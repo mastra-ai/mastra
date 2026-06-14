@@ -124,10 +124,7 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/MC_MCP_HTTP_TOOL_RESULT:mcp-http-e2e:ok/i, terminal, 15_000);
     await runtime.waitForScreenText(/MCP HTTP lookup completed/i, terminal, 15_000);
     runtime.printScreen('mcp http tool call', terminal);
-
-    await runtime.sleep(500);
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     const serialized = JSON.stringify(requests.map((request: any) => request.body));

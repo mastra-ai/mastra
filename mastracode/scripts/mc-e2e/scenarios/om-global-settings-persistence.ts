@@ -19,25 +19,21 @@ export const omGlobalSettingsPersistenceScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Observe attachments\s+Auto/i, terminal, 8_000);
 
     terminal.write('\x1b[B'.repeat(4));
-    await runtime.sleep(250);
     terminal.write('\r');
     await runtime.waitForScreenText(/Caveman-style terse compression/i, terminal, 8_000);
     terminal.write('\x1b[A');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Caveman observations\s+On/i, terminal, 8_000);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(250);
     terminal.write('\r');
     await runtime.waitForScreenText(/Always forward attachments/i, terminal, 8_000);
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Observe attachments\s+On/i, terminal, 8_000);
 
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("OM_GLOBAL_CAVEMAN="+s.models.omCavemanObservations); console.log("OM_GLOBAL_ATTACH="+s.models.omObserveAttachments)'`,
@@ -51,7 +47,6 @@ export const omGlobalSettingsPersistenceScenario: McE2eScenario = {
     await runtime.waitForScreenText(/OM_THREAD_KEYS=1:1/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 1) {

@@ -95,7 +95,6 @@ export const setupCustomPackCompletionScenario = {
 
     await runtime.waitForScreenText(/Tool Approval/i, terminal, 8_000);
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 8_000);
@@ -111,6 +110,5 @@ export const setupCustomPackCompletionScenario = {
     await runtime.waitForScreenText(/SETUP_CUSTOM_OVERRIDES=0:false/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

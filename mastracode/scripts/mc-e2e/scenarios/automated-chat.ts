@@ -21,7 +21,6 @@ export const automatedChatScenario: McE2eScenario = {
     runtime.printScreen('after automated prompt', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

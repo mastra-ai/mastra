@@ -69,7 +69,6 @@ export const workspacePlanModeToolsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Plan-mode workspace tools observed\./i, terminal, 10_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     const buildNames = findRequestTools(requests, BUILD_PROMPT);

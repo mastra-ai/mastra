@@ -41,7 +41,6 @@ export const browserProfileProviderMismatchScenario = {
 
       await runtime.waitForScreenText(/Select browser provider:/i, terminal, 8_000);
       terminal.write('\x1b[B');
-      await runtime.sleep(150);
       terminal.write('\r');
 
       await runtime.waitForScreenText(/Run in headless mode\?/i, terminal, 8_000);
@@ -52,7 +51,6 @@ export const browserProfileProviderMismatchScenario = {
 
       await runtime.waitForScreenText(/Use a browser profile\?/i, terminal, 8_000);
       terminal.write('\x1b[B');
-      await runtime.sleep(150);
       terminal.write('\r');
 
       await runtime.waitForScreenText(/Profile directory path:/i, terminal, 8_000);
@@ -72,7 +70,6 @@ export const browserProfileProviderMismatchScenario = {
     await chooseAgentBrowserWithSeededProfile();
     await runtime.waitForScreenText(/Continue anyway\?/i, terminal, 8_000);
     terminal.write('\x1b[B');
-    await runtime.sleep(150);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Browser automation enabled:/i, terminal, 10_000);
@@ -84,6 +81,5 @@ export const browserProfileProviderMismatchScenario = {
     await runtime.waitForScreenText(/BROWSER_MISMATCH_PROCEED=true:agent-browser:false:true:agent-browser/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

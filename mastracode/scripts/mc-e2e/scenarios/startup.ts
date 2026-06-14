@@ -19,11 +19,10 @@ export const startupScenario: McE2eScenario = {
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('/help');
-    await runtime.sleep(1_000);
+    await runtime.waitForScreenText(/Commands/i, terminal, 8_000);
     runtime.printScreen('after /help', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

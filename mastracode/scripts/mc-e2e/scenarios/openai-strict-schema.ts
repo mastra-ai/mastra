@@ -109,7 +109,6 @@ void tui.run().catch(error => {
     runtime.printScreen('after strict-schema prompt', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

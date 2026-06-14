@@ -53,7 +53,6 @@ export const skillsSymlinkDedupeScenario: McE2eScenario = {
     runtime.printScreen('after /skills', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

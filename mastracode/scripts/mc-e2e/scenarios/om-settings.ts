@@ -19,20 +19,18 @@ export const omSettingsScenario: McE2eScenario = {
     runtime.printScreen('after /om', terminal);
 
     terminal.write('\x1b[B'.repeat(4));
-    await runtime.sleep(300);
     terminal.write('\r');
     await runtime.waitForScreenText(/Caveman-style terse compression/i, terminal);
     await runtime.waitForScreenText(/Standard prose observations/i, terminal);
     runtime.printScreen('after caveman submenu', terminal);
 
     terminal.write('\x1b[A');
-    await runtime.sleep(300);
     terminal.write('\r');
     await runtime.waitForScreenText(/Caveman observations\s+On/i, terminal);
     runtime.printScreen('after caveman toggle', terminal);
 
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
     terminal.submit('/om');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal);
     await runtime.waitForScreenText(/Caveman observations\s+On/i, terminal);

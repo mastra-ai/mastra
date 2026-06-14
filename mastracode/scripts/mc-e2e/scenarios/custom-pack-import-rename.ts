@@ -95,6 +95,5 @@ export const customPackImportRenameScenario = {
     await runtime.waitForScreenText(/IMPORT_RENAME_IMPORTED_OK=true/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

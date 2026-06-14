@@ -27,13 +27,11 @@ export const updateCommandPromptScenario: McE2eScenario = {
     await runtime.waitForScreenText(/No/i, terminal);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Update skipped/i, terminal);
     await (expect(terminal.getByText(/›|>/gi, { full: true, strict: false })) as any).toBeVisible();
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 };

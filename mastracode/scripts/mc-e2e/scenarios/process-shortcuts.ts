@@ -23,7 +23,7 @@ export const processShortcutsScenario: McE2eScenario = {
     terminal.write('mc alt-z undo e2e draft');
     await runtime.waitForScreenText(/mc alt-z undo e2e draft/i, terminal);
     terminal.keyCtrlC();
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/mc alt-z undo e2e draft/i, terminal, 8_000);
     expect(terminal.serialize().view).not.toContain('mc alt-z undo e2e draft');
 
     terminal.write('\x1bz');
@@ -31,7 +31,6 @@ export const processShortcutsScenario: McE2eScenario = {
     runtime.printScreen('after Alt-Z undo', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

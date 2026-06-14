@@ -51,7 +51,6 @@ export const askUserAdvancedPromptsScenario: McE2eScenario = {
     runtime.printScreen('after multi-select answer', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

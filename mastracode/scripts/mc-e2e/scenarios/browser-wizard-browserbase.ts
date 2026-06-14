@@ -45,7 +45,6 @@ export const browserWizardBrowserbaseScenario = {
 
     await runtime.waitForScreenText(/Stagehand environment:/i, terminal, 8_000);
     terminal.write('\x1b[B');
-    await runtime.sleep(150);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Browserbase requires BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID/i, terminal, 8_000);
@@ -68,6 +67,5 @@ export const browserWizardBrowserbaseScenario = {
     await runtime.waitForScreenText(/BROWSERBASE_CREDS_PERSISTED=false/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

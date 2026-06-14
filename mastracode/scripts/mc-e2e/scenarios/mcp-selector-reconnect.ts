@@ -130,7 +130,7 @@ void tui.run().catch(error => {
       `!node -e 'const fs=require("fs"); const ready=process.env.MC_E2E_MCP_SELECTOR_READY_FILE; if(!ready) throw new Error("missing ready file env"); fs.writeFileSync(ready,"ready"); console.log("MCP_SELECTOR_READY=1");'`,
     );
     await runtime.waitForScreenText(/MCP_SELECTOR_READY=1/i, terminal, 10_000);
-    await runtime.sleep(300);
+    await runtime.waitForScreenText(/MCP_SELECTOR_READY=1[\s\S]*✓/i, terminal, 10_000);
 
     terminal.write('\x15');
     terminal.submit('/mcp');
@@ -143,21 +143,19 @@ void tui.run().catch(error => {
     terminal.write('\r');
     await runtime.waitForScreenText(/selector_retry \[http\] connected.*1 tools/i, terminal, 15_000);
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const url=process.env.MC_E2E_MCP_SELECTOR_URL; if(!url) throw new Error("missing selector url"); fs.mkdirSync(".mastracode",{recursive:true}); fs.writeFileSync(".mastracode/mcp.json", JSON.stringify({mcpServers:{selector_retry:{url,headers:{"x-mc-e2e":"selector-reconnect"}},selector_reload:{url,headers:{"x-mc-e2e":"selector-reconnect"}}}}, null, 2)); console.log("MCP_SELECTOR_RELOAD_CONFIG=2");'`,
     );
     await runtime.waitForScreenText(/MCP_SELECTOR_RELOAD_CONFIG=2/i, terminal, 10_000);
+    await runtime.waitForScreenText(/MCP_SELECTOR_RELOAD_CONFIG=2[\s\S]*✓/i, terminal, 10_000);
 
     terminal.submit('/mcp');
     await runtime.waitForScreenText(/selector_retry \[http\] connected/i, terminal, 8_000);
     terminal.write('r');
     await runtime.waitForScreenText(/selector_reload \[http\] connected.*1 tools/i, terminal, 15_000);
     runtime.printScreen('mcp selector reload after status', terminal);
-
-    await runtime.sleep(500);
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

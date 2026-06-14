@@ -55,7 +55,6 @@ export const customPackRenameActiveScenario = {
     await runtime.waitForScreenText(/Edit\s+Update this pack/i, terminal, 8_000);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Edit custom pack: Rename Source E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Rename → Rename Source E2E/i, terminal, 8_000);
@@ -70,14 +69,13 @@ export const customPackRenameActiveScenario = {
     await runtime.waitForScreenText(/Rename → Renamed Active E2E/i, terminal, 8_000);
 
     terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Renamed Active E2E/i, terminal, 8_000);
 
     terminal.write('\x1b');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const names=s.customModelPacks.map(p=>p.name).join("|"); const pack=s.customModelPacks.find(p=>p.name==="${renamedName}"); console.log("RENAME_ACTIVE="+s.models.activeModelPackId); console.log("RENAME_ONBOARDING="+s.onboarding.modePackId); console.log("RENAME_NAMES="+names); console.log("RENAME_MODELS="+[pack?.models.plan,pack?.models.build,pack?.models.fast].join("|")); console.log("RENAME_OLD_PRESENT="+s.customModelPacks.some(p=>p.name==="${originalName}"));'`,
@@ -93,6 +91,5 @@ export const customPackRenameActiveScenario = {
     await runtime.waitForScreenText(/RENAME_OLD_PRESENT=false/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

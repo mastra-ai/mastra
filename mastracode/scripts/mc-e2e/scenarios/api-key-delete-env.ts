@@ -57,7 +57,7 @@ export const apiKeyDeleteEnvScenario = {
     await runtime.waitForScreenText(/Key set via environment variable/i, terminal, 8_000);
 
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/API Keys/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); console.log("APIKEY_AUTH_PRESENT="+Object.prototype.hasOwnProperty.call(auth,"apikey:${provider}")); console.log("APIKEY_ENV_AFTER="+(process.env["${envVar}"]||"missing"))'`,
@@ -66,6 +66,5 @@ export const apiKeyDeleteEnvScenario = {
     await runtime.waitForScreenText(/APIKEY_ENV_AFTER=mc-e2e-real-env-key/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

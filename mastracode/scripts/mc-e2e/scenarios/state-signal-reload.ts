@@ -67,6 +67,5 @@ values
     await runtime.waitForScreenText(/Browser state reload e2e delta: active tab changed to https:\/\/example\.test\/reload-state/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 };

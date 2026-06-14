@@ -35,7 +35,6 @@ export const subagentDelegationScenario: McE2eScenario = {
     );
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 3) {

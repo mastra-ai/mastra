@@ -36,7 +36,6 @@ export const shellPassthroughLongOutputScenario: McE2eScenario = {
     runtime.printScreen('after expanded shell passthrough', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

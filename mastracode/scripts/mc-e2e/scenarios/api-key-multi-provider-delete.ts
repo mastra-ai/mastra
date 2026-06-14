@@ -72,7 +72,7 @@ export const apiKeyMultiProviderDeleteScenario = {
     await runtime.waitForScreenText(/anthropic\s+✓ \(stored\)/i, terminal, 8_000);
 
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/API Keys/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); console.log("APIKEY_MULTI_302="+(auth["apikey:${firstProvider}"]?.key||"missing")+":"+(process.env["${firstEnvVar}"]||"missing")); console.log("APIKEY_MULTI_ANTHROPIC="+(auth["apikey:${secondProvider}"]?.key||"missing")+":"+(process.env["${secondEnvVar}"]||"missing"));'`,
@@ -85,6 +85,5 @@ export const apiKeyMultiProviderDeleteScenario = {
     );
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

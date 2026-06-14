@@ -99,10 +99,7 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/Notification inbox e2e detail: CI is queued for review/i, terminal, 15_000);
     await runtime.waitForScreenText(/Notification inbox read completed/i, terminal, 15_000);
     runtime.printScreen('after notification inbox read', terminal);
-
-    await runtime.sleep(500);
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     const serialized = JSON.stringify(requests.map((request: any) => request.body));

@@ -29,7 +29,6 @@ export const ctrlfQueuedCustomSlashScenario = {
 
     terminal.submit(START_PROMPT);
     await runtime.waitForScreenText(/Start a slow Ctrl F custom slash queue run\./i, terminal);
-    await runtime.sleep(500);
 
     terminal.write('/queue-au');
     await runtime.waitForScreenText(/Queue command selected from autocomplete/i, terminal, 8_000);
@@ -42,7 +41,6 @@ export const ctrlfQueuedCustomSlashScenario = {
     runtime.printScreen('after queued custom slash command drained', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) {

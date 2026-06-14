@@ -47,7 +47,6 @@ export const shellPassthroughConfiguredSettingsScenario: McE2eScenario = {
     runtime.printScreen('after configured settings shell passthrough', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

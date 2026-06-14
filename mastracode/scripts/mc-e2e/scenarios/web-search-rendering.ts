@@ -85,7 +85,6 @@ void tui.run().catch(error => {
     expect(screen).not.toContain('SHOULD_NOT_RENDER_WEB_SEARCH_E2E');
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) {

@@ -75,7 +75,6 @@ await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
     await runtime.waitForScreenText(/Headless: no/i, terminal, 8_000);
     await runtime.waitForScreenText(/CDP URL: ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-startup-restore-e2e/i, terminal, 8_000);
 
-    await runtime.sleep(500);
     terminal.submit('Confirm browser startup restore context.');
     await runtime.waitForScreenText(/Browser startup restore confirmed\./i, terminal, 10_000);
 
@@ -87,7 +86,6 @@ await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
     await runtime.waitForScreenText(/BROWSER_STARTUP_CDP=ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-startup-restore-e2e/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     const serialized = JSON.stringify(requests.map((request: any) => request.body));

@@ -23,7 +23,6 @@ export const updateStartupPromptScenario: McE2eScenario = {
     await runtime.waitForScreenText(/No/i, terminal);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Update skipped\. Run \/update to update later\./i, terminal, 8_000);
@@ -34,6 +33,5 @@ export const updateStartupPromptScenario: McE2eScenario = {
     await (expect(terminal.getByText(/›|>/gi, { full: true, strict: false })) as any).toBeVisible();
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 };

@@ -96,7 +96,6 @@ void tui.run().catch(error => {
     runtime.printScreen('after /yolo', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

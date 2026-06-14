@@ -120,6 +120,5 @@ values
     await runtime.waitForScreenText(/Open the persisted GitHub notification fixture/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 };

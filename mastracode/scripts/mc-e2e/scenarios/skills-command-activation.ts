@@ -74,7 +74,6 @@ export const skillsCommandActivationScenario: McE2eScenario = {
     runtime.printScreen('after /goal status', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

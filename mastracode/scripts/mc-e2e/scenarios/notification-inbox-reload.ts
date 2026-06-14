@@ -179,6 +179,5 @@ values
     await runtime.waitForScreenText(/Use notification_inbox to inspect pending notifications/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 };

@@ -62,6 +62,5 @@ export const setupNestedModelSelectorScenario: McE2eScenario = {
     }
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 };

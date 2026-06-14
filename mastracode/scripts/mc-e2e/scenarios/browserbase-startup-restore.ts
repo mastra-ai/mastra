@@ -60,6 +60,5 @@ export const browserbaseStartupRestoreScenario = {
     await runtime.waitForScreenText(/BROWSERBASE_STARTUP_CREDS=false/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

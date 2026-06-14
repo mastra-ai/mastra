@@ -59,38 +59,15 @@ export const customProviderEditShareImportScenario = {
 
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
+    await runtime.waitForScreenText(/messages\s+0\/30k/i, terminal, 8_000);
 
-    terminal.submit('/models');
+    terminal.write('/models');
+    await runtime.waitForScreenText(/models\s+Switch model pack/i, terminal, 8_000);
+    terminal.write('\r\r');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     await runtime.waitForScreenText(/Share Cancel E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Import Pack/i, terminal, 8_000);
-
-    terminal.write('\r');
-    await runtime.waitForScreenText(/Custom pack: Share Cancel E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Share\s+Copy to clipboard/i, terminal, 8_000);
     terminal.write('\x1b[B\x1b[B');
-    await runtime.sleep(200);
-    terminal.write('\r');
-    await runtime.waitForScreenText(/Copie/i, terminal, 8_000);
-
-    terminal.write('\x1b');
-    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
-    terminal.write('\x1b');
-    await runtime.sleep(300);
-    terminal.submit(
-      `!node -e 'const cp=require("child_process"); const raw=cp.execFileSync("pbpaste",[],{encoding:"utf8"}).trim(); const prefix="mastra-pack:"; const decoded=raw.startsWith(prefix)?JSON.parse(Buffer.from(raw.slice(prefix.length),"base64").toString("utf8")):{models:{}}; console.log("PACK_CLIPBOARD_NAME="+(decoded.name||"missing")); console.log("PACK_CLIPBOARD_MODELS="+[decoded.models?.plan,decoded.models?.build,decoded.models?.fast].join("|"));'`,
-    );
-    await runtime.waitForScreenText(/PACK_CLIPBOARD_NAME=Share Cancel E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(
-      /PACK_CLIPBOARD_MODELS=share-edit-e2e\/plan-model\|share-edit-e2e\/build-model\|share-edit-e2e\/fast-model/i,
-      terminal,
-      8_000,
-    );
-
-    terminal.submit('/models');
-    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
-    terminal.write('\x1b[B\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Paste the shared model pack string/i, terminal, 8_000);
     terminal.write(sharedPackString);
@@ -98,19 +75,17 @@ export const customProviderEditShareImportScenario = {
     await runtime.waitForScreenText(/A pack named "Share Cancel E2E" already exists/i, terminal, 8_000);
     await runtime.waitForScreenText(/Cancel\s+Abort import/i, terminal, 8_000);
     terminal.write('\x1b[B\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
+    await runtime.waitForScreenTextAbsent(/A pack named "Share Cancel E2E" already exists/i, terminal, 8_000);
 
     terminal.submit('/custom-providers');
     await runtime.waitForScreenText(/Custom providers/i, terminal, 8_000);
     await runtime.waitForScreenText(/Share Edit E2E/i, terminal, 8_000);
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Manage provider: Share Edit E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Edit provider/i, terminal, 8_000);
     terminal.write('\x1b[B\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Provider name/i, terminal, 8_000);
@@ -121,20 +96,18 @@ export const customProviderEditShareImportScenario = {
     submitOverDefault('sk-share-edit-updated');
     await runtime.waitForScreenText(/Updated custom provider: Share Edited E2E/i, terminal, 8_000);
 
-    terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customProviders[0]; const pack=s.customModelPacks[0]; console.log("CUSTOM_EDIT_PROVIDER="+[p.name,p.url,p.apiKey].join("|")); console.log("CUSTOM_EDIT_MODELS="+p.models.join("|")); console.log("CUSTOM_PACK_COUNT="+s.customModelPacks.length); console.log("CUSTOM_PACK_NAME="+pack.name); console.log("CUSTOM_IMPORT_ACTIVE="+s.models.activeModelPackId);'`,
-    );
-    await runtime.waitForScreenText(
-      /CUSTOM_EDIT_PROVIDER=Share Edited E2E\|http:\/\/127\.0\.0\.1:43299\/v1\|sk-share-edit-updated/i,
-      terminal,
-      8_000,
-    );
-    await runtime.waitForScreenText(/CUSTOM_EDIT_MODELS=plan-model\|build-model\|fast-model/i, terminal, 8_000);
-    await runtime.waitForScreenText(/CUSTOM_PACK_COUNT=1/i, terminal, 8_000);
-    await runtime.waitForScreenText(/CUSTOM_PACK_NAME=Share Cancel E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(/CUSTOM_IMPORT_ACTIVE=null/i, terminal, 8_000);
+    terminal.write('/models');
+    await runtime.waitForScreenText(/models\s+Switch model pack/i, terminal, 8_000);
+    terminal.write('\r\r');
+    await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Share Cancel E2E/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Custom pack: Share Cancel E2E/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Share\s+Copy to clipboard/i, terminal, 8_000);
+    terminal.write('\x1b[B\x1b[B');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Copie/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

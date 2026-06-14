@@ -16,7 +16,6 @@ export const activeSignalFollowupScenario: McE2eScenario = {
 
     terminal.submit('Start a slow active signal run.');
     await runtime.waitForScreenText(/Start a slow active signal run\./i, terminal);
-    await runtime.sleep(500);
 
     terminal.submit('Steer while active.');
     await runtime.waitForScreenText(/↳ Steer while active\. pending/i, terminal);
@@ -27,7 +26,6 @@ export const activeSignalFollowupScenario: McE2eScenario = {
     runtime.printScreen('after active follow-up response', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

@@ -93,10 +93,7 @@ export const omAttachmentObservationScenario = {
     await runtime.waitForScreenText(/Suggested response:\s+Continue the recovery loop/i, terminal, 45_000);
     await runtime.waitForScreenText(/thread title updated:\s+Attachment observation/i, terminal, 45_000);
     await runtime.waitForScreenText(/MC OM attachment chat response/i, terminal, 45_000);
-
-    await runtime.sleep(2_000);
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length < 2) {

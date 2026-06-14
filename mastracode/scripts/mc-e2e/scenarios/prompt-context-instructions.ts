@@ -38,7 +38,6 @@ export const promptContextInstructionsScenario: McE2eScenario = {
     runtime.printScreen('after prompt-context prompt', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

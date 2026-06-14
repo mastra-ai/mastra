@@ -29,7 +29,6 @@ export const workspaceToolNamesScenario: McE2eScenario = {
     await runtime.waitForScreenText(new RegExp(RESPONSE), terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

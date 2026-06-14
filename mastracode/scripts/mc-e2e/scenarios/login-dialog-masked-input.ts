@@ -55,7 +55,7 @@ await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
     await runtime.waitForScreenText(/Paste the masked login authorization code:/i, terminal, 8_000);
 
     terminal.write(secret);
-    await runtime.sleep(500);
+    await runtime.waitForScreenText(/\*{30}/, terminal, 2_000);
 
     const maskedScreen = terminal.serialize().view;
     expect(maskedScreen).not.toContain(secret);
@@ -70,6 +70,5 @@ await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
     await runtime.waitForScreenText(/LOGIN_MASK_AUTH=true:true:true/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

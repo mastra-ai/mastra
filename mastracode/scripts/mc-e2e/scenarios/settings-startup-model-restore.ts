@@ -57,7 +57,7 @@ export const settingsStartupModelRestoreScenario = {
     await runtime.waitForScreenText(/Startup Restore E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/build\s+→\s+startup-restore-e2e\/build-model/i, terminal, 8_000);
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(
       '!node -e \'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("STARTUP_ACTIVE="+s.models.activeModelPackId); console.log("STARTUP_DEFAULTS="+[s.models.modeDefaults.plan,s.models.modeDefaults.build,s.models.modeDefaults.fast].join("|")); console.log("STARTUP_PACKS="+s.customModelPacks.map(p=>p.name).join("|"));\'',
@@ -71,6 +71,5 @@ export const settingsStartupModelRestoreScenario = {
     await runtime.waitForScreenText(/STARTUP_PACKS=Startup Restore E2E/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

@@ -42,7 +42,6 @@ export const customSlashCommandScenario: McE2eScenario = {
     runtime.printScreen('after review command', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

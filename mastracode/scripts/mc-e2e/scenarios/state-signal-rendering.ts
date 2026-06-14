@@ -92,10 +92,7 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/Browser state e2e snapshot/i, terminal, 10_000);
     runtime.printScreen('after state signal', terminal);
 
-    await runtime.sleep(500);
-
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

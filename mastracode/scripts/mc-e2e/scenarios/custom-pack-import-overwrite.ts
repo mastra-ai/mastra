@@ -93,6 +93,5 @@ export const customPackImportOverwriteScenario = {
     );
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

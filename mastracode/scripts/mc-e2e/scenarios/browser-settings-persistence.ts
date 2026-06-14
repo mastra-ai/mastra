@@ -71,6 +71,5 @@ export const browserSettingsPersistenceScenario = {
     await runtime.waitForScreenText(/BROWSER_CLEAR_DEFAULTS=false:stagehand:false:1280:720:missing:missing:missing:missing/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

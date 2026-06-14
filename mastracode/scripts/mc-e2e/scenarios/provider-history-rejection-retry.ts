@@ -229,7 +229,6 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/PROVIDER_RETRY_SANITIZED=true/i, terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

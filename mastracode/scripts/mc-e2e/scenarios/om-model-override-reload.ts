@@ -60,25 +60,26 @@ export const omModelOverrideReloadScenario: McE2eScenario = {
     await runtime.waitForScreenText(/updated-observer/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Observer model\s+updated-observer/i, terminal, 8_000);
+    await runtime.waitForScreenTextAbsent(/Observer Model/, terminal, 8_000);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Reflector Model/i, terminal, 8_000);
     terminal.write(updatedReflector);
     await runtime.waitForScreenText(/updated-reflector/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Reflector model\s+updated-reflector/i, terminal, 8_000);
+    await runtime.waitForScreenTextAbsent(/Reflector Model/, terminal, 8_000);
 
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit('/om');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
     await runtime.waitForScreenText(/Observer model\s+updated-observer/i, terminal, 8_000);
     await runtime.waitForScreenText(/Reflector model\s+updated-reflector/i, terminal, 8_000);
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const m=s.models||{}; console.log("OM_MODEL_OVERRIDES="+[m.activeOmPackId,m.omModelOverride||"null",m.observerModelOverride,m.reflectorModelOverride].join(":"));'`,
@@ -95,7 +96,6 @@ export const omModelOverrideReloadScenario: McE2eScenario = {
     await runtime.waitForScreenText(/OM_MODEL_THREAD=1:1:1:1/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 1) {

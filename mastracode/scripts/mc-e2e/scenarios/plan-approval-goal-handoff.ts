@@ -32,7 +32,6 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Confirm the goal handoff starts the canonical goal run/i, terminal, 10_000);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/✓\s+Set as goal/i, terminal, 10_000);
@@ -42,7 +41,6 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Plan goal handoff e2e goal run started\./i, terminal, 15_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(100);
   },
   verifyAimockRequests(requests) {
     if (requests.length < 2) {

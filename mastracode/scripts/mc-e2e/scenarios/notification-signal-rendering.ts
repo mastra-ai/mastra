@@ -84,17 +84,18 @@ void tui.run().catch(error => {
     runtime.printScreen('spawned', terminal);
 
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
+    terminal.keyCtrlC();
+    await runtime.waitForScreenTextAbsent(/\[WorkspaceSkills\].*Expected string/i, terminal, 8_000);
     runtime.printScreen('after startup', terminal);
 
-    terminal.submit('Start notification host run.');
+    terminal.write('Start notification host run.');
+    await runtime.waitForScreenText(/Start notification host run\./i, terminal, 8_000);
+    terminal.write('\r');
     await runtime.waitForScreenText(/notification from github/i, terminal, 10_000);
     await runtime.waitForScreenText(/urgent · ci-status · delivered/i, terminal, 10_000);
     await runtime.waitForScreenText(/Notification e2e alert: CI failed on main/i, terminal, 10_000);
     runtime.printScreen('after notification signal', terminal);
-
-    await runtime.sleep(500);
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

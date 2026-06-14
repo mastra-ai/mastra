@@ -57,6 +57,15 @@ async function waitForScreenText(pattern: RegExp, terminal: { serialize(): { vie
   throw new Error('Timed out waiting for ' + pattern + '\n\n' + terminal.serialize().view);
 }
 
+async function waitForScreenTextAbsent(pattern: RegExp, terminal: { serialize(): { view: string } }, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!pattern.test(terminal.serialize().view)) return;
+    await sleep(100);
+  }
+  throw new Error('Timed out waiting for ' + pattern + ' to disappear\n\n' + terminal.serialize().view);
+}
+
 for (const runConfig of runConfigs) {
   const scenario = getScenario(runConfig.scenarioName);
   const runtime: McE2eScenarioRuntime = {
@@ -64,6 +73,7 @@ for (const runConfig of runConfigs) {
     sleep,
     startLiveOutput: terminal => startLiveOutput(runConfig.liveOutput, terminal),
     waitForScreenText,
+    waitForScreenTextAbsent,
   };
 
   test.describe(scenario.name, () => {

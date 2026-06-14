@@ -142,10 +142,7 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/"status": "archived"/i, terminal, 15_000);
     await runtime.waitForScreenText(/Notification inbox CRUD\/search e2e complete/i, terminal, 15_000);
     runtime.printScreen('after notification inbox crud flow', terminal);
-
-    await runtime.sleep(500);
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     const serialized = JSON.stringify(requests.map((request: any) => request.body));

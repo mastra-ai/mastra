@@ -56,12 +56,10 @@ export const modelSelectionApiKeyPromptScenario = {
     await runtime.waitForScreenText(/Edit\s+Update this pack/i, terminal, 8_000);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Edit custom pack: Missing Key Prompt E2E/i, terminal, 8_000);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Select model for plan mode/i, terminal, 8_000);
     await runtime.waitForScreenText(/Type to search/i, terminal, 8_000);
@@ -84,13 +82,12 @@ export const modelSelectionApiKeyPromptScenario = {
     await runtime.waitForScreenText(/302ai\/keyprompt-e2e-model/i, terminal, 8_000);
 
     terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/302ai\/keyprompt-e2e-model/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const settings=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const pack=settings.customModelPacks.find(p=>p.name==="${packName}"); console.log("MODEL_PROMPT_PLAN="+pack.models.plan); console.log("MODEL_PROMPT_KEY="+(auth["apikey:302ai"]?.key || "missing")); console.log("MODEL_PROMPT_ENV="+(process.env["302AI_API_KEY"] || "missing"));'`,
@@ -100,6 +97,5 @@ export const modelSelectionApiKeyPromptScenario = {
     await runtime.waitForScreenText(/MODEL_PROMPT_ENV=sk-model-selection-key-e2e/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

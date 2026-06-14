@@ -57,12 +57,10 @@ export const modelSelectionCancelEnvScenario = {
     await runtime.waitForScreenText(/Edit\s+Update this pack/i, terminal, 8_000);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Edit custom pack: Cancel Env Selection E2E/i, terminal, 8_000);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Select model for plan mode/i, terminal, 8_000);
     terminal.write(envModel);
@@ -72,7 +70,6 @@ export const modelSelectionCancelEnvScenario = {
     await runtime.waitForScreenText(/302ai\/env-precedence-e2e-model/i, terminal, 8_000);
 
     terminal.write('\x1b[B\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Select model for build mode/i, terminal, 8_000);
     terminal.write(cancelModel);
@@ -86,13 +83,12 @@ export const modelSelectionCancelEnvScenario = {
     await runtime.waitForScreenText(/cancel-only\/cancelled-key-e2e-model/i, terminal, 8_000);
 
     terminal.write('\x1b[B\x1b[B\x1b[B\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/302ai\/env-precedence-e2e-model/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenText(/Switch model pack/i, terminal, 8_000);
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const authPath=process.env.MASTRA_APP_DATA_DIR+"/auth.json"; const settings=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const auth=fs.existsSync(authPath) ? JSON.parse(fs.readFileSync(authPath,"utf8")) : {}; const pack=settings.customModelPacks.find(p=>p.name==="${packName}"); console.log("MODEL_CANCEL_PLAN="+pack.models.plan); console.log("MODEL_CANCEL_BUILD="+pack.models.build); console.log("MODEL_CANCEL_302_KEY="+(auth["apikey:302ai"]?.key || "missing")); console.log("MODEL_CANCEL_CANCEL_KEY="+(auth["apikey:cancel-only"]?.key || "missing")); console.log("MODEL_CANCEL_ENV="+(process.env["302AI_API_KEY"] || "missing"));'`,
@@ -104,6 +100,5 @@ export const modelSelectionCancelEnvScenario = {
     await runtime.waitForScreenText(/MODEL_CANCEL_ENV=sk-real-env-selection-e2e/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

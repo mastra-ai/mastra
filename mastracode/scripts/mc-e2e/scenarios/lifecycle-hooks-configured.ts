@@ -115,7 +115,6 @@ console.log('HOOK_BLOCK_LOG=after:UserPromptSubmit:true');
     await runtime.waitForScreenText(/HOOK_BLOCK_LOG=after:UserPromptSubmit:true/i, terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

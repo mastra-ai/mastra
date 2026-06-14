@@ -26,7 +26,6 @@ export const commitAttributionPromptScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Co-Authored-By: Mastra Code \(openai\/gpt-5\.4-mini\) <noreply@mastra\.ai>/i, terminal, 10_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) {

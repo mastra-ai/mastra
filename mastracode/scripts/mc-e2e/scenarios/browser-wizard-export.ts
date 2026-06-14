@@ -59,7 +59,6 @@ await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
 
     await runtime.waitForScreenText(/Select browser provider:/i, terminal, 8_000);
     terminal.write('\x1b[B');
-    await runtime.sleep(150);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Run in headless mode\?/i, terminal, 8_000);
@@ -67,7 +66,6 @@ await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
 
     await runtime.waitForScreenText(/How do you want to launch the browser\?/i, terminal, 8_000);
     terminal.write('\x1b[B\x1b[B');
-    await runtime.sleep(150);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/CDP WebSocket URL/i, terminal, 8_000);
@@ -97,6 +95,5 @@ await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
     await runtime.waitForScreenText(/BROWSER_WIZARD_EXPORT=browser-wizard-export-e2e:agent-browser/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

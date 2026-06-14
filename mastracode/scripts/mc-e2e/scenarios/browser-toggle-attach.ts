@@ -117,7 +117,6 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/BROWSER_TOGGLE_CDP=ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-toggle-e2e/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     const serialized = JSON.stringify(requests.map((request: any) => request.body));

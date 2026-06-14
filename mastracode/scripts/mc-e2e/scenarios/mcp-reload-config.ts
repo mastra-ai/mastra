@@ -138,9 +138,6 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/reload_after \[http\] \(connected\)/i, terminal, 15_000);
     await runtime.waitForScreenText(/reload_after_reload_probe/i, terminal, 15_000);
     runtime.printScreen('mcp reload after status', terminal);
-
-    await runtime.sleep(500);
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

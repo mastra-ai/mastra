@@ -43,7 +43,6 @@ export const autocompleteWrappingNavigationScenario = {
     runtime.printScreen('after selecting wrapped autocomplete second item', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 1) {

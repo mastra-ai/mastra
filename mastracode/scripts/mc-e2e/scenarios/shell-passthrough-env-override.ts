@@ -65,7 +65,6 @@ export const shellPassthroughEnvOverrideScenario: McE2eScenario = {
     runtime.printScreen('after env override shell passthrough', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

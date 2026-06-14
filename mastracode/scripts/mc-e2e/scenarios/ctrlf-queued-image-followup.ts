@@ -58,7 +58,6 @@ export const ctrlfQueuedImageFollowupScenario = {
 
     terminal.submit(START_PROMPT);
     await runtime.waitForScreenText(/Start a slow Ctrl F queue run\./i, terminal);
-    await runtime.sleep(500);
 
     terminal.write(`${QUEUED_PROMPT} `);
     terminal.write(`${PASTE_START}${imagePath}${PASTE_END}`);
@@ -73,7 +72,6 @@ export const ctrlfQueuedImageFollowupScenario = {
     runtime.printScreen('after queued image follow-up drained', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) {

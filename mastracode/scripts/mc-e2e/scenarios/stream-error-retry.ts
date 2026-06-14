@@ -76,7 +76,6 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(new RegExp(RESPONSE), terminal, 30_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

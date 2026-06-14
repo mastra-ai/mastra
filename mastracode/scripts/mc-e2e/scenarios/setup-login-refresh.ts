@@ -83,6 +83,5 @@ await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
     await runtime.waitForScreenText(/SETUP_LOGIN_BUILTIN_DEFAULTS=0/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

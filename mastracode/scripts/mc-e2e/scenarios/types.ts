@@ -133,6 +133,7 @@ export type McE2eScenarioRuntime = {
   sleep: (ms: number) => Promise<void>;
   startLiveOutput: (terminal: McE2eTerminal) => void;
   waitForScreenText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
+  waitForScreenTextAbsent: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
 };
 
 export type McE2ePrepareContext = {

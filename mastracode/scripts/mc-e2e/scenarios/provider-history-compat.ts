@@ -165,7 +165,6 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/MC provider history compatibility response/i, terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

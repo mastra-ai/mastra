@@ -29,21 +29,19 @@ export const storageSettingsScenario: McE2eScenario = {
     runtime.printScreen('after /settings', terminal);
 
     terminal.write('\x1b[B'.repeat(6));
-    await runtime.sleep(300);
     terminal.write('\r');
     await runtime.waitForScreenText(/LibSQL/i, terminal);
     await runtime.waitForScreenText(/PostgreSQL/i, terminal);
     runtime.printScreen('after storage submenu', terminal);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(300);
     terminal.write('\r');
     await runtime.waitForScreenText(/PostgreSQL Connection/i, terminal);
     await runtime.waitForScreenText(/Enter a connection string/i, terminal);
     runtime.printScreen('after pg select', terminal);
 
     terminal.write(connection);
-    await runtime.sleep(500);
+    await runtime.waitForScreenText(/\*{20,}/, terminal, 2_000);
     const maskedScreen = terminal.serialize().view;
     expect(maskedScreen).not.toContain(connection);
     expect(maskedScreen).toMatch(/\*{20,}/);

@@ -52,18 +52,15 @@ export const setupCompletionPersistenceScenario = {
     await runtime.waitForScreenText(/Model Packs/i, terminal);
     await runtime.waitForScreenText(/OpenAI/i, terminal);
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Observational Memory/i, terminal);
     await runtime.waitForScreenText(/OpenAI Mini/i, terminal);
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Tool Approval/i, terminal);
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 8_000);
@@ -79,6 +76,5 @@ export const setupCompletionPersistenceScenario = {
     await runtime.waitForScreenText(/SETUP_CUSTOM_DEFAULTS=0/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

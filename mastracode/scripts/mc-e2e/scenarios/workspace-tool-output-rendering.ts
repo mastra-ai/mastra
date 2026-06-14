@@ -26,7 +26,6 @@ export const workspaceToolOutputRenderingScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Workspace tool output rendering complete\./i, terminal, 15_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) {

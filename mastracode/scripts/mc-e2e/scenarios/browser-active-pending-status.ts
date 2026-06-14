@@ -55,6 +55,5 @@ export const browserActivePendingStatusScenario = {
     await runtime.waitForScreenText(/BROWSER_PENDING_SETTINGS=true:agent-browser:ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-active-status-pending/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

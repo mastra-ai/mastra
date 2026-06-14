@@ -70,7 +70,6 @@ void tui.run().catch(error => {
     expect(screen).not.toContain(DEBUG_SENTINEL);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
 
     const runConfig = JSON.parse(process.env.MC_E2E_RUNS_JSON ?? '[]').find(
       (config: { scenarioName?: string }) => config.scenarioName === 'debug-logging',

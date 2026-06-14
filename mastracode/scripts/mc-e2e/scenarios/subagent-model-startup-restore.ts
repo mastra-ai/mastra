@@ -69,7 +69,6 @@ export const subagentModelStartupRestoreScenario = {
     await runtime.waitForScreenText(/SUBAGENT_STARTUP_PACK=custom:Subagent Startup Restore E2E:custom:Subagent Startup Restore E2E:openai\/gpt-5\.5:0/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 3) {

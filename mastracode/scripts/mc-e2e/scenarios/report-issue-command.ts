@@ -22,7 +22,6 @@ export const reportIssueCommandScenario: McE2eScenario = {
     runtime.printScreen('after /report-issue', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

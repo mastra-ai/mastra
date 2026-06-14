@@ -40,7 +40,6 @@ export const persistentGoalCommandsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/No goal set\. Use \/goal <text> to set one\./i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length < 1) {

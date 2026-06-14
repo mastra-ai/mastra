@@ -47,13 +47,11 @@ export const customProviderDeleteScenario = {
     await runtime.waitForScreenText(/1 model/i, terminal, 8_000);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Manage provider: Delete Me E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Delete provider/i, terminal, 8_000);
 
     terminal.write('\x1b[B\x1b[B\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Delete Delete Me E2E\?/i, terminal, 8_000);
     await runtime.waitForScreenText(/This cannot be undone/i, terminal, 8_000);
@@ -69,6 +67,5 @@ export const customProviderDeleteScenario = {
     await runtime.waitForScreenText(/CUSTOM_PACK_COUNT=1/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

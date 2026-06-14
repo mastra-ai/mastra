@@ -42,7 +42,7 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Observer model\s+gpt-5\.4-mini/i, terminal, 8_000);
     await runtime.waitForScreenText(/Reflector model\s+gpt-5\.4-mini/i, terminal, 8_000);
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const m=s.models||{}; console.log("OM_PACK_SETTINGS="+[m.activeOmPackId,m.omModelOverride||"null",m.observerModelOverride||"null",m.reflectorModelOverride||"null"].join(":"));'`,
@@ -50,7 +50,6 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
     await runtime.waitForScreenText(/OM_PACK_SETTINGS=openai:null:null:null/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 1) {

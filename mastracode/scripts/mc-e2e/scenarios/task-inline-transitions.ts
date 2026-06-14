@@ -21,7 +21,6 @@ export const taskInlineTransitionsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Task inline transition e2e complete\./i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 4) {

@@ -122,7 +122,7 @@ void tui.run().catch(error => {
       `!node -e 'const fs=require("fs"); fs.writeFileSync(process.env.MASTRA_APP_DATA_DIR+"/browser-state-processor.json", JSON.stringify({tabs:[{url:"https://example.test/browser-delta",title:"Browser Delta E2E"},{url:"https://example.test/second-tab",title:"Second Tab"}],activeTabIndex:0})); console.log("BROWSER_PROCESSOR_STATE=delta-ready");'`,
     );
     await runtime.waitForScreenText(/BROWSER_PROCESSOR_STATE=delta-ready/i, terminal, 8_000);
-    await runtime.sleep(500);
+    await runtime.waitForScreenText(/BROWSER_PROCESSOR_STATE=delta-ready[\s\S]*✓/i, terminal, 8_000);
 
     terminal.submit('Capture browser processor delta.');
     await runtime.waitForScreenText(/State delta: browser/i, terminal, 10_000);
@@ -130,7 +130,6 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/Browser processor delta captured/i, terminal, 10_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     const serialized = JSON.stringify(requests.map((request: any) => request.body));

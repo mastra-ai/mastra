@@ -15,7 +15,6 @@ export const settingsApiKeysNavigationScenario = {
 
     for (let i = 0; i < 7; i++) {
       terminal.write('\x1b[B');
-      await runtime.sleep(80);
     }
     terminal.write('\r');
 
@@ -24,6 +23,5 @@ export const settingsApiKeysNavigationScenario = {
     await runtime.waitForScreenText(/302ai/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

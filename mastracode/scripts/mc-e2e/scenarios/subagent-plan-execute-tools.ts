@@ -40,7 +40,6 @@ export const subagentPlanExecuteToolsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/SUBAGENT_EXECUTE_CAT=SUBAGENT_EXECUTE_FILE_WRITTEN_E2E/i, terminal, 10_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 5) {

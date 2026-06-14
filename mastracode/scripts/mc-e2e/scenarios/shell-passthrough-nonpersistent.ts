@@ -32,7 +32,6 @@ export const shellPassthroughNonpersistentScenario: McE2eScenario = {
 
     expect(terminal.serialize().view).toContain('SHELL_NONPERSIST_DB_COUNT=0');
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     expect(requests).toHaveLength(1);

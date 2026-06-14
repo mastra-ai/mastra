@@ -19,7 +19,6 @@ export const firstRunOnboardingScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Skip/i, terminal);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
@@ -32,6 +31,5 @@ export const firstRunOnboardingScenario: McE2eScenario = {
     }
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 };

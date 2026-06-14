@@ -127,6 +127,5 @@ values
     }
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 };

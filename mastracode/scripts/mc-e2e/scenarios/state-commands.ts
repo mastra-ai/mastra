@@ -66,7 +66,6 @@ export const stateCommandsScenario: McE2eScenario = {
     runtime.printScreen('after /feedback without session', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

@@ -83,6 +83,5 @@ export const customProviderModelSelectorScenario = {
     await runtime.waitForScreenText(/CUSTOM_SELECTOR_SUBAGENTS=0/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

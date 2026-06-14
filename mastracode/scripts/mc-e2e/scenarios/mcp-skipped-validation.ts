@@ -95,9 +95,6 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/bad_oauth_redirect — Invalid OAuth redirectUrl: must use HTTPS/i, terminal, 8_000);
     await runtime.waitForScreenText(/missing_entry_fields — Missing required field: "command" \(stdio\) or "url" \(http\)/i, terminal, 8_000);
     runtime.printScreen('mcp skipped validation selector', terminal);
-
-    await runtime.sleep(500);
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 } satisfies McE2eScenario;

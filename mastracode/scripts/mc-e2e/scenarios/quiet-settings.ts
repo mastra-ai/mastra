@@ -28,34 +28,30 @@ export const quietSettingsScenario = {
     runtime.printScreen('quiet settings initial', terminal);
 
     terminal.write('\x1b[B'.repeat(4));
-    await runtime.sleep(300);
     terminal.write('\r');
     await runtime.waitForScreenText(/Keep normal tool and subagent rendering/i, terminal);
     terminal.write('\x1b[A');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Quiet mode\s+On/i, terminal);
     runtime.printScreen('quiet mode enabled', terminal);
 
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Settings/i, terminal, 8_000);
     terminal.submit('/settings');
     await runtime.waitForScreenText(/Quiet mode\s+On/i, terminal);
     await runtime.waitForScreenText(/Quiet mode tool preview lines\s+2 lines/i, terminal);
     runtime.printScreen('quiet settings reopened', terminal);
 
     terminal.write('\x1b[B'.repeat(5));
-    await runtime.sleep(300);
     terminal.write('\r');
     await runtime.waitForScreenText(/Show up to 4 preview lines/i, terminal);
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Quiet mode tool preview lines\s+4 lines/i, terminal);
     runtime.printScreen('quiet preview updated', terminal);
 
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Settings/i, terminal, 8_000);
     terminal.submit('/settings');
     await runtime.waitForScreenText(/Quiet mode\s+On/i, terminal);
     await runtime.waitForScreenText(/Quiet mode tool preview lines\s+4 lines/i, terminal);

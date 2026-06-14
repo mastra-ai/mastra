@@ -38,25 +38,23 @@ export const omThresholdPersistenceScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Reflection threshold\s+80k/i, terminal, 8_000);
 
     terminal.write('\x1b[B'.repeat(2));
-    await runtime.sleep(250);
     terminal.write('\r');
     await runtime.waitForScreenText(/Observation Threshold/i, terminal, 8_000);
     terminal.write('15');
-    await runtime.sleep(150);
     terminal.write('\r');
     await runtime.waitForScreenText(/Observation threshold\s+15k/i, terminal, 8_000);
+    await runtime.waitForScreenTextAbsent(/_k tokens/i, terminal, 8_000);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(250);
     terminal.write('\r');
     await runtime.waitForScreenText(/Reflection Threshold/i, terminal, 8_000);
     terminal.write('60');
-    await runtime.sleep(150);
     terminal.write('\r');
     await runtime.waitForScreenText(/Reflection threshold\s+60k/i, terminal, 8_000);
+    await runtime.waitForScreenTextAbsent(/_k tokens/i, terminal, 8_000);
 
     terminal.write('\x1b');
-    await runtime.sleep(300);
+    await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("OM_THRESH_GLOBAL="+s.models.omObservationThreshold+":"+s.models.omReflectionThreshold)'`,
@@ -69,7 +67,6 @@ export const omThresholdPersistenceScenario: McE2eScenario = {
     await runtime.waitForScreenText(/OM_THRESH_THREAD=1:1:1:1/i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 1) {
