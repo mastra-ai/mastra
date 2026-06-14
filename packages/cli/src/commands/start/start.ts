@@ -49,6 +49,7 @@ export async function start(options: StartOptions = {}) {
     let stderrBuffer = '';
     server.stderr.on('data', data => {
       stderrBuffer += data.toString();
+      process.stderr.write(data);
     });
 
     server.on('exit', code => {

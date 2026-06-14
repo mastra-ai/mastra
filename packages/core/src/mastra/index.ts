@@ -1859,6 +1859,14 @@ export class Mastra<
     return this.#agents;
   }
 
+  #initializeAgentChannels(agentKey: string, agentChannelsInstance: AgentChannels): void {
+    void Promise.resolve()
+      .then(() => agentChannelsInstance.initialize(this))
+      .catch(err => {
+        this.#logger?.error(`Failed to initialize channels for agent "${agentKey}":`, err);
+      });
+  }
+
   /**
    * Adds a new agent to the Mastra instance.
    *
@@ -2025,7 +2033,7 @@ export class Mastra<
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      void agentChannelsInstance.initialize(this);
+      this.#initializeAgentChannels(agentKey, agentChannelsInstance);
     }
   }
 
