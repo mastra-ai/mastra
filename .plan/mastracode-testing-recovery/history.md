@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Core Harness API reference compile smoke (2026-06-13, pending)
+### Core Harness API reference compile smoke (2026-06-13, 7a24ff836b)
 
 Added `packages/core/src/harness/harness-public-api.test.ts`, a public API smoke that extracts the first TypeScript code block from `docs/src/content/en/reference/harness/harness-class.mdx`, compiles it through the package export `@mastra/core/harness`, then appends representative object-parameter calls for `sendMessage`, `switchMode`, `switchModel`, `createThread`, `switchThread`, `respondToQuestion`, `respondToPlanApproval`, and `respondToToolApproval`. Updated the Harness reference usage example to current Agent config and model config shapes while keeping the snippet self-contained.
 
