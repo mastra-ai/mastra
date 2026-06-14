@@ -1,0 +1,36 @@
+{
+  "name": "examples-sentinel",
+  "type": "module",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "mastra:build": "mastra build",
+    "mastra:dev": "mastra dev"
+  },
+  "dependencies": {
+    "zod": "^4.3.6",
+    "typescript": "^5.9.3",
+    "@ai-sdk/openai": "^3.0.0",
+    "ai": "^6.0.1",
+    "@mastra/core": "beta",
+    "@mastra/editor": "beta",
+    "@mastra/libsql": "beta",
+    "@mastra/duckdb": "beta",
+    "@mastra/observability": "beta",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "mastra": "link:../../packages/cli"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/editor": "link:../../packages/editor",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/duckdb": "link:../../stores/duckdb",
+      "@mastra/observability": "link:../../observability/mastra",
+      "mastra": "link:../../packages/cli"
+    }
+  },
+  "license": "Apache-2.0"
+}
