@@ -44,7 +44,11 @@ import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({ url: 'file:./mastra.db' }),
-  agents: { builderAgent: createBuilderAgent() },
+  agents: {
+    builderAgent: createBuilderAgent({
+      model: '__GATEWAY_OPENAI_MODEL__',
+    }),
+  },
   editor: new MastraEditor({
     builder: {
       enabled: true,
@@ -72,7 +76,56 @@ The Agent Builder requires:
 
 - **Storage**: An `@mastra/core` storage adapter on the `Mastra` instance. Agents, memory, and workspace state all persist through `Mastra.storage`.
 - **The Builder agent**: Register a Builder agent created with the `createBuilderAgent()` factory from `@mastra/editor/ee` on `Mastra.agents`. The chat-based editor invokes it through the same `Mastra.getAgent(id)` lookup as any other agent. Without this registration, the chat-based editor returns 404.
-- **`OPENAI_API_KEY`**: The Builder agent created by `createBuilderAgent()` runs on an OpenAI model, so an `OPENAI_API_KEY` environment variable is required.
+- **Model provider credentials**: The Builder agent defaults to `openai/gpt-5.5` when no `model` is passed to `createBuilderAgent()`. Pass a different model string or config object to use another provider. See [Configuring the Builder Agent model](#configuring-the-builder-agent-model) for examples.
+
+## Configuring the Builder Agent model
+
+The `createBuilderAgent()` factory accepts a partial agent config. Pass `model` to use a provider other than the default.
+
+Use a model string for any provider in the Mastra model router:
+
+```typescript title="src/mastra/index.ts"
+import { createBuilderAgent } from '@mastra/editor/ee'
+
+const builderAgent = createBuilderAgent({
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+})
+```
+
+Use a config object to point at a custom endpoint or gateway:
+
+```typescript title="src/mastra/index.ts"
+import { createBuilderAgent } from '@mastra/editor/ee'
+
+const builderAgent = createBuilderAgent({
+  model: {
+    id: 'my-provider/my-model',
+    url: 'https://api.my-provider.com/v1',
+    apiKey: process.env.MY_PROVIDER_API_KEY,
+  },
+})
+```
+
+Custom gateways registered on the `Mastra` instance also work. The model router resolves the gateway automatically:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { createBuilderAgent } from '@mastra/editor/ee'
+import { MyGateway } from './my-gateway'
+
+export const mastra = new Mastra({
+  gateways: {
+    myGateway: new MyGateway(),
+  },
+  agents: {
+    builderAgent: createBuilderAgent({
+      model: 'my-gateway/my-provider/my-model',
+    }),
+  },
+})
+```
+
+See the [custom gateways](/models/gateways/custom-gateways) page for how to implement `MastraModelGateway`.
 
 ## Disabling the Builder
 

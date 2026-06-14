@@ -51,6 +51,86 @@ Registered providers (`provider: 'openai'`, `provider: 'anthropic'`, and so on) 
 
 See the [`builder.configuration.agent.models`](/reference/editor/agent-builder/builder-models) reference for every admin-writable field and validation rules.
 
+## Using a different default model
+
+Pin a non-OpenAI model as the default for every new Builder-created agent:
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        models: {
+          default: { provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
+          allowed: [
+            { provider: 'anthropic', modelId: 'claude-sonnet-4-6' },
+            { provider: 'anthropic', modelId: 'claude-haiku-4-5' },
+          ],
+        },
+      },
+    },
+  },
+})
+```
+
+End users see only the two Anthropic models in the picker, with `claude-sonnet-4-6` pre-selected.
+
+## Custom gateways
+
+Use `kind: 'custom'` entries to allow models that are not in the built-in provider registry. This applies to self-hosted deployments, private API gateways, and any provider the registry does not recognize.
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        models: {
+          default: {
+            kind: 'custom',
+            provider: 'my-gateway',
+            modelId: 'my-model',
+          },
+          allowed: [
+            {
+              kind: 'custom',
+              provider: 'my-gateway',
+              modelId: 'my-model',
+            },
+            {
+              kind: 'custom',
+              provider: 'my-gateway',
+              modelId: 'my-model-fast',
+            },
+          ],
+        },
+      },
+    },
+  },
+})
+```
+
+Register the matching custom gateway on the `Mastra` instance so the model router can resolve these IDs at runtime:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MyGateway } from './my-gateway'
+
+export const mastra = new Mastra({
+  gateways: {
+    myGateway: new MyGateway(),
+  },
+  // ...
+})
+```
+
+See the [custom gateways](/models/gateways/custom-gateways) page for how to implement `MastraModelGateway`.
+
 ## Related
 
 - [Configuration](/docs/agent-builder/configuration) — wire the model policy into the broader Builder config.
