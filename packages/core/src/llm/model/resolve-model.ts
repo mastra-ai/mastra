@@ -13,34 +13,7 @@ import type {
   MastraLanguageModel,
   MastraLegacyLanguageModel,
 } from './shared.types';
-
-/**
- * Shape of a TanStack AI TextAdapter (structural detection, no import dependency).
- * @see https://tanstack.com/ai
- */
-interface TanStackTextAdapterLike {
-  readonly kind: 'text';
-  readonly name: string;
-  readonly model: string;
-  chatStream: (...args: Array<any>) => AsyncIterable<unknown>;
-}
-
-/**
- * Type guard to detect a TanStack AI TextAdapter by its structural shape.
- * Uses duck-typing so @mastra/core doesn't need a hard dependency on @tanstack/ai.
- * @internal
- */
-export function isTanStackTextAdapter(value: unknown): value is TanStackTextAdapterLike {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as Record<string, unknown>).kind === 'text' &&
-    typeof (value as Record<string, unknown>).name === 'string' &&
-    typeof (value as Record<string, unknown>).model === 'string' &&
-    typeof (value as Record<string, unknown>).chatStream === 'function' &&
-    !('specificationVersion' in value)
-  );
-}
+import { TanStackLanguageModel, isTanStackTextAdapter } from './tanstack/bridge';
 
 /**
  * Type guard to check if a model config is an OpenAICompatibleConfig object
@@ -153,10 +126,9 @@ export async function resolveModelConfig(
   const gatewayRecord = mastra?.listGateways();
   const customGateways = gatewayRecord ? Object.values(gatewayRecord) : undefined;
 
-  // TanStack AI TextAdapter: extract provider/model and route through Mastra's model router
+  // TanStack AI TextAdapter: wrap with protocol bridge that calls the adapter's chatStream()
   if (isTanStackTextAdapter(modelConfig)) {
-    const routerId = `${modelConfig.name}/${modelConfig.model}` as `${string}/${string}`;
-    return new ModelRouterLanguageModel(routerId, customGateways);
+    return new TanStackLanguageModel(modelConfig);
   }
 
   // If it's a string (magic string like "openai/gpt-4o") or OpenAICompatibleConfig, create ModelRouterLanguageModel

@@ -96,6 +96,7 @@ export type {
   AttachmentCapabilities,
 } from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
+export { TanStackLanguageModel, isTanStackTextAdapter } from './model/tanstack/bridge';
 
 export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;
 
