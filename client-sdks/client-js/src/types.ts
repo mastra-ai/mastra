@@ -148,9 +148,10 @@ export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /ag
 
 /**
  * Listed suspended runs as returned by `agent.listSuspendedRuns()`.
- * Unlike the raw wire response, `suspendedAt` is revived into a `Date`.
+ * Date fields (e.g. `suspendedAt`) are ISO strings over the wire, matching
+ * the rest of the client SDK.
  */
-export type ListAgentSuspendedRunsResponse = RouteResponse<'GET /agents/:agentId/suspended-runs'>;
+export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
 
 export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 

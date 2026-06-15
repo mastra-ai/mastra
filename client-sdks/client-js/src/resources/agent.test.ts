@@ -1658,7 +1658,7 @@ describe('Agent Voice Resource', () => {
     expect(versionedAgent).toBeInstanceOf(Agent);
   });
 
-  it('should list suspended runs and revive suspendedAt dates', async () => {
+  it('should list suspended runs with suspendedAt as an ISO string', async () => {
     const suspendedAt = new Date('2026-06-12T10:00:00.000Z');
     mockFetchResponse({
       runs: [
@@ -1686,7 +1686,7 @@ describe('Agent Voice Resource', () => {
     );
     expect(result.total).toBe(1);
     expect(result.runs[0]!.runId).toBe('run-123');
-    expect(result.runs[0]!.suspendedAt).toEqual(suspendedAt);
+    expect(result.runs[0]!.suspendedAt).toBe(suspendedAt.toISOString());
     expect(result.runs[0]!.toolCalls[0]!.requiresApproval).toBe(true);
   });
 
