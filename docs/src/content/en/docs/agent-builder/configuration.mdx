@@ -77,9 +77,9 @@ new MastraEditor({
       agent: {
         models: {
           allowed: [
-            { provider: 'openai', modelId: 'gpt-5.4-mini' },
-            { provider: 'openai', modelId: 'gpt-5.4' },
-            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+            { provider: 'openai', modelId: '__GATEWAY_OPENAI_MODEL_MINI__' },
+            { provider: 'openai', modelId: '__GATEWAY_OPENAI_MODEL__' },
+            { provider: 'anthropic', modelId: '__GATEWAY_ANTHROPIC_MODEL_OPUS__' },
           ],
         },
       },
@@ -130,9 +130,9 @@ MCP tools work the same way: load them via `MCPClient.getTools()` and spread the
 
 `configuration.agent.tools`, `configuration.agent.agents`, and `configuration.agent.workflows` constrain which registered entries appear in the Builder's pickers. Allowlist semantics are the same for all three:
 
-- **Omitted**: unrestricted. The picker shows every registered entry.
-- **`allowed: []`**: explicit lockdown. The picker is empty.
-- **`allowed: [...ids]`**: the picker shows only the listed IDs.
+- **Omitted**: Unrestricted. The picker shows every registered entry.
+- **`allowed: []`**: Explicit lockdown. The picker is empty.
+- **`allowed: [...ids]`**: The picker shows only the listed IDs.
 
 Unknown IDs are dropped and surfaced as warnings through `getModelPolicyWarnings()` and the server logs.
 
@@ -153,7 +153,7 @@ new MastraEditor({
 
 ## Related
 
-- [Model policy](/docs/agent-builder/model-policy) — pin the allowed models and default model.
-- [Memory](/docs/agent-builder/memory) — set the default memory shape for new agents.
-- [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) — full property list.
-- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — every field on `configuration.agent`.
+- [Model policy](/docs/agent-builder/model-policy): Pin the allowed models and default model.
+- [Memory](/docs/agent-builder/memory): Set the default memory shape for new agents.
+- [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options): Full property list.
+- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults): Every field on `configuration.agent`.

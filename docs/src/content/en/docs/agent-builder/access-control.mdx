@@ -96,13 +96,13 @@ export const mastra = new Mastra({
 
 Permission patterns follow `resource:action`. Wildcards are supported on either side:
 
-- `*` — full access (every resource, every action). Used by `admin`.
-- `agent-builder:*` — every action on the `agent-builder` resource.
-- `*:read` — `read` across every resource.
+- `*`: Full access (every resource, every action). Used by `admin`.
+- `agent-builder:*`: Every action on the `agent-builder` resource.
+- `*:read`: `read` Across every resource.
 
 Patterns resolve through `matchesPermission()`. The first matching role permission grants the action.
 
 ## Related
 
-- [Configuration](/docs/agent-builder/configuration) — wire RBAC alongside the rest of the Builder config.
-- [Deploying](/docs/agent-builder/deploying) — auth, RBAC, and EE license setup for production.
+- [Configuration](/docs/agent-builder/configuration): Wire RBAC alongside the rest of the Builder config.
+- [Deploying](/docs/agent-builder/deploying): Auth, RBAC, and EE license setup for production.
