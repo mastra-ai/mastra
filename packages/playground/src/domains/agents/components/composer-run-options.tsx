@@ -1,18 +1,17 @@
-import { Button, Popover, PopoverContent, PopoverTrigger, ScrollArea, Txt } from '@mastra/playground-ui';
-import { Braces } from 'lucide-react';
+import { Button, Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui';
+import { Settings2 } from 'lucide-react';
 
-import { RequestContext } from './request-context';
-import { RequestContextSchemaForm } from '@/domains/request-context/components/request-context-schema-form';
+import { AgentRunOptionsContent } from './agent-run-options';
 
-interface ComposerRequestContextProps {
+interface ComposerRunOptionsProps {
   requestContextSchema?: string;
 }
 
 /**
- * Composer popover for editing the request context sent with each run.
- * Requires SchemaRequestContextProvider when a schema is present.
+ * Composer popover for run-scoped controls.
+ * Requires SchemaRequestContextProvider and TracingSettingsProvider.
  */
-export function ComposerRequestContext({ requestContextSchema }: ComposerRequestContextProps) {
+export function ComposerRunOptions({ requestContextSchema }: ComposerRunOptionsProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -20,26 +19,17 @@ export function ComposerRequestContext({ requestContextSchema }: ComposerRequest
           variant="default"
           size="icon-md"
           type="button"
-          tooltip="Request context"
-          data-testid="composer-request-context-trigger"
+          tooltip="Run options"
+          data-testid="composer-run-options-trigger"
         >
-          <Braces className="h-5 w-5 text-neutral3 hover:text-neutral6" />
+          <Settings2 className="h-5 w-5 text-neutral3 hover:text-neutral6" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[400px] p-0">
-        <ScrollArea className="max-h-[500px]">
-          <div className="p-4 space-y-4">
-            <Txt variant="ui-sm" className="text-neutral3">
-              Request context values are passed into experiments and test chats.
-            </Txt>
-            {requestContextSchema ? (
-              <RequestContextSchemaForm requestContextSchema={requestContextSchema} />
-            ) : (
-              <RequestContext />
-            )}
-          </div>
-        </ScrollArea>
+      <PopoverContent align="start" className="w-[min(760px,calc(100vw-2rem))] p-0">
+        <AgentRunOptionsContent requestContextSchema={requestContextSchema} />
       </PopoverContent>
     </Popover>
   );
 }
+
+export const ComposerRequestContext = ComposerRunOptions;

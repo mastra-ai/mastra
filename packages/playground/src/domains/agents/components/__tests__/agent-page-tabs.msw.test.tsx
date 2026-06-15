@@ -30,6 +30,7 @@ const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorE
 );
 
 const navigateSpy = vi.fn();
+const enabledPackages = { ...systemPackages, cmsEnabled: true, observabilityEnabled: true };
 
 const noopPaths = {
   agentLink: () => '',
@@ -54,7 +55,7 @@ const noopPaths = {
   experimentLink: () => '',
 } as never;
 
-function renderLayout() {
+function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -64,7 +65,7 @@ function renderLayout() {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={navigateSpy} paths={noopPaths}>
           <TooltipProvider>
-            <MemoryRouter initialEntries={['/agents/agent-1/chat/new']}>
+            <MemoryRouter initialEntries={[initialEntry]}>
               <Routes>
                 <Route
                   path="/agents/:agentId/*"
@@ -83,10 +84,10 @@ function renderLayout() {
   );
 }
 
-function commonHandlers() {
+function commonHandlers(packagesResponse = systemPackages) {
   return [
     http.get(`${BASE_URL}/api/agents/agent-1`, () => HttpResponse.json(v2Agent)),
-    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
+    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesResponse)),
   ];
 }
 
@@ -117,14 +118,14 @@ describe('AgentLayout tool tabs', () => {
   });
 
   it('lets the tab list keep the full row width on mobile by wrapping the right-slot controls', async () => {
-    server.use(...commonHandlers());
+    server.use(...commonHandlers(enabledPackages));
 
-    renderLayout();
+    renderLayout('/agents/agent-1/evaluate');
 
     // Below lg the right-slot buttons wrap onto their own line, right-aligned,
     // instead of stealing width from the (scrollable) tab list.
-    const tracingTrigger = await screen.findByTestId('agent-tracing-controls-trigger');
-    const rightSlot = tracingTrigger.parentElement!;
+    const runOptionsTrigger = await screen.findByTestId('agent-top-bar-run-options-trigger');
+    const rightSlot = runOptionsTrigger.parentElement!;
     expect(rightSlot.className).toContain('ml-auto');
 
     const tabsRow = rightSlot.parentElement!;
@@ -135,5 +136,23 @@ describe('AgentLayout tool tabs', () => {
     const tabsRoot = screen.getByRole('tablist').parentElement!.parentElement!;
     expect(tabsRoot.className).toContain('min-w-0');
     expect(tabsRoot.className).toContain('max-lg:flex-auto');
+  });
+
+  it('keeps run options out of the Editor tab bar because the editor chat composer owns them', async () => {
+    server.use(...commonHandlers(enabledPackages));
+
+    renderLayout('/agents/agent-1/editor');
+
+    expect(await screen.findByRole('tab', { name: /editor/i })).not.toBeNull();
+    expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
+    expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
+  });
+
+  it('keeps the top-bar run options control on Evaluate because there is no composer', async () => {
+    server.use(...commonHandlers(enabledPackages));
+
+    renderLayout('/agents/agent-1/evaluate');
+
+    expect(await screen.findByTestId('agent-top-bar-run-options-trigger')).not.toBeNull();
   });
 });

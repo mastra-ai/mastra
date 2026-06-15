@@ -14,38 +14,62 @@ import {
   TooltipTrigger,
   Txt,
   Icon,
+  cn,
   useCopyToClipboard,
   formatJSON,
   isValidJson,
   toast,
 } from '@mastra/playground-ui';
 import CodeMirror from '@uiw/react-codemirror';
-import { Braces, CopyIcon, ExternalLink } from 'lucide-react';
+import { Braces, CopyIcon, ExternalLink, X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { RequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 
 import { useLinkComponent } from '@/lib/framework';
 import { usePlaygroundStore } from '@/store/playground-store';
 
-export const RequestContext = () => {
+interface RequestContextProps {
+  editorClassName?: string;
+}
+
+const REQUEST_CONTEXT_EDITOR_CLASSES = cn(
+  'overflow-y-scroll rounded-lg border border-border1 bg-surface2 overflow-hidden p-3',
+  '[&_.cm-editor]:!bg-surface2 [&_.cm-gutters]:!bg-surface2',
+);
+
+function getMatchingPresetKey(presets: RequestContextPresets | null, requestContextStr: string) {
+  if (!presets) return '__custom__';
+
+  for (const [key, value] of Object.entries(presets)) {
+    if (JSON.stringify(value) === requestContextStr) return key;
+  }
+
+  return '__custom__';
+}
+
+function normalizeJsonString(value: string) {
+  try {
+    return JSON.stringify(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+export const RequestContext = ({ editorClassName = 'h-[400px]' }: RequestContextProps = {}) => {
   const { requestContext, setRequestContext } = usePlaygroundStore();
   const [requestContextValue, setRequestContextValue] = useState<string>('');
+  const [savedRequestContextValue, setSavedRequestContextValue] = useState<string>('');
   const theme = useCodemirrorTheme();
   const presets = useRequestContextPresets();
+  const requestContextStr = JSON.stringify(requestContext ?? {});
 
   const [selectedPreset, setSelectedPreset] = useState<string>(() => {
-    if (!presets || !requestContext) return '__custom__';
-    const savedStr = JSON.stringify(requestContext);
-    for (const [key, value] of Object.entries(presets)) {
-      if (JSON.stringify(value) === savedStr) return key;
-    }
-    return '__custom__';
+    return getMatchingPresetKey(presets, requestContextStr);
   });
 
   const { handleCopy } = useCopyToClipboard({ text: requestContextValue });
-
-  const requestContextStr = JSON.stringify(requestContext);
 
   useEffect(() => {
     const run = async () => {
@@ -56,12 +80,26 @@ export const RequestContext = () => {
 
       const formatted = await formatJSON(requestContextStr);
       setRequestContextValue(formatted);
+      setSavedRequestContextValue(formatted);
+      setSelectedPreset(getMatchingPresetKey(presets, requestContextStr));
     };
 
     void run();
-  }, [requestContextStr]);
+  }, [presets, requestContextStr]);
+
+  const isRequestContextDirty = useMemo(() => {
+    const normalizedDraftValue = normalizeJsonString(requestContextValue);
+
+    if (normalizedDraftValue) {
+      return normalizedDraftValue !== requestContextStr;
+    }
+
+    return requestContextValue !== savedRequestContextValue;
+  }, [requestContextStr, requestContextValue, savedRequestContextValue]);
 
   const handleSaveRequestContext = () => {
+    if (!isRequestContextDirty) return;
+
     try {
       const parsedContext = JSON.parse(requestContextValue);
       setRequestContext(parsedContext);
@@ -70,6 +108,11 @@ export const RequestContext = () => {
       console.error('error', error);
       toast.error('Invalid JSON');
     }
+  };
+
+  const handleRevertRequestContext = () => {
+    setRequestContextValue(savedRequestContextValue);
+    setSelectedPreset(getMatchingPresetKey(presets, requestContextStr));
   };
 
   const buttonClass = 'text-neutral3 hover:text-neutral6';
@@ -113,7 +156,7 @@ export const RequestContext = () => {
           <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <button onClick={formatRequestContext} className={buttonClass}>
+                <button type="button" onClick={formatRequestContext} className={buttonClass}>
                   <Icon>
                     <Braces />
                   </Icon>
@@ -124,7 +167,7 @@ export const RequestContext = () => {
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <button onClick={handleCopy} className={buttonClass}>
+                <button type="button" onClick={handleCopy} className={buttonClass}>
                   <Icon>
                     <CopyIcon />
                   </Icon>
@@ -158,11 +201,24 @@ export const RequestContext = () => {
           onChange={handleEditorChange}
           theme={theme}
           extensions={[jsonLanguage]}
-          className="h-[400px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"
+          className={cn(editorClassName, REQUEST_CONTEXT_EDITOR_CLASSES)}
         />
 
-        <div className="flex justify-end pt-2">
-          <Button onClick={handleSaveRequestContext}>Save</Button>
+        <div className="flex justify-end gap-2 pt-2">
+          {isRequestContextDirty && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              type="button"
+              tooltip="Revert request context changes"
+              onClick={handleRevertRequestContext}
+            >
+              <X />
+            </Button>
+          )}
+          <Button type="button" onClick={handleSaveRequestContext} disabled={!isRequestContextDirty}>
+            Save
+          </Button>
         </div>
       </div>
     </TooltipProvider>

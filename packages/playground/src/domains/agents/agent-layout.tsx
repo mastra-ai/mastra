@@ -3,8 +3,7 @@ import { MainContentLayout } from '@mastra/playground-ui';
 import { useParams, useLocation } from 'react-router';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
-import { AgentTopBarControls } from '@/domains/agents/components/agent-top-bar-controls';
-import { AgentTracingControls } from '@/domains/agents/components/agent-tracing-controls';
+import { AgentTopBarRunOptions } from '@/domains/agents/components/agent-top-bar-controls';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
@@ -43,14 +42,8 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
             ? 'settings'
             : 'chat';
 
-  const showTopBarControls =
-    (activeTab === 'versions' || activeTab === 'evaluate' || activeTab === 'review') &&
-    (showPlayground || showObservability);
-
-  // Tracing options are run-scoped but rarely touched: they live in the tab
-  // bar instead of the chat composer.
-  const showTracingControls =
-    activeTab === 'chat' || activeTab === 'versions' || activeTab === 'evaluate' || activeTab === 'review';
+  const showTopBarRunOptions =
+    (activeTab === 'evaluate' || activeTab === 'review') && (showPlayground || showObservability);
 
   const content = (
     <MainContentLayout>
@@ -60,12 +53,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         showPlayground={showPlayground}
         showObservability={showObservability}
         rightSlot={
-          showTopBarControls || showTracingControls ? (
-            <>
-              {showTopBarControls && <AgentTopBarControls requestContextSchema={requestContextSchema} />}
-              {showTracingControls && <AgentTracingControls />}
-            </>
-          ) : undefined
+          showTopBarRunOptions ? <AgentTopBarRunOptions requestContextSchema={requestContextSchema} /> : undefined
         }
       />
       {children}
