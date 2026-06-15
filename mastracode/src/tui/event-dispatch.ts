@@ -10,6 +10,7 @@ import {
   handleAgentEnd,
   handleAgentAborted,
   handleAgentError,
+  handleGoalEvaluation,
   handleMessageStart,
   handleMessageUpdate,
   handleMessageEnd,
@@ -170,8 +171,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
         state.githubPrPollingActive = false;
         state.githubPrGradientAnimator?.stop();
-        // Load goal state from thread metadata
-        state.goalManager?.loadFromThreadMetadata(metadata);
+        // Load the objective from the durable ThreadState slot, falling back to
+        // the legacy thread-metadata goal for pre-migration threads.
+        await state.goalManager.loadFromThread(state);
+        if (!state.goalManager.getGoal()) {
+          state.goalManager.loadFromThreadMetadata(metadata);
+        }
       }
       break;
     }
@@ -367,6 +372,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
         state.ui.requestRender();
       }
+      break;
+    }
+
+    case 'goal_evaluation': {
+      handleGoalEvaluation(ectx, event.payload);
       break;
     }
 

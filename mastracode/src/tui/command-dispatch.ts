@@ -42,7 +42,6 @@ import {
   handleObservabilityCommand,
   handleGithubCommand,
   handleGoalCommand,
-  handleJudgeCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -251,9 +250,6 @@ export async function dispatchSlashCommand(
       return true;
     case 'goal':
       await handleGoalCommand(buildCtx(), args);
-      return true;
-    case 'judge':
-      await handleJudgeCommand(buildCtx());
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);

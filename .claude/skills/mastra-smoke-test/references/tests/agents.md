@@ -106,3 +106,9 @@ curl -s -X POST "http://localhost:4111/api/agents/<agentKey>/generate" \
 `/generate` — these are silently discarded. Use `memory: { thread, resource }`.
 Top-level `threadId` / `resourceId` are only read by the deprecated
 `/generate-legacy` route.
+
+**Browser agents** (`browser: new StagehandBrowser(...)`) require
+`memory: { thread, resource }` on every call — without it the auto-attached
+`BrowserContextProcessor` throws `computeStateSignal requires Mastra memory
+with an active resourceId and threadId`. See `tests/setup.md` →
+"Runtime requirement".
