@@ -532,6 +532,12 @@ const sidebars = {
         { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['alpha'] } },
         {
           type: 'doc',
+          id: 'signals/task-signal-provider',
+          label: 'TaskSignalProvider',
+          customProps: { tags: ['alpha'] },
+        },
+        {
+          type: 'doc',
           id: 'signals/webhook-signal-provider',
           label: 'WebhookSignalProvider',
           customProps: { tags: ['alpha'] },

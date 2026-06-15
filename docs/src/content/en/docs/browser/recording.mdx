@@ -1,0 +1,121 @@
+---
+title: "Browser recording (alpha)"
+description: "Record browser sessions as Motion-JPEG AVI videos with optional agent captions."
+packages:
+  - "@mastra/core"
+  - "@mastra/agent-browser"
+  - "@mastra/stagehand"
+---
+
+# Browser recording (alpha)
+
+Browser recording adds two opt-in tools that let an agent save a browser session as a Motion-JPEG AVI video. The agent can also add short captions while it works.
+
+:::caution
+
+Browser recording is an alpha feature. The API and output format may change.
+
+:::
+
+## When to use browser recording
+
+Use browser recording when you need to:
+
+- Review what an agent did in a browser
+- Share a short browser automation run with a teammate
+- Debug missed actions, slow page loads, or unexpected navigation
+- Add short captions that explain each major step
+
+Recording tools are disabled by default. Enable them only for agents that need to write video files.
+
+## Enable recording
+
+Pass `recording.outputDir` to `AgentBrowser` or `StagehandBrowser`. The browser provider adds the `browser_record` and `browser_record_caption` tools to the agent's toolset.
+
+The following example enables recording for `AgentBrowser`:
+
+```typescript title="src/mastra/browsers.ts"
+import { join } from 'node:path'
+import { AgentBrowser } from '@mastra/agent-browser'
+
+export const browser = new AgentBrowser({
+  headless: false,
+  recording: {
+    outputDir: join(process.cwd(), 'browser-recordings'),
+  },
+})
+```
+
+The same option works with `StagehandBrowser`:
+
+```typescript title="src/mastra/browsers.ts"
+import { join } from 'node:path'
+import { StagehandBrowser } from '@mastra/stagehand'
+
+export const browser = new StagehandBrowser({
+  headless: false,
+  recording: {
+    outputDir: join(process.cwd(), 'browser-recordings'),
+  },
+})
+```
+
+## Recording tools
+
+Enabling recording adds these tools:
+
+| Tool | Description |
+| - | - |
+| `browser_record` | Starts, stops, or checks the status of a recording. |
+| `browser_record_caption` | Adds a short caption at the current moment in the recording. |
+
+`browser_record` accepts an `action` field:
+
+- `start`: Start recording the current browser session.
+- `status`: Check whether a recording is active.
+- `stop`: Stop recording and write the `.avi` file.
+
+The `outputPath` option for `browser_record` must be an absolute path inside the configured `recording.outputDir`. If you omit it, Mastra creates a file in `outputDir`.
+
+## Example agent instructions
+
+Tell the agent when to record and when to add captions:
+
+```typescript title="src/mastra/agents/browser-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { browser } from '../browsers'
+
+export const browserAgent = new Agent({
+  id: 'browser-agent',
+  name: 'Browser Agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  browser,
+  instructions: `Use browser tools to complete the requested task.
+
+When the user asks for a recording:
+1. Call browser_record with action="start" before browser work begins.
+2. After each major action, call browser_record_caption with a caption of about six words.
+3. Call browser_record with action="stop" as soon as the task is complete.
+4. Return the saved video path to the user.`,
+})
+```
+
+## Output format and limits
+
+Recordings are saved as Motion-JPEG AVI files. This format is encoded in JavaScript and does not require `ffmpeg` or native dependencies.
+
+Default limits:
+
+- Maximum duration: 30 seconds
+- Hard duration cap: 120 seconds
+- Maximum frame size: 1024 × 720
+- Captions: 80 characters each
+- One active recording per process
+
+Use shorter recordings when possible. Long browser sessions produce larger files and are harder to review.
+
+## Next steps
+
+- [AgentBrowser](/docs/browser/agent-browser)
+- [Stagehand](/docs/browser/stagehand)
+- [Browser overview](/docs/browser/overview)

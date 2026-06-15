@@ -38,6 +38,8 @@ import {
   GetPromptRequestSchema,
   SetLevelRequestSchema,
   PromptSchema,
+  McpError,
+  ErrorCode,
 } from '@modelcontextprotocol/sdk/types.js';
 import type {
   TextResourceContents,
@@ -862,7 +864,7 @@ export class MCPServer extends MCPServerBase {
 
         if (!resource) {
           this.logger.warn('Unknown resource URI requested', { uri });
-          throw new Error(`Resource not found: ${uri}`);
+          throw new McpError(ErrorCode.InvalidParams, `Resource not found: ${uri}`);
         }
 
         try {
@@ -992,7 +994,7 @@ export class MCPServer extends MCPServerBase {
           if (prompt.arguments) {
             for (const arg of prompt.arguments) {
               if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
-                throw new Error(`Missing required argument: ${arg.name}`);
+                throw new McpError(ErrorCode.InvalidParams, `Missing required argument: ${arg.name}`);
               }
             }
           }

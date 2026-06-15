@@ -18,6 +18,7 @@ function createMockState() {
     taskToolInsertIndex: 5,
     harness: {
       abort: vi.fn(),
+      detachFromCurrentThread: vi.fn(),
       getDisplayState: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })),
       setState: vi.fn(async () => {}),
     },
@@ -34,13 +35,13 @@ function createCtx(state: ReturnType<typeof createMockState>): SlashCommandConte
 }
 
 describe('handleNewCommand', () => {
-  it('aborts the harness before setting pendingNewThread', async () => {
+  it('detaches from current thread before setting pendingNewThread', async () => {
     const state = createMockState();
     const ctx = createCtx(state);
     const callOrder: string[] = [];
 
-    state.harness.abort.mockImplementation(() => {
-      callOrder.push('abort');
+    state.harness.detachFromCurrentThread.mockImplementation(() => {
+      callOrder.push('detach');
     });
     const origPendingNewThread = Object.getOwnPropertyDescriptor(state, 'pendingNewThread');
     Object.defineProperty(state, 'pendingNewThread', {
@@ -56,8 +57,8 @@ describe('handleNewCommand', () => {
 
     await handleNewCommand(ctx);
 
-    expect(state.harness.abort).toHaveBeenCalledOnce();
-    expect(callOrder).toEqual(['abort', 'pendingNewThread']);
+    expect(state.harness.detachFromCurrentThread).toHaveBeenCalledOnce();
+    expect(callOrder).toEqual(['detach', 'pendingNewThread']);
   });
 
   it('clears UI state and ephemeral thread state', async () => {
