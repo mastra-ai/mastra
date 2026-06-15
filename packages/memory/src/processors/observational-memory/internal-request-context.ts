@@ -12,6 +12,7 @@ export function withOmInternalThreadId(
   omAgentId: string,
 ): RequestContext | undefined {
   if (!requestContext) return undefined;
+  if (!(requestContext instanceof RequestContext)) return requestContext;
 
   const parentThreadId = requestContext.get(MASTRA_THREAD_ID_KEY);
   if (typeof parentThreadId !== 'string' || !parentThreadId) return requestContext;

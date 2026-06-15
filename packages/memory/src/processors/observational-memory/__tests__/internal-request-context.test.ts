@@ -74,6 +74,12 @@ describe('withOmInternalThreadId', () => {
     expect(withOmInternalThreadId(undefined, 'observational-memory-observer')).toBeUndefined();
   });
 
+  it('returns non-RequestContext values unchanged', () => {
+    const requestContext = { threadId: 'legacy-thread' } as any;
+
+    expect(withOmInternalThreadId(requestContext, 'observational-memory-observer')).toBe(requestContext);
+  });
+
   it('returns the original request context when there is no parent thread id', () => {
     const requestContext = new RequestContext();
     requestContext.set('tenantId', 'tenant-1');

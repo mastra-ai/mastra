@@ -6,6 +6,7 @@ import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { omDebug } from './debug';
+import { withOmInternalThreadId } from './internal-request-context';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import type { ObserverAttachmentFilter } from './observer-agent';
 import {
@@ -21,7 +22,6 @@ import { withRetry } from './retry';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
 import type { ResolvedObservationConfig } from './types';
-import { withOmInternalThreadId } from './internal-request-context';
 
 type ConcreteObservationModel = Exclude<ResolvedObservationConfig['model'], ModelByInputTokens>;
 

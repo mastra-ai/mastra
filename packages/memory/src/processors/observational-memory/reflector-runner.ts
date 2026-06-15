@@ -9,6 +9,7 @@ import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/stor
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { omDebug, omError } from './debug';
+import { withOmInternalThreadId } from './internal-request-context';
 import {
   createActivationMarker,
   createBufferingEndMarker,
@@ -33,7 +34,6 @@ import { withRetry } from './retry';
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
-import { withOmInternalThreadId } from './internal-request-context';
 import type {
   ObservationDebugEvent,
   ObservationMarkerConfig,
