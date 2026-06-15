@@ -143,51 +143,51 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        * When toModelOutput is defined, the transform runs under a MAPPING child span so
        * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
        */
-       /**
-        * Normalize modelOutput from toModelOutput() into the AI SDK's
-        * LanguageModelV2ToolResultOutput shape.
-        *
-        * The AI SDK's content array only accepts type 'text' or 'media'.
-        * Mastra's createTool docs show type 'image-url' as a convenience shorthand,
-        * so we normalize that here into type 'media' with the correct structure.
-        *
-        * Previously this converted 'media' -> 'image-data'/'file-data' which was wrong
-        * (those types are not valid in LanguageModelV2ToolResultOutput).
-        * See: https://github.com/mastra-ai/mastra/issues/17876
-        */
-       function normalizeModelOutput(output: unknown): unknown {
-         if (output == null || typeof output !== 'object') return output;
+      /**
+       * Normalize modelOutput from toModelOutput() into the AI SDK's
+       * LanguageModelV2ToolResultOutput shape.
+       *
+       * The AI SDK's content array only accepts type 'text' or 'media'.
+       * Mastra's createTool docs show type 'image-url' as a convenience shorthand,
+       * so we normalize that here into type 'media' with the correct structure.
+       *
+       * Previously this converted 'media' -> 'image-data'/'file-data' which was wrong
+       * (those types are not valid in LanguageModelV2ToolResultOutput).
+       * See: https://github.com/mastra-ai/mastra/issues/17876
+       */
+      function normalizeModelOutput(output: unknown): unknown {
+        if (output == null || typeof output !== 'object') return output;
 
-         const obj = output as Record<string, unknown>;
-         if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
+        const obj = output as Record<string, unknown>;
+        if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
 
-         return {
-           ...obj,
-           value: (obj.value as unknown[]).map(item => {
-             if (item == null || typeof item !== 'object') return item;
-             const part = item as Record<string, unknown>;
-             // Normalize 'image-url' convenience type -> 'media' as AI SDK expects
-             if (part.type === 'image-url' && typeof part.url === 'string') {
-               // Prefer caller-supplied mediaType; fall back to parsing data: URI or defaulting to image/jpeg
-               const mediaType =
-                 typeof part.mediaType === 'string' && part.mediaType
-                   ? part.mediaType
-                   : part.url.startsWith('data:')
-                     ? (part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg')
-                     : 'image/jpeg';
-               return { type: 'media', data: part.url, mediaType };
-             }
-             // 'image-data'/'file-data' from old normalizeModelOutput — convert back to 'media'
-             if (part.type === 'image-data' && typeof part.data === 'string') {
-               return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'image/jpeg' };
-             }
-             if (part.type === 'file-data' && typeof part.data === 'string') {
-               return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'application/octet-stream' };
-             }
-             return part;
-           }),
-         };
-       }
+        return {
+          ...obj,
+          value: (obj.value as unknown[]).map(item => {
+            if (item == null || typeof item !== 'object') return item;
+            const part = item as Record<string, unknown>;
+            // Normalize 'image-url' convenience type -> 'media' as AI SDK expects
+            if (part.type === 'image-url' && typeof part.url === 'string') {
+              // Prefer caller-supplied mediaType; fall back to parsing data: URI or defaulting to image/jpeg
+              const mediaType =
+                typeof part.mediaType === 'string' && part.mediaType
+                  ? part.mediaType
+                  : part.url.startsWith('data:')
+                    ? part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg'
+                    : 'image/jpeg';
+              return { type: 'media', data: part.url, mediaType };
+            }
+            // 'image-data'/'file-data' from old normalizeModelOutput — convert back to 'media'
+            if (part.type === 'image-data' && typeof part.data === 'string') {
+              return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'image/jpeg' };
+            }
+            if (part.type === 'file-data' && typeof part.data === 'string') {
+              return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'application/octet-stream' };
+            }
+            return part;
+          }),
+        };
+      }
 
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
