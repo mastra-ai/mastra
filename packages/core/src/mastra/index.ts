@@ -4386,6 +4386,17 @@ export class Mastra<
       targets = this.#workers;
     }
 
+    // Ensure storage is fully initialized before any worker starts. The
+    // scheduler worker runs an immediate warm-up tick on start(), which can
+    // dispatch an internal scheduled workflow (e.g. the notification
+    // dispatcher) and persist a workflow snapshot. Without awaiting init here,
+    // that write can race the lazy storage.init() that creates
+    // `mastra_workflow_snapshot`, producing "no such table" errors on SQL
+    // stores (see #17905). init() is idempotent and a no-op when disabled.
+    if (this.#storage) {
+      await this.#storage.init();
+    }
+
     for (const worker of targets) {
       await worker.init(deps);
       await worker.start();
