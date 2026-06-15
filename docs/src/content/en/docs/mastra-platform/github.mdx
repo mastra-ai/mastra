@@ -1,0 +1,194 @@
+---
+title: "GitHub integration | Mastra platform"
+description: Connect a GitHub repository to a Mastra platform project to deploy Studio and Server on every push.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# GitHub integration
+
+The GitHub integration links a Mastra platform project to a GitHub repository so that pushes to a branch deploy Studio and Server automatically. Use it when you want push-to-deploy instead of running `mastra studio deploy` or `mastra server deploy` from your terminal or CI.
+
+Once a repository is linked, the platform:
+
+- Builds and deploys Studio and Server on every push to the configured branches.
+- Provisions managed databases and the Mastra gateway API key for projects created from a template.
+- Surfaces commit, branch, and pull request context on each deploy.
+- Reports build status back to GitHub as check runs and to the project dashboard with live status badges and inline logs.
+
+## When to use the GitHub integration
+
+Choose the GitHub integration when you want one of the following:
+
+- Push-to-deploy from `main` or any other branch, including separate branches for Studio and Server.
+- A managed onboarding flow that scaffolds a project from a Mastra template, including a fresh repository, managed database, and gateway API key.
+- Pull-request and commit context inside the platform dashboard for triage.
+
+The CLI flow (`mastra studio deploy` and `mastra server deploy`) is still available for ad-hoc deploys and CI providers other than GitHub. See [Studio](/docs/mastra-platform/studio) and [Server](/docs/mastra-platform/server) for the CLI-only path.
+
+## Install the Mastra GitHub App
+
+The integration is powered by the Mastra GitHub App. The App reads repository contents, listens for `push` events on the configured branches, and writes deploy status back as check runs.
+
+<Steps>
+  <StepItem>
+    In the [Mastra platform dashboard](https://projects.mastra.ai), open your organization settings and select **GitHub**.
+  </StepItem>
+
+  <StepItem>
+    Select **Install GitHub App** and choose the GitHub account or organization to install on.
+
+    If you don't own the GitHub organization, GitHub creates a pending **installation request** that an admin must approve. The dashboard tracks pending requests alongside completed installations.
+  </StepItem>
+
+  <StepItem>
+    Select the repositories the App can access. You can scope to specific repositories or grant access to all repositories on the account.
+
+    Mastra requests only the permissions needed for push-to-deploy and check runs. You can revoke or change repository access at any time from GitHub's App settings.
+  </StepItem>
+</Steps>
+
+:::note
+If GitHub later updates the App's required permissions, the dashboard surfaces an **outdated permissions** warning with a one-click approval link. Repository operations return a `403` until an admin re-approves.
+:::
+
+### Pending installation requests
+
+When a non-admin requests the App on an organization, the request stays pending until an organization admin approves it on github.com. The dashboard:
+
+- Lists pending requests next to active installations.
+- Lets the same user request access to multiple GitHub accounts at once.
+- Reconciles pending state against GitHub when you open the page, removing requests an admin has declined or the requester has withdrawn.
+
+There's no API to cancel a pending request from Mastra. Withdraw it from github.com if you no longer need it.
+
+## Create a project from a template
+
+Templates are the fastest way to start. The platform creates a new repository from a Mastra template, links it to a fresh project, provisions any managed databases the template declares, and runs the first deploy.
+
+<Steps>
+  <StepItem>
+    In the dashboard, select **Create project** and choose **Start from a template**.
+  </StepItem>
+
+  <StepItem>
+    Pick a template and select the GitHub account that owns the new repository. Name the repository and choose whether it should be private.
+  </StepItem>
+
+  <StepItem>
+    Configure the template's managed database requirements. Templates can declare required databases (such as Turso or Neon) and you pick the provider and region per requirement.
+  </StepItem>
+
+  <StepItem>
+    Add any template-specific environment variables (for example, AI provider API keys). The platform seeds `MASTRA_GATEWAY_API_KEY` and `MASTRA_PLATFORM_ACCESS_TOKEN` automatically so that template code that talks to the Mastra gateway works on the first deploy.
+  </StepItem>
+
+  <StepItem>
+    Select **Create project**. The platform creates the repository, writes a `.mastra-project.json` config file into it, provisions the managed databases, and triggers the initial Studio and Server deploys.
+  </StepItem>
+</Steps>
+
+The initial deploy waits for managed databases to finish provisioning before it starts, so the template's first build sees the database connection environment variables.
+
+## Link an existing repository
+
+Use this flow when you already have a Mastra project in a GitHub repository.
+
+<Steps>
+  <StepItem>
+    In the dashboard, select **Create project** and choose **Connect an existing repository**, or open an existing project and select **Link repository** from the project settings.
+  </StepItem>
+
+  <StepItem>
+    Pick an installation, then choose the repository. Repository search works across every repository the App has access to on that installation.
+  </StepItem>
+
+  <StepItem>
+    Choose the Studio and Server deploy branches. Both targets default to the repository's default branch, and they can share a branch or use different branches.
+
+    You can disable Studio or Server for the project. The dashboard always selects both by default when you open the deploy drawer.
+  </StepItem>
+
+  <StepItem>
+    Select **Link repository**. The platform validates that the repository doesn't already have a `.mastra-project.json` file pointing at a different project. If it does, the dashboard warns you and offers an **Overwrite** option that replaces the file on link.
+  </StepItem>
+</Steps>
+
+After linking, the next push to the configured branch triggers a deploy.
+
+### `.mastra-project.json` conflicts
+
+The platform writes a `.mastra-project.json` file into every linked repository to identify the project. When you link a repository that already has one of these files, the dashboard checks its contents before submitting:
+
+- **Missing**: the platform creates the file on link.
+- **Matching**: the file already points at the project you're linking, so no change is needed.
+- **Conflicting**: the file points at a different project. You can cancel or explicitly overwrite the file.
+
+See [Configuration](/docs/mastra-platform/configuration) for the file's schema.
+
+## Push-to-deploy
+
+After a repository is linked, every push to a configured branch triggers a deploy:
+
+- A push to the **Studio branch** triggers a Studio deploy.
+- A push to the **Server branch** triggers a Server deploy.
+- If both targets share a branch, one push triggers both deploys in parallel.
+
+Each deploy carries the commit SHA, branch, and (when available) the pull request number that introduced the commit. Builds run inside the platform and report status back to GitHub as check runs on the commit.
+
+Only one build per project runs at a time. If a new push arrives while a build is in progress, the platform cancels older queued builds for the same target and runs the latest.
+
+### Manual GitHub deploys
+
+You can also trigger a deploy from the dashboard without pushing. Open the project, select **Deploy from GitHub**, pick the target (Studio, Server, or both) and a branch, and submit. The platform runs the deploy against the head commit of that branch and records the trigger as a **GitHub Workflow** deploy.
+
+## Track deploys
+
+### Project setup page
+
+After a project is created from a template or linked to a repository, the **Setup** page shows one row per deploy target. Each row:
+
+- Displays a live status badge that polls the deploy until it finishes.
+- Links to the deploy detail page via the deploy ID.
+- Exposes a **Show logs** toggle that streams build and runtime logs inline. Server logs poll every three seconds while the deploy is active.
+
+### Deploy detail page
+
+The deploy detail header shows the commit SHA and, when the deploy is linked to a pull request, a colored pull-request button that links to the PR on GitHub. The button reflects the PR's current state:
+
+| State    | Color  |
+| -------- | ------ |
+| Draft    | Grey   |
+| Open     | Green  |
+| Closed   | Red    |
+| Merged   | Purple |
+
+The platform resolves PR status through the GitHub App so the badge works for private repositories.
+
+### Deploy source
+
+Every deploy records how it was triggered:
+
+- **CLI**: `mastra studio deploy` or `mastra server deploy`.
+- **GitHub Push**: a push to a configured branch.
+- **GitHub Workflow**: a manual deploy from the dashboard.
+
+The deploy list and detail pages show the source as a badge and you can filter the list by source.
+
+## Permissions and revocation
+
+To stop deploys from a repository, do one of the following:
+
+- **Unlink the repository** from the project in **Project settings → Repository**. The project keeps its history and you can re-link a different repository later.
+- **Remove repository access** for the Mastra GitHub App on github.com. Existing deploys keep running, but no new push triggers a deploy.
+- **Uninstall the GitHub App** from the GitHub account. This removes access to every repository on that account.
+
+If GitHub revokes or rotates the App's installation token, repository reads return a `github_app_permissions_outdated` error and the dashboard prompts an admin to re-approve permissions.
+
+## Related
+
+- [Mastra platform overview](/docs/mastra-platform/overview)
+- [Studio on Mastra platform](/docs/mastra-platform/studio)
+- [Server on Mastra platform](/docs/mastra-platform/server)
+- [Configuration](/docs/mastra-platform/configuration)
