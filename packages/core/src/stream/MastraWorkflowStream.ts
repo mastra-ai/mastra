@@ -76,72 +76,77 @@ export class MastraWorkflowStream<
 
     super({
       start: async controller => {
-        const writer = new WritableStream<ChunkType>({
-          write: chunk => {
-            if (
-              (chunk.type === 'step-output' &&
-                chunk.payload?.output?.from === 'AGENT' &&
-                chunk.payload?.output?.type === 'finish') ||
-              (chunk.type === 'step-output' &&
-                chunk.payload?.output?.from === 'WORKFLOW' &&
-                chunk.payload?.output?.type === 'finish')
-            ) {
-              const output = chunk.payload?.output;
-              if (output && 'payload' in output && output.payload) {
-                const finishPayload = output.payload;
-                if ('usage' in finishPayload && finishPayload.usage) {
-                  updateUsageCount(finishPayload.usage);
+        try {
+          const writer = new WritableStream<ChunkType>({
+            write: chunk => {
+              if (
+                (chunk.type === 'step-output' &&
+                  chunk.payload?.output?.from === 'AGENT' &&
+                  chunk.payload?.output?.type === 'finish') ||
+                (chunk.type === 'step-output' &&
+                  chunk.payload?.output?.from === 'WORKFLOW' &&
+                  chunk.payload?.output?.type === 'finish')
+              ) {
+                const output = chunk.payload?.output;
+                if (output && 'payload' in output && output.payload) {
+                  const finishPayload = output.payload;
+                  if ('usage' in finishPayload && finishPayload.usage) {
+                    updateUsageCount(finishPayload.usage);
+                  }
                 }
               }
+
+              controller.enqueue(chunk);
+            },
+          });
+
+          controller.enqueue({
+            type: 'workflow-start',
+            runId: run.runId,
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              workflowId: run.workflowId,
+            },
+          });
+
+          const stream: ReadableStream<ChunkType> = await createStream(writer);
+
+          let workflowStatus: WorkflowRunStatus = 'success';
+
+          for await (const chunk of stream) {
+            // update the usage count
+            if (chunk.type === 'step-finish' && chunk.payload.usage) {
+              updateUsageCount(chunk.payload.usage);
+            } else if (chunk.type === 'workflow-canceled') {
+              workflowStatus = 'canceled';
+            } else if (chunk.type === 'workflow-step-suspended') {
+              workflowStatus = 'suspended';
+            } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
+              workflowStatus = 'failed';
             }
 
             controller.enqueue(chunk);
-          },
-        });
-
-        controller.enqueue({
-          type: 'workflow-start',
-          runId: run.runId,
-          from: ChunkFrom.WORKFLOW,
-          payload: {
-            workflowId: run.workflowId,
-          },
-        });
-
-        const stream: ReadableStream<ChunkType> = await createStream(writer);
-
-        let workflowStatus: WorkflowRunStatus = 'success';
-
-        for await (const chunk of stream) {
-          // update the usage count
-          if (chunk.type === 'step-finish' && chunk.payload.usage) {
-            updateUsageCount(chunk.payload.usage);
-          } else if (chunk.type === 'workflow-canceled') {
-            workflowStatus = 'canceled';
-          } else if (chunk.type === 'workflow-step-suspended') {
-            workflowStatus = 'suspended';
-          } else if (chunk.type === 'workflow-step-result' && chunk.payload.status === 'failed') {
-            workflowStatus = 'failed';
           }
 
-          controller.enqueue(chunk);
-        }
-
-        controller.enqueue({
-          type: 'workflow-finish',
-          runId: run.runId,
-          from: ChunkFrom.WORKFLOW,
-          payload: {
-            workflowStatus,
-            output: {
-              usage: this.#usageCount,
+          controller.enqueue({
+            type: 'workflow-finish',
+            runId: run.runId,
+            from: ChunkFrom.WORKFLOW,
+            payload: {
+              workflowStatus,
+              output: {
+                usage: this.#usageCount,
+              },
+              metadata: {},
             },
-            metadata: {},
-          },
-        });
+          });
 
-        controller.close();
-        deferredPromise.resolve();
+          controller.close();
+          deferredPromise.resolve();
+        } catch (error) {
+          controller.error(error);
+          deferredPromise.reject(error);
+        }
       },
     });
 
