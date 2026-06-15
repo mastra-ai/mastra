@@ -17,6 +17,12 @@ vi.mock('node:fs', () => ({
 
 vi.mock('@earendil-works/pi-tui', () => ({
   CombinedAutocompleteProvider: class {},
+  Container: class {
+    children: unknown[] = [];
+    addChild(child: unknown) {
+      this.children.push(child);
+    }
+  },
   Spacer: class {
     type = 'spacer';
     constructor(public height: number) {}
