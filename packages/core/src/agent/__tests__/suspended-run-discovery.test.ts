@@ -147,6 +147,32 @@ function createApprovalTool(id: string) {
   });
 }
 
+/**
+ * A model that always delegates by emitting a single tool call to a named
+ * sub-agent. Used to build multi-level supervisor → sub-agent chains: each
+ * delegating agent re-suspends its own loop when the agent it called suspends.
+ */
+function createDelegationModel({ toolName, toolCallId }: { toolName: string; toolCallId: string }) {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: `${toolCallId}-0`, modelId: 'mock-model-id', timestamp: new Date(0) },
+        {
+          type: 'tool-call',
+          toolCallId,
+          toolName,
+          input: '{"message":"Find Dero Israel"}',
+          providerExecuted: false,
+        },
+        { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+      ]),
+    }),
+  });
+}
+
 function createSuspendedSetup({
   storage = new InMemoryStore(),
   toolCallOnFirstCall = true,
@@ -500,6 +526,77 @@ describe.each([
           requiresApproval: true,
         },
       ]);
+    }, 30000);
+
+    it('scopes deep (3-level) supervisor → mid → leaf suspensions to each agent owner', async () => {
+      // leaf has the real requireApproval tool; mid delegates to leaf;
+      // supervisor delegates to mid. A suspension at the leaf bubbles up,
+      // re-suspending mid's and the supervisor's delegating tool calls in turn,
+      // producing three chained suspended agentic-loop rows.
+      const leaf = new Agent({
+        id: 'leaf-agent',
+        name: 'Leaf Agent',
+        instructions: 'You find users.',
+        model: createMockModel(),
+        tools: { findUserTool: createFindUserTool() },
+      });
+      const mid = new Agent({
+        id: 'mid-agent',
+        name: 'Mid Agent',
+        instructions: 'You delegate to leaf.',
+        model: createDelegationModel({ toolName: 'agent-leaf-agent', toolCallId: 'mid-call-1' }),
+        agents: { 'leaf-agent': leaf },
+      });
+      const supervisor = new Agent({
+        id: 'supervisor-agent',
+        name: 'Supervisor Agent',
+        instructions: 'You delegate to mid.',
+        model: createDelegationModel({ toolName: 'agent-mid-agent', toolCallId: 'sup-call-1' }),
+        agents: { 'mid-agent': mid },
+      });
+      new Mastra({ agents: { supervisor, mid, leaf }, logger: false, storage: new InMemoryStore() });
+
+      const stream = await supervisor.stream('Find the user Dero Israel', {
+        memory: { thread: 'thread-1', resource: 'resource-1' },
+      });
+      for await (const _chunk of stream.fullStream) {
+        // consume until suspension
+      }
+
+      // Each agent in the chain sees only its own suspended run.
+      const supervisorRuns = await supervisor.listSuspendedRuns();
+      expect(supervisorRuns.runs.map(run => run.runId)).toEqual([stream.runId]);
+      // The supervisor's resumable run shows the delegation call to mid, not the
+      // real approval tool (which lives on the leaf's run).
+      expect(supervisorRuns.runs[0]!.toolCalls).toEqual([
+        {
+          toolCallId: 'sup-call-1',
+          toolName: 'agent-mid-agent',
+          args: { message: 'Find Dero Israel' },
+          requiresApproval: true,
+        },
+      ]);
+
+      const midRuns = await mid.listSuspendedRuns();
+      expect(midRuns.runs).toHaveLength(1);
+      expect(midRuns.runs[0]!.runId).not.toBe(stream.runId);
+      expect(midRuns.runs[0]!.toolCalls[0]!.toolName).toBe('agent-leaf-agent');
+
+      const leafRuns = await leaf.listSuspendedRuns();
+      expect(leafRuns.runs).toHaveLength(1);
+      // Only the innermost (leaf) run surfaces the actual approval tool + args.
+      expect(leafRuns.runs[0]!.toolCalls).toEqual([
+        {
+          toolCallId: expect.any(String),
+          toolName: 'findUserTool',
+          args: { name: 'Dero Israel' },
+          requiresApproval: true,
+        },
+      ]);
+
+      // All three runs are distinct rows.
+      const allRunIds = [supervisorRuns.runs[0]!.runId, midRuns.runs[0]!.runId, leafRuns.runs[0]!.runId];
+      expect(new Set(allRunIds).size).toBe(3);
     }, 30000);
 
     it('returns an empty list for a standalone agent (ephemeral in-memory storage)', async () => {
