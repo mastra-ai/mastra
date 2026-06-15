@@ -10,6 +10,7 @@ import {
   handleAgentEnd,
   handleAgentAborted,
   handleAgentError,
+  handleGoalEvaluation,
   handleMessageStart,
   handleMessageUpdate,
   handleMessageEnd,
@@ -170,8 +171,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
         state.githubPrPollingActive = false;
         state.githubPrGradientAnimator?.stop();
-        // Load goal state from thread metadata
-        state.goalManager?.loadFromThreadMetadata(metadata);
+        // Load the objective from the durable ThreadState slot, falling back to
+        // the legacy thread-metadata goal for pre-migration threads.
+        await state.goalManager.loadFromThread(state);
+        if (!state.goalManager.getGoal()) {
+          state.goalManager.loadFromThreadMetadata(metadata);
+        }
       }
       break;
     }
@@ -355,20 +360,23 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           state.taskToolInsertIndex = -1;
         }
 
-        // Check if all tasks are completed
-        const allCompleted = tasks && tasks.length > 0 && tasks.every(t => t.status === 'completed');
+        // When every task is completed the pinned list hides itself (the agent
+        // narrates completion), so we don't leave a redundant completed-task
+        // receipt in the transcript that reads like a second live list. We only
+        // render an inline receipt when the list is explicitly cleared.
         const previousTasks = state.harness.getDisplayState().previousTasks;
-        const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
-        if (allCompleted && !wasAllCompleted) {
-          // Show collapsed completed list (pinned/live)
-          ectx.renderCompletedTasksInline(tasks, insertIndex, true);
-        } else if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
+        if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
           // Tasks were cleared
           ectx.renderClearedTasksInline(previousTasks, insertIndex);
         }
 
         state.ui.requestRender();
       }
+      break;
+    }
+
+    case 'goal_evaluation': {
+      handleGoalEvaluation(ectx, event.payload);
       break;
     }
 

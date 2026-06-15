@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Agent } from '../agent';
+import { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
@@ -12,6 +12,7 @@ import type {
   ToolsetsInput,
 } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import { getServerSideFallbackInfo } from '../llm/model/server-side-fallback';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
@@ -71,7 +72,38 @@ type HarnessStreamState = {
   isSuspended: boolean;
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
+  /**
+   * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
+   * `error`, `length`). Carries the user-facing message so the run finalizes
+   * into an explicit terminal error state instead of silently completing.
+   */
+  terminalError?: string;
 };
+
+function validateModes(modes: HarnessMode[]): void {
+  const modeIds = new Set<string>();
+
+  for (const mode of modes) {
+    if (modeIds.has(mode.id)) {
+      throw new Error(`Duplicate mode id "${mode.id}" found when creating the Harness`);
+    }
+
+    modeIds.add(mode.id);
+
+    const modeRecord = mode as unknown as { id: string; tools?: unknown; additionalTools?: unknown };
+    if (modeRecord.tools && modeRecord.additionalTools) {
+      throw new Error(
+        `Mode "${modeRecord.id}" cannot set both "tools" and "additionalTools" - choose replace OR augment`,
+      );
+    }
+  }
+
+  for (const mode of modes) {
+    if (mode.transitionsTo && !modeIds.has(mode.transitionsTo)) {
+      throw new Error(`Mode "${mode.id}" transitionsTo references unknown mode "${mode.transitionsTo}"`);
+    }
+  }
+}
 
 type HarnessSendNotificationSignalOptions = {
   ifActive?: SendAgentNotificationSignalOptions['ifActive'];
@@ -80,6 +112,87 @@ type HarnessSendNotificationSignalOptions = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
 };
+
+/**
+ * Build a user-facing message for a non-success stream finish reason.
+ *
+ * Anthropic's classifier blocks / model refusals (e.g. `claude-fable-5`) surface
+ * through the AI SDK as a `content-filter` finish reason, with details on
+ * `providerMetadata.anthropic.stopDetails`. Without explicit handling these
+ * runs end on an empty assistant message with no error, so the run appears to
+ * silently stop. Returning a message here lets the harness finalize the run
+ * into an explicit terminal error state.
+ */
+export function describeNonSuccessFinishReason(reason: string, providerMetadata: unknown): string | undefined {
+  switch (reason) {
+    case 'content-filter': {
+      const stopDetails = (providerMetadata as { anthropic?: { stopDetails?: Record<string, unknown> } } | undefined)
+        ?.anthropic?.stopDetails;
+      const explanation =
+        stopDetails && typeof stopDetails.explanation === 'string' ? stopDetails.explanation : undefined;
+      const category = stopDetails && typeof stopDetails.category === 'string' ? stopDetails.category : undefined;
+      const detail = explanation ?? (category ? `category: ${category}` : undefined);
+      return detail ? `The model stopped on a content filter (${detail}).` : 'The model stopped on a content filter.';
+    }
+    case 'error':
+      return 'The model stream ended with an error before producing a final response.';
+    case 'length':
+      return 'The model stopped because it reached its maximum output length before finishing.';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The Anthropic model that `claude-fable-5` runs are automatically retried on
+ * server-side when fable-5's safety classifiers block a turn. See
+ * {@link buildFableFallbackProviderOptions}.
+ */
+const FABLE_FALLBACK_MODEL = 'claude-opus-4-8';
+
+/**
+ * Returns Anthropic `providerOptions` that enable a server-side fallback to
+ * {@link FABLE_FALLBACK_MODEL} when the active model is `claude-fable-5`, and
+ * `undefined` otherwise.
+ *
+ * fable-5 can have a turn blocked server-side by its safety classifiers. With
+ * a fallback configured, Anthropic transparently retries the blocked turn on
+ * the fallback model and returns that model's answer instead of refusing. If
+ * the whole chain refuses, the run still ends on a `content-filter` finish
+ * reason, which is handled as a terminal error.
+ *
+ * The match is suffix-based so it covers `anthropic/claude-fable-5`, a bare
+ * `claude-fable-5`, and any pack/provider-prefixed form.
+ */
+export function buildFableFallbackProviderOptions(
+  modelId: string,
+): { anthropic: { fallbacks: { model: string }[] } } | undefined {
+  if (!/(^|\/)claude-fable-5$/.test(modelId)) {
+    return undefined;
+  }
+  return { anthropic: { fallbacks: [{ model: FABLE_FALLBACK_MODEL }] } };
+}
+
+/**
+ * Build a user-facing notice when a turn was served by an Anthropic
+ * server-side fallback model instead of the primary model.
+ *
+ * When the primary model's safety classifiers decline a turn and a fallback
+ * chain is configured (see {@link buildFableFallbackProviderOptions}), the API
+ * transparently retries on the fallback model and reports this via
+ * `fallback_message` entries in `providerMetadata.anthropic.iterations`.
+ * Without a notice the user has no way to tell that the response did not come
+ * from the model they selected.
+ */
+export function describeServerSideFallback(providerMetadata: unknown): string | undefined {
+  const fallback = getServerSideFallbackInfo(providerMetadata);
+  if (!fallback) {
+    return undefined;
+  }
+  return fallback.model
+    ? `The selected model declined this turn; the response was generated by fallback model ${fallback.model}.`
+    : 'The selected model declined this turn; the response was generated by a fallback model.';
+}
 
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
   const value = usage[key];
@@ -367,13 +480,18 @@ export class Harness<TState = {}> {
   private switchModeVersion: number = 0;
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
+  readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
+  #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
   constructor(config: HarnessConfig<TState>) {
+    validateModes(config.modes);
+
     this.id = config.id;
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
     this.defaultResourceId = this.resourceId;
+    this.#instructions = config.instructions;
 
     // Convert PublicSchema to StandardSchemaWithJSON at the boundary
     this.stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
@@ -384,10 +502,15 @@ export class Harness<TState = {}> {
       ...config.initialState,
     } as TState;
 
-    // Find default mode
-    const defaultMode = config.modes.find(m => m.default) ?? config.modes[0];
+    const defaultMode = config.defaultModeId
+      ? config.modes.find(mode => mode.id === config.defaultModeId)
+      : (config.modes.find(mode => mode.default || mode.metadata?.default === true) ?? config.modes[0]);
     if (!defaultMode) {
-      throw new Error('Harness requires at least one agent mode');
+      throw new Error(
+        config.defaultModeId
+          ? `Default mode not found: ${config.defaultModeId}`
+          : 'Harness requires at least one agent mode',
+      );
     }
     this.currentModeId = defaultMode.id;
 
@@ -433,8 +556,7 @@ export class Harness<TState = {}> {
     this.browserFn = undefined;
 
     for (const mode of this.config.modes) {
-      const agent = typeof mode.agent === 'function' ? null : mode.agent;
-      if (!agent || agent.hasOwnBrowser()) continue;
+      const agent = this.getAgentForMode(mode);
       agent.setBrowser(browser);
     }
   }
@@ -491,8 +613,7 @@ export class Harness<TState = {}> {
 
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub to mode agents (after workspace init)
     for (const mode of this.config.modes) {
-      const agent = typeof mode.agent === 'function' ? null : mode.agent;
-      if (!agent) continue;
+      const agent = this.getAgentForMode(mode);
       this.propagateRuntimeServicesToAgent(agent);
     }
 
@@ -625,7 +746,7 @@ export class Harness<TState = {}> {
   // Mode Management
   // ===========================================================================
 
-  listModes(): HarnessMode<TState>[] {
+  listModes(): HarnessMode[] {
     return this.config.modes;
   }
 
@@ -633,7 +754,7 @@ export class Harness<TState = {}> {
     return this.currentModeId;
   }
 
-  getCurrentMode(): HarnessMode<TState> {
+  getCurrentMode(): HarnessMode {
     const mode = this.config.modes.find(m => m.id === this.currentModeId);
     if (!mode) {
       throw new Error(`Mode not found: ${this.currentModeId}`);
@@ -728,13 +849,61 @@ export class Harness<TState = {}> {
     return agent;
   }
 
+  private getAgentForMode(mode: HarnessMode): Agent<any, any, any, any> {
+    if (!this.#legacyAgentMode[mode.id]) {
+      const instructions = [this.#instructions ?? '', mode.instructions].filter(Boolean).join('\n');
+      const modeTools = {
+        ...mode.tools,
+        ...mode.additionalTools,
+      };
+
+      if (mode.agent) {
+        this.#legacyAgentMode[mode.id] = mode.agent;
+      } else if (this.config.agent) {
+        const forkedAgent = this.config.agent.__fork();
+        if (instructions) {
+          forkedAgent.__updateInstructions(instructions);
+        }
+        if (mode.tools || mode.additionalTools) {
+          forkedAgent.__setTools(modeTools as any);
+        }
+        this.#legacyAgentMode[mode.id] = forkedAgent;
+      } else {
+        if (!mode.defaultModelId) {
+          throw new Error(`Mode ${mode.id} requires a defaultModelId when no backing agent is configured`);
+        }
+
+        const model = this.config.resolveModel ? this.config.resolveModel(mode.defaultModelId) : mode.defaultModelId;
+        const forkedAgent = new Agent({
+          id: `${this.id}-agent`,
+          name: `Harness ${this.id} agent`,
+          model,
+          instructions,
+          // TODO move to permissions and global tools
+          tools: modeTools,
+        });
+
+        this.#legacyAgentMode[mode.id] = forkedAgent;
+      }
+    }
+
+    return this.#legacyAgentMode[mode.id]!;
+  }
+
   /**
    * Get the agent for the current mode.
    */
-  private getCurrentAgent(): Agent {
+  /**
+   * Resolve the Agent backing the current mode, with runtime services (storage,
+   * pubsub, telemetry) propagated. Public so consumers like MastraCode's
+   * GoalManager can drive the agent's native objective methods
+   * (`setObjective`/`getObjective`/`clearObjective`/`updateObjectiveOptions`),
+   * which read/write the durable `threadState` `'goal'` slot.
+   */
+  getCurrentAgent(): Agent {
     const mode = this.getCurrentMode();
-    const agent = typeof mode.agent === 'function' ? mode.agent(this.state) : mode.agent;
-    return this.propagateRuntimeServicesToAgent(agent);
+
+    return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
   }
 
   /**
@@ -1785,6 +1954,19 @@ export class Harness<TState = {}> {
       ...(tracingOptions && { tracingOptions }),
     };
     streamOptions.toolsets = await this.buildToolsets(requestContext);
+
+    // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
+    // block is transparently retried on the fallback model instead of failing.
+    const fableFallback = buildFableFallbackProviderOptions(this.getCurrentModelId());
+    if (fableFallback) {
+      const existing = streamOptions.providerOptions as Record<string, unknown> | undefined;
+      const existingAnthropic = (existing?.anthropic as Record<string, unknown> | undefined) ?? {};
+      streamOptions.providerOptions = {
+        ...existing,
+        anthropic: { ...existingAnthropic, ...fableFallback.anthropic },
+      };
+    }
+
     return streamOptions;
   }
 
@@ -1905,13 +2087,23 @@ export class Harness<TState = {}> {
             chunk.type === 'tool-call-suspended'
           ) {
             const finishedRunId: string | null = chunkRunId ?? this.currentRunId;
+            const suspended =
+              chunk.type === 'tool-call-suspended' ||
+              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
+              undefined;
+            const aborted = chunk.type === 'abort';
+            // A non-success terminal finish reason (e.g. a `claude-fable-5`
+            // content-filter refusal) is surfaced as an explicit error so the
+            // run never silently stops without a visible terminal state.
+            let isError = chunk.type === 'error';
+            if (currentRun.terminalError && !isError && !aborted && !this.abortRequested && !suspended) {
+              isError = true;
+              this.emit({ type: 'error', error: new Error(currentRun.terminalError) });
+            }
             await this.finishSubscribedStreamRun({
-              suspended:
-                chunk.type === 'tool-call-suspended' ||
-                (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-                undefined,
-              error: chunk.type === 'error',
-              aborted: chunk.type === 'abort',
+              suspended,
+              error: isError,
+              aborted,
             });
             lastFinishedRunId = finishedRunId;
             currentRun = undefined;
@@ -2552,6 +2744,15 @@ export class Harness<TState = {}> {
     }
 
     result ??= this.finishStreamState(state);
+
+    // A non-success terminal finish reason (e.g. a `claude-fable-5`
+    // content-filter refusal) is surfaced as an explicit error so the run never
+    // silently stops without a visible terminal state.
+    if (state.terminalError && !error && !aborted && !this.abortRequested && !result.suspended) {
+      error = true;
+      this.emit({ type: 'error', error: new Error(state.terminalError) });
+    }
+
     this.emit({
       type: 'agent_end',
       reason: error
@@ -2815,13 +3016,41 @@ export class Harness<TState = {}> {
 
       case 'finish': {
         const finishReason = chunk.payload.stepResult?.reason;
+        const finishProviderMetadata = chunk.payload?.metadata?.providerMetadata ?? chunk.payload?.providerMetadata;
+        // A server-side fallback means the turn was answered by a different
+        // model than the one the user selected (e.g. fable-5 declined and the
+        // fallback served the response). Surface that, otherwise the
+        // substitution is invisible.
+        const fallbackNotice = describeServerSideFallback(finishProviderMetadata);
+        if (fallbackNotice) {
+          this.emit({ type: 'info', message: fallbackNotice });
+        }
         if (finishReason === 'stop' || finishReason === 'end-turn') {
           state.currentMessage.stopReason = 'complete';
         } else if (finishReason === 'tool-calls') {
           state.currentMessage.stopReason = 'tool_use';
         } else {
-          state.currentMessage.stopReason = 'complete';
+          // Non-success terminal reasons (e.g. `content-filter` from a
+          // `claude-fable-5` refusal, `error`, or `length`) must surface as an
+          // explicit terminal error rather than a silent `complete`. Otherwise
+          // the run ends with no final message and no error, leaving the user
+          // unable to tell whether it completed, failed, or is still active.
+          const errorMessage = describeNonSuccessFinishReason(finishReason, finishProviderMetadata);
+          if (errorMessage) {
+            state.currentMessage.stopReason = 'error';
+            state.currentMessage.errorMessage = errorMessage;
+            state.terminalError = errorMessage;
+          } else {
+            state.currentMessage.stopReason = 'complete';
+          }
         }
+        break;
+      }
+
+      case 'goal': {
+        // In-loop goal evaluation. Forward the payload so consumers (the TUI's
+        // judge display) can render judge progress and the decision.
+        this.emit({ type: 'goal_evaluation', payload: chunk.payload });
         break;
       }
 
@@ -3142,6 +3371,20 @@ export class Harness<TState = {}> {
   }
 
   /**
+   * Detach from the current thread's event stream without switching to another
+   * thread. Used by the TUI `/new` command to stop receiving cross-process
+   * events from the old thread while the new thread creation is deferred until
+   * the first user message.
+   *
+   * The current thread ID is preserved so that {@link createThread} can still
+   * release the thread lock (when configured) for the previous thread.
+   */
+  detachFromCurrentThread(): void {
+    this.abort();
+    this.cleanupAgentThreadSubscription();
+  }
+
+  /**
    * Steer the agent mid-stream: aborts current run and sends a new message.
    */
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
@@ -3390,10 +3633,17 @@ export class Harness<TState = {}> {
     // switch) and move to the default execution mode.
     this.pendingSuspensions.delete(toolCallId);
 
-    const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
-    if (defaultMode && defaultMode.id !== this.currentModeId) {
+    const currentMode = this.getCurrentMode();
+    const transitionModeId =
+      currentMode.transitionsTo ??
+      this.config.defaultModeId ??
+      this.config.modes.find(mode => mode.default || mode.metadata?.default === true)?.id ??
+      this.config.modes[0]?.id;
+
+    const transitionMode = this.listModes().find(mode => mode.id === transitionModeId);
+    if (transitionMode && transitionMode.id !== this.currentModeId) {
       await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-      await this.switchMode({ modeId: defaultMode.id });
+      await this.switchMode({ modeId: transitionMode.id });
       // switchMode aborts the in-flight run but does not wait for it to
       // finalize. If the caller (e.g. mastracode's plan-approval handler)
       // immediately fires a system-reminder signal, that signal can land in

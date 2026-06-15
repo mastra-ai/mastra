@@ -224,6 +224,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       methodType: modelMethodType,
       agentId,
       requestContext: result.requestContext!,
+      actor: options.actor,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       runId,
       toolChoice: result.toolChoice,
@@ -388,6 +389,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
       maxProcessorRetries: options.maxProcessorRetries,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,
+      // Native goal config (agent-level): the in-loop goal step judges the
+      // thread's active objective each qualifying iteration.
+      goal: capabilities.agent.__getGoalConfig(),
       // Iteration hook for supervisor patterns
       onIterationComplete: options.onIterationComplete,
       processorStates: runScope.processorStates,

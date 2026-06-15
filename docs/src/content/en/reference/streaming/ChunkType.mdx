@@ -1760,6 +1760,88 @@ Contains monitoring and observability data from agent execution. Can include wor
 ]}
 />
 
+### goal
+
+Emitted on every evaluation of an agent [goal](/docs/agents/goals). Consumers use this to render judge progress and the result mid-run. A goal that has no judge model configured produces no `goal` chunk.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"goal"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'GoalEvaluationPayload',
+    description: 'The result of one goal evaluation',
+    properties: [
+      {
+        type: 'GoalEvaluationPayload',
+        parameters: [
+          {
+            name: 'objective',
+            type: 'string',
+            description: 'The objective being judged',
+          },
+          {
+            name: 'iteration',
+            type: 'number',
+            description: 'Goal evaluations consumed so far (runsUsed after this evaluation)',
+          },
+          {
+            name: 'maxRuns',
+            type: 'number',
+            description: 'Max evaluations before the goal stops',
+          },
+          {
+            name: 'passed',
+            type: 'boolean',
+            description: 'Whether the goal is judged complete',
+          },
+          {
+            name: 'status',
+            type: '"active" | "paused" | "done"',
+            description: 'The objective status after this evaluation',
+          },
+          {
+            name: 'results',
+            type: 'ScorerResult[]',
+            description: 'Individual scorer results',
+          },
+          {
+            name: 'reason',
+            type: 'string',
+            isOptional: true,
+            description: 'Judge feedback or stop reason',
+          },
+          {
+            name: 'duration',
+            type: 'number',
+            description: 'Total duration of the goal scoring check',
+          },
+          {
+            name: 'timedOut',
+            type: 'boolean',
+            description: 'Whether scoring timed out',
+          },
+          {
+            name: 'maxRunsReached',
+            type: 'boolean',
+            description: 'Whether the run budget (maxRuns) was reached',
+          },
+          {
+            name: 'suppressFeedback',
+            type: 'boolean',
+            description: 'Whether the goal feedback message is suppressed from memory',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
 ### tripwire
 
 Emitted when the stream is forcibly terminated due to content being blocked by a processor. This acts as a safety mechanism to prevent harmful or inappropriate content from being streamed. The payload includes information about why the content was blocked and whether a retry was requested.

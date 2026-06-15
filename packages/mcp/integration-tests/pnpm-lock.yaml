@@ -27,7 +27,7 @@ importers:
         version: 17.4.2
       vite:
         specifier: ^8.0.0
-        version: 8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(yaml@2.9.0)
+        version: 8.0.16(@types/node@22.19.21)(esbuild@0.27.7)(yaml@2.9.0)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -39,8 +39,8 @@ importers:
         specifier: ^16.3.2
         version: 16.3.2(@testing-library/dom@10.4.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@types/node':
-        specifier: 22.19.20
-        version: 22.19.20
+        specifier: 22.19.21
+        version: 22.19.21
       get-port:
         specifier: ^7.1.0
         version: 7.2.0
@@ -52,7 +52,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.8
-        version: 4.1.8(@types/node@22.19.20)(vite@8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(yaml@2.9.0))
+        version: 4.1.8(@types/node@22.19.21)(vite@8.0.16(@types/node@22.19.21)(esbuild@0.27.7)(yaml@2.9.0))
 
 packages:
 
@@ -864,8 +864,8 @@ packages:
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
-  '@types/node@22.19.20':
-    resolution: {integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==}
+  '@types/node@22.19.21':
+    resolution: {integrity: sha512-VMeFBSCKQKmm2swI2kW51SFusDqekC6q9trBCvJ/JliDchFSuoYYKN7yVNjPthP1HKZcx3U1gI/wTcEBjEFKTA==}
 
   '@types/resolve@1.20.2':
     resolution: {integrity: sha512-60BCwRFOZCQhDncwQdxxeOEEkbc5dIMccYLwbxsS4TUNeVECQ/pBJ0j09mrHOl/JJvpRPGwO9SvE4nR2Nb/a4Q==}
@@ -3008,7 +3008,7 @@ snapshots:
 
   '@types/estree@1.0.9': {}
 
-  '@types/node@22.19.20':
+  '@types/node@22.19.21':
     dependencies:
       undici-types: 6.21.0
 
@@ -3023,13 +3023,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.8(vite@8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(yaml@2.9.0))':
+  '@vitest/mocker@4.1.8(vite@8.0.16(@types/node@22.19.21)(esbuild@0.27.7)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 4.1.8
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(yaml@2.9.0)
+      vite: 8.0.16(@types/node@22.19.21)(esbuild@0.27.7)(yaml@2.9.0)
 
   '@vitest/pretty-format@4.1.8':
     dependencies:
@@ -4261,7 +4261,7 @@ snapshots:
 
   vary@1.1.2: {}
 
-  vite@8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(yaml@2.9.0):
+  vite@8.0.16(@types/node@22.19.21)(esbuild@0.27.7)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
@@ -4269,15 +4269,15 @@ snapshots:
       rolldown: 1.0.3
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 22.19.20
+      '@types/node': 22.19.21
       esbuild: 0.27.7
       fsevents: 2.3.3
       yaml: 2.9.0
 
-  vitest@4.1.8(@types/node@22.19.20)(vite@8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(yaml@2.9.0)):
+  vitest@4.1.8(@types/node@22.19.21)(vite@8.0.16(@types/node@22.19.21)(esbuild@0.27.7)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.8
-      '@vitest/mocker': 4.1.8(vite@8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(yaml@2.9.0))
+      '@vitest/mocker': 4.1.8(vite@8.0.16(@types/node@22.19.21)(esbuild@0.27.7)(yaml@2.9.0))
       '@vitest/pretty-format': 4.1.8
       '@vitest/runner': 4.1.8
       '@vitest/snapshot': 4.1.8
@@ -4294,10 +4294,10 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.0.16(@types/node@22.19.20)(esbuild@0.27.7)(yaml@2.9.0)
+      vite: 8.0.16(@types/node@22.19.21)(esbuild@0.27.7)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
-      '@types/node': 22.19.20
+      '@types/node': 22.19.21
     transitivePeerDependencies:
       - msw
 
