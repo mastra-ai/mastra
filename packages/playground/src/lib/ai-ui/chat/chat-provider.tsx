@@ -6,8 +6,6 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { ChatMessagesContext, ChatRunningContext, ChatSendContext } from './chat-context';
 import type { MessagesContextValue, RunningContextValue, SendContextValue } from './chat-context';
-import { ConversationUsageContext, EMPTY_CONVERSATION_USAGE, extractChunkUsage } from './conversation-usage-context';
-import type { ConversationUsage } from './conversation-usage-context';
 import { useChatSendHandler } from './use-chat-send-handler';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -51,7 +49,6 @@ export function ChatProvider({
   // `initialMessages` refreshes after a stream ends. Track them in a parallel
   // state that survives those resets so the chat still surfaces the failure.
   const [streamErrors, setStreamErrors] = useState<MastraDBMessage[]>([]);
-  const [conversationUsage, setConversationUsage] = useState<ConversationUsage>(EMPTY_CONVERSATION_USAGE);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
   const modelSettings = settings?.modelSettings ?? {};
@@ -62,28 +59,9 @@ export function ChatProvider({
   // leak across conversations.
   useEffect(() => {
     setStreamErrors([]);
-    setConversationUsage(EMPTY_CONVERSATION_USAGE);
     threadSignalsUnsupportedRef.current = false;
     setThreadSignalsUnsupported(false);
   }, [agentId, threadId]);
-
-  // LLM token usage arrives on `step-finish`/`finish` chunks; accumulate it so
-  // the composer can surface live context occupancy.
-  const recordUsageChunk = useCallback((chunk: unknown) => {
-    const { stepUsage, finishUsage } = extractChunkUsage(chunk);
-    if (!stepUsage && !finishUsage) return;
-    setConversationUsage(prev => ({
-      lastStep: stepUsage ?? prev.lastStep,
-      cumulative: finishUsage
-        ? {
-            inputTokens: prev.cumulative.inputTokens + (finishUsage.inputTokens ?? 0),
-            outputTokens: prev.cumulative.outputTokens + (finishUsage.outputTokens ?? 0),
-            totalTokens: prev.cumulative.totalTokens + (finishUsage.totalTokens ?? 0),
-          }
-        : prev.cumulative,
-      runCount: finishUsage ? prev.runCount + 1 : prev.runCount,
-    }));
-  }, []);
 
   const chatRequestContext = useMemo(() => {
     if (!agentVersionId && !requestContext) return undefined;
@@ -266,7 +244,6 @@ export function ChatProvider({
     refreshObservationalMemory,
     handleActivation,
     resetObservationalMemoryStreamState,
-    recordUsageChunk,
   });
 
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
@@ -301,7 +278,6 @@ export function ChatProvider({
   const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
 
   return (
-    <ConversationUsageContext.Provider value={conversationUsage}>
     <ChatRunningContext.Provider value={runningValue}>
       <ChatMessagesContext.Provider value={messagesValue}>
         <ChatSendContext.Provider value={sendValue}>
@@ -321,6 +297,5 @@ export function ChatProvider({
         </ChatSendContext.Provider>
       </ChatMessagesContext.Provider>
     </ChatRunningContext.Provider>
-    </ConversationUsageContext.Provider>
   );
 }

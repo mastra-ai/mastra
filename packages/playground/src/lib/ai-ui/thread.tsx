@@ -15,7 +15,6 @@ import './composer-sending.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
-import { ComposerContextUsage } from '@/domains/agents/components/composer-context-usage';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -68,7 +67,6 @@ export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   threadId?: string;
-  hasMemory?: boolean;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
@@ -79,7 +77,6 @@ export const Thread = ({
   agentName,
   agentId,
   threadId,
-  hasMemory,
   hasModelList,
   hideModelSwitcher,
   runOptionsSlot,
@@ -150,7 +147,6 @@ export const Thread = ({
 
         <Composer
           agentId={agentId}
-          hasMemory={hasMemory}
           hasModelList={hasModelList}
           hideModelSwitcher={hideModelSwitcher}
           runOptionsSlot={runOptionsSlot}
@@ -175,13 +171,12 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 
 interface ComposerProps {
   agentId?: string;
-  hasMemory?: boolean;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   runOptionsSlot?: React.ReactNode;
 }
 
-const Composer = ({ agentId, hasMemory, hasModelList, hideModelSwitcher, runOptionsSlot }: ComposerProps) => {
+const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
@@ -260,7 +255,6 @@ const Composer = ({ agentId, hasMemory, hasModelList, hideModelSwitcher, runOpti
             <ComposerActionRow
               canExecute={canExecuteAgent}
               agentId={agentId}
-              hasMemory={hasMemory}
               runOptionsSlot={runOptionsSlot}
               showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
               isEmpty={isEmpty}
@@ -328,7 +322,6 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
 interface ComposerActionRowProps {
   canExecute?: boolean;
   agentId?: string;
-  hasMemory?: boolean;
   showModelSwitcher?: boolean;
   runOptionsSlot?: React.ReactNode;
   isEmpty: boolean;
@@ -341,7 +334,6 @@ interface ComposerActionRowProps {
 const ComposerActionRow = ({
   canExecute = true,
   agentId,
-  hasMemory,
   showModelSwitcher,
   runOptionsSlot,
   isEmpty,
@@ -360,7 +352,6 @@ const ComposerActionRow = ({
                 <ComposerModelSwitcher agentId={agentId} />
               </div>
               <ComposerModelSettings agentId={agentId} />
-              <ComposerContextUsage agentId={agentId} hasMemory={hasMemory} />
             </>
           )}
           {runOptionsSlot}

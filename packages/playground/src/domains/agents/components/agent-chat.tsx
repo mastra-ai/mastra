@@ -79,7 +79,6 @@ export const AgentChat = ({
     >
       <Thread
         agentName={agentName ?? ''}
-        hasMemory={memory}
         agentId={agentId}
         threadId={threadId}
         hasModelList={Boolean(modelList)}
