@@ -18,14 +18,14 @@ test('overall layout information', async ({ page }) => {
   expect(breadcrumb).toMatchAriaSnapshot();
 
   // Information side panel
-  await expect(page.locator('h2:has-text("complex-workflow")')).toBeVisible();
-  await expect(page.locator('button:has-text("complexWorkflow")')).toBeVisible();
+  await expect(page.getByTestId('workflow-information-top-section')).toContainText('complex-workflow');
+  await expect(page.getByRole('button', { name: 'Copy to clipboard' })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Form' })).toBeChecked();
   await expect(page.getByRole('radio', { name: 'JSON' })).not.toBeChecked();
 
   // Shows the dynamic form when FORM is selected (default)
   await expect(page.getByRole('textbox', { name: 'Text' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Run' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeVisible();
 
   // Shows the JSON input when JSON is selected
   await page.getByRole('radio', { name: 'JSON' }).click();
@@ -58,7 +58,7 @@ test('initial workflow run state', async ({ page }) => {
 
 test('running the workflow (form) - short condition', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Text' }).fill('A');
-  await page.getByRole('button', { name: 'Run' }).click();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
 
   await runWorkflow(page);
   await checkShortPath(page);
@@ -66,7 +66,7 @@ test('running the workflow (form) - short condition', async ({ page }) => {
 
 test('running the workflow (form) - long condition', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Text' }).fill('SuperLongTextToStartWith');
-  await page.getByRole('button', { name: 'Run' }).click();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
 
   await runWorkflow(page);
   await checkLongPath(page);
@@ -75,7 +75,7 @@ test('running the workflow (form) - long condition', async ({ page }) => {
 test('running the workflow (json) - short condition', async ({ page }) => {
   await page.getByRole('radio', { name: 'JSON' }).click();
   await page.locator('.cm-content').fill('{"text":"A"}');
-  await page.getByRole('button', { name: 'Run' }).click();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
 
   await runWorkflow(page);
   await checkShortPath(page);
@@ -84,7 +84,7 @@ test('running the workflow (json) - short condition', async ({ page }) => {
 test('running the workflow (json) - long condition', async ({ page }) => {
   await page.getByRole('radio', { name: 'JSON' }).click();
   await page.locator('.cm-content').fill('{"text":"SuperLongTextToStartWith"}');
-  await page.getByRole('button', { name: 'Run' }).click();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
 
   await runWorkflow(page);
   await checkLongPath(page);
@@ -101,22 +101,22 @@ test('running a workflow with an enum input uses the selected form value', async
 
   await expect(page.getByRole('combobox', { name: 'Mode' })).toContainText('b');
 
-  await page.getByRole('button', { name: 'Run' }).click();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
 
   const nodes = page.locator('[data-workflow-node]');
   await expect(nodes.nth(0)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
 
-  await page.getByRole('button', { name: 'Open Workflow Execution (JSON)' }).click();
+  await page.getByRole('button', { name: 'Entire workflow execution (JSON)' }).click();
   await expect(page.getByRole('dialog')).toContainText('"mode": "b"');
 });
 
 test('resuming a workflow', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Text' }).fill('A');
-  await page.getByRole('button', { name: 'Run' }).click();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
   await runWorkflow(page);
 
   await page.getByRole('textbox', { name: 'User Input' }).fill('Hello');
-  await page.getByRole('button', { name: 'Resume workflow' }).click();
+  await page.getByTestId('workflow-suspended-overlay').getByRole('button', { name: 'Resume' }).click();
   const nodes = await page.locator('[data-workflow-node]');
 
   await expect(nodes.nth(12)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
@@ -124,11 +124,10 @@ test('resuming a workflow', async ({ page }) => {
 });
 
 async function checkSuspensionPayload(page: Page) {
-  await page.getByRole('button', { name: 'Suspension payload' }).click();
+  await page.getByRole('button', { name: /reason/ }).click();
   await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
     `"reason": "Please provide user input to continue"`,
   );
-  await page.getByRole('button', { name: 'Close' }).click();
 }
 
 async function checkShortPath(page: Page) {

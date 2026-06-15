@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
+import { WorkflowSelectedStepProvider } from '@/domains/workflows/context/workflow-selected-step-context';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
@@ -32,19 +33,21 @@ const Providers = ({ children }: { children: ReactNode }) => {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <ToolCallProvider
-            approveToolcall={() => {}}
-            declineToolcall={() => {}}
-            approveToolcallGenerate={() => {}}
-            declineToolcallGenerate={() => {}}
-            approveNetworkToolcall={() => {}}
-            declineNetworkToolcall={() => {}}
-            isRunning={false}
-            toolCallApprovals={{}}
-            networkToolCallApprovals={{}}
-          >
-            {children}
-          </ToolCallProvider>
+          <WorkflowSelectedStepProvider>
+            <ToolCallProvider
+              approveToolcall={() => {}}
+              declineToolcall={() => {}}
+              approveToolcallGenerate={() => {}}
+              declineToolcallGenerate={() => {}}
+              approveNetworkToolcall={() => {}}
+              declineNetworkToolcall={() => {}}
+              isRunning={false}
+              toolCallApprovals={{}}
+              networkToolCallApprovals={{}}
+            >
+              {children}
+            </ToolCallProvider>
+          </WorkflowSelectedStepProvider>
         </MemoryRouter>
       </QueryClientProvider>
     </MastraReactProvider>

@@ -17,6 +17,7 @@ import type { BrowserSessionProbe } from '@/domains/agents/hooks/use-browser-ses
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
+import { WorkflowSelectedStepProvider } from '@/domains/workflows/context/workflow-selected-step-context';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 import { useChatSend } from '@/lib/ai-ui/chat/chat-context';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -56,9 +57,11 @@ export interface ToolCardProps {
 
 export const ToolCard = (props: ToolCardProps) => {
   return (
-    <WorkflowRunProvider workflowId={''} withoutTimeTravel>
-      <ToolCardInner {...props} />
-    </WorkflowRunProvider>
+    <WorkflowSelectedStepProvider>
+      <WorkflowRunProvider workflowId={''} withoutTimeTravel>
+        <ToolCardInner {...props} />
+      </WorkflowRunProvider>
+    </WorkflowSelectedStepProvider>
   );
 };
 

@@ -10,6 +10,7 @@ import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import { WorkflowGraph, WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
 import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
+import { WorkflowSelectedStepProvider } from '@/domains/workflows/context/workflow-selected-step-context';
 import { useWorkflow } from '@/hooks';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -132,7 +133,9 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
       </div>
 
       <div className="rounded-md overflow-hidden h-[60vh] w-full">
-        <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
+        <WorkflowSelectedStepProvider>
+          <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
+        </WorkflowSelectedStepProvider>
       </div>
     </>
   );

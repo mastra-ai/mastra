@@ -61,8 +61,7 @@ test('valid tracing options persist after clicking Save', async ({ page }) => {
   await openRunOptions(page);
 
   const editor = page.getByRole('dialog').locator('.cm-content');
-  await editor.click();
-  await page.keyboard.type('{"metadata": {"persisted": true}}', { delay: 30 });
+  await editor.fill('{"metadata": {"persisted": true}}');
 
   // Typing alone does not persist; the dialog stays open until the user saves.
   await expect(page.getByRole('dialog')).toBeVisible();
