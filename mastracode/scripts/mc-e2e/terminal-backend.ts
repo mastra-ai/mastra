@@ -284,11 +284,14 @@ export async function runTerminalBackend(runConfig: TerminalRunConfig): Promise<
   };
 
   return withRunEnvironment(runConfig, async () => {
-    const [{ createMastraCode }, { MastraTUI }, { releaseAllThreadLocks }] = await Promise.all([
-      import('../../src/index.js'),
-      import('../../src/tui/index.js'),
-      import('../../src/utils/thread-lock.js'),
-    ]);
+    const [{ createMastraCode }, { MastraTUI }, { releaseAllThreadLocks }, { createBrowserFromSettings, loadSettings }] =
+      await Promise.all([
+        import('../../src/index.js'),
+        import('../../src/tui/index.js'),
+        import('../../src/utils/thread-lock.js'),
+        import('../../src/onboarding/settings.js'),
+      ]);
+    const settings = loadSettings();
     const initialState = resolveInitialStateFromEnv();
     const result = await createMastraCode({
       unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
@@ -297,6 +300,7 @@ export async function runTerminalBackend(runConfig: TerminalRunConfig): Promise<
       ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
       ...(initialState ? { initialState: initialState as never } : {}),
       cwd: runConfig.cwd,
+      ...(process.env.HOME ? { homeDir: process.env.HOME } : {}),
     });
 
     if (result.storageWarning) terminal.write(`⚠ ${result.storageWarning}\r\n`);
@@ -317,6 +321,14 @@ export async function runTerminalBackend(runConfig: TerminalRunConfig): Promise<
     void tui.run().catch(error => {
       process.stderr.write(`[mc-e2e:terminal] TUI run failed: ${error instanceof Error ? error.stack : String(error)}\n`);
     });
+
+    if (settings.browser.enabled) {
+      const browser = await createBrowserFromSettings(settings.browser);
+      if (browser) {
+        result.harness.setBrowser(browser);
+        await result.harness.setState({ activeBrowserSettings: settings.browser });
+      }
+    }
 
     try {
       await scenario.run({ terminal: scenarioTerminal, runtime });

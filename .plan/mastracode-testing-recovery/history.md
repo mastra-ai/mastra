@@ -35,14 +35,15 @@ Latest full terminal-backend audit:
 
 | backend shape | result | elapsed | notes |
 | --- | ---: | ---: | --- |
-| terminal workers, `--jobs 8` | 69/120 passed | not measured | 33 failures are explicit custom-entrypoint unsupported fast-fails; 18 are same-app terminal parity/timeouts. `autocomplete-wrapping-navigation` passes focused after output-drain handling but remains concurrency-sensitive in the full run. |
-| terminal workers, `--jobs 4` | 66/120 passed | 233s before status 139 | Lower concurrency did not improve parity and was less stable. |
+| hybrid terminal, `--jobs 2` | 120/120 passed | ~404s (6m44s) | Terminal workers handle the primary same-app corpus; subprocess fallback handles custom entrypoints and a small set of subprocess-owned/worker-sensitive scenarios. All AIMock request counts were valid. |
+| hybrid terminal, `--jobs 4` | did not stabilize | varies | Terminal scenarios mostly pass, but repeated full runs exposed worker exit 139 and load-sensitive autocomplete/GitHub-signal fallback flakes. |
+| terminal workers only, `--jobs 8` | 69/120 passed | not measured | Historical baseline before entrypoint fallback and parity fixes: 33 custom-entrypoint fast-fails plus 18 same-app parity/timeouts. |
 
-Remaining work before terminal backend can replace subprocess coverage:
+Remaining hardening work:
 
-1. Decide how custom `entrypoint()` scenarios should run in terminal mode: keep subprocess-only, or add an injectable terminal entrypoint contract for bespoke programs.
-2. Fix same-app terminal parity gaps: slash/custom autocomplete selection, file autocomplete (`fd`/cwd subprocess behavior), long shell readback truncation assertions, browser/status/settings projections, and notification reload timing.
-3. Re-run full terminal mode after each cluster and compare against the green sharded subprocess baseline (120/120 in 236s).
+1. Investigate the terminal-worker exit 139 at `--jobs 3/4` before raising CI concurrency above 2.
+2. Reduce subprocess fallback over time by adding an injectable-terminal entrypoint contract for bespoke programs where it makes sense.
+3. Keep `COREPACK_ENABLE_PROJECT_SPEC=1` on local validation commands if the pnpm shim resolves the wrong package-manager version.
 
 ### Full-suite shard parallelization proof (2026-06-14)
 

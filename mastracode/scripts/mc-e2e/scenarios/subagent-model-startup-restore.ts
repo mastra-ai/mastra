@@ -64,9 +64,12 @@ export const subagentModelStartupRestoreScenario = {
     );
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SUBAGENT_STARTUP_PACK="+[s.models.activeModelPackId,s.onboarding.modePackId,p?.models?.fast,Object.keys(s.models.subagentModels||{}).length].join(":"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SUBAGENT_STARTUP_ACTIVE="+s.models.activeModelPackId); console.log("SUBAGENT_STARTUP_ONBOARDING="+s.onboarding.modePackId); console.log("SUBAGENT_STARTUP_FAST="+p?.models?.fast); console.log("SUBAGENT_STARTUP_OVERRIDES="+Object.keys(s.models.subagentModels||{}).length);'`,
     );
-    await runtime.waitForScreenText(/SUBAGENT_STARTUP_PACK=custom:Subagent Startup Restore E2E:custom:Subagent Startup Restore E2E:openai\/gpt-5\.5:0/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SUBAGENT_STARTUP_ACTIVE=custom:Subagent Startup Restore E2E/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SUBAGENT_STARTUP_ONBOARDING=custom:Subagent Startup Restore E2E/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SUBAGENT_STARTUP_FAST=openai\/gpt-5\.5/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SUBAGENT_STARTUP_OVERRIDES=0/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

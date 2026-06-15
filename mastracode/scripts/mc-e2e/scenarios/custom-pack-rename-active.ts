@@ -78,16 +78,14 @@ export const customPackRenameActiveScenario = {
     await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const names=s.customModelPacks.map(p=>p.name).join("|"); const pack=s.customModelPacks.find(p=>p.name==="${renamedName}"); console.log("RENAME_ACTIVE="+s.models.activeModelPackId); console.log("RENAME_ONBOARDING="+s.onboarding.modePackId); console.log("RENAME_NAMES="+names); console.log("RENAME_MODELS="+[pack?.models.plan,pack?.models.build,pack?.models.fast].join("|")); console.log("RENAME_OLD_PRESENT="+s.customModelPacks.some(p=>p.name==="${originalName}"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const names=s.customModelPacks.map(p=>p.name).join("|"); const pack=s.customModelPacks.find(p=>p.name==="${renamedName}"); console.log("RENAME_ACTIVE="+s.models.activeModelPackId); console.log("RENAME_ONBOARDING="+s.onboarding.modePackId); console.log("RENAME_NAMES="+names); console.log("RENAME_PLAN="+pack?.models.plan); console.log("RENAME_BUILD="+pack?.models.build); console.log("RENAME_FAST="+pack?.models.fast); console.log("RENAME_OLD_PRESENT="+s.customModelPacks.some(p=>p.name==="${originalName}"));'`,
     );
     await runtime.waitForScreenText(/RENAME_ACTIVE=custom:Renamed Active E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/RENAME_ONBOARDING=custom:Renamed Active E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/RENAME_NAMES=Renamed Active E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(
-      /RENAME_MODELS=rename-pack-e2e\/plan-model\|rename-pack-e2e\/build-model\|rename-pack-e2e\/fast-model/i,
-      terminal,
-      8_000,
-    );
+    await runtime.waitForScreenText(/RENAME_PLAN=rename-pack-e2e\/plan-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/RENAME_BUILD=rename-pack-e2e\/build-model/i, terminal, 8_000);
+    await runtime.waitForScreenText(/RENAME_FAST=rename-pack-e2e\/fast-model/i, terminal, 8_000);
     await runtime.waitForScreenText(/RENAME_OLD_PRESENT=false/i, terminal, 8_000);
 
     terminal.keyCtrlC();

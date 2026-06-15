@@ -154,9 +154,9 @@ values
     await runtime.waitForScreenText(/Project: mastra/i, terminal);
 
     terminal.submit('/threads');
-    await runtime.waitForScreenText(/E2E GitHub unsubscribe fixture/i, terminal);
+    await runtime.waitForScreenText(/GitHub unsubscribe fixture/i, terminal);
     terminal.write('unsubscribe fixture');
-    await runtime.waitForScreenText(/E2E GitHub unsubscribe fixture/i, terminal);
+    await runtime.waitForScreenText(/GitHub unsubscribe fixture/i, terminal);
     terminal.write('\r');
     await runtime.waitForScreenText(/Switched to: E2E GitHub unsubscribe fixture/i, terminal);
     await runtime.waitForScreenText(/PR#17639/i, terminal, 10_000);

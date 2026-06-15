@@ -138,6 +138,8 @@ function applyEffectiveDefaultsToV1Modes(
 export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
   cwd?: string;
+  /** Home directory for global config discovery. Default: os.homedir() */
+  homeDir?: string;
   /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
   modes?: HarnessMode<MastraCodeState>[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
@@ -229,6 +231,7 @@ function resolveCloudObservabilityConfig(
 
 export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
+  const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
   const configDir = config?.configDir ?? DEFAULT_CONFIG_DIR;
   if (configDir !== DEFAULT_CONFIG_DIR) {
     validateConfigDirName(configDir);
@@ -406,7 +409,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);
 
   // Hooks
-  const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init', configDir);
+  const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init', configDir, homeDir);
 
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
@@ -536,19 +539,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const anthropicCred = authStorage.get('anthropic');
   const openaiCred = authStorage.get('openai-codex');
   const githubCopilotCred = authStorage.get('github-copilot');
+  const hasAnthropicApiKey =
+    (anthropicCred?.type === 'api_key' && anthropicCred.key.trim().length > 0) ||
+    authStorage.hasStoredApiKey('anthropic');
+  const hasOpenAIApiKey =
+    (openaiCred?.type === 'api_key' && openaiCred.key.trim().length > 0) ||
+    authStorage.hasStoredApiKey('openai-codex');
   const startupAccess: ProviderAccess = {
-    anthropic:
-      anthropicCred?.type === 'oauth'
-        ? 'oauth'
-        : anthropicCred?.type === 'api_key' && anthropicCred.key.trim().length > 0
-          ? 'apikey'
-          : false,
-    openai:
-      openaiCred?.type === 'oauth'
-        ? 'oauth'
-        : openaiCred?.type === 'api_key' && openaiCred.key.trim().length > 0
-          ? 'apikey'
-          : false,
+    anthropic: anthropicCred?.type === 'oauth' ? 'oauth' : hasAnthropicApiKey ? 'apikey' : false,
+    openai: openaiCred?.type === 'oauth' ? 'oauth' : hasOpenAIApiKey ? 'apikey' : false,
     cerebras: process.env.CEREBRAS_API_KEY ? 'apikey' : false,
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,

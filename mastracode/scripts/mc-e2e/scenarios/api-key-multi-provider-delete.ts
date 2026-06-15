@@ -75,14 +75,12 @@ export const apiKeyMultiProviderDeleteScenario = {
     await runtime.waitForScreenTextAbsent(/API Keys/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); console.log("APIKEY_MULTI_302="+(auth["apikey:${firstProvider}"]?.key||"missing")+":"+(process.env["${firstEnvVar}"]||"missing")); console.log("APIKEY_MULTI_ANTHROPIC="+(auth["apikey:${secondProvider}"]?.key||"missing")+":"+(process.env["${secondEnvVar}"]||"missing"));'`,
+      `!node -e 'const fs=require("fs"); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); console.log("APIKEY_MULTI_302_AUTH="+(auth["apikey:${firstProvider}"]?.key||"missing")); console.log("APIKEY_MULTI_302_ENV="+(process.env["${firstEnvVar}"]||"missing")); console.log("APIKEY_MULTI_ANTHROPIC_AUTH="+(auth["apikey:${secondProvider}"]?.key||"missing")); console.log("APIKEY_MULTI_ANTHROPIC_ENV="+(process.env["${secondEnvVar}"]||"missing"));'`,
     );
-    await runtime.waitForScreenText(/APIKEY_MULTI_302=missing:missing/i, terminal, 8_000);
-    await runtime.waitForScreenText(
-      /APIKEY_MULTI_ANTHROPIC=mc-e2e-anthropic-preserved-key:mc-e2e-anthropic-preserved-key/i,
-      terminal,
-      8_000,
-    );
+    await runtime.waitForScreenText(/APIKEY_MULTI_302_AUTH=missing/i, terminal, 8_000);
+    await runtime.waitForScreenText(/APIKEY_MULTI_302_ENV=missing/i, terminal, 8_000);
+    await runtime.waitForScreenText(/APIKEY_MULTI_ANTHROPIC_AUTH=mc-e2e-anthropic-preserved-key/i, terminal, 8_000);
+    await runtime.waitForScreenText(/APIKEY_MULTI_ANTHROPIC_ENV=mc-e2e-anthropic-preserved-key/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

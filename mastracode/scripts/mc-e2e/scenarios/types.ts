@@ -150,9 +150,11 @@ export type McE2eScenario = {
   testName: string;
   projectFixture?: 'long-branch';
   useOpenAIModel?: boolean;
+  disableMemory?: boolean;
   aimockFixture?: string;
   env?: (context: McE2ePrepareContext) => Record<string, string>;
   entrypoint?: (context: McE2ePrepareContext) => string;
+  terminalBackend?: 'subprocess';
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
   run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime }) => Promise<void>;
   verifyAimockRequests?: (requests: unknown[]) => void;

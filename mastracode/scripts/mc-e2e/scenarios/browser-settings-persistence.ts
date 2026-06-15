@@ -66,9 +66,16 @@ export const browserSettingsPersistenceScenario = {
     await runtime.waitForScreenText(/Browser settings reset to defaults\./i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_CLEAR_DEFAULTS="+[b.enabled,b.provider,b.headless,b.viewport&&b.viewport.width,b.viewport&&b.viewport.height,b.cdpUrl||"missing",b.profile||"missing",b.executablePath||"missing",b.agentBrowser?"kept":"missing"].join(":"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_CLEAR_ENABLED="+b.enabled); console.log("BROWSER_CLEAR_PROVIDER="+b.provider); console.log("BROWSER_CLEAR_HEADLESS="+b.headless); console.log("BROWSER_CLEAR_VIEWPORT="+(b.viewport&&b.viewport.width)+"x"+(b.viewport&&b.viewport.height)); console.log("BROWSER_CLEAR_CDP="+(b.cdpUrl||"missing")); console.log("BROWSER_CLEAR_PROFILE="+(b.profile||"missing")); console.log("BROWSER_CLEAR_EXEC="+(b.executablePath||"missing")); console.log("BROWSER_CLEAR_AGENT="+(b.agentBrowser?"kept":"missing"));'`,
     );
-    await runtime.waitForScreenText(/BROWSER_CLEAR_DEFAULTS=false:stagehand:false:1280:720:missing:missing:missing:missing/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSER_CLEAR_ENABLED=false/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSER_CLEAR_PROVIDER=stagehand/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSER_CLEAR_HEADLESS=false/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSER_CLEAR_VIEWPORT=1280x720/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSER_CLEAR_CDP=missing/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSER_CLEAR_PROFILE=missing/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSER_CLEAR_EXEC=missing/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSER_CLEAR_AGENT=missing/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

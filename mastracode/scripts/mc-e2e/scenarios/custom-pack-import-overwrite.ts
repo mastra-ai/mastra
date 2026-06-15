@@ -77,20 +77,16 @@ export const customPackImportOverwriteScenario = {
 
     await runtime.waitForScreenText(/Imported and activated Imported Pack E2E pack/i, terminal, 8_000);
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const pack=s.customModelPacks.find(p=>p.name==="Imported Pack E2E"); console.log("IMPORT_PACK_COUNT="+s.customModelPacks.length); console.log("IMPORT_ACTIVE="+s.models.activeModelPackId); console.log("IMPORT_DEFAULTS="+[s.models.modeDefaults.plan,s.models.modeDefaults.build,s.models.modeDefaults.fast].join("|")); console.log("IMPORT_PACK_MODELS="+[pack?.models?.plan,pack?.models?.build,pack?.models?.fast].join("|"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const pack=s.customModelPacks.find(p=>p.name==="Imported Pack E2E"); console.log("IMPORT_PACK_COUNT="+s.customModelPacks.length); console.log("IMPORT_ACTIVE="+s.models.activeModelPackId); console.log("IMPORT_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("IMPORT_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("IMPORT_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("IMPORT_PACK_PLAN="+pack?.models?.plan); console.log("IMPORT_PACK_BUILD="+pack?.models?.build); console.log("IMPORT_PACK_FAST="+pack?.models?.fast);'`,
     );
     await runtime.waitForScreenText(/IMPORT_PACK_COUNT=1/i, terminal, 8_000);
     await runtime.waitForScreenText(/IMPORT_ACTIVE=custom:Imported Pack E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(
-      /IMPORT_DEFAULTS=pack-import-e2e\/import-plan\|pack-import-e2e\/import-build\|pack-import-e2e\/import-fast/i,
-      terminal,
-      8_000,
-    );
-    await runtime.waitForScreenText(
-      /IMPORT_PACK_MODELS=pack-import-e2e\/import-plan\|pack-import-e2e\/import-build\|pack-import-e2e\/import-fast/i,
-      terminal,
-      8_000,
-    );
+    await runtime.waitForScreenText(/IMPORT_DEFAULT_PLAN=pack-import-e2e\/import-plan/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_DEFAULT_BUILD=pack-import-e2e\/import-build/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_DEFAULT_FAST=pack-import-e2e\/import-fast/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_PACK_PLAN=pack-import-e2e\/import-plan/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_PACK_BUILD=pack-import-e2e\/import-build/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_PACK_FAST=pack-import-e2e\/import-fast/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

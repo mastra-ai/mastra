@@ -242,6 +242,26 @@ async function runTerminalBackendPool(workerFile: string, configs: TuiRunConfig[
   return failed ? 1 : 0;
 }
 
+async function runSubprocessBackend(tuiTestBin: string, mastracodeDir: string, configs: TuiRunConfig[], jobs: number): Promise<number | null> {
+  if (configs.length === 0) return 0;
+  process.stdout.write(
+    `[mc-e2e] [subprocess] running ${configs.map(run => run.scenarioName).join(', ')} (${configs.length} scenarios, jobs=${jobs})\n`,
+  );
+  const testProcess = spawn(tuiTestBin, [], {
+    cwd: mastracodeDir,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      MC_E2E_JOBS: String(jobs),
+      MC_E2E_RUNS_JSON: JSON.stringify(configs),
+    },
+  });
+  return new Promise<number | null>((resolve, reject) => {
+    testProcess.on('error', reject);
+    testProcess.on('exit', resolve);
+  });
+}
+
 async function startAimock({
   fixturePath,
   recordAiPath,
@@ -382,7 +402,7 @@ async function prepareScenarioRun({
         MASTRACODE_DISABLE_MCP: '1',
         MASTRACODE_DISABLE_HOOKS: '1',
         MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB: '1',
-        MASTRACODE_DISABLE_MEMORY: '1',
+        ...(scenario.disableMemory === false ? {} : { MASTRACODE_DISABLE_MEMORY: '1' }),
         ...(scenario.name === 'update-startup-prompt' ? {} : { MASTRACODE_DISABLE_UPDATE_CHECK: '1' }),
         ...(scenario.useOpenAIModel ? { MASTRACODE_MODEL_ID: 'openai/gpt-5.4-mini', MASTRACODE_YOLO: '1' } : {}),
         FORCE_COLOR: '1',
@@ -442,21 +462,22 @@ if (options.recordAiPath)
 
 let status: number | null;
 if (options.backend === 'terminal') {
-  status = await runTerminalBackendPool(terminalWorkerFile, runs, options.jobs);
+  const terminalRuns = runs.filter(run => {
+    const scenario = getScenario(run.scenarioName);
+    return !scenario.entrypoint && scenario.terminalBackend !== 'subprocess';
+  });
+  const subprocessRuns = runs.filter(run => {
+    const scenario = getScenario(run.scenarioName);
+    return Boolean(scenario.entrypoint) || scenario.terminalBackend === 'subprocess';
+  });
+  if (subprocessRuns.length > 0) {
+    process.stdout.write(`[mc-e2e] [terminal] routing ${subprocessRuns.length} scenarios through subprocess fallback\n`);
+  }
+  const terminalStatus = await runTerminalBackendPool(terminalWorkerFile, terminalRuns, options.jobs);
+  const subprocessStatus = await runSubprocessBackend(tuiTestBin, mastracodeDir, subprocessRuns, Math.min(options.jobs, 4));
+  status = terminalStatus === 0 && subprocessStatus === 0 ? 0 : 1;
 } else {
-  const testProcess = spawn(tuiTestBin, [], {
-    cwd: mastracodeDir,
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      MC_E2E_JOBS: String(options.jobs),
-      MC_E2E_RUNS_JSON: JSON.stringify(runs),
-    },
-  });
-  status = await new Promise<number | null>((resolve, reject) => {
-    testProcess.on('error', reject);
-    testProcess.on('exit', resolve);
-  });
+  status = await runSubprocessBackend(tuiTestBin, mastracodeDir, runs, options.jobs);
 }
 
 let missingRequest = false;

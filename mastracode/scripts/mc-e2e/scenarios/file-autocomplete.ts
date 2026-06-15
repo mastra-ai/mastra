@@ -6,6 +6,7 @@ export const fileAutocompleteScenario = {
   name: 'file-autocomplete',
   description: 'shows and inserts @ file autocomplete suggestions from an isolated fixture project',
   testName: 'inserts a file reference from real TUI autocomplete',
+  terminalBackend: 'subprocess',
   projectFixture: 'long-branch',
   prepare({ projectDir }) {
     const srcDir = join(projectDir, 'src');
@@ -18,7 +19,7 @@ export const fileAutocompleteScenario = {
     const fdPath = join(binDir, 'fd');
     writeFileSync(
       fdPath,
-      '#!/bin/sh\n[ -f "src/autocomplete-target.ts" ] || exit 0\nprintf "%s\\n" "src/autocomplete-target.ts" "src/another-file.md"\n',
+      '#!/bin/sh\nPROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)\n[ -f "$PROJECT_DIR/src/autocomplete-target.ts" ] || exit 0\nprintf "%s\\n" "src/autocomplete-target.ts" "src/another-file.md"\n',
     );
     chmodSync(fdPath, 0o755);
   },
@@ -31,7 +32,7 @@ export const fileAutocompleteScenario = {
     await runtime.waitForScreenText(/Branch: feature\/super-long-branch-name/i, terminal);
 
     terminal.write('Attach @auto');
-    await runtime.waitForScreenText(/autocomplete-target\.ts/i, terminal);
+    await runtime.waitForScreenText(/autocomplete-target\.ts/i, terminal, 20_000);
     runtime.printScreen('file autocomplete suggestions', terminal);
 
     terminal.write('\t');

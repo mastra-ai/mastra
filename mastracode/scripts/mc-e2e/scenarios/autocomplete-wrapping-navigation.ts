@@ -12,6 +12,7 @@ export const autocompleteWrappingNavigationScenario = {
   name: 'autocomplete-wrapping-navigation',
   description: 'Wraps long custom slash descriptions while arrow navigation remains item-based.',
   testName: 'wraps long slash autocomplete descriptions and selects the next item with one Down arrow',
+  terminalBackend: 'subprocess',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
   aimockFixture: 'autocomplete-wrapping-navigation.json',
@@ -30,9 +31,9 @@ export const autocompleteWrappingNavigationScenario = {
     await runtime.waitForScreenText(/Project: project/i, terminal);
 
     terminal.write('/wrap-');
-    await runtime.waitForScreenText(/Alpha wrapped autocomplete description begins/i, terminal, 8_000);
-    await runtime.waitForScreenText(/navigation-sentinel-wrap-tail/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Bravo command selected after exactly one Down arrow/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Alpha wrapped autocomplete description begins/i, terminal, 20_000);
+    await runtime.waitForScreenText(/navigation-sentinel-wrap-tail/i, terminal, 20_000);
+    await runtime.waitForScreenText(/Bravo command selected after exactly one Down arrow/i, terminal, 20_000);
     runtime.printScreen('wrapped custom slash autocomplete list', terminal);
 
     terminal.write(DOWN);

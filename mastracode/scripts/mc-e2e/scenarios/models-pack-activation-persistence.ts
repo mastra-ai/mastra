@@ -60,14 +60,12 @@ export const modelsPackActivationPersistenceScenario = {
     await runtime.waitForScreenText(/Switched to Models Pack E2E pack/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("MODELS_ACTIVE="+s.models.activeModelPackId); console.log("MODELS_DEFAULTS="+[s.models.modeDefaults.plan,s.models.modeDefaults.build,s.models.modeDefaults.fast].join("|")); console.log("MODELS_SUBAGENTS="+Object.keys(s.models.subagentModels||{}).length); console.log("MODELS_PACK_COUNT="+s.customModelPacks.length)'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("MODELS_ACTIVE="+s.models.activeModelPackId); console.log("MODELS_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("MODELS_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("MODELS_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("MODELS_SUBAGENTS="+Object.keys(s.models.subagentModels||{}).length); console.log("MODELS_PACK_COUNT="+s.customModelPacks.length)'`,
     );
     await runtime.waitForScreenText(/MODELS_ACTIVE=custom:Models Pack E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(
-      /MODELS_DEFAULTS=models-pack-e2e\/plan-e2e\|models-pack-e2e\/build-e2e\|models-pack-e2e\/fast-e2e/i,
-      terminal,
-      8_000,
-    );
+    await runtime.waitForScreenText(/MODELS_DEFAULT_PLAN=models-pack-e2e\/plan-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/MODELS_DEFAULT_BUILD=models-pack-e2e\/build-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/MODELS_DEFAULT_FAST=models-pack-e2e\/fast-e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/MODELS_SUBAGENTS=0/i, terminal, 8_000);
     await runtime.waitForScreenText(/MODELS_PACK_COUNT=1/i, terminal, 8_000);
 

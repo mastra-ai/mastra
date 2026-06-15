@@ -66,6 +66,7 @@ export const browserProfileProviderMismatchScenario = {
       `!node -e 'const fs=require("fs"); const path=require("path"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; const marker=fs.readFileSync(path.join(b.profile,".mastra-provider"),"utf8").trim(); console.log("BROWSER_MISMATCH_CANCEL="+[b.enabled,b.provider,marker].join(":"));'`,
     );
     await runtime.waitForScreenText(/BROWSER_MISMATCH_CANCEL=false:stagehand:stagehand/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\$ node -e[\s\S]*✓/i, terminal, 8_000);
 
     await chooseAgentBrowserWithSeededProfile();
     await runtime.waitForScreenText(/Continue anyway\?/i, terminal, 8_000);

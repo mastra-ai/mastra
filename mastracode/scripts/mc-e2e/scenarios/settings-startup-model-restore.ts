@@ -60,14 +60,12 @@ export const settingsStartupModelRestoreScenario = {
     await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(
-      '!node -e \'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("STARTUP_ACTIVE="+s.models.activeModelPackId); console.log("STARTUP_DEFAULTS="+[s.models.modeDefaults.plan,s.models.modeDefaults.build,s.models.modeDefaults.fast].join("|")); console.log("STARTUP_PACKS="+s.customModelPacks.map(p=>p.name).join("|"));\'',
+      '!node -e \'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("STARTUP_ACTIVE="+s.models.activeModelPackId); console.log("STARTUP_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("STARTUP_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("STARTUP_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("STARTUP_PACKS="+s.customModelPacks.map(p=>p.name).join("|"));\'',
     );
     await runtime.waitForScreenText(/STARTUP_ACTIVE=custom:Startup Restore E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(
-      /STARTUP_DEFAULTS=stale-mode-defaults\/plan\|stale-mode-defaults\/build\|stale-mode-defaults\/fast/i,
-      terminal,
-      8_000,
-    );
+    await runtime.waitForScreenText(/STARTUP_DEFAULT_PLAN=stale-mode-defaults\/plan/i, terminal, 8_000);
+    await runtime.waitForScreenText(/STARTUP_DEFAULT_BUILD=stale-mode-defaults\/build/i, terminal, 8_000);
+    await runtime.waitForScreenText(/STARTUP_DEFAULT_FAST=stale-mode-defaults\/fast/i, terminal, 8_000);
     await runtime.waitForScreenText(/STARTUP_PACKS=Startup Restore E2E/i, terminal, 8_000);
 
     terminal.keyCtrlC();

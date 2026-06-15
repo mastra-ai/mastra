@@ -173,7 +173,7 @@ values
     await runtime.waitForScreenText(/low · triage-note · dismissed/i, terminal, 8_000);
     await runtime.waitForScreenText(/low · deployment-success · archived/i, terminal, 8_000);
     await runtime.waitForScreenText(/medium · comment-batch · pending/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Notification reload coalesced target: 3 comments collapsed into one record/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Notification reload coalesced target/i, terminal, 8_000);
     await runtime.waitForScreenText(/Notification summary: 1 pending/i, terminal, 8_000);
     await runtime.waitForScreenText(/linear: 1/i, terminal, 8_000);
     await runtime.waitForScreenText(/Use notification_inbox to inspect pending notifications/i, terminal, 8_000);

@@ -100,13 +100,20 @@ export const setupCustomPackCompletionScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SETUP_CUSTOM_DONE="+Boolean(s.onboarding.completedAt)); console.log("SETUP_CUSTOM_PACK="+s.onboarding.modePackId+":"+s.models.activeModelPackId); console.log("SETUP_CUSTOM_MODELS="+[p?.models?.plan,p?.models?.build,p?.models?.fast].join("|")); console.log("SETUP_CUSTOM_DEFAULTS="+[s.models.modeDefaults.plan,s.models.modeDefaults.build,s.models.modeDefaults.fast].join("|")); console.log("SETUP_CUSTOM_OM="+s.onboarding.omPackId+":"+s.models.activeOmPackId+":"+s.models.omModelOverride); console.log("SETUP_CUSTOM_OVERRIDES="+Object.keys(s.models.subagentModels||{}).length+":"+s.preferences.yolo);'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SETUP_CUSTOM_DONE="+Boolean(s.onboarding.completedAt)); console.log("SETUP_CUSTOM_ONBOARDING="+s.onboarding.modePackId); console.log("SETUP_CUSTOM_ACTIVE="+s.models.activeModelPackId); console.log("SETUP_CUSTOM_PLAN="+p?.models?.plan); console.log("SETUP_CUSTOM_BUILD="+p?.models?.build); console.log("SETUP_CUSTOM_FAST="+p?.models?.fast); console.log("SETUP_CUSTOM_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("SETUP_CUSTOM_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("SETUP_CUSTOM_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("SETUP_CUSTOM_OM_ONBOARDING="+s.onboarding.omPackId); console.log("SETUP_CUSTOM_OM_ACTIVE="+s.models.activeOmPackId); console.log("SETUP_CUSTOM_OM_MODEL="+s.models.omModelOverride); console.log("SETUP_CUSTOM_OVERRIDES="+Object.keys(s.models.subagentModels||{}).length+":"+s.preferences.yolo);'`,
     );
     await runtime.waitForScreenText(/SETUP_CUSTOM_DONE=true/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SETUP_CUSTOM_PACK=custom:Setup Custom Pack E2E:custom:Setup Custom Pack E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SETUP_CUSTOM_MODELS=302ai\/setup-custom-plan-e2e\|302ai\/setup-custom-build-e2e\|302ai\/setup-custom-fast-e2e/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SETUP_CUSTOM_DEFAULTS=302ai\/setup-custom-plan-e2e\|302ai\/setup-custom-build-e2e\|302ai\/setup-custom-fast-e2e/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SETUP_CUSTOM_OM=custom:custom:302ai\/setup-custom-om-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_ONBOARDING=custom:Setup Custom Pack E2E/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_ACTIVE=custom:Setup Custom Pack E2E/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_PLAN=302ai\/setup-custom-plan-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_BUILD=302ai\/setup-custom-build-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_FAST=302ai\/setup-custom-fast-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_DEFAULT_PLAN=302ai\/setup-custom-plan-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_DEFAULT_BUILD=302ai\/setup-custom-build-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_DEFAULT_FAST=302ai\/setup-custom-fast-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_OM_ONBOARDING=custom/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_OM_ACTIVE=custom/i, terminal, 8_000);
+    await runtime.waitForScreenText(/SETUP_CUSTOM_OM_MODEL=302ai\/setup-custom-om-e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/SETUP_CUSTOM_OVERRIDES=0:false/i, terminal, 8_000);
 
     terminal.keyCtrlC();

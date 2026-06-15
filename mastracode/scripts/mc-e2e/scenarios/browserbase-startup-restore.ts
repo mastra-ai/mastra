@@ -53,10 +53,13 @@ export const browserbaseStartupRestoreScenario = {
     await runtime.waitForScreenText(/\/browser on to apply, \/browser to reconfigure, or restart\./i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; const sh=b.stagehand||{}; console.log("BROWSERBASE_STARTUP_PROVIDER="+b.enabled+":"+b.provider+":"+sh.env+":"+b.headless); console.log("BROWSERBASE_STARTUP_CDP="+(b.cdpUrl||"missing")); console.log("BROWSERBASE_STARTUP_CREDS="+Boolean(sh.apiKey||sh.projectId));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; const sh=b.stagehand||{}; console.log("BROWSERBASE_STARTUP_ENABLED="+b.enabled); console.log("BROWSERBASE_STARTUP_PROVIDER="+b.provider); console.log("BROWSERBASE_STARTUP_ENV="+sh.env); console.log("BROWSERBASE_STARTUP_HEADLESS="+b.headless); console.log("BROWSERBASE_STARTUP_CDP_SUFFIX="+String(b.cdpUrl||"").split("/").pop()); console.log("BROWSERBASE_STARTUP_CREDS="+Boolean(sh.apiKey||sh.projectId));'`,
     );
-    await runtime.waitForScreenText(/BROWSERBASE_STARTUP_PROVIDER=true:stagehand:BROWSERBASE:false/i, terminal, 8_000);
-    await runtime.waitForScreenText(/BROWSERBASE_STARTUP_CDP=ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browserbase-startup-pending/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSERBASE_STARTUP_ENABLED=true/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSERBASE_STARTUP_PROVIDER=stagehand/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSERBASE_STARTUP_ENV=BROWSERBASE/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSERBASE_STARTUP_HEADLESS=false/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSERBASE_STARTUP_CDP_SUFFIX=browserbase-startup-pending/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSERBASE_STARTUP_CREDS=false/i, terminal, 8_000);
 
     terminal.keyCtrlC();

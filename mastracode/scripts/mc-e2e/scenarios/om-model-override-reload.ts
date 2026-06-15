@@ -82,13 +82,12 @@ export const omModelOverrideReloadScenario: McE2eScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const m=s.models||{}; console.log("OM_MODEL_OVERRIDES="+[m.activeOmPackId,m.omModelOverride||"null",m.observerModelOverride,m.reflectorModelOverride].join(":"));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const m=s.models||{}; console.log("OM_MODEL_PACK="+m.activeOmPackId); console.log("OM_MODEL_LEGACY="+(m.omModelOverride||"null")); console.log("OM_MODEL_OBSERVER="+m.observerModelOverride); console.log("OM_MODEL_REFLECTOR="+m.reflectorModelOverride);'`,
     );
-    await runtime.waitForScreenText(
-      /OM_MODEL_OVERRIDES=custom:null:om-override-e2e\/updated-observer:om-override-e2e\/updated-reflector/i,
-      terminal,
-      8_000,
-    );
+    await runtime.waitForScreenText(/OM_MODEL_PACK=custom/i, terminal, 8_000);
+    await runtime.waitForScreenText(/OM_MODEL_LEGACY=null/i, terminal, 8_000);
+    await runtime.waitForScreenText(/OM_MODEL_OBSERVER=om-override-e2e\/updated-observer/i, terminal, 8_000);
+    await runtime.waitForScreenText(/OM_MODEL_REFLECTOR=om-override-e2e\/updated-reflector/i, terminal, 8_000);
 
     terminal.submit(
       `!sqlite3 "$MASTRA_DB_PATH" "select 'OM_MODEL_THREAD=' || (instr(hex(metadata),'6F627365727665724D6F64656C4964')>0) || ':' || (instr(hex(metadata),'6F6D2D6F766572726964652D6532652F757064617465642D6F62736572766572')>0) || ':' || (instr(hex(metadata),'7265666C6563746F724D6F64656C4964')>0) || ':' || (instr(hex(metadata),'6F6D2D6F766572726964652D6532652F757064617465642D7265666C6563746F72')>0) from mastra_threads where instr(hex(metadata),'6F627365727665724D6F64656C4964')>0 limit 1"`,

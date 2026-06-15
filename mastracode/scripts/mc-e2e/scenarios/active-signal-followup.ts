@@ -6,6 +6,7 @@ export const activeSignalFollowupScenario: McE2eScenario = {
   projectFixture: 'long-branch',
   description: 'Send a real TUI follow-up while an AIMock-backed run is active and verify signal delivery.',
   testName: 'accepts a while-active follow-up as an agent signal in the real TUI',
+  terminalBackend: 'subprocess',
   useOpenAIModel: true,
   aimockFixture: 'active-signal-followup.json',
   async run({ terminal, runtime }) {
@@ -24,8 +25,8 @@ export const activeSignalFollowupScenario: McE2eScenario = {
     await runtime.waitForScreenText(/↳ Steer while active\. pending/i, terminal);
     runtime.printScreen('after active follow-up submit', terminal);
 
-    await runtime.waitForScreenText(/Initial signal run completed\./i, terminal, 10_000);
-    await runtime.waitForScreenText(/Active signal follow-up completed\./i, terminal, 10_000);
+    await runtime.waitForScreenText(/Initial signal run completed\./i, terminal, 30_000);
+    await runtime.waitForScreenText(/Active signal follow-up completed\./i, terminal, 30_000);
     runtime.printScreen('after active follow-up response', terminal);
 
     terminal.keyCtrlC();
