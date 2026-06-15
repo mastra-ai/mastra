@@ -1025,6 +1025,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   addAgent(agent: GithubSignalAgent, options: GithubSignalAgentOptions = {}): void {
     this.#agent = agent;
     this.#agentOptions = options;
+    this.#propagateMastraToAgent();
   }
 
   /**
@@ -1034,6 +1035,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   override connect(agent: Agent<any, any, any, any>): void {
     super.connect(agent);
     this.#agent = agent as unknown as GithubSignalAgent;
+    this.#propagateMastraToAgent();
   }
 
   getInputProcessors(): InputProcessorOrWorkflow[] {
@@ -1055,15 +1057,17 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   override __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
     super.__registerMastra(mastra);
     this.#ghMastra = mastra as unknown as GithubSignalsMastra;
-    // Propagate Mastra to the connected agent so sendNotificationSignal has
-    // storage access.  When GithubSignals is wired via `signals: [...]`, the
-    // agent that called `connect()` may not yet have been registered with a
-    // Mastra instance (e.g. in Harness where only forked agents get registered).
-    if (this.#agent && typeof (this.#agent as any).__registerMastra === 'function') {
-      if (!(this.#agent as any).getMastraInstance?.()) {
-        (this.#agent as any).__registerMastra(mastra);
-      }
-    }
+    this.#propagateMastraToAgent();
+  }
+
+  // Ensure the connected agent has a Mastra instance so sendNotificationSignal
+  // has storage access.  Called from __registerMastra (normal path), connect(),
+  // and addAgent() to handle any ordering of registration vs attachment.
+  #propagateMastraToAgent(): void {
+    if (!this.#ghMastra || !this.#agent) return;
+    if (typeof (this.#agent as any).__registerMastra !== 'function') return;
+    if ((this.#agent as any).getMastraInstance?.()) return;
+    (this.#agent as any).__registerMastra(this.#ghMastra as unknown as Mastra);
   }
 
   async syncThreadNow(input: GithubPollingThread): Promise<number> {

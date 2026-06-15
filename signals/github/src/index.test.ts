@@ -822,6 +822,47 @@ describe('GithubSignals', () => {
     expect(mockAgent.__registerMastra).not.toHaveBeenCalled();
   });
 
+  it('propagates Mastra when agent is attached after __registerMastra via connect()', () => {
+    const mockMastra = { getStorage: vi.fn(), getAgentById: vi.fn() };
+    let agentMastra: unknown = undefined;
+    const mockAgent = {
+      sendSignal: vi.fn(),
+      sendNotificationSignal: vi.fn(),
+      getMastraInstance: () => agentMastra,
+      __registerMastra: vi.fn((m: unknown) => {
+        agentMastra = m;
+      }),
+    };
+
+    const processor = new GithubSignals({ threadStore: createThreadStore({} as any) });
+    // Register Mastra first, attach agent later (reversed ordering)
+    processor.__registerMastra(mockMastra as any);
+    processor.connect(mockAgent as any);
+
+    expect(mockAgent.__registerMastra).toHaveBeenCalledWith(mockMastra);
+    expect(agentMastra).toBe(mockMastra);
+  });
+
+  it('propagates Mastra when agent is attached after __registerMastra via addAgent()', () => {
+    const mockMastra = { getStorage: vi.fn(), getAgentById: vi.fn() };
+    let agentMastra: unknown = undefined;
+    const mockAgent = {
+      sendSignal: vi.fn(),
+      sendNotificationSignal: vi.fn(),
+      getMastraInstance: () => agentMastra,
+      __registerMastra: vi.fn((m: unknown) => {
+        agentMastra = m;
+      }),
+    };
+
+    const processor = new GithubSignals({ threadStore: createThreadStore({} as any) });
+    processor.__registerMastra(mockMastra as any);
+    processor.addAgent(mockAgent as any);
+
+    expect(mockAgent.__registerMastra).toHaveBeenCalledWith(mockMastra);
+    expect(agentMastra).toBe(mockMastra);
+  });
+
   it('resolves owner and repo from the project when the signal only carries a PR number', async () => {
     const thread: StorageThreadType = {
       id: 'thread-2',
