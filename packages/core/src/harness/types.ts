@@ -3,7 +3,7 @@ import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
@@ -306,7 +306,7 @@ export interface HarnessConfig<TState = {}> {
    * Converts a model ID string (e.g., "anthropic/claude-sonnet-4-20250514") to a
    * language model instance for Harness-managed observer, reflector, and subagent models.
    */
-  resolveModel?: (modelId: string) => MastraLanguageModel;
+  resolveModel?: (modelId: string) => MastraModelConfig;
 
   /**
    * Observational Memory configuration defaults.
