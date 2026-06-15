@@ -21,7 +21,7 @@ const overlayMocks = vi.hoisted(() => ({
 
 vi.mock('../../../onboarding/settings.js', () => settingsMock);
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   Box: class {
     children: unknown[] = [];
     constructor() {}

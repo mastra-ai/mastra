@@ -1,5 +1,5 @@
-import type { Component, OverlayHandle, OverlayOptions, SizeValue, TUI } from '@mariozechner/pi-tui';
-import { visibleWidth } from '@mariozechner/pi-tui';
+import type { Component, OverlayHandle, OverlayOptions, SizeValue, TUI } from '@earendil-works/pi-tui';
+import { visibleWidth } from '@earendil-works/pi-tui';
 
 import { theme } from './theme.js';
 

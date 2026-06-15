@@ -1,4 +1,4 @@
-import type { Component } from '@mariozechner/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 
 export type ChatSpacingKind =
   | 'quiet-compact-tool'

@@ -1,0 +1,5 @@
+---
+"@mastra/sentry": patch
+---
+dependencies updates:
+  - Updated dependency [`@sentry/node@^10.57.0` ↗︎](https://www.npmjs.com/package/@sentry/node/v/10.57.0) (from `^10.43.0`, in `dependencies`)
