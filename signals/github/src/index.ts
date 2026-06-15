@@ -1780,12 +1780,19 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       sent.push(notification);
     }
     if (notificationInputs.length > 0) {
-      const target = { resourceId: input.polling.resourceId, threadId: input.polling.threadId };
-      const streamOptions = await this.#agentOptions.getNotificationStreamOptions?.(target);
-      await agent.sendNotificationSignal(
-        notificationInputs,
-        streamOptions ? { ...target, ifIdle: { streamOptions } } : target,
-      );
+      try {
+        const target = { resourceId: input.polling.resourceId, threadId: input.polling.threadId };
+        const streamOptions = await this.#agentOptions.getNotificationStreamOptions?.(target);
+        await agent.sendNotificationSignal(
+          notificationInputs,
+          streamOptions ? { ...target, ifIdle: { streamOptions } } : target,
+        );
+      } catch (error) {
+        console.warn(
+          `GitHub Signals: activity notification failed for ${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}:`,
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
     return sent;
   }
@@ -1870,12 +1877,19 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     });
     this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
     if (baselineSnapshot) {
-      await this.#sendBaselineNotification({
-        threadId: input.threadId!,
-        resourceId: input.resourceId!,
-        subscription,
-        snapshot: baselineSnapshot,
-      });
+      try {
+        await this.#sendBaselineNotification({
+          threadId: input.threadId!,
+          resourceId: input.resourceId!,
+          subscription,
+          snapshot: baselineSnapshot,
+        });
+      } catch (error) {
+        console.warn(
+          `GitHub Signals: baseline notification failed for ${owner}/${repo}#${input.number}:`,
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
     await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
 
