@@ -2,7 +2,7 @@ import type { IToolExecutionComponent } from '../components/tool-execution-inter
 import type { SlashCommandContext } from './types.js';
 
 function applyCurrentModeColorToRenderedTools(ctx: SlashCommandContext): void {
-  const modeColor = ctx.harness.getCurrentMode?.()?.color;
+  const modeColor = ctx.harness.getCurrentMode?.()?.metadata?.color;
   for (const tool of ctx.state.allToolComponents as IToolExecutionComponent[]) {
     tool.setCompactToolModeColor?.(modeColor);
   }
@@ -25,7 +25,7 @@ export async function handleModeCommand(ctx: SlashCommandContext, args: string[]
   } else {
     const currentMode = ctx.harness.getCurrentMode();
     const modeList = modes
-      .map(m => `  ${m.id === currentMode?.id ? '* ' : '  '}${m.id}${m.name ? ` - ${m.name}` : ''}`)
+      .map(m => `  ${m.id === currentMode?.id ? '* ' : '  '}${m.name}${m.description ? ` - ${m.description}` : ''}`)
       .join('\n');
     ctx.showInfo(`Modes:\n${modeList}`);
   }
