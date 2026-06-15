@@ -31,9 +31,9 @@ class RuntimeDepsThreadManager extends AgentBrowserThreadManager {
     super(config);
   }
 
-  override async getPageForThread(threadId?: string) {
+  protected override async createSession(threadId: string) {
     installPlaywrightLinuxDeps();
-    return super.getPageForThread(threadId);
+    return super.createSession(threadId);
   }
 }
 
