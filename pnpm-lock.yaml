@@ -1200,7 +1200,7 @@ importers:
         specifier: ^5.2.0
         version: 5.2.0(encoding@0.1.13)
       rollup:
-        specifier: ^4.59.0
+        specifier: ^4.61.1
         version: 4.61.1
       rollup-plugin-esbuild:
         specifier: ^6.2.1
@@ -1258,7 +1258,7 @@ importers:
         specifier: ^11.3.5
         version: 11.3.5
       rollup:
-        specifier: ^4.0.0
+        specifier: ^4.61.1
         version: 4.61.1
       zod:
         specifier: ^3.25.0 || ^4.0.0
@@ -1474,7 +1474,7 @@ importers:
         version: 1.1.4(react@18.3.1)
       valibot:
         specifier: ^1.2.0
-        version: 1.2.0(typescript@6.0.3)
+        version: 1.4.1(typescript@6.0.3)
     devDependencies:
       '@docusaurus/module-type-aliases':
         specifier: ^3.9.2
@@ -3932,7 +3932,7 @@ importers:
         specifier: ^2.0.3
         version: 2.0.3
       rollup:
-        specifier: ^4.59.0
+        specifier: ^4.61.1
         version: 4.61.1
       rollup-plugin-esbuild:
         specifier: ^6.2.1
@@ -7882,7 +7882,7 @@ importers:
         specifier: ^1.17.2
         version: 1.17.2
       rollup:
-        specifier: ^4.60.2
+        specifier: ^4.61.1
         version: 4.61.1
     devDependencies:
       '@internal/lint':
@@ -11041,6 +11041,7 @@ packages:
 
   '@daytonaio/sdk@0.143.0':
     resolution: {integrity: sha512-itQ409W+WuuqLd8edIRVUWeRUyujSlOKInnN6GeC3OqyOWT27wyD/KzkesXDJtQ6HthGtqa4uRtHqnayd5wRCQ==}
+    deprecated: 'Moved to @daytona/sdk, same API, no breaking changes. Please update: npm uninstall @daytonaio/sdk && npm i @daytona/sdk'
 
   '@daytonaio/toolbox-api-client@0.143.0':
     resolution: {integrity: sha512-E6+yHPnFygNqRIctoDheISHCpzQkHydAU7fiBfsA5pnElfB/yLTOXQlnZfP8gfvOmUkRNU8QCXKzaualRTlI7w==}
@@ -52036,7 +52037,7 @@ snapshots:
       json-rpc-2.0: 1.7.1
       sqids: 0.3.0
       uri-template-matcher: 1.1.2
-      valibot: 1.2.0(typescript@6.0.3)
+      valibot: 1.4.1(typescript@6.0.3)
     transitivePeerDependencies:
       - typescript
 
