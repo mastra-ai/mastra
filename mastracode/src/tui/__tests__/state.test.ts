@@ -43,7 +43,7 @@ import { createTUIState } from '../state.js';
 
 function createHarness() {
   return {
-    getCurrentMode: vi.fn(() => ({ id: 'build', color: '#7c3aed' })),
+    getCurrentMode: vi.fn(() => ({ id: 'build', metadata: { color: '#7c3aed' } })),
   };
 }
 
