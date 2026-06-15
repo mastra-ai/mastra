@@ -99,6 +99,30 @@ export const LargeContent: Story = {
   },
 };
 
+export const WithMarkdownPretty: Story = {
+  args: {
+    title: 'Tool Result',
+    icon: <CodeIcon />,
+    codeStr: JSON.stringify({
+      type: 'text',
+      text: '### Ran Playwright code\n```js\nawait page.goto(\'https://linear.app\');\n```\n## Page\n- Page URL: https://linear.app\n- Page Title: Linear\n### Snapshot\n- [Snapshot](.playwright-mcp/page-2026-06-15.yml)',
+    }),
+  },
+};
+
+export const WithEmbeddedJson: Story = {
+  args: {
+    title: 'Tool Result',
+    icon: <CodeIcon />,
+    codeStr: JSON.stringify({
+      status: 'ok',
+      result: JSON.stringify({ key: 'value', nested: [1, 2, 3] }),
+      meta: JSON.stringify({ agent: 'playwright', step: 4 }),
+      plain: 'just a plain string',
+    }),
+  },
+};
+
 export const NullContent: Story = {
   args: {
     title: 'Empty',

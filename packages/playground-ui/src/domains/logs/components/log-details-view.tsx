@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import type { LogRecord } from '../types';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -69,6 +69,9 @@ export function LogDetailsView({
 }: LogDetailsViewProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [messageExpanded, setMessageExpanded] = useState(false);
+  useEffect(() => {
+    setMessageExpanded(false);
+  }, [log.message, log.timestamp]);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
   const date = toDate(log.timestamp);

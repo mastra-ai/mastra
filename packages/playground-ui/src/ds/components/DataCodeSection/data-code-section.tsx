@@ -9,7 +9,7 @@ import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import ReactCodeMirror from '@uiw/react-codemirror';
-import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, XIcon } from 'lucide-react';
+import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, SparklesIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -25,8 +25,9 @@ import {
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { useTheme } from '@/ds/components/ThemeProvider';
-import { expandEmbeddedJsonStrings } from '@/lib/json-utils';
+import { expandEmbeddedJsonStrings, hasMarkdownStrings } from '@/lib/json-utils';
 import { cn } from '@/lib/utils';
+import { JsonPrettyRenderer } from './json-pretty-renderer';
 
 // -- Search highlight extension -----------------------------------------------
 
@@ -156,6 +157,7 @@ export function DataCodeSection({
 }: DataCodeSectionProps) {
   const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
+  const [showPretty, setShowPretty] = useState(false);
   const [searchMinimized, setSearchMinimized] = useState(true);
   const [searchQuery, setSearchQueryState] = useState('');
   const [expandedOpen, setExpandedOpen] = useState(false);
@@ -165,6 +167,12 @@ export function DataCodeSection({
   const expandedEditorRef = useRef<ReactCodeMirrorRef>(null);
 
   const processedCodeStr = useMemo(() => expandEmbeddedJsonStrings(codeStr), [codeStr]);
+
+  const parsedValue = useMemo(() => {
+    try { return JSON.parse(processedCodeStr); } catch { return null; }
+  }, [processedCodeStr]);
+
+  const hasPrettyContent = useMemo(() => parsedValue !== null && hasMarkdownStrings(parsedValue), [parsedValue]);
 
   const hasMultilineText = useMemo(() => {
     try {
@@ -266,7 +274,17 @@ export function DataCodeSection({
           )}
           <ButtonsGroup>
             <CopyButton content={codeStr || 'No content'} size="sm" />
-            {hasMultilineText && (
+            {hasPrettyContent && (
+              <Button
+                size="sm"
+                aria-label={showPretty ? 'Show raw JSON' : 'Show pretty view'}
+                tooltip={showPretty ? 'Show raw JSON' : 'Show pretty view'}
+                onClick={() => setShowPretty(v => !v)}
+              >
+                <SparklesIcon />
+              </Button>
+            )}
+            {!showPretty && hasMultilineText && (
               <Button
                 size="sm"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
@@ -284,7 +302,9 @@ export function DataCodeSection({
       </div>
 
       <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all max-h-[30vh] overflow-y-auto">
-        {usePlainTextView ? (
+        {showPretty && parsedValue !== null ? (
+          <JsonPrettyRenderer value={parsedValue} />
+        ) : usePlainTextView ? (
           <div className="text-neutral4 font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
@@ -345,7 +365,11 @@ export function DataCodeSection({
             </div>
           </DialogHeader>
           <div className="overflow-auto px-6 pb-6">
-            {expandedMultiline ? (
+            {showPretty && parsedValue !== null ? (
+              <div className="dark:bg-black/20 bg-surface3 p-3 rounded-lg border dark:border-white/10 border-border1">
+                <JsonPrettyRenderer value={parsedValue} />
+              </div>
+            ) : expandedMultiline ? (
               <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all overflow-y-auto">
                 <div className="text-neutral4 font-mono break-all">
                   <pre className="text-wrap">{expandedFinalCodeStr}</pre>

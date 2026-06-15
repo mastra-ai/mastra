@@ -32,6 +32,24 @@ function expandNode(value: unknown, depth: number): unknown {
   return value;
 }
 
+const MARKDOWN_PATTERN = /(?:^|\n)(?:#{1,6} |```|\*\*|__|- |\* |\d+\. |> )/;
+
+/** True when a string value (after unescaping \n) looks like Markdown prose. */
+export function looksLikeMarkdown(s: string): boolean {
+  const unescaped = s.replace(/\\n/g, '\n');
+  return unescaped.includes('\n') && MARKDOWN_PATTERN.test(unescaped);
+}
+
+/** True when any string value anywhere in the parsed JSON tree looks like Markdown. */
+export function hasMarkdownStrings(value: unknown): boolean {
+  if (typeof value === 'string') return looksLikeMarkdown(value);
+  if (Array.isArray(value)) return value.some(hasMarkdownStrings);
+  if (typeof value === 'object' && value !== null) {
+    return Object.values(value as Record<string, unknown>).some(hasMarkdownStrings);
+  }
+  return false;
+}
+
 /**
  * Walks a JSON string, replacing any string value whose content is valid JSON
  * with the parsed structure (up to MAX_EXPAND_DEPTH levels deep), then

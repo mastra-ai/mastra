@@ -5,14 +5,15 @@ import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import ReactCodeMirror from '@uiw/react-codemirror';
-import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
+import { AlignJustifyIcon, AlignLeftIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { useTheme } from '@/ds/components/ThemeProvider';
-import { expandEmbeddedJsonStrings } from '@/lib/json-utils';
+import { expandEmbeddedJsonStrings, hasMarkdownStrings } from '@/lib/json-utils';
 import { cn } from '@/lib/utils';
+import { JsonPrettyRenderer } from '@/ds/components/DataCodeSection/json-pretty-renderer';
 
 function buildDarkTheme(): Extension {
   return draculaInit({
@@ -97,8 +98,15 @@ export function DataDetailsPanelCodeSection({
 }: DataDetailsPanelCodeSectionProps) {
   const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
+  const [showPretty, setShowPretty] = useState(false);
 
   const processedCodeStr = useMemo(() => expandEmbeddedJsonStrings(codeStr), [codeStr]);
+
+  const parsedValue = useMemo(() => {
+    try { return JSON.parse(processedCodeStr); } catch { return null; }
+  }, [processedCodeStr]);
+
+  const hasPrettyContent = useMemo(() => parsedValue !== null && hasMarkdownStrings(parsedValue), [parsedValue]);
 
   const hasMultilineText = useMemo(() => {
     try {
@@ -128,7 +136,17 @@ export function DataDetailsPanelCodeSection({
         </div>
         <ButtonsGroup>
           <CopyButton content={codeStr || 'No content'} size="sm" />
-          {hasMultilineText && (
+          {hasPrettyContent && (
+            <Button
+              size="sm"
+              aria-label={showPretty ? 'Show raw JSON' : 'Show pretty view'}
+              tooltip={showPretty ? 'Show raw JSON' : 'Show pretty view'}
+              onClick={() => setShowPretty(v => !v)}
+            >
+              <SparklesIcon />
+            </Button>
+          )}
+          {!showPretty && hasMultilineText && (
             <Button
               size="sm"
               aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
@@ -140,7 +158,9 @@ export function DataDetailsPanelCodeSection({
         </ButtonsGroup>
       </div>
       <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all max-h-[30vh] overflow-y-auto">
-        {usePlainTextView ? (
+        {showPretty && parsedValue !== null ? (
+          <JsonPrettyRenderer value={parsedValue} />
+        ) : usePlainTextView ? (
           <div className="text-neutral4 font-mono break-all">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
