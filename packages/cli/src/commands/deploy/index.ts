@@ -310,7 +310,7 @@ async function uploadToEnvironment(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
-      'x-mastra-org-id': orgId,
+      'x-organization-id': orgId,
     },
     body: JSON.stringify({
       projectName: opts.projectName,
@@ -346,7 +346,7 @@ async function uploadToEnvironment(
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
-      'x-mastra-org-id': orgId,
+      'x-organization-id': orgId,
     },
   });
 
