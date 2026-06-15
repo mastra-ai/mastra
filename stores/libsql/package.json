@@ -27,7 +27,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@libsql/client": "^0.17.3"
+    "@libsql/client": "^0.17.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
