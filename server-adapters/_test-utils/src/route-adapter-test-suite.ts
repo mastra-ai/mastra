@@ -96,6 +96,14 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // getPermissionsForRole. Per-status behavior is covered in
       // packages/server/src/server/handlers/auth.test.ts.
       '/auth/roles/:roleId/permissions',
+      // FGA routes require an FGA provider (e.g., WorkOS FGA) to be configured.
+      // The test harness uses SimpleAuth which has no FGA. Behavior is covered
+      // by packages/auth-workos FGA provider tests.
+      '/auth/fga/resource-types',
+      '/auth/fga/resource-types/:resourceType/roles',
+      '/auth/fga/resources/:resourceType/:resourceId/access',
+      '/auth/fga/resources/:resourceType/:resourceId/access/:membershipId',
+      '/auth/organization/members',
     ];
     // Skip routes that require external dependencies (APIs)
     const routesRequiringExternalDeps = [
