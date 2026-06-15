@@ -107,11 +107,7 @@ async function main() {
 
   // Keep a thread subscription open so this worker receives signal-enqueued
   // events from other workers and updates its local activeThreadRunIds map.
-  await runtime.subscribeToThread(
-    agent as any,
-    { resourceId: RESOURCE_ID, threadId: THREAD_ID },
-    pubsub,
-  );
+  await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub);
 
   emit({ type: 'ready' });
 
