@@ -108,8 +108,8 @@ importers:
         specifier: ^16.4.0
         version: 16.4.0
       npm-run-all2:
-        specifier: ^9.0.1
-        version: 9.0.1
+        specifier: ^9.0.2
+        version: 9.0.2
       path-to-regexp:
         specifier: ^8.3.0
         version: 8.4.2
@@ -1474,7 +1474,7 @@ importers:
         version: 1.1.4(react@18.3.1)
       valibot:
         specifier: ^1.2.0
-        version: 1.2.0(typescript@6.0.3)
+        version: 1.4.1(typescript@6.0.3)
     devDependencies:
       '@docusaurus/module-type-aliases':
         specifier: ^3.9.2
@@ -3419,7 +3419,7 @@ importers:
         version: 6.1.7
       shell-quote:
         specifier: ^1.8.3
-        version: 1.8.3
+        version: 1.8.4
       strip-json-comments:
         specifier: ^5.0.3
         version: 5.0.3
@@ -11041,6 +11041,7 @@ packages:
 
   '@daytonaio/sdk@0.143.0':
     resolution: {integrity: sha512-itQ409W+WuuqLd8edIRVUWeRUyujSlOKInnN6GeC3OqyOWT27wyD/KzkesXDJtQ6HthGtqa4uRtHqnayd5wRCQ==}
+    deprecated: 'Moved to @daytona/sdk, same API, no breaking changes. Please update: npm uninstall @daytonaio/sdk && npm i @daytona/sdk'
 
   '@daytonaio/toolbox-api-client@0.143.0':
     resolution: {integrity: sha512-E6+yHPnFygNqRIctoDheISHCpzQkHydAU7fiBfsA5pnElfB/yLTOXQlnZfP8gfvOmUkRNU8QCXKzaualRTlI7w==}
@@ -24067,8 +24068,8 @@ packages:
     resolution: {integrity: sha512-nkc+3pIIhqHVQr085X9d2JzPzLyjzQS96zbruppqC9aZRm/x8xx6xhI98gHtsfELP2bE+loHq8ZaHFHhe+NauA==}
     engines: {node: ^16.14.0 || >=18.0.0}
 
-  npm-run-all2@9.0.1:
-    resolution: {integrity: sha512-ZtK8WXZBUA9x0XD6nxYdFLe86FxpkCTq2LiQxzX0LeXQY/vyAigQZXjjj/xfTwgV4Yqe/vYNIq2W09lrHKTcuQ==}
+  npm-run-all2@9.0.2:
+    resolution: {integrity: sha512-+dd4SO2jAlLE06OzmJKzIe6QvvjXezcbmobnh8usR0a8BzQCABTdqTXqVPji0ICOhSQpIIrkGd7IzNl5iDaRSA==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0, npm: '>= 10'}
     hasBin: true
 
@@ -24628,9 +24629,9 @@ packages:
   picoquery@2.5.0:
     resolution: {integrity: sha512-j1kgOFxtaCyoFCkpoYG2Oj3OdGakadO7HZ7o5CqyRazlmBekKhbDoUnNnXASE07xSY4nDImWZkrZv7toSxMi/g==}
 
-  pidtree@0.6.0:
-    resolution: {integrity: sha512-eG2dWTVw5bzqGRztnHExczNxt5VGsE6OwTeCG3fdUf9KBsZzO3R5OIIIzWR+iZA0NtZ+RDVdaoE2dK1cn6jH4g==}
-    engines: {node: '>=0.10'}
+  pidtree@1.0.0:
+    resolution: {integrity: sha512-avfAvjB9Dd0wdj3rjJX//yS+G79OO0KrS5pJHFJENjYGX6N4SMgEDBBI/yFy0lloOYSaC6XQxzpOAMPfSYFV/Q==}
+    engines: {node: '>=18'}
     hasBin: true
 
   pify@3.0.0:
@@ -26343,8 +26344,8 @@ packages:
     resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
     engines: {node: '>=8'}
 
-  shell-quote@1.8.3:
-    resolution: {integrity: sha512-ObmnIF4hXNg1BqhnHmgbDETF8dLPCggZWBjkQfhZpbszZnYur5DUljTcCHii5LC3J5E0yeO/1LIMyH+UvHQgyw==}
+  shell-quote@1.8.4:
+    resolution: {integrity: sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ==}
     engines: {node: '>= 0.4'}
 
   shiki@1.29.2:
@@ -32285,7 +32286,7 @@ snapshots:
       form-data: 4.0.5
       isomorphic-ws: 5.0.0(ws@8.20.0(bufferutil@4.1.0))
       pathe: 2.0.3
-      shell-quote: 1.8.3
+      shell-quote: 1.8.4
       tar: 7.5.15
     transitivePeerDependencies:
       - debug
@@ -46397,7 +46398,7 @@ snapshots:
   launch-editor@2.12.0:
     dependencies:
       picocolors: 1.1.1
-      shell-quote: 1.8.3
+      shell-quote: 1.8.4
 
   lazystream@1.0.1:
     dependencies:
@@ -48120,15 +48121,15 @@ snapshots:
       npm-package-arg: 11.0.3
       semver: 7.8.0
 
-  npm-run-all2@9.0.1:
+  npm-run-all2@9.0.2:
     dependencies:
       ansi-styles: 6.2.3
       cross-spawn: 7.0.6
       memorystream: 0.3.1
       picomatch: 4.0.4
-      pidtree: 0.6.0
+      pidtree: 1.0.0
       read-package-json-fast: 6.0.0
-      shell-quote: 1.8.3
+      shell-quote: 1.8.4
       which: 7.0.0
 
   npm-run-path@4.0.1:
@@ -48793,7 +48794,7 @@ snapshots:
 
   picoquery@2.5.0: {}
 
-  pidtree@0.6.0: {}
+  pidtree@1.0.0: {}
 
   pify@3.0.0: {}
 
@@ -51132,7 +51133,7 @@ snapshots:
 
   shebang-regex@3.0.0: {}
 
-  shell-quote@1.8.3: {}
+  shell-quote@1.8.4: {}
 
   shiki@1.29.2:
     dependencies:
@@ -51881,7 +51882,7 @@ snapshots:
     dependencies:
       bluebird: 3.7.2
       lodash: 4.18.1
-      shell-quote: 1.8.3
+      shell-quote: 1.8.4
       source-map-support: 0.5.21
 
   teeny-request@10.1.0:
@@ -52036,7 +52037,7 @@ snapshots:
       json-rpc-2.0: 1.7.1
       sqids: 0.3.0
       uri-template-matcher: 1.1.2
-      valibot: 1.2.0(typescript@6.0.3)
+      valibot: 1.4.1(typescript@6.0.3)
     transitivePeerDependencies:
       - typescript
 
