@@ -12,6 +12,7 @@ import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
 } from '../chat-boundary-reconciliation.js';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { OMMarkerComponent } from '../components/om-marker.js';
 import type { OMMarkerData } from '../components/om-marker.js';
 import { OMOutputComponent } from '../components/om-output.js';
@@ -39,7 +40,14 @@ function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): vo
 
 function isImmediatelyBeforeStreamingInsert(ctx: EventHandlerContext, child: Component): boolean {
   const insertIndex = getInsertIndexBeforeStreaming(ctx);
-  return insertIndex > 0 && ctx.state.chatContainer.children[insertIndex - 1] === child;
+  // Walk backward from the insert point, skipping boundary spacers,
+  // to find the actual preceding component.
+  for (let i = insertIndex - 1; i >= 0; i--) {
+    if (!isChatBoundarySpacer(ctx.state.chatContainer.children[i]!)) {
+      return ctx.state.chatContainer.children[i] === child;
+    }
+  }
+  return false;
 }
 
 function removeChatChild(ctx: EventHandlerContext, child: Component | undefined): void {

@@ -2,6 +2,7 @@ import { Container } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
+import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
 import type { TUIState } from '../../state.js';
 import { handleOMActivation, handleOMBufferingStart } from '../om.js';
 import type { EventHandlerContext } from '../types.js';
@@ -54,5 +55,24 @@ describe('handleOMActivation', () => {
 
     // 4 children: OMMarker, Container, boundary-spacer (above 2nd OMMarker), OMMarker
     expect(state.chatContainer.children).toHaveLength(4);
+  });
+
+  it('coalesces consecutive activations when a streaming component is present', () => {
+    const { ctx, state } = createCtx();
+
+    // Simulate a streaming assistant message at the end of the container
+    const streamingComponent = new Container();
+    state.chatContainer.addChild(streamingComponent);
+    state.streamingComponent = streamingComponent as any;
+
+    handleOMActivation(ctx, 'observation', 7_300, 400);
+    handleOMActivation(ctx, 'observation', 2_000, 125);
+
+    // Should coalesce into a single marker despite boundary spacers
+    const nonSpacerChildren = state.chatContainer.children.filter(c => !isChatBoundarySpacer(c));
+    // 2 real children: the coalesced OMMarker + the streaming component
+    expect(nonSpacerChildren).toHaveLength(2);
+    const text = stripAnsi(state.chatContainer.render(120).join('\n'));
+    expect(text).toContain('Activated 2 observations');
   });
 });
