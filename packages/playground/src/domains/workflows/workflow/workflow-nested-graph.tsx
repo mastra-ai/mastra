@@ -21,7 +21,7 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
   const [isMounted, setIsMounted] = useState(false);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
-  const { nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges, workflowName });
+  const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges, workflowName });
 
   useEffect(() => {
     if (open) {
@@ -37,6 +37,7 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
         <ReactFlow
           nodes={nodes}
           edges={styledEdges}
+          edgeTypes={edgeTypes}
           fitView
           fitViewOptions={{
             maxZoom: 1,

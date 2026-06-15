@@ -65,10 +65,7 @@ const WorkflowStepCard = ({
         <WorkflowStepActionBar
           stepName={label}
           stepId={stepId}
-          input={step?.input}
           resumeData={step?.resumeData}
-          output={step?.output}
-          suspendOutput={step?.suspendOutput}
           error={isTripwire ? undefined : step?.error}
           tripwire={isTripwire ? step?.tripwire : undefined}
           mapConfig={mapConfig}
@@ -112,7 +109,6 @@ const WorkflowConditionCard = ({ data }: { data: WorkflowStepNodeData }) => {
       actionBar={
         <WorkflowStepActionBar
           stepName={data.nextStepId ?? data.label}
-          input={previousStep?.output}
           mapConfig={data.mapConfig}
           tripwire={isTripwire ? previousStep?.tripwire : undefined}
           status={nextStep ? previousDisplayStatus : undefined}

@@ -18,9 +18,6 @@ import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export interface WorkflowStepActionBarProps {
-  input?: any;
-  output?: any;
-  suspendOutput?: any;
   resumeData?: any;
   error?: any;
   tripwire?: TripwireData;
@@ -34,10 +31,7 @@ export interface WorkflowStepActionBarProps {
 }
 
 export const WorkflowStepActionBar = ({
-  input,
-  output,
   resumeData,
-  suspendOutput,
   error,
   tripwire,
   mapConfig,
@@ -48,8 +42,6 @@ export const WorkflowStepActionBar = ({
   stepKey,
   stepsFlow,
 }: WorkflowStepActionBarProps) => {
-  const [isInputOpen, setIsInputOpen] = useState(false);
-  const [isOutputOpen, setIsOutputOpen] = useState(false);
   const [isResumeDataOpen, setIsResumeDataOpen] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
   const [isTripwireOpen, setIsTripwireOpen] = useState(false);
@@ -166,9 +158,7 @@ export const WorkflowStepActionBar = ({
 
   return (
     <>
-      {(input ||
-        output ||
-        error ||
+      {(error ||
         tripwire ||
         mapConfig ||
         resumeData ||
@@ -277,26 +267,6 @@ export const WorkflowStepActionBar = ({
               Map config
             </Button>
           )}
-          {input && (
-            <>
-              <Button onClick={() => setIsInputOpen(true)} size="sm">
-                Input
-              </Button>
-
-              <Dialog open={isInputOpen} onOpenChange={setIsInputOpen}>
-                <DialogContent className={dialogContentClass}>
-                  <DialogHeader>
-                    <DialogTitle>{stepName} input</DialogTitle>
-                    <DialogDescription>View the input data for this step</DialogDescription>
-                  </DialogHeader>
-                  <DialogBody>
-                    <CodeDialogContent data={input} />
-                  </DialogBody>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
-
           {resumeData && (
             <>
               <Button onClick={() => setIsResumeDataOpen(true)} size="sm">
@@ -311,26 +281,6 @@ export const WorkflowStepActionBar = ({
                   </DialogHeader>
                   <DialogBody>
                     <CodeDialogContent data={resumeData} />
-                  </DialogBody>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
-
-          {(output ?? suspendOutput) && (
-            <>
-              <Button onClick={() => setIsOutputOpen(true)} size="sm">
-                Output
-              </Button>
-
-              <Dialog open={isOutputOpen} onOpenChange={setIsOutputOpen}>
-                <DialogContent className={dialogContentClass}>
-                  <DialogHeader>
-                    <DialogTitle>{stepName} output</DialogTitle>
-                    <DialogDescription>View the output data for this step</DialogDescription>
-                  </DialogHeader>
-                  <DialogBody>
-                    <CodeDialogContent data={output ?? suspendOutput} />
                   </DialogBody>
                 </DialogContent>
               </Dialog>

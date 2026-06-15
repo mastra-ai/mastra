@@ -16,13 +16,14 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
-  const { nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges });
+  const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges });
 
   return (
     <div className="w-full h-full bg-surface2">
       <ReactFlow
         nodes={nodes}
         edges={styledEdges}
+        edgeTypes={edgeTypes}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         fitView
