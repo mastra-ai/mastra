@@ -224,10 +224,19 @@ export function sanitizeV5UIMessages(
           if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
             return {
               ...part,
-              output:
-                typeof part.output === 'object' && part.output && 'value' in part.output
-                  ? part.output.value
-                  : part.output,
+              output: (() => {
+                const o = part.output;
+                if (o == null || typeof o !== 'object') return o;
+                const obj = o as Record<string, unknown>;
+                // Preserve { type: 'content', value: [...] } — this is the AI SDK's
+                // native multimodal tool result shape. Unwrapping it here causes
+                // convertToModelMessages to receive a raw array which gets stringified.
+                // See: https://github.com/mastra-ai/mastra/issues/17876
+                if (obj.type === 'content' && Array.isArray(obj.value)) return o;
+                // For other wrapped shapes (legacy), unwrap as before
+                if ('value' in obj) return obj.value;
+                return o;
+              })(),
             };
           }
           return part;
