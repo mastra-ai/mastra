@@ -365,7 +365,9 @@ export class MastraCodeGateway extends MastraModelGateway {
       return { apiKey: this.#mastraGatewayApiKey, source: 'gateway' };
     }
 
-    const customProvider = this.#getCustomProviders().find(provider => request.providerId === getCustomProviderId(provider.name));
+    const customProvider = this.#getCustomProviders().find(
+      provider => request.providerId === getCustomProviderId(provider.name),
+    );
     if (customProvider?.apiKey) {
       return { apiKey: customProvider.apiKey, source: 'gateway' };
     }
@@ -381,7 +383,9 @@ export class MastraCodeGateway extends MastraModelGateway {
     transport?: any;
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
-    const customProvider = this.#getCustomProviders().find(provider => args.providerId === getCustomProviderId(provider.name));
+    const customProvider = this.#getCustomProviders().find(
+      provider => args.providerId === getCustomProviderId(provider.name),
+    );
     if (customProvider) {
       const provider = createOpenAICompatible({
         name: args.providerId,
@@ -464,7 +468,11 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), args.headers) as unknown as GatewayLanguageModel;
+      return anthropicApiKeyProvider(
+        bareModelId,
+        storedCred.key.trim(),
+        args.headers,
+      ) as unknown as GatewayLanguageModel;
     }
 
     const apiKey = getAnthropicApiKey();

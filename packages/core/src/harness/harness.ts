@@ -980,7 +980,10 @@ export class Harness<TState = {}> {
       const availableModels = await this.listAvailableModels();
       const currentModel = availableModels.find(model => model.id === modelId);
       if (currentModel) {
-        return { hasAuth: currentModel.hasApiKey, apiKeyEnvVar: currentModel.hasApiKey ? undefined : currentModel.apiKeyEnvVar };
+        return {
+          hasAuth: currentModel.hasApiKey,
+          apiKeyEnvVar: currentModel.hasApiKey ? undefined : currentModel.apiKeyEnvVar,
+        };
       }
     } catch {
       // Ignore catalog lookup errors and fall through to provider-based checks.

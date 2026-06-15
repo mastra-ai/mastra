@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
-import type { CustomModelCatalogProvider } from './types';
 import { Harness } from './harness';
+import type { CustomModelCatalogProvider } from './types';
 
 function createHarness(customModelCatalogProvider: CustomModelCatalogProvider) {
   const agent = new Agent({

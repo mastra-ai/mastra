@@ -93,10 +93,7 @@ import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
-function applyEffectiveDefaultsToModes(
-  modes: HarnessMode[],
-  effectiveDefaults: Record<string, string>,
-): HarnessMode[] {
+function applyEffectiveDefaultsToModes(modes: HarnessMode[], effectiveDefaults: Record<string, string>): HarnessMode[] {
   return modes.map(mode => {
     const savedModel = effectiveDefaults[mode.id];
     if (!savedModel) {
@@ -252,7 +249,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
 
   const mgApiKey = storedGatewayKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
-  const mastraGatewayBaseUrl = (storedGatewayUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai')
+  const mastraGatewayBaseUrl = (
+    storedGatewayUrl ??
+    process.env['MASTRA_GATEWAY_URL'] ??
+    'https://gateway-api.mastra.ai'
+  )
     .replace(/\/+$/, '')
     .replace(/\/v1$/, '');
   const mastraCodeGateway = createMastraCodeGateway({

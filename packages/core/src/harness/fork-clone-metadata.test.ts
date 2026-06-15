@@ -139,9 +139,9 @@ describe('Harness fork clone metadata wiring', () => {
       ],
     });
 
-    const toolsets = (await (harness as unknown as { buildToolsets(ctx: RequestContext): Promise<Record<string, unknown>> }).buildToolsets(
-      new RequestContext(),
-    )) as { harnessBuiltIn?: Record<string, unknown> };
+    const toolsets = (await (
+      harness as unknown as { buildToolsets(ctx: RequestContext): Promise<Record<string, unknown>> }
+    ).buildToolsets(new RequestContext())) as { harnessBuiltIn?: Record<string, unknown> };
 
     expect(capturedOpts).toHaveLength(0);
     expect(toolsets.harnessBuiltIn?.subagent).toBeUndefined();

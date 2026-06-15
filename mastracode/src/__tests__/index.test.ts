@@ -359,7 +359,12 @@ describe('createMastraCode', () => {
     });
 
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
-      | { gateways?: unknown[]; resolveModel?: unknown; modelAuthChecker?: unknown; customModelCatalogProvider?: unknown }
+      | {
+          gateways?: unknown[];
+          resolveModel?: unknown;
+          modelAuthChecker?: unknown;
+          customModelCatalogProvider?: unknown;
+        }
       | undefined;
     expect(harnessConfig?.gateways).toEqual([mastraCodeGatewayMock]);
     expect(harnessConfig?.resolveModel).toBe(resolveModelMock);
