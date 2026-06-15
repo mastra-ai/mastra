@@ -385,6 +385,59 @@ describe('CachingPubSub', () => {
     });
   });
 
+  describe('lease delegation', () => {
+    it('should delegate acquireLease to the inner pubsub', async () => {
+      const spy = vi.spyOn(innerPubsub, 'acquireLease');
+
+      const result = await cachingPubsub.acquireLease('key-1', 'owner-1', 5000);
+
+      expect(spy).toHaveBeenCalledWith('key-1', 'owner-1', 5000);
+      expect(result).toEqual({ acquired: true, owner: 'owner-1' });
+    });
+
+    it('should delegate getLeaseOwner to the inner pubsub', async () => {
+      await cachingPubsub.acquireLease('key-1', 'owner-1', 5000);
+      const spy = vi.spyOn(innerPubsub, 'getLeaseOwner');
+
+      const owner = await cachingPubsub.getLeaseOwner('key-1');
+
+      expect(spy).toHaveBeenCalledWith('key-1');
+      expect(owner).toBe('owner-1');
+    });
+
+    it('should delegate releaseLease to the inner pubsub', async () => {
+      await cachingPubsub.acquireLease('key-1', 'owner-1', 5000);
+      const spy = vi.spyOn(innerPubsub, 'releaseLease');
+
+      await cachingPubsub.releaseLease('key-1', 'owner-1');
+
+      expect(spy).toHaveBeenCalledWith('key-1', 'owner-1');
+      expect(await cachingPubsub.getLeaseOwner('key-1')).toBeUndefined();
+    });
+
+    it('should delegate renewLease to the inner pubsub', async () => {
+      await cachingPubsub.acquireLease('key-1', 'owner-1', 5000);
+      const spy = vi.spyOn(innerPubsub, 'renewLease');
+
+      const renewed = await cachingPubsub.renewLease('key-1', 'owner-1', 5000);
+
+      expect(spy).toHaveBeenCalledWith('key-1', 'owner-1', 5000);
+      expect(renewed).toBe(true);
+    });
+
+    it('preserves real lease semantics from the inner pubsub instead of falling back to no-op defaults', async () => {
+      // Without delegation, the base PubSub defaults would let a second
+      // owner "acquire" the same lease — this test guards against that
+      // regression.
+      const first = await cachingPubsub.acquireLease('thread-1', 'owner-a', 5000);
+      expect(first).toEqual({ acquired: true, owner: 'owner-a' });
+
+      const second = await cachingPubsub.acquireLease('thread-1', 'owner-b', 5000);
+      expect(second.acquired).toBe(false);
+      expect(second.owner).toBe('owner-a');
+    });
+  });
+
   describe('withCaching factory', () => {
     it('should create a CachingPubSub instance', () => {
       const result = withCaching(innerPubsub, cache);

@@ -268,6 +268,36 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Delegate lease acquisition to the inner PubSub so wrapping (e.g. with
+   * Redis) preserves real distributed lease semantics instead of falling
+   * back to the base no-op default.
+   */
+  acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+    return this.inner.acquireLease(key, owner, ttlMs);
+  }
+
+  /**
+   * Delegate lease owner lookup to the inner PubSub.
+   */
+  getLeaseOwner(key: string): Promise<string | undefined> {
+    return this.inner.getLeaseOwner(key);
+  }
+
+  /**
+   * Delegate lease release to the inner PubSub.
+   */
+  releaseLease(key: string, owner: string): Promise<void> {
+    return this.inner.releaseLease(key, owner);
+  }
+
+  /**
+   * Delegate lease renewal to the inner PubSub.
+   */
+  renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
+    return this.inner.renewLease(key, owner, ttlMs);
+  }
+
+  /**
    * Clear cached events for a specific topic.
    * Call this when a stream completes to free memory.
    * Also clears the index counter.
