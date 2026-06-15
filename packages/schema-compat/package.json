@@ -98,7 +98,6 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@types/json-schema": "^7.0.15",
     "json-schema-to-zod": "^2.7.0",
     "zod-from-json-schema": "^0.5.2",
     "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5",
@@ -119,6 +118,7 @@
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@standard-schema/spec": "^1.1.0",
+    "@types/json-schema": "^7.0.15",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
