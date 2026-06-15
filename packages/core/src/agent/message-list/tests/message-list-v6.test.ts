@@ -462,7 +462,7 @@ describe('MessageList AI SDK v6 support', () => {
               mastra: {
                 modelOutput: {
                   type: 'content',
-                  value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+                  value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
                 },
               },
             },
@@ -477,7 +477,7 @@ describe('MessageList AI SDK v6 support', () => {
     // Stored modelOutput travels on the v6 UI part as callProviderMetadata
     expect(toolUIPart?.callProviderMetadata?.mastra?.modelOutput).toEqual({
       type: 'content',
-      value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+      value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
     });
 
     // And survives ingestion back into a db message
@@ -486,7 +486,7 @@ describe('MessageList AI SDK v6 support', () => {
     expect(roundTrippedPart?.toolInvocation?.result).toEqual({ ok: true, _b64: 'base64imagedata' });
     expect(roundTrippedPart?.providerMetadata?.mastra?.modelOutput).toEqual({
       type: 'content',
-      value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+      value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
     });
   });
 

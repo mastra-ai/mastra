@@ -1,9 +1,8 @@
 import type { Tool } from '@mastra/core/tools';
 
 /**
- * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts
- * are converted to `type: 'image-data'` or `type: 'file-data'` as AI SDK
- * providers expect. Mirrors `normalizeModelOutput` in @mastra/core's
+ * Normalize modelOutput from toModelOutput() to the AI SDK V2 tool result
+ * content shape. Mirrors `normalizeModelOutput` in @mastra/core's
  * llm-mapping-step, which performs the same normalization for server tools.
  */
 function normalizeModelOutput(output: unknown): unknown {
@@ -17,11 +16,22 @@ function normalizeModelOutput(output: unknown): unknown {
     value: (obj.value as unknown[]).map(item => {
       if (item == null || typeof item !== 'object') return item;
       const part = item as Record<string, unknown>;
-      if (part.type !== 'media') return part;
-      if (typeof part.mediaType === 'string' && part.mediaType.startsWith('image/')) {
-        return { type: 'image-data', data: part.data, mediaType: part.mediaType };
+      if (part.type === 'image-url' && typeof part.url === 'string') {
+        const mediaType =
+          typeof part.mediaType === 'string' && part.mediaType
+            ? part.mediaType
+            : part.url.startsWith('data:')
+              ? part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg'
+              : 'image/jpeg';
+        return { type: 'media', data: part.url, mediaType };
       }
-      return { type: 'file-data', data: part.data, mediaType: part.mediaType };
+      if (part.type === 'image-data' && typeof part.data === 'string') {
+        return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'image/jpeg' };
+      }
+      if (part.type === 'file-data' && typeof part.data === 'string') {
+        return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'application/octet-stream' };
+      }
+      return part;
     }),
   };
 }

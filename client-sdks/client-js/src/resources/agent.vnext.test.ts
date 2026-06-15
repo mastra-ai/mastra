@@ -188,13 +188,12 @@ describe('Agent vNext', () => {
     expect(toolInvocationPart).toBeDefined();
     // Raw result preserved on the invocation itself
     expect(toolInvocationPart.toolInvocation.result).toEqual({ ok: true, _b64: 'base64imagedata' });
-    // Transformed output travels via part-level providerMetadata, with media
-    // parts normalized to image-data as AI SDK providers expect
+    // Transformed output travels via part-level providerMetadata
     expect(toolInvocationPart.providerMetadata).toEqual({
       mastra: {
         modelOutput: {
           type: 'content',
-          value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+          value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
         },
       },
     });
@@ -845,15 +844,14 @@ describe('Agent vNext', () => {
             toolName: 'screenshotTool',
             // Raw result is preserved for storage/app logic
             result: { ok: true, _b64: 'base64imagedata' },
-            // Transformed output travels via providerOptions, with media
-            // parts normalized to image-data as AI SDK providers expect
+            // Transformed output travels via providerOptions
             providerOptions: {
               mastra: {
                 modelOutput: {
                   type: 'content',
                   value: [
                     { type: 'text', text: 'Here is the current screenshot.' },
-                    { type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' },
+                    { type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' },
                   ],
                 },
               },

@@ -35,7 +35,7 @@ describe('getClientToolModelOutput', () => {
     expect(await getClientToolModelOutput(tool, { ok: true })).toEqual({ type: 'text', value: 'async result' });
   });
 
-  it('normalizes media parts in content output to image-data and file-data', async () => {
+  it('passes through media parts in content output', async () => {
     const tool = toolWith(() => ({
       type: 'content',
       value: [
@@ -49,22 +49,29 @@ describe('getClientToolModelOutput', () => {
       type: 'content',
       value: [
         { type: 'text', text: 'Here is the screenshot.' },
-        { type: 'image-data', data: 'imgb64', mediaType: 'image/jpeg' },
-        { type: 'file-data', data: 'pdfb64', mediaType: 'application/pdf' },
+        { type: 'media', data: 'imgb64', mediaType: 'image/jpeg' },
+        { type: 'media', data: 'pdfb64', mediaType: 'application/pdf' },
       ],
     });
   });
 
-  it('leaves already-normalized content parts unchanged', async () => {
-    const output = {
+  it('normalizes convenience and legacy content parts to media', async () => {
+    const tool = toolWith(() => ({
       type: 'content',
-      value: [{ type: 'image-data', data: 'imgb64', mediaType: 'image/png' }],
-    };
-    expect(
-      await getClientToolModelOutput(
-        toolWith(() => output),
-        { ok: true },
-      ),
-    ).toEqual(output);
+      value: [
+        { type: 'image-url', url: 'data:image/png;base64,imgb64' },
+        { type: 'image-data', data: 'legacy-imgb64' },
+        { type: 'file-data', data: 'legacy-fileb64' },
+      ],
+    }));
+
+    expect(await getClientToolModelOutput(tool, { ok: true })).toEqual({
+      type: 'content',
+      value: [
+        { type: 'media', data: 'data:image/png;base64,imgb64', mediaType: 'image/png' },
+        { type: 'media', data: 'legacy-imgb64', mediaType: 'image/jpeg' },
+        { type: 'media', data: 'legacy-fileb64', mediaType: 'application/octet-stream' },
+      ],
+    });
   });
 });

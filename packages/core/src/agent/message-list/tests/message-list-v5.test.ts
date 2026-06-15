@@ -1866,7 +1866,7 @@ describe('MessageList V5 Support', () => {
               mastra: {
                 modelOutput: {
                   type: 'content',
-                  value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+                  value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
                 },
               },
             },
@@ -1883,7 +1883,7 @@ describe('MessageList V5 Support', () => {
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
       expect(toolResultPart.output).toEqual({
         type: 'content',
-        value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+        value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
       });
 
       // Raw result should still be preserved in the stored messages
@@ -1893,7 +1893,7 @@ describe('MessageList V5 Support', () => {
       expect(toolPart.toolInvocation.result).toEqual({ ok: true, _b64: 'base64imagedata' });
       expect(toolPart.providerMetadata?.mastra?.modelOutput).toEqual({
         type: 'content',
-        value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+        value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
       });
     });
 

@@ -670,15 +670,14 @@ describe('Agent signal routes', () => {
 
     // Raw result preserved in output for storage/app logic
     expect(toolResultPart.output).toEqual({ type: 'json', value: { ok: true, _b64: 'base64imagedata' } });
-    // Transformed output travels via providerOptions, with media parts
-    // normalized to image-data as AI SDK providers expect
+    // Transformed output travels via providerOptions for the next model call
     expect(toolResultPart.providerOptions).toEqual({
       mastra: {
         modelOutput: {
           type: 'content',
           value: [
             { type: 'text', text: 'Here is the current screenshot.' },
-            { type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' },
+            { type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' },
           ],
         },
       },
