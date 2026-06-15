@@ -84,6 +84,7 @@ import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
+import { computeToolModelOutput } from '../tools/model-output';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
@@ -7785,7 +7786,12 @@ export class Agent<
             if (rawValue == null) return part;
 
             try {
-              const modelOutput = await tool.toModelOutput(rawValue);
+              const modelOutput = await computeToolModelOutput({
+                tool,
+                result: rawValue,
+                toolName: part.toolName,
+                toolCallId: part.toolCallId,
+              });
               if (modelOutput == null) return part;
               return { ...part, output: modelOutput };
             } catch {

@@ -1,7 +1,8 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
-import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
+import { createObservabilityContext } from '../../../observability';
+import { computeToolModelOutput } from '../../../tools/model-output';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
@@ -149,26 +150,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        * providers expect. AI SDK does this internally in `mapToolResultOutput`,
        * but Mastra calls toModelOutput directly and stores the result, bypassing
        * that normalization.
+       *
+       * NOTE: The implementation lives in `tools/model-output.ts` as a shared
+       * utility so the client-tool continuation path (agent.ts) uses the same
+       * transform + normalize pipeline.
        */
-      function normalizeModelOutput(output: unknown): unknown {
-        if (output == null || typeof output !== 'object') return output;
-
-        const obj = output as Record<string, unknown>;
-        if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
-
-        return {
-          ...obj,
-          value: (obj.value as unknown[]).map(item => {
-            if (item == null || typeof item !== 'object') return item;
-            const part = item as Record<string, unknown>;
-            if (part.type !== 'media') return part;
-            if (typeof part.mediaType === 'string' && part.mediaType.startsWith('image/')) {
-              return { type: 'image-data', data: part.data, mediaType: part.mediaType };
-            }
-            return { type: 'file-data', data: part.data, mediaType: part.mediaType };
-          }),
-        };
-      }
 
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
@@ -181,31 +167,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
           | { toModelOutput?: (output: unknown) => unknown }
           | undefined;
-        let modelOutput: unknown;
-        if (tool?.toModelOutput && toolCall.result != null) {
-          const parentSpan = observabilityContext?.tracingContext?.currentSpan;
-          const mappingSpan = parentSpan?.createChildSpan({
-            type: SpanType.MAPPING,
-            name: `tool output mapping: '${toolCall.toolName}'`,
-            entityType: EntityType.TOOL,
-            entityId: toolCall.toolName,
-            entityName: toolCall.toolName,
-            input: toolCall.result,
-            attributes: {
-              mappingType: 'toModelOutput',
-              toolCallId: toolCall.toolCallId,
-            },
-          });
-          try {
-            modelOutput = await tool.toModelOutput(toolCall.result);
-            // Normalize media parts to image-data/file-data as AI SDK expects
-            modelOutput = normalizeModelOutput(modelOutput);
-            mappingSpan?.end({ output: modelOutput });
-          } catch (err) {
-            mappingSpan?.error({ error: err as Error, endSpan: true });
-            throw err;
-          }
-        }
+
+        const modelOutput = await computeToolModelOutput({
+          tool,
+          result: toolCall.result,
+          toolName: toolCall.toolName,
+          toolCallId: toolCall.toolCallId,
+          observabilityContext,
+        });
 
         const existingMastra = (toolCall.providerMetadata as any)?.mastra;
         const providerMetadata = {
