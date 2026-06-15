@@ -22,7 +22,6 @@ export class StateSignalComponent extends Container {
       const preview = message.length > 180 ? `${message.slice(0, 177)}...` : message;
       this.addChild(new Text(theme.fg('dim', preview), BOX_INDENT + 2, 0));
     }
-
   }
 
   getChatSpacingKind(): ChatSpacingKind {
