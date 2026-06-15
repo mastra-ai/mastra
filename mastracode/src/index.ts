@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import path from 'node:path';
 

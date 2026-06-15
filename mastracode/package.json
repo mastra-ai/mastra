@@ -76,9 +76,11 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
+    "@ai-sdk/amazon-bedrock": "^3.0.102",
     "@ai-sdk/anthropic": "^3.0.82",
     "@ai-sdk/openai": "^3.0.63",
     "@ai-sdk/openai-compatible": "^2.0.47",
+    "@aws-sdk/credential-providers": "^3.864.0",
     "@ast-grep/napi": "^0.42.0",
     "@earendil-works/pi-tui": "^0.79.4",
     "@hono/node-server": "^1.19.11",

@@ -46,6 +46,15 @@ export function createMastraCodeModelCatalogProvider(gateway: MastraModelGateway
 }
 
 /**
+ * Placeholder for future model ID normalization.
+ * Currently returns the input unchanged, but exists as a seam
+ * for aliasing, casing fixes, or validation in the future.
+ */
+export function resolveModelId(modelId: string): string {
+  return modelId;
+}
+
+/**
  * Resolve a model ID to the correct provider instance.
  * Shared by the main agent, observer, and reflector.
  *
