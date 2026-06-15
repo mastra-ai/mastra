@@ -74,4 +74,28 @@ describe('getClientToolModelOutput', () => {
       ],
     });
   });
+
+  it('extracts media type from comma-delimited data URLs', async () => {
+    const tool = toolWith(() => ({
+      type: 'content',
+      value: [{ type: 'image-url', url: 'data:image/svg+xml,<svg></svg>' }],
+    }));
+
+    expect(await getClientToolModelOutput(tool, { ok: true })).toEqual({
+      type: 'content',
+      value: [{ type: 'media', data: 'data:image/svg+xml,<svg></svg>', mediaType: 'image/svg+xml' }],
+    });
+  });
+
+  it('prefers explicit mediaType over data URL parsing', async () => {
+    const tool = toolWith(() => ({
+      type: 'content',
+      value: [{ type: 'image-url', url: 'data:image/png;base64,imgb64', mediaType: 'image/webp' }],
+    }));
+
+    expect(await getClientToolModelOutput(tool, { ok: true })).toEqual({
+      type: 'content',
+      value: [{ type: 'media', data: 'data:image/png;base64,imgb64', mediaType: 'image/webp' }],
+    });
+  });
 });

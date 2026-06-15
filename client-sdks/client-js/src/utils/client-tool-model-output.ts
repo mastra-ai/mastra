@@ -17,11 +17,19 @@ function normalizeModelOutput(output: unknown): unknown {
       if (item == null || typeof item !== 'object') return item;
       const part = item as Record<string, unknown>;
       if (part.type === 'image-url' && typeof part.url === 'string') {
+        const semicolonIndex = part.url.indexOf(';');
+        const commaIndex = part.url.indexOf(',');
+        const mediaTypeEnd =
+          semicolonIndex === -1
+            ? commaIndex
+            : commaIndex === -1
+              ? semicolonIndex
+              : Math.min(semicolonIndex, commaIndex);
         const mediaType =
           typeof part.mediaType === 'string' && part.mediaType
             ? part.mediaType
             : part.url.startsWith('data:')
-              ? part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg'
+              ? part.url.slice(5, mediaTypeEnd === -1 ? undefined : mediaTypeEnd) || 'image/jpeg'
               : 'image/jpeg';
         return { type: 'media', data: part.url, mediaType };
       }
