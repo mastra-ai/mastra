@@ -69,25 +69,6 @@ The shipping UI consumes these `AgentFeatures` keys: `tools`, `agents`, `workflo
 
 `builder.configuration.agent` pins admin-controlled defaults onto every agent the Builder produces.
 
-```typescript title="src/mastra/index.ts"
-new MastraEditor({
-  builder: {
-    enabled: true,
-    configuration: {
-      agent: {
-        models: {
-          allowed: [
-            { provider: 'openai', modelId: '__GATEWAY_OPENAI_MODEL_MINI__' },
-            { provider: 'openai', modelId: '__GATEWAY_OPENAI_MODEL__' },
-            { provider: 'anthropic', modelId: '__GATEWAY_ANTHROPIC_MODEL_OPUS__' },
-          ],
-        },
-      },
-    },
-  },
-})
-```
-
 `configuration.agent` accepts `models`, `memory`, `workspace`, `browser`, `tools`, `agents`, and `workflows`. See the [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) for the full shape.
 
 ## Making tools, agents, and workflows available
