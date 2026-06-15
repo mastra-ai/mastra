@@ -48,7 +48,7 @@ export function extractV6NativeApproval(
 
   const parts = lastAssistantMsg.parts ?? [];
   for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i];
+    const part = parts[i]!;
     if (!isToolUIPart(part) || part.state !== 'approval-responded') continue;
 
     const lastSep = part.approval.id.lastIndexOf(APPROVAL_ID_SEPARATOR);
