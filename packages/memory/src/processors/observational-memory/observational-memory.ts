@@ -13,6 +13,7 @@ import xxhash from 'xxhash-wasm';
 
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
+import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
 import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTEXT_PROMPT,
@@ -188,6 +189,7 @@ function parseActivationTTL(
 
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
+import { buildExtractedValueContextSections } from './extracted-values';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
@@ -505,6 +507,10 @@ export class ObservationalMemory {
       instruction: config.observation?.instruction,
       threadTitle: config.observation?.threadTitle ?? false,
       observeAttachments: config.observation?.observeAttachments ?? true,
+      extractors: composeObservationExtractors({
+        threadTitle: config.observation?.threadTitle ?? false,
+        extract: config.observation?.extract,
+      }),
     };
 
     // Resolve reflection config with defaults
@@ -536,6 +542,7 @@ export class ObservationalMemory {
             config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
           ),
       instruction: config.reflection?.instruction,
+      extractors: composeReflectionExtractors({ extract: config.reflection?.extract }),
     };
 
     this.tokenCounter = new TokenCounter({
@@ -1570,6 +1577,7 @@ export class ObservationalMemory {
     observations: string,
     currentTask?: string,
     suggestedResponse?: string,
+    extractedValues?: Record<string, unknown>,
     unobservedContextBlocks?: string,
     currentDate?: Date,
     retrieval = false,
@@ -1608,6 +1616,13 @@ export class ObservationalMemory {
     if (suggestedResponse) {
       messages.push(`<suggested-response>\n${suggestedResponse}\n</suggested-response>`);
     }
+
+    messages.push(
+      ...buildExtractedValueContextSections(
+        [...this.observationConfig.extractors, ...this.reflectionConfig.extractors],
+        extractedValues,
+      ),
+    );
 
     return messages;
   }
@@ -2488,6 +2503,7 @@ ${formattedMessages}
       record.activeObservations,
       currentTask,
       suggestedResponse,
+      omMetadata?.extracted,
       unobservedContextBlocks,
       currentDate,
       this.retrieval,
@@ -2890,6 +2906,7 @@ ${formattedMessages}
      *  before lastBufferedBoundary is set. */
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
+    agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
     requestContext?: RequestContext;
     currentModel?: ObservationModelContext;
@@ -3044,6 +3061,7 @@ ${formattedMessages}
         cycleId,
         startedAt,
         writer,
+        agent: opts.agent,
         sendSignal: opts.sendSignal,
         requestContext,
         currentModel: opts.currentModel,
@@ -3352,6 +3370,7 @@ ${formattedMessages}
     resourceId?: string;
     messages?: MastraDBMessage[];
     hooks?: ObserveHooks;
+    agent?: ProcessorContext['agent'];
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
     observabilityContext?: ObservabilityContext;
@@ -3400,6 +3419,7 @@ ${formattedMessages}
           resourceId,
           messages: unobservedMessages,
           reflectionHooks,
+          agent: opts.agent,
           requestContext,
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
@@ -3462,6 +3482,7 @@ ${formattedMessages}
         undefined,
         undefined,
         requestContext,
+        undefined,
         observabilityContext,
         undefined,
       );
@@ -3624,6 +3645,7 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    agent?: ProcessorContext['agent'];
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }): ObservationTurn {
@@ -3632,6 +3654,7 @@ ${formattedMessages}
       threadId: opts.threadId,
       resourceId: opts.resourceId,
       messageList: opts.messageList,
+      agent: opts.agent,
       observabilityContext: opts.observabilityContext,
       hooks: opts.hooks,
     });

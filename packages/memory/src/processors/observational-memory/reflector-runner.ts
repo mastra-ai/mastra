@@ -1,8 +1,9 @@
 import { Agent } from '@mastra/core/agent';
 import type { MessageList } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
@@ -10,6 +11,15 @@ import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { omDebug, omError } from './debug';
 import { withOmInternalThreadId } from './internal-request-context';
+import {
+  applyExtractorHooks,
+  buildThreadMetadataFromExtractedValues,
+  getBuiltInExtractedValues,
+  getPriorExtractedValues,
+  mergeExtractedValues,
+  mergeExtractionFailures,
+} from './extracted-values';
+import { extractStructuredValues } from './extraction-runner';
 import {
   createActivationMarker,
   createBufferingEndMarker,
@@ -44,6 +54,47 @@ import type {
   ResolvedReflectionConfig,
   ThresholdRange,
 } from './types';
+
+async function getThreadExtractedValues(
+  storage: MemoryStorage,
+  threadId?: string | null,
+): Promise<Record<string, unknown> | undefined> {
+  if (!threadId) {
+    return undefined;
+  }
+
+  const thread = await storage.getThreadById({ threadId });
+  return getPriorExtractedValues(getThreadOMMetadata(thread?.metadata));
+}
+
+async function persistThreadExtractedValues(
+  storage: MemoryStorage,
+  threadId: string | undefined,
+  values: Record<string, unknown> | undefined,
+): Promise<void> {
+  if (!threadId || !values) {
+    return;
+  }
+
+  const metadataUpdate = buildThreadMetadataFromExtractedValues(values);
+  const thread = await storage.getThreadById({ threadId });
+  if (!thread) {
+    return;
+  }
+
+  const previousOmMetadata = getThreadOMMetadata(thread.metadata);
+  const newMetadata = setThreadOMMetadata(thread.metadata, {
+    currentTask: metadataUpdate.currentTask ?? previousOmMetadata?.currentTask,
+    suggestedResponse: metadataUpdate.suggestedResponse ?? previousOmMetadata?.suggestedResponse,
+    threadTitle: metadataUpdate.threadTitle ?? previousOmMetadata?.threadTitle,
+    extracted: { ...(previousOmMetadata?.extracted ?? {}), ...(metadataUpdate.extracted ?? {}) },
+  });
+  await storage.updateThread({
+    id: threadId,
+    title: thread.title ?? '',
+    metadata: newMetadata,
+  });
+}
 
 function formatModelContext(provider?: string, modelId?: string): string | undefined {
   if (provider && modelId) {
@@ -194,7 +245,7 @@ export class ReflectorRunner {
     const agent = new Agent({
       id: 'observational-memory-reflector',
       name: 'Reflector',
-      instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction),
+      instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, this.reflectionConfig.extractors),
       model,
     });
     if (this.mastra) {
@@ -250,11 +301,16 @@ export class ReflectorRunner {
     skipContinuationHints?: boolean,
     compressionStartLevel?: CompressionLevel,
     requestContext?: RequestContext,
+    priorExtractedValues?: Record<string, unknown>,
     observabilityContext?: ObservabilityContext,
     model?: ConcreteReflectionModel,
+    mainAgent?: ProcessorContext['agent'],
+    sendSignal?: ProcessorContext['sendSignal'],
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
+    extractedValues?: Record<string, unknown>;
+    extractionFailures?: Array<{ slug: string; error: string }>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   }> {
     const originalTokens = this.tokenCounter.countObservations(observations);
@@ -264,6 +320,12 @@ export class ReflectorRunner {
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+    const activeExtractors = skipContinuationHints
+      ? this.reflectionConfig.extractors.filter(
+          extractor => extractor.slug !== 'current-task' && extractor.slug !== 'suggested-response',
+        )
+      : this.reflectionConfig.extractors;
+    let resultText = '';
 
     const startLevel: CompressionLevel = compressionStartLevel ?? 0;
     let currentLevel: CompressionLevel = startLevel;
@@ -276,7 +338,14 @@ export class ReflectorRunner {
       attemptNumber++;
       const isRetry = attemptNumber > 1;
 
-      const prompt = buildReflectorPrompt(observations, manualPrompt, currentLevel, skipContinuationHints);
+      const prompt = buildReflectorPrompt(
+        observations,
+        manualPrompt,
+        currentLevel,
+        skipContinuationHints,
+        activeExtractors,
+        priorExtractedValues,
+      );
       omDebug(
         `[OM:callReflector] ${isRetry ? `retry #${attemptNumber - 1}` : 'first attempt'}: level=${currentLevel}, originalTokens=${originalTokens}, targetThreshold=${targetThreshold}, promptLen=${prompt.length}, skipContinuationHints=${skipContinuationHints}`,
       );
@@ -355,6 +424,7 @@ export class ReflectorRunner {
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
       );
 
+      resultText = result.text;
       const usage = result.totalUsage ?? result.usage;
       if (usage) {
         totalUsage.inputTokens += usage.inputTokens ?? 0;
@@ -362,7 +432,7 @@ export class ReflectorRunner {
         totalUsage.totalTokens += usage.totalTokens ?? 0;
       }
 
-      parsed = parseReflectorOutput(result.text, observations);
+      parsed = parseReflectorOutput(result.text, observations, activeExtractors);
 
       if (parsed.degenerate) {
         omDebug(
@@ -421,9 +491,53 @@ export class ReflectorRunner {
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
     }
 
+    const structuredExtraction = await extractStructuredValues({
+      agent,
+      source: 'reflector',
+      extractors: activeExtractors,
+      sourceMessages: [
+        {
+          role: 'user',
+          content: buildReflectorPrompt(
+            observations,
+            manualPrompt,
+            currentLevel,
+            skipContinuationHints,
+            activeExtractors,
+            priorExtractedValues,
+          ),
+        },
+      ],
+      sourceOutput: resultText,
+      observations: parsed.observations,
+      priorExtractedValues,
+      requestContext,
+      observabilityContext,
+      abortSignal,
+    });
+    const parsedExtractedValues = mergeExtractedValues(parsed.extractedValues, structuredExtraction.values);
+    const parsedExtractionFailures = mergeExtractionFailures(parsed.extractionFailures, structuredExtraction.failures);
+    const hookedValues = await applyExtractorHooks({
+      source: 'reflector',
+      extractors: activeExtractors,
+      values: parsedExtractedValues,
+      failures: parsedExtractionFailures,
+      previousValues: priorExtractedValues,
+      threadId: streamContext?.threadId ?? 'unknown',
+      resourceId: streamContext?.resourceId,
+      mainAgent,
+      sendSignal,
+      requestContext,
+    });
+    const extractedValues = hookedValues.values;
+    const extractionFailures = hookedValues.failures;
+    const builtIns = getBuiltInExtractedValues(extractedValues);
+
     return {
       observations: parsed.observations,
-      suggestedContinuation: parsed.suggestedContinuation,
+      suggestedContinuation: builtIns.suggestedContinuation ?? parsed.suggestedContinuation,
+      extractedValues,
+      extractionFailures,
       usage: totalUsage.totalTokens > 0 ? totalUsage : undefined,
     };
   }
@@ -439,6 +553,9 @@ export class ReflectorRunner {
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>,
+    priorExtractedValues?: Record<string, unknown>,
+    mainAgent?: ProcessorContext['agent'],
+    sendSignal?: ProcessorContext['sendSignal'],
   ): void {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -454,7 +571,16 @@ export class ReflectorRunner {
     });
 
     reflectionHooks?.onReflectionStart?.();
-    const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer, requestContext, observabilityContext)
+    const asyncOp = this.doAsyncBufferedReflection(
+      record,
+      bufferKey,
+      writer,
+      requestContext,
+      observabilityContext,
+      priorExtractedValues,
+      mainAgent,
+      sendSignal,
+    )
       .then(usage => {
         reflectionHooks?.onReflectionEnd?.({ usage });
       })
@@ -503,6 +629,9 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
+    priorExtractedValues?: Record<string, unknown>,
+    mainAgent?: ProcessorContext['agent'],
+    sendSignal?: ProcessorContext['sendSignal'],
   ): Promise<{ inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined> {
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
@@ -565,7 +694,17 @@ export class ReflectorRunner {
       true,
       compressionStartLevel,
       requestContext,
+      priorExtractedValues,
       observabilityContext,
+      undefined,
+      mainAgent,
+      sendSignal,
+    );
+
+    await persistThreadExtractedValues(
+      this.storage,
+      currentRecord.threadId ?? undefined,
+      reflectResult.extractedValues,
     );
 
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
@@ -594,6 +733,8 @@ export class ReflectorRunner {
         recordId: currentRecord.id,
         threadId: currentRecord.threadId ?? '',
         observations: reflectResult.observations,
+        extractedValues: reflectResult.extractedValues,
+        extractionFailures: reflectResult.extractionFailures,
       });
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
       void writer.custom({ ...endMarker, transient: true }).catch(() => {});
@@ -783,6 +924,8 @@ export class ReflectorRunner {
     threadId?: string;
     writer?: ProcessorStreamWriter;
     abortSignal?: AbortSignal;
+    mainAgent?: ProcessorContext['agent'];
+    sendSignal?: ProcessorContext['sendSignal'];
     messageList?: MessageList;
     currentModel?: ObservationModelContext;
     reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
@@ -795,6 +938,8 @@ export class ReflectorRunner {
       observationTokens,
       writer,
       abortSignal,
+      mainAgent,
+      sendSignal,
       messageList,
       currentModel,
       reflectionHooks,
@@ -805,6 +950,7 @@ export class ReflectorRunner {
     } = opts;
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
+    const priorExtractedValues = await getThreadExtractedValues(this.storage, requestedThreadId ?? record.threadId);
 
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
@@ -833,6 +979,9 @@ export class ReflectorRunner {
           requestContext,
           observabilityContext,
           reflectionHooks,
+          priorExtractedValues,
+          mainAgent,
+          sendSignal,
         );
       }
     }
@@ -927,6 +1076,9 @@ export class ReflectorRunner {
           requestContext,
           observabilityContext,
           reflectionHooks,
+          priorExtractedValues,
+          mainAgent,
+          sendSignal,
         );
         return;
       }
@@ -991,9 +1143,14 @@ export class ReflectorRunner {
         undefined,
         compressionStartLevel,
         requestContext,
+        priorExtractedValues,
         observabilityContext,
+        undefined,
+        mainAgent,
+        sendSignal,
       );
       reflectionUsage = reflectResult.usage;
+      await persistThreadExtractedValues(this.storage, record.threadId ?? undefined, reflectResult.extractedValues);
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
@@ -1010,6 +1167,8 @@ export class ReflectorRunner {
           tokensObserved: observationTokens,
           observationTokens: reflectionTokenCount,
           observations: reflectResult.observations,
+          extractedValues: reflectResult.extractedValues,
+          extractionFailures: reflectResult.extractionFailures,
           recordId: record.id,
           threadId,
         });

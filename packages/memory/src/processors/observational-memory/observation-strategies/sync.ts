@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
+import { applyExtractorHooks, filterUserExtractedValues, getPriorExtractedValues } from '../extracted-values';
 import {
   createObservationEndMarker,
   createObservationFailedMarker,
@@ -21,6 +22,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
   private cycleId?: string;
   private tokensToObserve = 0;
   private observerResult!: ObserverOutput;
+  private priorExtractedValues?: Record<string, unknown>;
 
   constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
     super(deps, opts);
@@ -98,6 +100,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     // Fetch prior thread metadata for observer prompt continuity
     const thread = await this.storage.getThreadById({ threadId: this.opts.threadId });
     const omMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
+    this.priorExtractedValues = getPriorExtractedValues(omMeta);
 
     const result = await this.deps.observer.call(existingObservations, messages, this.opts.abortSignal, {
       requestContext: this.opts.requestContext,
@@ -105,9 +108,27 @@ export class SyncObservationStrategy extends ObservationStrategy {
       priorCurrentTask: omMeta?.currentTask,
       priorSuggestedResponse: omMeta?.suggestedResponse,
       priorThreadTitle: omMeta?.threadTitle,
+      priorExtractedValues: this.priorExtractedValues,
     });
-    this.observerResult = result;
-    return result;
+    const hookedValues = await applyExtractorHooks({
+      source: 'observer',
+      extractors: this.observationConfig.extractors,
+      values: result.extractedValues,
+      failures: result.extractionFailures,
+      previousValues: this.priorExtractedValues,
+      threadId: this.opts.threadId,
+      resourceId: this.opts.resourceId,
+      mainAgent: this.opts.agent,
+      sendSignal: this.opts.sendSignal,
+      requestContext: this.opts.requestContext,
+    });
+    const output = {
+      ...result,
+      extractedValues: hookedValues.values,
+      extractionFailures: hookedValues.failures,
+    };
+    this.observerResult = output;
+    return output;
   }
 
   async process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation> {
@@ -153,6 +174,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
+      extractedValues: output.extractedValues,
+      extractionFailures: output.extractionFailures,
     };
   }
 
@@ -166,10 +189,15 @@ export class SyncObservationStrategy extends ObservationStrategy {
       const oldTitle = thread.title?.trim();
       const newTitle = processed.threadTitle?.trim();
       const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+      const previousOmMetadata = getThreadOMMetadata(thread.metadata);
       const newMetadata = setThreadOMMetadata(thread.metadata, {
         suggestedResponse: processed.suggestedContinuation,
         currentTask: processed.currentTask,
         threadTitle: processed.threadTitle,
+        extracted: {
+          ...(previousOmMetadata?.extracted ?? {}),
+          ...(filterUserExtractedValues(processed.extractedValues) ?? {}),
+        },
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
       });
       await this.storage.updateThread({
@@ -215,6 +243,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
         observations: this.observerResult.observations,
         currentTask: this.observerResult.currentTask,
         suggestedResponse: this.observerResult.suggestedContinuation,
+        extractedValues: this.observerResult.extractedValues,
+        extractionFailures: this.observerResult.extractionFailures,
         recordId: this.opts.record.id,
         threadId: this.opts.threadId,
       });

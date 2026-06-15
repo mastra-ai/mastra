@@ -53,6 +53,14 @@ export {
   ModelByInputTokens,
   type ModelByInputTokensConfig,
 } from './processors/observational-memory/model-by-input-tokens';
+export {
+  Extractor,
+  type ExtractorConfig,
+  type ExtractorInjectionBehaviour,
+  type ExtractorMode,
+  type ExtractorOnExtractedContext,
+  type ExtractorSource,
+} from './processors/observational-memory';
 
 /**
  * Normalize a `boolean | object` observational memory config.

@@ -2,6 +2,7 @@ import type { AgentConfig } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
+import type { Extractor } from './extractor';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 
 /**
@@ -195,6 +196,12 @@ export interface ObservationConfig {
   instruction?: string;
 
   /**
+   * Additional values to extract from observer output. Built-in OM fields are registered automatically.
+   * @experimental Extractors are experimental and may change in a future release.
+   */
+  extract?: Extractor<any>[];
+
+  /**
    * Whether the Observer should suggest thread titles.
    * When enabled, the Observer will analyze conversation context and
    * suggest a short, descriptive title for the thread.
@@ -314,6 +321,12 @@ export interface ReflectionConfig {
    * Use this to customize reflection behavior for specific use cases.
    */
   instruction?: string;
+
+  /**
+   * Additional values to extract from reflector output. Built-in OM fields are registered automatically.
+   * @experimental Extractors are experimental and may change in a future release.
+   */
+  extract?: Extractor<any>[];
 }
 
 /**
@@ -325,6 +338,12 @@ export interface ObserverResult {
 
   /** Suggested continuation for the Actor */
   suggestedContinuation?: string;
+
+  /** Extracted values keyed by extractor slug */
+  extractedValues?: Record<string, unknown>;
+
+  /** Extractor failures keyed by extractor slug */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
 
 /**
@@ -339,6 +358,12 @@ export interface ReflectorResult {
 
   /** True if the output was detected as degenerate (repetition loop) and should be discarded/retried */
   degenerate?: boolean;
+
+  /** Extracted values keyed by extractor slug */
+  extractedValues?: Record<string, unknown>;
+
+  /** Extractor failures keyed by extractor slug */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
 
 /**
@@ -429,6 +454,12 @@ export interface DataOmObservationEndPart {
 
     /** Suggested response extracted by the Observer */
     suggestedResponse?: string;
+
+    /** Extracted values keyed by extractor slug */
+    extractedValues?: Record<string, unknown>;
+
+    /** Extractor failures keyed by extractor slug */
+    extractionFailures?: Array<{ slug: string; error: string }>;
 
     /** The OM record ID */
     recordId: string;
@@ -609,6 +640,12 @@ export interface DataOmBufferingEndPart {
 
     /** The buffered observations/reflection content (for UI expansion) */
     observations?: string;
+
+    /** Extracted values keyed by extractor slug */
+    extractedValues?: Record<string, unknown>;
+
+    /** Extractor failures keyed by extractor slug */
+    extractionFailures?: Array<{ slug: string; error: string }>;
   };
 }
 
@@ -982,6 +1019,8 @@ export interface ResolvedObservationConfig {
   threadTitle?: boolean;
   /** Filter for attachment parts forwarded to the Observer model */
   observeAttachments: 'auto' | boolean | string[];
+  /** Resolved observer extractors, including enabled built-ins and user extractors */
+  extractors: Extractor<any>[];
 }
 
 export interface ResolvedReflectionConfig {
@@ -1003,6 +1042,8 @@ export interface ResolvedReflectionConfig {
   blockAfter?: number;
   /** Custom instructions to append to the Reflector's system prompt */
   instruction?: string;
+  /** Resolved reflector extractors, including enabled built-ins and user extractors */
+  extractors: Extractor<any>[];
 }
 
 export interface ObserveHookUsage {

@@ -112,6 +112,8 @@ export abstract class ObservationStrategy {
           threadId,
           writer,
           abortSignal,
+          mainAgent: this.opts.agent,
+          sendSignal: this.opts.sendSignal,
           reflectionHooks,
           requestContext,
           observabilityContext: this.opts.observabilityContext,

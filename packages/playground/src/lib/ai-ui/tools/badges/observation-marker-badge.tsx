@@ -14,6 +14,8 @@ export interface OmMarkerData {
   observations?: string;
   currentTask?: string;
   suggestedResponse?: string;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
   durationMs?: number;
   error?: string;
   recordId?: string;
@@ -54,6 +56,78 @@ const formatTokens = (tokens: number): string => {
     return `${(tokens / 1000).toFixed(1)}k`;
   }
   return String(Math.round(tokens));
+};
+
+const hasExtractedValue = (value: unknown) => value !== undefined && value !== null && value !== '';
+
+const getExtractedValueEntries = (values?: Record<string, unknown>) => {
+  return Object.entries(values ?? {}).filter(([, value]) => hasExtractedValue(value));
+};
+
+const formatExtractedValue = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const isStructuredExtractedValue = (value: unknown) => typeof value === 'object' && value !== null;
+
+const ExtractedValuesPanel = ({
+  extractedValues,
+  extractionFailures,
+  isExpanded,
+  onToggle,
+}: {
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) => {
+  const entries = getExtractedValueEntries(extractedValues);
+  const failures = extractionFailures ?? [];
+
+  if (entries.length === 0 && failures.length === 0) return null;
+
+  return (
+    <div className="mt-2 pt-2 border-t border-neutral-700">
+      <button
+        onClick={onToggle}
+        className="flex items-center gap-1 text-[10px] font-medium text-foreground uppercase tracking-wide hover:opacity-80 transition-opacity"
+      >
+        {isExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+        Extractions ({entries.length}){failures.length > 0 ? ` · ${failures.length} failed` : ''}
+      </button>
+      {isExpanded && (
+        <div className="mt-1 space-y-2">
+          {entries.map(([slug, value]) => (
+            <div key={slug} className="rounded border border-neutral-700/60 bg-black/5 p-2 dark:bg-white/5">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-foreground/70">{slug}</div>
+              {isStructuredExtractedValue(value) ? (
+                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[11px] text-foreground/80">
+                  {formatExtractedValue(value)}
+                </pre>
+              ) : (
+                <div className="mt-1 text-[11px] text-foreground/80 [&_code]:bg-black/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[10px]">
+                  <MarkdownRenderer>{formatExtractedValue(value)}</MarkdownRenderer>
+                </div>
+              )}
+            </div>
+          ))}
+          {failures.map(failure => (
+            <div key={failure.slug} className="rounded border border-red-500/20 bg-red-500/5 p-2 text-red-700">
+              <div className="text-[10px] font-medium uppercase tracking-wide">{failure.slug}</div>
+              <div className="mt-1 text-[11px]">{failure.error}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 /**
@@ -100,6 +174,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const [isObservationsExpanded, setIsObservationsExpanded] = useState(true);
   const [isTaskExpanded, setIsTaskExpanded] = useState(false);
   const [isResponseExpanded, setIsResponseExpanded] = useState(false);
+  const [isExtractedExpanded, setIsExtractedExpanded] = useState(false);
 
   // Colors - same scheme for both observation and reflection
   const bgColor = 'bg-blue-500/10';
@@ -144,6 +219,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
     const observations = omData.observations;
     const currentTask = omData.currentTask;
     const suggestedResponse = omData.suggestedResponse;
+    const extractedValues = omData.extractedValues;
+    const extractionFailures = omData.extractionFailures;
     const durationMs = omData.durationMs;
     const compressionRatio =
       tokensObserved && observationTokens && observationTokens > 0
@@ -259,6 +336,12 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
                   )}
                 </div>
               )}
+              <ExtractedValuesPanel
+                extractedValues={extractedValues}
+                extractionFailures={extractionFailures}
+                isExpanded={isExtractedExpanded}
+                onToggle={() => setIsExtractedExpanded(!isExtractedExpanded)}
+              />
             </div>
           )}
         </div>
@@ -343,7 +426,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   if (isBufferingComplete) {
     const tokensBuffered = omData.tokensBuffered;
     const bufferedTokens = omData.bufferedTokens;
-    const { observations } = omData;
+    const { observations, extractedValues, extractionFailures } = omData;
     const bufferedLabel = isReflection ? 'Buffered reflection' : 'Buffered observations';
     const compressionRatio =
       tokensBuffered && bufferedTokens && bufferedTokens > 0 ? Math.round(tokensBuffered / bufferedTokens) : null;
@@ -378,9 +461,17 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
             </span>
           </button>
 
-          {isExpanded && observations && (
-            <div className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs border ${expandedBorderColor}`}>
-              <ObservationRenderer observations={observations} maxHeight="240px" />
+          {isExpanded && (
+            <div
+              className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs space-y-1.5 border ${expandedBorderColor}`}
+            >
+              {observations && <ObservationRenderer observations={observations} maxHeight="240px" />}
+              <ExtractedValuesPanel
+                extractedValues={extractedValues}
+                extractionFailures={extractionFailures}
+                isExpanded={isExtractedExpanded}
+                onToggle={() => setIsExtractedExpanded(!isExtractedExpanded)}
+              />
             </div>
           )}
         </div>
