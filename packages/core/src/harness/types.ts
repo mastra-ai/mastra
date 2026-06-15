@@ -78,10 +78,11 @@ interface HarnessModeBase {
   transitionsTo?: string;
 
   /**
-   * Arbitrary user-defined metadata. Pass-through only — the harness
-   * never reads or validates it. Use for UI affordances like display
-   * color, icon, display name overrides, or any per-mode configuration
-   * that isn't part of the harness's own contract.
+   * Arbitrary user-defined metadata. `metadata.default === true` is a
+   * reserved harness hint for choosing the default mode when `defaultModeId`
+   * is unset; all other metadata is pass-through and unvalidated. Use for UI
+   * affordances like display color, icon, display name overrides, or any
+   * per-mode configuration that isn't part of the harness's own contract.
    *
    * Surfaced verbatim on `getCurrentMode()` and `listModes()`.
    */

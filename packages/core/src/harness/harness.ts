@@ -99,6 +99,9 @@ function validateModes(modes: HarnessMode[]): void {
   }
 
   for (const mode of modes) {
+    if (mode.transitionsTo === mode.id) {
+      throw new Error(`Mode "${mode.id}" transitionsTo cannot reference itself`);
+    }
     if (mode.transitionsTo && !modeIds.has(mode.transitionsTo)) {
       throw new Error(`Mode "${mode.id}" transitionsTo references unknown mode "${mode.transitionsTo}"`);
     }
@@ -575,8 +578,9 @@ export class Harness<TState = {}> {
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
     if (this.config.storage) {
-      const gateways = this.config.gateways?.length
-        ? Object.fromEntries(this.config.gateways.map(gateway => [gateway.id, gateway]))
+      const enabledGateways = this.config.gateways?.filter(gateway => gateway.shouldEnable?.() ?? true);
+      const gateways = enabledGateways?.length
+        ? Object.fromEntries(enabledGateways.map(gateway => [gateway.id, gateway]))
         : undefined;
 
       this.#internalMastra = new Mastra({
