@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import type { HarnessEvent } from '@mastra/core/harness';
+import { Mastra } from '@mastra/core/mastra';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
@@ -134,16 +135,6 @@ function createHarnessWithAgent(opts: {
   inputProcessors?: any[];
   outputProcessors?: any[];
 }) {
-  const agent = new Agent({
-    id: 'test-agent',
-    name: 'Test Agent',
-    instructions: 'You are a test agent.',
-    model: new MastraLanguageModelV2Mock({ doStream: opts.doStream }) as any,
-    tools: opts.tools ?? {},
-    inputProcessors: opts.inputProcessors ?? [],
-    outputProcessors: opts.outputProcessors ?? [],
-  });
-
   const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-'));
   const storePath = join(tempDir, 'test.db');
   tempStorePaths.push(storePath, tempDir);
@@ -153,12 +144,40 @@ function createHarnessWithAgent(opts: {
     url: `file:${storePath}`,
   });
 
+  const agent = new Agent({
+    id: 'test-agent',
+    name: 'Test Agent',
+    instructions: 'You are a test agent.',
+    model: new MastraLanguageModelV2Mock({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        ...(await opts.doStream()),
+      }),
+    }) as any,
+    tools: opts.tools ?? {},
+    inputProcessors: opts.inputProcessors,
+    outputProcessors: opts.outputProcessors,
+  });
+  const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
+  const registeredAgent = mastra.getAgent('test-agent');
+
   const harness = new Harness({
     id: 'test-harness',
     storage,
-    modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    modes: [
+      {
+        id: 'default',
+        name: 'Default',
+        description: 'default',
+        defaultModelId: 'test',
+        instructions: 'you are a test agent',
+        metadata: { default: true },
+      },
+    ],
     initialState: { yolo: true } as any,
   });
+  (harness as any).getAgentForMode = () => registeredAgent;
 
   return harness;
 }
@@ -391,14 +410,6 @@ function createHarnessWithModels(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
   customModels?: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[];
 }) {
-  const agent = new Agent({
-    id: 'test-agent',
-    name: 'Test Agent',
-    instructions: 'You are a test agent.',
-    model: new MastraLanguageModelV2Mock({ doStream: opts.doStream }) as any,
-    tools: {},
-  });
-
   const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-model-'));
   const storePath = join(tempDir, 'test.db');
   tempStorePaths.push(storePath, tempDir);
@@ -408,10 +419,34 @@ function createHarnessWithModels(opts: {
     url: `file:${storePath}`,
   });
 
+  const agent = new Agent({
+    id: 'test-agent',
+    name: 'Test Agent',
+    instructions: 'You are a test agent.',
+    model: new MastraLanguageModelV2Mock({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        ...(await opts.doStream()),
+      }),
+    }) as any,
+  });
+  const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
+  const registeredAgent = mastra.getAgent('test-agent');
+
   const harness = new Harness({
     id: 'test-harness',
     storage,
-    modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    modes: [
+      {
+        id: 'default',
+        name: 'Default',
+        description: 'default',
+        defaultModelId: 'test',
+        metadata: { default: true },
+        instructions: 'You are a test agent.',
+      },
+    ],
     initialState: { yolo: true } as any,
     customModelCatalogProvider: () =>
       (opts.customModels ?? []).map(m => ({
@@ -419,6 +454,7 @@ function createHarnessWithModels(opts: {
         useCount: 0,
       })),
   });
+  (harness as any).getAgentForMode = () => registeredAgent;
 
   return harness;
 }
@@ -1229,6 +1265,7 @@ describe('headless mode — thread control', () => {
       },
       harnessV1 as any,
     );
+    (harness as any).getAgentForMode = () => agent;
 
     await harness.init();
     const thread = await harness.createThread({ title: 'prefilled-title' });
@@ -1281,13 +1318,26 @@ describe('headless mode — thread control', () => {
 
     const memory = new Memory({ storage });
 
+    const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
+    const registeredAgent = mastra.getAgent('test-agent');
+
     const harness = new Harness({
       id: 'test-harness',
       storage,
       memory,
-      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          description: 'default',
+          metadata: { default: true },
+          instructions: 'You are a test agent.',
+          defaultModelId: 'test',
+        },
+      ],
       initialState: { yolo: true } as any,
     });
+    (harness as any).getAgentForMode = () => registeredAgent;
 
     await harness.init();
     const sourceThread = await harness.createThread({ title: 'source-thread' });
