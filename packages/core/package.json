@@ -809,7 +809,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@sindresorhus/slugify": "^2.2.1",
     "@standard-schema/spec": "^1.1.0",
-    "ajv": "^8.18.0",
+    "ajv": "^8.20.0",
     "chat": "^4.29.0",
     "croner": "^10.0.1",
     "dotenv": "^17.3.1",
