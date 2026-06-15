@@ -439,6 +439,10 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Builder registry route params
   if (route.path.includes(':registryId')) params.registryId = 'skills-sh';
 
+  // FGA route params
+  if (route.path.includes(':resourceType')) params.resourceType = 'agent';
+  if (route.path.includes(':membershipId')) params.membershipId = 'test-membership-id';
+
   return params;
 }
 
