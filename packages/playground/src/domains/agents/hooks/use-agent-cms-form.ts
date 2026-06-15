@@ -17,7 +17,12 @@ import {
 import { collectMCPClientIds } from '../utils/collect-mcp-client-ids';
 import { computeAgentInitialValues } from '../utils/compute-agent-initial-values';
 import type { AgentDataSource } from '../utils/compute-agent-initial-values';
+import {
+  EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE,
+  instructionsResolveEmptyDueToDrafts,
+} from '../utils/instruction-blocks-runtime';
 import { useStoredAgentMutations } from './use-stored-agents';
+import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
 
 type CreateOptions = {
   mode: 'create';
@@ -80,6 +85,37 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   );
 
   const { form } = useAgentEditForm({ initialValues, isCodeAgentOverride });
+
+  // Prompt block publication status, used to guard against saving an agent whose
+  // instructions would resolve to an empty prompt at runtime because every
+  // referenced block is unpublished. The list returns blocks of every status,
+  // each carrying `activeVersionId` (present only when published).
+  const { data: promptBlocksData } = useStoredPromptBlocks();
+  const isPromptBlockPublished = useCallback(
+    (promptBlockId: string) => {
+      const match = promptBlocksData?.promptBlocks.find(b => b.id === promptBlockId);
+      // Unknown blocks (e.g. not in the loaded page) are assumed published so the
+      // guard never blocks a save it cannot prove would resolve empty.
+      if (!match) return true;
+      return Boolean(match.activeVersionId);
+    },
+    [promptBlocksData?.promptBlocks],
+  );
+
+  // Returns true and surfaces an error toast when the current instruction blocks
+  // would resolve to an empty prompt at runtime due to unpublished refs.
+  const blocksWouldResolveEmpty = useCallback(
+    (values: AgentFormValues): boolean => {
+      // Only relevant when the user actually owns/edits instructions.
+      if (isCodeAgentOverride && !ownsInstructions) return false;
+      if (instructionsResolveEmptyDueToDrafts(values.instructionBlocks, isPromptBlockPublished)) {
+        toast.error(EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE);
+        return true;
+      }
+      return false;
+    },
+    [isCodeAgentOverride, ownsInstructions, isPromptBlockPublished],
+  );
 
   // Edit mode: reset form + resolve MCP client IDs when data source changes
   // Wrapped in useEffectEvent to avoid form/client/initialValues in the dependency array,
@@ -265,6 +301,11 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       }
 
       const values = form.getValues();
+
+      // Block saving an agent that would run with an empty prompt because all of
+      // its instruction blocks reference unpublished prompt blocks.
+      if (blocksWouldResolveEmpty(values)) return;
+
       setIsSavingDraft(true);
 
       try {
@@ -323,6 +364,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       createStoredAgent,
       updateStoredAgent,
       queryClient,
+      blocksWouldResolveEmpty,
     ],
   );
 
@@ -338,6 +380,12 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       }
 
       const values = form.getValues();
+
+      // Block publishing an agent that would run with an empty prompt because all
+      // of its instruction blocks reference unpublished prompt blocks.
+      // Skipped when activating a specific existing version (form is read-only).
+      if (!publishVersionId && blocksWouldResolveEmpty(values)) return;
+
       setIsSubmitting(true);
 
       try {
@@ -433,6 +481,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       buildSharedParams,
       buildMemoryParams,
       queryClient,
+      blocksWouldResolveEmpty,
     ],
   );
 
