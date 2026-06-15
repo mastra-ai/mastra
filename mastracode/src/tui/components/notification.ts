@@ -1,4 +1,4 @@
-import { Container, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
+import { Container, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, getTermWidth, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';

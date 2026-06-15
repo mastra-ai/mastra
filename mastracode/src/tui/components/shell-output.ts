@@ -3,7 +3,7 @@
  * Shows a bordered box with live stdout/stderr and a status footer.
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Spacer, Text } from '@earendil-works/pi-tui';
 import { getTermWidth, theme } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 

@@ -6,7 +6,7 @@ const { visibleWidthMock, chalkRgbMock, applyGradientSweepMock } = vi.hoisted(()
   applyGradientSweepMock: vi.fn((value: string) => value),
 }));
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   visibleWidth: visibleWidthMock,
 }));
 

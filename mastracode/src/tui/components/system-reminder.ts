@@ -4,7 +4,7 @@
  */
 
 import process from 'node:process';
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Spacer, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';

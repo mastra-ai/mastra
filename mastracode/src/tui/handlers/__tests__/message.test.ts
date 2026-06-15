@@ -1,4 +1,4 @@
-import { Container, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

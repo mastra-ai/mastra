@@ -2,7 +2,7 @@
  * Component that renders git diff output with syntax highlighting.
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Spacer, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, theme, mastra } from '../theme.js';
 

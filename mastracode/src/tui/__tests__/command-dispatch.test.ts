@@ -1,4 +1,4 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => vi.resetModules());

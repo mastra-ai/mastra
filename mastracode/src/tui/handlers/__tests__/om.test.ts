@@ -1,4 +1,4 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 

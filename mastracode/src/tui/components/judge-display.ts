@@ -2,7 +2,7 @@
  * JudgeDisplayComponent — renders the goal judge's decision inline in the chat.
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Spacer, Text } from '@earendil-works/pi-tui';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';

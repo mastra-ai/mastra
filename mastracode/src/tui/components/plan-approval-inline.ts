@@ -15,8 +15,8 @@ import {
   Text,
   truncateToWidth,
   visibleWidth,
-} from '@mariozechner/pi-tui';
-import type { Component, Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
+} from '@earendil-works/pi-tui';
+import type { Component, Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';

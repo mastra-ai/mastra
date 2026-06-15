@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   truncateAnsi: vi.fn((text: string) => text),
 }));
 
-vi.mock('@mariozechner/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', () => {
   class Container {
     children: unknown[] = [];
 
