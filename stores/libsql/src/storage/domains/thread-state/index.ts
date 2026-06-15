@@ -9,6 +9,8 @@ import {
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import { createExecuteWriteOperationWithRetry } from '../../db/utils';
+import { withClientWriteLock } from '../../db/write-lock';
 
 /**
  * LibSQL implementation of {@link ThreadStateStorage}.
@@ -20,12 +22,57 @@ import type { LibSQLDomainConfig } from '../../db';
 export class ThreadStateLibSQL extends ThreadStateStorage {
   #db: LibSQLDB;
   #client: Client;
+  private readonly executeWithRetry: <T>(operationFn: () => Promise<T>, operationDescription: string) => Promise<T>;
 
   constructor(config: LibSQLDomainConfig) {
     super();
     const client = resolveClient(config);
+    const maxRetries = config.maxRetries ?? 5;
+    const initialBackoffMs = config.initialBackoffMs ?? 100;
+
     this.#client = client;
-    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+    this.#db = new LibSQLDB({ client, maxRetries, initialBackoffMs });
+    this.executeWithRetry = createExecuteWriteOperationWithRetry({
+      logger: this.logger,
+      maxRetries,
+      initialBackoffMs,
+    });
+
+    // Set PRAGMA settings to help with database locks
+    // Note: This is async but we can't await in constructor, so we'll handle it as a fire-and-forget
+    this.setupPragmaSettings().catch(err =>
+      this.logger.warn('LibSQL ThreadState: Failed to setup PRAGMA settings.', err),
+    );
+  }
+
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
+  private async setupPragmaSettings() {
+    try {
+      // Set busy timeout to wait longer before returning busy errors
+      await this.#client.execute('PRAGMA busy_timeout = 10000;');
+      this.logger.debug('LibSQL ThreadState: PRAGMA busy_timeout=10000 set.');
+
+      // Enable WAL mode for better concurrency (if supported)
+      try {
+        await this.#client.execute('PRAGMA journal_mode = WAL;');
+        this.logger.debug('LibSQL ThreadState: PRAGMA journal_mode=WAL set.');
+      } catch {
+        this.logger.debug('LibSQL ThreadState: WAL mode not supported, using default journal mode.');
+      }
+
+      // Set synchronous mode for better durability vs performance trade-off
+      try {
+        await this.#client.execute('PRAGMA synchronous = NORMAL;');
+        this.logger.debug('LibSQL ThreadState: PRAGMA synchronous=NORMAL set.');
+      } catch {
+        this.logger.debug('LibSQL ThreadState: Failed to set synchronous mode.');
+      }
+    } catch (err) {
+      this.logger.warn('LibSQL ThreadState: Failed to set PRAGMA settings.', err);
+    }
   }
 
   async init(): Promise<void> {
@@ -38,7 +85,7 @@ export class ThreadStateLibSQL extends ThreadStateStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     try {
-      await this.#client.execute(`DELETE FROM "${TABLE_THREAD_STATE}"`);
+      await this.#db.deleteData({ tableName: TABLE_THREAD_STATE });
     } catch (error) {
       throw new MastraError(
         {
@@ -77,13 +124,19 @@ export class ThreadStateLibSQL extends ThreadStateStorage {
     const now = new Date().toISOString();
     const serialized = JSON.stringify(value ?? null);
     try {
-      await this.#client.execute({
-        sql: `INSERT INTO "${TABLE_THREAD_STATE}" ("threadId", "type", "value", "createdAt", "updatedAt")
-              VALUES (?, ?, ?, ?, ?)
-              ON CONFLICT ("threadId", "type")
-              DO UPDATE SET "value" = excluded."value", "updatedAt" = excluded."updatedAt"`,
-        args: [threadId, type, serialized, now, now],
-      });
+      await this.executeWithRetry(
+        () =>
+          withClientWriteLock(this.#client, () =>
+            this.#client.execute({
+              sql: `INSERT INTO "${TABLE_THREAD_STATE}" ("threadId", "type", "value", "createdAt", "updatedAt")
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT ("threadId", "type")
+                    DO UPDATE SET "value" = excluded."value", "updatedAt" = excluded."updatedAt"`,
+              args: [threadId, type, serialized, now, now],
+            }),
+          ),
+        'setState',
+      );
     } catch (error) {
       throw new MastraError(
         {
@@ -99,10 +152,16 @@ export class ThreadStateLibSQL extends ThreadStateStorage {
 
   async deleteState({ threadId, type }: { threadId: string; type: string }): Promise<void> {
     try {
-      await this.#client.execute({
-        sql: `DELETE FROM "${TABLE_THREAD_STATE}" WHERE "threadId" = ? AND "type" = ?`,
-        args: [threadId, type],
-      });
+      await this.executeWithRetry(
+        () =>
+          withClientWriteLock(this.#client, () =>
+            this.#client.execute({
+              sql: `DELETE FROM "${TABLE_THREAD_STATE}" WHERE "threadId" = ? AND "type" = ?`,
+              args: [threadId, type],
+            }),
+          ),
+        'deleteState',
+      );
     } catch (error) {
       throw new MastraError(
         {

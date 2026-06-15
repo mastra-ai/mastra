@@ -1,6 +1,6 @@
 import type { Client } from '@libsql/client';
 import { createClient } from '@libsql/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ThreadStateLibSQL } from './index';
 
@@ -72,5 +72,67 @@ describe('ThreadStateLibSQL', () => {
     const reopened = new ThreadStateLibSQL({ client, maxRetries: 1, initialBackoffMs: 10 });
     await reopened.init();
     expect(await reopened.getState({ threadId: 'thread-1', type: 'task' })).toEqual(tasks());
+  });
+
+  it('serializes concurrent writes to the same (threadId, type) without losing data', async () => {
+    // Fire multiple concurrent setState calls for the same key.
+    // The write lock should serialize them so each one sees the prior state.
+    const writes = Array.from({ length: 10 }, (_, i) =>
+      store.setState({ threadId: 'thread-1', type: 'task', value: [{ id: `t${i}`, content: `Task ${i}`, status: 'pending', activeForm: `Doing ${i}` }] }),
+    );
+    await Promise.all(writes);
+
+    // The final read should return one of the written values (last writer wins),
+    // not undefined or corrupted data.
+    const final = await store.getState<Task[]>({ threadId: 'thread-1', type: 'task' });
+    expect(final).toBeDefined();
+    expect(final).toHaveLength(1);
+    expect(final![0].id).toMatch(/^t\d+$/);
+  });
+
+  it('handles concurrent writes to different (threadId, type) keys', async () => {
+    const writes = Array.from({ length: 5 }, (_, i) =>
+      store.setState({ threadId: `thread-${i}`, type: 'task', value: [{ id: `t${i}`, content: `Task ${i}`, status: 'pending', activeForm: `Doing ${i}` }] }),
+    );
+    await Promise.all(writes);
+
+    // Each thread should have its own state
+    for (let i = 0; i < 5; i++) {
+      const state = await store.getState<Task[]>({ threadId: `thread-${i}`, type: 'task' });
+      expect(state).toBeDefined();
+      expect(state![0].id).toBe(`t${i}`);
+    }
+  });
+
+  it('retries setState when the underlying execute throws a SQLITE_BUSY error', async () => {
+    // Use a dedicated client/store with maxRetries: 2 so we get 1 initial attempt + 1 retry.
+    const busyClient = createTestClient();
+    const busyStore = new ThreadStateLibSQL({ client: busyClient, maxRetries: 2, initialBackoffMs: 1 });
+    await busyStore.init();
+
+    // Spy on the client's execute method and simulate SQLITE_BUSY on the first
+    // write call, then let subsequent calls succeed.
+    const originalExecute = busyClient.execute.bind(busyClient);
+    let writeAttempts = 0;
+    const spy = vi.spyOn(busyClient, 'execute').mockImplementation(async (stmt: any) => {
+      const sql = typeof stmt === 'string' ? stmt : stmt.sql;
+      if (sql.includes('INSERT INTO') || sql.includes('ON CONFLICT')) {
+        writeAttempts++;
+        if (writeAttempts === 1) {
+          throw Object.assign(new Error('SQLITE_BUSY: database is locked'), { code: 'SQLITE_BUSY' });
+        }
+      }
+      return originalExecute(stmt);
+    });
+
+    await busyStore.setState({ threadId: 'thread-1', type: 'task', value: tasks() });
+
+    // The first attempt threw SQLITE_BUSY, the retry succeeded — so 2 write attempts total.
+    expect(writeAttempts).toBe(2);
+    const result = await busyStore.getState<Task[]>({ threadId: 'thread-1', type: 'task' });
+    expect(result).toEqual(tasks());
+
+    spy.mockRestore();
+    busyClient.close();
   });
 });
