@@ -25,6 +25,7 @@ import {
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { expandEmbeddedJsonStrings } from '@/lib/json-utils';
 import { cn } from '@/lib/utils';
 
 // -- Search highlight extension -----------------------------------------------
@@ -163,14 +164,16 @@ export function DataCodeSection({
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const expandedEditorRef = useRef<ReactCodeMirrorRef>(null);
 
+  const processedCodeStr = useMemo(() => expandEmbeddedJsonStrings(codeStr), [codeStr]);
+
   const hasMultilineText = useMemo(() => {
     try {
-      const parsed = JSON.parse(codeStr);
+      const parsed = JSON.parse(processedCodeStr);
       return containsInnerNewline(parsed || '');
     } catch {
       return false;
     }
-  }, [codeStr]);
+  }, [processedCodeStr]);
 
   const dispatchSearch = useCallback((query: string) => {
     const view = editorRef.current?.view;
@@ -236,8 +239,8 @@ export function DataCodeSection({
     dispatchExpandedSearch('');
   }, [dispatchExpandedSearch]);
 
-  const finalCodeStr = showAsMultilineText ? codeStr?.replace(/\\n/g, '\n') : codeStr;
-  const expandedFinalCodeStr = expandedMultiline ? codeStr?.replace(/\\n/g, '\n') : codeStr;
+  const finalCodeStr = showAsMultilineText ? processedCodeStr?.replace(/\\n/g, '\n') : processedCodeStr;
+  const expandedFinalCodeStr = expandedMultiline ? processedCodeStr?.replace(/\\n/g, '\n') : processedCodeStr;
   const usePlainTextView = simplified || showAsMultilineText;
 
   if (!codeStr || codeStr === 'null') return null;
@@ -290,7 +293,7 @@ export function DataCodeSection({
             ref={editorRef}
             extensions={[json(), EditorView.lineWrapping, searchHighlightExtension()]}
             theme={theme}
-            value={codeStr}
+            value={processedCodeStr}
             editable={false}
           />
         )}
@@ -353,7 +356,7 @@ export function DataCodeSection({
                 ref={expandedEditorRef}
                 extensions={[json(), EditorView.lineWrapping, searchHighlightExtension()]}
                 theme={theme}
-                value={codeStr}
+                value={processedCodeStr}
                 editable={false}
               />
             )}

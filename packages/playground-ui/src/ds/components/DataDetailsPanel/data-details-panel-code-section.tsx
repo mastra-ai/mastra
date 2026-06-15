@@ -11,6 +11,7 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { expandEmbeddedJsonStrings } from '@/lib/json-utils';
 import { cn } from '@/lib/utils';
 
 function buildDarkTheme(): Extension {
@@ -96,16 +97,19 @@ export function DataDetailsPanelCodeSection({
 }: DataDetailsPanelCodeSectionProps) {
   const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
+
+  const processedCodeStr = useMemo(() => expandEmbeddedJsonStrings(codeStr), [codeStr]);
+
   const hasMultilineText = useMemo(() => {
     try {
-      const parsed = JSON.parse(codeStr);
+      const parsed = JSON.parse(processedCodeStr);
       return containsInnerNewline(parsed || '');
     } catch {
       return false;
     }
-  }, [codeStr]);
+  }, [processedCodeStr]);
 
-  const finalCodeStr = showAsMultilineText ? codeStr?.replace(/\\n/g, '\n') : codeStr;
+  const finalCodeStr = showAsMultilineText ? processedCodeStr?.replace(/\\n/g, '\n') : processedCodeStr;
   const usePlainTextView = simplified || showAsMultilineText;
 
   if (!codeStr || codeStr === 'null') return null;
@@ -144,7 +148,7 @@ export function DataDetailsPanelCodeSection({
           <ReactCodeMirror
             extensions={[json(), EditorView.lineWrapping]}
             theme={theme}
-            value={codeStr}
+            value={processedCodeStr}
             editable={false}
           />
         )}
