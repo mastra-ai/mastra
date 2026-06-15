@@ -820,6 +820,10 @@ If a branch uses a mutating strategy like `redact`, map to that branch so its tr
 
 When an agent is registered with Mastra, processor workflows are automatically registered as workflows, allowing you to view and debug them in the [Studio](/docs/studio/overview).
 
+:::warning
+A workflow processor runs as a nested workflow, and its run state — which includes the agent's message list — is persisted by serializing it to JSON. If the message list contains circular references, serialization fails with `Converting circular structure to JSON` and the processor workflow errors. This happens, for example, when the agent has [Observational Memory](/docs/memory/observational-memory) enabled, whose `ObservationTurn` and `ObservationStep` objects reference each other. The same processors used directly (as a flat `inputProcessors` / `outputProcessors` list, not wrapped in a workflow) are unaffected, since they do not go through nested-workflow persistence. See [issue #17933](https://github.com/mastra-ai/mastra/issues/17933).
+:::
+
 ### Retry mechanism
 
 Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks, output validation, or iterative refinement:
