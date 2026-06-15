@@ -1053,7 +1053,6 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   }
 
   override __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
-    if (this.#ghMastra === (mastra as unknown)) return;
     super.__registerMastra(mastra);
     this.#ghMastra = mastra as unknown as GithubSignalsMastra;
     // Propagate Mastra to the connected agent so sendNotificationSignal has
