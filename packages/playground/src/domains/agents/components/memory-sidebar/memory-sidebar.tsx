@@ -102,7 +102,10 @@ export function MemorySidebar({
     config && 'observationalMemory' in config && (config as { observationalMemory?: unknown }).observationalMemory,
   );
 
-  const messagesWindow = streamProgress?.windows?.active?.messages;
+  // streamProgress is intentionally retained across thread switches (for reload
+  // display), so only trust it for the thread this card belongs to — otherwise the
+  // collapsed bar keeps the previous thread's percentage.
+  const messagesWindow = streamProgress?.threadId === threadId ? streamProgress.windows?.active?.messages : undefined;
   const observationPercent =
     messagesWindow && messagesWindow.threshold > 0
       ? Math.min(100, Math.round((messagesWindow.tokens / messagesWindow.threshold) * 100))

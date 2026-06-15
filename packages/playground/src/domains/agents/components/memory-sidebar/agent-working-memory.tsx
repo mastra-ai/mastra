@@ -41,7 +41,9 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   });
   const [isEditing, setIsEditing] = useState(false);
 
-  if (editState.source !== workingMemoryData) {
+  // Sync the buffer to fresh data, but not while editing — a background refetch or
+  // streamed update would otherwise discard the user's in-progress edits.
+  if (!isEditing && editState.source !== workingMemoryData) {
     setEditState({ source: workingMemoryData, value: workingMemoryData ?? '' });
   }
 

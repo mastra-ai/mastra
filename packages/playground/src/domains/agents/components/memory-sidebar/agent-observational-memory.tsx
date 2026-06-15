@@ -117,7 +117,7 @@ const ProgressBar = ({
   totalBudget?: number; // Total shared budget in adaptive mode
 }) => {
   const isAdaptive = baseThreshold !== undefined && totalBudget !== undefined;
-  const percentage = Math.min(100, Math.max(0, (value / max) * 100));
+  const percentage = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
   const barColor = getBarColor(percentage);
   const elapsed = useElapsedTime(isActive && percentage >= 100);
   const isProcessing = isActive && percentage >= 100;
@@ -594,6 +594,11 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     clearProgress();
   }, [threadId, clearProgress]);
 
+  // streamProgress is intentionally retained across thread switches (for reload
+  // display), so scope it to the current thread here — otherwise the bars keep
+  // showing (and get "stuck" on) the previous thread's streamed token counts.
+  const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
+
   // Get OM config to get thresholds
   const { data: configData } = useMemoryConfig(agentId);
 
@@ -725,7 +730,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // Priority: streamProgress > recordConfig > agentConfig > defaults
   // For messages bar: use stream threshold (real-time effective) or total budget (max available)
   const messageTokensThreshold =
-    streamProgress?.windows?.active?.messages?.threshold ??
+    liveProgress?.windows?.active?.messages?.threshold ??
     recordConfig?.observation?.messageTokens ??
     getThresholdValue(omAgentConfig?.messageTokens, 30000);
 
@@ -733,14 +738,14 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // The adaptive logic is handled by the backend - UI just shows progress against configured threshold
   const configObservationTokens = getThresholdValue(omAgentConfig?.observationTokens, 40000);
   const observationTokensThreshold =
-    streamProgress?.windows?.active?.observations?.threshold ??
+    liveProgress?.windows?.active?.observations?.threshold ??
     recordConfig?.reflection?.observationTokens ??
     configObservationTokens;
 
   // Use stream progress token counts when available (real-time), fallback to record
-  const pendingMessageTokens = streamProgress?.windows?.active?.messages?.tokens ?? record?.pendingMessageTokens ?? 0;
+  const pendingMessageTokens = liveProgress?.windows?.active?.messages?.tokens ?? record?.pendingMessageTokens ?? 0;
   const observationTokenCount =
-    streamProgress?.windows?.active?.observations?.tokens ?? record?.observationTokenCount ?? 0;
+    liveProgress?.windows?.active?.observations?.tokens ?? record?.observationTokenCount ?? 0;
 
   // Show all previous observation records (exclude current active record), oldest first
   const previousObservations = useMemo(() => {
@@ -801,7 +806,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
         isCopied={isCopied}
         onCopy={handleCopy}
       />
-      <BackgroundProcessingStatus streamProgress={streamProgress} />
+      <BackgroundProcessingStatus streamProgress={liveProgress} />
     </div>
   );
 };

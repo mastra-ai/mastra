@@ -175,7 +175,6 @@ export const mastra = new Mastra({
   },
   bundler: {
     sourcemap: true,
-    externals: ['@duckdb/node-bindings'],
   },
   editor: new MastraEditor({
     source: 'code',
