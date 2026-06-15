@@ -5056,9 +5056,6 @@ importers:
 
   packages/schema-compat:
     dependencies:
-      '@types/json-schema':
-        specifier: ^7.0.15
-        version: 7.0.15
       json-schema-to-zod:
         specifier: ^2.7.0
         version: 2.7.0
@@ -5105,6 +5102,9 @@ importers:
       '@standard-schema/spec':
         specifier: ^1.1.0
         version: 1.1.0
+      '@types/json-schema':
+        specifier: ^7.0.15
+        version: 7.0.15
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -11041,6 +11041,7 @@ packages:
 
   '@daytonaio/sdk@0.143.0':
     resolution: {integrity: sha512-itQ409W+WuuqLd8edIRVUWeRUyujSlOKInnN6GeC3OqyOWT27wyD/KzkesXDJtQ6HthGtqa4uRtHqnayd5wRCQ==}
+    deprecated: 'Moved to @daytona/sdk, same API, no breaking changes. Please update: npm uninstall @daytonaio/sdk && npm i @daytona/sdk'
 
   '@daytonaio/toolbox-api-client@0.143.0':
     resolution: {integrity: sha512-E6+yHPnFygNqRIctoDheISHCpzQkHydAU7fiBfsA5pnElfB/yLTOXQlnZfP8gfvOmUkRNU8QCXKzaualRTlI7w==}
