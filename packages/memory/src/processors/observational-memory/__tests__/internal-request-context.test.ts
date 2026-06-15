@@ -120,9 +120,7 @@ describe('OM internal agent request contexts', () => {
 
     expect(capturedRequestContext).toBeDefined();
     expect(capturedRequestContext).not.toBe(parentRequestContext);
-    expect(capturedRequestContext?.get(MASTRA_THREAD_ID_KEY)).toBe(
-      'parent-thread-observational-memory-observer',
-    );
+    expect(capturedRequestContext?.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread-observational-memory-observer');
     expect(capturedRequestContext?.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-1');
     expect(capturedRequestContext?.get('tenantId')).toBe('tenant-1');
     expect(parentRequestContext.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
@@ -180,13 +178,20 @@ describe('OM internal agent request contexts', () => {
       },
     });
 
-    await reflector.call('existing observations', undefined, undefined, undefined, undefined, undefined, 0, parentRequestContext);
+    await reflector.call(
+      'existing observations',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      0,
+      parentRequestContext,
+    );
 
     expect(capturedRequestContext).toBeDefined();
     expect(capturedRequestContext).not.toBe(parentRequestContext);
-    expect(capturedRequestContext?.get(MASTRA_THREAD_ID_KEY)).toBe(
-      'parent-thread-observational-memory-reflector',
-    );
+    expect(capturedRequestContext?.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread-observational-memory-reflector');
     expect(capturedRequestContext?.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-1');
     expect(capturedRequestContext?.get('tenantId')).toBe('tenant-1');
     expect(parentRequestContext.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
