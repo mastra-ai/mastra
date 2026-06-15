@@ -1550,6 +1550,65 @@ describe('MCPServer', () => {
       }
     });
 
+    it('should let an explicit enableJsonResponse override serverlessStreaming', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessExplicitJsonServer',
+        version: '1.0.0',
+        tools: {
+          progressTool: {
+            description: 'Reports progress while working',
+            parameters: z.object({}),
+            execute: async (_args: unknown, context: any) => {
+              const extra = context?.mcp?.extra;
+              const progressToken = extra?._meta?.progressToken;
+              if (progressToken !== undefined && extra?.sendNotification) {
+                await extra.sendNotification({
+                  method: 'notifications/progress',
+                  params: { progressToken, progress: 1, total: 2 },
+                });
+              }
+              return { result: 'done' };
+            },
+          },
+        },
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // serverlessStreaming requests streaming, but an explicit enableJsonResponse wins
+          options: { serverless: true, serverlessStreaming: true, enableJsonResponse: true },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new Client({ name: 'serverless-explicit-json-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      try {
+        await client.connect(transport);
+
+        const progressUpdates: number[] = [];
+        const result = await client.callTool({ name: 'progressTool', arguments: {} }, undefined, {
+          onprogress: notification => progressUpdates.push(notification.progress),
+        });
+
+        // JSON response mode buffers the request, so no progress notifications stream through
+        expect(progressUpdates).toEqual([]);
+
+        // The final tool result is still delivered
+        const content = result.content as Array<{ type: string; text: string }>;
+        expect(JSON.parse(content[0].text)).toEqual({ result: 'done' });
+      } finally {
+        await client.close();
+        await transport.close();
+      }
+    });
+
     it('should not require or persist an mcp-session-id in serverless streaming mode', async () => {
       sessionServer = new MCPServer({
         name: 'ServerlessNoSessionServer',

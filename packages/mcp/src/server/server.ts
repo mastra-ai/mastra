@@ -1375,8 +1375,8 @@ export class MCPServer extends MCPServerBase {
       this.logger.debug('startHTTP: Running in stateless mode (serverless or sessionIdGenerator: undefined)');
       // Default to JSON responses for backward compatibility. Opt into request-scoped
       // SSE streaming (e.g. notifications/progress) via serverlessStreaming or an explicit
-      // enableJsonResponse: false.
-      const enableJsonResponse = options?.serverlessStreaming === true ? false : (options?.enableJsonResponse ?? true);
+      // enableJsonResponse: false. An explicit enableJsonResponse always takes precedence.
+      const enableJsonResponse = options?.enableJsonResponse ?? !options?.serverlessStreaming;
       await this.handleServerlessRequest(req, res, { enableJsonResponse });
       return;
     }
