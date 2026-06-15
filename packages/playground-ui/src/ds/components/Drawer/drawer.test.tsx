@@ -132,6 +132,32 @@ describe('Drawer', () => {
     expect(document.querySelector('[data-slot="drawer-content"]')).toBeDefined();
   });
 
+  it('renders a built-in close button by default', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Drawer defaultOpen onOpenChange={onOpenChange}>
+        <DrawerContent>
+          <DrawerTitle>Closable drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
+  });
+
+  it('can hide the built-in close button', () => {
+    render(
+      <Drawer defaultOpen>
+        <DrawerContent showCloseButton={false}>
+          <DrawerTitle>No close icon</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
+  });
+
   it('renders a handle bar on bottom-anchored drawers', () => {
     render(
       <Drawer defaultOpen>
@@ -223,6 +249,7 @@ describe('Drawer', () => {
     expect(content?.contains(sideHandle)).toBe(false);
     expect(sideHandle?.classList.contains('-left-2')).toBe(true);
     expect(sideHandle?.classList.contains('touch-none')).toBe(true);
+    expect(sideHandle?.classList.contains('lg:hidden')).toBe(true);
   });
 
   it('renders a transparent backdrop for a floating drawer when requested', () => {
@@ -242,6 +269,25 @@ describe('Drawer', () => {
     expect(backdrop?.classList.contains('bg-overlay')).toBe(false);
     expect(backdrop?.classList.contains('backdrop-blur-xs')).toBe(false);
     expect(viewport?.getAttribute('data-variant')).toBe('floating');
+    expect(popup?.classList.contains('drawer-popup-floating')).toBe(true);
+  });
+
+  it('keeps visible floating overlays modal and swipe-dismissible like the default right drawer', () => {
+    render(
+      <Drawer side="right" variant="floating" overlay="visible" defaultOpen>
+        <DrawerContent>
+          <DrawerTitle>Visible overlay drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const backdrop = document.querySelector('[data-slot="drawer-backdrop"]');
+    const viewport = document.querySelector('[data-slot="drawer-viewport"]');
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(backdrop?.getAttribute('data-overlay')).toBe('visible');
+    expect(backdrop?.classList.contains('bg-overlay')).toBe(true);
+    expect(viewport?.classList.contains('pointer-events-none')).toBe(false);
+    expect(popup?.getAttribute('data-swipe-direction')).toBe('right');
     expect(popup?.classList.contains('drawer-popup-floating')).toBe(true);
   });
 
