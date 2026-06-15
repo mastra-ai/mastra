@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -34,7 +34,7 @@ const renderNode = (data: WorkflowStepNodeData) => {
 };
 
 describe('WorkflowGraphNode', () => {
-  it('renders map steps through the unified default node surface', () => {
+  it('renders map steps through the unified default node surface', async () => {
     renderNode({
       label: 'map-step',
       stepId: 'map-step',
@@ -48,8 +48,10 @@ describe('WorkflowGraphNode', () => {
 
     expect(screen.getByTestId('workflow-default-node').getAttribute('data-workflow-step-status')).toBe('idle');
     expect(screen.getByText('map-step')).not.toBeNull();
-    expect(screen.getByText('MAP')).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Map config' })).not.toBeNull();
+    expect(screen.getByRole('img', { name: 'Map step' })).not.toBeNull();
+    expect(screen.queryByText('MAP')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Step actions' }));
+    expect(await screen.findByText('Map config')).not.toBeNull();
   });
 
   it('renders conditions through the unified condition node surface', () => {
@@ -68,7 +70,8 @@ describe('WorkflowGraphNode', () => {
 
     const conditionNode = screen.getByTestId('workflow-condition-node');
     expect(conditionNode).not.toBeNull();
-    expect(screen.getByText('WHEN')).not.toBeNull();
+    expect(screen.getByRole('img', { name: 'When condition' })).not.toBeNull();
+    expect(screen.queryByText('WHEN')).toBeNull();
     expect(conditionNode.textContent).toContain('input.value > 0');
   });
 });

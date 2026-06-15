@@ -1,53 +1,41 @@
-import { Badge } from '@mastra/playground-ui';
+import { Icon, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
 
-import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-card-badge-utils';
-import type { WorkflowCardBadgesProps } from './workflow-card-badge-utils';
+import type { WorkflowCardIndicator } from './workflow-card-badge-utils';
 
-export const WorkflowCardBadges = (props: WorkflowCardBadgesProps) => {
-  const { isSleepNode, isForEachNode, isMapNode, isNestedWorkflow, hasSpecialBadge } = getNodeBadgeInfo(props);
+export interface WorkflowCardIndicatorListProps {
+  indicators: WorkflowCardIndicator[];
+  className?: string;
+}
 
-  if (!hasSpecialBadge) {
+export const WorkflowCardBadges = ({ indicators, className }: WorkflowCardIndicatorListProps) => {
+  if (!indicators.length) {
     return null;
   }
 
   return (
-    <div className="px-3 pt-2 pb-1 flex gap-1.5 flex-wrap">
-      {isSleepNode && (
-        <Badge
-          icon={
-            props.date ? (
-              <BADGE_ICONS.sleepUntil className="text-current" style={{ color: BADGE_COLORS.sleep }} />
-            ) : (
-              <BADGE_ICONS.sleep className="text-current" style={{ color: BADGE_COLORS.sleep }} />
-            )
-          }
-        >
-          {props.date ? 'SLEEP UNTIL' : 'SLEEP'}
-        </Badge>
-      )}
-      {props.canSuspend && (
-        <Badge icon={<BADGE_ICONS.suspend className="text-current" style={{ color: BADGE_COLORS.suspend }} />}>
-          SUSPEND/RESUME
-        </Badge>
-      )}
-      {props.isParallel && (
-        <Badge icon={<BADGE_ICONS.parallel className="text-current" style={{ color: BADGE_COLORS.parallel }} />}>
-          PARALLEL
-        </Badge>
-      )}
-      {isNestedWorkflow && (
-        <Badge icon={<BADGE_ICONS.workflow className="text-current" style={{ color: BADGE_COLORS.workflow }} />}>
-          WORKFLOW
-        </Badge>
-      )}
-      {isForEachNode && (
-        <Badge icon={<BADGE_ICONS.forEach className="text-current" style={{ color: BADGE_COLORS.forEach }} />}>
-          FOREACH
-        </Badge>
-      )}
-      {isMapNode && (
-        <Badge icon={<BADGE_ICONS.map className="text-current" style={{ color: BADGE_COLORS.map }} />}>MAP</Badge>
-      )}
+    <div className={cn('flex items-center gap-1', className)}>
+      {indicators.map(indicator => {
+        const IndicatorIcon = indicator.icon;
+
+        return (
+          <Tooltip key={indicator.id}>
+            <TooltipTrigger asChild>
+              <span
+                role="img"
+                tabIndex={0}
+                aria-label={indicator.label}
+                data-testid={`workflow-card-indicator-${indicator.id}`}
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-neutral5 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1"
+              >
+                <Icon size="sm">
+                  <IndicatorIcon className="text-current" style={{ color: indicator.color }} />
+                </Icon>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{indicator.label}</TooltipContent>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 };

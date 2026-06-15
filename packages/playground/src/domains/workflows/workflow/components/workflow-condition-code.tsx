@@ -1,21 +1,14 @@
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle, ScrollArea, cn } from '@mastra/playground-ui';
 import { Highlight, themes } from 'prism-react-renderer';
 
-import type { WorkflowCardDisplayStatus, WorkflowConditionCodeCondition } from './types';
+import type { WorkflowConditionCodeCondition } from './types';
 
 export interface WorkflowConditionCodeProps {
   condition: WorkflowConditionCodeCondition;
-  previousDisplayStatus?: WorkflowCardDisplayStatus;
-  hasNextStep?: boolean;
   onOpen: () => void;
 }
 
-export const WorkflowConditionCode = ({
-  condition,
-  previousDisplayStatus,
-  hasNextStep,
-  onOpen,
-}: WorkflowConditionCodeProps) => (
+export const WorkflowConditionCode = ({ condition, onOpen }: WorkflowConditionCodeProps) => (
   <div className="px-3">
     <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
       {({ className, style, tokens, getLineProps, getTokenProps }) => (
@@ -23,9 +16,6 @@ export const WorkflowConditionCode = ({
           className={cn(
             'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs bg-surface4! whitespace-pre-wrap wrap-break-word',
             className,
-            previousDisplayStatus === 'success' && hasNextStep && 'bg-accent1Dark!',
-            previousDisplayStatus === 'failed' && hasNextStep && 'bg-accent2Dark!',
-            previousDisplayStatus === 'tripwire' && hasNextStep && 'bg-amber-900/40!',
           )}
           onClick={onOpen}
           style={style}

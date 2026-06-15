@@ -55,6 +55,26 @@ export interface ConditionIconConfig {
   color: string | undefined;
 }
 
+export interface WorkflowCardIndicator {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  color: string;
+}
+
+const CONDITION_LABELS: Record<string, string> = {
+  when: 'When condition',
+  dountil: 'Do until condition',
+  dowhile: 'Do while condition',
+  until: 'Until condition',
+  while: 'While condition',
+  if: 'If condition',
+  else: 'Else condition',
+  and: 'And condition',
+  or: 'Or condition',
+  not: 'Not condition',
+};
+
 export const getConditionIconAndColor = (type?: string): ConditionIconConfig => {
   switch (type) {
     case 'when':
@@ -71,9 +91,28 @@ export const getConditionIconAndColor = (type?: string): ConditionIconConfig => 
       return { icon: BADGE_ICONS.if, color: BADGE_COLORS.if };
     case 'else':
       return { icon: BADGE_ICONS.else, color: BADGE_COLORS.else };
+    case 'and':
+    case 'or':
+    case 'not':
+      return { icon: BADGE_ICONS.when, color: BADGE_COLORS.when };
     default:
       return { icon: undefined, color: undefined };
   }
+};
+
+export const getConditionIndicator = (type?: string): WorkflowCardIndicator | undefined => {
+  const { icon, color } = getConditionIconAndColor(type);
+
+  if (!type || !icon || !color) {
+    return undefined;
+  }
+
+  return {
+    id: `condition-${type}`,
+    label: CONDITION_LABELS[type] ?? `${type} condition`,
+    icon,
+    color,
+  };
 };
 
 export interface WorkflowNodeBadgeInfo {
@@ -118,3 +157,67 @@ export const getNodeBadgeInfo = ({
     hasSpecialBadge,
   };
 };
+
+export const getNodeIndicators = (props: WorkflowCardBadgesProps): WorkflowCardIndicator[] => {
+  const { isSleepNode, isForEachNode, isMapNode, isNestedWorkflow } = getNodeBadgeInfo(props);
+  const indicators: WorkflowCardIndicator[] = [];
+
+  if (isSleepNode) {
+    indicators.push({
+      id: props.date ? 'sleep-until' : 'sleep',
+      label: props.date ? 'Sleep until step' : 'Sleep step',
+      icon: props.date ? BADGE_ICONS.sleepUntil : BADGE_ICONS.sleep,
+      color: BADGE_COLORS.sleep,
+    });
+  }
+
+  if (props.canSuspend) {
+    indicators.push({
+      id: 'suspend',
+      label: 'Suspend/resume step',
+      icon: BADGE_ICONS.suspend,
+      color: BADGE_COLORS.suspend,
+    });
+  }
+
+  if (props.isParallel) {
+    indicators.push({
+      id: 'parallel',
+      label: 'Parallel step',
+      icon: BADGE_ICONS.parallel,
+      color: BADGE_COLORS.parallel,
+    });
+  }
+
+  if (isNestedWorkflow) {
+    indicators.push({
+      id: 'workflow',
+      label: 'Nested workflow step',
+      icon: BADGE_ICONS.workflow,
+      color: BADGE_COLORS.workflow,
+    });
+  }
+
+  if (isForEachNode) {
+    indicators.push({
+      id: 'foreach',
+      label: 'Foreach step',
+      icon: BADGE_ICONS.forEach,
+      color: BADGE_COLORS.forEach,
+    });
+  }
+
+  if (isMapNode) {
+    indicators.push({
+      id: 'map',
+      label: 'Map step',
+      icon: BADGE_ICONS.map,
+      color: BADGE_COLORS.map,
+    });
+  }
+
+  return indicators;
+};
+
+export const getWorkflowCardAccentColor = (indicators: WorkflowCardIndicator[]): string | undefined =>
+  indicators[0]?.color;

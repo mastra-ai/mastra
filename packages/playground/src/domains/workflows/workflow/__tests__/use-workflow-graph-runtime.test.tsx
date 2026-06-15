@@ -49,6 +49,21 @@ describe('useWorkflowGraphRuntime', () => {
     expect(result.current.styledEdges[0].type).toBe(WORKFLOW_DATA_EDGE_TYPE);
   });
 
+  it('renders unfinished edges in gray instead of the default white stroke', () => {
+    const edges: Edge[] = [
+      {
+        id: 'e-transform-load',
+        source: 'transform',
+        target: 'load',
+        data: { previousStepId: 'transform', nextStepId: 'load' },
+      },
+    ];
+
+    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper });
+
+    expect(result.current.styledEdges[0].style?.stroke).toBe('#8e8e8e');
+  });
+
   it('renders finished green edges as solid instead of animated', () => {
     const edges: Edge[] = [
       {

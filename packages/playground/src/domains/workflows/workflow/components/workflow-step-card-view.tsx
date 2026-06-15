@@ -2,7 +2,7 @@ import { Txt, cn } from '@mastra/playground-ui';
 
 import { Clock } from '../workflow-clock';
 import type { WorkflowStepCardViewProps } from './types';
-import { getNodeBadgeInfo } from './workflow-card-badge-utils';
+import { getNodeIndicators, getWorkflowCardAccentColor } from './workflow-card-badge-utils';
 import { WorkflowCardBadges } from './workflow-card-badges';
 import { WorkflowCardStatusIcon } from './workflow-card-status-icon';
 
@@ -69,30 +69,32 @@ export const WorkflowStepCardView = ({
   actionBar,
 }: WorkflowStepCardViewProps) => {
   const badgeProps = { duration, date, isForEach, mapConfig, canSuspend, isParallel, stepGraph };
-  const hasSpecialBadge = getNodeBadgeInfo(badgeProps).hasSpecialBadge;
+  const indicators = getNodeIndicators(badgeProps);
+  const accentColor = getWorkflowCardAccentColor(indicators);
 
   return (
     <div
       data-workflow-node
       data-workflow-step-status={displayStatus ?? 'idle'}
       data-testid={isNestedWorkflowStep ? 'workflow-nested-node' : 'workflow-default-node'}
+      style={accentColor ? { borderLeftColor: accentColor } : undefined}
       className={cn(
         'bg-surface3 rounded-lg w-[274px] border border-border1',
-        hasSpecialBadge ? 'pt-0' : 'pt-2',
-        displayStatus === 'success' && 'bg-accent1Darker',
-        displayStatus === 'failed' && 'bg-accent2Darker',
-        displayStatus === 'tripwire' && 'bg-amber-950/40 border-amber-500/30',
-        displayStatus === 'suspended' && 'bg-accent3Darker',
-        displayStatus === 'waiting' && 'bg-accent5Darker',
-        displayStatus === 'running' && 'bg-accent6Darker',
+        accentColor && 'border-l-4',
       )}
     >
-      <WorkflowCardBadges {...badgeProps} />
-      <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
+      <div className={cn('flex items-center gap-2 px-3 pt-2', !description && 'pb-2')}>
+        <WorkflowCardBadges indicators={indicators} className="shrink-0" />
         <WorkflowCardStatusIcon displayStatus={displayStatus} hasStep={hasStep} />
-        <Txt variant="ui-lg" className="text-neutral6 font-medium inline-flex items-center gap-1 justify-between w-full">
-          {label} {startedAt && <Clock startedAt={startedAt} endedAt={endedAt} />}
-        </Txt>
+        <div className="min-w-0 flex-1">
+          <Txt variant="ui-sm" className="block truncate text-neutral6 font-medium" title={label}>
+            {label}
+          </Txt>
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {startedAt && <Clock startedAt={startedAt} endedAt={endedAt} />}
+          {actionBar}
+        </div>
       </div>
 
       {description && (
@@ -103,7 +105,6 @@ export const WorkflowStepCardView = ({
 
       {isForEach && <WorkflowForEachProgress foreachProgress={foreachProgress} />}
       <WorkflowSleepDetails duration={duration} date={date} />
-      {actionBar}
     </div>
   );
 };
