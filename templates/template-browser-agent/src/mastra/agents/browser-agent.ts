@@ -4,10 +4,24 @@ import { Memory } from '@mastra/memory';
 import { AgentBrowser } from '@mastra/agent-browser';
 import 'playwright-chromium';
 
-const browser = new AgentBrowser({
-  headless: process.env.BROWSER_HEADLESS !== 'false',
-  ...(process.env.BROWSER_CDP_URL ? { cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' as const } : {}),
-});
+const browser = process.env.BROWSER_CDP_URL
+  ? new AgentBrowser({
+      headless: process.env.BROWSER_HEADLESS !== 'false',
+      cdpUrl: process.env.BROWSER_CDP_URL,
+      scope: 'shared',
+    })
+  : process.env.BROWSER_ALLOW_LOCAL_CHROMIUM === 'true'
+    ? new AgentBrowser({
+        headless: process.env.BROWSER_HEADLESS !== 'false',
+      })
+    : undefined;
+
+const browserInstructions = browser
+  ? `**Navigation:** browser_goto (open URL), browser_back (go back), browser_tabs (list/switch tabs), browser_close (close tab).
+**Observation:** browser_snapshot (get page accessibility tree with ref ids — this is your primary way to "see" the page), browser_screenshot (visual capture).
+**Interaction:** browser_click (click by ref), browser_type (type into input by ref), browser_press (press key combo), browser_select (select dropdown option), browser_scroll (scroll up/down), browser_hover (hover element), browser_drag (drag between refs).
+**Other:** browser_wait (pause for ms), browser_dialog (accept/dismiss dialog), browser_evaluate (run arbitrary JS — escape hatch only).`
+  : `Browser tools are disabled because BROWSER_CDP_URL is not set and BROWSER_ALLOW_LOCAL_CHROMIUM is not true. Use web_search for lookups and explain that browser automation needs BROWSER_CDP_URL in server deployments.`;
 
 export const browserAgent = new Agent({
   id: 'browser-agent',
@@ -16,10 +30,7 @@ export const browserAgent = new Agent({
 
 ## Your tools
 
-**Navigation:** browser_goto (open URL), browser_back (go back), browser_tabs (list/switch tabs), browser_close (close tab).
-**Observation:** browser_snapshot (get page accessibility tree with ref ids — this is your primary way to "see" the page), browser_screenshot (visual capture).
-**Interaction:** browser_click (click by ref), browser_type (type into input by ref), browser_press (press key combo), browser_select (select dropdown option), browser_scroll (scroll up/down), browser_hover (hover element), browser_drag (drag between refs).
-**Other:** browser_wait (pause for ms), browser_dialog (accept/dismiss dialog), browser_evaluate (run arbitrary JS — escape hatch only).
+${browserInstructions}
 **Search:** web_search (quick factual lookup without opening a browser).
 
 ## Core workflow
@@ -44,7 +55,7 @@ export const browserAgent = new Agent({
   defaultOptions: {
     maxSteps: 100,
   },
-  browser,
+  ...(browser ? { browser } : {}),
   tools: {
     web_search: openai.tools.webSearch({}),
   },

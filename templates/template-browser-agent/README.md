@@ -12,13 +12,14 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 - A [Mastra Gateway API key](https://mastra.ai/docs/models/gateways/mastra).
 - A [Turso](https://turso.tech) database URL + auth token (or swap to `:memory:` for ephemeral local runs).
-- Playwright Chromium is installed by the `playwright-chromium` package during dependency install, or set `BROWSER_CDP_URL` for a hosted Chrome/Browserbase/Browserless instance in server deployments.
+- For server deployments, a hosted Chrome/Browserbase/Browserless endpoint via `BROWSER_CDP_URL`. Local Chromium is opt-in because many server images do not include Chrome system libraries.
 
 ## Quickstart 🚀
 
 1. **Add your API keys**
    - Copy `.env.example` to `.env` and fill it in. Set `BROWSER_HEADLESS=false` if you want to watch the agent click around locally.
-   - For server deployments, you can optionally set `BROWSER_CDP_URL` to a hosted browser endpoint instead of launching the installed local Chromium.
+   - For server deployments, set `BROWSER_CDP_URL` to a hosted browser endpoint. Without it, the agent still starts and can use web search, but browser automation tools stay disabled.
+   - For local-only runs, set `BROWSER_ALLOW_LOCAL_CHROMIUM=true` to launch the installed local Chromium.
 2. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111).
 
@@ -31,10 +32,11 @@ Ask things like:
 ## How it works
 
 ```ts
-const browser = new AgentBrowser({
-  headless: true,
-  ...(process.env.BROWSER_CDP_URL ? { cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' } : {}),
-});
+const browser = process.env.BROWSER_CDP_URL
+  ? new AgentBrowser({ headless: true, cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' })
+  : process.env.BROWSER_ALLOW_LOCAL_CHROMIUM === 'true'
+    ? new AgentBrowser({ headless: true })
+    : undefined;
 
 export const browserAgent = new Agent({
   // …
@@ -43,7 +45,7 @@ export const browserAgent = new Agent({
 });
 ```
 
-Passing `browser` to the agent automatically registers the full browser toolset (`browser_goto`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot`, etc.) on the agent. You don't have to wire individual tools yourself.
+Passing `browser` to the agent automatically registers the full browser toolset (`browser_goto`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot`, etc.) on the agent. The template only creates the browser when `BROWSER_CDP_URL` is set or `BROWSER_ALLOW_LOCAL_CHROMIUM=true`, so server deployments do not fail on missing Chromium system libraries.
 
 ## Making it yours
 
