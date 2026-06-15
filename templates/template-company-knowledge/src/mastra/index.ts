@@ -18,6 +18,6 @@ export const mastra = new Mastra({
   workflows: { indexKnowledgeWorkflow },
   storage,
   vectors: { pgVector: vector },
-  editor: new MastraEditor({ source: 'code' }),
+  editor: new MastraEditor({ source: 'code', codePath: 'mastra/editor' }),
   logger: new PinoLogger({ name: 'company-knowledge', level: 'info' }),
 });

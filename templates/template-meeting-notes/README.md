@@ -63,6 +63,10 @@ Returns the structured notes JSON. Useful for Google Meet / Riverside / Loom / p
 - **Auto-create Linear issues.** Add a workflow step that loops over `actionItems` and uses the Linear MCP tools to create issues for each one.
 - **Trigger on Zoom webhooks.** Add an API route at `/zoom/webhook` that listens for the `recording.completed` event and kicks off the `ingest-meeting` workflow automatically.
 
+## Agent Editor
+
+This template enables the code-backed Agent Editor with `new MastraEditor({ source: 'code', codePath: 'mastra/editor' })`. Edits made in Studio are written as deterministic JSON overrides under `mastra/editor/agents/`, so Mastra Platform can open GitHub pull requests for agent changes instead of only saving them to the database.
+
 ## About Mastra templates
 
 [Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.

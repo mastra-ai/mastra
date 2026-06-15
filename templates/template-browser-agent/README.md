@@ -52,6 +52,10 @@ Passing `browser` to the agent automatically registers the full browser toolset 
 - **Drop tools you don't want.** `AgentBrowser({ excludeTools: ['browser_screenshot'] })` is useful when targeting a text-only model.
 - **Swap the model.** Any `mastra/<provider>/<model>` id works. The browser tools are provider-agnostic.
 
+## Agent Editor
+
+This template enables the code-backed Agent Editor with `new MastraEditor({ source: 'code', codePath: 'mastra/editor' })`. Edits made in Studio are written as deterministic JSON overrides under `mastra/editor/agents/`, so Mastra Platform can open GitHub pull requests for agent changes instead of only saving them to the database.
+
 ## About Mastra templates
 
 [Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.

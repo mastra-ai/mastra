@@ -22,7 +22,7 @@ export const mastra = new Mastra({
     authToken: process.env.TURSO_AUTH_TOKEN,
   }),
   agents: { browserAgent },
-  editor: new MastraEditor({ source: 'code' }),
+  editor: new MastraEditor({ source: 'code', codePath: 'mastra/editor' }),
   logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
   observability: new Observability({
     configs: {

@@ -65,3 +65,7 @@ The agent will pick up new skills on the next request.
 | `CLAW_WORKSPACE_DIR`     | Override the workspace root directory.                                |
 | `BROWSER_HEADLESS`       | Set to `false` to launch the browser headfully. Defaults to headless. |
 | `BROWSER_CDP_URL`        | Optional hosted browser CDP URL for server deployments.               |
+
+## Agent Editor
+
+This template enables the code-backed Agent Editor with `new MastraEditor({ source: 'code', codePath: 'mastra/editor' })`. Edits made in Studio are written as deterministic JSON overrides under `mastra/editor/agents/`, so Mastra Platform can open GitHub pull requests for agent changes instead of only saving them to the database.

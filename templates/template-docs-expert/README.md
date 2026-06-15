@@ -33,6 +33,10 @@ Ask things like:
 - **Add structured output.** Set `structuredOutput` on the agent or call `generate({ output: z.object({ answer: z.string(), sources: z.array(...) }) })` to force JSON with citations.
 - **Persist conversations.** This template already wires Memory + Turso, so threads survive restarts.
 
+## Agent Editor
+
+This template enables the code-backed Agent Editor with `new MastraEditor({ source: 'code', codePath: 'mastra/editor' })`. Edits made in Studio are written as deterministic JSON overrides under `mastra/editor/agents/`, so Mastra Platform can open GitHub pull requests for agent changes instead of only saving them to the database.
+
 ## About Mastra templates
 
 [Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show what you can build. Use the platform-created repository as your starting point, then customize it for your app.

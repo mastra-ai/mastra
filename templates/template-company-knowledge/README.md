@@ -51,3 +51,7 @@ Sources (URLs) are always cited in the response.
 | `DATABASE_URL`           | Neon (or other) Postgres connection string with `?sslmode=require`.               |
 | `LINEAR_API_KEY`         | Linear personal API key (for Linear MCP server).                                  |
 | `NOTION_API_KEY`         | Notion internal integration token (for Notion MCP server).                        |
+
+## Agent Editor
+
+This template enables the code-backed Agent Editor with `new MastraEditor({ source: 'code', codePath: 'mastra/editor' })`. Edits made in Studio are written as deterministic JSON overrides under `mastra/editor/agents/`, so Mastra Platform can open GitHub pull requests for agent changes instead of only saving them to the database.
