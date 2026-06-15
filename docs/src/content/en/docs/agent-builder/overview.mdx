@@ -18,6 +18,8 @@ The Agent Builder lets you build, configure, and operate Mastra agents all withi
 - [**Configuration**](/docs/agent-builder/configuration): Toggle UI sections and pin admin-controlled defaults for every new agent.
 - [**Model policy**](/docs/agent-builder/model-policy): Restrict which providers and models the Builder exposes, and pin a default.
 - [**Memory**](/docs/agent-builder/memory): Configure the default memory shape for every Builder-created agent.
+- [**Workspace**](/docs/agent-builder/workspace): Configure the default filesystem, sandbox, and skills workspace for Builder-created agents.
+- [**Browser**](/docs/agent-builder/browser): Register browser providers and pin a default browser configuration.
 - [**Access control**](/docs/agent-builder/access-control): Gate the Builder behind Mastra RBAC roles and permissions.
 - [**Channels**](/docs/agent-builder/channels): Connect Builder-created agents to Slack and other channels.
 - [**Tool providers**](/docs/agent-builder/integrations): Connect Builder-created agents to third-party apps through OAuth-backed tool providers.
@@ -26,15 +28,24 @@ The Agent Builder lets you build, configure, and operate Mastra agents all withi
 
 For building agents entirely in code, see the [Agents overview](/docs/agents/overview). For editing code-defined agents through Studio, see the [Editor overview](/docs/editor/overview).
 
+## Prerequisites
+
+The Agent Builder requires:
+
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
+- **Storage**: A `@mastra/core` storage adapter on the `Mastra` instance. Agents, memory, and workspace state all persist through `Mastra.storage`.
+- **A builder agent**: Register a `builderAgent` created with the `createBuilderAgent()` factory from `@mastra/editor/ee` on `Mastra.agents`. The chat-based editor invokes it through the same `Mastra.getAgent(id)` lookup as any other agent. Without this registration, the chat-based editor returns 404.
+- **Model credentials**: `createBuilderAgent()` uses an OpenAI model by default, which requires `OPENAI_API_KEY`. To use a different provider, pass a `model` override to `createBuilderAgent({ model })` and set that provider's credentials instead.
+
 ## Get started
 
-Install `@mastra/editor` alongside a storage adapter:
+Install `@mastra/editor` alongside a storage adapter. This example uses `@mastra/libsql`:
 
 ```bash npm2yarn
 npm install @mastra/editor @mastra/libsql
 ```
 
-Wire the Agent Builder onto a `Mastra` instance:
+The example below defines a storage adapter, registers a builder agent, and enables the editor as explained in the prerequisites:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -58,21 +69,13 @@ export const mastra = new Mastra({
 })
 ```
 
-Start the dev server:
+Start Mastra's development server:
 
 ```bash
 npx mastra dev
 ```
 
 The Agent Builder is mounted at `http://localhost:4111/agent-builder`.
-
-## Prerequisites
-
-The Agent Builder requires:
-
-- **Storage**: An `@mastra/core` storage adapter on the `Mastra` instance. Agents, memory, and workspace state all persist through `Mastra.storage`.
-- **The Builder agent**: Register a Builder agent created with the `createBuilderAgent()` factory from `@mastra/editor/ee` on `Mastra.agents`. The chat-based editor invokes it through the same `Mastra.getAgent(id)` lookup as any other agent. Without this registration, the chat-based editor returns 404.
-- **`OPENAI_API_KEY`**: The Builder agent created by `createBuilderAgent()` runs on an OpenAI model, so an `OPENAI_API_KEY` environment variable is required.
 
 ## Disabling the Builder
 
@@ -87,3 +90,9 @@ new MastraEditor({
 ```
 
 Omitting the `builder` field has the same effect.
+
+## Next steps
+
+- [Configuration](/docs/agent-builder/configuration): Toggle Builder surfaces and pin defaults for new agents.
+- [Access control](/docs/agent-builder/access-control): Gate the Builder with authentication and role-based access control.
+- [Deploying](/docs/agent-builder/deploying): Replace local development primitives with production-ready storage, filesystems, and sandboxes.

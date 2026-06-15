@@ -13,7 +13,7 @@ vi.mock('../../utils/project.js', () => ({
   getCurrentGitBranchAsync: vi.fn(() => Promise.resolve('main')),
 }));
 
-import { handleAgentAborted, handleAgentError } from '../handlers/agent-lifecycle.js';
+import { handleAgentAborted, handleAgentEnd, handleAgentError } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
 import type { TUIState } from '../state.js';
 
@@ -55,6 +55,23 @@ describe('agent lifecycle goal timing', () => {
     const state = createState();
 
     handleAgentError(createContext(state));
+
+    expect(state.goalManager.stopActiveTimer).toHaveBeenCalled();
+  });
+
+  it('stops active goal timing when an agent completes normally', () => {
+    const state = createState({
+      pendingTaskToolIds: new Set(),
+      harness: { getFollowUpCount: vi.fn(() => 0) },
+    } as unknown as Partial<TUIState>);
+
+    const ctx = {
+      state,
+      updateStatusLine: vi.fn(),
+      notify: vi.fn(),
+    } as unknown as EventHandlerContext;
+
+    handleAgentEnd(ctx);
 
     expect(state.goalManager.stopActiveTimer).toHaveBeenCalled();
   });

@@ -408,3 +408,26 @@ export function getDynamicModel({ requestContext }: { requestContext: RequestCon
 
   return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
 }
+
+/**
+ * Goal judge model resolver for the agent's `goal.judge` config. Resolves the
+ * configured goal judge model through mastracode's gateway so provider
+ * credentials (stored in auth storage, not just env) are injected — a bare model
+ * id handed to core's default model router would fail to find the API key.
+ *
+ * Returns `undefined` when no judge model is configured, which keeps the goal
+ * step a complete no-op (the goal mechanism requires a judge to do anything).
+ *
+ * `settingsPath` must be the same source `createMastraCode()` reads from so the
+ * judge model and the goal budget (`goalMaxTurns`) come from one config — with a
+ * custom `settingsPath` a bare `loadSettings()` here could read a different file
+ * and silently turn the goal step into a no-op.
+ */
+export function getGoalJudgeModel(
+  { requestContext }: { requestContext: RequestContext },
+  settingsPath?: string,
+): ResolvedModel | undefined {
+  const judgeModelId = loadSettings(settingsPath).models.goalJudgeModel;
+  if (!judgeModelId) return undefined;
+  return resolveModel(judgeModelId, { remapForCodexOAuth: true, requestContext });
+}

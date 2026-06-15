@@ -11,6 +11,7 @@ import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
+import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
 export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
@@ -210,6 +211,23 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         rest.mastra.__registerInternalWorkflow(agenticLoopWorkflow, runId);
       }
 
+      // Once the run reaches a terminal state its snapshot rows are no longer
+      // needed for resume. Delete both the agentic-loop row and the nested
+      // execution workflow's row (persisted under the same runId) — otherwise
+      // the nested row leaks as a stale "pending"/"suspended" record in
+      // workflow snapshot storage for every completed agent run.
+      // Best-effort: a cleanup failure must never turn a finished run into a
+      // stream error (a stale row is preferable to a broken stream).
+      const deleteRunSnapshots = async () => {
+        try {
+          await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+          const workflowsStore = await rest.mastra?.getStorage()?.getStore('workflows');
+          await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: AGENTIC_EXECUTION_WORKFLOW_ID });
+        } catch (error) {
+          rest.logger?.warn('Failed to delete agentic-loop snapshot rows after terminal state', { runId, error });
+        }
+      };
+
       // Keep the run-scoped registration alive only when the run suspends — a
       // later resume on the same runId must still resolve this instance. Every
       // other exit (success, failure, or a throw before completion) must drop
@@ -301,7 +319,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           if (executionResult.status !== 'suspended') {
-            await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+            await deleteRunSnapshots();
           } else {
             keepRegisteredForResume = true;
           }
@@ -310,7 +328,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           return;
         }
 
-        await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+        await deleteRunSnapshots();
 
         // Always emit finish chunk, even for abort (tripwire) cases
         // This ensures the stream properly completes and all promises are resolved
