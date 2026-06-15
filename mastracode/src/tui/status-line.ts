@@ -84,7 +84,7 @@ export function updateStatusLine(state: TUIState): void {
   const currentMode = modes.length > 1 ? state.harness.getCurrentMode() : undefined;
   const judgeModeColor = mastra.blue;
   // Use judge color for goal judge activity, OM color for OM activity, otherwise mode color
-  const mainModeColor = currentMode?.color;
+  const mainModeColor = currentMode?.metadata?.color;
   const modeColor = isJudging
     ? judgeModeColor
     : showOMMode
