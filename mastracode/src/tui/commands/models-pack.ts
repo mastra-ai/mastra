@@ -239,10 +239,10 @@ async function runCustomFlow(
   ctx: SlashCommandContext,
   options?: { name?: string; models?: ModePack['models']; skipNamePrompt?: boolean },
 ): Promise<ModePack | null> {
-  const modes: Array<{ id: 'plan' | 'build' | 'fast'; label: string; color: string }> = [
-    { id: 'plan', label: 'plan', color: mastra.purple },
-    { id: 'build', label: 'build', color: mastra.green },
-    { id: 'fast', label: 'fast', color: mastra.orange },
+  const modes: Array<{ id: 'plan' | 'build' | 'fast'; label: string; metadata: { color: string } }> = [
+    { id: 'plan', label: 'plan', metadata: { color: mastra.purple } },
+    { id: 'build', label: 'build', metadata: { color: mastra.green } },
+    { id: 'fast', label: 'fast', metadata: { color: mastra.orange } },
   ];
 
   const name = options?.skipNamePrompt
