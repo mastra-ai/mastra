@@ -1,5 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import type { Run, Step, WorkflowRunStatus } from '../workflows';
+import { safeError } from './base/input';
 import type { ChunkType } from './types';
 import { ChunkFrom } from './types';
 
@@ -144,7 +145,7 @@ export class MastraWorkflowStream<
           controller.close();
           deferredPromise.resolve();
         } catch (error) {
-          controller.error(error);
+          safeError(controller, error);
           deferredPromise.reject(error);
         }
       },
