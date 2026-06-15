@@ -1,6 +1,8 @@
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { GATEWAY_AUTH_HEADER, MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type {
@@ -153,6 +155,29 @@ function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRe
   });
 }
 
+/**
+ * Create an Amazon Bedrock model.
+ *
+ * Bedrock authenticates with AWS SigV4 rather than a bearer API key, so this
+ * resolves credentials through the standard AWS provider chain
+ * (`fromNodeProviderChain`): environment variables, shared `~/.aws` config and
+ * SSO profiles, and container/instance roles — the same resolution order the AWS
+ * CLI uses. The region falls back to `us-east-1` to match the AWS SDK default.
+ *
+ * When `AWS_BEARER_TOKEN_BEDROCK` is set, `@ai-sdk/amazon-bedrock` uses bearer
+ * auth instead and ignores the credential provider, so we leave that path to the
+ * SDK and only wire up SigV4 here.
+ */
+function bedrockProvider(modelId: string, headers?: ModelRequestHeaders) {
+  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
+  const bedrock = createAmazonBedrock({
+    region,
+    credentialProvider: fromNodeProviderChain(),
+    headers,
+  });
+  return bedrock(modelId);
+}
+
 function getProviderAuthKey(providerId: string): string | undefined {
   const authProviderId = providerId === 'openai' ? 'openai-codex' : providerId;
   const storedCred = authStorage.get(authProviderId);
@@ -215,6 +240,10 @@ function createMastraCodeGateway({
       return resolveAuth(request);
     },
     resolveLanguageModel(args: GatewayResolveLanguageModelArgs) {
+      if (args.providerId === 'amazon-bedrock') {
+        return bedrockProvider(args.modelId, args.headers) as unknown as GatewayLanguageModel;
+      }
+
       const customProvider = customProviders.find(provider => args.providerId === getCustomProviderId(provider.name));
       if (customProvider) {
         const provider = createOpenAICompatible({

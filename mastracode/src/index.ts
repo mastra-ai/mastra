@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import path from 'node:path';
 
@@ -71,6 +72,7 @@ import {
   toCustomProviderModelId,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
+import { getBedrockModelCatalog } from './providers/amazon-bedrock.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { getCopilotModelCatalog, setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -96,6 +98,35 @@ const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   openai: 'openai-codex',
   'github-copilot': 'github-copilot',
 };
+
+/**
+ * Best-effort, synchronous check for whether AWS credentials are available for
+ * Amazon Bedrock. The actual resolution happens through the AWS provider chain
+ * at request time; this only governs whether Bedrock models are offered as
+ * "authenticated" in the picker. We look for the common signals (env vars,
+ * bearer token, a configured profile, or a shared credentials/config file)
+ * rather than resolving credentials here, since the auth checker must stay sync.
+ */
+function hasAwsCredentials(): boolean {
+  if (
+    process.env.AWS_BEARER_TOKEN_BEDROCK ||
+    (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
+    process.env.AWS_PROFILE ||
+    process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI ||
+    process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI ||
+    process.env.AWS_WEB_IDENTITY_TOKEN_FILE
+  ) {
+    return true;
+  }
+  const home = process.env.HOME || process.env.USERPROFILE;
+  if (home) {
+    const awsDir = path.join(home, '.aws');
+    if (existsSync(path.join(awsDir, 'credentials')) || existsSync(path.join(awsDir, 'config'))) {
+      return true;
+    }
+  }
+  return false;
+}
 
 const CODE_AGENT_ID = 'code-agent';
 
@@ -768,6 +799,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         }
       }
 
+      // Amazon Bedrock authenticates via the AWS credential chain rather than a
+      // stored API key, so offer its models whenever AWS credentials look available.
+      if (provider === 'amazon-bedrock' && hasAwsCredentials()) {
+        return true;
+      }
+
       const customProvider = loadSettings().customProviders.find(entry => {
         return provider === getCustomProviderId(entry.name);
       });
@@ -823,6 +860,27 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         }
       } catch (error) {
         console.warn('Failed to load GitHub Copilot model catalog:', error);
+      }
+
+      // Amazon Bedrock is resolved directly (AWS SigV4) rather than through the
+      // gateway-synced model router, so its models are surfaced here from the
+      // public models.dev catalog. Only offer them when AWS credentials look
+      // available, to avoid cluttering the picker with unusable models.
+      if (hasAwsCredentials()) {
+        try {
+          const bedrockModels = await getBedrockModelCatalog();
+          for (const m of bedrockModels) {
+            customModels.push({
+              id: `amazon-bedrock/${m.id}`,
+              provider: 'amazon-bedrock',
+              modelName: m.id,
+              hasApiKey: true,
+              apiKeyEnvVar: undefined,
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to load Amazon Bedrock model catalog:', error);
+        }
       }
 
       return customModels;
