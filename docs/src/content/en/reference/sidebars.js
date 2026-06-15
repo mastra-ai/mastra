@@ -750,6 +750,7 @@ const sidebars = {
         { type: 'doc', id: 'workspace/railway-sandbox', label: 'RailwaySandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
+        { type: 'doc', id: 'workspace/upstash-box-sandbox', label: 'UpstashBoxSandbox' },
         { type: 'doc', id: 'workspace/vercel-microvm-sandbox', label: 'VercelMicroVMSandbox' },
         { type: 'doc', id: 'workspace/vercel', label: 'VercelSandbox' },
         { type: 'doc', id: 'workspace/workspace-class', label: 'Workspace Class' },
