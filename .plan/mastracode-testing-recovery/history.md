@@ -10,6 +10,7 @@ Key implementation points:
 - Terminal workers set isolated env/cwd state before lazy-importing Mastra Code modules, matching subprocess startup semantics and avoiding module-level auth/storage leakage.
 - `homeDir` is carried in state so workspace skill discovery uses the isolated scenario home instead of `os.homedir()` from the parent process.
 - `EmulatedTerminal` uses pi-tui `StdinBuffer` so arrow/select/modal key sequences follow the same parser path as `ProcessTerminal`.
+- `EmulatedTerminal` queues xterm writes and drains them before screen assertions, so snapshots do not read stale asynchronous terminal output.
 - The terminal backend mirrors CLI startup warnings by writing storage/observability warnings into the emulated terminal before TUI startup.
 - Successful cleanup removes only the current run directory and only removes `.tmp-mc-e2e` when empty, avoiding races between concurrent focused runs.
 
@@ -24,6 +25,7 @@ pnpm --filter ./mastracode run e2e:test storage-startup-pg-fallback -- --backend
 pnpm --filter ./mastracode run e2e:test om-threshold-persistence -- --backend terminal
 pnpm --filter ./mastracode run e2e:test persistent-goal-commands -- --backend terminal
 pnpm --filter ./mastracode run e2e:test shell-passthrough-long-output -- --backend terminal
+pnpm --filter ./mastracode run e2e:test autocomplete-wrapping-navigation -- --backend terminal
 pnpm run build:mastracode
 pnpm --filter ./mastracode check
 pnpm --filter ./mastracode lint
@@ -33,7 +35,7 @@ Latest full terminal-backend audit:
 
 | backend shape | result | elapsed | notes |
 | --- | ---: | ---: | --- |
-| terminal workers, `--jobs 8` | 67/120 passed | 250s | 33 failures are explicit custom-entrypoint unsupported fast-fails; 20 are same-app terminal parity/timeouts. |
+| terminal workers, `--jobs 8` | 69/120 passed | not measured | 33 failures are explicit custom-entrypoint unsupported fast-fails; 18 are same-app terminal parity/timeouts. `autocomplete-wrapping-navigation` passes focused after output-drain handling but remains concurrency-sensitive in the full run. |
 | terminal workers, `--jobs 4` | 66/120 passed | 233s before status 139 | Lower concurrency did not improve parity and was less stable. |
 
 Remaining work before terminal backend can replace subprocess coverage:

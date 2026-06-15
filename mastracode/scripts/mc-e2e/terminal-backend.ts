@@ -35,6 +35,7 @@ class EmulatedTerminal implements Terminal {
   private readonly xterm: XtermTerminalType;
   private inputHandler?: (data: string) => void;
   private inputQueue = Promise.resolve();
+  private outputQueue = Promise.resolve();
   private resizeHandler?: () => void;
   private stdinBuffer?: StdinBuffer;
   private readonly terminalColumns: number;
@@ -61,11 +62,17 @@ class EmulatedTerminal implements Terminal {
     this.stdinBuffer.on('paste', content => {
       this.inputHandler?.(`\x1b[200~${content}\x1b[201~`);
     });
-    this.xterm.write('\x1b[?2004h');
+    this.writeToXterm('\x1b[?2004h');
+  }
+
+  private writeToXterm(data: string): void {
+    this.outputQueue = this.outputQueue
+      .then(() => new Promise<void>(resolve => this.xterm.write(data, resolve)))
+      .catch(() => undefined);
   }
 
   stop(): void {
-    this.xterm.write('\x1b[?2004l');
+    this.writeToXterm('\x1b[?2004l');
     this.stdinBuffer?.destroy();
     this.stdinBuffer = undefined;
     this.inputHandler = undefined;
@@ -75,7 +82,7 @@ class EmulatedTerminal implements Terminal {
   async drainInput(_maxMs?: number, _idleMs?: number): Promise<void> {}
 
   write(data: string): void {
-    this.xterm.write(data);
+    this.writeToXterm(data);
   }
 
   get columns(): number {
@@ -91,32 +98,32 @@ class EmulatedTerminal implements Terminal {
   }
 
   moveBy(lines: number): void {
-    if (lines > 0) this.xterm.write(`\x1b[${lines}B`);
-    else if (lines < 0) this.xterm.write(`\x1b[${-lines}A`);
+    if (lines > 0) this.writeToXterm(`\x1b[${lines}B`);
+    else if (lines < 0) this.writeToXterm(`\x1b[${-lines}A`);
   }
 
   hideCursor(): void {
-    this.xterm.write('\x1b[?25l');
+    this.writeToXterm('\x1b[?25l');
   }
 
   showCursor(): void {
-    this.xterm.write('\x1b[?25h');
+    this.writeToXterm('\x1b[?25h');
   }
 
   clearLine(): void {
-    this.xterm.write('\x1b[K');
+    this.writeToXterm('\x1b[K');
   }
 
   clearFromCursor(): void {
-    this.xterm.write('\x1b[J');
+    this.writeToXterm('\x1b[J');
   }
 
   clearScreen(): void {
-    this.xterm.write('\x1b[2J\x1b[H');
+    this.writeToXterm('\x1b[2J\x1b[H');
   }
 
   setTitle(title: string): void {
-    this.xterm.write(`\x1b]0;${title}\x07`);
+    this.writeToXterm(`\x1b]0;${title}\x07`);
   }
 
   setProgress(_active: boolean): void {}
@@ -134,6 +141,7 @@ class EmulatedTerminal implements Terminal {
     await this.inputQueue;
     const flushed = this.stdinBuffer?.flush() ?? [];
     for (const sequence of flushed) this.inputHandler?.(sequence);
+    await this.outputQueue;
   }
 
   resize(columns: number, rows: number): void {
