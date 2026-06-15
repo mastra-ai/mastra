@@ -9,6 +9,7 @@ import {
 } from '@mastra/playground-ui';
 import { ChevronRight, ChevronDown, Brain, ExternalLink, Info } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
 import { ObservationRenderer } from '@/lib/ai-ui/tools/badges/observation-renderer';
@@ -33,28 +34,52 @@ const getModelLabel = (model: unknown, modelRouting?: Array<{ upTo: number; mode
   return undefined;
 };
 
-// Hook to track elapsed time when active
+type ThresholdValue = number | { min: number; max: number };
+
+const getThresholdValue = (threshold: ThresholdValue | undefined, defaultValue: number) => {
+  if (!threshold) return defaultValue;
+  if (typeof threshold === 'number') return threshold;
+  return threshold.max;
+};
+
+const getBaseThresholdValue = (threshold: ThresholdValue | undefined, defaultValue: number) => {
+  if (!threshold) return defaultValue;
+  if (typeof threshold === 'number') return threshold;
+  return threshold.min;
+};
+
+const handleCopyKeyDown = (event: KeyboardEvent<HTMLDivElement>, onCopy: () => void) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  onCopy();
+};
+
 const useElapsedTime = (isActive: boolean) => {
-  const [elapsed, setElapsed] = useState(0);
+  const [state, setState] = useState({ isActive, elapsed: 0 });
   const startTimeRef = useRef<number | null>(null);
 
+  if (state.isActive !== isActive) {
+    startTimeRef.current = isActive ? Date.now() : null;
+    setState({ isActive, elapsed: 0 });
+  }
+
   useEffect(() => {
-    if (isActive) {
+    if (!isActive) return;
+
+    if (!startTimeRef.current) {
       startTimeRef.current = Date.now();
-      setElapsed(0);
-      const interval = setInterval(() => {
-        if (startTimeRef.current) {
-          setElapsed((Date.now() - startTimeRef.current) / 1000);
-        }
-      }, 100);
-      return () => clearInterval(interval);
-    } else {
-      startTimeRef.current = null;
-      setElapsed(0);
     }
+
+    const interval = setInterval(() => {
+      const startTime = startTimeRef.current;
+      if (!startTime) return;
+      setState(current => ({ ...current, elapsed: (Date.now() - startTime) / 1000 }));
+    }, 100);
+
+    return () => clearInterval(interval);
   }, [isActive]);
 
-  return elapsed;
+  return state.isActive === isActive ? state.elapsed : 0;
 };
 
 // Progress bar component with percent label inside bar
@@ -275,7 +300,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const isLoading = isStatusLoading || isOMLoading;
   const isEnabled = statusData?.observationalMemory?.enabled ?? false;
   const record = omData?.record;
-  const history = omData?.history ?? [];
 
   // Extract threshold values - try multiple sources in priority order:
   // 1. Stream progress (real-time during streaming)
@@ -347,21 +371,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     reflectionModelRouting,
   );
 
-  const getThresholdValue = (threshold: number | { min: number; max: number } | undefined, defaultValue: number) => {
-    if (!threshold) return defaultValue;
-    if (typeof threshold === 'number') return threshold;
-    return threshold.max; // Use max for progress display (adaptive budget)
-  };
-
-  const getBaseThresholdValue = (
-    threshold: number | { min: number; max: number } | undefined,
-    defaultValue: number,
-  ) => {
-    if (!threshold) return defaultValue;
-    if (typeof threshold === 'number') return threshold;
-    return threshold.min; // Use min for base threshold (configured value)
-  };
-
   // Check if adaptive mode is enabled (threshold is an object with min/max)
   const isAdaptiveMode = omAgentConfig?.messageTokens !== undefined && typeof omAgentConfig.messageTokens !== 'number';
 
@@ -396,10 +405,10 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
 
   // Show all previous observation records (exclude current active record), oldest first
   const previousObservations = useMemo(() => {
-    return history
+    return (omData?.history ?? [])
       .filter(h => h.id !== record?.id)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [history, record?.id]);
+  }, [omData?.history, record?.id]);
 
   // Format the observations for display
   const observations = useMemo(() => {
@@ -540,6 +549,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
           {/* Collapsible Observations Section */}
           <div className="border border-border1 rounded-lg bg-surface3 w-full overflow-hidden">
             <button
+              type="button"
               onClick={() => setIsExpanded(!isExpanded)}
               className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface4 transition-colors rounded-t-lg"
             >
@@ -571,6 +581,10 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                     ref={observationsContentRef}
                     className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs overflow-hidden w-full"
                     onClick={handleCopy}
+                    onKeyDown={event => handleCopyKeyDown(event, handleCopy)}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Copy observations"
                   >
                     <ObservationRenderer
                       observations={observations}
@@ -595,6 +609,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
           {previousObservations.length > 0 && (
             <div className="border-t border-border1 pt-3">
               <button
+                type="button"
                 onClick={() => setShowHistory(!showHistory)}
                 className="flex items-center gap-2 text-xs text-neutral3 hover:text-neutral5 transition-colors"
               >
@@ -608,6 +623,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
                     return (
                       <div key={historyRecord.id} className="border border-border1 rounded-lg bg-surface2">
                         <button
+                          type="button"
                           onClick={() => toggleReflection(historyRecord.id)}
                           className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface3 transition-colors rounded-lg"
                         >

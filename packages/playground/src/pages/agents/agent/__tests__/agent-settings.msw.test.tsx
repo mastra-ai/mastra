@@ -62,6 +62,15 @@ afterEach(() => {
 });
 
 describe('Agent settings view', () => {
+  it('keeps the redesigned route shell visible while the agent record is loading', () => {
+    useDefaultHandlers();
+    renderSettingsRoute();
+
+    expect(screen.getByTestId('agent-route-skeleton')).not.toBeNull();
+    expect(screen.getByTestId('agent-route-sidebar-skeleton')).not.toBeNull();
+    expect(screen.getByTestId('agent-settings-skeleton')).not.toBeNull();
+  });
+
   it('renders the full-zone settings view with the agent overview by default', async () => {
     useDefaultHandlers();
     renderSettingsRoute();

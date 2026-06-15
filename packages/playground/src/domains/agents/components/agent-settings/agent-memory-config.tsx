@@ -199,6 +199,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
         {configSections.map(section => (
           <div key={section.title} className="border border-border1 rounded-lg bg-surface3">
             <button
+              type="button"
               onClick={() => toggleSection(section.title)}
               className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface4 transition-colors rounded-t-lg"
             >

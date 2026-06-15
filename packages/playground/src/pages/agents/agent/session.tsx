@@ -4,6 +4,7 @@ import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { SessionHeader } from '@/components/session-header';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
+import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
@@ -48,7 +49,7 @@ function AgentSession() {
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
   if (isAgentLoading) {
-    return null;
+    return <AgentSessionLoadingSkeleton />;
   }
 
   if (!agent) {
@@ -112,3 +113,12 @@ function AgentSession() {
 }
 
 export default AgentSession;
+
+const AgentSessionLoadingSkeleton = () => (
+  <MainContentLayout>
+    <SessionHeader />
+    <div className="grid overflow-y-auto relative h-full pt-6" data-testid="agent-session-skeleton" aria-busy="true">
+      <AgentChatLoadingSkeleton />
+    </div>
+  </MainContentLayout>
+);

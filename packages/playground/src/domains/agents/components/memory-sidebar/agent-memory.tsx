@@ -85,7 +85,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         }
       }
     },
-    [agentId, threadId, navigate],
+    [agentId, threadId, navigate, paths],
   );
 
   const searchScope = searchMemoryData?.searchScope;

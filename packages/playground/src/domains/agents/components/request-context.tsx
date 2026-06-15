@@ -207,8 +207,8 @@ export const RequestContext = ({ editorClassName = 'h-[400px]' }: RequestContext
         <div className="flex justify-end gap-2 pt-2">
           {isRequestContextDirty && (
             <Button
-              variant="ghost"
-              size="icon-sm"
+              variant="default"
+              size="icon-md"
               type="button"
               tooltip="Revert request context changes"
               onClick={handleRevertRequestContext}

@@ -11,7 +11,8 @@ import {
   cn,
 } from '@mastra/playground-ui';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
-import React, { useState } from 'react';
+import { useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
 import { CodeDisplay } from './code-display';
 import { useMemoryConfig } from '@/domains/memory/hooks';
@@ -35,12 +36,20 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     text: workingMemoryData ?? '',
     copyMessage: 'Working memory copied!',
   });
-  const [editValue, setEditValue] = useState<string>(workingMemoryData ?? '');
+  const [editState, setEditState] = useState({
+    source: workingMemoryData,
+    value: workingMemoryData ?? '',
+  });
   const [isEditing, setIsEditing] = useState(false);
+  const handleCopyKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    handleCopy();
+  };
 
-  React.useEffect(() => {
-    setEditValue(workingMemoryData ?? '');
-  }, [workingMemoryData]);
+  if (editState.source !== workingMemoryData) {
+    setEditState({ source: workingMemoryData, value: workingMemoryData ?? '' });
+  }
 
   if (isLoading || isConfigLoading) {
     return <Skeleton className="h-32 w-full" />;
@@ -94,6 +103,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                           <div
                             className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs"
                             onClick={handleCopy}
+                            onKeyDown={handleCopyKeyDown}
+                            role="button"
+                            tabIndex={0}
+                            aria-label="Copy working memory"
                           >
                             <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
                             {isCopied && (
@@ -119,9 +132,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           ) : (
             <textarea
               className="w-full min-h-[150px] p-3 border border-border1 rounded-lg bg-surface3 font-mono text-sm text-neutral5 resize-none"
-              value={editValue}
-              onChange={e => setEditValue(e.target.value)}
+              value={editState.value}
+              onChange={e => setEditState(state => ({ ...state, value: e.target.value }))}
               disabled={isUpdating}
+              aria-label="Working memory content"
               placeholder="Enter working memory content..."
             />
           )}
@@ -131,11 +145,14 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 {!threadExists ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span tabIndex={0}>
-                        <Button disabled className="text-xs pointer-events-none">
-                          Edit Working Memory
-                        </Button>
-                      </span>
+                      <Button
+                        type="button"
+                        aria-disabled="true"
+                        onClick={event => event.preventDefault()}
+                        className="text-xs cursor-not-allowed opacity-50"
+                      >
+                        Edit Working Memory
+                      </Button>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>Working memory will be available after the agent calls updateWorkingMemory</p>
@@ -152,7 +169,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 <Button
                   onClick={async () => {
                     try {
-                      await updateWorkingMemory(editValue);
+                      await updateWorkingMemory(editState.value);
                       setIsEditing(false);
                     } catch (error) {
                       console.error('Failed to update working memory:', error);
@@ -166,7 +183,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 </Button>
                 <Button
                   onClick={() => {
-                    setEditValue(workingMemoryData ?? '');
+                    setEditState({ source: workingMemoryData, value: workingMemoryData ?? '' });
                     setIsEditing(false);
                   }}
                   disabled={isUpdating}

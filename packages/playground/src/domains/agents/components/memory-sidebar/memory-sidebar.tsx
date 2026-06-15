@@ -95,7 +95,7 @@ export function MemorySidebar({
               'flex min-h-0 flex-col overflow-hidden border transition-all duration-normal ease-out-custom',
               showMemory
                 ? 'm-0 rounded-none border-transparent bg-surface3'
-                : 'm-2 rounded-lg border-border1 bg-surface4',
+                : 'm-2 rounded-studio-panel border-border1/40 bg-surface4',
             )}
             // flex-basis stays `auto` so the collapsed card hugs its content;
             // only flex-grow animates, which is what produces the expansion.
@@ -108,12 +108,13 @@ export function MemorySidebar({
               data-testid="memory-sidebar-card"
               className={cn(
                 'group/memory-card shrink-0 px-3 py-2.5 text-left transition-colors duration-normal',
+                !showMemory && 'rounded-studio-panel',
                 !showMemory && 'hover:bg-surface5',
               )}
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5 text-neutral6">
-                  <MemoryIcon className="h-4 w-4 shrink-0 text-accent1" />
+                  <MemoryIcon className="h-4 w-4 shrink-0" />
                   <Txt as="span" variant="ui-sm" className="font-medium">
                     Memory
                   </Txt>
