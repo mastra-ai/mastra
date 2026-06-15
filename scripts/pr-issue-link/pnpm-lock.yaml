@@ -13,8 +13,8 @@ importers:
         version: 5.0.5
     devDependencies:
       '@types/node':
-        specifier: 22.19.15
-        version: 22.19.15
+        specifier: 22.19.21
+        version: 22.19.21
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
@@ -290,8 +290,8 @@ packages:
   '@types/aws-lambda@8.10.162':
     resolution: {integrity: sha512-Fn658grtLOci1oxi1391vvDWJRKNGWRSqfxRkmN/Iy3c0tQH1USMKEXcPYHLvope+ZgTFocx9FRQJx1muBL6qw==}
 
-  '@types/node@22.19.15':
-    resolution: {integrity: sha512-F0R/h2+dsy5wJAUe3tAU6oqa2qbWY5TpNfL/RGmo1y38hiyO1w3x2jPtt76wmuaJI4DQnOBu21cNXQ2STIUUWg==}
+  '@types/node@22.19.21':
+    resolution: {integrity: sha512-VMeFBSCKQKmm2swI2kW51SFusDqekC6q9trBCvJ/JliDchFSuoYYKN7yVNjPthP1HKZcx3U1gI/wTcEBjEFKTA==}
 
   before-after-hook@4.0.0:
     resolution: {integrity: sha512-q6tR3RPqIB1pMiTRMFcZwuG5T8vwp+vUvEG0vuI6B+Rikh5BfPp2fQ82c925FOs+b0lcFQ8CFrL+KbilfZFhOQ==}
@@ -573,7 +573,7 @@ snapshots:
 
   '@types/aws-lambda@8.10.162': {}
 
-  '@types/node@22.19.15':
+  '@types/node@22.19.21':
     dependencies:
       undici-types: 6.21.0
 
