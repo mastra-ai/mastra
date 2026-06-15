@@ -20,7 +20,7 @@
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 
-import { Agent } from '@mastra/core/agent';
+import type { Agent } from '@mastra/core/agent';
 // AgentThreadStreamRuntime isn't part of the public surface yet; we reach into
 // the source directly via the workspace path. This worker is test infra only.
 import { AgentThreadStreamRuntime } from '../../../packages/core/src/agent/thread-stream-runtime';

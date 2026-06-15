@@ -306,7 +306,7 @@ agent.sendMessage('Continue with the next step.', {
 })
 ```
 
-Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory.
+Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, ownerStream?: Promise<MastraModelOutput | undefined> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory. `ownerStream` resolves to the agent stream when this process wins the thread lease and is running the agent, or `undefined` when another process owns the run.
 
 ### `queueMessage(message, options)`
 
@@ -319,7 +319,7 @@ agent.queueMessage('Also check whether the tests need updates.', {
 })
 ```
 
-`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`.
+`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, ownerStream?: Promise<MastraModelOutput | undefined> }`.
 
 ### `sendSignal(signal, options)`
 
@@ -426,7 +426,7 @@ Sends a signal to an active run or memory thread.
 ]}
 />
 
-Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory.
+Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, ownerStream?: Promise<MastraModelOutput | undefined> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory. `ownerStream` resolves to the agent stream when this process wins the thread lease and is running the agent, or `undefined` when another process owns the run.
 
 ### `sendStateSignal(state, options)`
 
@@ -521,7 +521,7 @@ const result = await agent.sendStateSignal(
 ]}
 />
 
-Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, skipped?: false }` when Mastra accepts new state. Returns `{ accepted: true, skipped: true, reason: 'unchanged' }` when the same `cacheKey` and mode are already current for the state lane.
+Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, ownerStream?: Promise<MastraModelOutput | undefined>, skipped?: false }` when Mastra accepts new state. Returns `{ accepted: true, skipped: true, reason: 'unchanged' }` when the same `cacheKey` and mode are already current for the state lane. `ownerStream` resolves to the agent stream when this process wins the thread lease and is running the agent, or `undefined` when another process owns the run.
 
 ### `sendNotificationSignal(notification, options)`
 
@@ -653,7 +653,7 @@ const result = await agent.sendNotificationSignal(
 ]}
 />
 
-Returns `{ accepted: true, record: NotificationRecord, decision: NotificationDeliveryDecision, runId?: string, signal?: CreatedAgentSignal, persisted?: Promise<void> }`. `record` is the stored inbox record. `decision` is the delivery-policy result. `signal` and `runId` are present when ingress emits a signal immediately, including the immediate summary emitted for active high-priority notifications. `persisted` is present when the emitted signal is persisted without waking an idle thread.
+Returns `{ accepted: true, record: NotificationRecord, decision: NotificationDeliveryDecision, runId?: string, signal?: CreatedAgentSignal, persisted?: Promise<void>, ownerStream?: Promise<MastraModelOutput | undefined> }`. `record` is the stored inbox record. `decision` is the delivery-policy result. `signal` and `runId` are present when ingress emits a signal immediately, including the immediate summary emitted for active high-priority notifications. `persisted` is present when the emitted signal is persisted without waking an idle thread. `ownerStream` resolves to the agent stream when this process wins the thread lease and is running the agent, or `undefined` when another process owns the run.
 
 Default delivery is priority-aware. `urgent` notifications deliver immediately. `high` notifications deliver immediately when the thread is idle; when the thread is active, Mastra emits a summary immediately and keeps `deliverAt` for later full delivery when the thread is idle. `medium` notifications deliver immediately when idle and batch into summaries when active. `low` notifications batch into summaries in both active and idle threads; idle low-priority summaries reach subscribers without waking the model loop. For the full flow, visit [Signals](/docs/agents/signals#notification-signals).
 

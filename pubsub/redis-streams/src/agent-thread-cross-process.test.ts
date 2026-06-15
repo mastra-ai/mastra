@@ -16,7 +16,8 @@ import type { ChildProcess } from 'node:child_process';
 import { resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { flushRedis, REDIS_URL, waitFor, waitForLine, type ManagedProcess } from '../test-fixtures/harness';
+import { flushRedis, REDIS_URL, waitFor, waitForLine } from '../test-fixtures/harness';
+import type { ManagedProcess } from '../test-fixtures/harness';
 
 const PACKAGE_DIR = resolve(__dirname, '..');
 const TSX_BIN = resolve(PACKAGE_DIR, 'node_modules/.bin/tsx');

@@ -737,6 +737,9 @@ export class AgentThreadStreamRuntime {
         if (state.activeThreadRunIds.get(key) === pending.runId) {
           state.activeThreadRunIds.delete(key);
         }
+        // Release the cross-process lease so another process can wake the
+        // thread; if no lease was held, this is a no-op.
+        this.#releaseThreadLease(pubsub, key, pending.runId);
         this.#publish(pubsub, key, {
           type: 'run-failed',
           runId: pending.runId,
@@ -819,6 +822,9 @@ export class AgentThreadStreamRuntime {
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
+      // Release the cross-process lease so another process can wake the
+      // thread; if no lease was held, this is a no-op.
+      this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: pendingIdle.runId,
@@ -1487,14 +1493,17 @@ export class AgentThreadStreamRuntime {
         state.threadKeysByRunId.delete(reservedRunId);
 
         // Forward the user signal to the winning runId so the message is not dropped.
+        // Await the publish so that callers using ownerStream resolution as their
+        // "safe to exit" boundary (e.g. a serverless Lambda holding the request open
+        // via waitUntil) don't tear down before the enqueue lands on the broker.
         const winnerRunId = lease.owner;
         if (winnerRunId) {
-          this.#publish(pubsub, reservedKey, {
+          await this.#publishAndWait(pubsub, reservedKey, {
             type: 'signal-enqueued',
             runId: winnerRunId,
             signal: this.#serializeSignal(signal),
             sourceId: this.#getSourceId(),
-          });
+          }).catch(() => {});
         }
         return undefined;
       }
