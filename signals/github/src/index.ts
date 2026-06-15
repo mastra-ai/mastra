@@ -1053,8 +1053,18 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   }
 
   override __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
+    if (this.#ghMastra === (mastra as unknown)) return;
     super.__registerMastra(mastra);
     this.#ghMastra = mastra as unknown as GithubSignalsMastra;
+    // Propagate Mastra to the connected agent so sendNotificationSignal has
+    // storage access.  When GithubSignals is wired via `signals: [...]`, the
+    // agent that called `connect()` may not yet have been registered with a
+    // Mastra instance (e.g. in Harness where only forked agents get registered).
+    if (this.#agent && typeof (this.#agent as any).__registerMastra === 'function') {
+      if (!(this.#agent as any).getMastraInstance?.()) {
+        (this.#agent as any).__registerMastra(mastra);
+      }
+    }
   }
 
   async syncThreadNow(input: GithubPollingThread): Promise<number> {
@@ -1780,19 +1790,12 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       sent.push(notification);
     }
     if (notificationInputs.length > 0) {
-      try {
-        const target = { resourceId: input.polling.resourceId, threadId: input.polling.threadId };
-        const streamOptions = await this.#agentOptions.getNotificationStreamOptions?.(target);
-        await agent.sendNotificationSignal(
-          notificationInputs,
-          streamOptions ? { ...target, ifIdle: { streamOptions } } : target,
-        );
-      } catch (error) {
-        console.warn(
-          `GitHub Signals: activity notification failed for ${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}:`,
-          error instanceof Error ? error.message : error,
-        );
-      }
+      const target = { resourceId: input.polling.resourceId, threadId: input.polling.threadId };
+      const streamOptions = await this.#agentOptions.getNotificationStreamOptions?.(target);
+      await agent.sendNotificationSignal(
+        notificationInputs,
+        streamOptions ? { ...target, ifIdle: { streamOptions } } : target,
+      );
     }
     return sent;
   }
@@ -1877,19 +1880,12 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     });
     this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
     if (baselineSnapshot) {
-      try {
-        await this.#sendBaselineNotification({
-          threadId: input.threadId!,
-          resourceId: input.resourceId!,
-          subscription,
-          snapshot: baselineSnapshot,
-        });
-      } catch (error) {
-        console.warn(
-          `GitHub Signals: baseline notification failed for ${owner}/${repo}#${input.number}:`,
-          error instanceof Error ? error.message : error,
-        );
-      }
+      await this.#sendBaselineNotification({
+        threadId: input.threadId!,
+        resourceId: input.resourceId!,
+        subscription,
+        snapshot: baselineSnapshot,
+      });
     }
     await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
 

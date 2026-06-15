@@ -744,6 +744,84 @@ describe('GithubSignals', () => {
     });
   });
 
+  it('propagates Mastra to agent connected via connect() so sendNotificationSignal has storage access', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-connect-mastra',
+      resourceId: 'resource-connect-mastra',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const threadStore = createThreadStore(thread);
+    const snapshot: GithubPullRequestSnapshot = {
+      title: 'Test PR',
+      state: 'open',
+      githubUpdatedAt: '2026-01-01T00:00:00.000Z',
+      contentHash: 'hash-1',
+    };
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => snapshot),
+    };
+    // Mock agent that simulates the real connect() flow: starts without Mastra,
+    // gets it propagated via __registerMastra.
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    let agentMastra: unknown = undefined;
+    const mockAgent = {
+      sendSignal: vi.fn(),
+      sendNotificationSignal,
+      getMastraInstance: () => agentMastra,
+      __registerMastra: vi.fn((mastra: unknown) => {
+        agentMastra = mastra;
+      }),
+    };
+
+    const processor = new GithubSignals({ threadStore, syncClient });
+    // Simulate what Agent constructor does: connect() stores the agent reference
+    processor.connect(mockAgent as any);
+    // Simulate what Harness does later: __registerMastra propagates Mastra to signals
+    const mockMastra = { getStorage: vi.fn(), getAgentById: vi.fn() };
+    processor.__registerMastra(mockMastra as any);
+
+    // Agent should now have Mastra registered
+    expect(mockAgent.__registerMastra).toHaveBeenCalledWith(mockMastra);
+    expect(agentMastra).toBe(mockMastra);
+
+    // Subscribe should successfully call sendNotificationSignal
+    const signal = createSignal(
+      GithubSignals.signals.subscribeToPR({ owner: 'mastra-ai', repo: 'mastra', number: 999 }),
+    );
+    const messageList = new MessageList({ threadId: thread.id, resourceId: thread.resourceId });
+    messageList.add([signal.toDBMessage({ threadId: thread.id, resourceId: thread.resourceId })], 'input');
+
+    await runGithubSignalsProcessor({
+      processor,
+      messageList,
+      requestContext: createRequestContext(thread),
+    });
+
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'github', kind: 'pull-request-baseline' }),
+      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
+    );
+  });
+
+  it('does not re-register Mastra on agent that already has one', async () => {
+    const existingMastra = { getStorage: vi.fn(), getAgentById: vi.fn() };
+    const mockAgent = {
+      sendSignal: vi.fn(),
+      sendNotificationSignal: vi.fn(),
+      getMastraInstance: () => existingMastra,
+      __registerMastra: vi.fn(),
+    };
+
+    const processor = new GithubSignals({ threadStore: createThreadStore({} as any) });
+    processor.connect(mockAgent as any);
+    processor.__registerMastra({ getStorage: vi.fn(), getAgentById: vi.fn() } as any);
+
+    // Should not overwrite the agent's existing Mastra
+    expect(mockAgent.__registerMastra).not.toHaveBeenCalled();
+  });
+
   it('resolves owner and repo from the project when the signal only carries a PR number', async () => {
     const thread: StorageThreadType = {
       id: 'thread-2',
