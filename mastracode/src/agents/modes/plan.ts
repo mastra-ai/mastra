@@ -1,17 +1,13 @@
 /**
- * Plan subagent — read-only analysis and planning.
- *
- * This subagent is given a task to analyze and produces a structured
- * implementation plan. It can read the codebase to understand existing
- * patterns and architecture, but cannot modify anything.
+ * Plan mode — read-only analysis and planning.
  */
-import type { HarnessSubagent } from '@mastra/core/harness';
+import type { HarnessMode } from '@mastra/core/harness';
 
-import { MC_TOOLS } from '../../tool-names.js';
-
-export const planSubagent: HarnessSubagent = {
+export const planMode: HarnessMode = {
   id: 'plan',
   name: 'Plan',
+  transitionsTo: 'build',
+  defaultModelId: 'openai/gpt-5.5',
   description:
     "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
   instructions: `You are an expert software architect and planner. Your job is to analyze a codebase and produce a detailed implementation plan for a given task.
@@ -42,5 +38,8 @@ Structure your plan as:
 . **Risks**: Potential issues or edge cases (if any)
 
 Be specific about code locations (file paths, function names, line numbers). Keep the plan actionable and under 500 words.`,
-  allowedWorkspaceTools: [MC_TOOLS.VIEW, MC_TOOLS.SEARCH_CONTENT, MC_TOOLS.FIND_FILES],
+
+  metadata: {
+    default: false,
+  },
 };

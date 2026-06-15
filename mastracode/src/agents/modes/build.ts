@@ -5,11 +5,11 @@
  * read and write tools to complete it. It can modify files, run commands,
  * and perform actual development work within a constrained scope.
  */
-import type { HarnessSubagent } from '@mastra/core/harness';
+import type { HarnessMode } from '@mastra/core/harness';
 
-export const executeSubagent: HarnessSubagent = {
-  id: 'execute',
-  name: 'Execute',
+export const buildMode: HarnessMode = {
+  id: 'build',
+  name: 'Build',
   description:
     "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
   instructions: `You are a focused execution agent. Your job is to complete a specific, well-defined task by making the necessary changes to the codebase.
@@ -44,4 +44,8 @@ End with a structured summary:
 . **Changes**: Files modified/created
 . **Verification**: How you verified it works
 . **Notes**: Follow-up needed (if any)`,
+  defaultModelId: 'openai/gpt-5.5',
+  metadata: {
+    default: true,
+  },
 };

@@ -2,7 +2,8 @@ import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import type { PubSub } from '../events/pubsub';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
@@ -42,31 +43,72 @@ export interface HeartbeatHandler {
  * Configuration for a single agent mode within the harness.
  * Each mode represents a different "personality" or capability set.
  */
-export interface HarnessMode<TState> {
-  /** Unique identifier for this mode (e.g., "plan", "build", "review") */
+interface HarnessModeBase {
+  /** Unique within `HarnessConfig.modes`. Validated at construction. */
   id: string;
 
-  /** Human-readable name for display */
   name?: string;
 
-  /** Whether this is the default mode when harness starts */
+  /** bootstrap model default when a session enters this mode. */
+  defaultModelId?: string;
+
+  /** Surfaced in mode pickers / Studio UI. Free text. */
+  description?: string;
+
+  /**
+   * Layered above the backing agent's own instructions for the duration
+   * of this mode. Plain text by design — modes carve operating profile,
+   * not full system-message overrides.
+   */
+  instructions?: string;
+
+  /** @deprecated Use HarnessConfig.agent as the shared backing agent. */
+  agent?: Agent<any, any, any, any>;
+
+  /** @deprecated Prefer metadata.default. */
   default?: boolean;
 
   /**
-   * Default model ID for this mode (e.g., "anthropic/claude-sonnet-4-20250514").
-   * Used when no per-mode model has been explicitly selected.
+   * Optional plan→build target. When `submit_plan` runs in this mode, the
+   * registered `PendingResume` freezes this value as `transitionModeId`.
+   * On approval, the session flips to this mode
+   * idempotently (§5.1, §5.7). If unset, plan approval resumes with no
+   * mode change. Must reference another mode's `id`.
    */
-  defaultModelId?: string;
-
-  /** Hex color for the mode indicator (e.g., "#7c3aed") */
-  color?: string;
+  transitionsTo?: string;
 
   /**
-   * The agent for this mode.
-   * Can be a static Agent or a function that receives harness state.
+   * Arbitrary user-defined metadata. `metadata.default === true` is a
+   * reserved harness hint for choosing the default mode when `defaultModeId`
+   * is unset; all other metadata is pass-through and unvalidated. Use for UI
+   * affordances like display color, icon, display name overrides, or any
+   * per-mode configuration that isn't part of the harness's own contract.
+   *
+   * Surfaced verbatim on `getCurrentMode()` and `listModes()`.
    */
-  agent: Agent | ((state: TState) => Agent);
+  metadata?: Record<string, unknown>;
 }
+
+type HarnessModeToolOverrides =
+  | {
+      /**
+       * The tool set this mode runs with. **Replaces** the backing agent's
+       * tools — the agent's own tools are hidden for the duration of the
+       * mode. Mutually exclusive with `additionalTools`.
+       */
+      tools?: ToolsInput;
+      additionalTools?: never;
+    }
+  | {
+      tools?: never;
+      /**
+       * Tools layered on top of the backing agent's tools. The agent's tools
+       * stay; these are added. Mutually exclusive with `tools`.
+       */
+      additionalTools?: ToolsInput;
+    };
+
+export type HarnessMode = HarnessModeBase & HarnessModeToolOverrides;
 
 // =============================================================================
 // Subagents
@@ -179,7 +221,15 @@ export interface HarnessConfig<TState = {}> {
   memory?: DynamicArgument<MastraMemory>;
 
   /** Available agent modes */
-  modes: HarnessMode<TState>[];
+  modes: HarnessMode[];
+
+  /** Shared backing agent that each mode forks and decorates. */
+  agent?: Agent<any, any, any, any>;
+
+  /** Default mode to enter when a thread has no persisted mode. */
+  defaultModeId?: string;
+
+  instructions?: string;
 
   /**
    * Tools available to all agents across all modes.
@@ -248,10 +298,16 @@ export interface HarnessConfig<TState = {}> {
   subagents?: HarnessSubagent[];
 
   /**
-   * Converts a model ID string (e.g., "anthropic/claude-sonnet-4-20250514") to a
-   * language model instance. Used by subagents and OM model resolution.
+   * Model gateways registered on Harness' internal Mastra instance.
+   * Apps that need gateway-backed model resolution should provide `resolveModel`.
    */
-  resolveModel?: (modelId: string) => MastraLanguageModel;
+  gateways?: MastraModelGatewayInterface[];
+
+  /**
+   * Converts a model ID string (e.g., "anthropic/claude-sonnet-4-20250514") to a
+   * language model instance for Harness-managed observer, reflector, and subagent models.
+   */
+  resolveModel?: (modelId: string) => MastraModelConfig;
 
   /**
    * Observational Memory configuration defaults.

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Agent } from '../agent';
+import { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
@@ -79,6 +79,34 @@ type HarnessStreamState = {
    */
   terminalError?: string;
 };
+
+function validateModes(modes: HarnessMode[]): void {
+  const modeIds = new Set<string>();
+
+  for (const mode of modes) {
+    if (modeIds.has(mode.id)) {
+      throw new Error(`Duplicate mode id "${mode.id}" found when creating the Harness`);
+    }
+
+    modeIds.add(mode.id);
+
+    const modeRecord = mode as unknown as { id: string; tools?: unknown; additionalTools?: unknown };
+    if (modeRecord.tools && modeRecord.additionalTools) {
+      throw new Error(
+        `Mode "${modeRecord.id}" cannot set both "tools" and "additionalTools" - choose replace OR augment`,
+      );
+    }
+  }
+
+  for (const mode of modes) {
+    if (mode.transitionsTo === mode.id) {
+      throw new Error(`Mode "${mode.id}" transitionsTo cannot reference itself`);
+    }
+    if (mode.transitionsTo && !modeIds.has(mode.transitionsTo)) {
+      throw new Error(`Mode "${mode.id}" transitionsTo references unknown mode "${mode.transitionsTo}"`);
+    }
+  }
+}
 
 type HarnessSendNotificationSignalOptions = {
   ifActive?: SendAgentNotificationSignalOptions['ifActive'];
@@ -455,13 +483,18 @@ export class Harness<TState = {}> {
   private switchModeVersion: number = 0;
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
+  readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
+  #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
   constructor(config: HarnessConfig<TState>) {
+    validateModes(config.modes);
+
     this.id = config.id;
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
     this.defaultResourceId = this.resourceId;
+    this.#instructions = config.instructions;
 
     // Convert PublicSchema to StandardSchemaWithJSON at the boundary
     this.stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
@@ -472,10 +505,15 @@ export class Harness<TState = {}> {
       ...config.initialState,
     } as TState;
 
-    // Find default mode
-    const defaultMode = config.modes.find(m => m.default) ?? config.modes[0];
+    const defaultMode = config.defaultModeId
+      ? config.modes.find(mode => mode.id === config.defaultModeId)
+      : (config.modes.find(mode => mode.default || mode.metadata?.default === true) ?? config.modes[0]);
     if (!defaultMode) {
-      throw new Error('Harness requires at least one agent mode');
+      throw new Error(
+        config.defaultModeId
+          ? `Default mode not found: ${config.defaultModeId}`
+          : 'Harness requires at least one agent mode',
+      );
     }
     this.currentModeId = defaultMode.id;
 
@@ -521,8 +559,7 @@ export class Harness<TState = {}> {
     this.browserFn = undefined;
 
     for (const mode of this.config.modes) {
-      const agent = typeof mode.agent === 'function' ? null : mode.agent;
-      if (!agent || agent.hasOwnBrowser()) continue;
+      const agent = this.getAgentForMode(mode);
       agent.setBrowser(browser);
     }
   }
@@ -541,11 +578,17 @@ export class Harness<TState = {}> {
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
     if (this.config.storage) {
+      const enabledGateways = this.config.gateways?.filter(gateway => gateway.shouldEnable?.() ?? true);
+      const gateways = enabledGateways?.length
+        ? Object.fromEntries(enabledGateways.map(gateway => [gateway.id, gateway]))
+        : undefined;
+
       this.#internalMastra = new Mastra({
         logger: false,
         storage: this.config.storage,
         ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
+        ...(gateways ? { gateways } : {}),
       });
       await this.#internalMastra.getStorage()!.init();
     }
@@ -579,8 +622,7 @@ export class Harness<TState = {}> {
 
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub to mode agents (after workspace init)
     for (const mode of this.config.modes) {
-      const agent = typeof mode.agent === 'function' ? null : mode.agent;
-      if (!agent) continue;
+      const agent = this.getAgentForMode(mode);
       this.propagateRuntimeServicesToAgent(agent);
     }
 
@@ -713,7 +755,7 @@ export class Harness<TState = {}> {
   // Mode Management
   // ===========================================================================
 
-  listModes(): HarnessMode<TState>[] {
+  listModes(): HarnessMode[] {
     return this.config.modes;
   }
 
@@ -721,7 +763,7 @@ export class Harness<TState = {}> {
     return this.currentModeId;
   }
 
-  getCurrentMode(): HarnessMode<TState> {
+  getCurrentMode(): HarnessMode {
     const mode = this.config.modes.find(m => m.id === this.currentModeId);
     if (!mode) {
       throw new Error(`Mode not found: ${this.currentModeId}`);
@@ -816,6 +858,47 @@ export class Harness<TState = {}> {
     return agent;
   }
 
+  private getAgentForMode(mode: HarnessMode): Agent<any, any, any, any> {
+    if (!this.#legacyAgentMode[mode.id]) {
+      const instructions = [this.#instructions ?? '', mode.instructions].filter(Boolean).join('\n');
+      const modeTools = {
+        ...mode.tools,
+        ...mode.additionalTools,
+      };
+
+      if (mode.agent) {
+        this.#legacyAgentMode[mode.id] = mode.agent;
+      } else if (this.config.agent) {
+        const forkedAgent = this.config.agent.__fork();
+        if (instructions) {
+          forkedAgent.__updateInstructions(instructions);
+        }
+        if (mode.tools || mode.additionalTools) {
+          forkedAgent.__setTools(modeTools as any);
+        }
+        this.#legacyAgentMode[mode.id] = forkedAgent;
+      } else {
+        if (!mode.defaultModelId) {
+          throw new Error(`Mode ${mode.id} requires a defaultModelId when no backing agent is configured`);
+        }
+
+        const model = this.config.resolveModel ? this.config.resolveModel(mode.defaultModelId) : mode.defaultModelId;
+        const forkedAgent = new Agent({
+          id: `${this.id}-agent`,
+          name: `Harness ${this.id} agent`,
+          model,
+          instructions,
+          // TODO move to permissions and global tools
+          tools: modeTools,
+        });
+
+        this.#legacyAgentMode[mode.id] = forkedAgent;
+      }
+    }
+
+    return this.#legacyAgentMode[mode.id]!;
+  }
+
   /**
    * Get the agent for the current mode.
    */
@@ -828,8 +911,8 @@ export class Harness<TState = {}> {
    */
   getCurrentAgent(): Agent {
     const mode = this.getCurrentMode();
-    const agent = typeof mode.agent === 'function' ? mode.agent(this.state) : mode.agent;
-    return this.propagateRuntimeServicesToAgent(agent);
+
+    return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
   }
 
   /**
@@ -891,55 +974,36 @@ export class Harness<TState = {}> {
 
   /**
    * Check if the current model's provider has authentication configured.
-   * Uses the provider registry's `apiKeyEnvVar` and the optional `modelAuthChecker` hook.
+   * Uses app-provided catalog/auth hooks; Harness does not resolve gateway auth itself.
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
     const modelId = this.getCurrentModelId();
+    if (!modelId) return { hasAuth: true };
 
     try {
       const availableModels = await this.listAvailableModels();
       const currentModel = availableModels.find(model => model.id === modelId);
       if (currentModel) {
-        if (currentModel.hasApiKey) {
-          return { hasAuth: true };
-        }
-        return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
+        return {
+          hasAuth: currentModel.hasApiKey,
+          apiKeyEnvVar: currentModel.hasApiKey ? undefined : currentModel.apiKeyEnvVar,
+        };
       }
     } catch {
       // Ignore catalog lookup errors and fall through to provider-based checks.
     }
 
-    const provider = modelId.split('/')[0];
-    if (!provider) return { hasAuth: true };
-
-    if (this.config.modelAuthChecker) {
+    const provider = modelId.split('/', 1)[0];
+    if (this.config.modelAuthChecker && provider) {
       const result = this.config.modelAuthChecker(provider);
-      if (result === true) return { hasAuth: true };
-      if (result === false) {
-        const apiKeyEnvVar = await this.getProviderApiKeyEnvVar(provider);
-        return { hasAuth: false, apiKeyEnvVar };
-      }
+      if (result !== undefined) return { hasAuth: result };
     }
 
-    try {
-      const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
-      const registry = PROVIDER_REGISTRY as Record<string, { apiKeyEnvVar?: string | string[] }>;
-      const providerConfig = registry[provider];
-      const envVars = providerConfig?.apiKeyEnvVar;
-      const apiKeyEnvVar = Array.isArray(envVars) ? envVars[0] : envVars;
-      if (apiKeyEnvVar && process.env[apiKeyEnvVar]) {
-        return { hasAuth: true };
-      }
-      return { hasAuth: false, apiKeyEnvVar: apiKeyEnvVar || undefined };
-    } catch {
-      return { hasAuth: true };
-    }
+    return { hasAuth: true };
   }
 
   /**
-   * Get all available models from the provider registry with auth status.
-   * Uses the optional `modelAuthChecker`, `modelUseCountProvider`, and
-   * `customModelCatalogProvider` hooks.
+   * Get available models from the app-provided catalog hook with use counts applied.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
     const now = Date.now();
@@ -947,93 +1011,43 @@ export class Harness<TState = {}> {
       return this.availableModelsCache;
     }
 
-    try {
-      const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
+    const useCounts = this.config.modelUseCountProvider?.() ?? {};
+    const modelsById = new Map<string, AvailableModel>();
 
-      if (!PROVIDER_REGISTRY) return [];
+    const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
+      if (!model.id || !model.provider || !model.modelName) return;
+      modelsById.set(model.id, {
+        ...model,
+        useCount: useCounts[model.id] ?? 0,
+      });
+    };
 
-      const registry = PROVIDER_REGISTRY as Record<
-        string,
-        { models?: string[]; name?: string; apiKeyEnvVar?: string | string[] }
-      >;
-      const providers = Object.keys(registry);
-      const useCounts = this.config.modelUseCountProvider?.() ?? {};
-      const modelsById = new Map<string, AvailableModel>();
-
-      const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
-        if (!model.id || !model.provider || !model.modelName) return;
-        modelsById.set(model.id, {
-          ...model,
-          useCount: useCounts[model.id] ?? 0,
-        });
-      };
-
-      for (const provider of providers) {
-        const providerConfig = registry[provider];
-        const envVars = providerConfig?.apiKeyEnvVar;
-        const apiKeyEnvVar = Array.isArray(envVars) ? envVars[0] : envVars;
-        const hasEnvKey = apiKeyEnvVar ? !!process.env[apiKeyEnvVar] : false;
-
-        let hasApiKey = hasEnvKey;
-        if (!hasApiKey && this.config.modelAuthChecker) {
-          const customAuth = this.config.modelAuthChecker(provider);
-          if (customAuth === true) hasApiKey = true;
+    if (this.config.customModelCatalogProvider) {
+      try {
+        const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
+        for (const model of customModels) {
+          upsertModel({
+            id: model.id,
+            provider: model.provider,
+            modelName: model.modelName,
+            hasApiKey: model.hasApiKey,
+            apiKeyEnvVar: model.apiKeyEnvVar,
+          });
         }
-
-        if (providerConfig?.models && Array.isArray(providerConfig.models)) {
-          for (const modelName of providerConfig.models) {
-            upsertModel({
-              id: `${provider}/${modelName}`,
-              provider,
-              modelName,
-              hasApiKey,
-              apiKeyEnvVar: apiKeyEnvVar || undefined,
-            });
-          }
-        }
+      } catch (error) {
+        console.warn('Failed to load available models:', error);
       }
-
-      if (this.config.customModelCatalogProvider) {
-        try {
-          const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
-          for (const model of customModels) {
-            upsertModel({
-              id: model.id,
-              provider: model.provider,
-              modelName: model.modelName,
-              hasApiKey: model.hasApiKey,
-              apiKeyEnvVar: model.apiKeyEnvVar,
-            });
-          }
-        } catch (error) {
-          console.warn('Failed to load custom available models:', error);
-        }
-      }
-
-      const result = [...modelsById.values()];
-      this.availableModelsCache = result;
-      this.availableModelsCacheTime = Date.now();
-      return result;
-    } catch (error) {
-      console.warn('Failed to load available models:', error);
-      return [];
     }
+
+    const result = [...modelsById.values()];
+    this.availableModelsCache = result;
+    this.availableModelsCacheTime = Date.now();
+    return result;
   }
 
   invalidateAvailableModelsCache(): void {
     this.availableModelsCache = null;
     this.availableModelsCacheTime = 0;
-  }
-
-  private async getProviderApiKeyEnvVar(provider: string): Promise<string | undefined> {
-    try {
-      const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
-      const registry = PROVIDER_REGISTRY as Record<string, { apiKeyEnvVar?: string | string[] }>;
-      const envVars = registry[provider]?.apiKeyEnvVar;
-      return Array.isArray(envVars) ? envVars[0] : envVars;
-    } catch {
-      return undefined;
-    }
   }
 
   // ===========================================================================
@@ -1654,7 +1668,7 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Resolves the observer model ID to a language model instance via `resolveModel`.
+   * Resolves the observer model ID to a language model instance via the configured resolver.
    */
   getResolvedObserverModel() {
     const modelId = this.getObserverModelId();
@@ -1663,7 +1677,7 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Resolves the reflector model ID to a language model instance via `resolveModel`.
+   * Resolves the reflector model ID to a language model instance via the configured resolver.
    */
   getResolvedReflectorModel() {
     const modelId = this.getReflectorModelId();
@@ -3559,10 +3573,17 @@ export class Harness<TState = {}> {
     // switch) and move to the default execution mode.
     this.pendingSuspensions.delete(toolCallId);
 
-    const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
-    if (defaultMode && defaultMode.id !== this.currentModeId) {
+    const currentMode = this.getCurrentMode();
+    const transitionModeId =
+      currentMode.transitionsTo ??
+      this.config.defaultModeId ??
+      this.config.modes.find(mode => mode.default || mode.metadata?.default === true)?.id ??
+      this.config.modes[0]?.id;
+
+    const transitionMode = this.listModes().find(mode => mode.id === transitionModeId);
+    if (transitionMode && transitionMode.id !== this.currentModeId) {
       await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-      await this.switchMode({ modeId: defaultMode.id });
+      await this.switchMode({ modeId: transitionMode.id });
       // switchMode aborts the in-flight run but does not wait for it to
       // finalize. If the caller (e.g. mastracode's plan-approval handler)
       // immediately fires a system-reminder signal, that signal can land in

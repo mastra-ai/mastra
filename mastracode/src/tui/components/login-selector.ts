@@ -2,7 +2,7 @@
  * OAuth provider selector component for /login and /logout commands
  */
 
-import { Box, Container, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { OAuthProviderInterface } from '../../auth/types.js';
 import { theme } from '../theme.js';
 

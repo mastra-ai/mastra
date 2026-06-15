@@ -1,4 +1,4 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -330,10 +330,11 @@ describe('addUserMessage', () => {
       }),
     );
 
-    expect(state.chatContainer.children).toHaveLength(2);
+    // 3 children: TemporalGap, boundary-spacer, UserMessage
+    expect(state.chatContainer.children).toHaveLength(3);
     expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
-    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[1]);
+    expect(state.chatContainer.children[2]).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[2]);
   });
 
   it('renders a legacy persisted temporal-gap marker from whole-message XML', () => {

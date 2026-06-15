@@ -1,4 +1,6 @@
+import { Container } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
+import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
 import { handleSkillCommand, handleSkillsCommand } from '../skills.js';
 
 function createCtx(options?: {
@@ -26,7 +28,7 @@ function createCtx(options?: {
   const state = {
     pendingNewThread: options?.pendingNewThread ?? false,
     allSlashCommandComponents: [],
-    chatContainer: { addChild: vi.fn() },
+    chatContainer: new Container(),
     ui: { requestRender: vi.fn() },
   };
   const harness = {
@@ -79,13 +81,19 @@ describe('handleSkillCommand', () => {
     expect(ctx.showError).not.toHaveBeenCalled();
   });
 
-  it('loads a named skill and sends its instructions to the agent', async () => {
+  it('loads a named skill and sends its instructions to the agent with immediate boundary spacing', async () => {
     const { ctx, harness, state } = createCtx();
+    const previousComponent = new Container();
+    (previousComponent as any).getChatSpacingKind = () => 'user-message';
+    state.chatContainer.addChild(previousComponent);
 
     await handleSkillCommand(ctx, 'github-triage', ['focus', 'tests']);
 
     expect(state.allSlashCommandComponents).toHaveLength(1);
-    expect(state.chatContainer.addChild).toHaveBeenCalledWith(state.allSlashCommandComponents[0]);
+    expect(state.chatContainer.children).toHaveLength(3);
+    expect(state.chatContainer.children[0]).toBe(previousComponent);
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    expect(state.chatContainer.children[2]).toBe(state.allSlashCommandComponents[0]);
     expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
     expect(harness.sendMessage).toHaveBeenCalledWith({
       content:
