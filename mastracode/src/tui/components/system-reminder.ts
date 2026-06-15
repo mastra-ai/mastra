@@ -4,7 +4,7 @@
  */
 
 import process from 'node:process';
-import { Container, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
@@ -116,7 +116,6 @@ export class SystemReminderComponent extends Container {
     }
 
     this.addChild(new Text(`${border('╰')}${border(horizontal)}${border('╯')}`, BOX_INDENT, 0));
-    this.addChild(new Spacer(1));
   }
 }
 

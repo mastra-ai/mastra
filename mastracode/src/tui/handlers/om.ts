@@ -8,6 +8,10 @@
  */
 import type { Component } from '@earendil-works/pi-tui';
 
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from '../chat-boundary-reconciliation.js';
 import { OMMarkerComponent } from '../components/om-marker.js';
 import type { OMMarkerData } from '../components/om-marker.js';
 import { OMOutputComponent } from '../components/om-output.js';
@@ -30,12 +34,7 @@ function getInsertIndexBeforeStreaming(ctx: EventHandlerContext): number {
 
 function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): void {
   const insertIndex = getInsertIndexBeforeStreaming(ctx);
-  if (insertIndex < ctx.state.chatContainer.children.length) {
-    ctx.state.chatContainer.children.splice(insertIndex, 0, child);
-    ctx.state.chatContainer.invalidate();
-    return;
-  }
-  ctx.state.chatContainer.addChild(child);
+  insertChatComponentWithBoundarySpacing(ctx.state.chatContainer, child, insertIndex);
 }
 
 function isImmediatelyBeforeStreamingInsert(ctx: EventHandlerContext, child: Component): boolean {
@@ -48,7 +47,7 @@ function removeChatChild(ctx: EventHandlerContext, child: Component | undefined)
   const idx = ctx.state.chatContainer.children.indexOf(child);
   if (idx >= 0) {
     ctx.state.chatContainer.children.splice(idx, 1);
-    ctx.state.chatContainer.invalidate();
+    reconcileChatBoundarySpacers(ctx.state.chatContainer);
   }
 }
 

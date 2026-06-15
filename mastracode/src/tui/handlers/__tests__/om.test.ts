@@ -52,6 +52,7 @@ describe('handleOMActivation', () => {
     state.chatContainer.addChild(new Container());
     handleOMActivation(ctx, 'observation', 2_000, 125);
 
-    expect(state.chatContainer.children).toHaveLength(3);
+    // 4 children: OMMarker, Container, boundary-spacer (above 2nd OMMarker), OMMarker
+    expect(state.chatContainer.children).toHaveLength(4);
   });
 });

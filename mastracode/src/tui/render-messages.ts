@@ -3,7 +3,7 @@
  *
  * Pure functions that operate on TUIState — no class dependency.
  */
-import { Container, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
@@ -94,7 +94,6 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
     const text = chalk.hex(theme.getTheme().dim).strikethrough(task.content);
     container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
-  container.addChild(new Spacer(1));
   insertTaskHistoryComponent(state, container, insertIndex);
 }
 
@@ -444,7 +443,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     const slashComp = new SlashCommandComponent(commandName, commandContent);
     state.allSlashCommandComponents.push(slashComp);
-    state.chatContainer.addChild(slashComp);
+    insertChatComponentWithBoundarySpacing(state.chatContainer, slashComp);
     state.ui.requestRender();
     return;
   }
@@ -471,7 +470,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     const skillComp = new SlashCommandComponent(commandName, skillContent);
     state.allSlashCommandComponents.push(skillComp);
-    state.chatContainer.addChild(skillComp);
+    insertChatComponentWithBoundarySpacing(state.chatContainer, skillComp);
     state.ui.requestRender();
     return;
   }
