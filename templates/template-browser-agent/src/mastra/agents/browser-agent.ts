@@ -2,7 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { AgentBrowser } from '@mastra/agent-browser';
-import 'playwright';
+import 'playwright-chromium';
 
 const browser = new AgentBrowser({
   headless: process.env.BROWSER_HEADLESS !== 'false',

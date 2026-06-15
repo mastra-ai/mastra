@@ -12,13 +12,13 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 - A [Mastra Gateway API key](https://mastra.ai/docs/models/gateways/mastra).
 - A [Turso](https://turso.tech) database URL + auth token (or swap to `:memory:` for ephemeral local runs).
-- Playwright's Chromium browser for local runs, or `BROWSER_CDP_URL` for a hosted Chrome/Browserbase/Browserless instance in server deployments.
+- Playwright Chromium is installed by the `playwright-chromium` package during dependency install, or set `BROWSER_CDP_URL` for a hosted Chrome/Browserbase/Browserless instance in server deployments.
 
 ## Quickstart 🚀
 
 1. **Add your API keys**
    - Copy `.env.example` to `.env` and fill it in. Set `BROWSER_HEADLESS=false` if you want to watch the agent click around locally.
-   - For server deployments, set `BROWSER_CDP_URL` to a hosted browser endpoint so the app can start without installing Chromium system packages in the runtime image.
+   - For server deployments, you can optionally set `BROWSER_CDP_URL` to a hosted browser endpoint instead of launching the installed local Chromium.
 2. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111).
 
