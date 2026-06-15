@@ -20,8 +20,8 @@ import {
   truncateToWidth,
   visibleWidth,
   wrapTextWithAnsi,
-} from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
+} from '@earendil-works/pi-tui';
+import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import { MultilineInput } from './multiline-input.js';
 import { WrappingSelectList } from './wrapping-select-list.js';

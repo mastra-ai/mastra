@@ -2,8 +2,8 @@
  * Component that renders a user message with a thin border that fits the content.
  */
 
-import { Container, Markdown, Spacer, Text, truncateToWidth, visibleWidth } from '@mariozechner/pi-tui';
-import type { MarkdownTheme } from '@mariozechner/pi-tui';
+import { Container, Markdown, Spacer, Text, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
+import type { MarkdownTheme } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';

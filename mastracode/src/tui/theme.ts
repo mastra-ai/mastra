@@ -3,7 +3,7 @@
  * Simplified from pi-mono's theme system.
  */
 
-import type { MarkdownTheme, EditorTheme, SettingsListTheme, SelectListTheme } from '@mariozechner/pi-tui';
+import type { MarkdownTheme, EditorTheme, SettingsListTheme, SelectListTheme } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 
 // =============================================================================

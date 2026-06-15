@@ -5,7 +5,7 @@
  * Includes marker info (emoji, compression stats) in the footer.
  */
 
-import { Container, Text, Spacer } from '@mariozechner/pi-tui';
+import { Container, Text, Spacer } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, getTermWidth, mastra } from '../theme.js';
 

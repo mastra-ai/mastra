@@ -20,7 +20,7 @@ const autocompleteProviders: Array<{
   fdPath: string | null | undefined;
 }> = [];
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   CombinedAutocompleteProvider: class {
     constructor(
       commands: Array<{

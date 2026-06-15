@@ -3,8 +3,8 @@
  * syntax highlighting, and smart summarization.
  */
 
-import { Box, Container, Text, Spacer } from '@mariozechner/pi-tui';
-import type { TUI } from '@mariozechner/pi-tui';
+import { Box, Container, Text, Spacer } from '@earendil-works/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 

@@ -3,7 +3,7 @@
  * Supports updating in-place (start → end/failed).
  */
 
-import { Container, Text, Spacer } from '@mariozechner/pi-tui';
+import { Container, Text, Spacer } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
 
 /**

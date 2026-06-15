@@ -1,7 +1,7 @@
 /**
  * Display helpers for the TUI: error messages, info messages, notifications.
  */
-import { Spacer, Text } from '@mariozechner/pi-tui';
+import { Spacer, Text } from '@earendil-works/pi-tui';
 
 import { parseError } from '../utils/errors.js';
 import type { NotificationMode, NotificationReason } from './notify.js';

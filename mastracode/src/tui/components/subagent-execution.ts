@@ -8,8 +8,8 @@
  *  - Bottom border with agent type, model, status, duration
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
-import type { TUI } from '@mariozechner/pi-tui';
+import { Container, Spacer, Text } from '@earendil-works/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import { BOX_INDENT, getTermWidth, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';

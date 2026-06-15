@@ -6,7 +6,7 @@
  * All omProgress state updates are handled by the Harness display state.
  * These handlers focus on UI component creation/removal.
  */
-import type { Component } from '@mariozechner/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 
 import { OMMarkerComponent } from '../components/om-marker.js';
 import type { OMMarkerData } from '../components/om-marker.js';

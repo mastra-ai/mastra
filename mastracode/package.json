@@ -65,7 +65,7 @@
     "@ai-sdk/openai": "^3.0.63",
     "@ai-sdk/openai-compatible": "^2.0.47",
     "@ast-grep/napi": "^0.42.0",
-    "@mariozechner/pi-tui": "^0.73.1",
+    "@earendil-works/pi-tui": "^0.79.4",
     "@mastra/agent-browser": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/github-signals": "workspace:*",
