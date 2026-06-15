@@ -34,7 +34,7 @@
   "dependencies": {
     "@mastra/deployer": "workspace:^",
     "fs-extra": "^11.3.5",
-    "rollup": "^4.0.0"
+    "rollup": "^4.61.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
