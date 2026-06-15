@@ -248,10 +248,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  const mgApiKey = storedGatewayKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
+  const mgApiKey = process.env['MASTRA_GATEWAY_API_KEY'] ?? storedGatewayKey;
   const mastraGatewayBaseUrl = (
-    storedGatewayUrl ??
     process.env['MASTRA_GATEWAY_URL'] ??
+    storedGatewayUrl ??
     'https://gateway-api.mastra.ai'
   )
     .replace(/\/+$/, '')
