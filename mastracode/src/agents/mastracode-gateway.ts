@@ -294,9 +294,12 @@ export class MastraCodeGateway extends MastraModelGateway {
         const modelNames = providerConfig.models;
         if (!Array.isArray(modelNames)) continue;
 
+        const gatewayAuth = modelNames[0]
+          ? await resolveGatewayProviderAuth(gateway, `${provider}/${modelNames[0]}`)
+          : undefined;
+
         for (const modelName of modelNames) {
           const id = `${provider}/${modelName}`;
-          const gatewayAuth = await resolveGatewayProviderAuth(gateway, id);
           models.push({
             id,
             provider,
@@ -480,6 +483,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       return anthropicApiKeyProvider(bareModelId, apiKey, args.headers) as unknown as GatewayLanguageModel;
     }
 
+    // No stored credentials: use the OAuth-backed provider so the first request can trigger login.
     return opencodeClaudeMaxProvider(bareModelId, { headers: args.headers }) as unknown as GatewayLanguageModel;
   }
 

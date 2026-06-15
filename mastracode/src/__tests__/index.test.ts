@@ -348,8 +348,9 @@ describe('createMastraCode', () => {
 
   it('registers the MastraCode gateway and app-provided model hooks on Harness', async () => {
     const { createMastraCode } = await import('../index.js');
+    const subagent = { id: 'review', name: 'Review', instructions: 'Review changes' };
 
-    await createMastraCode();
+    await createMastraCode({ subagents: [subagent as any] });
 
     expect(createMastraCodeGatewayMock).toHaveBeenCalledWith({
       mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
@@ -364,9 +365,11 @@ describe('createMastraCode', () => {
           resolveModel?: unknown;
           modelAuthChecker?: unknown;
           customModelCatalogProvider?: unknown;
+          subagents?: unknown[];
         }
       | undefined;
     expect(harnessConfig?.gateways).toEqual([mastraCodeGatewayMock]);
+    expect(harnessConfig?.subagents).toEqual([subagent]);
     expect(harnessConfig?.resolveModel).toBe(resolveModelMock);
     expect(createMastraCodeModelCatalogProviderMock).toHaveBeenCalledWith(mastraCodeGatewayMock);
     expect(harnessConfig?.modelAuthChecker).toBeUndefined();

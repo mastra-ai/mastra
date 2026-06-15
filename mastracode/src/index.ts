@@ -671,7 +671,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     pubsub: signalsPubSub,
     stateSchema: typedStateSchema,
     agent: codeAgent,
-    subagents: [],
+    subagents: config?.subagents ?? [],
     gateways: [mastraCodeGateway],
     toolCategoryResolver: getToolCategory,
     initialState: {
