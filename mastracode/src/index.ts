@@ -570,7 +570,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const modes = applyEffectiveDefaultsToV1Modes(config?.modes ? config.modes : defaultModes, effectiveDefaults);
   const defaultModeId =
     modes.find(mode => mode.metadata?.default === true)?.id ??
-    modes.find(mode => mode.id === 'plan')?.id ??
+    modes.find(mode => mode.id === 'build')?.id ??
     modes[0]?.id;
   if (!defaultModeId) {
     throw new Error('MastraCode requires at least one mode');

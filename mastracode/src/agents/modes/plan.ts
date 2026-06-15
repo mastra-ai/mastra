@@ -43,6 +43,6 @@ Be specific about code locations (file paths, function names, line numbers). Kee
 
   allowedWorkspaceTools: [MC_TOOLS.VIEW, MC_TOOLS.SEARCH_CONTENT, MC_TOOLS.FIND_FILES],
   metadata: {
-    default: true,
+    default: false,
   },
 };
