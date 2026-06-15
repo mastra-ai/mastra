@@ -1,8 +1,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
 import type { MessageFactoryPart } from '@mastra/react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { MessageRow, MessagesSkeleton, PendingIndicator } from './messages';
+import { MessageRow, MessagesSkeleton } from './messages';
 import { useAutoScroll } from '@/domains/agent-builder/hooks/use-auto-scroll';
 
 /**
@@ -92,7 +93,7 @@ export const MessageList = ({
           {messages.map(message => (
             <MessageRow key={message.id} message={message} />
           ))}
-          {showPending && <PendingIndicator />}
+          {showPending && <PendingIndicator testId="agent-builder-chat-pending" />}
         </div>
       )}
     </div>

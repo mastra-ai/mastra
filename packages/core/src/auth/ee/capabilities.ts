@@ -9,7 +9,13 @@ import type { IACLProvider } from './interfaces/acl';
 import type { IFGAProvider } from './interfaces/fga';
 import type { IRBACProvider } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
-import { isLicenseValid, isDevEnvironment, getSafeLicenseSummary, warnIfDevEENeedsLicense } from './license';
+import {
+  isLicenseValid,
+  isDevEnvironment,
+  isFeatureEnabled,
+  getSafeLicenseSummary,
+  warnIfDevEENeedsLicense,
+} from './license';
 
 /**
  * Public capabilities response (no authentication required).
@@ -254,6 +260,11 @@ export async function buildCapabilities(
   }
   const isLicensedOrCloud = hasLicense || isCloud || isSimple || isDev;
 
+  // Per-feature license gating: rbac/acl/fga additionally require the license
+  // entitlement (e.g. enterprise tier). Cloud, SimpleAuth and dev are exempt.
+  const isFeatureLicensed = (feature: string) =>
+    isCloud || isSimple || isDev || (hasLicense && isFeatureEnabled(feature));
+
   // Build login configuration (always public)
   let login: PublicAuthCapabilities['login'] = null;
 
@@ -323,10 +334,10 @@ export async function buildCapabilities(
 
   // Get RBAC provider from options (if configured)
   const rbacProvider = options?.rbac;
-  const hasRBAC = !!rbacProvider && isLicensedOrCloud;
+  const hasRBAC = !!rbacProvider && isFeatureLicensed('rbac');
 
   // Get FGA provider from options (if configured)
-  const hasFGA = !!options?.fga && isLicensedOrCloud;
+  const hasFGA = !!options?.fga && isFeatureLicensed('fga');
 
   // Build capability flags
   const capabilities: CapabilityFlags = {
@@ -334,7 +345,7 @@ export async function buildCapabilities(
     session: implementsInterface<ISessionProvider>(auth, 'createSession') && isLicensedOrCloud,
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
     rbac: hasRBAC,
-    acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
+    acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isFeatureLicensed('acl'),
     fga: hasFGA,
   };
 

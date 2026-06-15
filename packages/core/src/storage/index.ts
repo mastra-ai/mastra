@@ -6,6 +6,8 @@ export * from './filesystem';
 export * from './filesystem-db';
 export * from './filesystem-versioned';
 export * from './git-history';
+export * from './source-control';
+export * from './providers';
 export * from './domains';
 export * from './utils';
 export * from './workflow-snapshot';

@@ -55,7 +55,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/observability', description: 'Configure cloud observability' },
     { key: '/github', description: 'Subscribe/sync GitHub PR signals' },
     { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
-    { key: '/judge', description: 'Set goal judge defaults' },
+    { key: '/goal judge', description: 'Set the goal judge model and max attempts' },
   ];
 
   if (modes > 1) {
