@@ -4,6 +4,7 @@ import type { Node } from '@xyflow/react';
 import type { Condition } from './utils';
 
 export const WORKFLOW_STEP_NODE_TYPE = 'workflow-step-node';
+export const WORKFLOW_BOUNDARY_NODE_TYPE = 'workflow-boundary-node';
 
 export type WorkflowStepNodeData = {
   label: string;
@@ -28,6 +29,13 @@ export type WorkflowStepNodeData = {
 };
 
 export type WorkflowStepNode = Node<WorkflowStepNodeData, typeof WORKFLOW_STEP_NODE_TYPE>;
+
+export type WorkflowBoundaryNodeData = {
+  label: 'Start' | 'End';
+  boundaryRole: 'start' | 'end';
+};
+
+export type WorkflowBoundaryNode = Node<WorkflowBoundaryNodeData, typeof WORKFLOW_BOUNDARY_NODE_TYPE>;
 
 export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): ResolvedWorkflowStep => {
   switch (flow.type) {

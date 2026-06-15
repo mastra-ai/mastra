@@ -1,7 +1,7 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { describe, expect, it } from 'vitest';
 import { constructNodesAndEdges } from '../utils';
-import { resolveWorkflowGraphStep } from '../workflow-step-node-utils';
+import { resolveWorkflowGraphStep, WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_STEP_NODE_TYPE } from '../workflow-step-node-utils';
 
 const step = (id: string) => ({ id, description: `${id} description` });
 
@@ -42,7 +42,7 @@ describe('resolveWorkflowGraphStep', () => {
   });
 
   it('keeps workflow graph nodes on one React Flow node type with resolved step data', () => {
-    const { nodes } = constructNodesAndEdges({
+    const { nodes, edges } = constructNodesAndEdges({
       stepGraph: [
         { type: 'step', step: step('regular') },
         { type: 'step', step: { ...step('map'), mapConfig: 'return input' } },
@@ -50,8 +50,18 @@ describe('resolveWorkflowGraphStep', () => {
       ],
     });
 
-    expect(nodes).toHaveLength(3);
-    expect(nodes.map(node => node.type)).toEqual(['workflow-step-node', 'workflow-step-node', 'workflow-step-node']);
-    expect(nodes.map(node => node.data.workflowStep.kind)).toEqual(['step', 'map-step', 'sleep-step']);
+    const stepNodes = nodes.filter(node => node.type === WORKFLOW_STEP_NODE_TYPE);
+
+    expect(nodes).toHaveLength(5);
+    expect(nodes[0].type).toBe(WORKFLOW_BOUNDARY_NODE_TYPE);
+    expect(nodes[0].data.label).toBe('Start');
+    expect(nodes.at(-1)?.type).toBe(WORKFLOW_BOUNDARY_NODE_TYPE);
+    expect(nodes.at(-1)?.data.label).toBe('End');
+    expect(stepNodes).toHaveLength(3);
+    expect(stepNodes.map(node => node.data.workflowStep.kind)).toEqual(['step', 'map-step', 'sleep-step']);
+    expect(stepNodes[0].data.withoutTopHandle).toBe(false);
+    expect(stepNodes.at(-1)?.data.withoutBottomHandle).toBe(false);
+    expect(edges.some(edge => edge.source === '__workflow-start__' && edge.target === 'regular')).toBe(true);
+    expect(edges.some(edge => edge.source === 'sleep' && edge.target === '__workflow-end__')).toBe(true);
   });
 });

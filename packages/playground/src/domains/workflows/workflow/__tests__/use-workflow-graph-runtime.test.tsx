@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { useWorkflowGraphRuntime } from '../use-workflow-graph-runtime';
 import { WORKFLOW_DATA_EDGE_TYPE } from '../workflow-data-edge';
+import { WORKFLOW_BOUNDARY_NODE_TYPE } from '../workflow-step-node-utils';
 
 const workflowRunContextValue = {
   result: {
@@ -46,6 +47,7 @@ describe('useWorkflowGraphRuntime', () => {
     const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper });
 
     expect(result.current.edgeTypes[WORKFLOW_DATA_EDGE_TYPE]).toEqual(expect.any(Function));
+    expect(result.current.nodeTypes[WORKFLOW_BOUNDARY_NODE_TYPE]).toEqual(expect.any(Function));
     expect(result.current.styledEdges[0].type).toBe(WORKFLOW_DATA_EDGE_TYPE);
   });
 

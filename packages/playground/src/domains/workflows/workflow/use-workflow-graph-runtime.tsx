@@ -3,9 +3,10 @@ import { useMemo } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
 import { WorkflowDataEdge, WORKFLOW_DATA_EDGE_TYPE } from './workflow-data-edge';
+import { WorkflowBoundaryNode } from './workflow-boundary-node';
 import { WorkflowGraphNode } from './workflow-graph-node';
-import { WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
-import type { WorkflowStepNode } from './workflow-step-node-utils';
+import { WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
+import type { WorkflowBoundaryNode as WorkflowBoundaryNodeType, WorkflowStepNode } from './workflow-step-node-utils';
 
 const getScopedStepId = (stepId: string | undefined, workflowName?: string) =>
   stepId && workflowName ? `${workflowName}.${stepId}` : stepId;
@@ -16,12 +17,16 @@ const INACTIVE_EDGE_COLOR = '#8e8e8e';
 const buildStepsFlow = (edges: Edge[]) =>
   edges.reduce(
     (acc, edge) => {
-      if (!edge.data) {
+      if (!edge.data || edge.data.boundaryPayload) {
         return acc;
       }
 
       const stepId = edge.data.nextStepId as string;
       const prevStepId = edge.data.previousStepId as string;
+
+      if (!stepId || !prevStepId) {
+        return acc;
+      }
 
       return {
         ...acc,
@@ -39,6 +44,7 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
       [WORKFLOW_STEP_NODE_TYPE]: (props: NodeProps<WorkflowStepNode>) => (
         <WorkflowGraphNode parentWorkflowName={workflowName} {...props} stepsFlow={stepsFlow} />
       ),
+      [WORKFLOW_BOUNDARY_NODE_TYPE]: (props: NodeProps<WorkflowBoundaryNodeType>) => <WorkflowBoundaryNode {...props} />,
     }),
     [stepsFlow, workflowName],
   );

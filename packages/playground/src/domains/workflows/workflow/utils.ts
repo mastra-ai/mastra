@@ -2,7 +2,24 @@ import Dagre from '@dagrejs/dagre';
 import type { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { Node, Edge } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
-import { resolveWorkflowGraphStep, WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
+import { resolveWorkflowGraphStep, WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
+
+const WORKFLOW_START_NODE_ID = '__workflow-start__';
+const WORKFLOW_END_NODE_ID = '__workflow-end__';
+
+const getNodeSize = (node: Node): { width: number; height: number } => {
+  if (node.type === WORKFLOW_BOUNDARY_NODE_TYPE) {
+    return {
+      width: node.measured?.width ?? 56,
+      height: node.measured?.height ?? 56,
+    };
+  }
+
+  return {
+    width: node.measured?.width ?? 274,
+    height: node.measured?.height ?? (node?.data?.isLarge ? 260 : 100),
+  };
+};
 
 export type ConditionConditionType = 'if' | 'else' | 'when' | 'until' | 'while' | 'dountil' | 'dowhile';
 
@@ -68,8 +85,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   nodes.forEach(node =>
     g.setNode(node.id, {
       ...node,
-      width: node.measured?.width ?? 274,
-      height: node.measured?.height ?? (node?.data?.isLarge ? 260 : 100),
+      ...getNodeSize(node),
     }),
   );
 
@@ -81,10 +97,11 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   return {
     nodes: nodes.map(node => {
       const position = g.node(node.id);
+      const { width, height } = getNodeSize(node);
       // We are shifting the dagre node position (anchor=center center) to the top left
       // so it matches the React Flow node anchor point (top left).
-      const positionX = position.x - (node.measured?.width ?? 274) / 2;
-      const positionY = position.y - (node.measured?.height ?? (node?.data?.isLarge ? 260 : 100)) / 2;
+      const positionX = position.x - width / 2;
+      const positionY = position.y - height / 2;
       const x = positionX;
       const y = positionY;
 
@@ -507,6 +524,56 @@ export const constructNodesAndEdges = ({
     prevStepIds = nextPrevStepIds;
     allPrevNodeIds.push(...prevNodeIds);
   }
+
+  const edgeTargetIds = new Set(edges.map(edge => edge.target));
+  const edgeSourceIds = new Set(edges.map(edge => edge.source));
+  const sourceNodeIds = nodes.filter(node => !edgeTargetIds.has(node.id)).map(node => node.id);
+  const terminalNodeIds = nodes.filter(node => !edgeSourceIds.has(node.id)).map(node => node.id);
+  const sourceNodeIdSet = new Set(sourceNodeIds);
+  const terminalNodeIdSet = new Set(terminalNodeIds);
+
+  nodes = nodes.map(node => ({
+    ...node,
+    data: {
+      ...node.data,
+      ...(sourceNodeIdSet.has(node.id) ? { withoutTopHandle: false } : {}),
+      ...(terminalNodeIdSet.has(node.id) ? { withoutBottomHandle: false } : {}),
+    },
+  }));
+
+  nodes = [
+    {
+      id: WORKFLOW_START_NODE_ID,
+      position: { x: 0, y: 0 },
+      type: WORKFLOW_BOUNDARY_NODE_TYPE,
+      data: { label: 'Start', boundaryRole: 'start' },
+    },
+    ...nodes,
+    {
+      id: WORKFLOW_END_NODE_ID,
+      position: { x: 0, y: 0 },
+      type: WORKFLOW_BOUNDARY_NODE_TYPE,
+      data: { label: 'End', boundaryRole: 'end' },
+    },
+  ];
+
+  edges = [
+    ...sourceNodeIds.map(nodeId => ({
+      id: `e${WORKFLOW_START_NODE_ID}-${nodeId}`,
+      source: WORKFLOW_START_NODE_ID,
+      target: nodeId,
+      data: { boundaryPayload: 'workflow-input' },
+      ...defaultEdgeOptions,
+    })),
+    ...edges,
+    ...terminalNodeIds.map(nodeId => ({
+      id: `e${nodeId}-${WORKFLOW_END_NODE_ID}`,
+      source: nodeId,
+      target: WORKFLOW_END_NODE_ID,
+      data: { boundaryPayload: 'workflow-output' },
+      ...defaultEdgeOptions,
+    })),
+  ];
 
   const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
 

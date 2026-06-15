@@ -17,6 +17,15 @@ describe('WorkflowEdgeDataButton', () => {
     expect(screen.getAllByText(/cus_123/).length).toBeGreaterThan(0);
   });
 
+  it('uses a custom label for workflow boundary payloads', () => {
+    render(<WorkflowEdgeDataButton label="Workflow input" output={{ text: 'hello' }} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Data' }));
+
+    expect(screen.getByText('Workflow input')).not.toBeNull();
+    expect(screen.getAllByText(/hello/).length).toBeGreaterThan(0);
+  });
+
   it('does not render when there is no payload to inspect', () => {
     const { container } = render(<WorkflowEdgeDataButton previousStepId="a" />);
 

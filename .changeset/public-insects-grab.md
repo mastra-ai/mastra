@@ -2,4 +2,4 @@
 '@internal/playground': patch
 ---
 
-Improved workflow step cards with icon indicators and progress status.
+Improved workflow graph cards and added Start/End nodes with workflow data edges.

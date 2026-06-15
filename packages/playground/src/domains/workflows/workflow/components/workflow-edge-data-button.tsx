@@ -15,13 +15,15 @@ import { CodeDialogContent } from '../workflow-code-dialog-content';
 export interface WorkflowEdgeDataButtonProps {
   previousStepId?: string;
   output?: unknown;
+  label?: string;
 }
 
 const hasPayload = (value: unknown) => value !== undefined;
 
-export const WorkflowEdgeDataButton = ({ previousStepId, output }: WorkflowEdgeDataButtonProps) => {
+export const WorkflowEdgeDataButton = ({ previousStepId, output, label }: WorkflowEdgeDataButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const hasOutput = hasPayload(output);
+  const dataLabel = label ?? (previousStepId ? `${previousStepId} output` : 'Previous output');
 
   if (!hasOutput) {
     return null;
@@ -46,7 +48,7 @@ export const WorkflowEdgeDataButton = ({ previousStepId, output }: WorkflowEdgeD
           <DialogBody className="max-h-[700px] overflow-auto">
             <div className="min-w-0 rounded-lg border border-border1 bg-surface2 p-3">
               <Txt variant="ui-sm" className="mb-2 block text-neutral5">
-                {previousStepId ? `${previousStepId} output` : 'Previous output'}
+                {dataLabel}
               </Txt>
               <CodeDialogContent data={output} />
             </div>
