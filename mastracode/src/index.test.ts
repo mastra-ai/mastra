@@ -179,16 +179,18 @@ describe('createMastraCode startup performance', () => {
     } as never);
     const { createMastraCode } = await import('./index.js');
 
-    const result = await Promise.race([
-      createMastraCode(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('createMastraCode waited for gateway sync')), 1000),
-      ),
-    ]);
+    let result: Awaited<ReturnType<typeof createMastraCode>> | undefined;
+    const resultPromise = createMastraCode().then(value => {
+      result = value;
+      return value;
+    });
+
+    await new Promise(resolve => setImmediate(resolve));
 
     expect(syncGateways).toHaveBeenCalledTimes(1);
-    expect(result.storageWarning).toBe('Storage fallback warning');
+    expect(result?.storageWarning).toBe('Storage fallback warning');
     resolveSync?.();
+    await resultPromise;
   });
 });
 
