@@ -82,6 +82,71 @@ function createMockModel({
   });
 }
 
+/**
+ * Emits two parallel tool calls on the first model turn, then a final text
+ * answer. When both tools require approval the loop forces sequential
+ * (concurrency 1) execution, so the calls suspend one at a time.
+ */
+function createParallelToolCallsModel() {
+  let callCount = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-A',
+              toolName: 'toolA',
+              input: '{"name":"A"}',
+              providerExecuted: false,
+            },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-B',
+              toolName: 'toolB',
+              input: '{"name":"B"}',
+              providerExecuted: false,
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        };
+      }
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-final', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'done' },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      };
+    },
+  });
+}
+
+function createApprovalTool(id: string) {
+  return createTool({
+    id,
+    description: id,
+    inputSchema: z.object({ name: z.string() }),
+    requireApproval: true,
+    execute: async input => input,
+  });
+}
+
 function createSuspendedSetup({
   storage = new InMemoryStore(),
   toolCallOnFirstCall = true,
@@ -317,6 +382,59 @@ describe.each([
       }
 
       expect((await agent.listSuspendedRuns()).runs).toHaveLength(0);
+    }, 30000);
+
+    it('drains parallel approval-requiring tool calls one suspension at a time', async () => {
+      // The model requests two tool calls in the same turn. Because both
+      // require approval, the loop runs them sequentially, so each call
+      // suspends on its own — discovery always reports exactly the tool call
+      // that is currently blocking (and therefore resumable), never a stale or
+      // half-executed sibling.
+      const agent = new Agent({
+        id: 'user-agent',
+        name: 'User Agent',
+        instructions: 'You call tools.',
+        model: createParallelToolCallsModel(),
+        tools: { toolA: createApprovalTool('toolA'), toolB: createApprovalTool('toolB') },
+      });
+      new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+
+      const stream = await agent.stream('do both', {
+        requireToolApproval: true,
+        memory: { thread: 'thread-par', resource: 'resource-par' },
+      });
+      for await (const _chunk of stream.fullStream) {
+        // consume until the first suspension
+      }
+
+      // First suspension: only the first tool call is parked and discoverable.
+      const first = await agent.listSuspendedRuns({ threadId: 'thread-par' });
+      expect(first.runs).toHaveLength(1);
+      expect(first.runs[0]!.runId).toBe(stream.runId);
+      expect(first.runs[0]!.toolCalls).toEqual([
+        { toolCallId: 'call-A', toolName: 'toolA', args: { name: 'A' }, requiresApproval: true },
+      ]);
+
+      // Approve the first call; the loop resumes and re-suspends on the second.
+      const afterFirst = await agent.approveToolCall({ runId: stream.runId, toolCallId: 'call-A' });
+      for await (const _chunk of afterFirst.fullStream) {
+        // consume until the next suspension
+      }
+
+      const second = await agent.listSuspendedRuns({ threadId: 'thread-par' });
+      expect(second.runs).toHaveLength(1);
+      expect(second.runs[0]!.runId).toBe(stream.runId);
+      expect(second.runs[0]!.toolCalls).toEqual([
+        { toolCallId: 'call-B', toolName: 'toolB', args: { name: 'B' }, requiresApproval: true },
+      ]);
+
+      // Approve the second call; the run completes and is no longer discoverable.
+      const afterSecond = await agent.approveToolCall({ runId: stream.runId, toolCallId: 'call-B' });
+      for await (const _chunk of afterSecond.fullStream) {
+        // consume to completion
+      }
+
+      expect((await agent.listSuspendedRuns({ threadId: 'thread-par' })).runs).toHaveLength(0);
     }, 30000);
 
     it('scopes nested supervisor/subagent suspensions by threadId to the resumable outer run', async () => {
