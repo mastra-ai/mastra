@@ -1,0 +1,197 @@
+/**
+ * Fixture worker that simulates a single Vercel-Lambda-like process holding
+ * one AgentThreadStreamRuntime + Agent bound to a shared RedisStreamsPubSub.
+ *
+ * The worker reads newline-delimited JSON commands on stdin and emits
+ * newline-delimited JSON events on stdout. Commands:
+ *   {"cmd":"send","sigId":"s1","text":"hello","runMs":300}
+ *   {"cmd":"exit"}
+ *
+ * Events:
+ *   {"type":"ready"}
+ *   {"type":"signal-result","sigId":"s1","accepted":true,"hasOwnerStream":true}
+ *   {"type":"run-started","sigId":"s1","runId":"..."}
+ *   {"type":"run-finished","sigId":"s1","runId":"..."}
+ *   {"type":"run-error","sigId":"s1","error":"..."}
+ *
+ * The "runMs" field controls how long the stubbed agent.stream() takes to
+ * resolve _waitUntilFinished, simulating an in-flight model call.
+ */
+import { randomUUID } from 'node:crypto';
+import { createInterface } from 'node:readline';
+
+import { Agent } from '@mastra/core/agent';
+// AgentThreadStreamRuntime isn't part of the public surface yet; we reach into
+// the source directly via the workspace path. This worker is test infra only.
+import { AgentThreadStreamRuntime } from '../../../packages/core/src/agent/thread-stream-runtime';
+
+import { RedisStreamsPubSub } from '../src/index';
+
+const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
+const RESOURCE_ID = process.env.RESOURCE_ID ?? 'rapid-fire-resource';
+const THREAD_ID = process.env.THREAD_ID ?? 'rapid-fire-thread';
+const WORKER_ID = process.env.WORKER_ID ?? 'worker';
+
+function emit(event: Record<string, unknown>) {
+  process.stdout.write(`${JSON.stringify(event)}\n`);
+}
+
+/**
+ * Map sigId -> resolver so the worker can correlate the inbound stub stream
+ * completion with the SEND command that started it. The stub agent buries the
+ * sigId inside the message contents and we read it back from the call.
+ */
+const runEnds = new Map<string, () => void>();
+
+function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub: RedisStreamsPubSub) {
+  const agent: any = {
+    id: `${WORKER_ID}-agent`,
+    name: `${WORKER_ID} Stub Agent`,
+    stream: async (input: any, options: any) => {
+      // The signal carrying the user message exposes its sigId as contents.
+      const sigId: string = typeof input === 'string' ? input : (input?.contents ?? input?.text ?? '');
+      const runId = options?.runId ?? randomUUID();
+      const finished = new Promise<void>(resolve => {
+        const timer = setTimeout(() => {
+          runEnds.delete(sigId);
+          resolve();
+        }, runMs);
+        timer.unref();
+        runEnds.set(sigId, () => {
+          clearTimeout(timer);
+          runEnds.delete(sigId);
+          resolve();
+        });
+      });
+
+      emit({ type: 'run-started', sigId, runId });
+
+      void finished.then(() => {
+        emit({ type: 'run-finished', sigId, runId });
+      });
+
+      const output: any = {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {})(),
+        consumeStream: async () => {},
+        _waitUntilFinished: () => finished,
+      };
+
+      // Real Agent.stream registers the run with the runtime so completion
+      // watchers fire and pending signals drain. The stub mirrors that.
+      runtime.registerRun(
+        agent as any,
+        output as any,
+        {
+          runId,
+          memory: { resource: RESOURCE_ID, thread: THREAD_ID },
+          ...(options ?? {}),
+        } as any,
+        pubsub,
+      );
+
+      return output;
+    },
+  };
+  return agent as Agent;
+}
+
+async function main() {
+  const pubsub = new RedisStreamsPubSub({ url: REDIS_URL });
+  const runtime = new AgentThreadStreamRuntime();
+  // runMs is fixed per worker (set at boot via env) so the test can vary
+  // "slow worker A" vs "fast follower workers B/C" without per-send wiring.
+  const runMs = Number(process.env.RUN_MS ?? '300');
+  const agent = makeStubAgent(runMs, runtime, pubsub);
+
+  // Keep a thread subscription open so this worker receives signal-enqueued
+  // events from other workers and updates its local activeThreadRunIds map.
+  await runtime.subscribeToThread(
+    agent as any,
+    { resourceId: RESOURCE_ID, threadId: THREAD_ID },
+    pubsub,
+  );
+
+  emit({ type: 'ready' });
+
+  const rl = createInterface({ input: process.stdin });
+  rl.on('line', async (line: string) => {
+    if (!line.trim()) return;
+    let cmd: any;
+    try {
+      cmd = JSON.parse(line);
+    } catch (err) {
+      emit({ type: 'parse-error', line, error: String(err) });
+      return;
+    }
+
+    if (cmd.cmd === 'exit') {
+      try {
+        await pubsub.close();
+      } catch {}
+      process.exit(0);
+    }
+
+    if (cmd.cmd === 'send' || cmd.cmd === 'send-and-exit') {
+      const sigId: string = cmd.sigId;
+      try {
+        const result = runtime.sendSignal(
+          agent as any,
+          { type: 'user-message', contents: sigId },
+          {
+            resourceId: RESOURCE_ID,
+            threadId: THREAD_ID,
+            ifIdle: {
+              behavior: 'wake' as const,
+              streamOptions: {
+                memory: { resource: RESOURCE_ID, thread: THREAD_ID },
+              },
+            },
+            ifActive: {
+              behavior: 'deliver' as const,
+            },
+          },
+          pubsub,
+        );
+        emit({
+          type: 'signal-result',
+          sigId,
+          accepted: result.accepted,
+          hasOwnerStream: Boolean(result.ownerStream),
+        });
+        const ownerSettled = result.ownerStream
+          ? result.ownerStream
+              .then(stream => {
+                emit({
+                  type: 'owner-stream-resolved',
+                  sigId,
+                  defined: Boolean(stream),
+                });
+              })
+              .catch(err => {
+                emit({ type: 'owner-stream-error', sigId, error: String(err) });
+              })
+          : Promise.resolve();
+
+        if (cmd.cmd === 'send-and-exit') {
+          // Models a Vercel Lambda that waitUntil-defers the publish, then dies.
+          // Make sure the lease loser path (which fires `signal-enqueued`) has
+          // actually flushed to Redis before we shut down.
+          await ownerSettled;
+          try {
+            await pubsub.close();
+          } catch {}
+          process.exit(0);
+        }
+      } catch (err) {
+        emit({ type: 'run-error', sigId, error: String(err) });
+      }
+    }
+  });
+}
+
+main().catch(err => {
+  emit({ type: 'fatal', error: String(err), stack: (err as Error)?.stack });
+  process.exit(1);
+});
