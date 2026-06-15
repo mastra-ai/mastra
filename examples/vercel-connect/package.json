@@ -13,7 +13,8 @@
   },
   "pnpm": {
     "overrides": {
-      "@mastra/core": "link:../../packages/core"
+      "@mastra/core": "link:../../packages/core",
+      "mastra": "link:../../packages/cli"
     }
   },
   "scripts": {
