@@ -176,7 +176,13 @@ export const WorkflowStepActionBar = ({
     <>
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
-          <Button size="icon-sm" variant="ghost" aria-label="Step actions" title="Step actions" className="nodrag nopan">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Step actions"
+            title="Step actions"
+            className="nodrag nopan"
+          >
             <MoreVerticalIcon />
           </Button>
         </DropdownMenu.Trigger>

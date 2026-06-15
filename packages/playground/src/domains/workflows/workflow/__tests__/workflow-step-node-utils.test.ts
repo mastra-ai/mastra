@@ -1,7 +1,11 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { describe, expect, it } from 'vitest';
 import { constructNodesAndEdges } from '../utils';
-import { resolveWorkflowGraphStep, WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_STEP_NODE_TYPE } from '../workflow-step-node-utils';
+import {
+  resolveWorkflowGraphStep,
+  WORKFLOW_BOUNDARY_NODE_TYPE,
+  WORKFLOW_STEP_NODE_TYPE,
+} from '../workflow-step-node-utils';
 
 const step = (id: string) => ({ id, description: `${id} description` });
 

@@ -7,8 +7,9 @@ import { getConditionIndicator, getWorkflowCardAccentColor } from './workflow-ca
 import { WorkflowCardBadges } from './workflow-card-badges';
 import { WorkflowConditionCode, WorkflowConditionDialog } from './workflow-condition-code';
 
-const isCodeCondition = (condition: WorkflowConditionCardViewProps['conditions'][number]): condition is WorkflowConditionCodeCondition =>
-  Boolean(condition.fnString);
+const isCodeCondition = (
+  condition: WorkflowConditionCardViewProps['conditions'][number],
+): condition is WorkflowConditionCodeCondition => Boolean(condition.fnString);
 
 export const WorkflowConditionCardView = ({
   type,
@@ -33,10 +34,7 @@ export const WorkflowConditionCardView = ({
       data-workflow-step-status={previousDisplayStatus ?? 'idle'}
       data-testid="workflow-condition-node"
       style={accentColor ? { borderLeftColor: accentColor } : undefined}
-      className={cn(
-        'bg-surface3 rounded-lg w-dropdown-max-height border border-border1',
-        accentColor && 'border-l-4',
-      )}
+      className={cn('bg-surface3 rounded-lg w-dropdown-max-height border border-border1', accentColor && 'border-l-4')}
     >
       <Collapsible
         open={!isCollapsible ? true : isOpen}

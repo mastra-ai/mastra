@@ -21,9 +21,7 @@ const WorkflowForEachProgress = ({ foreachProgress }: Pick<WorkflowStepCardViewP
           )}
           style={{
             width: `${
-              foreachProgress.totalCount > 0
-                ? (foreachProgress.completedCount / foreachProgress.totalCount) * 100
-                : 0
+              foreachProgress.totalCount > 0 ? (foreachProgress.completedCount / foreachProgress.totalCount) * 100 : 0
             }%`,
           }}
         />
@@ -78,10 +76,7 @@ export const WorkflowStepCardView = ({
       data-workflow-step-status={displayStatus ?? 'idle'}
       data-testid={isNestedWorkflowStep ? 'workflow-nested-node' : 'workflow-default-node'}
       style={accentColor ? { borderLeftColor: accentColor } : undefined}
-      className={cn(
-        'bg-surface3 rounded-lg w-[274px] border border-border1',
-        accentColor && 'border-l-4',
-      )}
+      className={cn('bg-surface3 rounded-lg w-[274px] border border-border1', accentColor && 'border-l-4')}
     >
       <div className={cn('flex items-center gap-2 px-3 pt-2', !description && 'pb-2')}>
         <WorkflowCardBadges indicators={indicators} className="shrink-0" />

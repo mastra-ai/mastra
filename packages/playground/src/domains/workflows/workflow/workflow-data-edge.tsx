@@ -37,7 +37,7 @@ const WorkflowDataEdgeComponent = (props: WorkflowDataEdgeProps) => {
         : workflowInput
       : data?.boundaryPayload === 'workflow-output'
         ? workflowOutput
-        : previousStep?.output ?? previousStep?.suspendOutput;
+        : (previousStep?.output ?? previousStep?.suspendOutput);
   const outputLabel =
     data?.boundaryPayload === 'workflow-input'
       ? 'Workflow input'

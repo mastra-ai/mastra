@@ -2,7 +2,11 @@ import Dagre from '@dagrejs/dagre';
 import type { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { Node, Edge } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
-import { resolveWorkflowGraphStep, WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
+import {
+  resolveWorkflowGraphStep,
+  WORKFLOW_BOUNDARY_NODE_TYPE,
+  WORKFLOW_STEP_NODE_TYPE,
+} from './workflow-step-node-utils';
 
 const WORKFLOW_START_NODE_ID = '__workflow-start__';
 const WORKFLOW_END_NODE_ID = '__workflow-end__';

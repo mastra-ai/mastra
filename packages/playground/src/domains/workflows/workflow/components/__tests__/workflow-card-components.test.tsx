@@ -88,7 +88,8 @@ describe('workflow card UI components', () => {
     expect(
       screen
         .getByRole('button', { name: 'Collapse condition' })
-        .compareDocumentPosition(screen.getByRole('img', { name: 'When condition' })) & Node.DOCUMENT_POSITION_FOLLOWING,
+        .compareDocumentPosition(screen.getByRole('img', { name: 'When condition' })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).not.toBe(0);
     expect(card.querySelector('[data-testid="workflow-card-progress-indicator"]')).toBeNull();
     expect(card.textContent).toContain('input.value > 0');

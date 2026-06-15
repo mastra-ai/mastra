@@ -130,18 +130,28 @@ export function WorkflowGraphNode({
         step={data.workflowStep}
         Step={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
         MapStep={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
-        ForEachStep={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
-        ParallelStep={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
+        ForEachStep={() => (
+          <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
+        )}
+        ParallelStep={() => (
+          <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
+        )}
         Conditional={() => <WorkflowConditionCard data={data} />}
         LoopStep={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
         SleepStep={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
-        SleepUntilStep={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
+        SleepUntilStep={() => (
+          <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
+        )}
         NestedWorkflowStep={() => (
           <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
         )}
-        UnknownStep={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
+        UnknownStep={() => (
+          <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
+        )}
       />
-      {!data.withoutBottomHandle && <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />}
+      {!data.withoutBottomHandle && (
+        <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />
+      )}
     </>
   );
 }

@@ -44,7 +44,9 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
       [WORKFLOW_STEP_NODE_TYPE]: (props: NodeProps<WorkflowStepNode>) => (
         <WorkflowGraphNode parentWorkflowName={workflowName} {...props} stepsFlow={stepsFlow} />
       ),
-      [WORKFLOW_BOUNDARY_NODE_TYPE]: (props: NodeProps<WorkflowBoundaryNodeType>) => <WorkflowBoundaryNode {...props} />,
+      [WORKFLOW_BOUNDARY_NODE_TYPE]: (props: NodeProps<WorkflowBoundaryNodeType>) => (
+        <WorkflowBoundaryNode {...props} />
+      ),
     }),
     [stepsFlow, workflowName],
   );
