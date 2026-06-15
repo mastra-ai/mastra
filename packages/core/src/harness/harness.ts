@@ -154,6 +154,18 @@ export function describeNonSuccessFinishReason(reason: string, providerMetadata:
 const FABLE_FALLBACK_MODEL = 'claude-opus-4-8';
 
 /**
+ * Step budget applied to every harness-driven agent run.
+ *
+ * This MUST be passed to both the initial stream and `resumeStream`: when a run
+ * suspends on an interactive tool (e.g. `ask_user`) and then resumes, the
+ * resumed call merges over the agent's *default* options, whose `maxSteps` is
+ * small (~5). Without re-supplying this budget the resumed run is silently
+ * capped and ends with `reason:"complete"` after a few steps — the agent stops
+ * mid-task even though it promised to continue. See {@link buildSharedRunOptions}.
+ */
+const HARNESS_MAX_STEPS = 1000;
+
+/**
  * Returns Anthropic `providerOptions` that enable a server-side fallback to
  * {@link FABLE_FALLBACK_MODEL} when the active model is `claude-fable-5`, and
  * `undefined` otherwise.
@@ -1881,33 +1893,42 @@ export class Harness<TState = {}> {
     this.abortRequested = false;
     this.abortController ??= new AbortController();
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const streamOptions: Record<string, unknown> = {
+      ...this.buildSharedRunOptions(),
       memory: { thread: this.currentThreadId, resource: this.resourceId },
       abortSignal: this.abortController.signal,
       requestContext,
-      maxSteps: 1000,
-      savePerStep: false,
-      requireToolApproval: !isYolo,
-      modelSettings: { temperature: 1 },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
     };
     streamOptions.toolsets = await this.buildToolsets(requestContext);
 
+    return streamOptions;
+  }
+
+  /**
+   * Options that every harness-driven agent run must carry — the initial stream
+   * AND every `resumeStream`. Centralized so the two paths can't drift: a
+   * missing `maxSteps` on resume silently caps the resumed run at the agent's
+   * small default and ends it mid-task (see {@link HARNESS_MAX_STEPS}).
+   */
+  private buildSharedRunOptions(): Record<string, unknown> {
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const shared: Record<string, unknown> = {
+      maxSteps: HARNESS_MAX_STEPS,
+      savePerStep: false,
+      requireToolApproval: !isYolo,
+      modelSettings: { temperature: 1 },
+    };
+
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
     // block is transparently retried on the fallback model instead of failing.
     const fableFallback = buildFableFallbackProviderOptions(this.getCurrentModelId());
     if (fableFallback) {
-      const existing = streamOptions.providerOptions as Record<string, unknown> | undefined;
-      const existingAnthropic = (existing?.anthropic as Record<string, unknown> | undefined) ?? {};
-      streamOptions.providerOptions = {
-        ...existing,
-        anthropic: { ...existingAnthropic, ...fableFallback.anthropic },
-      };
+      shared.providerOptions = { anthropic: { ...fableFallback.anthropic } };
     }
 
-    return streamOptions;
+    return shared;
   }
 
   private async drainFollowUpQueue(options?: {
@@ -3683,16 +3704,19 @@ export class Harness<TState = {}> {
     this.displayState.pendingSuspensions.delete(toolCallId);
 
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+
     const output = await agent.resumeStream(resumeData, {
+      // Re-supply the shared run budget (maxSteps, etc). Without it the resumed
+      // run merges over the agent's small default maxSteps and stops mid-task.
+      ...this.buildSharedRunOptions(),
       runId: suspension.runId,
       toolCallId,
-      requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
+
     await this.processStream(output, requestContext);
   }
 
