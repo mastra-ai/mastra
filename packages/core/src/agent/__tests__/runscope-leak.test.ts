@@ -47,10 +47,10 @@ describe.each([
   { engine: 'evented', evented: true },
 ])('agentic-loop RunScope leak vectors ($engine engine)', ({ evented }) => {
   beforeAll(() => {
-    if (evented) vi.stubEnv('MASTRA_EVENTED_EXECUTION', 'true');
+    vi.stubEnv('MASTRA_EVENTED_EXECUTION', evented ? 'true' : 'false');
   });
   afterAll(() => {
-    if (evented) vi.unstubAllEnvs();
+    vi.unstubAllEnvs();
   });
 
   it('isolates scopes across parallel runs and releases all of them on completion', async () => {
