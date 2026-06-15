@@ -406,6 +406,35 @@ export interface IsTaskCompletePayload {
   suppressFeedback: boolean;
 }
 
+/**
+ * Payload for `goal` events emitted by the in-loop goal scorer. Consumers (TUIs,
+ * `@mastra/client-js`) use this to render judge progress and the result.
+ */
+export interface GoalEvaluationPayload {
+  /** The objective being judged. */
+  objective: string;
+  /** Goal evaluations consumed so far (runsUsed after this evaluation). */
+  iteration: number;
+  /** Max evaluations before the goal stops. */
+  maxRuns: number;
+  /** Whether the goal is judged complete. */
+  passed: boolean;
+  /** The objective status after this evaluation. */
+  status: 'active' | 'paused' | 'done';
+  /** Individual scorer results. */
+  results: ScorerResult[];
+  /** Judge feedback / stop reason. */
+  reason?: string;
+  /** Total duration of the goal scoring check. */
+  duration: number;
+  /** Whether scoring timed out. */
+  timedOut: boolean;
+  /** Whether the run budget (`maxRuns`) was reached. */
+  maxRunsReached: boolean;
+  /** Whether the goal feedback message is suppressed from memory. */
+  suppressFeedback: boolean;
+}
+
 export interface BackgroundTaskStartedPayload {
   taskId: string;
   toolName: string;
@@ -800,6 +829,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
   | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
+  | (BaseChunkType & { type: 'goal'; payload: GoalEvaluationPayload })
   | (BaseChunkType & {
       type: 'background-task-started';
       payload: BackgroundTaskStartedPayload;

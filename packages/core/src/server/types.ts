@@ -14,6 +14,8 @@ type RouteFGAConfig = FGARouteConfig;
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
 
+export type ApiRouteHandler = (c: any) => Response | Promise<Response>;
+
 export type ApiRoute =
   | {
       path: string;
@@ -31,7 +33,7 @@ export type ApiRoute =
   | {
       path: string;
       method: Methods;
-      createHandler: ({ mastra }: { mastra: Mastra }) => Promise<Handler>;
+      createHandler: ({ mastra }: { mastra: Mastra }) => Promise<ApiRouteHandler>;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
       cors?: CorsOptions;
