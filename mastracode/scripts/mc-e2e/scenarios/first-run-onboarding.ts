@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const firstRunOnboardingScenario: McE2eScenario = {

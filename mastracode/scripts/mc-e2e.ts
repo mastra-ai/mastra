@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import { LibSQLStore } from '@mastra/libsql';
 import { getScenario, listScenarios } from './mc-e2e/scenarios/index.js';
 import type { McE2eScenario, ScenarioName } from './mc-e2e/scenarios/index.js';
 
 type RunMode = 'observe' | 'run';
+type RunBackend = 'subprocess' | 'terminal';
 
 type Options = {
   all: boolean;
@@ -16,6 +18,7 @@ type Options = {
   columns: number;
   scenario: ScenarioName;
   jobs: number;
+  backend: RunBackend;
   recordAiPath?: string;
 };
 
@@ -35,6 +38,7 @@ type TuiRunConfig = {
   programFile: string;
   programArgs: string[];
   env: Record<string, string | null>;
+  cwd: string;
 };
 
 const scenarioNames = new Set(listScenarios().map(scenario => scenario.name));
@@ -47,6 +51,7 @@ function parseArgs(argv: string[]): Options {
     columns: Number(process.stdout.columns ?? process.env.COLUMNS ?? 120),
     scenario: 'startup',
     jobs: 1,
+    backend: 'subprocess',
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -67,6 +72,10 @@ function parseArgs(argv: string[]): Options {
       options.all = true;
     } else if (name === '--jobs') {
       options.jobs = Number(readValue());
+    } else if (name === '--backend') {
+      const backend = readValue();
+      if (backend !== 'subprocess' && backend !== 'terminal') throw new Error(`Unknown backend: ${backend}`);
+      options.backend = backend;
     } else if (name === '--rows') {
       options.rows = Number(readValue());
     } else if (name === '--columns' || name === '--cols') {
@@ -90,7 +99,7 @@ function parseArgs(argv: string[]): Options {
       process.exit(0);
     } else if (name === '--help' || name === '-h') {
       process.stdout.write(
-        `Usage: pnpm --filter ./mastracode e2e:test [scenario] -- [options]\n\nOptions:\n  --mode <mode>        observe | run. Default: observe\n  --run                Shortcut for --mode run\n  --observe            Shortcut for --mode observe\n  --scenario <name>    ${Array.from(scenarioNames).join(' | ')}. Default: startup\n  --all                Run every registered scenario\n  --jobs <n>           Number of tui-test workers. Default: 1\n  --record-ai <dir>    Record unmatched AIMock OpenAI calls to this fixture directory\n  --list               List available scenarios\n  --rows <n>           PTY rows. Default: current terminal rows or 36\n  --columns <n>        PTY columns. Default: current terminal columns or 120\n`,
+        `Usage: pnpm --filter ./mastracode e2e:test [scenario] -- [options]\n\nOptions:\n  --mode <mode>        observe | run. Default: observe\n  --run                Shortcut for --mode run\n  --observe            Shortcut for --mode observe\n  --scenario <name>    ${Array.from(scenarioNames).join(' | ')}. Default: startup\n  --all                Run every registered scenario\n  --jobs <n>           Number of workers. Default: 1\n  --backend <name>     subprocess | terminal. Default: subprocess\n  --record-ai <dir>    Record unmatched AIMock OpenAI calls to this fixture directory\n  --list               List available scenarios\n  --rows <n>           PTY rows. Default: current terminal rows or 36\n  --columns <n>        PTY columns. Default: current terminal columns or 120\n`,
       );
       process.exit(0);
     } else {
@@ -105,6 +114,9 @@ function parseArgs(argv: string[]): Options {
   if (options.mode === 'observe' && options.jobs > 1) {
     process.stdout.write('[mc-e2e] observe mode forces --jobs 1 so live terminal output stays readable.\n');
     options.jobs = 1;
+  }
+  if (options.backend === 'terminal' && options.mode === 'observe') {
+    throw new Error('--backend terminal only supports run mode');
   }
 
   return options;
@@ -176,6 +188,58 @@ async function initializeStorage(dbPath: string): Promise<void> {
   const storage = new LibSQLStore({ id: 'mc-e2e', url: `file:${dbPath}` });
   await storage.init();
   await storage.close();
+}
+
+async function runTerminalBackendWorker(workerFile: string, config: TuiRunConfig): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
+    let settled = false;
+    const finish = (status: number) => {
+      if (settled) return;
+      settled = true;
+      resolve(status);
+    };
+    const workerEnv = {
+      ...process.env,
+      ...Object.fromEntries(Object.entries(config.env).filter((entry): entry is [string, string] => entry[1] !== null)),
+    };
+    const worker = new Worker(pathToFileURL(workerFile), {
+      workerData: { config },
+      env: workerEnv,
+      stdout: true,
+      stderr: true,
+    });
+    worker.stdout?.pipe(process.stdout, { end: false });
+    worker.stderr?.pipe(process.stderr, { end: false });
+    worker.on('message', message => {
+      const result = message as { status?: number; error?: string };
+      if (result.error) process.stderr.write(`[mc-e2e] ${config.scenarioName} terminal worker failed:\n${result.error}\n`);
+      finish(result.status ?? 1);
+    });
+    worker.on('error', reject);
+    worker.on('exit', code => {
+      if (code !== 0) finish(code ?? 1);
+      else finish(0);
+    });
+  });
+}
+
+async function runTerminalBackendPool(workerFile: string, configs: TuiRunConfig[], jobs: number): Promise<number> {
+  let nextIndex = 0;
+  let failed = false;
+  const runNext = async (): Promise<void> => {
+    while (nextIndex < configs.length) {
+      const config = configs[nextIndex++];
+      if (!config) continue;
+      const start = Date.now();
+      process.stdout.write(`[mc-e2e] [terminal] starting ${config.scenarioName}\n`);
+      const status = await runTerminalBackendWorker(workerFile, config);
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      process.stdout.write(`[mc-e2e] [terminal] ${config.scenarioName} ${status === 0 ? 'passed' : 'failed'} in ${elapsed}s\n`);
+      if (status !== 0) failed = true;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(jobs, configs.length) }, () => runNext()));
+  return failed ? 1 : 0;
 }
 
 async function startAimock({
@@ -298,6 +362,7 @@ async function prepareScenarioRun({
       liveOutput: options.mode === 'observe',
       programFile,
       programArgs,
+      cwd: launchCwd,
       env: {
         ...(aimockBaseUrl
           ? {
@@ -318,6 +383,7 @@ async function prepareScenarioRun({
         MASTRACODE_DISABLE_HOOKS: '1',
         MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB: '1',
         MASTRACODE_DISABLE_MEMORY: '1',
+        ...(scenario.name === 'update-startup-prompt' ? {} : { MASTRACODE_DISABLE_UPDATE_CHECK: '1' }),
         ...(scenario.useOpenAIModel ? { MASTRACODE_MODEL_ID: 'openai/gpt-5.4-mini', MASTRACODE_YOLO: '1' } : {}),
         FORCE_COLOR: '1',
         TERM: 'xterm-256color',
@@ -337,6 +403,7 @@ const fixturesDir = join(scriptDir, 'mc-e2e', 'fixtures');
 const tmpRootDir = join(mastracodeDir, '.tmp-mc-e2e');
 const tmpDir = join(tmpRootDir, `${Date.now()}-${process.pid}`);
 const tuiTestBin = join(mastracodeDir, 'node_modules', '.bin', 'tui-test');
+const terminalWorkerFile = join(scriptDir, 'mc-e2e', 'terminal-worker.mjs');
 const tsxBin = join(mastracodeDir, 'node_modules', '.bin', 'tsx');
 const mainFile = join(mastracodeDir, 'src/main.ts');
 
@@ -363,7 +430,7 @@ for (const scenario of selectedScenarios) {
 }
 
 process.stdout.write(
-  `[mc-e2e] running ${runs.map(run => run.scenarioName).join(', ')} under @microsoft/tui-test (${options.columns}x${options.rows}, mode=${options.mode}, jobs=${options.jobs})...\n`,
+  `[mc-e2e] running ${runs.map(run => run.scenarioName).join(', ')} under ${options.backend} backend (${options.columns}x${options.rows}, mode=${options.mode}, jobs=${options.jobs})...\n`,
 );
 for (const run of runs) {
   if (run.env.OPENAI_BASE_URL) {
@@ -373,19 +440,24 @@ for (const run of runs) {
 if (options.recordAiPath)
   process.stdout.write(`[mc-e2e] recording AIMock fixtures to: ${resolve(options.recordAiPath)}\n`);
 
-const testProcess = spawn(tuiTestBin, [], {
-  cwd: mastracodeDir,
-  stdio: 'inherit',
-  env: {
-    ...process.env,
-    MC_E2E_JOBS: String(options.jobs),
-    MC_E2E_RUNS_JSON: JSON.stringify(runs),
-  },
-});
-const status = await new Promise<number | null>((resolve, reject) => {
-  testProcess.on('error', reject);
-  testProcess.on('exit', resolve);
-});
+let status: number | null;
+if (options.backend === 'terminal') {
+  status = await runTerminalBackendPool(terminalWorkerFile, runs, options.jobs);
+} else {
+  const testProcess = spawn(tuiTestBin, [], {
+    cwd: mastracodeDir,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      MC_E2E_JOBS: String(options.jobs),
+      MC_E2E_RUNS_JSON: JSON.stringify(runs),
+    },
+  });
+  status = await new Promise<number | null>((resolve, reject) => {
+    testProcess.on('error', reject);
+    testProcess.on('exit', resolve);
+  });
+}
 
 let missingRequest = false;
 let requestVerificationFailed = false;
@@ -406,7 +478,14 @@ for (const aimock of aimocks) {
   await aimock.stop();
 }
 
-if (status === 0) rmSync(tmpRootDir, { recursive: true, force: true });
+if (status === 0) {
+  rmSync(tmpDir, { recursive: true, force: true });
+  try {
+    if (readdirSync(tmpRootDir).length === 0) rmdirSync(tmpRootDir);
+  } catch {
+    // Another e2e runner may still be using the shared temp root.
+  }
+}
 if (missingRequest) {
   process.stderr.write('[mc-e2e] expected at least one AIMock request for each OpenAI-backed scenario but saw none.\n');
   process.exit(1);

@@ -5,7 +5,7 @@
  * MastraTUI class.
  */
 import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
-import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@mariozechner/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
@@ -127,6 +127,9 @@ export interface MastraTUIOptions {
 
   /** GitHub PR signal processor used for status-line polling state. */
   githubSignals?: GithubSignals;
+
+  /** Terminal implementation for tests or embedded hosts. Defaults to ProcessTerminal. */
+  terminal?: Terminal;
 }
 
 // =============================================================================
@@ -152,7 +155,7 @@ export interface TUIState {
   lastRenderedMessageAt?: number;
   editor: CustomEditor;
   footer: Container;
-  terminal: ProcessTerminal;
+  terminal: Terminal;
 
   // ── Agent / streaming ─────────────────────────────────────────────────
   isInitialized: boolean;
@@ -286,11 +289,13 @@ export interface TUIState {
  * and sets all mutable fields to their defaults.
  */
 export function createTUIState(options: MastraTUIOptions): TUIState {
-  const terminal = new ProcessTerminal();
-  // Override columns getter to prevent line wrapping in nested terminal emulators
-  Object.defineProperty(terminal, 'columns', {
-    get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
-  });
+  const terminal = options.terminal ?? new ProcessTerminal();
+  if (!options.terminal) {
+    // Override columns getter to prevent line wrapping in nested terminal emulators.
+    Object.defineProperty(terminal, 'columns', {
+      get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
+    });
+  }
   const ui = new TUI(terminal);
 
   // Perf profiling removed

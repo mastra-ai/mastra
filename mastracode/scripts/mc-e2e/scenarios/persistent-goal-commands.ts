@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 const OBJECTIVE = 'Persist the goal command e2e objective across status commands.';

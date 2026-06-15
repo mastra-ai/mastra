@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 const connection = 'postgresql://user:pass@localhost:5432/e2e';

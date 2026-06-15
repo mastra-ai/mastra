@@ -1,4 +1,4 @@
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const updateStartupPromptScenario: McE2eScenario = {

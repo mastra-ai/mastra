@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 
 import type { McE2ePrepareContext, McE2eScenario } from './types.js';
 

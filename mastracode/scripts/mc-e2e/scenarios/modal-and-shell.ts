@@ -1,4 +1,3 @@
-import { expect } from '@microsoft/tui-test';
 import type { McE2eScenario } from './types.js';
 
 export const modalAndShellScenario: McE2eScenario = {
@@ -9,9 +8,7 @@ export const modalAndShellScenario: McE2eScenario = {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
 
-    await (
-      expect(terminal.getByText(/Mastra Code|Build|Plan|Fast|Type|Press|>/gi, { full: true, strict: false })) as any
-    ).toBeVisible();
+    await runtime.waitForScreenText(/Mastra Code|Build|Plan|Fast|Type|Press|>/i, terminal);
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('/sandbox');

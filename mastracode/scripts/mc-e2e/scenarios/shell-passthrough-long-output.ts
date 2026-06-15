@@ -1,4 +1,4 @@
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 const shellCommand = `node -e "let i=0; const t=setInterval(() => { console.log('mc-shell-line-' + String(i).padStart(3, '0')); if (++i === 22) clearInterval(t); }, 100)"`;

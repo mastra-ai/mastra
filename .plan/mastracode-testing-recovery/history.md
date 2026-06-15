@@ -1,5 +1,47 @@
 # Mastra Code testing recovery history
 
+### Experimental terminal backend vertical slice (2026-06-15)
+
+Added an experimental `mc-e2e --backend terminal` path that runs the same checked-in scenario corpus without `@microsoft/tui-test` subprocesses. The backend injects a pi-tui `Terminal` into `MastraTUI`, implements that terminal with `@xterm/headless`, runs scenarios in worker threads, and preserves AIMock request verification. Scenario files now import a local lightweight `expect` wrapper so they can run both under tui-test and the standalone terminal workers.
+
+Key implementation points:
+
+- `MastraTUIOptions` accepts an optional `Terminal`; production still defaults to `ProcessTerminal`.
+- Terminal workers set isolated env/cwd state before lazy-importing Mastra Code modules, matching subprocess startup semantics and avoiding module-level auth/storage leakage.
+- `homeDir` is carried in state so workspace skill discovery uses the isolated scenario home instead of `os.homedir()` from the parent process.
+- `EmulatedTerminal` uses pi-tui `StdinBuffer` so arrow/select/modal key sequences follow the same parser path as `ProcessTerminal`.
+- The terminal backend mirrors CLI startup warnings by writing storage/observability warnings into the emulated terminal before TUI startup.
+- Successful cleanup removes only the current run directory and only removes `.tmp-mc-e2e` when empty, avoiding races between concurrent focused runs.
+
+Focused parity proof:
+
+```sh
+pnpm --filter ./mastracode run e2e:test modal-and-shell -- --backend subprocess
+pnpm --filter ./mastracode run e2e:test modal-and-shell -- --backend terminal
+pnpm --filter ./mastracode run e2e:test api-key-delete-env -- --backend terminal
+pnpm --filter ./mastracode run e2e:test custom-provider-model-selector -- --backend terminal
+pnpm --filter ./mastracode run e2e:test storage-startup-pg-fallback -- --backend terminal
+pnpm --filter ./mastracode run e2e:test om-threshold-persistence -- --backend terminal
+pnpm --filter ./mastracode run e2e:test persistent-goal-commands -- --backend terminal
+pnpm --filter ./mastracode run e2e:test shell-passthrough-long-output -- --backend terminal
+pnpm run build:mastracode
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+```
+
+Latest full terminal-backend audit:
+
+| backend shape | result | elapsed | notes |
+| --- | ---: | ---: | --- |
+| terminal workers, `--jobs 8` | 67/120 passed | 250s | 33 failures are explicit custom-entrypoint unsupported fast-fails; 20 are same-app terminal parity/timeouts. |
+| terminal workers, `--jobs 4` | 66/120 passed | 233s before status 139 | Lower concurrency did not improve parity and was less stable. |
+
+Remaining work before terminal backend can replace subprocess coverage:
+
+1. Decide how custom `entrypoint()` scenarios should run in terminal mode: keep subprocess-only, or add an injectable terminal entrypoint contract for bespoke programs.
+2. Fix same-app terminal parity gaps: slash/custom autocomplete selection, file autocomplete (`fd`/cwd subprocess behavior), long shell readback truncation assertions, browser/status/settings projections, and notification reload timing.
+3. Re-run full terminal mode after each cluster and compare against the green sharded subprocess baseline (120/120 in 236s).
+
 ### Full-suite shard parallelization proof (2026-06-14)
 
 Root cause for the `--jobs 4` suite still taking ~14 minutes was structural: `@microsoft/tui-test` parallelizes by test file, and the Mastra Code e2e wrapper put all 120 scenarios in one `tui.test.ts` file. That meant tests inside the file still ran effectively serially.
