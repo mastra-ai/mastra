@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Unified TUI spacing: removed internal Spacer(1) from all chat components and made every component participate in boundary spacing via getChatSpacingKind(). This eliminates double blank lines (where internal + boundary spacers stacked) and missing blank lines (where components bypassed the spacing system). All chat spacing is now controlled by a single reconciliation pass.
+Fixed TUI chat spacing so message layout stays stable while the assistant streams. Chat spacing now runs through a single boundary-spacing pass, preventing flicker from dynamic spacer recomputation, avoiding stacked or missing blank lines, and keeping custom slash command previews consistently spaced as responses begin.
