@@ -12,7 +12,7 @@
     "eslint": "^10.4.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
-    "npm-run-all2": "^9.0.1",
+    "npm-run-all2": "^9.0.2",
     "path-to-regexp": "^8.3.0",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.7.2",

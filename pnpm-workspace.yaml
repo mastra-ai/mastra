@@ -35,7 +35,7 @@ catalog:
   '@microsoft/api-extractor': ^7.57.7
   '@vitest/coverage-v8': 4.1.8
   '@vitest/ui': 4.1.8
-  date-fns: 4.1.0
+  date-fns: 4.4.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^6.0.3
