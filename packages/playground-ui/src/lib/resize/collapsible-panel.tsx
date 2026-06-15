@@ -30,6 +30,7 @@ export const CollapsiblePanel = ({
   children,
   direction,
   className,
+  onResize,
   style,
   minSize,
   ...props
@@ -37,13 +38,11 @@ export const CollapsiblePanel = ({
   const [collapsed, setCollapsed] = useState(false);
   const panelRef = usePanelRef();
   const elementRef = useRef<HTMLDivElement | null>(null);
+  const expandButtonRef = useRef<HTMLButtonElement | null>(null);
   const stripRef = useRef<HTMLButtonElement | null>(null);
   const pillRef = useRef<HTMLSpanElement | null>(null);
   const enableSizeTransitions = useRef<() => void>(() => {});
 
-  // On pointer entry the pill must spawn under the cursor, not glide over
-  // from its previous position: suppress the `top` trailing transition for
-  // one frame while keeping the opacity fade-in.
   const spawnPill = (clientY: number) => {
     const strip = stripRef.current;
     const pill = pillRef.current;
@@ -55,9 +54,6 @@ export const CollapsiblePanel = ({
     });
   };
 
-  // A panel restored in its collapsed state must FIRST PAINT collapsed, not
-  // load open and animate shut: every transition stays disarmed until one
-  // frame after the library reports the initial size.
   const [booted, setBooted] = useState(false);
   const bootedRef = useRef(false);
   const bootScheduled = useRef(false);
@@ -67,13 +63,10 @@ export const CollapsiblePanel = ({
     requestAnimationFrame(() => {
       bootedRef.current = true;
       setBooted(true);
+      enableSizeTransitions.current();
     });
   };
 
-  // Animate panel sizes on collapse/expand so the neighboring layout reflows
-  // smoothly instead of jumping. The library only sets flex styles on the
-  // group's panel elements; a CSS transition on them is purely visual and
-  // must be suspended while dragging to keep resizing direct.
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const group = elementRef.current?.parentElement;
@@ -105,27 +98,23 @@ export const CollapsiblePanel = ({
     };
   }, []);
 
-  // Arm the size transitions once the initial layout has painted.
-  useEffect(() => {
-    if (booted) enableSizeTransitions.current();
-  }, [booted]);
-
-  // Hovering the adjacent resize handle should also reveal the expand pill.
-  // The separator is a sibling element, out of reach of CSS group/hover.
-  const [edgeHovered, setEdgeHovered] = useState(false);
   useEffect(() => {
     if (!collapsed) return;
     const panelElement = elementRef.current;
     const separator = direction === 'left' ? panelElement?.nextElementSibling : panelElement?.previousElementSibling;
     if (!(separator instanceof HTMLElement) || !separator.hasAttribute('data-separator')) return;
 
+    const setEdgeHovered = (hovered: boolean) => {
+      const expandButton = expandButtonRef.current;
+      const pill = pillRef.current;
+      if (expandButton) expandButton.dataset.edgeHovered = hovered ? 'true' : 'false';
+      if (pill) pill.dataset.edgeHovered = hovered ? 'true' : 'false';
+    };
     const show = (event: PointerEvent) => {
       setEdgeHovered(true);
       spawnPill(event.clientY);
     };
     const hide = () => setEdgeHovered(false);
-    // The pill follows the pointer along the separator too, so the affordance
-    // stays under the cursor across the whole edge.
     const follow = (event: PointerEvent) => {
       if (stripRef.current) trackPillY(stripRef.current, event.clientY);
     };
@@ -141,9 +130,6 @@ export const CollapsiblePanel = ({
   }, [collapsed, direction]);
 
   const expand = () => {
-    // Re-assert the size transition right before the programmatic expand: a
-    // just-finished drag may have left it suspended, which made the panel
-    // snap open instantly instead of animating.
     enableSizeTransitions.current();
     if (!panelRef.current) return;
     panelRef.current.expand();
@@ -158,9 +144,6 @@ export const CollapsiblePanel = ({
       collapsedSize={collapsedSize}
       minSize={minSize}
       className={cn('relative', className)}
-      // The library's nested div defaults to overflow auto, which would clip
-      // the expand strip floating past the zero-width collapsed panel. While
-      // expanded it clips the min-width content so the moving panel reveals it.
       style={
         {
           overflow: collapsed ? 'visible' : 'hidden',
@@ -169,29 +152,24 @@ export const CollapsiblePanel = ({
         } as CSSProperties
       }
       {...props}
-      onResize={size => {
+      onResize={(size, previousSize, panel) => {
+        onResize?.(size, previousSize, panel);
         if (typeof collapsedSize !== 'number') return;
         setCollapsed(size.inPixels <= collapsedSize);
         boot();
       }}
     >
-      {/* The wrapper always tracks the panel width but never lays out
-          narrower than the panel's minimum size: transient widths (drag,
-          expand animation, collapsed at zero) clip the content instead of
-          rewrapping it. Anchored to the panel's outer edge, it slides + fades
-          out on collapse and slides back in on expand — opacity and translate
-          are plain inline styles, natively animated by the static transition
-          classes. */}
       <div
         inert={collapsed}
         data-state={collapsed ? 'collapsed' : 'open'}
         data-direction={direction}
         style={{
+          minWidth: 'var(--panel-min-w)',
           opacity: collapsed ? 0 : undefined,
           translate: collapsed ? (direction === 'left' ? '-100% 0' : '100% 0') : undefined,
         }}
         className={cn(
-          'absolute inset-y-0 w-full min-w-(--panel-min-w) overflow-hidden',
+          'absolute inset-y-0 w-full overflow-hidden',
           'transition-[opacity,translate] duration-300 ease-out-custom motion-reduce:transition-none',
           'data-[direction=left]:left-0 data-[direction=right]:right-0',
           'data-[state=collapsed]:z-10',
@@ -203,10 +181,8 @@ export const CollapsiblePanel = ({
 
       {collapsed && (
         <>
-          {/* Always-visible hint that a panel can be opened here, placed like
-              a header action inside the interface. Fades in via
-              @starting-style when the panel reaches its collapsed state. */}
           <button
+            ref={expandButtonRef}
             type="button"
             aria-label="Expand panel"
             onClick={expand}
@@ -215,7 +191,7 @@ export const CollapsiblePanel = ({
               'absolute top-2 z-10',
               'transition-[color,background-color,opacity] duration-300 starting:opacity-0',
               direction === 'left' ? 'left-2' : 'right-2',
-              edgeHovered && 'text-neutral6',
+              'data-[edge-hovered=true]:text-neutral6',
             )}
           >
             <Icon>
@@ -223,11 +199,6 @@ export const CollapsiblePanel = ({
             </Icon>
           </button>
 
-          {/* Expand affordance for pointers: thin hover strip floating over the
-              neighboring panel's edge — takes no layout space. The pill chevron
-              follows the cursor along the strip. The edge-most 4px stay free
-              for the separator's drag hit zone. Keyboard users get the button
-              above instead. */}
           <button
             ref={stripRef}
             type="button"
@@ -244,13 +215,14 @@ export const CollapsiblePanel = ({
           >
             <span
               ref={pillRef}
+              style={{ top: 'var(--pill-y)' }}
               className={cn(
-                'absolute top-(--pill-y) flex size-7 -translate-y-1/2 items-center justify-center rounded-full bg-neutral6 text-surface1 shadow-dialog',
+                'absolute flex size-7 -translate-y-1/2 items-center justify-center rounded-full bg-neutral6 text-surface1 shadow-dialog',
                 'pointer-events-none opacity-0 transition-[opacity,translate,top] duration-150 ease-out-custom motion-reduce:transition-none',
                 direction === 'left' ? 'left-0.5 -translate-x-1' : 'right-0.5 translate-x-1',
                 'group-hover/expand:pointer-events-auto group-hover/expand:translate-x-0 group-hover/expand:opacity-100',
                 'group-active/expand:bg-neutral6/80',
-                edgeHovered && 'pointer-events-auto translate-x-0 opacity-100',
+                'data-[edge-hovered=true]:pointer-events-auto data-[edge-hovered=true]:translate-x-0 data-[edge-hovered=true]:opacity-100',
               )}
             >
               <Icon>{direction === 'left' ? <ChevronRight /> : <ChevronLeft />}</Icon>

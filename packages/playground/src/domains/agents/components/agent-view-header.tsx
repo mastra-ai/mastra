@@ -12,10 +12,6 @@ export interface AgentViewHeaderProps {
   view: 'chat' | 'settings';
 }
 
-/**
- * Header row at the top of the agent main column: entity header on the left,
- * and the agent actions (edit, share, chat/settings toggle) on the right.
- */
 export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,8 +44,6 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
 
   return (
     <TooltipProvider>
-      {/* Named so the header crossfades in place instead of being swept into the root snapshot */}
-      {/* max-lg: the title is hidden so the floating drawer trigger owns the top-left corner; py-2 keeps the action buttons aligned with it */}
       <div
         className="flex items-center justify-between gap-2 pr-3 max-lg:py-2"
         style={{ viewTransitionName: 'agent-view-header' }}
@@ -57,7 +51,6 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
         <div className="flex-1 min-w-0 max-lg:hidden">
           <AgentEntityHeader agentId={agentId} />
         </div>
-        {/* ml-auto keeps the actions on the right below lg, where the entity header is hidden */}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {showEditButton && (
             <Button variant="outline" size="sm" as={FrameworkLink} to={editPath}>

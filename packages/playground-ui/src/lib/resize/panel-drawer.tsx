@@ -20,12 +20,6 @@ export interface PanelDrawerProps {
   children: ReactNode;
 }
 
-/**
- * Mobile counterpart of `CollapsiblePanel`: the side panel content lives in an
- * edge drawer, opened from a persistent ghost icon button floating at the top
- * of the matching edge. The drawer stays mounted while closed so the panel
- * content keeps its state (scroll position, inputs).
- */
 export const PanelDrawer = ({ direction, label, children }: PanelDrawerProps) => {
   return (
     <Drawer side={direction}>

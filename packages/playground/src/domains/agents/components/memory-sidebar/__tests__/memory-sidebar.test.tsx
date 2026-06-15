@@ -129,17 +129,23 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('MemorySidebar', () => {
-  it('shows the thread list by default with a Memory footer card', async () => {
+  it('renders the Memory card as an overlay above the thread list by default', async () => {
     const { container } = renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
     // Threads view is the default: the thread list (with New Chat) is visible.
-    expect(await screen.findByText('New Chat')).not.toBeNull();
+    const newChat = await screen.findByText('New Chat');
+    expect(newChat).not.toBeNull();
     expect(await screen.findByText('My first chat')).not.toBeNull();
 
-    // No header row or tabs: a footer card is the entry point to the memory view.
+    // No header row or tabs: a top card is the entry point to the memory view.
     const card = screen.getByTestId('memory-sidebar-card');
     expect(card.textContent).toMatch(/memory/i);
     expect(card.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('memory-sidebar-thread-layer').textContent).toContain('New Chat');
+    expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('absolute');
+    expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('z-10');
+    expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('rounded-xl');
+    expect(card.className).toContain('bg-transparent');
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 

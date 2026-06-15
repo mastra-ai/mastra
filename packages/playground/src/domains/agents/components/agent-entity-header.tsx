@@ -16,10 +16,6 @@ export interface AgentEntityHeaderProps {
   agentId: string;
 }
 
-/**
- * Agent title row: icon + name. Hovering reveals a copy icon and clicking
- * anywhere on the title copies the agent id.
- */
 export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { handleCopy, isCopied } = useCopyToClipboard({ text: agentId });

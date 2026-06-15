@@ -8,10 +8,13 @@ interface MemoryConfigSection {
   title: string;
   items: Array<{
     label: string;
-    value: string | number | boolean | undefined;
-    badge?: 'success' | 'info' | 'warning';
+    value: MemoryConfigItemValue | undefined;
+    badge?: MemoryConfigBadge;
   }>;
 }
+
+type MemoryConfigBadge = 'success' | 'info' | 'warning';
+type MemoryConfigItemValue = string | number | boolean;
 
 interface AgentMemoryConfigProps {
   agentId: string;
@@ -39,6 +42,43 @@ type DisplayMemoryConfig = {
         };
       };
 };
+
+const formatThreshold = (threshold: number | { min: number; max: number } | undefined) => {
+  if (!threshold) return 'Default';
+  if (typeof threshold === 'number') return `${threshold.toLocaleString()} tokens`;
+  return `${threshold.min.toLocaleString()}-${threshold.max.toLocaleString()} tokens`;
+};
+
+const badgeColors: Record<MemoryConfigBadge, string> = {
+  success: 'bg-green-500/20 text-green-400',
+  info: 'bg-blue-500/20 text-blue-400',
+  warning: 'bg-yellow-500/20 text-yellow-400',
+};
+
+function MemoryConfigValue({ value, badge }: { value: MemoryConfigItemValue; badge?: MemoryConfigBadge }) {
+  if (typeof value === 'boolean') {
+    return (
+      <span
+        className={cn(
+          'text-xs font-medium px-2 py-0.5 rounded',
+          value
+            ? badge === 'info'
+              ? 'dark:bg-blue-500/20 dark:text-blue-400 bg-blue-500/10 text-blue-600'
+              : 'dark:bg-green-500/20 dark:text-green-400 bg-green-500/10 text-green-600'
+            : 'dark:bg-red-500/20 dark:text-red-400 bg-red-500/10 text-red-600',
+        )}
+      >
+        {value ? 'Yes' : 'No'}
+      </span>
+    );
+  }
+
+  if (badge) {
+    return <span className={cn('text-xs font-medium px-2 py-0.5 rounded', badgeColors[badge])}>{value}</span>;
+  }
+
+  return <span className="text-xs text-neutral3">{value}</span>;
+}
 
 export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
   const { data, isLoading } = useMemoryConfig(agentId);
@@ -100,12 +140,6 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
     const isObservationalMemoryEnabled = omConfig === true || (isOmConfigObject && omConfig.enabled !== false);
 
     if (isObservationalMemoryEnabled) {
-      const formatThreshold = (threshold: number | { min: number; max: number } | undefined) => {
-        if (!threshold) return 'Default';
-        if (typeof threshold === 'number') return `${threshold.toLocaleString()} tokens`;
-        return `${threshold.min.toLocaleString()}-${threshold.max.toLocaleString()} tokens`;
-      };
-
       const observationModel = isOmConfigObject
         ? omConfig.observationModel || omConfig.model || omConfig.observation?.model
         : undefined;
@@ -143,36 +177,6 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
       newExpanded.add(title);
     }
     setExpandedSections(newExpanded);
-  };
-
-  const renderValue = (value: string | number | boolean, badge?: 'success' | 'info' | 'warning') => {
-    if (typeof value === 'boolean') {
-      return (
-        <span
-          className={cn(
-            'text-xs font-medium px-2 py-0.5 rounded',
-            value
-              ? badge === 'info'
-                ? 'dark:bg-blue-500/20 dark:text-blue-400 bg-blue-500/10 text-blue-600'
-                : 'dark:bg-green-500/20 dark:text-green-400 bg-green-500/10 text-green-600'
-              : 'dark:bg-red-500/20 dark:text-red-400 bg-red-500/10 text-red-600',
-          )}
-        >
-          {value ? 'Yes' : 'No'}
-        </span>
-      );
-    }
-
-    if (badge) {
-      const badgeColors = {
-        success: 'bg-green-500/20 text-green-400',
-        info: 'bg-blue-500/20 text-blue-400',
-        warning: 'bg-yellow-500/20 text-yellow-400',
-      };
-      return <span className={cn('text-xs font-medium px-2 py-0.5 rounded', badgeColors[badge])}>{value}</span>;
-    }
-
-    return <span className="text-xs text-neutral3">{value}</span>;
   };
 
   if (isLoading) {
@@ -215,7 +219,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
                 {section.items.map(item => (
                   <div key={`${section.title}-${item.label}`} className="flex items-center justify-between py-1">
                     <span className="text-xs text-neutral3">{item.label}</span>
-                    {renderValue(item.value ?? '', item.badge)}
+                    <MemoryConfigValue value={item.value ?? ''} badge={item.badge} />
                   </div>
                 ))}
               </div>

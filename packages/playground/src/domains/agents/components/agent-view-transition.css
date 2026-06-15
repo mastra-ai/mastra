@@ -65,7 +65,7 @@
 }
 
 /*
- * Fallback for browsers without the View Transitions API (applied only there —
+ * Fallback for browsers without the View Transitions API (applied only there;
  * see pages/agents/agent/index.tsx). Opacity-only: an in-flow translate would
  * overflow the main panel and flash its scrollbar during the animation.
  */
@@ -88,6 +88,29 @@
   }
 }
 
+/* Memory sidebar overlay: dialog-like expansion without shifting the threads layer */
+.memory-sidebar-overlay {
+  transition-property: height, margin, border-radius, border-color, background-color, box-shadow;
+  transition-duration: 420ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: height, margin, border-radius;
+}
+
+.memory-sidebar-thread-layer {
+  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.memory-sidebar-overlay:not(:has(.memory-card-content)) {
+  animation: memory-sidebar-hover-lock 420ms steps(1, end);
+}
+
+@keyframes memory-sidebar-hover-lock {
+  from,
+  to {
+    background-color: var(--surface4);
+  }
+}
+
 /* Memory card expansion: the detail content fades in once the card has grown */
 @keyframes memory-card-content-enter {
   from {
@@ -99,10 +122,19 @@
 }
 
 .memory-card-content {
-  animation: memory-card-content-enter 200ms ease-out 100ms both;
+  animation: memory-card-content-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) 80ms both;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .memory-sidebar-overlay,
+  .memory-sidebar-thread-layer {
+    transition: none;
+  }
+
+  .memory-sidebar-overlay:not(:has(.memory-card-content)) {
+    animation: none;
+  }
+
   .memory-card-content {
     animation: none;
   }

@@ -207,8 +207,6 @@ export const SearchWithDropdown: Story = {
           />
         </InputGroup>
         <Select value={sort} onValueChange={setSort}>
-          {/* size="lg" = h-form-default — matches the InputGroup `size="default"` height,
-              since the trigger's `md` default sits one step shorter. */}
           <SelectTrigger aria-label="Sort by" size="lg" className="rounded-full">
             <SelectValue />
           </SelectTrigger>

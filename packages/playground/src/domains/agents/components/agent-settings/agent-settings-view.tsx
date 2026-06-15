@@ -3,8 +3,8 @@ import { Brain, Radio, Settings2 } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 
 import { useChannelPlatforms } from '../../hooks/use-channels';
-import { AgentChannels } from '../agent-channels';
-import { AgentMetadata } from '../agent-metadata';
+import { AgentChannels } from '../agent-channels/agent-channels';
+import { AgentMetadata } from '../agent-metadata/agent-metadata';
 import { AgentMemoryConfig } from './agent-memory-config';
 
 export type AgentSettingsTab = 'overview' | 'memory' | 'channels';
@@ -19,11 +19,6 @@ export interface AgentSettingsViewProps {
   agentId: string;
 }
 
-/**
- * Full-zone agent configuration view shown in place of the chat.
- * Static config only — run-scoped options (request context, tracing, model
- * settings) live next to the chat composer.
- */
 export function AgentSettingsView({ agentId }: AgentSettingsViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: channelPlatforms } = useChannelPlatforms();
@@ -38,8 +33,6 @@ export function AgentSettingsView({ agentId }: AgentSettingsViewProps) {
     <div
       className="h-full w-full min-w-0"
       data-testid="agent-settings-view"
-      // Named so the chat/settings view transition can slide the panel in from
-      // under the header instead of crossfading with the rest of the page.
       style={{ viewTransitionName: 'agent-settings-view' }}
     >
       <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>

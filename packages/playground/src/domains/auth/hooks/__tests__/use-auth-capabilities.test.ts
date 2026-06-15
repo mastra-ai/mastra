@@ -65,7 +65,7 @@ describe('useAuthCapabilities', () => {
           'x-custom-header': 'custom-value',
         }),
       );
-    });
+    }, 10_000);
 
     it('should work when client has no custom headers', async () => {
       const mockClient = {

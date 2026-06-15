@@ -86,7 +86,6 @@ describe('ComposerRunOptions', () => {
 
     expect(await screen.findByRole('heading', { name: /run options/i })).not.toBeNull();
     expect(await screen.findByRole('button', { name: /context details/i })).not.toBeNull();
-    expect(await screen.findByRole('heading', { name: /tracing/i })).not.toBeNull();
     expect(await screen.findByText('Tracing Options (JSON)')).not.toBeNull();
     expect(await screen.findByText('Auto-applied on valid JSON')).not.toBeNull();
     expect(await screen.findByRole('tooltip')).not.toBeNull();

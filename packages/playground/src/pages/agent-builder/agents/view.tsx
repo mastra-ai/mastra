@@ -1,5 +1,5 @@
 import { Spinner } from '@mastra/playground-ui';
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { Navigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
@@ -52,13 +52,7 @@ const ViewPageForm = ({ storedAgent }: ViewPageFormProps) => {
   const [defaultValues] = useState(() => storedAgentToFormValues(storedAgent));
   const formMethods = useForm<AgentBuilderEditFormValues>({ defaultValues });
 
-  const body = (
-    <AgentBuilderViewLayout
-      topBar={<ViewTopBarSlot />}
-      chat={<AgentChatPanelChat hasBrowser={hasBrowser} />}
-      browserOverlay={hasBrowser ? <BrowserViewPanel /> : undefined}
-    />
-  );
+  const body = <ViewPageBody hasBrowser={hasBrowser} />;
 
   if (hasBrowser) {
     return (
@@ -80,6 +74,14 @@ const ViewPageForm = ({ storedAgent }: ViewPageFormProps) => {
     </FormProvider>
   );
 };
+
+const ViewPageBody = memo(function ViewPageBody({ hasBrowser }: { hasBrowser: boolean }) {
+  const topBar = useMemo(() => <ViewTopBarSlot />, []);
+  const chat = useMemo(() => <AgentChatPanelChat hasBrowser={hasBrowser} />, [hasBrowser]);
+  const browserOverlay = useMemo(() => (hasBrowser ? <BrowserViewPanel /> : undefined), [hasBrowser]);
+
+  return <AgentBuilderViewLayout topBar={topBar} chat={chat} browserOverlay={browserOverlay} />;
+});
 
 const ViewTopBarSlot = () => {
   const { canModify, onModeToggle, isOwner, agentId, agent } = useViewPage();

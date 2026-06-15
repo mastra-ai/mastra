@@ -5,22 +5,25 @@ const DEFAULT_MOBILE_BREAKPOINT = 1024;
 
 const noopSubscribe = () => () => {};
 
-/**
- * Tracks whether the viewport is below the mobile breakpoint.
- * SSR-safe: renders desktop on the server, then syncs on hydration.
- */
 export const useIsMobile = (breakpoint: number = DEFAULT_MOBILE_BREAKPOINT) => {
   const query = `(max-width: ${breakpoint - 1}px)`;
+  const getSnapshot = () =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(query).matches : false;
 
   return useSyncExternalStore(
-    typeof window === 'undefined'
+    typeof window === 'undefined' || typeof window.matchMedia !== 'function'
       ? noopSubscribe
       : callback => {
           const mq = window.matchMedia(query);
-          mq.addEventListener('change', callback);
-          return () => mq.removeEventListener('change', callback);
+          if (typeof mq.addEventListener === 'function') {
+            mq.addEventListener('change', callback);
+            return () => mq.removeEventListener('change', callback);
+          }
+
+          mq.addListener(callback);
+          return () => mq.removeListener(callback);
         },
-    () => window.matchMedia(query).matches,
+    getSnapshot,
     () => false,
   );
 };

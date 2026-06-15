@@ -1,3 +1,4 @@
+import type { GetObservationalMemoryResponse } from '@mastra/client-js';
 import {
   ScrollArea,
   Skeleton,
@@ -9,8 +10,8 @@ import {
 } from '@mastra/playground-ui';
 import { ChevronRight, ChevronDown, Brain, ExternalLink, Info } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
-import type { KeyboardEvent } from 'react';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
+import type { OmProgressData } from '@/domains/agents/context';
 import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
 import { ObservationRenderer } from '@/lib/ai-ui/tools/badges/observation-renderer';
 
@@ -35,6 +36,9 @@ const getModelLabel = (model: unknown, modelRouting?: Array<{ upTo: number; mode
 };
 
 type ThresholdValue = number | { min: number; max: number };
+type ModelRouting = Array<{ upTo: number; model: string }>;
+type ObservationalMemoryRecord = NonNullable<GetObservationalMemoryResponse['record']>;
+type ObservationalMemoryHistoryRecord = NonNullable<GetObservationalMemoryResponse['history']>[number];
 
 const getThresholdValue = (threshold: ThresholdValue | undefined, defaultValue: number) => {
   if (!threshold) return defaultValue;
@@ -48,10 +52,20 @@ const getBaseThresholdValue = (threshold: ThresholdValue | undefined, defaultVal
   return threshold.min;
 };
 
-const handleCopyKeyDown = (event: KeyboardEvent<HTMLDivElement>, onCopy: () => void) => {
-  if (event.key !== 'Enter' && event.key !== ' ') return;
-  event.preventDefault();
-  onCopy();
+const formatRelativeTime = (date: Date | string | null | undefined) => {
+  if (!date) return 'Never';
+  const d = new Date(date);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return d.toLocaleDateString();
 };
 
 const useElapsedTime = (isActive: boolean) => {
@@ -223,16 +237,113 @@ const ProgressBar = ({
   );
 };
 
-interface AgentObservationalMemoryProps {
-  agentId: string;
-  resourceId: string;
-  threadId?: string;
+const ObservationalMemoryHeader = () => (
+  <div className="flex items-center gap-2 mb-3">
+    <Brain className="w-4 h-4 text-purple-400" />
+    <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
+  </div>
+);
+
+const ObservationalMemoryDisabled = () => (
+  <div className="p-4">
+    <div className="flex items-center gap-2 mb-3">
+      <Brain className="w-4 h-4 text-neutral3" />
+      <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
+    </div>
+    <div className="bg-surface3 border border-border1 rounded-lg p-4">
+      <p className="text-sm text-neutral3 mb-3">
+        Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain observations
+        from conversations.
+      </p>
+      <a
+        href="https://mastra.ai/en/docs/memory/observational-memory"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+      >
+        Learn about Observational Memory
+        <ExternalLink className="w-3 h-3" />
+      </a>
+    </div>
+  </div>
+);
+
+function ObservationalMemoryProgressBars({
+  pendingMessageTokens,
+  messageTokensThreshold,
+  isObserving,
+  observationModel,
+  observationModelRouting,
+  baseMessageTokens,
+  totalBudget,
+  observationTokenCount,
+  observationTokensThreshold,
+  isReflecting,
+  baseObservationTokens,
+  reflectionModel,
+  reflectionModelRouting,
+}: {
+  pendingMessageTokens: number;
+  messageTokensThreshold: number;
+  isObserving: boolean;
+  observationModel?: string;
+  observationModelRouting?: ModelRouting;
+  baseMessageTokens?: number;
+  totalBudget: number;
+  observationTokenCount: number;
+  observationTokensThreshold: number;
+  isReflecting: boolean;
+  baseObservationTokens?: number;
+  reflectionModel?: string;
+  reflectionModelRouting?: ModelRouting;
+}) {
+  return (
+    <TooltipProvider delayDuration={0}>
+      <div className="flex gap-3 mb-3">
+        <ProgressBar
+          value={pendingMessageTokens}
+          max={messageTokensThreshold}
+          label="Messages"
+          isActive={isObserving}
+          model={observationModel}
+          modelRouting={observationModelRouting}
+          baseThreshold={baseMessageTokens}
+          totalBudget={totalBudget}
+        />
+        <ProgressBar
+          value={observationTokenCount}
+          max={observationTokensThreshold}
+          label="Observations"
+          isActive={isReflecting}
+          baseThreshold={baseObservationTokens}
+          model={reflectionModel}
+          modelRouting={reflectionModelRouting}
+          totalBudget={totalBudget}
+        />
+      </div>
+    </TooltipProvider>
+  );
 }
 
-export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: AgentObservationalMemoryProps) => {
+function ObservationsSection({
+  observations,
+  previousObservations,
+  record,
+  tokenCount,
+  isCopied,
+  onCopy,
+}: {
+  observations: string;
+  previousObservations: ObservationalMemoryHistoryRecord[];
+  record: ObservationalMemoryRecord | null | undefined;
+  tokenCount: number;
+  isCopied: boolean;
+  onCopy: () => void;
+}) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedReflections, setExpandedReflections] = useState<Set<string>>(new Set());
+  const observationsContentRef = useRef<HTMLDivElement>(null);
 
   const toggleReflection = (id: string) => {
     setExpandedReflections(prev => {
@@ -246,6 +357,234 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     });
   };
 
+  useEffect(() => {
+    if (!observations || !observationsContentRef.current || !isExpanded) return;
+
+    const container = observationsContentRef.current;
+    const dateHeaders = container.querySelectorAll<HTMLElement>('[class*="sticky"]');
+    const lastDateHeader = dateHeaders[dateHeaders.length - 1];
+    const scrollContainer = container.closest('[data-radix-scroll-area-viewport]') as HTMLElement;
+    if (!scrollContainer || !lastDateHeader) return;
+
+    const containerTop = container.getBoundingClientRect().top;
+    const headerTop = lastDateHeader.getBoundingClientRect().top;
+    const offsetFromTop = headerTop - containerTop;
+
+    requestAnimationFrame(() => {
+      scrollContainer.scrollTo({
+        top: offsetFromTop,
+        behavior: 'smooth',
+      });
+    });
+  }, [observations, isExpanded]);
+
+  if (!observations) return null;
+
+  const observedAt = record?.lastObservedAt ?? record?.updatedAt;
+
+  return (
+    <div className="space-y-3 min-w-0 overflow-hidden w-full">
+      <div className="border border-border1 rounded-lg bg-surface3 w-full overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsExpanded(value => !value)}
+          className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface4 transition-colors rounded-t-lg"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-neutral5">Observations</span>
+            <span className="text-xs text-neutral3">{tokenCount.toLocaleString()} tokens</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-neutral3">{observedAt ? formatRelativeTime(observedAt) : ''}</span>
+            {isExpanded ? (
+              <ChevronDown className="w-3 h-3 text-neutral3" />
+            ) : (
+              <ChevronRight className="w-3 h-3 text-neutral3" />
+            )}
+          </div>
+        </button>
+        {isExpanded && (
+          <div className="border-t border-border1 overflow-hidden w-full" style={{ height: '400px' }}>
+            <ScrollArea className="h-full w-full">
+              <div
+                ref={observationsContentRef}
+                className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs overflow-hidden w-full"
+              >
+                <button
+                  type="button"
+                  onClick={onCopy}
+                  aria-label="Copy observations"
+                  className="absolute inset-0 z-10 rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent1"
+                />
+                <ObservationRenderer
+                  observations={observations}
+                  maxHeight={undefined}
+                  className="wrap-break-word w-full overflow-hidden pointer-events-none"
+                />
+                {isCopied && (
+                  <span className="absolute top-2 right-2 z-20 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500 pointer-events-none">
+                    Copied!
+                  </span>
+                )}
+                <span className="absolute top-2 right-2 z-20 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface3 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  Click to copy
+                </span>
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+      </div>
+
+      {previousObservations.length > 0 && (
+        <ObservationHistory
+          previousObservations={previousObservations}
+          showHistory={showHistory}
+          expandedReflections={expandedReflections}
+          onToggleHistory={() => setShowHistory(value => !value)}
+          onToggleReflection={toggleReflection}
+        />
+      )}
+    </div>
+  );
+}
+
+function ObservationHistory({
+  previousObservations,
+  showHistory,
+  expandedReflections,
+  onToggleHistory,
+  onToggleReflection,
+}: {
+  previousObservations: ObservationalMemoryHistoryRecord[];
+  showHistory: boolean;
+  expandedReflections: Set<string>;
+  onToggleHistory: () => void;
+  onToggleReflection: (id: string) => void;
+}) {
+  return (
+    <div className="border-t border-border1 pt-3">
+      <button
+        type="button"
+        onClick={onToggleHistory}
+        className="flex items-center gap-2 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+      >
+        {showHistory ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <span>Previous observations ({previousObservations.length})</span>
+      </button>
+      {showHistory && (
+        <div className="mt-2 space-y-2">
+          {previousObservations.map(historyRecord => (
+            <ObservationHistoryRecord
+              key={historyRecord.id}
+              historyRecord={historyRecord}
+              isExpanded={expandedReflections.has(historyRecord.id)}
+              onToggle={() => onToggleReflection(historyRecord.id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ObservationHistoryRecord({
+  historyRecord,
+  isExpanded,
+  onToggle,
+}: {
+  historyRecord: ObservationalMemoryHistoryRecord;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="border border-border1 rounded-lg bg-surface2">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface3 transition-colors rounded-lg"
+      >
+        <div className="flex items-center gap-2">
+          {isExpanded ? (
+            <ChevronDown className="w-3 h-3 text-neutral3" />
+          ) : (
+            <ChevronRight className="w-3 h-3 text-neutral3" />
+          )}
+          <span className="text-xs font-medium text-neutral4">
+            {historyRecord.originType === 'reflection' ? 'Reflection' : 'Observation'}
+          </span>
+          {historyRecord.observationTokenCount !== undefined && (
+            <span className="text-xs text-neutral3">{formatTokens(historyRecord.observationTokenCount)} tokens</span>
+          )}
+        </div>
+        <span className="text-xs text-neutral3">{formatRelativeTime(historyRecord.createdAt)}</span>
+      </button>
+      {isExpanded && (
+        <div className="px-3 pb-3 max-h-48 overflow-y-auto border-t border-border1">
+          {historyRecord.activeObservations ? (
+            <ObservationRenderer observations={historyRecord.activeObservations} maxHeight={undefined} />
+          ) : (
+            <span className="text-xs text-neutral3 italic">No observations</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BackgroundProcessingStatus({ streamProgress }: { streamProgress: OmProgressData | null }) {
+  if (!streamProgress) return null;
+
+  const buffered = streamProgress.windows?.buffered;
+  const observationChunks = buffered?.observations?.chunks ?? 0;
+  const reflectionStatus = buffered?.reflection?.status;
+  if (observationChunks === 0 && reflectionStatus !== 'running' && reflectionStatus !== 'complete') return null;
+
+  return (
+    <div className="mt-3 border border-border1 rounded-lg bg-surface3 overflow-hidden">
+      <div className="px-3 py-2 space-y-1.5">
+        <div className="text-[9px] text-neutral4 uppercase tracking-wider font-normal">Background Processing</div>
+        {observationChunks > 0 && buffered?.observations && (
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${buffered.observations.status === 'running' ? 'bg-blue-400 animate-pulse' : 'bg-green-500'}`}
+            />
+            <span className="text-[10px] text-neutral5">
+              {observationChunks} buffered chunk{observationChunks !== 1 ? 's' : ''}
+            </span>
+            <span className="text-[10px] text-neutral3">
+              ↓{formatTokens(buffered.observations.projectedMessageRemoval ?? 0)} msg on activate →{' '}
+              {formatTokens(buffered.observations.observationTokens)} obs
+            </span>
+          </div>
+        )}
+        {reflectionStatus === 'running' && (
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-purple-400 animate-pulse" />
+            <span className="text-[10px] text-neutral5">Buffering reflection…</span>
+          </div>
+        )}
+        {reflectionStatus === 'complete' && buffered?.reflection && (
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-green-500" />
+            <span className="text-[10px] text-neutral5">Reflection buffered</span>
+            <span className="text-[10px] text-neutral3">
+              {formatTokens(buffered.reflection.inputObservationTokens)} →{' '}
+              {formatTokens(buffered.reflection.observationTokens)}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface AgentObservationalMemoryProps {
+  agentId: string;
+  resourceId: string;
+  threadId?: string;
+}
+
+export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: AgentObservationalMemoryProps) => {
   // Get real-time observation status and progress from streaming context
   const { isObservingFromStream, isReflectingFromStream, streamProgress, clearProgress } =
     useObservationalMemoryContext();
@@ -416,7 +755,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     return record.activeObservations;
   }, [record]);
 
-  const hasObservations = Boolean(observations);
   // Keep the sidebar label aligned with the same live observation window tokens used by the progress bar.
   const tokenCount = observationTokenCount;
 
@@ -424,56 +762,6 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
     text: observations,
     copyMessage: 'Observations copied!',
   });
-
-  // Ref for the observations scroll container
-  const observationsContentRef = useRef<HTMLDivElement>(null);
-
-  // Scroll to the most recent date section when observations change
-  useEffect(() => {
-    if (!observations || !observationsContentRef.current || !isExpanded) return;
-
-    // Find all date headers (elements with "Date:" text pattern)
-    const container = observationsContentRef.current;
-    const dateHeaders = container.querySelectorAll<HTMLElement>('[class*="sticky"]');
-
-    if (dateHeaders.length > 0) {
-      // Get the last (most recent) date section
-      const lastDateHeader = dateHeaders[dateHeaders.length - 1];
-      const scrollContainer = container.closest('[data-radix-scroll-area-viewport]') as HTMLElement;
-
-      if (scrollContainer && lastDateHeader) {
-        // Calculate position to scroll so date header is at top
-        const containerTop = container.getBoundingClientRect().top;
-        const headerTop = lastDateHeader.getBoundingClientRect().top;
-        const offsetFromTop = headerTop - containerTop;
-
-        // Use requestAnimationFrame for smooth scrolling after render
-        requestAnimationFrame(() => {
-          scrollContainer.scrollTo({
-            top: offsetFromTop,
-            behavior: 'smooth',
-          });
-        });
-      }
-    }
-  }, [observations, isExpanded]);
-
-  // Format relative time
-  const formatRelativeTime = (date: Date | string | null | undefined) => {
-    if (!date) return 'Never';
-    const d = new Date(date);
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return d.toLocaleDateString();
-  };
 
   if (isLoading) {
     return (
@@ -484,230 +772,36 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   }
 
   if (!isEnabled) {
-    return (
-      <div className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Brain className="w-4 h-4 text-neutral3" />
-          <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
-        </div>
-        <div className="bg-surface3 border border-border1 rounded-lg p-4">
-          <p className="text-sm text-neutral3 mb-3">
-            Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain
-            observations from conversations.
-          </p>
-          <a
-            href="https://mastra.ai/en/docs/memory/observational-memory"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
-          >
-            Learn about Observational Memory
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      </div>
-    );
+    return <ObservationalMemoryDisabled />;
   }
 
   return (
     <div className="p-4 overflow-hidden min-w-0 w-full">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-3">
-        <Brain className="w-4 h-4 text-purple-400" />
-        <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
-      </div>
-
-      {/* Progress Bars for Thresholds - Side by side */}
-      <TooltipProvider delayDuration={0}>
-        <div className="flex gap-3 mb-3">
-          <ProgressBar
-            value={pendingMessageTokens}
-            max={messageTokensThreshold}
-            label="Messages"
-            isActive={isObserving}
-            model={observationModel}
-            modelRouting={observationModelRouting}
-            baseThreshold={baseMessageTokens}
-            totalBudget={totalBudget}
-          />
-          <ProgressBar
-            value={observationTokenCount}
-            max={observationTokensThreshold}
-            label="Observations"
-            isActive={isReflecting}
-            baseThreshold={baseObservationTokens}
-            model={reflectionModel}
-            modelRouting={reflectionModelRouting}
-            totalBudget={totalBudget}
-          />
-        </div>
-      </TooltipProvider>
-
-      {/* Observations Content */}
-      {hasObservations && (
-        <div className="space-y-3 min-w-0 overflow-hidden w-full">
-          {/* Collapsible Observations Section */}
-          <div className="border border-border1 rounded-lg bg-surface3 w-full overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface4 transition-colors rounded-t-lg"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-neutral5">Observations</span>
-                {tokenCount !== undefined && (
-                  <span className="text-xs text-neutral3">{tokenCount.toLocaleString()} tokens</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-neutral3">
-                  {record?.lastObservedAt
-                    ? formatRelativeTime(record.lastObservedAt)
-                    : record?.updatedAt
-                      ? formatRelativeTime(record.updatedAt)
-                      : ''}
-                </span>
-                {isExpanded ? (
-                  <ChevronDown className="w-3 h-3 text-neutral3" />
-                ) : (
-                  <ChevronRight className="w-3 h-3 text-neutral3" />
-                )}
-              </div>
-            </button>
-            {isExpanded && (
-              <div className="border-t border-border1 overflow-hidden w-full" style={{ height: '400px' }}>
-                <ScrollArea className="h-full w-full">
-                  <div
-                    ref={observationsContentRef}
-                    className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs overflow-hidden w-full"
-                    onClick={handleCopy}
-                    onKeyDown={event => handleCopyKeyDown(event, handleCopy)}
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Copy observations"
-                  >
-                    <ObservationRenderer
-                      observations={observations}
-                      maxHeight={undefined}
-                      className="wrap-break-word w-full overflow-hidden"
-                    />
-                    {isCopied && (
-                      <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
-                        Copied!
-                      </span>
-                    )}
-                    <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface3 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity">
-                      Click to copy
-                    </span>
-                  </div>
-                </ScrollArea>
-              </div>
-            )}
-          </div>
-
-          {/* History Toggle - only show if there are previous observation records */}
-          {previousObservations.length > 0 && (
-            <div className="border-t border-border1 pt-3">
-              <button
-                type="button"
-                onClick={() => setShowHistory(!showHistory)}
-                className="flex items-center gap-2 text-xs text-neutral3 hover:text-neutral5 transition-colors"
-              >
-                {showHistory ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                <span>Previous observations ({previousObservations.length})</span>
-              </button>
-              {showHistory && (
-                <div className="mt-2 space-y-2">
-                  {previousObservations.map(historyRecord => {
-                    const isRecordExpanded = expandedReflections.has(historyRecord.id);
-                    return (
-                      <div key={historyRecord.id} className="border border-border1 rounded-lg bg-surface2">
-                        <button
-                          type="button"
-                          onClick={() => toggleReflection(historyRecord.id)}
-                          className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface3 transition-colors rounded-lg"
-                        >
-                          <div className="flex items-center gap-2">
-                            {isRecordExpanded ? (
-                              <ChevronDown className="w-3 h-3 text-neutral3" />
-                            ) : (
-                              <ChevronRight className="w-3 h-3 text-neutral3" />
-                            )}
-                            <span className="text-xs font-medium text-neutral4">
-                              {historyRecord.originType === 'reflection' ? 'Reflection' : 'Observation'}
-                            </span>
-                            {historyRecord.observationTokenCount !== undefined && (
-                              <span className="text-xs text-neutral3">
-                                {formatTokens(historyRecord.observationTokenCount)} tokens
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-xs text-neutral3">{formatRelativeTime(historyRecord.createdAt)}</span>
-                        </button>
-                        {isRecordExpanded && (
-                          <div className="px-3 pb-3 max-h-48 overflow-y-auto border-t border-border1">
-                            {historyRecord.activeObservations ? (
-                              <ObservationRenderer
-                                observations={historyRecord.activeObservations}
-                                maxHeight={undefined}
-                              />
-                            ) : (
-                              <span className="text-xs text-neutral3 italic">No observations</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Async Buffering Status — shown below observations as a subtle footer */}
-      {streamProgress &&
-        ((streamProgress.windows?.buffered?.observations?.chunks ?? 0) > 0 ||
-          streamProgress.windows?.buffered?.reflection?.status === 'running' ||
-          streamProgress.windows?.buffered?.reflection?.status === 'complete') && (
-          <div className="mt-3 border border-border1 rounded-lg bg-surface3 overflow-hidden">
-            <div className="px-3 py-2 space-y-1.5">
-              <div className="text-[9px] text-neutral4 uppercase tracking-wider font-normal">Background Processing</div>
-              {(streamProgress.windows?.buffered?.observations?.chunks ?? 0) > 0 && (
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${streamProgress.windows.buffered.observations.status === 'running' ? 'bg-blue-400 animate-pulse' : 'bg-green-500'}`}
-                  />
-                  <span className="text-[10px] text-neutral5">
-                    {streamProgress.windows.buffered.observations.chunks} buffered chunk
-                    {streamProgress.windows.buffered.observations.chunks !== 1 ? 's' : ''}
-                  </span>
-                  <span className="text-[10px] text-neutral3">
-                    ↓{formatTokens(streamProgress.windows.buffered.observations.projectedMessageRemoval ?? 0)} msg on
-                    activate → {formatTokens(streamProgress.windows.buffered.observations.observationTokens)} obs
-                  </span>
-                </div>
-              )}
-              {streamProgress.windows?.buffered?.reflection?.status === 'running' && (
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-purple-400 animate-pulse" />
-                  <span className="text-[10px] text-neutral5">Buffering reflection…</span>
-                </div>
-              )}
-              {streamProgress.windows?.buffered?.reflection?.status === 'complete' && (
-                <div className="flex items-center gap-2">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-green-500" />
-                  <span className="text-[10px] text-neutral5">Reflection buffered</span>
-                  <span className="text-[10px] text-neutral3">
-                    {formatTokens(streamProgress.windows.buffered.reflection.inputObservationTokens)} →{' '}
-                    {formatTokens(streamProgress.windows.buffered.reflection.observationTokens)}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+      <ObservationalMemoryHeader />
+      <ObservationalMemoryProgressBars
+        pendingMessageTokens={pendingMessageTokens}
+        messageTokensThreshold={messageTokensThreshold}
+        isObserving={isObserving}
+        observationModel={observationModel}
+        observationModelRouting={observationModelRouting}
+        baseMessageTokens={baseMessageTokens}
+        totalBudget={totalBudget}
+        observationTokenCount={observationTokenCount}
+        observationTokensThreshold={observationTokensThreshold}
+        isReflecting={isReflecting}
+        baseObservationTokens={baseObservationTokens}
+        reflectionModel={reflectionModel}
+        reflectionModelRouting={reflectionModelRouting}
+      />
+      <ObservationsSection
+        observations={observations}
+        previousObservations={previousObservations}
+        record={record}
+        tokenCount={tokenCount}
+        isCopied={isCopied}
+        onCopy={handleCopy}
+      />
+      <BackgroundProcessingStatus streamProgress={streamProgress} />
     </div>
   );
 };

@@ -1,5 +1,4 @@
 import { ScrollArea } from '@mastra/playground-ui';
-import type { KeyboardEvent } from 'react';
 
 interface CodeDisplayProps {
   content: string;
@@ -18,24 +17,19 @@ export function CodeDisplay({
   onCopy,
   className = '',
 }: CodeDisplayProps) {
-  const handleCopyKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!onCopy || (event.key !== 'Enter' && event.key !== ' ')) return;
-    event.preventDefault();
-    onCopy();
-  };
-
   return (
     <div className={`rounded-md border ${className}`} style={{ height }}>
       <ScrollArea className="h-full">
-        <div
-          className="p-2 cursor-pointer hover:bg-surface4/50 transition-colors group relative"
-          onClick={onCopy}
-          onKeyDown={handleCopyKeyDown}
-          role={onCopy ? 'button' : undefined}
-          tabIndex={onCopy ? 0 : undefined}
-          aria-label={onCopy ? 'Copy code' : undefined}
-        >
-          <pre className="text-ui-xs whitespace-pre-wrap font-mono">{content}</pre>
+        <div className={`p-2 transition-colors group relative ${onCopy ? 'cursor-pointer hover:bg-surface4/50' : ''}`}>
+          {onCopy && (
+            <button
+              type="button"
+              onClick={onCopy}
+              aria-label="Copy code"
+              className="absolute inset-0 z-10 rounded-md focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent1"
+            />
+          )}
+          <pre className="text-ui-xs whitespace-pre-wrap font-mono pointer-events-none">{content}</pre>
           {isDraft && (
             <div className="mt-1.5">
               <span className="text-ui-xs px-1.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500">
@@ -44,12 +38,12 @@ export function CodeDisplay({
             </div>
           )}
           {isCopied && (
-            <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
+            <span className="absolute top-2 right-2 z-20 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500 pointer-events-none">
               Copied!
             </span>
           )}
           {onCopy && (
-            <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface4 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="absolute top-2 right-2 z-20 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface4 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
               Click to copy
             </span>
           )}

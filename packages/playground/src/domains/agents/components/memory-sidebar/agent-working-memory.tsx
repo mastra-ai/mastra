@@ -12,7 +12,6 @@ import {
 } from '@mastra/playground-ui';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
-import type { KeyboardEvent } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
 import { CodeDisplay } from './code-display';
 import { useMemoryConfig } from '@/domains/memory/hooks';
@@ -41,11 +40,6 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     value: workingMemoryData ?? '',
   });
   const [isEditing, setIsEditing] = useState(false);
-  const handleCopyKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    handleCopy();
-  };
 
   if (editState.source !== workingMemoryData) {
     setEditState({ source: workingMemoryData, value: workingMemoryData ?? '' });
@@ -100,21 +94,22 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     <>
                       <div className="bg-surface3 border border-border1 rounded-lg" style={{ height: '300px' }}>
                         <ScrollArea className="h-full">
-                          <div
-                            className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs"
-                            onClick={handleCopy}
-                            onKeyDown={handleCopyKeyDown}
-                            role="button"
-                            tabIndex={0}
-                            aria-label="Copy working memory"
-                          >
-                            <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
+                          <div className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs">
+                            <button
+                              type="button"
+                              onClick={handleCopy}
+                              aria-label="Copy working memory"
+                              className="absolute inset-0 z-10 rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent1"
+                            />
+                            <div className="pointer-events-none">
+                              <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
+                            </div>
                             {isCopied && (
-                              <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
+                              <span className="absolute top-2 right-2 z-20 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500 pointer-events-none">
                                 Copied!
                               </span>
                             )}
-                            <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface3 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="absolute top-2 right-2 z-20 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface3 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                               Click to copy
                             </span>
                           </div>

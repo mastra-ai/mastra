@@ -1,8 +1,10 @@
-import React from 'react';
-import { Code } from '../Code';
-import { CopyButton } from '../CopyButton';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
-import { Tab, TabList, Tabs } from '../Tabs';
+import type { ReactNode } from 'react';
+import { Code } from '../Code/code';
+import { CopyButton } from '../CopyButton/copy-button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select/select';
+import { TabList } from '../Tabs/tabs-list';
+import { Tabs } from '../Tabs/tabs-root';
+import { Tab } from '../Tabs/tabs-tab';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -28,9 +30,7 @@ export interface CodeBlockProps {
   overflow?: CodeBlockOverflow;
   copyMessage?: string;
   copyTooltip?: string;
-  /** Rendered at the inline end of the header row (tabs, select, or file name),
-   *  for consumer controls that belong with the code surface — e.g. a mode toggle. */
-  actions?: React.ReactNode;
+  actions?: ReactNode;
   className?: string;
 }
 
@@ -72,10 +72,7 @@ export function CodeBlock({
                 ))}
               </TabList>
             </div>
-            {actions && (
-              /* Same border token as the `line` TabList so the header rule runs unbroken under the actions. */
-              <div className="flex shrink-0 items-center border-b border-border1 pr-2 pl-3">{actions}</div>
-            )}
+            {actions && <div className="flex shrink-0 items-center border-b border-border1 pr-2 pl-3">{actions}</div>}
           </div>
         </Tabs>
       )}

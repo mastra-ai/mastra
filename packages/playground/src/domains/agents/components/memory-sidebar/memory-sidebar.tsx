@@ -1,6 +1,18 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { Button, EmptyState, MemoryIcon, Txt, cn } from '@mastra/playground-ui';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Button,
+  EmptyState,
+  MemoryIcon,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  Txt,
+  cn,
+} from '@mastra/playground-ui';
+import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { AgentMemory } from './agent-memory';
 import { useMemorySidebarTab } from './use-memory-sidebar-tab';
 import '../agent-view-transition.css';
@@ -25,14 +37,40 @@ const barColor = (percent: number): string => {
   return 'bg-green-500';
 };
 
-function ConfigDot({ color, label }: { color: string; label: string }) {
+type ConfigBadgeProps = {
+  icon: LucideIcon;
+  label: string;
+  tooltip: string;
+  enabled: boolean;
+  value?: number;
+  expanded: boolean;
+};
+
+function ConfigBadge({ icon: Icon, label, tooltip, enabled, value, expanded }: ConfigBadgeProps) {
   return (
-    <span className="flex items-center gap-1">
-      <span className={cn('h-1.5 w-1.5 rounded-full', color)} />
-      <Txt as="span" variant="ui-xs" className="text-neutral4">
-        {label}
-      </Txt>
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
+            enabled ? 'border-border1 bg-surface4 text-neutral6' : 'border-border1/40 text-neutral3/50',
+          )}
+        >
+          <Icon className="h-3 w-3 shrink-0" />
+          {value !== undefined && (
+            <Txt as="span" variant="ui-xs" className="font-medium tabular-nums leading-none">
+              {value}
+            </Txt>
+          )}
+          {expanded && (
+            <Txt as="span" variant="ui-xs" className="whitespace-nowrap leading-none">
+              {label}
+            </Txt>
+          )}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -49,12 +87,17 @@ export function MemorySidebar({
   const { streamProgress } = useObservationalMemoryContext();
   const { data: memoryConfig } = useMemoryConfig(agentId);
   const showMemory = selectedTab === 'memory';
+  const memoryCardShellRef = useRef<HTMLDivElement>(null);
+  const memoryCardButtonRef = useRef<HTMLButtonElement>(null);
+  const [collapsedCardSize, setCollapsedCardSize] = useState({ height: 0, offset: 0 });
 
   const config = memoryConfig?.config;
   const lastMessages = typeof config?.lastMessages === 'number' ? config.lastMessages : undefined;
   const semanticRecallOn = Boolean(config?.semanticRecall);
   const workingMemoryOn =
-    typeof config?.workingMemory === 'object' ? Boolean(config?.workingMemory?.enabled) : Boolean(config?.workingMemory);
+    typeof config?.workingMemory === 'object'
+      ? Boolean(config?.workingMemory?.enabled)
+      : Boolean(config?.workingMemory);
   const observationalOn = Boolean(
     config && 'observationalMemory' in config && (config as { observationalMemory?: unknown }).observationalMemory,
   );
@@ -65,18 +108,49 @@ export function MemorySidebar({
       ? Math.min(100, Math.round((messagesWindow.tokens / messagesWindow.threshold) * 100))
       : undefined;
 
+  useLayoutEffect(() => {
+    if (showMemory) return;
+
+    const shell = memoryCardShellRef.current;
+    const button = memoryCardButtonRef.current;
+    if (!shell || !button) return;
+
+    const updateCollapsedSize = () => {
+      const shellStyles = getComputedStyle(shell);
+      const borderTop = Number.parseFloat(shellStyles.borderTopWidth) || 0;
+      const borderBottom = Number.parseFloat(shellStyles.borderBottomWidth) || 0;
+      const marginTop = Number.parseFloat(shellStyles.marginTop) || 0;
+      const marginBottom = Number.parseFloat(shellStyles.marginBottom) || 0;
+      const height = Math.ceil(button.getBoundingClientRect().height + borderTop + borderBottom);
+      const offset = Math.ceil(height + marginTop + marginBottom);
+
+      setCollapsedCardSize(current =>
+        current.height === height && current.offset === offset ? current : { height, offset },
+      );
+    };
+
+    updateCollapsedSize();
+
+    if (typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(updateCollapsedSize);
+    observer.observe(button);
+    return () => observer.disconnect();
+  }, [lastMessages, observationPercent, observationalOn, semanticRecallOn, showMemory, workingMemoryOn]);
+
   return (
     <SidebarPanel>
       {hasMemory ? (
-        <>
-          {/* Thread list: cedes its space to the memory card as it expands */}
+        <div className="relative h-full min-h-0 w-full overflow-hidden">
           <div
             aria-hidden={showMemory}
+            inert={showMemory ? true : undefined}
+            data-testid="memory-sidebar-thread-layer"
             className={cn(
-              'min-h-0 transition-all duration-normal ease-out-custom',
-              showMemory ? 'overflow-hidden opacity-0 pointer-events-none' : 'overflow-y-auto opacity-100',
+              'memory-sidebar-thread-layer absolute inset-0 min-h-0 overflow-y-auto',
+              showMemory ? 'pointer-events-none opacity-0' : 'opacity-100',
             )}
-            style={{ flexGrow: showMemory ? 0 : 1, flexBasis: 0 }}
+            style={{ paddingTop: collapsedCardSize.offset || undefined }}
           >
             <ChatThreads
               resourceId={agentId}
@@ -89,28 +163,24 @@ export function MemorySidebar({
             />
           </div>
 
-          {/* Memory card: expands in place (height + margins) into the full memory view */}
           <div
+            ref={memoryCardShellRef}
+            data-testid="memory-sidebar-overlay"
             className={cn(
-              'flex min-h-0 flex-col overflow-hidden border transition-all duration-normal ease-out-custom',
+              'memory-sidebar-overlay absolute inset-x-0 top-0 z-10 box-border flex min-h-0 flex-col overflow-hidden border',
               showMemory
-                ? 'm-0 rounded-none border-transparent bg-surface3'
-                : 'm-2 rounded-studio-panel border-border1/40 bg-surface4',
+                ? 'm-0 rounded-none border-transparent bg-surface3 shadow-none'
+                : 'm-1 rounded-xl border-border1/40 bg-surface4 hover:bg-surface5 active:bg-surface4',
             )}
-            // flex-basis stays `auto` so the collapsed card hugs its content;
-            // only flex-grow animates, which is what produces the expansion.
-            style={{ flexGrow: showMemory ? 1 : 0, flexShrink: 0 }}
+            style={{ height: showMemory ? '100%' : collapsedCardSize.height || undefined }}
           >
             <button
+              ref={memoryCardButtonRef}
               type="button"
               onClick={() => handleTabChange(showMemory ? 'threads' : 'memory')}
               aria-pressed={showMemory}
               data-testid="memory-sidebar-card"
-              className={cn(
-                'group/memory-card shrink-0 px-3 py-2.5 text-left transition-colors duration-normal',
-                !showMemory && 'rounded-studio-panel',
-                !showMemory && 'hover:bg-surface5',
-              )}
+              className="group/memory-card w-full shrink-0 cursor-pointer bg-transparent px-3 py-2.5 text-left"
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5 text-neutral6">
@@ -120,21 +190,63 @@ export function MemorySidebar({
                   </Txt>
                 </span>
                 {showMemory ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-neutral3" />
-                ) : (
                   <ChevronUp className="h-4 w-4 shrink-0 text-neutral3" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 shrink-0 text-neutral3" />
                 )}
               </span>
 
-              {/* Memory setup at a glance */}
-              <span className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                {lastMessages !== undefined && <ConfigDot color="bg-accent1" label={`${lastMessages} messages`} />}
-                {semanticRecallOn && <ConfigDot color="bg-green-500" label="Semantic recall" />}
-                {workingMemoryOn && <ConfigDot color="bg-blue-500" label="Working memory" />}
-                {observationalOn && <ConfigDot color="bg-purple-400" label="Observational" />}
-              </span>
+              {/* Memory setup at a glance: filled badge = on, faded = off */}
+              <TooltipProvider delay={150} timeout={400}>
+                <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  <ConfigBadge
+                    icon={MessageSquare}
+                    label="recent messages"
+                    tooltip={
+                      lastMessages !== undefined
+                        ? `Keeps the last ${lastMessages} messages in context`
+                        : 'Recent message history is off'
+                    }
+                    enabled={lastMessages !== undefined}
+                    value={lastMessages}
+                    expanded={showMemory}
+                  />
+                  <ConfigBadge
+                    icon={Search}
+                    label="Semantic recall"
+                    tooltip={
+                      semanticRecallOn
+                        ? 'Semantic recall is on - retrieves relevant past messages'
+                        : 'Semantic recall is off'
+                    }
+                    enabled={semanticRecallOn}
+                    expanded={showMemory}
+                  />
+                  <ConfigBadge
+                    icon={NotebookPen}
+                    label="Working memory"
+                    tooltip={
+                      workingMemoryOn
+                        ? 'Working memory is on - persists notes across the conversation'
+                        : 'Working memory is off'
+                    }
+                    enabled={workingMemoryOn}
+                    expanded={showMemory}
+                  />
+                  <ConfigBadge
+                    icon={Eye}
+                    label="Observational"
+                    tooltip={
+                      observationalOn
+                        ? 'Observational memory is on - learns from the conversation'
+                        : 'Observational memory is off'
+                    }
+                    enabled={observationalOn}
+                    expanded={showMemory}
+                  />
+                </span>
+              </TooltipProvider>
 
-              {/* Live observation progress (messages window vs threshold) when OM streams */}
               {observationPercent !== undefined ? (
                 <span className="mt-2 block h-1 w-full overflow-hidden rounded-full bg-surface5">
                   <span
@@ -154,7 +266,7 @@ export function MemorySidebar({
               </div>
             )}
           </div>
-        </>
+        </div>
       ) : (
         <EmptyState
           iconSlot={null}

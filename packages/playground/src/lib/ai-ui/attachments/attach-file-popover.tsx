@@ -41,7 +41,7 @@ export const AttachFilePopover = () => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     // The popover is portaled out of the composer form in the DOM, but React
-    // still bubbles the submit event through the component tree — stop it so
+    // still bubbles the submit event through the component tree; stop it so
     // adding a URL doesn't also send the chat message.
     e.stopPropagation();
 

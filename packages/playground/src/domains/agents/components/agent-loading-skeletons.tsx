@@ -5,11 +5,7 @@ import { SidebarPanel } from './sidebar-panel';
 
 export function AgentViewLoadingSkeleton({ agentId, view }: { agentId: string; view: 'chat' | 'settings' }) {
   return (
-    <AgentLayout
-      agentId={agentId}
-      leftDrawerLabel="Open threads and memory"
-      leftSlot={<AgentSidebarLoadingSkeleton />}
-    >
+    <AgentLayout agentId={agentId} leftDrawerLabel="Open threads and memory" leftSlot={<AgentSidebarLoadingSkeleton />}>
       <div className="grid grid-rows-[auto_1fr] h-full min-h-0" data-testid="agent-route-skeleton" aria-busy="true">
         <AgentViewHeaderLoadingSkeleton />
         <div className="min-h-0 overflow-hidden">
@@ -46,7 +42,7 @@ function AgentSidebarLoadingSkeleton() {
             <Skeleton className="h-4 w-4 shrink-0 rounded" />
             <Skeleton className="h-3 w-16" />
           </SidebarLoadingRow>
-          <div role="separator" aria-orientation="horizontal" className="-mx-1 my-1 h-px bg-border1/40" />
+          <hr aria-hidden="true" className="-mx-1 my-1 h-px border-0 bg-border1/40" />
           <div className="flex flex-col gap-px">
             <SidebarLoadingRow>
               <Skeleton className="h-3 w-32" />

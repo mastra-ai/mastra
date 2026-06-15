@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 
 import { useOptionalAgentEditFormContext } from '../context/agent-edit-form-context';
 import { RequestContext } from './request-context';
+import { RequestContextLabel } from '@/domains/request-context/components/request-context-label';
 import { RequestContextSchemaForm } from '@/domains/request-context/components/request-context-schema-form';
 import { useSchemaRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { DynamicForm } from '@/lib/form';
@@ -13,6 +14,7 @@ import { resolveSerializedZodOutput } from '@/lib/form/utils';
 interface AgentRequestContextRunOptionsProps {
   requestContextSchema?: string;
   freeformEditorClassName?: string;
+  requestContextTooltip?: string;
 }
 
 type InputMode = 'form' | 'json';
@@ -28,7 +30,13 @@ function hasSchemaProperties(schema: Record<string, unknown> | undefined): schem
  * Renders a schema-driven form from the agent editor variables JSON schema.
  * Used when the agent has editor-defined variables but no code-level requestContextSchema.
  */
-function VariablesRequestContextForm({ variablesSchema }: { variablesSchema: Record<string, unknown> }) {
+function VariablesRequestContextForm({
+  labelTooltip,
+  variablesSchema,
+}: {
+  labelTooltip?: string;
+  variablesSchema: Record<string, unknown>;
+}) {
   const { setSchemaValues, schemaValues } = useSchemaRequestContext();
   const localFormValuesStr = JSON.stringify(schemaValues);
 
@@ -54,9 +62,7 @@ function VariablesRequestContextForm({ variablesSchema }: { variablesSchema: Rec
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Txt as="span" variant="ui-md" className="text-neutral3">
-          Request Context
-        </Txt>
+        <RequestContextLabel tooltip={labelTooltip}>Request Context</RequestContextLabel>
         <CopyButton content={localFormValuesStr} />
       </div>
 
@@ -108,6 +114,7 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
 export function AgentRequestContextRunOptionsBody({
   requestContextSchema,
   freeformEditorClassName,
+  requestContextTooltip,
 }: AgentRequestContextRunOptionsProps) {
   const formCtx = useOptionalAgentEditFormContext();
   const variables = formCtx?.form.watch('variables') as Record<string, unknown> | undefined;
@@ -126,16 +133,19 @@ export function AgentRequestContextRunOptionsBody({
 
           {mode === 'form' ? (
             requestContextSchema ? (
-              <RequestContextSchemaForm requestContextSchema={requestContextSchema} />
+              <RequestContextSchemaForm
+                requestContextSchema={requestContextSchema}
+                labelTooltip={requestContextTooltip}
+              />
             ) : hasVariables ? (
-              <VariablesRequestContextForm variablesSchema={variables} />
+              <VariablesRequestContextForm variablesSchema={variables} labelTooltip={requestContextTooltip} />
             ) : null
           ) : (
-            <RequestContext editorClassName={freeformEditorClassName} />
+            <RequestContext editorClassName={freeformEditorClassName} labelTooltip={requestContextTooltip} />
           )}
         </>
       ) : (
-        <RequestContext editorClassName={freeformEditorClassName} />
+        <RequestContext editorClassName={freeformEditorClassName} labelTooltip={requestContextTooltip} />
       )}
     </div>
   );

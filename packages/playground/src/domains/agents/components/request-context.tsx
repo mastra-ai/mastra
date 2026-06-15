@@ -12,7 +12,6 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-  Txt,
   Icon,
   cn,
   useCopyToClipboard,
@@ -24,6 +23,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, ExternalLink, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { RequestContextLabel } from '@/domains/request-context/components/request-context-label';
 import type { RequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';
 
@@ -32,6 +32,7 @@ import { usePlaygroundStore } from '@/store/playground-store';
 
 interface RequestContextProps {
   editorClassName?: string;
+  labelTooltip?: string;
 }
 
 const REQUEST_CONTEXT_EDITOR_CLASSES = cn(
@@ -57,7 +58,7 @@ function normalizeJsonString(value: string) {
   }
 }
 
-export const RequestContext = ({ editorClassName = 'h-[400px]' }: RequestContextProps = {}) => {
+export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: RequestContextProps = {}) => {
   const { requestContext, setRequestContext } = usePlaygroundStore();
   const [requestContextValue, setRequestContextValue] = useState<string>('');
   const [savedRequestContextValue, setSavedRequestContextValue] = useState<string>('');
@@ -149,9 +150,9 @@ export const RequestContext = ({ editorClassName = 'h-[400px]' }: RequestContext
     <TooltipProvider>
       <div>
         <div className="flex items-center justify-between pb-2">
-          <Txt as="label" variant="ui-md" className="text-neutral3">
+          <RequestContextLabel as="label" tooltip={labelTooltip}>
             Request Context (JSON)
-          </Txt>
+          </RequestContextLabel>
 
           <div className="flex items-center gap-2">
             <Tooltip>

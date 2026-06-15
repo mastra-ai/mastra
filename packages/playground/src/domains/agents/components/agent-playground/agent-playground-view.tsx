@@ -142,8 +142,6 @@ export function AgentPlaygroundView({
   onOpenPr,
   isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
-  // Shares the same resizable layout (and persisted panel size) as the agent
-  // chat page — only the sidebar content differs between the two routes.
   return (
     <AgentLayout
       agentId={agentId}
