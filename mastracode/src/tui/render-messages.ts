@@ -40,6 +40,7 @@ const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
 // These are internal control-plane signals handled by GithubSignals. The user-visible
 // result is rendered by github-sync-status, so showing these would duplicate the UI.
 const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+const GOAL_STATE_SIGNAL_ID = 'goal';
 
 function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
@@ -59,7 +60,7 @@ function getPendingUserMessageLabel(isInterjection?: boolean): string | undefine
 }
 
 function getCurrentModeColor(state: TUIState): string | undefined {
-  return state.harness.getCurrentMode?.()?.color;
+  return state.harness.getCurrentMode?.()?.metadata?.color as string;
 }
 
 // =============================================================================
@@ -324,7 +325,12 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
   // The `tasks` state signal is rendered by the pinned task list UI (replayed
   // from task tool history), so skip its raw <current-task-list> snapshot here.
-  if (stateSignalPart && stateSignalPart.stateId === TASKS_STATE_ID) {
+  // The `goal` state signal is surfaced by the goal/judge UI, so likewise skip
+  // its raw <current-objective> snapshot.
+  if (
+    stateSignalPart &&
+    (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_SIGNAL_ID)
+  ) {
     return;
   }
 

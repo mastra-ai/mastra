@@ -8,6 +8,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
+import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
 import type { TaskItemSnapshot } from './tools';
@@ -41,31 +42,71 @@ export interface HeartbeatHandler {
  * Configuration for a single agent mode within the harness.
  * Each mode represents a different "personality" or capability set.
  */
-export interface HarnessMode<TState> {
-  /** Unique identifier for this mode (e.g., "plan", "build", "review") */
+interface HarnessModeBase {
+  /** Unique within `HarnessConfig.modes`. Validated at construction. */
   id: string;
 
-  /** Human-readable name for display */
   name?: string;
 
-  /** Whether this is the default mode when harness starts */
+  /** bootstrap model default when a session enters this mode. */
+  defaultModelId?: string;
+
+  /** Surfaced in mode pickers / Studio UI. Free text. */
+  description?: string;
+
+  /**
+   * Layered above the backing agent's own instructions for the duration
+   * of this mode. Plain text by design — modes carve operating profile,
+   * not full system-message overrides.
+   */
+  instructions?: string;
+
+  /** @deprecated Use HarnessConfig.agent as the shared backing agent. */
+  agent?: Agent<any, any, any, any>;
+
+  /** @deprecated Prefer metadata.default. */
   default?: boolean;
 
   /**
-   * Default model ID for this mode (e.g., "anthropic/claude-sonnet-4-20250514").
-   * Used when no per-mode model has been explicitly selected.
+   * Optional plan→build target. When `submit_plan` runs in this mode, the
+   * registered `PendingResume` freezes this value as `transitionModeId`.
+   * On approval, the session flips to this mode
+   * idempotently (§5.1, §5.7). If unset, plan approval resumes with no
+   * mode change. Must reference another mode's `id`.
    */
-  defaultModelId?: string;
-
-  /** Hex color for the mode indicator (e.g., "#7c3aed") */
-  color?: string;
+  transitionsTo?: string;
 
   /**
-   * The agent for this mode.
-   * Can be a static Agent or a function that receives harness state.
+   * Arbitrary user-defined metadata. Pass-through only — the harness
+   * never reads or validates it. Use for UI affordances like display
+   * color, icon, display name overrides, or any per-mode configuration
+   * that isn't part of the harness's own contract.
+   *
+   * Surfaced verbatim on `getCurrentMode()` and `listModes()`.
    */
-  agent: Agent | ((state: TState) => Agent);
+  metadata?: Record<string, unknown>;
 }
+
+type HarnessModeToolOverrides =
+  | {
+      /**
+       * The tool set this mode runs with. **Replaces** the backing agent's
+       * tools — the agent's own tools are hidden for the duration of the
+       * mode. Mutually exclusive with `additionalTools`.
+       */
+      tools?: ToolsInput;
+      additionalTools?: never;
+    }
+  | {
+      tools?: never;
+      /**
+       * Tools layered on top of the backing agent's tools. The agent's tools
+       * stay; these are added. Mutually exclusive with `tools`.
+       */
+      additionalTools?: ToolsInput;
+    };
+
+export type HarnessMode = HarnessModeBase & HarnessModeToolOverrides;
 
 // =============================================================================
 // Subagents
@@ -178,7 +219,15 @@ export interface HarnessConfig<TState = {}> {
   memory?: DynamicArgument<MastraMemory>;
 
   /** Available agent modes */
-  modes: HarnessMode<TState>[];
+  modes: HarnessMode[];
+
+  /** Shared backing agent that each mode forks and decorates. */
+  agent?: Agent<any, any, any, any>;
+
+  /** Default mode to enter when a thread has no persisted mode. */
+  defaultModeId?: string;
+
+  instructions?: string;
 
   /**
    * Tools available to all agents across all modes.
@@ -849,6 +898,10 @@ export type HarnessEvent =
   | {
       type: 'task_updated';
       tasks: TaskItemSnapshot[];
+    }
+  | {
+      type: 'goal_evaluation';
+      payload: GoalEvaluationPayload;
     }
   | { type: 'display_state_changed'; displayState: HarnessDisplayState };
 

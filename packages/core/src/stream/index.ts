@@ -39,6 +39,7 @@ export type {
   FilePayload,
   SourcePayload,
   IsTaskCompletePayload,
+  GoalEvaluationPayload,
   TripwirePayload,
 
   // JSON & Data Types
