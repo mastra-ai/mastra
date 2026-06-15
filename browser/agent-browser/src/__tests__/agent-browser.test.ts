@@ -2,7 +2,7 @@ import type { BrowserConfig } from '@mastra/core/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
-const { mockPage, mockLocator, mockContext, mockManager } = vi.hoisted(() => {
+const { mockPage, mockLocator, mockContext, mockManager, mockInstallPlaywrightLinuxDeps } = vi.hoisted(() => {
   const mockContext = {
     on: vi.fn(),
     off: vi.fn(),
@@ -112,8 +112,12 @@ const { mockPage, mockLocator, mockContext, mockManager } = vi.hoisted(() => {
     getPages: vi.fn().mockReturnValue([mockPage]),
   };
 
-  return { mockPage, mockLocator, mockContext, mockManager };
+  return { mockPage, mockLocator, mockContext, mockManager, mockInstallPlaywrightLinuxDeps: vi.fn() };
 });
+
+vi.mock('../playwright-deps', () => ({
+  installPlaywrightLinuxDeps: mockInstallPlaywrightLinuxDeps,
+}));
 
 vi.mock('agent-browser', () => ({
   BrowserManager: class {
@@ -275,6 +279,23 @@ describe('AgentBrowser', () => {
       await browser.ensureReady();
       expect(browser.status).toBe('ready');
       expect(mockManager.launch).toHaveBeenCalledOnce();
+    });
+
+    it('installs Playwright Linux dependencies before shared browser launch', async () => {
+      await browser.ensureReady();
+
+      expect(mockInstallPlaywrightLinuxDeps).toHaveBeenCalledWith({ cdpUrl: undefined, enabled: true });
+      expect(mockInstallPlaywrightLinuxDeps.mock.invocationCallOrder[0]).toBeLessThan(
+        mockManager.launch.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('allows disabling Playwright Linux dependency install', async () => {
+      const browserWithoutInstall = new AgentBrowser({ scope: 'shared', installLinuxDependencies: false });
+
+      await browserWithoutInstall.ensureReady();
+
+      expect(mockInstallPlaywrightLinuxDeps).toHaveBeenCalledWith({ cdpUrl: undefined, enabled: false });
     });
 
     it('does not relaunch if already ready', async () => {

@@ -30,7 +30,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "agent-browser": "0.19.0"
+    "agent-browser": "0.19.0",
+    "playwright-chromium": "^1.60.0"
   },
   "devDependencies": {
     "@internal/browser-test-utils": "workspace:*",

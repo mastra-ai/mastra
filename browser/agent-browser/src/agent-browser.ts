@@ -42,6 +42,7 @@ import type { CreateAgentBrowserThreadManager } from './thread-manager';
 import { createAgentBrowserTools } from './tools';
 import type { BrowserConfig } from './types';
 import { getBrowserPid } from './utils';
+import { installPlaywrightLinuxDeps } from './playwright-deps';
 
 /** AgentBrowser accepts an optional thread-manager factory (see {@link CreateAgentBrowserThreadManager}). */
 export type AgentBrowserConfig = BrowserConfig & {
@@ -196,6 +197,10 @@ export class AgentBrowser extends MastraBrowser {
       launchOptions.cdpUrl = await this.resolveCdpUrl(localConfig.cdpUrl);
     }
 
+    installPlaywrightLinuxDeps({
+      cdpUrl: launchOptions.cdpUrl,
+      enabled: localConfig.installLinuxDependencies !== false,
+    });
     await this.sharedManager.launch(launchOptions);
 
     // Register the shared manager with ThreadManager

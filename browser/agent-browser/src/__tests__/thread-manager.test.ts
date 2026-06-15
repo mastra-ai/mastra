@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockManager } = vi.hoisted(() => {
+const { mockManager, mockInstallPlaywrightLinuxDeps } = vi.hoisted(() => {
   const mockPage = {
     goto: vi.fn().mockResolvedValue(undefined),
   };
@@ -16,8 +16,12 @@ const { mockManager } = vi.hoisted(() => {
     switchTo: vi.fn().mockResolvedValue(undefined),
   };
 
-  return { mockManager, mockPage };
+  return { mockManager, mockPage, mockInstallPlaywrightLinuxDeps: vi.fn() };
 });
+
+vi.mock('../playwright-deps', () => ({
+  installPlaywrightLinuxDeps: mockInstallPlaywrightLinuxDeps,
+}));
 
 vi.mock('agent-browser', () => ({
   BrowserManager: class MockBrowserManager {
@@ -115,6 +119,31 @@ describe('AgentBrowserThreadManager', () => {
       await threadManager.getManagerForThread('thread-1');
 
       expect(threadManager.hasSession('thread-1')).toBe(true);
+    });
+
+    it('installs Playwright Linux dependencies before thread browser launch', async () => {
+      const threadManager = new AgentBrowserThreadManager({
+        scope: 'thread',
+        browserConfig: { headless: true },
+      });
+
+      await threadManager.getManagerForThread('thread-1');
+
+      expect(mockInstallPlaywrightLinuxDeps).toHaveBeenCalledWith({ cdpUrl: undefined, enabled: true });
+      expect(mockInstallPlaywrightLinuxDeps.mock.invocationCallOrder[0]).toBeLessThan(
+        mockManager.launch.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('allows disabling Playwright Linux dependency install before thread browser launch', async () => {
+      const threadManager = new AgentBrowserThreadManager({
+        scope: 'thread',
+        browserConfig: { headless: true, installLinuxDependencies: false },
+      });
+
+      await threadManager.getManagerForThread('thread-1');
+
+      expect(mockInstallPlaywrightLinuxDeps).toHaveBeenCalledWith({ cdpUrl: undefined, enabled: false });
     });
 
     it('destroySession removes session in browser mode', async () => {
