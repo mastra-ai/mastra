@@ -11,7 +11,6 @@ import type {
   HarnessSubagent,
   HarnessRequestContext,
 } from '@mastra/core/harness';
-import type { HarnessMode as HarnessModeV1 } from '@mastra/core/harness/v1';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import {
@@ -37,7 +36,13 @@ import {
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
-import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
+import {
+  createMastraCodeGateway,
+  createMastraCodeModelCatalogProvider,
+  getDynamicModel,
+  getGoalJudgeModel,
+  resolveModel,
+} from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
@@ -88,10 +93,10 @@ import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
-function applyEffectiveDefaultsToV1Modes(
-  modes: HarnessModeV1[],
+function applyEffectiveDefaultsToModes(
+  modes: HarnessMode[],
   effectiveDefaults: Record<string, string>,
-): HarnessModeV1[] {
+): HarnessMode[] {
   return modes.map(mode => {
     const savedModel = effectiveDefaults[mode.id];
     if (!savedModel) {
@@ -562,7 +567,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
-  const modes = applyEffectiveDefaultsToV1Modes(config?.modes ? config.modes : defaultModes, effectiveDefaults);
+  const modes = applyEffectiveDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults);
   const defaultModeId =
     modes.find(mode => mode.metadata?.default === true)?.id ??
     modes.find(mode => mode.id === 'plan')?.id ??
@@ -683,6 +688,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     browser: config?.browser,
     modes,
     heartbeatHandlers,
+    resolveModel,
+    customModelCatalogProvider: createMastraCodeModelCatalogProvider(mastraCodeGateway),
     modelUseCountProvider: () => loadSettings().modelUseCounts,
     modelUseCountTracker: modelId => {
       try {

@@ -12,10 +12,6 @@ import type {
   ToolsetsInput,
 } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
-import { ModelRouterLanguageModel } from '../llm/model';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
-import type { GatewayAuthResult, MastraModelGatewayInterface, ProviderConfig } from '../llm/model/gateways';
-import { getGatewayId } from '../llm/model/gateways';
 import { getServerSideFallbackInfo } from '../llm/model/server-side-fallback';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -579,12 +575,16 @@ export class Harness<TState = {}> {
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
     if (this.config.storage) {
+      const gateways = this.config.gateways?.length
+        ? Object.fromEntries(this.config.gateways.map(gateway => [gateway.id, gateway]))
+        : undefined;
+
       this.#internalMastra = new Mastra({
         logger: false,
         storage: this.config.storage,
         ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
-        ...(this.getGatewayRecord() ? { gateways: this.getGatewayRecord() } : {}),
+        ...(gateways ? { gateways } : {}),
       });
       await this.#internalMastra.getStorage()!.init();
     }
@@ -970,56 +970,33 @@ export class Harness<TState = {}> {
 
   /**
    * Check if the current model's provider has authentication configured.
-   * Uses the provider registry's `apiKeyEnvVar` and the optional `modelAuthChecker` hook.
+   * Uses app-provided catalog/auth hooks; Harness does not resolve gateway auth itself.
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
     const modelId = this.getCurrentModelId();
+    if (!modelId) return { hasAuth: true };
 
     try {
       const availableModels = await this.listAvailableModels();
       const currentModel = availableModels.find(model => model.id === modelId);
       if (currentModel) {
-        if (currentModel.hasApiKey) {
-          return { hasAuth: true };
-        }
-        return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
+        return { hasAuth: currentModel.hasApiKey, apiKeyEnvVar: currentModel.hasApiKey ? undefined : currentModel.apiKeyEnvVar };
       }
     } catch {
       // Ignore catalog lookup errors and fall through to provider-based checks.
     }
 
-    const provider = this.getProviderKeyForRouterId(modelId);
-    if (!provider) return { hasAuth: true };
-
-    if (this.config.modelAuthChecker) {
+    const provider = modelId.split('/', 1)[0];
+    if (this.config.modelAuthChecker && provider) {
       const result = this.config.modelAuthChecker(provider);
-      if (result === true) return { hasAuth: true };
-      if (result === false) {
-        const apiKeyEnvVar = await this.getProviderApiKeyEnvVar(provider);
-        return { hasAuth: false, apiKeyEnvVar };
-      }
+      if (result !== undefined) return { hasAuth: result };
     }
 
-    const gatewayAuth = await this.resolveProviderAuth(modelId);
-    if (gatewayAuth) return { hasAuth: true };
-
-    try {
-      const providers = await this.getProviderConfigs();
-      const providerConfig = providers[provider];
-      const apiKeyEnvVar = this.getApiKeyEnvVar(providerConfig);
-      if (apiKeyEnvVar && process.env[apiKeyEnvVar]) {
-        return { hasAuth: true };
-      }
-      return { hasAuth: false, apiKeyEnvVar: apiKeyEnvVar || undefined };
-    } catch {
-      return { hasAuth: true };
-    }
+    return { hasAuth: true };
   }
 
   /**
-   * Get all available models from the provider registry with auth status.
-   * Uses the optional `modelAuthChecker`, `modelUseCountProvider`, and
-   * `customModelCatalogProvider` hooks.
+   * Get available models from the app-provided catalog hook with use counts applied.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
     const now = Date.now();
@@ -1027,223 +1004,43 @@ export class Harness<TState = {}> {
       return this.availableModelsCache;
     }
 
-    try {
-      const registry = await this.getProviderConfigs();
-      const providers = Object.keys(registry);
-      const useCounts = this.config.modelUseCountProvider?.() ?? {};
-      const modelsById = new Map<string, AvailableModel>();
+    const useCounts = this.config.modelUseCountProvider?.() ?? {};
+    const modelsById = new Map<string, AvailableModel>();
 
-      const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
-        if (!model.id || !model.provider || !model.modelName) return;
-        modelsById.set(model.id, {
-          ...model,
-          useCount: useCounts[model.id] ?? 0,
-        });
-      };
+    const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
+      if (!model.id || !model.provider || !model.modelName) return;
+      modelsById.set(model.id, {
+        ...model,
+        useCount: useCounts[model.id] ?? 0,
+      });
+    };
 
-      for (const provider of providers) {
-        const providerConfig = registry[provider];
-        const apiKeyEnvVar = this.getApiKeyEnvVar(providerConfig);
-        const hasEnvKey = apiKeyEnvVar ? !!process.env[apiKeyEnvVar] : false;
-
-        let hasProviderAuth = hasEnvKey;
-        if (!hasProviderAuth && this.config.modelAuthChecker) {
-          const customAuth = this.config.modelAuthChecker(provider);
-          if (customAuth === true) hasProviderAuth = true;
+    if (this.config.customModelCatalogProvider) {
+      try {
+        const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
+        for (const model of customModels) {
+          upsertModel({
+            id: model.id,
+            provider: model.provider,
+            modelName: model.modelName,
+            hasApiKey: model.hasApiKey,
+            apiKeyEnvVar: model.apiKeyEnvVar,
+          });
         }
-
-        const modelNames = providerConfig?.models;
-        if (modelNames && Array.isArray(modelNames)) {
-          for (const modelName of modelNames) {
-            const id = `${provider}/${modelName}`;
-            let hasApiKey = hasProviderAuth;
-            if (!hasApiKey) {
-              hasApiKey = Boolean(await this.resolveProviderAuth(id));
-            }
-
-            upsertModel({
-              id,
-              provider,
-              modelName,
-              hasApiKey,
-              apiKeyEnvVar: apiKeyEnvVar || undefined,
-            });
-          }
-        }
+      } catch (error) {
+        console.warn('Failed to load available models:', error);
       }
-
-      if (this.config.customModelCatalogProvider) {
-        try {
-          const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
-          for (const model of customModels) {
-            upsertModel({
-              id: model.id,
-              provider: model.provider,
-              modelName: model.modelName,
-              hasApiKey: model.hasApiKey,
-              apiKeyEnvVar: model.apiKeyEnvVar,
-            });
-          }
-        } catch (error) {
-          console.warn('Failed to load custom available models:', error);
-        }
-      }
-
-      const result = [...modelsById.values()];
-      this.availableModelsCache = result;
-      this.availableModelsCacheTime = Date.now();
-      return result;
-    } catch (error) {
-      console.warn('Failed to load available models:', error);
-      return [];
     }
+
+    const result = [...modelsById.values()];
+    this.availableModelsCache = result;
+    this.availableModelsCacheTime = Date.now();
+    return result;
   }
 
   invalidateAvailableModelsCache(): void {
     this.availableModelsCache = null;
     this.availableModelsCacheTime = 0;
-  }
-
-  private getGateways(): MastraModelGatewayInterface[] {
-    const gatewaysById = new Map<string, MastraModelGatewayInterface>();
-
-    const addGateway = (gateway: MastraModelGatewayInterface | undefined) => {
-      if (!gateway) return;
-      const gatewayId = getGatewayId(gateway);
-      if (!gatewaysById.has(gatewayId)) {
-        gatewaysById.set(gatewayId, gateway);
-      }
-    };
-
-    for (const gateway of this.config.gateways ?? []) {
-      addGateway(gateway);
-    }
-
-    const mastraGateways = this.#internalMastra?.listGateways?.();
-    for (const gateway of Object.values(mastraGateways ?? {})) {
-      addGateway(gateway);
-    }
-
-    return [...gatewaysById.values()];
-  }
-
-  private getGatewayRecord(): Record<string, MastraModelGatewayInterface> | undefined {
-    if (!this.config.gateways?.length) return undefined;
-
-    return Object.fromEntries(this.config.gateways.map(gateway => [getGatewayId(gateway), gateway]));
-  }
-
-  private resolveModel(modelId: string): MastraLanguageModel {
-    if (this.config.resolveModel) {
-      return this.config.resolveModel(modelId);
-    }
-
-    return new ModelRouterLanguageModel(modelId as never, this.getGateways()) as MastraLanguageModel;
-  }
-
-  private parseModelRouterId(routerId: string, gateway?: MastraModelGatewayInterface): {
-    gatewayId?: string;
-    providerId: string;
-    modelId: string;
-  } {
-    const [firstPart = '', secondPart = '', ...restParts] = routerId.split('/');
-    const gatewayId = gateway ? getGatewayId(gateway) : undefined;
-
-    if (gatewayId && firstPart === gatewayId && secondPart) {
-      return {
-        gatewayId,
-        providerId: secondPart,
-        modelId: restParts.join('/'),
-      };
-    }
-
-    return {
-      gatewayId,
-      providerId: firstPart,
-      modelId: [secondPart, ...restParts].filter(Boolean).join('/'),
-    };
-  }
-
-  private hasResolvedAuth(auth: GatewayAuthResult | undefined): boolean {
-    if (!auth) return false;
-    if (auth.apiKey || auth.bearerToken) return true;
-    return auth.headers ? Object.keys(auth.headers).length > 0 : false;
-  }
-
-  private async resolveProviderAuth(routerId: string): Promise<GatewayAuthResult | undefined> {
-    for (const gateway of this.getGateways()) {
-      if (!gateway.resolveAuth) continue;
-
-      const gatewayId = getGatewayId(gateway);
-      const parsed = this.parseModelRouterId(routerId, gateway);
-
-      try {
-        const result = await gateway.resolveAuth({
-          gatewayId,
-          providerId: parsed.providerId,
-          modelId: parsed.modelId,
-          routerId,
-        });
-        if (this.hasResolvedAuth(result)) {
-          return result;
-        }
-      } catch {
-        // Auth lookup should be best-effort; fall back to the registry/env checks.
-      }
-    }
-
-    return undefined;
-  }
-
-  private getGatewayProviderKey(gatewayId: string, providerId: string): string {
-    if (gatewayId === 'models.dev') return providerId;
-    return providerId === gatewayId ? gatewayId : `${gatewayId}/${providerId}`;
-  }
-
-  private getProviderKeyForRouterId(routerId: string): string {
-    const [firstPart = '', secondPart = ''] = routerId.split('/');
-    const matchingGateway = this.getGateways().find(gateway => getGatewayId(gateway) === firstPart);
-    if (matchingGateway && getGatewayId(matchingGateway) !== 'models.dev' && secondPart) {
-      return this.getGatewayProviderKey(firstPart, secondPart);
-    }
-    return firstPart;
-  }
-
-  private async getProviderConfigs(): Promise<Record<string, ProviderConfig>> {
-    const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
-    const providers: Record<string, ProviderConfig> = { ...(PROVIDER_REGISTRY as Record<string, ProviderConfig>) };
-
-    for (const gateway of this.getGateways()) {
-      const gatewayId = getGatewayId(gateway);
-      try {
-        const gatewayProviders = await gateway.fetchProviders();
-        for (const [providerId, config] of Object.entries(gatewayProviders)) {
-          const providerKey = this.getGatewayProviderKey(gatewayId, providerId);
-          providers[providerKey] = {
-            ...config,
-            gateway: gatewayId,
-          };
-        }
-      } catch (error) {
-        console.warn(`Failed to load providers from gateway ${gatewayId}:`, error);
-      }
-    }
-
-    return providers;
-  }
-
-  private getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | undefined): string | undefined {
-    const envVars = providerConfig?.apiKeyEnvVar;
-    return Array.isArray(envVars) ? envVars[0] : envVars;
-  }
-
-  private async getProviderApiKeyEnvVar(provider: string): Promise<string | undefined> {
-    try {
-      const providers = await this.getProviderConfigs();
-      return this.getApiKeyEnvVar(providers[provider]);
-    } catch {
-      return undefined;
-    }
   }
 
   // ===========================================================================
@@ -1864,21 +1661,21 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Resolves the observer model ID to a language model instance via the configured resolver or gateways.
+   * Resolves the observer model ID to a language model instance via the configured resolver.
    */
   getResolvedObserverModel() {
     const modelId = this.getObserverModelId();
-    if (!modelId || (!this.config.resolveModel && !this.config.gateways?.length)) return undefined;
-    return this.resolveModel(modelId);
+    if (!modelId || !this.config.resolveModel) return undefined;
+    return this.config.resolveModel(modelId);
   }
 
   /**
-   * Resolves the reflector model ID to a language model instance via the configured resolver or gateways.
+   * Resolves the reflector model ID to a language model instance via the configured resolver.
    */
   getResolvedReflectorModel() {
     const modelId = this.getReflectorModelId();
-    if (!modelId || (!this.config.resolveModel && !this.config.gateways?.length)) return undefined;
-    return this.resolveModel(modelId);
+    if (!modelId || !this.config.resolveModel) return undefined;
+    return this.config.resolveModel(modelId);
   }
 
   /**
@@ -4383,12 +4180,12 @@ export class Harness<TState = {}> {
     }
 
     // Auto-create subagent tool if subagent definitions are configured
-    if (this.config.subagents?.length && (this.config.resolveModel || this.config.gateways?.length)) {
+    if (this.config.subagents?.length && this.config.resolveModel) {
       const currentMode = this.getCurrentMode();
       const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
-        resolveModel: modelId => this.resolveModel(modelId),
+        resolveModel: this.config.resolveModel,
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
         getParentModelId: () => this.getCurrentModelId(),

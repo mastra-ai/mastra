@@ -1,8 +1,8 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import type { HarnessRequestContext } from '@mastra/core/harness';
-import { GATEWAY_AUTH_HEADER, MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
+import type { CustomAvailableModel, CustomModelCatalogProvider, HarnessRequestContext } from '@mastra/core/harness';
+import { GATEWAY_AUTH_HEADER, MastraGateway, ModelRouterLanguageModel, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type {
   GatewayAuthRequest,
   GatewayAuthResult,
@@ -182,6 +182,114 @@ export function resolveAuth(request: GatewayAuthRequest, memoryGatewayApiKey?: s
 }
 
 type MastraCodeCustomProvider = { name: string; url: string; apiKey?: string; models?: string[] };
+
+function getGatewayProviderKey(gatewayId: string, providerId: string): string {
+  if (gatewayId === 'models.dev') return providerId;
+  return providerId === gatewayId ? gatewayId : `${gatewayId}/${providerId}`;
+}
+
+function parseGatewayRouterId(
+  routerId: string,
+  gateway: MastraModelGatewayInterface,
+): { gatewayId: string; providerId: string; modelId: string } {
+  const [firstPart = '', secondPart = '', ...restParts] = routerId.split('/');
+  const gatewayId = gateway.id;
+
+  if (firstPart === gatewayId && secondPart) {
+    return {
+      gatewayId,
+      providerId: secondPart,
+      modelId: restParts.join('/'),
+    };
+  }
+
+  return {
+    gatewayId,
+    providerId: firstPart,
+    modelId: [secondPart, ...restParts].filter(Boolean).join('/'),
+  };
+}
+
+function hasResolvedAuth(auth: GatewayAuthResult | undefined): boolean {
+  if (!auth) return false;
+  if (auth.apiKey || auth.bearerToken) return true;
+  return auth.headers ? Object.keys(auth.headers).length > 0 : false;
+}
+
+async function resolveGatewayProviderAuth(
+  gateway: MastraModelGatewayInterface,
+  routerId: string,
+): Promise<GatewayAuthResult | undefined> {
+  if (!gateway.resolveAuth) return undefined;
+
+  const parsed = parseGatewayRouterId(routerId, gateway);
+  try {
+    const result = await gateway.resolveAuth({
+      gatewayId: parsed.gatewayId,
+      providerId: parsed.providerId,
+      modelId: parsed.modelId,
+      routerId,
+    });
+    return hasResolvedAuth(result) ? result : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function getMastraCodeProviderConfigs(
+  gateway: MastraModelGatewayInterface,
+): Promise<Record<string, ProviderConfig>> {
+  const providers: Record<string, ProviderConfig> = { ...(PROVIDER_REGISTRY as Record<string, ProviderConfig>) };
+
+  try {
+    const gatewayProviders = await gateway.fetchProviders();
+    for (const [providerId, config] of Object.entries(gatewayProviders)) {
+      providers[getGatewayProviderKey(gateway.id, providerId)] = {
+        ...config,
+        gateway: gateway.id,
+      };
+    }
+  } catch (error) {
+    console.warn(`Failed to load providers from gateway ${gateway.id}:`, error);
+  }
+
+  return providers;
+}
+
+function getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | undefined): string | undefined {
+  const envVars = providerConfig?.apiKeyEnvVar;
+  return Array.isArray(envVars) ? envVars[0] : envVars;
+}
+
+export function createMastraCodeModelCatalogProvider(
+  gateway: MastraModelGatewayInterface,
+): CustomModelCatalogProvider {
+  return async () => {
+    const registry = await getMastraCodeProviderConfigs(gateway);
+    const models: CustomAvailableModel[] = [];
+
+    for (const [provider, providerConfig] of Object.entries(registry)) {
+      const apiKeyEnvVar = getApiKeyEnvVar(providerConfig);
+      const hasEnvKey = apiKeyEnvVar ? Boolean(process.env[apiKeyEnvVar]) : false;
+      const modelNames = providerConfig.models;
+      if (!Array.isArray(modelNames)) continue;
+
+      for (const modelName of modelNames) {
+        const id = `${provider}/${modelName}`;
+        const gatewayAuth = await resolveGatewayProviderAuth(gateway, id);
+        models.push({
+          id,
+          provider,
+          modelName,
+          hasApiKey: hasEnvKey || Boolean(gatewayAuth),
+          apiKeyEnvVar: apiKeyEnvVar || undefined,
+        });
+      }
+    }
+
+    return models;
+  };
+}
 
 export function createMastraCodeGateway({
   mastraGatewayBaseUrl,
@@ -387,15 +495,6 @@ export function createMastraCodeGateway({
 }
 
 /**
- * Placeholder for future model ID normalization.
- * Currently returns the input unchanged, but exists as a seam
- * for aliasing, casing fixes, or validation in the future.
- */
-export function resolveModelId(modelId: string): string {
-  return modelId;
-}
-
-/**
  * Resolve a model ID to the correct provider instance.
  * Shared by the main agent, observer, and reflector.
  *
@@ -407,13 +506,12 @@ export function resolveModelId(modelId: string): string {
 export function resolveModel(
   modelId: string,
   options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
-): ResolvedModel {
+): ModelRouterLanguageModel {
   authStorage.reload();
   const headers = getHarnessHeaders(options?.requestContext);
   const settings = loadSettings();
-  const resolvedRouterModelId = resolveModelId(modelId);
-  const isMastraGatewayModel = resolvedRouterModelId.startsWith(MASTRA_GATEWAY_PREFIX);
-  const normalizedModelId = stripMastraGatewayPrefix(resolvedRouterModelId);
+  const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
+  const normalizedModelId = stripMastraGatewayPrefix(modelId);
 
   const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
   const rawGatewayBase =

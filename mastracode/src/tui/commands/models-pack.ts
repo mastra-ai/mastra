@@ -261,7 +261,7 @@ async function runCustomFlow(
     const modelId = await selectModel(
       ctx,
       `Select model for ${mode.label} mode`,
-      mode.color,
+      mode.metadata.color,
       models[mode.id] || undefined,
     );
     if (!modelId) return null;

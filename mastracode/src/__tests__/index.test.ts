@@ -10,6 +10,9 @@ const mastraCodeGatewayMock = {
   resolveLanguageModel: vi.fn(),
 };
 const createMastraCodeGatewayMock = vi.fn(() => mastraCodeGatewayMock);
+const mastraCodeCatalogProviderMock = vi.fn();
+const createMastraCodeModelCatalogProviderMock = vi.fn(() => mastraCodeCatalogProviderMock);
+const resolveModelMock = vi.fn();
 
 vi.mock('@mastra/core/llm', () => ({
   PROVIDER_REGISTRY: providerRegistryMock,
@@ -159,9 +162,10 @@ vi.mock('../agents/memory.js', () => ({
 
 vi.mock('../agents/model.js', () => ({
   createMastraCodeGateway: createMastraCodeGatewayMock,
+  createMastraCodeModelCatalogProvider: createMastraCodeModelCatalogProviderMock,
   getDynamicModel: vi.fn(),
   getGoalJudgeModel: vi.fn(),
-  resolveModel: vi.fn(),
+  resolveModel: resolveModelMock,
 }));
 
 vi.mock('../agents/subagents/execute.js', () => ({
@@ -289,6 +293,9 @@ describe('createMastraCode', () => {
   beforeEach(() => {
     vi.resetModules();
     createMastraCodeGatewayMock.mockClear();
+    createMastraCodeModelCatalogProviderMock.mockClear();
+    mastraCodeCatalogProviderMock.mockClear();
+    resolveModelMock.mockClear();
     mastraCodeGatewayMock.fetchProviders.mockClear();
     mastraCodeGatewayMock.buildUrl.mockClear();
     mastraCodeGatewayMock.getApiKey.mockClear();
@@ -339,7 +346,7 @@ describe('createMastraCode', () => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
   });
 
-  it('registers the MastraCode gateway on Harness instead of a legacy model resolver', async () => {
+  it('registers the MastraCode gateway and app-provided model hooks on Harness', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -355,9 +362,10 @@ describe('createMastraCode', () => {
       | { gateways?: unknown[]; resolveModel?: unknown; modelAuthChecker?: unknown; customModelCatalogProvider?: unknown }
       | undefined;
     expect(harnessConfig?.gateways).toEqual([mastraCodeGatewayMock]);
-    expect(harnessConfig?.resolveModel).toBeUndefined();
+    expect(harnessConfig?.resolveModel).toBe(resolveModelMock);
+    expect(createMastraCodeModelCatalogProviderMock).toHaveBeenCalledWith(mastraCodeGatewayMock);
     expect(harnessConfig?.modelAuthChecker).toBeUndefined();
-    expect(harnessConfig?.customModelCatalogProvider).toBeUndefined();
+    expect(harnessConfig?.customModelCatalogProvider).toBe(mastraCodeCatalogProviderMock);
   }, 10_000);
 
   it('uses configured memory gateway settings when creating the MastraCode gateway', async () => {

@@ -101,7 +101,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
   });
 
-  it('creates the subagent tool with gateway-backed model resolution when no legacy resolver is configured', async () => {
+  it('does not create the subagent tool from gateways without an app-provided resolver', async () => {
     const subagents: HarnessSubagent[] = [
       {
         id: 'explore',
@@ -139,17 +139,12 @@ describe('Harness fork clone metadata wiring', () => {
       ],
     });
 
-    await (harness as unknown as { buildToolsets(ctx: RequestContext): Promise<unknown> }).buildToolsets(
+    const toolsets = (await (harness as unknown as { buildToolsets(ctx: RequestContext): Promise<Record<string, unknown>> }).buildToolsets(
       new RequestContext(),
-    );
+    )) as { harnessBuiltIn?: Record<string, unknown> };
 
-    expect(capturedOpts).toHaveLength(1);
-    const resolveModel = capturedOpts[0]!.resolveModel as (modelId: string) => unknown;
-    expect(resolveModel('test-gateway/acme/sonic-fast')).toMatchObject({
-      gatewayId: 'test-gateway',
-      provider: 'acme',
-      modelId: 'sonic-fast',
-    });
+    expect(capturedOpts).toHaveLength(0);
+    expect(toolsets.harnessBuiltIn?.subagent).toBeUndefined();
   });
 
   it('wires getParentToolsets so forks can inherit parent toolsets', async () => {

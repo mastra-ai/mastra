@@ -17,6 +17,12 @@ vi.mock('@mastra/core/agent', () => ({
 
 vi.mock('@mastra/core/harness', () => ({
   Harness: class {
+    constructor(config: { heartbeatHandlers?: Array<{ immediate?: boolean; handler: () => unknown }> }) {
+      for (const heartbeat of config.heartbeatHandlers ?? []) {
+        if (heartbeat.immediate !== false) void heartbeat.handler();
+      }
+    }
+
     subscribe() {}
   },
   taskWriteTool: {},
@@ -39,6 +45,8 @@ vi.mock('./agents/memory.js', () => ({
 }));
 
 vi.mock('./agents/model.js', () => ({
+  createMastraCodeGateway: vi.fn(() => ({})),
+  createMastraCodeModelCatalogProvider: vi.fn(() => vi.fn()),
   getDynamicModel: vi.fn(),
   getGoalJudgeModel: vi.fn(),
   resolveModel: vi.fn(),
@@ -153,21 +161,17 @@ vi.mock('./utils/thread-lock.js', () => ({
 
 describe('createMastraCode startup performance', () => {
   it('does not wait for background gateway sync before returning storage warnings', async () => {
-    const [{ GatewayRegistry }, { createStorage }] = await Promise.all([
-      import('@mastra/core/llm'),
+    const [{ syncGateways }, { createStorage }] = await Promise.all([
+      import('./utils/gateway-sync.js'),
       import('./utils/storage-factory.js'),
     ]);
     let resolveSync: (() => void) | undefined;
-    const syncGateways = vi.fn(
+    vi.mocked(syncGateways).mockImplementation(
       () =>
         new Promise<void>(resolve => {
           resolveSync = resolve;
         }),
     );
-    vi.mocked(GatewayRegistry.getInstance).mockReturnValue({
-      syncGateways,
-      getProviders: vi.fn(() => ({})),
-    } as never);
     vi.mocked(createStorage).mockReturnValue({
       storage: {},
       backend: 'memory',
@@ -182,7 +186,7 @@ describe('createMastraCode startup performance', () => {
       ),
     ]);
 
-    expect(syncGateways).toHaveBeenCalledWith(true);
+    expect(syncGateways).toHaveBeenCalledTimes(1);
     expect(result.storageWarning).toBe('Storage fallback warning');
     resolveSync?.();
   });

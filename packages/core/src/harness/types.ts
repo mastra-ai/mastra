@@ -297,16 +297,14 @@ export interface HarnessConfig<TState = {}> {
   subagents?: HarnessSubagent[];
 
   /**
-   * Model gateways used for model resolution, auth lookup, and provider discovery.
-   * When `resolveModel` is omitted, model IDs resolve through `ModelRouterLanguageModel`
-   * with these gateways.
+   * Model gateways registered on Harness' internal Mastra instance.
+   * Apps that need gateway-backed model resolution should provide `resolveModel`.
    */
   gateways?: MastraModelGatewayInterface[];
 
   /**
-   * Legacy model resolver for apps that need custom back-compat behavior.
    * Converts a model ID string (e.g., "anthropic/claude-sonnet-4-20250514") to a
-   * language model instance. When provided, this takes precedence over gateways.
+   * language model instance for Harness-managed observer, reflector, and subagent models.
    */
   resolveModel?: (modelId: string) => MastraLanguageModel;
 

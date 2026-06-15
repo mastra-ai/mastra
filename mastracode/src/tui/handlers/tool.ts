@@ -25,7 +25,8 @@ import { getMarkdownTheme } from '../theme.js';
 import type { EventHandlerContext } from './types.js';
 
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
-  return ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+  const color = ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+  return typeof color === 'string' ? color : undefined;
 }
 
 export function isTaskMutationTool(toolName: string): boolean {
