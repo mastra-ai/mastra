@@ -90,8 +90,16 @@ function applyBrowserToAgents(
   browserSettings?: BrowserSettings,
 ): void {
   const modes = ctx.harness.listModes();
+  let harnessState: unknown;
   for (const mode of modes) {
-    mode.agent?.setBrowser(browser);
+    const modeAgent = (mode as { agent?: unknown }).agent;
+    const agent =
+      typeof modeAgent === 'function'
+        ? (modeAgent(harnessState ??= ctx.state.harness.getState()) as {
+            setBrowser?: (browser?: MastraBrowser) => void;
+          })
+        : (modeAgent as { setBrowser?: (browser?: MastraBrowser) => void } | undefined);
+    agent?.setBrowser?.(browser);
   }
   // Track the active browser settings in harness state
   ctx.harness.setState({ [ACTIVE_BROWSER_KEY]: browserSettings } as any);
