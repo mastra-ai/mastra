@@ -95,7 +95,7 @@ function applyBrowserToAgents(
     const modeAgent = (mode as { agent?: unknown }).agent;
     const agent =
       typeof modeAgent === 'function'
-        ? (modeAgent(harnessState ??= ctx.state.harness.getState()) as {
+        ? (modeAgent((harnessState ??= ctx.state.harness.getState())) as {
             setBrowser?: (browser?: MastraBrowser) => void;
           })
         : (modeAgent as { setBrowser?: (browser?: MastraBrowser) => void } | undefined);
