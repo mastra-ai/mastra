@@ -179,18 +179,16 @@ describe('createMastraCode startup performance', () => {
     } as never);
     const { createMastraCode } = await import('./index.js');
 
-    let result: Awaited<ReturnType<typeof createMastraCode>> | undefined;
-    const resultPromise = createMastraCode().then(value => {
-      result = value;
-      return value;
-    });
-
-    await new Promise(resolve => setImmediate(resolve));
+    // The contract under test: createMastraCode() resolves with the storage
+    // warning even while the background gateway sync is still pending. Because
+    // the gateway-sync heartbeat fires synchronously during Harness
+    // construction, awaiting createMastraCode() is enough to observe the call
+    // without relying on real wall-clock timeouts.
+    const result = await createMastraCode();
 
     expect(syncGateways).toHaveBeenCalledTimes(1);
-    expect(result?.storageWarning).toBe('Storage fallback warning');
+    expect(result.storageWarning).toBe('Storage fallback warning');
     resolveSync?.();
-    await resultPromise;
   });
 });
 
