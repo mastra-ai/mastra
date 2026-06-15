@@ -220,6 +220,45 @@ function findApprovalRequest(
         return part;
       }
     }
+
+    const pendingToolApprovals = message.content.metadata?.pendingToolApprovals;
+    if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
+      continue;
+    }
+
+    for (const pendingToolApproval of Object.values(pendingToolApprovals)) {
+      if (!pendingToolApproval || typeof pendingToolApproval !== 'object') {
+        continue;
+      }
+
+      const toolCallId = 'toolCallId' in pendingToolApproval ? pendingToolApproval.toolCallId : undefined;
+      if (typeof toolCallId !== 'string') {
+        continue;
+      }
+
+      const runId = 'runId' in pendingToolApproval ? pendingToolApproval.runId : undefined;
+      const pendingApprovalId = typeof runId === 'string' ? `${runId}::${toolCallId}` : toolCallId;
+      if (pendingApprovalId !== approvalId) {
+        continue;
+      }
+
+      const existingPart = findToolInvocationPart(message.content.parts || [], toolCallId);
+      if (!existingPart) {
+        continue;
+      }
+
+      return createToolInvocationPart({
+        toolCallId: existingPart.toolInvocation.toolCallId,
+        toolName: existingPart.toolInvocation.toolName,
+        args: existingPart.toolInvocation.args,
+        state: 'approval-requested',
+        approval: { id: pendingApprovalId },
+        providerMetadata: existingPart.providerMetadata,
+        providerExecuted: existingPart.providerExecuted,
+        title: existingPart.title,
+        preliminary: existingPart.preliminary,
+      });
+    }
   }
 
   return undefined;
