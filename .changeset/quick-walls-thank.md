@@ -9,3 +9,5 @@ Redesigned collapsible side panels in the studio.
 **Smooth open and close.** Expanding animates the panel width so the neighboring layout reflows smoothly instead of jumping, and a panel restored in its collapsed state first paints collapsed instead of loading open and snapping shut. Content holds a minimum width while the panel moves so text never rewraps mid-flight, and stays mounted while collapsed, preserving scroll position and inputs.
 
 **Mobile gets drawers.** Below the mobile breakpoint, resizable side panels become near-full-width edge drawers (new `PanelDrawer` component) opened from the same ghost icon, with content kept mounted so panel state survives open/close. A new `useIsMobile` hook is exported for viewport-dependent rendering.
+
+The resize wrapper also preserves the original resize callback arguments from `react-resizable-panels`, and `useIsMobile` now handles environments where media query APIs are unavailable.

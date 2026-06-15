@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Added collision avoidance controls to PopoverContent so start-aligned popovers can avoid flipping to end alignment.
+Added collision avoidance controls to `PopoverContent` so consumers can keep start-aligned popovers while still avoiding viewport overflow.
