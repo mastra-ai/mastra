@@ -483,7 +483,10 @@ describe('handleMessageUpdate system reminders', () => {
       streamingMessage,
     ]);
     expect(state.allSystemReminderComponents[0]).toBeInstanceOf(TemporalGapComponent);
-    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    // Spacer is placed above optimisticUserMessage (the next spacing participant),
+    // not directly after earlierUserMessage, because TemporalGapComponent does
+    // not participate in spacing.
+    expect(isChatBoundarySpacer(state.chatContainer.children[2]!)).toBe(true);
   });
 
   it('surfaces failed pending tools in quiet mode when the assistant run errors', () => {
