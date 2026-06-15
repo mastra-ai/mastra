@@ -8,18 +8,25 @@ import {
   comparePeriodSchema,
   commonFilterFields,
   contextFields,
+  deltaLimitSchema,
+  deltaInfoSchema,
   dimensionsField,
   groupBySchema,
+  deltaCursorSchema,
+  listModeSchema,
+  normalizeObservabilityListArgs,
   paginationArgsSchema,
   paginationInfoSchema,
   percentileField,
   percentileBucketValueField,
   percentilesSchema,
+  refineObservabilityListMode,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
   metadataField,
 } from '../shared';
+import type { AggregationType } from '../shared';
 
 // ============================================================================
 // Field Schemas
@@ -182,25 +189,36 @@ export const metricsOrderBySchema = z
   })
   .describe('Order by configuration');
 
-/** Schema for listMetrics operation arguments */
 export const listMetricsArgsSchema = z
   .object({
+    mode: listModeSchema.optional(),
     filters: metricsFilterSchema.optional(),
-    pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
-    orderBy: metricsOrderBySchema
-      .default({ field: 'timestamp', direction: 'DESC' })
-      .describe('Ordering configuration (defaults to timestamp desc)'),
+    pagination: paginationArgsSchema.optional(),
+    orderBy: metricsOrderBySchema.optional(),
+    after: deltaCursorSchema.optional(),
+    limit: deltaLimitSchema,
   })
+  .strict()
+  .superRefine(refineObservabilityListMode)
+  .transform(value =>
+    normalizeObservabilityListArgs<MetricsFilter, z.output<typeof metricsOrderBySchema>>(value, {
+      orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+    }),
+  )
   .describe('Arguments for listing metrics');
 
 /** Arguments for listing metrics */
 export type ListMetricsArgs = z.input<typeof listMetricsArgsSchema>;
 
 /** Schema for listMetrics operation response */
-export const listMetricsResponseSchema = z.object({
-  pagination: paginationInfoSchema,
-  metrics: z.array(metricRecordSchema),
-});
+export const listMetricsResponseSchema = z
+  .object({
+    pagination: paginationInfoSchema.optional(),
+    delta: deltaInfoSchema.optional(),
+    deltaCursor: deltaCursorSchema.optional(),
+    metrics: z.array(metricRecordSchema),
+  })
+  .describe('Response from listing metrics');
 
 /** Response containing paginated metrics */
 export type ListMetricsResponse = z.infer<typeof listMetricsResponseSchema>;
@@ -209,15 +227,59 @@ export type ListMetricsResponse = z.infer<typeof listMetricsResponseSchema>;
 // OLAP Query Schemas
 // ============================================================================
 
+/**
+ * Columns eligible for `count_distinct`.
+ *
+ * Restricted to low/medium-cardinality categorical attributes. ID columns are
+ * intentionally excluded — approximate distinct count over near-unique values
+ * converges to the row count and is rarely a useful KPI.
+ */
+export const METRIC_DISTINCT_COLUMNS = [
+  'entityType',
+  'entityName',
+  'parentEntityType',
+  'parentEntityName',
+  'rootEntityType',
+  'rootEntityName',
+  'name',
+  'provider',
+  'model',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'threadId',
+  'resourceId',
+] as const;
+
+export type MetricDistinctColumn = (typeof METRIC_DISTINCT_COLUMNS)[number];
+
+export const distinctColumnSchema = z
+  .enum(METRIC_DISTINCT_COLUMNS)
+  .optional()
+  .describe(
+    "Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions.",
+  );
+
 // --- getMetricAggregate ---
+
+const requireDistinctColumnRefinement = {
+  check: (data: { aggregation: AggregationType; distinctColumn?: string | undefined }) =>
+    data.aggregation !== 'count_distinct' || data.distinctColumn !== undefined,
+  options: {
+    message: "distinctColumn is required when aggregation is 'count_distinct'",
+    path: ['distinctColumn'],
+  },
+};
 
 export const getMetricAggregateArgsSchema = z
   .object({
     name: z.array(z.string()).nonempty().describe('Metric name(s) to aggregate'),
     aggregation: aggregationTypeSchema,
+    distinctColumn: distinctColumnSchema,
     filters: metricsFilterSchema.optional(),
     comparePeriod: comparePeriodSchema.optional(),
   })
+  .refine(requireDistinctColumnRefinement.check, requireDistinctColumnRefinement.options)
   .describe('Arguments for getting a metric aggregate');
 
 export type GetMetricAggregateArgs = z.infer<typeof getMetricAggregateArgsSchema>;
@@ -251,8 +313,22 @@ export const getMetricBreakdownArgsSchema = z
     name: z.array(z.string()).nonempty().describe('Metric name(s) to break down'),
     groupBy: groupBySchema,
     aggregation: aggregationTypeSchema,
+    distinctColumn: distinctColumnSchema,
     filters: metricsFilterSchema.optional(),
+    limit: z
+      .number()
+      .int()
+      .positive()
+      .max(1000)
+      .optional()
+      .describe('Maximum number of groups to return (server-side TopK). Required for high-cardinality groupBy.'),
+    orderDirection: sortDirectionSchema
+      .optional()
+      .describe(
+        "Sort direction for the aggregated value (defaults to 'DESC' at the storage layer; pairs with limit for top/bottom-N).",
+      ),
   })
+  .refine(requireDistinctColumnRefinement.check, requireDistinctColumnRefinement.options)
   .describe('Arguments for getting a metric breakdown');
 
 export type GetMetricBreakdownArgs = z.infer<typeof getMetricBreakdownArgsSchema>;
@@ -281,9 +357,11 @@ export const getMetricTimeSeriesArgsSchema = z
     name: z.array(z.string()).nonempty().describe('Metric name(s)'),
     interval: aggregationIntervalSchema,
     aggregation: aggregationTypeSchema,
+    distinctColumn: distinctColumnSchema,
     filters: metricsFilterSchema.optional(),
     groupBy: groupBySchema.optional(),
   })
+  .refine(requireDistinctColumnRefinement.check, requireDistinctColumnRefinement.options)
   .describe('Arguments for getting metric time series');
 
 export type GetMetricTimeSeriesArgs = z.infer<typeof getMetricTimeSeriesArgsSchema>;

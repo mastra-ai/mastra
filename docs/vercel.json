@@ -1,6 +1,31 @@
 {
   "redirects": [
     {
+      "source": "/docs/observability/tracing/exporters/cloud",
+      "destination": "/docs/observability/integrations/exporters/mastra-platform",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/default",
+      "destination": "/docs/observability/integrations/exporters/mastra-storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/:path*",
+      "destination": "/docs/observability/integrations/exporters/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/bridges/:path*",
+      "destination": "/docs/observability/integrations/bridges/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/processors/:path*",
+      "destination": "/docs/observability/integrations/processors/:path*",
+      "permanent": true
+    },
+    {
       "source": "/docs/getting-started/start",
       "destination": "/docs",
       "permanent": true
@@ -718,6 +743,16 @@
     {
       "source": "/docs/mastra-cloud/observability",
       "destination": "/docs/mastra-platform/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/publishing-mcp-server",
+      "destination": "/guides/guide/publishing-mcp-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/response-caching",
+      "destination": "/docs/agents/processors#response-caching",
       "permanent": true
     }
   ]

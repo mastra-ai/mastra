@@ -349,8 +349,8 @@ export const darkTheme: ThemeColors = {
   // System reminders
   systemReminderBg: '#1a1400', // Dark orange tint
   // Tool execution
-  toolPendingBg: '#0a1a10', // Dark green tint (matches brand accent)
-  toolSuccessBg: '#0a1a10', // Dark green tint (same as pending)
+  toolPendingBg: darkSurface.antiGrid,
+  toolSuccessBg: darkSurface.antiGrid,
   toolErrorBg: '#1f0a0a', // Dark red tint
   toolBorderPending: '#52525b', // Zinc-600 dim grey for pending
   toolBorderSuccess: '#52525b', // Zinc-600 dim grey for success
@@ -393,8 +393,8 @@ export const lightTheme: ThemeColors = {
   // System reminders
   systemReminderBg: '#fefce8', // Light yellow
   // Tool execution
-  toolPendingBg: '#f0fdf4', // Light green tint (matches brand accent)
-  toolSuccessBg: '#f0fdf4', // Light green tint (same as pending)
+  toolPendingBg: lightSurface.antiGrid,
+  toolSuccessBg: lightSurface.antiGrid,
   toolErrorBg: '#fef2f2', // Light red
   toolBorderPending: '#a1a1aa', // Zinc-400 dim grey for pending
   toolBorderSuccess: '#a1a1aa', // Zinc-400 dim grey for success
@@ -648,6 +648,29 @@ export function ensureContrast(fgHex: string, bgHex: string, minRatio = 4.5): st
  */
 export function getContrastText(hexBg: string): string {
   return luminance(hexBg) > 0.179 ? '#000000' : '#ffffff';
+}
+
+const NEAR_BLACK_LUMINANCE = luminance('#111111');
+const NEAR_BLACK_GLYPH_MIN_CONTRAST = 3;
+
+/**
+ * Keep deliberately subdued glyph colors on black/nearly-black backgrounds,
+ * but contrast-adapt them on brighter terminal backgrounds.
+ */
+export function ensureContrastUnlessNearBlack(fgHex: string, minRatio = TUI_MIN_CONTRAST): string {
+  const bgHex = getContrastBg();
+  if (luminance(bgHex) <= NEAR_BLACK_LUMINANCE) return fgHex;
+  return ensureContrast(fgHex, bgHex, minRatio);
+}
+
+/**
+ * Terminal glyphs need a little extra visibility even on black backgrounds.
+ * Keep them subdued on near-black terminals, but do not let them get too faint.
+ */
+export function ensureTerminalGlyphContrast(fgHex: string, minRatio = TUI_MIN_CONTRAST): string {
+  const bgHex = getContrastBg();
+  const targetRatio = luminance(bgHex) <= NEAR_BLACK_LUMINANCE ? NEAR_BLACK_GLYPH_MIN_CONTRAST : minRatio;
+  return ensureContrast(fgHex, bgHex, targetRatio);
 }
 
 // =============================================================================

@@ -383,7 +383,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "thinking",
-        "type": "{ type: \"adaptive\"; } | { type: \"enabled\"; budgetTokens?: number | undefined; } | { type: \"disabled\"; } | undefined",
+        "type": "{ type: \"adaptive\"; display?: \"omitted\" | \"summarized\" | undefined; } | { type: \"enabled\"; budgetTokens?: number | undefined; } | { type: \"disabled\"; } | undefined",
         "description": "",
         "isOptional": true
     },
@@ -425,7 +425,13 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "effort",
-        "type": "\"low\" | \"medium\" | \"high\" | \"max\" | undefined",
+        "type": "\"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "taskBudget",
+        "type": "{ type: \"tokens\"; total: number; remaining?: number | undefined; } | undefined",
         "description": "",
         "isOptional": true
     },

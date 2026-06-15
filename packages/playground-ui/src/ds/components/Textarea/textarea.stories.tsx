@@ -7,11 +7,10 @@ const meta: Meta<typeof Textarea> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'filled', 'unstyled'],
+      options: ['default', 'filled', 'outline', 'unstyled'],
     },
     size: {
       control: { type: 'select' },
@@ -40,6 +39,8 @@ export const Variants: Story = {
   render: () => (
     <div className="flex flex-col gap-3 w-dropdown-max-height">
       <Textarea variant="default" placeholder="default" />
+      <Textarea variant="filled" placeholder="filled" />
+      <Textarea variant="outline" placeholder="outline" />
       <Textarea variant="unstyled" placeholder="unstyled" />
     </div>
   ),
@@ -69,4 +70,23 @@ export const Disabled: Story = {
     disabled: true,
     className: 'w-dropdown-max-height',
   },
+};
+
+export const OnDifferentSurfaces: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 w-96">
+      <div className="bg-surface1 p-4 rounded-lg border border-border1">
+        <Textarea placeholder="On bg-surface1" />
+      </div>
+      <div className="bg-surface2 p-4 rounded-lg border border-border1">
+        <Textarea placeholder="On bg-surface2" />
+      </div>
+      <div className="bg-surface3 p-4 rounded-lg border border-border1">
+        <Textarea placeholder="On bg-surface3" />
+      </div>
+      <div className="bg-surface4 p-4 rounded-lg border border-border1">
+        <Textarea placeholder="On bg-surface4" />
+      </div>
+    </div>
+  ),
 };

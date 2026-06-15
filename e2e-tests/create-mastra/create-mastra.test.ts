@@ -22,13 +22,14 @@ describe('create mastra', () => {
       fixturePath = await mkdtemp(join(tmpdir(), 'mastra-create-test-'));
       projectPath = join(fixturePath, 'project');
       execSync(
-        `pnpm --config.trust-policy=off --config.block-exotic-subdeps=false dlx create-mastra@${tag} -c agents,tools,workflows,scorers -l openai -e project`,
+        `pnpm --config.trust-policy=off --config.block-exotic-subdeps=false --config.minimum-release-age=0 dlx create-mastra@${tag} -c agents,tools,workflows,scorers -l openai -e project`,
         {
           cwd: fixturePath,
           stdio: ['inherit', 'inherit', 'inherit'],
           env: {
             ...process.env,
-            npm_config_registry: registry,
+            pnpm_config_registry: registry,
+            pnpm_config_minimum_release_age: '0',
           },
         },
       );
@@ -130,20 +131,18 @@ describe('create mastra', () => {
               "hasDraft": false,
               "id": "weather-agent",
               "inputProcessors": [],
-              "instructions": "
-                You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
+              "instructions": "You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
 
-                Your primary function is to help users get weather details for specific locations. When responding:
-                - Always ask for a location if none is provided
-                - If the location name isn't in English, please translate it
-                - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-                - Include relevant details like humidity, wind conditions, and precipitation
-                - Keep responses concise but informative
-                - If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
-                - If the user asks for activities, respond in the format they request.
+          Your primary function is to help users get weather details for specific locations. When responding:
+          - Always ask for a location if none is provided
+          - If the location name isn't in English, please translate it
+          - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
+          - Include relevant details like humidity, wind conditions, and precipitation
+          - Keep responses concise but informative
+          - If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
+          - If the user asks for activities, respond in the format they request.
 
-                Use the weatherTool to fetch current weather data.
-          ",
+          Use the weatherTool to fetch current weather data.",
               "modelId": "gpt-5-mini",
               "modelVersion": "v2",
               "name": "Weather Agent",
@@ -151,6 +150,7 @@ describe('create mastra', () => {
               "provider": "openai",
               "skills": [],
               "source": "code",
+              "supportsMemory": true,
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",

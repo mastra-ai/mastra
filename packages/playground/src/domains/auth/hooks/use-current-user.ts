@@ -34,7 +34,7 @@ import { fetchWithRefresh } from './fetch-with-refresh';
  */
 export function useCurrentUser() {
   const client = useMastraClient();
-  const baseUrl = (client as any).options?.baseUrl || '';
+  const baseUrl = client.options?.baseUrl || '';
 
   return useQuery<CurrentUser>({
     queryKey: ['auth', 'me'],

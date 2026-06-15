@@ -23,7 +23,7 @@ packages:
 
 # $NAME
 
-Added in: `@mastra/$PACKAGE@$VERSION`
+**Added in:** `@mastra/$PACKAGE@$VERSION`
 
 One or two sentences on what the class or function does and when to use it.
 
@@ -95,15 +95,15 @@ Rules:
 - frontmatter title must be `Reference: $NAME | $CATEGORY`
 - for functions, include parentheses in `$NAME` in frontmatter and H1
 - for classes, use the class name in frontmatter and H1
-- include `Added in:` only when the API was introduced in a specific release and the minimum version matters
-- place `Added in:` immediately after the H1
-- omit `Added in:` for long-standing APIs
+- include `**Added in:**` only when the API was introduced in a specific release and the minimum version matters. Do not add it if the package is a net-new package
+- place `**Added in:**` immediately after the H1
+- omit `**Added in:**` for long-standing APIs
 - link to alternative APIs right after the description when they exist
 - put a minimal working usage example immediately after the description
 - if the API has multiple calling patterns, show them in the Usage example section
 - use `<PropertiesTable>` for constructor parameters, function parameters, and properties
 - each `<PropertiesTable>` entry should include `name`, `type`, and `description`, and may include `isOptional`, `properties`, and `defaultValue`
-- for nested types, use nested `properties` arrays
+- for nested types, use `properties: [{ type: '$TYPE', parameters: [...] }]`; do not put nested parameter objects directly inside `properties`
 - check existing reference pages for `<PropertiesTable>` patterns and consistency
 - group methods by category with H3 headings
 - use H4 headings with backticked method signatures
@@ -114,3 +114,32 @@ Rules:
 - add domain-specific H2 sections after the standard sections when needed
 - use tables for capability lists
 - link to doc pages instead of duplicating long conceptual explanations
+
+Tips:
+
+- For nested objects, put `parameters` inside a typed entry in `properties`:
+
+  ```mdx
+  <PropertiesTable
+    content={[
+      {
+        name: 'options',
+        type: 'RunOptions',
+        description: 'Options for the run.',
+        properties: [
+          {
+            type: 'RunOptions',
+            parameters: [
+              {
+                name: 'timeout',
+                type: 'number',
+                description: 'Timeout in milliseconds.',
+                isOptional: true,
+              },
+            ],
+          },
+        ],
+      },
+    ]}
+  />
+  ```

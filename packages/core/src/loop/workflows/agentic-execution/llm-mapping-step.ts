@@ -1,13 +1,20 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
-import { createObservabilityContext } from '../../../observability';
+import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { createStep } from '../../../workflows';
+import {
+  transformToolPayloadForTargets,
+  withToolPayloadTransformMetadata,
+  withToolPayloadTransformProviderMetadata,
+} from '../../../tools/payload-transform';
+import { findProviderToolByName } from '../../../tools/provider-tool-utils';
+import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
+import { deserializeToolError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
@@ -68,26 +75,50 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         streamWriter,
       );
 
-      if (blocked) {
-        // Emit a tripwire chunk so downstream knows about the abort
+      const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
         rest.controller.enqueue({
           type: 'tripwire',
           payload: {
-            reason: reason || 'Output processor blocked content',
-            retry: tripwireOptions?.retry,
-            metadata: tripwireOptions?.metadata,
-            processorId,
+            reason: r || 'Output processor blocked content',
+            retry: opts?.retry,
+            metadata: opts?.metadata,
+            processorId: pid,
           },
         } as ChunkType<OUTPUT>);
+      };
+
+      if (blocked) {
+        // Emit a tripwire chunk so downstream knows about the abort
+        enqueueTripwire(reason, tripwireOptions, processorId);
         return null;
       }
 
       if (processed) {
         rest.controller.enqueue(processed as ChunkType<OUTPUT>);
-        return processed as ChunkType<OUTPUT>;
       }
 
-      return null;
+      // Emit any parts a processor stashed for reprocessing (e.g. the non-text
+      // part that triggered a BatchPartsProcessor flush), pushing each back
+      // through the whole chain so it gets downstream processing.
+      const reprocessed = await processorRunner.drainReprocessParts(
+        rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
+        observabilityContext,
+        rest.requestContext,
+        rest.messageList,
+        0,
+        streamWriter,
+      );
+      for (const r of reprocessed) {
+        if (r.blocked) {
+          enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
+          return processed ? (processed as ChunkType<OUTPUT>) : null;
+        }
+        if (r.part != null) {
+          rest.controller.enqueue(r.part as ChunkType<OUTPUT>);
+        }
+      }
+
+      return processed ? (processed as ChunkType<OUTPUT>) : null;
     } else {
       // No processor runner, just enqueue the chunk directly
       rest.controller.enqueue(chunk);
@@ -102,17 +133,78 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
 
-      // Compute toModelOutput for a successful tool call and return providerMetadata
-      // with the result stored at mastra.modelOutput
+      /**
+       * Compute toModelOutput for a successful tool call and return providerMetadata
+       * with the result stored at mastra.modelOutput.
+       *
+       * Looks up the tool from dynamically loaded tools (`_internal.stepTools`, e.g. via
+       * ToolSearchProcessor) first, then falls back to the agent's static tool definitions.
+       *
+       * When toModelOutput is defined, the transform runs under a MAPPING child span so
+       * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
+       */
+      /**
+       * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts
+       * are converted to `type: 'image-data'` or `type: 'file-data'` as AI SDK
+       * providers expect. AI SDK does this internally in `mapToolResultOutput`,
+       * but Mastra calls toModelOutput directly and stores the result, bypassing
+       * that normalization.
+       */
+      function normalizeModelOutput(output: unknown): unknown {
+        if (output == null || typeof output !== 'object') return output;
+
+        const obj = output as Record<string, unknown>;
+        if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
+
+        return {
+          ...obj,
+          value: (obj.value as unknown[]).map(item => {
+            if (item == null || typeof item !== 'object') return item;
+            const part = item as Record<string, unknown>;
+            if (part.type !== 'media') return part;
+            if (typeof part.mediaType === 'string' && part.mediaType.startsWith('image/')) {
+              return { type: 'image-data', data: part.data, mediaType: part.mediaType };
+            }
+            return { type: 'file-data', data: part.data, mediaType: part.mediaType };
+          }),
+        };
+      }
+
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
+        toolCallId?: string;
         result?: unknown;
         providerMetadata?: Record<string, unknown>;
       }) {
-        const tool = rest.tools?.[toolCall.toolName] as { toModelOutput?: (output: unknown) => unknown } | undefined;
+        const tool = ((
+          _internal?.stepTools as Record<string, { toModelOutput?: (output: unknown) => unknown }> | undefined
+        )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
+          | { toModelOutput?: (output: unknown) => unknown }
+          | undefined;
         let modelOutput: unknown;
         if (tool?.toModelOutput && toolCall.result != null) {
-          modelOutput = await tool.toModelOutput(toolCall.result);
+          const parentSpan = observabilityContext?.tracingContext?.currentSpan;
+          const mappingSpan = parentSpan?.createChildSpan({
+            type: SpanType.MAPPING,
+            name: `tool output mapping: '${toolCall.toolName}'`,
+            entityType: EntityType.TOOL,
+            entityId: toolCall.toolName,
+            entityName: toolCall.toolName,
+            input: toolCall.result,
+            attributes: {
+              mappingType: 'toModelOutput',
+              toolCallId: toolCall.toolCallId,
+            },
+          });
+          try {
+            modelOutput = await tool.toModelOutput(toolCall.result);
+            // Normalize media parts to image-data/file-data as AI SDK expects
+            modelOutput = normalizeModelOutput(modelOutput);
+            mappingSpan?.end({ output: modelOutput });
+          } catch (err) {
+            mappingSpan?.error({ error: err as Error, endSpan: true });
+            throw err;
+          }
         }
 
         const existingMastra = (toolCall.providerMetadata as any)?.mastra;
@@ -124,23 +216,83 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         return hasMetadata ? providerMetadata : undefined;
       }
 
+      async function transformToolChunk(
+        chunk: ChunkType<OUTPUT>,
+        toolCall: {
+          toolName: string;
+          toolCallId: string;
+          args?: unknown;
+          result?: unknown;
+          error?: unknown;
+          providerMetadata?: Record<string, unknown>;
+        },
+        phase: 'output-available' | 'error',
+      ): Promise<ChunkType<OUTPUT>> {
+        const stepTools = _internal?.stepTools as ToolSet | undefined;
+        const tool =
+          stepTools?.[toolCall.toolName] ||
+          findProviderToolByName(stepTools, toolCall.toolName) ||
+          Object.values(stepTools || {}).find((t: any) => `id` in t && t.id === toolCall.toolName) ||
+          rest.tools?.[toolCall.toolName] ||
+          findProviderToolByName(rest.tools, toolCall.toolName) ||
+          Object.values(rest.tools || {}).find((t: any) => `id` in t && t.id === toolCall.toolName);
+        const source = {
+          policy: _internal?.toolPayloadTransform,
+          toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
+        };
+        const inputTransform = await transformToolPayloadForTargets(
+          {
+            phase: 'input-available',
+            toolName: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            input: toolCall.args,
+            providerMetadata: toolCall.providerMetadata,
+          },
+          source,
+          rest.logger,
+        );
+        const transform = await transformToolPayloadForTargets(
+          {
+            phase,
+            toolName: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            input: toolCall.args,
+            output: toolCall.result,
+            error: toolCall.error,
+            providerMetadata: toolCall.providerMetadata,
+          },
+          source,
+          rest.logger,
+        );
+
+        return withToolPayloadTransformMetadata(withToolPayloadTransformMetadata(chunk, inputTransform), transform);
+      }
+
       if (inputData?.some(toolCall => toolCall?.result === undefined && !toolCall.providerExecuted)) {
         const errorResults = inputData.filter(toolCall => toolCall?.error && !toolCall.providerExecuted);
 
         if (errorResults?.length) {
           for (const toolCall of errorResults) {
-            const chunk: ChunkType<OUTPUT> = {
-              type: 'tool-error',
-              runId: rest.runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                error: toolCall.error,
-                args: toolCall.args,
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
-                providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+            // `toolCall.error` arrives as the plain {name,message,stack} the workflow step
+            // serializes (Error instances become `{}` over the pubsub bus). Reify here so
+            // chunk consumers see a real Error with name/message/stack intact.
+            const reifiedError = deserializeToolError(toolCall.error);
+            const chunk = await transformToolChunk(
+              {
+                type: 'tool-error',
+                runId: rest.runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  error: reifiedError,
+                  args: toolCall.args,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+                },
               },
-            };
+              { ...toolCall, error: reifiedError },
+              'error',
+            );
             const processed = await processAndEnqueueChunk(chunk);
             if (processed) await rest.options?.onChunk?.(processed);
 
@@ -151,9 +303,23 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
-                result: toolCall.error?.message ?? toolCall.error,
+                // Use the already-reified Error rather than `toolCall.error` (which is the
+                // plain {name,message,stack} shape after the pubsub JSON round-trip).
+                // Without reification the `instanceof Error` check below falls through to
+                // `safeStringify`, dumping the whole stringified payload into the history.
+                result: reifiedError.message || 'Tool execution failed',
               },
-              ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata as ProviderMetadata } : {}),
+              ...(withToolPayloadTransformProviderMetadata(
+                toolCall.providerMetadata as ProviderMetadata,
+                chunk.metadata,
+              )
+                ? {
+                    providerMetadata: withToolPayloadTransformProviderMetadata(
+                      toolCall.providerMetadata as ProviderMetadata,
+                      chunk.metadata,
+                    ) as ProviderMetadata,
+                  }
+                : {}),
             });
           }
         }
@@ -176,26 +342,39 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           const successfulResults = inputData.filter(tc => tc.result !== undefined);
           if (successfulResults.length) {
             for (const toolCall of successfulResults) {
-              const chunk: ChunkType<OUTPUT> = {
-                type: 'tool-result',
-                runId: rest.runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  args: toolCall.args,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result: toolCall.result,
-                  providerMetadata: toolCall.providerMetadata,
-                  providerExecuted: toolCall.providerExecuted,
+              // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
+              // can access it on the chunk's providerMetadata.mastra.modelOutput.
+              // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
+              const providerMetadata = !toolCall.providerExecuted
+                ? await getProviderMetadataWithModelOutput(toolCall)
+                : undefined;
+              const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
+                | ProviderMetadata
+                | undefined;
+
+              const chunk = await transformToolChunk(
+                {
+                  type: 'tool-result',
+                  runId: rest.runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    args: toolCall.args,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: toolCall.toolName,
+                    result: toolCall.result,
+                    providerMetadata: chunkProviderMetadata,
+                    providerExecuted: toolCall.providerExecuted,
+                  },
                 },
-              };
+                toolCall,
+                'output-available',
+              );
               const processed = await processAndEnqueueChunk(chunk);
               if (processed) await rest.options?.onChunk?.(processed);
 
               if (!toolCall.providerExecuted) {
                 // Update tool invocations from state:'call' to state:'result' for successful client tools.
                 // Provider-executed tools are handled by llm-execution-step.
-                const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
                 rest.messageList.updateToolInvocation({
                   type: 'tool-invocation' as const,
                   toolInvocation: {
@@ -205,7 +384,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     args: toolCall.args,
                     result: toolCall.result,
                   },
-                  ...(providerMetadata ? { providerMetadata } : {}),
+                  ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
+                    ? {
+                        providerMetadata: withToolPayloadTransformProviderMetadata(
+                          providerMetadata,
+                          chunk.metadata,
+                        ) as ProviderMetadata,
+                      }
+                    : {}),
                 });
               }
             }
@@ -250,19 +436,31 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // by processOutputStream's 'tool-result' case in llm-execution-step.
           if (toolCall.result === undefined) continue;
 
-          const chunk: ChunkType<OUTPUT> = {
-            type: 'tool-result',
-            runId: rest.runId,
-            from: ChunkFrom.AGENT,
-            payload: {
-              args: toolCall.args,
-              toolCallId: toolCall.toolCallId,
-              toolName: toolCall.toolName,
-              result: toolCall.result,
-              providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
-              providerExecuted: toolCall.providerExecuted,
+          // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
+          // can access it on the chunk's providerMetadata.mastra.modelOutput.
+          // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
+          const providerMetadata = !toolCall.providerExecuted
+            ? await getProviderMetadataWithModelOutput(toolCall)
+            : undefined;
+          const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
+
+          const chunk = await transformToolChunk(
+            {
+              type: 'tool-result',
+              runId: rest.runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                args: toolCall.args,
+                toolCallId: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+                result: toolCall.result,
+                providerMetadata: chunkProviderMetadata,
+                providerExecuted: toolCall.providerExecuted,
+              },
             },
-          };
+            toolCall,
+            'output-available',
+          );
 
           const processed = await processAndEnqueueChunk(chunk);
           if (processed) await rest.options?.onChunk?.(processed);
@@ -270,7 +468,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // Exclude provider-executed tools — these are handled by llm-execution-step
           // (same-turn results are stored directly, deferred results are resolved via updateToolInvocation).
           if (!toolCall.providerExecuted) {
-            const providerMetadata = await getProviderMetadataWithModelOutput(toolCall);
             rest.messageList.updateToolInvocation({
               type: 'tool-invocation' as const,
               toolInvocation: {
@@ -280,7 +477,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 args: toolCall.args,
                 result: toolCall.result,
               },
-              ...(providerMetadata ? { providerMetadata } : {}),
+              ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
+                ? {
+                    providerMetadata: withToolPayloadTransformProviderMetadata(
+                      providerMetadata,
+                      chunk.metadata,
+                    ) as ProviderMetadata,
+                  }
+                : {}),
             });
           }
         }

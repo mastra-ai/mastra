@@ -5,7 +5,6 @@ import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-import prettier from 'prettier';
 
 import { DepsService } from '../../services/service.deps.js';
 import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
@@ -75,6 +74,19 @@ async function initializePackageJson(pm: PackageManager): Promise<void> {
     node: '>=22.13.0',
   };
 
+  // pnpm v11+ writes devEngines.packageManager with a semver range (e.g.
+  // "^11.3.0"). Corepack ≤0.35.0 (bundled with Node 22) reads this field
+  // too and rejects ranges, so we must remove both the legacy packageManager
+  // field and devEngines.packageManager to avoid the error:
+  //   "Invalid package manager specification in package.json (pnpm@^11.3.0)"
+  delete packageJson.packageManager;
+  if (packageJson.devEngines?.packageManager) {
+    delete packageJson.devEngines.packageManager;
+    if (Object.keys(packageJson.devEngines).length === 0) {
+      delete packageJson.devEngines;
+    }
+  }
+
   await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
 }
 
@@ -113,17 +125,12 @@ The [Mastra platform](https://projects.mastra.ai) provides two products for depl
 
 Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-platform/overview).`;
 
-  const formattedContent = await prettier.format(content, {
-    parser: 'markdown',
-    singleQuote: true,
-  });
-
-  await fs.writeFile(readmePath, formattedContent);
+  await fs.writeFile(readmePath, content);
 };
 
-async function installMastraDependency(
+async function installMastraDependencies(
   pm: PackageManager,
-  dependency: string,
+  dependencies: string[],
   versionTag: string,
   isDev: boolean,
   timeout?: number,
@@ -138,19 +145,23 @@ async function installMastraDependency(
     installCommand = `${installCommand} -D`;
   }
 
+  const dependenciesWithVersion = dependencies.map(dependency => `${dependency}${versionTag}`).join(' ');
+
   try {
-    await execWithTimeout(`${pm} ${installCommand} ${dependency}${versionTag}`, timeout);
+    await execWithTimeout(`${pm} ${installCommand} ${dependenciesWithVersion}`, timeout);
   } catch (err) {
     if (versionTag === '@latest') {
       throw new Error(
-        `Failed to install ${dependency}@latest: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        `Failed to install ${dependenciesWithVersion}: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
     }
+
+    const latestDependencies = dependencies.map(dependency => `${dependency}@latest`).join(' ');
     try {
-      await execWithTimeout(`${pm} ${installCommand} ${dependency}@latest`, timeout);
+      await execWithTimeout(`${pm} ${installCommand} ${latestDependencies}`, timeout);
     } catch (fallbackErr) {
       throw new Error(
-        `Failed to install ${dependency} (tried ${versionTag} and @latest): ${fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error'}`,
+        `Failed to install ${dependencies.join(', ')} (tried ${versionTag} and @latest): ${fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error'}`,
       );
     }
   }
@@ -164,7 +175,9 @@ export const createMastraProject = async ({
   llmApiKey,
   skills,
   mcpServer,
+  observability,
   needsInteractive,
+  onObservabilitySelected,
 }: {
   projectName?: string;
   createVersionTag?: string;
@@ -173,7 +186,14 @@ export const createMastraProject = async ({
   llmApiKey?: string;
   skills?: string[];
   mcpServer?: string;
+  observability?: boolean;
   needsInteractive?: boolean;
+  onObservabilitySelected?: (event: {
+    command?: 'create' | 'init';
+    enabled: boolean;
+    answer: 'yes' | 'no';
+    selection_method: 'interactive';
+  }) => void;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
 
@@ -201,12 +221,13 @@ export const createMastraProject = async ({
     const skipGitInit = await isGitInitialized({ cwd: process.cwd() });
 
     result = await interactivePrompt({
-      options: { showBanner: false },
+      options: { command: 'create', showBanner: false, onObservabilitySelected },
       skip: {
         llmProvider: llmProvider !== undefined,
         llmApiKey: llmApiKey !== undefined,
         skills: skills !== undefined && skills.length > 0,
         mcpServer: mcpServer !== undefined,
+        observability: observability !== undefined,
         directory: true,
         gitInit: skipGitInit,
       },
@@ -251,6 +272,22 @@ export const createMastraProject = async ({
       );
     }
 
+    // Write pnpm workspace config for pnpm v11
+    if (pm === 'pnpm') {
+      await fs.writeFile(
+        'pnpm-workspace.yaml',
+        `packages:
+  - '.'
+allowBuilds:
+  esbuild: true
+  sharp: true
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+`,
+      );
+    }
+
     s.stop('Project structure created');
 
     s.start(`Installing ${pm} dependencies`);
@@ -285,7 +322,7 @@ export const createMastraProject = async ({
     const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
 
     try {
-      await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
+      await installMastraDependencies(pm, ['mastra'], versionTag, true, timeout);
     } catch (error) {
       throw new Error(`Failed to install Mastra CLI: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -293,9 +330,13 @@ export const createMastraProject = async ({
 
     s.start('Installing Mastra dependencies');
     try {
-      await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
-      await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
-      await installMastraDependency(pm, '@mastra/memory', versionTag, false, timeout);
+      await installMastraDependencies(
+        pm,
+        ['@mastra/core', '@mastra/libsql', '@mastra/memory'],
+        versionTag,
+        false,
+        timeout,
+      );
     } catch (error) {
       throw new Error(
         `Failed to install Mastra dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,

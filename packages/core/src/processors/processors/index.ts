@@ -41,11 +41,45 @@ export {
   type SystemPromptDetection,
 } from './system-prompt-scrubber';
 
+export {
+  CostGuardProcessor,
+  type CostGuardOptions,
+  type CostGuardUsage,
+  type CostGuardTripwireMetadata,
+  type CostGuardViolationDetail,
+  type CostScope,
+  type CostWindow,
+} from './cost-guard';
+
+export {
+  RegexFilterProcessor,
+  type RegexFilterOptions,
+  type RegexRule,
+  type RegexMatch,
+  type RegexPreset,
+  type RegexFilterTripwireMetadata,
+} from './regex-filter';
 export { ToolCallFilter } from './tool-call-filter';
 
 export { AgentsMDInjector, type ToolResultReminderOptions } from '../tool-result-reminder';
 
-export { ToolSearchProcessor, type ToolSearchProcessorOptions } from './tool-search';
+export {
+  ToolSearchProcessor,
+  type ToolSearchFilterArgs,
+  type ToolSearchFilterPhase,
+  type ToolSearchProcessorOptions,
+} from './tool-search';
 export { SkillsProcessor, type SkillsProcessorOptions } from './skills';
 export { SkillSearchProcessor, type SkillSearchProcessorOptions } from './skill-search';
 export { WorkspaceInstructionsProcessor, type WorkspaceInstructionsProcessorOptions } from './workspace-instructions';
+export {
+  ResponseCache,
+  DEFAULT_RESPONSE_CACHE_TTL_SECONDS,
+  RESPONSE_CACHE_CONTEXT_KEY,
+  buildResponseCacheKey,
+  type ResponseCacheOptions,
+  type ResponseCacheContextOptions,
+  type ResponseCacheKeyFn,
+  type ResponseCacheKeyInputs,
+  type CachedLLMStepResponse,
+} from './response-cache';

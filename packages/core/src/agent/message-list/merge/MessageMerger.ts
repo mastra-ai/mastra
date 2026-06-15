@@ -46,6 +46,13 @@ export class MessageMerger {
     // Don't merge into sealed messages (e.g., messages that have been observed)
     if (MessageMerger.isSealed(latestMessage)) return false;
 
+    if (
+      (latestMessage.content?.metadata as { mastra?: { responseBoundary?: boolean } } | undefined)?.mastra
+        ?.responseBoundary
+    ) {
+      return false;
+    }
+
     // Don't merge completion result message (network uses completionResult, supervisor uses isTaskCompleteResult)
     if (
       incomingMessage.content.metadata?.completionResult ||
@@ -53,6 +60,12 @@ export class MessageMerger {
       incomingMessage.content.metadata?.isTaskCompleteResult ||
       latestMessage.content.metadata?.isTaskCompleteResult
     ) {
+      return false;
+    }
+
+    const latestParts = latestMessage.content?.parts ?? [];
+    const latestOnlyHasDataParts = latestParts.length > 0 && latestParts.every(part => part.type.startsWith('data-'));
+    if (latestOnlyHasDataParts && latestMessage.id !== incomingMessage.id) {
       return false;
     }
 
@@ -72,18 +85,19 @@ export class MessageMerger {
   }
 
   /**
-   * Merge an incoming assistant message into the latest assistant message
+   * Merge an incoming assistant message into the latest assistant message.
+   *
+   * This preserves the existing message-level createdAt. OM uses that timestamp
+   * as its observation boundary, so moving it forward can make an already
+   * observed message look unobserved and eligible for reprocessing.
    *
    * This handles:
    * - Updating tool invocations with their results
    * - Adding new parts in the correct order using anchor maps
    * - Inserting step-start markers where needed
-   * - Updating timestamps and content strings
+   * - Updating content strings
    */
   static merge(latestMessage: MastraDBMessage, incomingMessage: MastraDBMessage): void {
-    // Update timestamp
-    latestMessage.createdAt = incomingMessage.createdAt || latestMessage.createdAt;
-
     if (incomingMessage.content.metadata) {
       latestMessage.content.metadata = {
         ...(latestMessage.content.metadata ?? {}),
@@ -98,9 +112,10 @@ export class MessageMerger {
     for (const [index, part] of incomingMessage.content.parts.entries()) {
       // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
       if (part.type === 'tool-invocation') {
+        if (!part.toolInvocation) continue;
         const existingCallPart = [...latestMessage.content.parts]
           .reverse()
-          .find(p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === part.toolInvocation.toolCallId);
+          .find(p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === part.toolInvocation.toolCallId);
 
         const existingCallToolInvocation = !!existingCallPart && existingCallPart.type === 'tool-invocation';
 
@@ -194,9 +209,6 @@ export class MessageMerger {
       partsToAdd,
     });
 
-    if (latestMessage.createdAt.getTime() < incomingMessage.createdAt.getTime()) {
-      latestMessage.createdAt = incomingMessage.createdAt;
-    }
     if (!latestMessage.content.content && incomingMessage.content.content) {
       latestMessage.content.content = incomingMessage.content.content;
     }

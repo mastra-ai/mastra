@@ -9,6 +9,196 @@ import { createTool } from '../../tools';
 import { isProviderDefinedTool, isVercelTool } from '../toolchecks';
 import { CoreToolBuilder } from './builder';
 
+describe('CoreToolBuilder FGA', () => {
+  it('executes tools without FGA when only auth/server config is present', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const testTool = createTool({
+      id: 'search',
+      description: 'Search',
+      inputSchema: z.object({ query: z.string() }),
+      execute,
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1' });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'search',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        requestContext,
+        mastra: {
+          getServer: () => ({ auth: {} }),
+        } as any,
+      },
+    });
+
+    const builtTool = builder.build();
+    await expect(builtTool.execute!({ query: 'docs' }, { toolCallId: 'call-1', messages: [] })).resolves.toEqual({
+      result: 'ok',
+    });
+    expect(execute).toHaveBeenCalledWith(
+      { query: 'docs' },
+      expect.objectContaining({
+        mastra: expect.any(Object),
+        requestContext,
+      }),
+    );
+  });
+
+  it('checks tool execution FGA before executing a tool', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const testTool = createTool({
+      id: 'search',
+      description: 'Search',
+      inputSchema: z.object({ query: z.string() }),
+      execute,
+    });
+    const user = { id: 'user-1' };
+    const requestContext = new RequestContext();
+    requestContext.set('user', user);
+    const fgaProvider = {
+      require: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'search',
+        agentId: 'agent-1',
+        agentName: 'Agent 1',
+        runId: 'run-1',
+        threadId: 'thread-1',
+        resourceId: 'tenant-1',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        requestContext,
+        mastra: {
+          getServer: () => ({ fga: fgaProvider }),
+        } as any,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({ query: 'docs' }, { toolCallId: 'call-1', messages: [] });
+
+    expect(fgaProvider.require).toHaveBeenCalledWith(user, {
+      resource: { type: 'tool', id: 'agent-1:search' },
+      permission: 'tools:execute',
+      context: expect.objectContaining({
+        resourceId: 'tenant-1',
+        requestContext,
+        metadata: expect.objectContaining({
+          toolName: 'search',
+          agentId: 'agent-1',
+          agentName: 'Agent 1',
+          runId: 'run-1',
+          threadId: 'thread-1',
+          executionResourceId: 'tenant-1',
+        }),
+      }),
+    });
+    expect(execute).toHaveBeenCalled();
+  });
+
+  it('fails closed when FGA is configured and a tool executes without a user', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const testTool = createTool({
+      id: 'search',
+      description: 'Search',
+      inputSchema: z.object({ query: z.string() }),
+      execute,
+    });
+    const fgaProvider = {
+      require: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'search',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        requestContext: new RequestContext(),
+        mastra: {
+          getServer: () => ({ fga: fgaProvider }),
+        } as any,
+      },
+    });
+
+    const builtTool = builder.build();
+    await expect(builtTool.execute!({ query: 'docs' }, { toolCallId: 'call-1', messages: [] })).rejects.toThrow(
+      'authenticated user is required',
+    );
+    expect(fgaProvider.require).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('bypasses membership resolution for a tenant-scoped trusted actor', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const testTool = createTool({
+      id: 'search',
+      description: 'Search',
+      inputSchema: z.object({ query: z.string() }),
+      execute,
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+    const fgaProvider = {
+      require: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'search',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        requestContext,
+        mastra: {
+          getServer: () => ({ fga: fgaProvider }),
+        } as any,
+      },
+    });
+
+    const actor = { actorKind: 'system', sourceWorkflow: 'nightly-workflow' } as const;
+    const builtTool = builder.build();
+    await builtTool.execute!(
+      { query: 'docs' },
+      {
+        toolCallId: 'call-1',
+        messages: [],
+        actor,
+      },
+    );
+
+    expect(fgaProvider.require).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith(
+      { query: 'docs' },
+      expect.objectContaining({
+        actor,
+      }),
+    );
+  });
+});
+
 describe('MCP Tool Tracing', () => {
   it('should use MCP_TOOL_CALL span type when tool has mcpMetadata', async () => {
     const testTool = createTool({
@@ -226,7 +416,7 @@ describe('MCP Tool Tracing', () => {
         originalTool: testTool as any,
         options: {
           name: 'test-tool',
-          requireApproval: needsApprovalFn as any,
+          requireApproval: needsApprovalFn,
         },
       });
 
@@ -257,6 +447,62 @@ describe('MCP Tool Tracing', () => {
       const builtTool = builder.build();
       expect(builtTool.requireApproval).toBe(true);
       expect((builtTool as any).needsApprovalFn).toBeUndefined();
+    });
+
+    it('should preserve a needsApprovalFn attached directly to the tool instance (MCP shape)', () => {
+      // MCP tools wrap a server-level requireToolApproval function and attach it as
+      // `needsApprovalFn` on the tool while keeping `requireApproval` as a boolean.
+      const needsApprovalFn = (args: any) => args.value === 'secret';
+      const testTool = {
+        id: 'mcp-test-tool',
+        description: 'An MCP-style test tool',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async (input: any) => input,
+        requireApproval: true,
+        needsApprovalFn,
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: testTool as any,
+        options: {
+          name: 'mcp-test-tool',
+          // Mirrors the agent passing the tool's boolean requireApproval into options.
+          requireApproval: true,
+        },
+      });
+
+      const builtTool = builder.build();
+
+      // requireApproval stays true so tool-call-step evaluates the function.
+      expect(builtTool.requireApproval).toBe(true);
+      // The directly-attached function must survive conversion.
+      expect((builtTool as any).needsApprovalFn).toBe(needsApprovalFn);
+    });
+
+    it('should not override an options-derived needsApprovalFn with the instance one', () => {
+      const optionsFn = (input: any) => input.value === 'fromOptions';
+      const instanceFn = (input: any) => input.value === 'fromInstance';
+      const testTool = {
+        id: 'precedence-tool',
+        description: 'A tool with both function sources',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async (input: any) => input,
+        needsApprovalFn: instanceFn,
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: testTool as any,
+        options: {
+          name: 'precedence-tool',
+          requireApproval: optionsFn,
+        },
+      });
+
+      const builtTool = builder.build();
+
+      expect(builtTool.requireApproval).toBe(true);
+      // Options-derived function wins; the instance fallback only fills gaps.
+      expect((builtTool as any).needsApprovalFn).toBe(optionsFn);
     });
   });
 });
@@ -370,5 +616,122 @@ describe('CoreToolBuilder strict', () => {
 
     expect((builtTool as any).name).toBe('web_search');
     expect((builtTool as any).id).toBe('anthropic.web_search_20250305');
+  });
+});
+
+describe('CoreToolBuilder background task schema injection', () => {
+  it('does not crash re-building a tool whose inputSchema has a refinement (zod v4)', () => {
+    const refinedTool = createTool({
+      id: 'refined_tool',
+      description: 'tool whose input schema carries a .refine()',
+      inputSchema: z
+        .object({ a: z.string().optional(), b: z.string().optional() })
+        .refine(d => !!d.a || !!d.b, { message: 'pass a or b' }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const build = () =>
+      new CoreToolBuilder({
+        originalTool: refinedTool,
+        options: { name: 'refined_tool', requestContext: new RequestContext() },
+        backgroundTaskEnabled: true,
+      }).build();
+
+    // The builder mutates originalTool.inputSchema, so the second build re-injects
+    // `_background` onto the already-refined schema. With `.extend()` Zod v4 threw
+    // "Cannot overwrite keys on object schemas containing refinements"; safeExtend fixes it.
+    expect(() => build()).not.toThrow();
+    expect(() => build()).not.toThrow();
+    expect((refinedTool.inputSchema as z.ZodTypeAny).safeParse({}).success).toBe(false);
+  });
+});
+
+describe('CoreToolBuilder requestContext merge', () => {
+  it('preserves non-serializable closure requestContext values when exec RC is also present', async () => {
+    // Simulates what happens when the evented workflow engine deserialises requestContext:
+    // the 'harness' key (containing functions) is lost because JSON.stringify drops functions
+    // and may throw on objects with circular references.
+    const harnessCtx = {
+      harnessId: 'h-1',
+      getState: () => ({ tasks: [] }),
+      setState: vi.fn(),
+      updateState: vi.fn(),
+    };
+
+    const closureRC = new RequestContext();
+    closureRC.set('harness', harnessCtx);
+    closureRC.set('serializable-key', 'from-closure');
+
+    // The evented engine's RC — reconstructed from toJSON(), missing 'harness'
+    const execRC = new RequestContext();
+    execRC.set('serializable-key', 'from-exec');
+    execRC.set('workflow-only-key', 42);
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'task_write',
+      description: 'Write tasks',
+      inputSchema: z.object({ tasks: z.array(z.string()) }),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'task_write',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+        requestContext: closureRC,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({ tasks: ['a'] }, { toolCallId: 'call-1', messages: [], requestContext: execRC });
+
+    const merged = receivedCtx.requestContext!;
+    // Non-serializable key from closure is preserved
+    expect(merged.get('harness')).toBe(harnessCtx);
+    expect((merged.get('harness') as any).updateState).toBe(harnessCtx.updateState);
+    // Closure value wins for shared keys
+    expect(merged.get('serializable-key')).toBe('from-closure');
+    // Exec-only key is preserved
+    expect(merged.get('workflow-only-key')).toBe(42);
+  });
+
+  it('falls back to closure RC when exec RC is empty', async () => {
+    const closureRC = new RequestContext();
+    closureRC.set('harness', { harnessId: 'h-1' });
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'test_tool',
+      description: 'Test',
+      inputSchema: z.object({}),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'test_tool',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+        requestContext: closureRC,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({}, { toolCallId: 'call-1', messages: [] });
+
+    // With no exec RC, closure RC is used directly
+    expect(receivedCtx.requestContext!.get('harness')).toEqual({ harnessId: 'h-1' });
   });
 });

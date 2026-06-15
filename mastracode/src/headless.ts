@@ -186,6 +186,12 @@ Examples:
   mastracode --resource-id my-project --prompt "Fix the bug"
   echo "task description" | mastracode --prompt -
 
+Piping without --prompt launches the interactive TUI with piped content
+as the first message:
+  cat file.txt | mastracode
+  git diff | mastracode
+  npm test 2>&1 | mastracode
+
 Run without --prompt for the interactive TUI.
 `);
 }
@@ -199,28 +205,37 @@ function autoResolve<TState extends Record<string, unknown>>(
   event: HarnessEvent,
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
-    case 'sandbox_access_request': {
-      harness.respondToQuestion({ questionId: event.questionId, answer: 'Yes' });
-      return { resolved: true, label: `[auto-approved sandbox] ${event.path}`, json: { ...event, autoApproved: true } };
-    }
     case 'tool_approval_required': {
       harness.respondToToolApproval({ decision: 'approve' });
       return { resolved: true, label: `[auto-approved] ${event.toolName}`, json: { ...event, autoApproved: true } };
     }
-    case 'ask_question': {
-      harness.respondToQuestion({
-        questionId: event.questionId,
-        answer: 'Proceed with your best judgment. Do not ask further questions.',
+    case 'tool_suspended': {
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: 'Yes' });
+        return {
+          resolved: true,
+          label: `[auto-approved sandbox] ${String(payload.path ?? '')}`,
+          json: { ...event, autoApproved: true },
+        };
+      }
+      if (event.toolName === 'submit_plan') {
+        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: { action: 'approved' } });
+        return {
+          resolved: true,
+          label: `[auto-approved plan] ${String(payload.title ?? '')}`,
+          json: { ...event, autoApproved: true },
+        };
+      }
+      void harness.respondToToolSuspension({
+        toolCallId: event.toolCallId,
+        resumeData: 'Proceed with your best judgment. Do not ask further questions.',
       });
       return {
         resolved: true,
-        label: `[auto-answered] ${truncate(event.question, 100)}`,
+        label: `[auto-answered] ${truncate(String(payload.question ?? ''), 100)}`,
         json: { ...event, autoAnswered: true },
       };
-    }
-    case 'plan_approval_required': {
-      void harness.respondToPlanApproval({ planId: event.planId, response: { action: 'approved' } });
-      return { resolved: true, label: `[auto-approved plan] ${event.title}`, json: { ...event, autoApproved: true } };
     }
     default:
       return { resolved: false };
@@ -257,7 +272,9 @@ function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): vo
       process.stderr.write(event.output);
       break;
     case 'subagent_start':
-      process.stderr.write(`[subagent:${event.agentType}] ${truncate(event.task, 100)}\n`);
+      process.stderr.write(
+        `[subagent:${event.forked ? 'forked:' : ''}${event.agentType}] ${truncate(event.task, 100)}\n`,
+      );
       break;
     case 'subagent_end':
       if (event.isError) process.stderr.write(`[subagent error] ${truncate(event.result, 200)}\n`);
@@ -336,8 +353,8 @@ function finalizeSummary<TState extends Record<string, unknown>>(
 }
 
 /** Resolve a thread by ID or title. Tries exact ID match first, then title. */
-async function resolveThread(
-  harness: Harness,
+async function resolveThread<TState extends Record<string, unknown>>(
+  harness: Harness<TState>,
   threadIdOrTitle: string,
 ): Promise<{ threadId: string; matchType: 'id' | 'title' } | { error: string }> {
   const threads = await harness.listThreads();
@@ -567,7 +584,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
  * Headless mode main entry point: parse arguments, read stdin, initialize
  * MastraCode, and run headless mode.
  */
-export async function headlessMain(): Promise<never> {
+export async function headlessMain(predrainedInput?: string | null): Promise<never> {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     printHeadlessUsage();
     process.exit(0);
@@ -582,7 +599,10 @@ export async function headlessMain(): Promise<never> {
   }
 
   let prompt = args.prompt;
-  if (prompt === '-' || (!prompt && !process.stdin.isTTY)) {
+  if (predrainedInput !== undefined) {
+    // Stdin was already drained by the caller (e.g. TTY reopen failed after pipe drain)
+    prompt = predrainedInput ?? '';
+  } else if (prompt === '-' || (!prompt && !process.stdin.isTTY)) {
     const chunks: Buffer[] = [];
     for await (const chunk of process.stdin) {
       chunks.push(chunk as Buffer);
@@ -612,12 +632,19 @@ export async function headlessMain(): Promise<never> {
 
   setupDebugLogging();
   await harness.init();
+  await harness.getMastra()?.startWorkers();
 
   const exitCode = await runHeadless(harness, { ...args, prompt }, effectiveDefaults);
 
   // Cleanup
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
+  const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+  await Promise.allSettled([
+    mcpManager?.disconnect(),
+    harness.getMastra()?.stopWorkers(),
+    harness?.stopHeartbeats(),
+    closeSignalsPubSub?.(),
+  ]);
 
   process.exit(exitCode);
 }

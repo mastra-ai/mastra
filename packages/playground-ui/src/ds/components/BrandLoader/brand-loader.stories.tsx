@@ -10,7 +10,6 @@ const meta: Meta<typeof BrandLoader> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     size: {
       control: { type: 'radio' },

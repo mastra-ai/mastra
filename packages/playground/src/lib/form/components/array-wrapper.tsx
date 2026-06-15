@@ -15,8 +15,8 @@ export const ArrayWrapper: React.FC<ArrayWrapperProps> = ({ label, children, onA
           {label}
         </Txt>
 
-        <TooltipProvider>
-          <Tooltip delayDuration={0}>
+        <TooltipProvider delayDuration={0}>
+          <Tooltip>
             <TooltipTrigger asChild>
               <button
                 onClick={onAddItem}

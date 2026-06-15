@@ -154,7 +154,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
   });
 
-  it('should set pendingSuspension display state when tool suspends', async () => {
+  it('should set pendingSuspensions display state when tool suspends', async () => {
     const confirmTool = createTool({
       id: 'confirm-action',
       description: 'Confirms an action with the user',
@@ -198,9 +198,10 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.sendMessage({ content: 'Do it' });
 
     const ds = harness.getDisplayState();
-    expect(ds.pendingSuspension).not.toBeNull();
-    expect(ds.pendingSuspension!.toolName).toBe('confirmAction');
-    expect(ds.pendingSuspension!.suspendPayload).toEqual({ action: 'deploy' });
+    expect(ds.pendingSuspensions.size).toBe(1);
+    const suspension = Array.from(ds.pendingSuspensions.values())[0];
+    expect(suspension!.toolName).toBe('confirmAction');
+    expect(suspension!.suspendPayload).toEqual({ action: 'deploy' });
   });
 
   it('should resume execution via respondToToolSuspension()', async () => {
@@ -282,10 +283,11 @@ describe('Harness: tool suspension and resumption', () => {
     const resumeEnd = events.find((e: any) => e.type === 'agent_end');
     expect(resumeEnd).toBeDefined();
     expect(resumeEnd.reason).toBe('complete');
+    expect(events.some((e: any) => e.type === 'error')).toBe(false);
 
-    // pendingSuspension should be cleared after resume
+    // pending suspensions should be cleared after resume
     const ds = harness.getDisplayState();
-    expect(ds.pendingSuspension).toBeNull();
+    expect(ds.pendingSuspensions.size).toBe(0);
   });
 
   it('should forward requireToolApproval=false to resumeStream when harness is in yolo mode', async () => {

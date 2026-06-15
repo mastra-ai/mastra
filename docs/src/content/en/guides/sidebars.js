@@ -50,6 +50,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'getting-started/nestjs',
+          label: 'NestJS',
+        },
+        {
+          type: 'doc',
           id: 'getting-started/hono',
           label: 'Hono',
         },
@@ -113,6 +118,11 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'deployment/aws-bedrock-agentcore',
+          label: 'Amazon Bedrock AgentCore',
+        },
+        {
+          type: 'doc',
           id: 'deployment/amazon-ec2',
           label: 'Amazon EC2',
         },
@@ -142,14 +152,18 @@ const sidebars = {
           label: 'Inngest',
         },
         {
-          type: 'doc',
-          id: 'deployment/mastra-platform',
-          label: 'Mastra Platform',
+          type: 'html',
+          value: '<a class="menu__link" href="/docs/mastra-platform/server"><span>Mastra platform</span></a>',
         },
         {
           type: 'doc',
           id: 'deployment/netlify',
           label: 'Netlify',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/temporal',
+          label: 'Temporal',
         },
         {
           type: 'doc',
@@ -202,6 +216,11 @@ const sidebars = {
               id: 'guide/notes-mcp-server',
               label: 'MCP Server: Notes MCP Server',
             },
+            {
+              type: 'doc',
+              id: 'guide/signal-provider',
+              label: 'Signals: CI Signal Provider',
+            },
           ],
         },
         {
@@ -238,13 +257,23 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'guide/whatsapp-chat-bot',
-          label: 'WhatsApp Chat Bot',
+          id: 'guide/github-actions-pr-description',
+          label: 'GitHub Actions: PR Description',
         },
         {
           type: 'doc',
-          id: 'guide/github-actions-pr-description',
-          label: 'GitHub Actions: PR Description',
+          id: 'guide/slack-assistant',
+          label: 'Channels: Slack Assistant',
+        },
+        {
+          type: 'doc',
+          id: 'guide/publishing-mcp-server',
+          label: 'Publishing an MCP Server',
+        },
+        {
+          type: 'doc',
+          id: 'guide/whatsapp-chat-bot',
+          label: 'WhatsApp Chat Bot',
         },
       ],
     },
@@ -347,7 +376,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'migrations/mastra-cloud',
-          label: 'Mastra Cloud to Mastra Platform',
+          label: 'Mastra Cloud to Mastra platform',
         },
         {
           type: 'doc',

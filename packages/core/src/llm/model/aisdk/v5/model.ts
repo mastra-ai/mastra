@@ -4,24 +4,57 @@ import { createStreamFromGenerateResult } from '../generate-to-stream';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
 
-function stripStrictFromFunctionTools(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
+/**
+ * Strips per-tool `strict` from function tools (V2 providers don't support it)
+ * and, when any tool had `strict: true`, injects `strictJsonSchema: true` into
+ * the OpenAI provider options so the V2 OpenAI provider enables strict mode
+ * globally for all tools.
+ */
+function applyStrictForV2(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
   if (!options.tools?.length) {
     return options;
   }
 
+  let hasStrictTool = false;
   const sanitizedTools = options.tools.map((tool: Record<string, unknown>) => {
     if (tool.type !== 'function' || !('strict' in tool)) {
       return tool;
+    }
+
+    if (tool.strict === true) {
+      hasStrictTool = true;
     }
 
     const { strict: _strict, ...rest } = tool;
     return rest;
   });
 
-  return {
+  let result: LanguageModelV2CallOptions = {
     ...options,
     tools: sanitizedTools as typeof options.tools,
   };
+
+  // V2 OpenAI providers use a global `strictJsonSchema` option instead of per-tool strict.
+  // When any tool requested strict mode, propagate it to the provider option so the
+  // V2 OpenAI provider applies strict JSON schema validation to all tool parameters.
+  if (hasStrictTool) {
+    const existingOpenai = (options.providerOptions?.openai ?? {}) as Record<string, unknown>;
+    // Only inject if the user hasn't already set strictJsonSchema explicitly
+    if (existingOpenai.strictJsonSchema == null) {
+      result = {
+        ...result,
+        providerOptions: {
+          ...options.providerOptions,
+          openai: {
+            ...existingOpenai,
+            strictJsonSchema: true,
+          },
+        },
+      };
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -64,7 +97,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doGenerate(options: LanguageModelV2CallOptions) {
-    const result = await this.#model.doGenerate(stripStrictFromFunctionTools(options));
+    const result = await this.#model.doGenerate(applyStrictForV2(options));
 
     return {
       ...result,
@@ -75,7 +108,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doStream(options: LanguageModelV2CallOptions) {
-    return await this.#model.doStream(stripStrictFromFunctionTools(options));
+    return await this.#model.doStream(applyStrictForV2(options));
   }
 
   /**

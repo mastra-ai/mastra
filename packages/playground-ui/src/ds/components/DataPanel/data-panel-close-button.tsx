@@ -1,5 +1,5 @@
 import { XIcon } from 'lucide-react';
-import { ButtonWithTooltip } from '@/ds/components/Button/ButtonWithTooltip';
+import { Button } from '@/ds/components/Button';
 
 export interface DataPanelCloseButtonProps {
   onClick: () => void;
@@ -9,14 +9,8 @@ export interface DataPanelCloseButtonProps {
 
 export function DataPanelCloseButton({ onClick, tooltip = 'Close panel', className }: DataPanelCloseButtonProps) {
   return (
-    <ButtonWithTooltip
-      size="md"
-      onClick={onClick}
-      aria-label="Close Panel"
-      tooltipContent={tooltip}
-      className={className}
-    >
+    <Button size="md" onClick={onClick} aria-label="Close Panel" tooltip={tooltip} className={className}>
       <XIcon />
-    </ButtonWithTooltip>
+    </Button>
   );
 }

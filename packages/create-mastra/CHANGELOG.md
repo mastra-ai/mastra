@@ -1,5 +1,321 @@
 # create-mastra
 
+## 1.13.0
+
+## 1.13.0-alpha.4
+
+## 1.12.3-alpha.3
+
+## 1.12.3-alpha.2
+
+## 1.12.3-alpha.1
+
+## 1.12.3-alpha.0
+
+## 1.12.2
+
+## 1.12.2-alpha.1
+
+## 1.12.2-alpha.0
+
+## 1.12.1
+
+## 1.12.1-alpha.0
+
+## 1.12.0
+
+## 1.12.0-alpha.0
+
+## 1.11.0
+
+### Patch Changes
+
+- Fixed observability setup so multi-organization users can choose the target organization without reopening an extra prompt during project provisioning. ([#17214](https://github.com/mastra-ai/mastra/pull/17214))
+
+## 1.11.0-alpha.9
+
+## 1.11.0-alpha.8
+
+## 1.11.0-alpha.7
+
+## 1.11.0-alpha.6
+
+## 1.11.0-alpha.5
+
+## 1.10.3-alpha.4
+
+## 1.10.3-alpha.3
+
+### Patch Changes
+
+- Fixed observability setup so multi-organization users can choose the target organization without reopening an extra prompt during project provisioning. ([#17214](https://github.com/mastra-ai/mastra/pull/17214))
+
+## 1.10.3-alpha.2
+
+## 1.10.3-alpha.1
+
+## 1.10.3-alpha.0
+
+## 1.10.2
+
+## 1.10.2-alpha.0
+
+## 1.10.1
+
+## 1.10.1-alpha.10
+
+## 1.10.1-alpha.9
+
+## 1.10.1-alpha.8
+
+## 1.10.1-alpha.7
+
+## 1.10.1-alpha.6
+
+## 1.10.1-alpha.5
+
+## 1.10.1-alpha.4
+
+## 1.10.1-alpha.3
+
+## 1.10.1-alpha.2
+
+## 1.10.1-alpha.1
+
+## 1.10.1-alpha.0
+
+## 1.10.0
+
+## 1.10.0-alpha.11
+
+## 1.9.4-alpha.10
+
+## 1.9.4-alpha.9
+
+## 1.9.4-alpha.8
+
+## 1.9.4-alpha.7
+
+## 1.9.4-alpha.6
+
+## 1.9.4-alpha.5
+
+## 1.9.4-alpha.4
+
+## 1.9.4-alpha.3
+
+## 1.9.4-alpha.2
+
+## 1.9.4-alpha.1
+
+## 1.9.4-alpha.0
+
+## 1.9.3
+
+### Patch Changes
+
+- Fixed create-mastra observability setup so fresh projects use your saved organization instead of showing an extra organization picker at the end of project creation. ([#16644](https://github.com/mastra-ai/mastra/pull/16644))
+
+## 1.9.3-alpha.3
+
+## 1.9.3-alpha.2
+
+### Patch Changes
+
+- Fixed create-mastra observability setup so fresh projects use your saved organization instead of showing an extra organization picker at the end of project creation. ([#16644](https://github.com/mastra-ai/mastra/pull/16644))
+
+## 1.9.3-alpha.1
+
+## 1.9.3-alpha.0
+
+## 1.9.2
+
+### Patch Changes
+
+- Improve `npm create mastra` telemetry delivery so command completion events are tracked and flushed before the process exits. ([#16582](https://github.com/mastra-ai/mastra/pull/16582))
+
+## 1.9.2-alpha.3
+
+## 1.9.2-alpha.2
+
+## 1.9.2-alpha.1
+
+### Patch Changes
+
+- Improve `npm create mastra` telemetry delivery so command completion events are tracked and flushed before the process exits. ([#16582](https://github.com/mastra-ai/mastra/pull/16582))
+
+## 1.9.2-alpha.0
+
+## 1.9.1
+
+## 1.9.1-alpha.1
+
+## 1.9.1-alpha.0
+
+## 1.9.0
+
+### Minor Changes
+
+- Add "Enable Mastra Observability? (will open auth flow)" prompt to `create-mastra` and `mastra init`. ([#15728](https://github.com/mastra-ai/mastra/pull/15728))
+
+  When the user opts in, the CLI runs the interactive browser login flow (if not already authenticated), lets them pick an existing project or create a new one, mints a fresh organization access token, and writes `MASTRA_PLATFORM_ACCESS_TOKEN` + `MASTRA_PROJECT_ID` to `.env`. The generated project already registers a `MastraPlatformExporter`, so no additional setup is needed to start sending traces.
+
+  `MASTRA_PLATFORM_ACCESS_TOKEN` replaces `MASTRA_CLOUD_ACCESS_TOKEN`. The old name is still read by the exporter for backwards compatibility but is deprecated.
+
+  If provisioning fails (e.g., the platform is unreachable), the command falls back to writing placeholder env vars with instructions.
+
+  Both commands also accept `--observability` / `--no-observability` flags for non-interactive use, and `--observability-project <name>` to bypass the project picker.
+
+### Patch Changes
+
+- Mastra Observability provisioning now creates new platform projects as observability-only (no Studio or Server runtime attached). The first `mastra studio deploy` or `mastra server deploy` flips the matching runtime flag, so projects are no longer mislabelled as Studio in the platform UI before any deploy has happened. ([#15728](https://github.com/mastra-ai/mastra/pull/15728))
+
+## 1.9.0-alpha.18
+
+## 1.9.0-alpha.17
+
+## 1.9.0-alpha.16
+
+## 1.9.0-alpha.15
+
+### Minor Changes
+
+- Add "Enable Mastra Observability? (will open auth flow)" prompt to `create-mastra` and `mastra init`. ([#15728](https://github.com/mastra-ai/mastra/pull/15728))
+
+  When the user opts in, the CLI runs the interactive browser login flow (if not already authenticated), lets them pick an existing project or create a new one, mints a fresh organization access token, and writes `MASTRA_PLATFORM_ACCESS_TOKEN` + `MASTRA_PROJECT_ID` to `.env`. The generated project already registers a `MastraPlatformExporter`, so no additional setup is needed to start sending traces.
+
+  `MASTRA_PLATFORM_ACCESS_TOKEN` replaces `MASTRA_CLOUD_ACCESS_TOKEN`. The old name is still read by the exporter for backwards compatibility but is deprecated.
+
+  If provisioning fails (e.g., the platform is unreachable), the command falls back to writing placeholder env vars with instructions.
+
+  Both commands also accept `--observability` / `--no-observability` flags for non-interactive use, and `--observability-project <name>` to bypass the project picker.
+
+### Patch Changes
+
+- Mastra Observability provisioning now creates new platform projects as observability-only (no Studio or Server runtime attached). The first `mastra studio deploy` or `mastra server deploy` flips the matching runtime flag, so projects are no longer mislabelled as Studio in the platform UI before any deploy has happened. ([#15728](https://github.com/mastra-ai/mastra/pull/15728))
+
+## 1.9.0-alpha.14
+
+## 1.9.0-alpha.13
+
+## 1.9.0-alpha.12
+
+## 1.9.0-alpha.11
+
+## 1.9.0-alpha.10
+
+## 1.9.0-alpha.9
+
+## 1.9.0-alpha.8
+
+## 1.9.0-alpha.7
+
+## 1.9.0-alpha.6
+
+## 1.9.0-alpha.5
+
+## 1.9.0-alpha.4
+
+## 1.9.0-alpha.3
+
+## 1.8.2-alpha.2
+
+## 1.8.2-alpha.1
+
+## 1.8.2-alpha.0
+
+## 1.8.1
+
+## 1.8.1-alpha.0
+
+## 1.8.0
+
+## 1.8.0-alpha.4
+
+## 1.8.0-alpha.3
+
+## 1.7.4-alpha.2
+
+## 1.7.4-alpha.1
+
+## 1.7.4-alpha.0
+
+## 1.7.3
+
+## 1.7.3-alpha.6
+
+## 1.7.3-alpha.5
+
+## 1.7.3-alpha.4
+
+## 1.7.3-alpha.3
+
+## 1.7.3-alpha.2
+
+## 1.7.3-alpha.1
+
+## 1.7.3-alpha.0
+
+## 1.7.2
+
+## 1.7.2-alpha.1
+
+## 1.7.2-alpha.0
+
+## 1.7.1
+
+## 1.7.1-alpha.2
+
+## 1.7.1-alpha.1
+
+## 1.7.1-alpha.0
+
+## 1.7.0
+
+### Patch Changes
+
+- Removed Prettier from the CLI install path so generated project setup no longer pulls in the prettier dependency. ([#15711](https://github.com/mastra-ai/mastra/pull/15711))
+
+- Improved `create-mastra` package size by reducing runtime dependency overhead. ([#15721](https://github.com/mastra-ai/mastra/pull/15721))
+  This decreases install surface while preserving existing CLI behavior.
+
+## 1.7.0-alpha.6
+
+## 1.7.0-alpha.5
+
+## 1.7.0-alpha.4
+
+## 1.7.0-alpha.3
+
+## 1.6.4-alpha.2
+
+## 1.6.4-alpha.1
+
+## 1.6.4-alpha.0
+
+### Patch Changes
+
+- Removed Prettier from the CLI install path so generated project setup no longer pulls in the prettier dependency. ([#15711](https://github.com/mastra-ai/mastra/pull/15711))
+
+- Improved `create-mastra` package size by reducing runtime dependency overhead. ([#15721](https://github.com/mastra-ai/mastra/pull/15721))
+  This decreases install surface while preserving existing CLI behavior.
+
+## 1.6.3
+
+## 1.6.3-alpha.2
+
+## 1.6.3-alpha.1
+
+## 1.6.3-alpha.0
+
+## 1.6.2
+
+## 1.6.2-alpha.2
+
+## 1.6.2-alpha.1
+
+## 1.6.2-alpha.0
+
 ## 1.6.1
 
 ### Patch Changes

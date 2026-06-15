@@ -2,9 +2,45 @@ import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
 import { MastraError } from '@mastra/core/error';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TABLE_LOG_EVENTS, TABLE_METRIC_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS } from './ddl';
-import { migrateSignalTables } from './migration';
+import {
+  ALL_TABLE_NAMES,
+  MV_DISCOVERY_PAIRS,
+  MV_DISCOVERY_VALUES,
+  MV_FEEDBACK_EVENTS_DELTA,
+  MV_LOG_EVENTS_DELTA,
+  MV_METRIC_EVENTS_DELTA,
+  MV_SCORE_EVENTS_DELTA,
+  MV_TRACE_BRANCHES,
+  MV_TRACE_BRANCHES_DELTA,
+  MV_TRACE_ROOTS,
+  MV_TRACE_ROOTS_DELTA,
+  TABLE_LOG_EVENTS,
+  TABLE_METRIC_EVENTS,
+} from './ddl';
+import { isReplacingMergeTreeEngine, migrateSignalTables } from './migration';
 import { ObservabilityStorageClickhouseVNext } from '.';
+
+describe('isReplacingMergeTreeEngine', () => {
+  it('accepts plain ReplacingMergeTree', () => {
+    expect(isReplacingMergeTreeEngine('ReplacingMergeTree')).toBe(true);
+  });
+
+  it('accepts SharedReplacingMergeTree (ClickHouse Cloud rewrite)', () => {
+    expect(isReplacingMergeTreeEngine('SharedReplacingMergeTree')).toBe(true);
+  });
+
+  it('accepts ReplicatedReplacingMergeTree (self-managed replicated clusters)', () => {
+    expect(isReplacingMergeTreeEngine('ReplicatedReplacingMergeTree')).toBe(true);
+  });
+
+  it('rejects non-replacing engines', () => {
+    expect(isReplacingMergeTreeEngine('MergeTree')).toBe(false);
+    expect(isReplacingMergeTreeEngine('SharedMergeTree')).toBe(false);
+    expect(isReplacingMergeTreeEngine('AggregatingMergeTree')).toBe(false);
+    expect(isReplacingMergeTreeEngine('Log')).toBe(false);
+    expect(isReplacingMergeTreeEngine('')).toBe(false);
+  });
+});
 
 /** Wraps a client so that INSERT commands throw — used to exercise rollback. */
 function clientThatFailsOnInsert(real: ClickHouseClient): ClickHouseClient {
@@ -26,7 +62,18 @@ function clientThatFailsOnInsert(real: ClickHouseClient): ClickHouseClient {
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ALL_SIGNAL_TABLES = [TABLE_METRIC_EVENTS, TABLE_LOG_EVENTS, TABLE_SCORE_EVENTS, TABLE_FEEDBACK_EVENTS];
+const ALL_VIEW_NAMES = [
+  MV_TRACE_ROOTS,
+  MV_TRACE_BRANCHES,
+  MV_TRACE_ROOTS_DELTA,
+  MV_TRACE_BRANCHES_DELTA,
+  MV_METRIC_EVENTS_DELTA,
+  MV_LOG_EVENTS_DELTA,
+  MV_SCORE_EVENTS_DELTA,
+  MV_FEEDBACK_EVENTS_DELTA,
+  MV_DISCOVERY_VALUES,
+  MV_DISCOVERY_PAIRS,
+];
 
 /** Minimal legacy log_events schema: MergeTree + all non-nullable columns of the new DDL minus logId. */
 const LEGACY_LOG_DDL = `
@@ -55,7 +102,10 @@ ORDER BY (name, timestamp)
 `;
 
 async function dropAll(client: ClickHouseClient): Promise<void> {
-  for (const table of ALL_SIGNAL_TABLES) {
+  for (const view of ALL_VIEW_NAMES) {
+    await client.command({ query: `DROP VIEW IF EXISTS ${view}` });
+  }
+  for (const table of ALL_TABLE_NAMES) {
     await client.command({ query: `DROP TABLE IF EXISTS ${table}` });
   }
   const leftovers = await client.query({

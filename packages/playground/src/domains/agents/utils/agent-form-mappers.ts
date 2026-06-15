@@ -60,11 +60,15 @@ export const joinModelId = (m?: { provider?: string; name?: string }): string | 
 // Integration tools
 // ---------------------------------------------------------------------------
 
-/** Transform flat form keys (`"providerId:toolSlug"`) to nested API format. */
+/** Transform flat form keys (`"providerId:toolSlug"`) to nested API format.
+ *  Returns `{}` (not `undefined`) when there are no integration tools so that the
+ *  server auto-versioning layer sees an explicit "cleared" value instead of
+ *  interpreting `undefined` as "no change" and preserving stale tools.
+ */
 export const transformIntegrationToolsForApi = (
   integrationTools: Record<string, EntityConfig> | undefined,
-): Record<string, { tools?: Record<string, EntityConfig> }> | undefined => {
-  if (!integrationTools || Object.keys(integrationTools).length === 0) return undefined;
+): Record<string, { tools?: Record<string, EntityConfig> }> => {
+  if (!integrationTools || Object.keys(integrationTools).length === 0) return {};
 
   const result: Record<string, { tools?: Record<string, EntityConfig> }> = {};
   for (const [compositeKey, config] of Object.entries(integrationTools)) {

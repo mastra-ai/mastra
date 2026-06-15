@@ -19,11 +19,15 @@
  * ```
  */
 
-import type { MessageList, MastraDBMessage } from '../agent/message-list';
-import type { MastraMessageContentV2 } from '../agent/message-list/state/types';
-import type { ProcessInputArgs, ProcessInputResult, ProcessInputStepArgs } from '../processors/index';
+import { randomUUID } from 'node:crypto';
+import type {
+  ComputeStateSignalArgs,
+  ComputeStateSignalResult,
+  ProcessInputArgs,
+  ProcessInputResult,
+} from '../processors/index';
 
-const REMINDER_TYPE = 'browser-context';
+const BROWSER_PROCESS_ID = randomUUID();
 
 /**
  * Browser context stored in RequestContext.
@@ -32,6 +36,9 @@ const REMINDER_TYPE = 'browser-context';
 export interface BrowserContext {
   /** Browser provider name (e.g., "agent-browser", "stagehand") */
   provider: string;
+
+  /** Provider type: 'sdk' for direct API, 'cli' for command-line tools */
+  providerType?: 'sdk' | 'cli';
 
   /** Session ID for tracking */
   sessionId?: string;
@@ -44,6 +51,34 @@ export interface BrowserContext {
 
   /** Current page title (updated per-request) */
   pageTitle?: string;
+
+  /** Whether the browser is currently open/connected. Defaults to true when browser context is present. */
+  isOpen?: boolean;
+
+  /**
+   * Reason the browser was closed, when isOpen is false.
+   * Helps differentiate between agent-initiated close, user action, process restart, or error.
+   */
+  closeReason?: 'agent' | 'user' | 'process_restart' | 'error';
+
+  /** Number of currently open tabs, when available. */
+  tabCount?: number;
+
+  /** Who initiated the most recent active URL change, when known. */
+  activeUrlChangeSource?: 'agent' | 'user';
+
+  /** Additional active page metadata exposed by the browser provider. */
+  pageMetadata?: Record<string, string | number | boolean | null | undefined>;
+
+  /**
+   * CDP WebSocket URL for CLI providers.
+   * When present, the agent should pass this URL to CLI commands
+   * to connect them to the browser managed by Mastra.
+   */
+  cdpUrl?: string;
+
+  /** Internal provider hook used to refresh browser state between agentic loop steps. */
+  getState?: () => Promise<Partial<BrowserContext> | undefined>;
 }
 
 /**
@@ -51,6 +86,7 @@ export interface BrowserContext {
  */
 export class BrowserContextProcessor {
   readonly id = 'browser-context';
+  readonly stateId = 'browser';
 
   processInput(args: ProcessInputArgs): ProcessInputResult {
     const ctx = args.requestContext?.get('browser') as BrowserContext | undefined;
@@ -66,107 +102,235 @@ export class BrowserContextProcessor {
       lines.push(`Session ID: ${ctx.sessionId}`);
     }
 
+    // For CLI providers, include CDP URL for context (injection handles the mechanics)
+    if (ctx.providerType === 'cli' && ctx.cdpUrl) {
+      lines.push(`CDP WebSocket URL: ${ctx.cdpUrl}`);
+    }
+
     const systemMessages = [...args.systemMessages, { role: 'system' as const, content: lines.join(' ') }];
 
     return { messages: args.messages, systemMessages };
   }
 
-  processInputStep(args: ProcessInputStepArgs): MessageList | undefined {
-    // Only inject per-request context at the first step
-    if (args.stepNumber !== 0) return;
-
+  async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
     const ctx = args.requestContext?.get('browser') as BrowserContext | undefined;
     if (!ctx) return;
 
-    const parts: string[] = [];
+    const refreshedState = await ctx.getState?.();
+    let browserState = getBrowserState(refreshedState ? { ...ctx, ...refreshedState } : ctx);
+    const shouldRefreshSnapshot = Boolean(args.lastSnapshot && !args.contextWindow.hasSnapshot);
+    const previousState =
+      getMostRecentBrowserState(args.activeStateSignals) ?? getBrowserStateFromSignal(args.lastSnapshot);
 
-    if (ctx.currentUrl) {
-      parts.push(`Current URL: ${escapeXml(ctx.currentUrl)}`);
+    if (!browserState.open && !browserState.closeReason) {
+      if (!previousState?.open || !previousState.processId) {
+        if (isBareClosedState(browserState)) return;
+      } else {
+        browserState = {
+          ...browserState,
+          closeReason: previousState.processId === browserState.processId ? 'user' : 'process_restart',
+        };
+      }
     }
 
-    if (ctx.pageTitle) {
-      parts.push(`Page title: ${escapeXml(ctx.pageTitle)}`);
+    if (
+      previousState?.open &&
+      browserState.open &&
+      previousState.activeUrl &&
+      browserState.activeUrl &&
+      previousState.activeUrl !== browserState.activeUrl &&
+      previousState.processId === browserState.processId &&
+      !browserState.activeUrlChangeSource
+    ) {
+      browserState = { ...browserState, activeUrlChangeSource: 'user' };
     }
 
-    if (parts.length === 0) return;
+    const changed = getChangedBrowserState(previousState, browserState);
+    if (previousState && Object.keys(changed).length === 0 && !shouldRefreshSnapshot) return;
 
-    const reminderText = parts.join(' | ');
-    const reminderMarkup = `<system-reminder type="${REMINDER_TYPE}">${reminderText}</system-reminder>`;
-
-    // Only suppress if the trailing message is already the same browser reminder
-    const existingMessages = args.messageList.get.all.db();
-    if (hasTrailingBrowserReminder(existingMessages, ctx.currentUrl, ctx.pageTitle)) {
-      return;
-    }
-
-    // Add as a new user message at the end of history to preserve prompt cache
-    const reminderMessage = createBrowserReminderMessage(reminderMarkup, ctx.currentUrl, ctx.pageTitle);
-    args.messageList.add(reminderMessage, 'user');
-    args.rotateResponseMessageId?.();
-
-    return args.messageList;
+    const isDelta = Boolean(previousState && !shouldRefreshSnapshot);
+    return {
+      id: 'browser',
+      cacheKey: stableBrowserStateCacheKey(browserState),
+      mode: isDelta ? 'delta' : 'snapshot',
+      tagName: 'state',
+      contents: isDelta ? formatBrowserStateDelta(changed) : formatBrowserStateSnapshot(browserState),
+      value: browserState,
+      ...(isDelta ? { delta: changed } : {}),
+      attributes: {
+        type: 'browser',
+        updated: new Date().toISOString(),
+      },
+      metadata: {
+        browser: browserState,
+      },
+    };
   }
 }
 
-interface BrowserReminderMetadata {
-  type: typeof REMINDER_TYPE;
-  url?: string;
-  title?: string;
-}
+type BrowserState = {
+  processId: string;
+  open: boolean;
+  activeUrl?: string;
+  pageTitle?: string;
+  tabCount?: number;
+  activeUrlChangeSource?: 'agent' | 'user';
+  pageMetadata?: Record<string, string | number | boolean | null | undefined>;
+  closeReason?: 'agent' | 'user' | 'process_restart' | 'error';
+};
 
-function createBrowserReminderMessage(
-  reminderMarkup: string,
-  url: string | undefined,
-  title: string | undefined,
-): MastraDBMessage {
-  const reminderMeta: BrowserReminderMetadata = {
-    type: REMINDER_TYPE,
-    url,
-    title,
-  };
-
-  const content: MastraMessageContentV2 = {
-    format: 2,
-    parts: [{ type: 'text', text: reminderMarkup }],
-    metadata: {
-      systemReminder: reminderMeta,
-    },
-  };
-
+function getBrowserState(ctx: BrowserContext): BrowserState {
   return {
-    id: crypto.randomUUID(),
-    role: 'user',
-    content,
-    createdAt: new Date(),
+    processId: BROWSER_PROCESS_ID,
+    open: ctx.isOpen ?? true,
+    ...(ctx.currentUrl ? { activeUrl: ctx.currentUrl } : {}),
+    ...(ctx.pageTitle ? { pageTitle: ctx.pageTitle } : {}),
+    ...(typeof ctx.tabCount === 'number' ? { tabCount: ctx.tabCount } : {}),
+    ...(ctx.activeUrlChangeSource ? { activeUrlChangeSource: ctx.activeUrlChangeSource } : {}),
+    ...(ctx.pageMetadata ? { pageMetadata: ctx.pageMetadata } : {}),
+    ...(ctx.closeReason ? { closeReason: ctx.closeReason } : {}),
   };
 }
 
-/**
- * Escape XML special characters in browser-derived values.
- * Prevents URLs or page titles containing <, &, or </system-reminder> from breaking the markup.
- */
-function escapeXml(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+function getMostRecentBrowserState(
+  activeStateSignals: ComputeStateSignalArgs['activeStateSignals'],
+): BrowserState | undefined {
+  for (const signal of [...activeStateSignals].reverse()) {
+    const browserState = getBrowserStateFromSignal(signal);
+    if (browserState) return browserState;
+  }
+  return undefined;
 }
 
-/**
- * Check if the trailing message is already a browser reminder with the same URL/title.
- * Only checks the last message to avoid suppressing reminders when the browser context
- * is no longer at the tail (e.g., user → reminder(A) → assistant → user should get a fresh reminder).
- */
-function hasTrailingBrowserReminder(
-  messages: MastraDBMessage[],
-  url: string | undefined,
-  title: string | undefined,
-): boolean {
-  const msg = messages[messages.length - 1];
-  if (!msg || msg.role !== 'user') return false;
-
-  const metadata = msg.content.metadata;
-  if (typeof metadata !== 'object' || metadata === null || !('systemReminder' in metadata)) {
-    return false;
+function getBrowserStateFromSignal(signal?: ComputeStateSignalArgs['lastSnapshot']): BrowserState | undefined {
+  const value = signal?.metadata?.value;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as BrowserState;
   }
 
-  const reminder = (metadata as { systemReminder?: BrowserReminderMetadata }).systemReminder;
-  return reminder?.type === REMINDER_TYPE && reminder.url === url && reminder.title === title;
+  const browser = signal?.metadata?.browser;
+  if (browser && typeof browser === 'object' && !Array.isArray(browser)) {
+    return browser as BrowserState;
+  }
+  return undefined;
+}
+
+function stableBrowserStateCacheKey(state: BrowserState): string {
+  return JSON.stringify(state, (_key, value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const sorted: Record<string, unknown> = {};
+      for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+        sorted[key] = (value as Record<string, unknown>)[key];
+      }
+      return sorted;
+    }
+    return value;
+  });
+}
+
+function isBareClosedState(state: BrowserState): boolean {
+  return (
+    !state.open &&
+    !state.activeUrl &&
+    !state.pageTitle &&
+    typeof state.tabCount !== 'number' &&
+    !state.closeReason &&
+    (!state.pageMetadata || Object.keys(state.pageMetadata).length === 0)
+  );
+}
+
+function getChangedBrowserState(previous: BrowserState | undefined, current: BrowserState): Partial<BrowserState> {
+  if (!previous) return current;
+
+  const changed: Partial<BrowserState> = {};
+  for (const key of Object.keys(current) as Array<keyof BrowserState>) {
+    if (key === 'processId') continue;
+    if (key === 'activeUrlChangeSource' && previous.activeUrl === current.activeUrl) continue;
+    if (JSON.stringify(previous[key]) !== JSON.stringify(current[key])) {
+      (changed as Record<string, unknown>)[key] = current[key];
+    }
+  }
+
+  if (!previous.open && current.open) {
+    if (current.activeUrl) changed.activeUrl = current.activeUrl;
+    if (current.activeUrlChangeSource) changed.activeUrlChangeSource = current.activeUrlChangeSource;
+    if (current.pageTitle) changed.pageTitle = current.pageTitle;
+    if (typeof current.tabCount === 'number') changed.tabCount = current.tabCount;
+    if (current.pageMetadata && Object.keys(current.pageMetadata).length > 0)
+      changed.pageMetadata = current.pageMetadata;
+  }
+
+  return changed;
+}
+
+function formatBrowserStateSnapshot(state: BrowserState): string {
+  const parts = [formatOpenClosedStatus(state)];
+  if (state.activeUrl) parts.push(`Active tab URL: ${state.activeUrl}.`);
+  if (state.pageTitle) parts.push(`Page title: ${state.pageTitle}.`);
+  if (typeof state.tabCount === 'number')
+    parts.push(`${state.tabCount} open ${state.tabCount === 1 ? 'tab' : 'tabs'}.`);
+  if (state.pageMetadata && Object.keys(state.pageMetadata).length > 0) {
+    parts.push(`Page metadata: ${JSON.stringify(state.pageMetadata)}.`);
+  }
+  return parts.join(' ');
+}
+
+function formatBrowserStateDelta(delta: Partial<BrowserState>): string {
+  const parts: string[] = [];
+  if (typeof delta.open === 'boolean') {
+    if (delta.open) {
+      parts.push('browser opened');
+    } else {
+      parts.push(formatCloseReason(delta.closeReason));
+    }
+  }
+  if (delta.activeUrl) parts.push(formatActiveUrlChange(delta.activeUrl, delta.activeUrlChangeSource));
+  if (delta.pageTitle) parts.push(`page title changed to ${delta.pageTitle}`);
+  if (typeof delta.tabCount === 'number') parts.push(`${delta.tabCount} open ${delta.tabCount === 1 ? 'tab' : 'tabs'}`);
+  if (delta.pageMetadata && Object.keys(delta.pageMetadata).length > 0) {
+    parts.push(`page metadata changed to ${JSON.stringify(delta.pageMetadata)}`);
+  }
+  return `changed: ${parts.join('; ')}`;
+}
+
+function formatActiveUrlChange(url: string, source?: 'agent' | 'user'): string {
+  switch (source) {
+    case 'agent':
+      return `agent changed active tab URL to ${url}`;
+    case 'user':
+      return `user changed active tab URL to ${url}`;
+    default:
+      return `active tab URL changed to ${url}`;
+  }
+}
+
+function formatOpenClosedStatus(state: BrowserState): string {
+  if (state.open) return 'Browser is open.';
+  switch (state.closeReason) {
+    case 'process_restart':
+      return 'The browser was closed because the chat process restarted.';
+    case 'user':
+      return 'The browser was closed externally, maybe by the user.';
+    case 'error':
+      return 'Browser closed unexpectedly due to an error.';
+    case 'agent':
+      return 'Browser is closed.';
+    default:
+      return 'Browser is closed.';
+  }
+}
+
+function formatCloseReason(reason?: 'agent' | 'user' | 'process_restart' | 'error'): string {
+  switch (reason) {
+    case 'process_restart':
+      return 'the browser was closed because the chat process restarted';
+    case 'user':
+      return 'the browser was closed externally, maybe by the user';
+    case 'error':
+      return 'browser closed unexpectedly due to an error';
+    case 'agent':
+      return 'browser closed';
+    default:
+      return 'browser closed';
+  }
 }

@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
 import { PlusIcon } from 'lucide-react';
-import type { JsonSchema } from '@/lib/json-schema';
+import { useState } from 'react';
 import { TooltipProvider } from '../Tooltip';
-import { JSONSchemaForm } from './index';
 import type { SchemaField } from './types';
 import { createField } from './types';
+import { JSONSchemaForm } from './index';
+import type { JsonSchema } from '@/lib/json-schema';
 
 const meta: Meta<typeof JSONSchemaForm.Root> = {
   title: 'Forms/JSONSchemaForm',
@@ -20,7 +20,6 @@ const meta: Meta<typeof JSONSchemaForm.Root> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -251,7 +250,7 @@ export const CustomStyling: Story = {
                     <JSONSchemaForm.FieldOptional label="Optional field" labelClassName="text-neutral4" />
                     <JSONSchemaForm.FieldNullable label="Allow null" labelClassName="text-neutral4" />
                   </div>
-                  <JSONSchemaForm.FieldRemove variant="outline" size="md" tooltip="Remove this field" />
+                  <JSONSchemaForm.FieldRemove variant="outline" tooltip="Remove this field" />
                 </div>
               </JSONSchemaForm.Field>
             )}

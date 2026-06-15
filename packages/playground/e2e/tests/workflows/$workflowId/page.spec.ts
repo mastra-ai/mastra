@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
+import { expectRouteDocsLink } from '../../__utils__/route-header';
 
 test.afterEach(async () => {
   await resetStorage();
@@ -12,10 +13,7 @@ test.beforeEach(async ({ page }) => {
 test('overall layout information', async ({ page }) => {
   // Header
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('text=Workflows documentation')).toHaveAttribute(
-    'href',
-    'https://mastra.ai/en/docs/workflows/overview',
-  );
+  await expectRouteDocsLink(page, 'Workflows documentation', 'https://mastra.ai/en/docs/workflows/overview');
   const breadcrumb = page.locator('header>nav');
   expect(breadcrumb).toMatchAriaSnapshot();
 
@@ -90,6 +88,26 @@ test('running the workflow (json) - long condition', async ({ page }) => {
 
   await runWorkflow(page);
   await checkLongPath(page);
+});
+
+test('running a workflow with an enum input uses the selected form value', async ({ page }) => {
+  // FEATURE: Workflow enum input forms
+  // USER STORY: As a Studio user, I want enum dropdown choices to update run input so workflows execute with my selection.
+  // BEHAVIOR UNDER TEST: Selecting a non-default enum option persists in the form and reaches the workflow output.
+  await page.goto('/workflows/enumWorkflow/graph');
+
+  await page.getByRole('combobox', { name: 'Mode' }).click();
+  await page.getByRole('option', { name: 'b' }).click();
+
+  await expect(page.getByRole('combobox', { name: 'Mode' })).toContainText('b');
+
+  await page.getByRole('button', { name: 'Run' }).click();
+
+  const nodes = page.locator('[data-workflow-node]');
+  await expect(nodes.nth(0)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
+
+  await page.getByRole('button', { name: 'Open Workflow Execution (JSON)' }).click();
+  await expect(page.getByRole('dialog')).toContainText('"mode": "b"');
 });
 
 test('resuming a workflow', async ({ page }) => {

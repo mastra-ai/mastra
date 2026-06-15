@@ -43,54 +43,62 @@ describe('browser_evaluate', () => {
     await browser.close();
   });
 
-  it('evaluates script and returns number result', async () => {
-    mockPage.evaluate.mockResolvedValueOnce(42);
+  it('passes script directly to page.evaluate', async () => {
+    mockPage.evaluate.mockResolvedValue(42);
 
-    const result = await browser.evaluate({ script: 'return 1 + 41' });
+    await browser.evaluate({ script: '1 + 41' });
+
+    expect(mockPage.evaluate).toHaveBeenCalledWith('1 + 41');
+  });
+
+  it('returns number result', async () => {
+    mockPage.evaluate.mockResolvedValue(42);
+
+    const result = await browser.evaluate({ script: '1 + 41' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toBe(42);
   });
 
-  it('evaluates script and returns string result', async () => {
-    mockPage.evaluate.mockResolvedValueOnce('Hello World');
+  it('returns string result', async () => {
+    mockPage.evaluate.mockResolvedValue('Hello World');
 
-    const result = await browser.evaluate({ script: 'return "Hello World"' });
+    const result = await browser.evaluate({ script: '"Hello World"' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toBe('Hello World');
   });
 
-  it('evaluates script and returns object result', async () => {
+  it('returns object result', async () => {
     const obj = { name: 'John', age: 30 };
-    mockPage.evaluate.mockResolvedValueOnce(obj);
+    mockPage.evaluate.mockResolvedValue(obj);
 
-    const result = await browser.evaluate({ script: 'return { name: "John", age: 30 }' });
+    const result = await browser.evaluate({ script: '({ name: "John", age: 30 })' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toEqual(obj);
   });
 
-  it('evaluates script and returns array result', async () => {
-    mockPage.evaluate.mockResolvedValueOnce([1, 2, 3]);
+  it('returns array result', async () => {
+    mockPage.evaluate.mockResolvedValue([1, 2, 3]);
 
-    const result = await browser.evaluate({ script: 'return [1, 2, 3]' });
+    const result = await browser.evaluate({ script: '[1, 2, 3]' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toEqual([1, 2, 3]);
   });
 
-  it('evaluates script and returns null', async () => {
-    mockPage.evaluate.mockResolvedValueOnce(null);
+  it('returns null', async () => {
+    mockPage.evaluate.mockResolvedValue(null);
 
-    const result = await browser.evaluate({ script: 'return null' });
+    const result = await browser.evaluate({ script: 'null' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.result).toBeNull();
   });
 
-  it('evaluates script and returns undefined', async () => {
-    mockPage.evaluate.mockResolvedValueOnce(undefined);
+  it('returns undefined for side-effect scripts', async () => {
+    mockPage.evaluate.mockResolvedValue(undefined);
 
     const result = await browser.evaluate({ script: 'console.log("hi")' });
 
@@ -99,49 +107,40 @@ describe('browser_evaluate', () => {
   });
 
   it('returns error for syntax errors', async () => {
-    mockPage.evaluate.mockRejectedValueOnce(new Error('SyntaxError'));
+    mockPage.evaluate.mockRejectedValue(new Error('SyntaxError'));
 
-    const result = await browser.evaluate({ script: 'return {' });
+    const result = await browser.evaluate({ script: '{invalid' });
 
     expect(result.success).toBe(false);
   });
 
   it('returns error for runtime errors', async () => {
-    mockPage.evaluate.mockRejectedValueOnce(new Error('ReferenceError: x is not defined'));
+    mockPage.evaluate.mockRejectedValue(new Error('ReferenceError: x is not defined'));
 
-    const result = await browser.evaluate({ script: 'return x' });
+    const result = await browser.evaluate({ script: 'x' });
 
     expect(result.success).toBe(false);
   });
 
   it('returns error for thrown exceptions', async () => {
-    mockPage.evaluate.mockRejectedValueOnce(new Error('Custom error'));
+    mockPage.evaluate.mockRejectedValue(new Error('Custom error'));
 
     const result = await browser.evaluate({ script: 'throw new Error("Custom error")' });
 
     expect(result.success).toBe(false);
   });
 
-  it('handles async scripts', async () => {
-    mockPage.evaluate.mockResolvedValueOnce('resolved');
-
-    const result = await browser.evaluate({ script: 'return await Promise.resolve("resolved")' });
-
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.result).toBe('resolved');
-  });
-
   it('returns hint about taking snapshot', async () => {
-    mockPage.evaluate.mockResolvedValueOnce(true);
+    mockPage.evaluate.mockResolvedValue(true);
 
-    const result = await browser.evaluate({ script: 'return true' });
+    const result = await browser.evaluate({ script: 'true' });
 
     expect(result.success).toBe(true);
     if (result.success) expect(result.hint).toContain('snapshot');
   });
 
   it('handles empty script', async () => {
-    mockPage.evaluate.mockResolvedValueOnce(undefined);
+    mockPage.evaluate.mockResolvedValue(undefined);
 
     const result = await browser.evaluate({ script: '' });
 

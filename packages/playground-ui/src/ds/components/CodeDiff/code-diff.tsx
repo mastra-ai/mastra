@@ -9,7 +9,7 @@ import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import { useEffect, useMemo, useRef } from 'react';
-import { useIsDarkMode } from '@/store/playground-store';
+import { useTheme } from '@/ds/components/ThemeProvider';
 
 const diffOverrides = EditorView.theme({
   '&.cm-editor .cm-changedLine': {
@@ -47,7 +47,7 @@ export interface CodeDiffProps {
 function buildDiffDarkTheme(): Extension {
   return draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.8125rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -66,7 +66,7 @@ function buildDiffLightTheme(): Extension {
       fontSize: '0.8125rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -104,7 +104,7 @@ function buildDiffLightTheme(): Extension {
 export function CodeDiff({ codeA, codeB }: CodeDiffProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<MergeView | null>(null);
-  const isDark = useIsDarkMode();
+  const isDark = useTheme().resolvedTheme === 'dark';
   const theme = useMemo(() => (isDark ? buildDiffDarkTheme() : buildDiffLightTheme()), [isDark]);
 
   useEffect(() => {

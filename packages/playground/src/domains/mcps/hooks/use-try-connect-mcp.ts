@@ -1,3 +1,4 @@
+import { useMastraClient } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';
 
 interface McpTool {
@@ -32,11 +33,18 @@ async function parseResponse(response: Response): Promise<unknown> {
   return response.json();
 }
 
-async function connectAndListTools(url: string): Promise<TryConnectResult> {
+async function connectAndListTools(url: string, clientHeaders?: Record<string, string>): Promise<TryConnectResult> {
+  const baseHeaders: Record<string, string> = {
+    ...clientHeaders,
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+  };
+
   // Step 1: Initialize
   const initResponse = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+    headers: baseHeaders,
+    credentials: 'include',
     body: JSON.stringify({
       jsonrpc: '2.0',
       id: 1,
@@ -57,8 +65,7 @@ async function connectAndListTools(url: string): Promise<TryConnectResult> {
   await parseResponse(initResponse);
 
   const sessionHeaders: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json, text/event-stream',
+    ...baseHeaders,
   };
   if (sessionId) {
     sessionHeaders['Mcp-Session-Id'] = sessionId;
@@ -68,6 +75,7 @@ async function connectAndListTools(url: string): Promise<TryConnectResult> {
   await fetch(url, {
     method: 'POST',
     headers: sessionHeaders,
+    credentials: 'include',
     body: JSON.stringify({
       jsonrpc: '2.0',
       method: 'notifications/initialized',
@@ -78,6 +86,7 @@ async function connectAndListTools(url: string): Promise<TryConnectResult> {
   const toolsResponse = await fetch(url, {
     method: 'POST',
     headers: sessionHeaders,
+    credentials: 'include',
     body: JSON.stringify({
       jsonrpc: '2.0',
       id: 2,
@@ -97,8 +106,11 @@ async function connectAndListTools(url: string): Promise<TryConnectResult> {
 }
 
 export const useTryConnectMcp = () => {
+  const client = useMastraClient();
+  const clientHeaders = (client.options?.headers as Record<string, string>) ?? {};
+
   return useMutation({
-    mutationFn: (url: string) => connectAndListTools(url),
+    mutationFn: (url: string) => connectAndListTools(url, clientHeaders),
   });
 };
 

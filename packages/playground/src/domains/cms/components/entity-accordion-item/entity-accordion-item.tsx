@@ -1,8 +1,8 @@
 import {
+  Button,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-  IconButton,
   Textarea,
   Icon,
   RuleBuilder,
@@ -52,9 +52,9 @@ export function EntityAccordionItem({
             <span className="text-xs font-medium text-neutral6">{name}</span>
           </div>
           {onRemove && (
-            <IconButton tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="sm">
+            <Button tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="icon-sm">
               <Trash2 />
-            </IconButton>
+            </Button>
           )}
         </div>
 

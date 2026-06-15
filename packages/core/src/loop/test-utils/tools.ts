@@ -1,4 +1,3 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { dynamicTool, jsonSchema, stepCountIs } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -6,6 +5,7 @@ import { z } from 'zod/v4';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
 import { createMessageListWithUserMessage, createTestModels, defaultSettings, testUsage } from './utils';
+import { convertAsyncIterableToArray } from './stream-helpers';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
@@ -1049,7 +1049,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       );
       expect(assistantMsg).toBeDefined();
       expect(assistantMsg?.content.metadata).toEqual({
-        modelId: 'claude-code-model',
+        modelId: 'mock-model-id',
         provider: 'mock-provider',
       });
 

@@ -1,6 +1,6 @@
 import type { LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 import { describe, it, expect } from 'vitest';
-import { extractUsageMetrics } from './usage';
+import { addUsageStats, extractUsageMetrics } from './usage';
 
 describe('extractUsageMetrics', () => {
   describe('basic usage extraction', () => {
@@ -170,6 +170,33 @@ describe('extractUsageMetrics', () => {
       expect(result.inputDetails?.text).toBe(323);
       expect(result.inputDetails?.cacheRead).toBe(3170);
       expect(result.outputTokens).toBe(125);
+    });
+
+    it('should sum Anthropic cache write across multi-step runs via usage.cacheCreationInputTokens', () => {
+      // Regression for PR #14674: 3-step Anthropic prompt-caching aggregation.
+      // Mastra-summed usage must win over per-step providerMetadata.
+      const usage: LanguageModelUsage = {
+        inputTokens: 17962,
+        outputTokens: 1500,
+        cachedInputTokens: 12686,
+        cacheCreationInputTokens: 5268,
+      };
+
+      const providerMetadata: ProviderMetadata = {
+        anthropic: {
+          cacheReadInputTokens: 4551,
+          cacheCreationInputTokens: 4005,
+        },
+      };
+
+      const result = extractUsageMetrics(usage, providerMetadata);
+
+      expect(result.inputTokens).toBe(17962);
+      expect(result.outputTokens).toBe(1500);
+      expect(result.inputDetails?.cacheRead).toBe(12686);
+      expect(result.inputDetails?.cacheWrite).toBe(5268);
+      expect(result.inputDetails?.text).toBe(8);
+      expect(result.outputDetails?.text).toBe(1500);
     });
 
     it('should not double count Anthropic cache tokens when v6 usage already includes them', () => {
@@ -394,7 +421,7 @@ describe('extractUsageMetrics', () => {
 
       const providerMetadata: ProviderMetadata = {
         anthropic: {
-          cacheReadInputTokens: 3000, // last step only — should be ignored
+          cacheReadInputTokens: 3000, // last step only - should be ignored
           cacheCreationInputTokens: 0,
         },
       };
@@ -494,5 +521,52 @@ describe('extractUsageMetrics', () => {
       expect(result.inputDetails).toEqual({ text: 100 });
       expect(result.outputDetails).toEqual({ text: 50 });
     });
+  });
+});
+
+describe('addUsageStats', () => {
+  it('returns a copy of b when accumulator is undefined', () => {
+    const result = addUsageStats(undefined, { inputTokens: 10, outputTokens: 5 });
+    expect(result).toEqual({ inputTokens: 10, outputTokens: 5 });
+  });
+
+  it('does not mutate the accumulator', () => {
+    const a = { inputTokens: 5, outputTokens: 2 };
+    const result = addUsageStats(a, { inputTokens: 3, outputTokens: 1 });
+    expect(a).toEqual({ inputTokens: 5, outputTokens: 2 });
+    expect(result).toEqual({ inputTokens: 8, outputTokens: 3 });
+  });
+
+  it('sums top-level token counts', () => {
+    const result = addUsageStats({ inputTokens: 100, outputTokens: 50 }, { inputTokens: 25, outputTokens: 75 });
+    expect(result.inputTokens).toBe(125);
+    expect(result.outputTokens).toBe(125);
+  });
+
+  it('keeps undefined fields undefined when both sides omit them', () => {
+    const result = addUsageStats({ inputTokens: 10 }, { outputTokens: 5 });
+    expect(result.inputTokens).toBe(10);
+    expect(result.outputTokens).toBe(5);
+  });
+
+  it('merges inputDetails and outputDetails per-field', () => {
+    const result = addUsageStats(
+      {
+        inputDetails: { text: 90, cacheRead: 10 },
+        outputDetails: { text: 40, reasoning: 5 },
+      },
+      {
+        inputDetails: { text: 30, cacheWrite: 8 },
+        outputDetails: { text: 10, audio: 2 },
+      },
+    );
+    expect(result.inputDetails).toEqual({ text: 120, cacheRead: 10, cacheWrite: 8 });
+    expect(result.outputDetails).toEqual({ text: 50, reasoning: 5, audio: 2 });
+  });
+
+  it('preserves details from one side when the other has none', () => {
+    const result = addUsageStats({ inputTokens: 10 }, { inputTokens: 5, inputDetails: { text: 5 } });
+    expect(result.inputTokens).toBe(15);
+    expect(result.inputDetails).toEqual({ text: 5 });
   });
 });

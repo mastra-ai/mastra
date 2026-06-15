@@ -1,17 +1,13 @@
 import {
-  ButtonWithTooltip,
   ErrorState,
   ListSearch,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
-  ToolsIcon,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
@@ -28,7 +24,7 @@ export default function Tools() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -36,7 +32,7 @@ export default function Tools() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="tools" />
       </NoDataPageLayout>
     );
@@ -44,7 +40,7 @@ export default function Tools() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load tools" message={error.message} />
       </NoDataPageLayout>
     );
@@ -52,7 +48,7 @@ export default function Tools() {
 
   if (Object.keys(tools).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Tools" icon={<ToolsIcon />}>
+      <NoDataPageLayout>
         <NoToolsInfo />
       </NoDataPageLayout>
     );
@@ -61,26 +57,6 @@ export default function Tools() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <ToolsIcon /> Tools
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Tools documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
         </div>

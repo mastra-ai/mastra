@@ -1,7 +1,9 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { NOISE_SENSITIVITY_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface NoiseSensitivityOptions {
@@ -25,21 +27,21 @@ export interface NoiseSensitivityOptions {
 }
 
 // Helper for score validation - uses refine() instead of min/max for Anthropic API compatibility
-const scoreSchema = z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' });
-
-const analyzeOutputSchema = z.object({
-  dimensions: z.array(
-    z.object({
-      dimension: z.string(),
-      impactLevel: z.enum(['none', 'minimal', 'moderate', 'significant', 'severe']),
-      specificChanges: z.string(),
-      noiseInfluence: z.string(),
-    }),
-  ),
-  overallAssessment: z.string(),
-  majorIssues: z.array(z.string()).optional().default([]),
-  robustnessScore: scoreSchema,
-});
+const analyzeOutputSchema = compileSchema(
+  z.object({
+    dimensions: z.array(
+      z.object({
+        dimension: z.string(),
+        impactLevel: z.enum(['none', 'minimal', 'moderate', 'significant', 'severe']),
+        specificChanges: z.string(),
+        noiseInfluence: z.string(),
+      }),
+    ),
+    overallAssessment: z.string(),
+    majorIssues: z.array(z.string()).optional().default([]),
+    robustnessScore: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+  }),
+);
 
 // Default scoring constants for maintainability and clarity
 const DEFAULT_IMPACT_WEIGHTS = {
@@ -67,7 +69,7 @@ export function createNoiseSensitivityScorerLLM({
     throw new Error('Both baselineResponse and noisyQuery are required for Noise Sensitivity scoring');
   }
 
-  return createScorer({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'noise-sensitivity-scorer',
     name: 'Noise Sensitivity (LLM)',
     description: 'Evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information',

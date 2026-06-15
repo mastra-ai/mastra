@@ -1,12 +1,12 @@
-import { useAuiState } from '@assistant-ui/react';
-import { Badge, IconButton, Icon, cn } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
+import { Badge, Button, Icon, cn } from '@mastra/playground-ui';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useLinkComponent } from '@/lib/framework';
 
 // Matches the shape returned by workspace.getInfo() — flat, not nested under "workspace"
@@ -52,8 +52,9 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
   toolName: string;
   args: Record<string, unknown> | string;
   result: any;
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   toolCalled?: boolean;
+  dataParts?: ReadonlyArray<DataMessagePart>;
 }
 
 // Hook for live elapsed time while running
@@ -107,7 +108,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
             <code className="text-xs text-neutral-300 font-mono truncate">{command}</code>
           </div>
           {onCopy && (
-            <IconButton variant="light" size="sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">
+            <Button variant="default" size="icon-sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">
               <span className="grid">
                 <span
                   style={{ gridArea: '1/1' }}
@@ -122,7 +123,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
                   <CopyIcon size={14} />
                 </span>
               </span>
-            </IconButton>
+            </Button>
           )}
         </div>
       )}
@@ -147,13 +148,12 @@ export const SandboxExecutionBadge = ({
   toolApprovalMetadata,
   isNetwork,
   toolCalled: toolCalledProp,
+  dataParts: dataPartsProp,
 }: SandboxExecutionBadgeProps) => {
   // Get sandbox streaming data parts from the message
-  const message = useAuiState(s => s.message);
   const dataParts = useMemo(() => {
-    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.filter(part => part.type === 'data');
-  }, [message.content]);
+    return (dataPartsProp ?? []).filter(part => part.type === 'data');
+  }, [dataPartsProp]);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { isCopied, copyToClipboard } = useCopyToClipboard();

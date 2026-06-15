@@ -53,7 +53,10 @@ export class EditorMCPNamespace extends CrudEditorNamespace<
    * Converts `url` from string to URL for HTTP servers.
    * Returns a plain object — callers must pass it to `new MCPClient()`.
    */
-  static toMCPServerDefinition(serverConfig: StorageMCPServerConfig): Record<string, unknown> {
+  static toMCPServerDefinition(
+    serverConfig: StorageMCPServerConfig,
+    requestInit?: { headers: Record<string, string> },
+  ): Record<string, unknown> {
     if (serverConfig.type === 'stdio') {
       return {
         command: serverConfig.command!,
@@ -63,23 +66,27 @@ export class EditorMCPNamespace extends CrudEditorNamespace<
       };
     }
 
-    // HTTP transport
+    // HTTP transport — include requestInit (e.g., auth headers) when provided
     return {
       url: new URL(serverConfig.url!),
       timeout: serverConfig.timeout,
+      ...(requestInit ? { requestInit } : {}),
     };
   }
 
   /**
    * Convert all servers in a stored MCP client to MCPClientOptions shape.
    */
-  static toMCPClientOptions(config: StorageResolvedMCPClientType): {
+  static toMCPClientOptions(
+    config: StorageResolvedMCPClientType,
+    requestInit?: { headers: Record<string, string> },
+  ): {
     id: string;
     servers: Record<string, Record<string, unknown>>;
   } {
     const servers: Record<string, Record<string, unknown>> = {};
     for (const [name, serverConfig] of Object.entries(config.servers)) {
-      servers[name] = EditorMCPNamespace.toMCPServerDefinition(serverConfig);
+      servers[name] = EditorMCPNamespace.toMCPServerDefinition(serverConfig, requestInit);
     }
     return { id: config.id, servers };
   }

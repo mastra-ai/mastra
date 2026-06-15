@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { TextAndIcon } from './text-and-icon';
 import { Clock, User, MapPin, Mail, Phone, Calendar } from 'lucide-react';
+import { TextAndIcon } from './text-and-icon';
 
 const meta: Meta<typeof TextAndIcon> = {
   title: 'DataDisplay/TextAndIcon',
@@ -8,7 +8,6 @@ const meta: Meta<typeof TextAndIcon> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

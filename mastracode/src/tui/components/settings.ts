@@ -6,7 +6,7 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, Container, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
 import type { StorageBackend } from '../../onboarding/settings.js';
 import type { NotificationMode } from '../notify.js';
@@ -24,9 +24,11 @@ export interface SettingsConfig {
   currentModelId: string;
   escapeAsCancel: boolean;
   quietMode: boolean;
+  quietModeMaxToolPreviewLines: number;
   storageBackend: StorageBackend;
   pgConnectionString: string;
   libsqlUrl: string;
+  experimentalGithubSignals: boolean;
 }
 
 export interface SettingsCallbacks {
@@ -35,7 +37,9 @@ export interface SettingsCallbacks {
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
   onQuietModeChange: (enabled: boolean) => void;
+  onQuietModeMaxToolPreviewLinesChange: (lines: number) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
+  onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onApiKeys?: () => void;
   onClose: () => void;
 }
@@ -45,7 +49,12 @@ export interface SettingsCallbacks {
 // =============================================================================
 
 class SelectSubmenu extends SelectList {
-  constructor(items: SelectItem[], currentValue: string, onSelect: (value: string) => void, onBack: () => void) {
+  constructor(
+    items: SelectItem[],
+    currentValue: string,
+    onSelect: (value: string) => void | Promise<void>,
+    onBack: () => void,
+  ) {
     super(items, Math.min(items.length, 8), getSelectListTheme());
 
     const currentIndex = items.findIndex(i => i.value === currentValue);
@@ -53,8 +62,8 @@ class SelectSubmenu extends SelectList {
       this.setSelectedIndex(currentIndex);
     }
 
-    this.onSelect = (item: SelectItem) => {
-      onSelect(item.value);
+    this.onSelect = async (item: SelectItem) => {
+      await onSelect(item.value);
     };
     this.onCancel = onBack;
   }
@@ -149,7 +158,7 @@ class StorageBackendSubmenu extends Container {
     }
 
     // Connection string input phase
-    if (data === '\r' || data === '\n') {
+    if (matchesKey(data, 'enter') || data === '\r' || data === '\n') {
       const value = this.input.getValue().trim();
       if (this.pendingBackend === 'pg') {
         // PG requires a connection string
@@ -163,7 +172,7 @@ class StorageBackendSubmenu extends Container {
       return;
     }
 
-    if (data === '\x1b' || data === '\x1b\x1b') {
+    if (matchesKey(data, 'escape') || data === '\x1b' || data === '\x1b\x1b') {
       this.onBack();
       return;
     }
@@ -175,6 +184,10 @@ class StorageBackendSubmenu extends Container {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+function quietPreviewLinesLabel(lines: number): string {
+  return lines === 0 ? 'None' : `${lines} line${lines === 1 ? '' : 's'}`;
+}
 
 function storageLabel(config: SettingsConfig): string {
   if (config.storageBackend === 'pg') return 'PostgreSQL';
@@ -198,7 +211,7 @@ export class SettingsComponent extends Box implements Focusable {
   }
 
   constructor(config: SettingsConfig, callbacks: SettingsCallbacks) {
-    super(2, 1, (text: string) => theme.bg('overlayBg', text));
+    super(4, 2, (text: string) => theme.bg('overlayBg', text));
 
     // Title
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Settings')), 0, 0));
@@ -328,7 +341,7 @@ export class SettingsComponent extends Box implements Focusable {
       {
         id: 'quietMode',
         label: 'Quiet mode',
-        description: 'Collapse subagent output to a single line after completion.',
+        description: 'Render tool calls compactly and collapse subagent output after completion.',
         currentValue: config.quietMode ? 'On' : 'Off',
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
@@ -336,12 +349,12 @@ export class SettingsComponent extends Box implements Focusable {
               {
                 value: 'on',
                 label: '  On',
-                description: 'Auto-collapse subagent output when done',
+                description: 'Compact older tool calls and completed subagents',
               },
               {
                 value: 'off',
                 label: '  Off',
-                description: 'Keep subagent output visible when done',
+                description: 'Keep normal tool and subagent rendering',
               },
             ],
             config.quietMode ? 'on' : 'off',
@@ -349,6 +362,63 @@ export class SettingsComponent extends Box implements Focusable {
               config.quietMode = value === 'on';
               callbacks.onQuietModeChange(config.quietMode);
               done(config.quietMode ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      ...(config.quietMode
+        ? [
+            {
+              id: 'quietModeMaxToolPreviewLines',
+              label: 'Quiet mode tool preview lines',
+              description: 'Maximum compact tool detail preview lines. Set to None to hide previews.',
+              currentValue: quietPreviewLinesLabel(config.quietModeMaxToolPreviewLines),
+              submenu: (_currentValue: string, done: (value?: string) => void) =>
+                new SelectSubmenu(
+                  [0, 1, 2, 4, 8].map(lines => ({
+                    value: String(lines),
+                    label: `  ${quietPreviewLinesLabel(lines)}`,
+                    description:
+                      lines === 0
+                        ? 'Hide compact tool detail previews'
+                        : `Show up to ${lines} preview line${lines === 1 ? '' : 's'}`,
+                  })),
+                  String(config.quietModeMaxToolPreviewLines),
+                  value => {
+                    config.quietModeMaxToolPreviewLines = Number(value);
+                    callbacks.onQuietModeMaxToolPreviewLinesChange(config.quietModeMaxToolPreviewLines);
+                    done(quietPreviewLinesLabel(config.quietModeMaxToolPreviewLines));
+                  },
+                  () => done(),
+                ),
+            },
+          ]
+        : []),
+      {
+        id: 'experimentalGithubSignals',
+        label: 'Experimental GitHub signals',
+        description: 'Enable local-first GitHub PR subscriptions with gitcrawl (restart required).',
+        currentValue: config.experimentalGithubSignals ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Enable GitHub signal processor and PR subscription tools',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Disable GitHub signal processor and tools',
+              },
+            ],
+            config.experimentalGithubSignals ? 'on' : 'off',
+            async value => {
+              const nextValue = value === 'on';
+              const accepted = await callbacks.onExperimentalGithubSignalsChange(nextValue);
+              config.experimentalGithubSignals = accepted === false ? !nextValue : nextValue;
+              done(config.experimentalGithubSignals ? 'On' : 'Off');
             },
             () => done(),
           ),

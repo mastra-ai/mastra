@@ -1,5 +1,357 @@
 # @mastra/auth-workos
 
+## 1.5.2
+
+### Patch Changes
+
+- Added guidance for using `actor` with WorkOS integrations when trusted background jobs, such as cron jobs and scheduled workflows, have no JWT or human membership. ([#17487](https://github.com/mastra-ai/mastra/pull/17487))
+
+- Updated dependencies [[`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`575f815`](https://github.com/mastra-ai/mastra/commit/575f815c5c3567b71c0b83cbb7fa98c8253a9d9c), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`053735a`](https://github.com/mastra-ai/mastra/commit/053735a75c2c18e23ce34d9468007efa4a45f4c4), [`306909a`](https://github.com/mastra-ai/mastra/commit/306909a693de77d709b38706e2673c9547d24a28), [`5191af8`](https://github.com/mastra-ai/mastra/commit/5191af80c799eea25357c545fc05d91b3883531d), [`43bd3d4`](https://github.com/mastra-ai/mastra/commit/43bd3d421987463fdf35386a45199c49499ed069), [`e6fa79e`](https://github.com/mastra-ai/mastra/commit/e6fa79ec72a2ddffdd25e85270398951e9d552a4), [`904bcdf`](https://github.com/mastra-ai/mastra/commit/904bcdf7b8004aa7be823f9f70ca63580e47e470), [`7f5ee1d`](https://github.com/mastra-ai/mastra/commit/7f5ee1dca46daee8d2817f2ebe49e6335da81956), [`1e9aab5`](https://github.com/mastra-ai/mastra/commit/1e9aab50ff11e6e88fde4d7cbf512c44a9fe8d61), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`bf8eb6d`](https://github.com/mastra-ai/mastra/commit/bf8eb6d0ec213a403eb9265a594ad283c44ab3dc), [`e9be4e7`](https://github.com/mastra-ai/mastra/commit/e9be4e747ec3d8b65548bff92f9377db06105376), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`d53cfc2`](https://github.com/mastra-ai/mastra/commit/d53cfc2c7f8d78343a4aa84ec4e129ba25f3325e), [`65799d4`](https://github.com/mastra-ai/mastra/commit/65799d4d549e5ebb9c848fbe3f51ac090f64becf), [`c268c89`](https://github.com/mastra-ai/mastra/commit/c268c89f4c63a93ee474d3cffdf3ea60bf00d4f2), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`014e00f`](https://github.com/mastra-ai/mastra/commit/014e00f2b3a597a016b72f9901c6ab27d491f822), [`029a414`](https://github.com/mastra-ai/mastra/commit/029a4141719793bd3e898a39eb5a0466a55f5f3a), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`d371ac1`](https://github.com/mastra-ai/mastra/commit/d371ac1d9820afaaf7cfdbc380a475946a994d8f), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`0c72f03`](https://github.com/mastra-ai/mastra/commit/0c72f032abb13254df5a7856d64be2f207b8006d), [`cf182b7`](https://github.com/mastra-ai/mastra/commit/cf182b7fb495767946d9840ef29f19cfa906f31f), [`3b45ea9`](https://github.com/mastra-ai/mastra/commit/3b45ea95015557a6cb9d70dc5252af54ab1b78ac), [`a049c2a`](https://github.com/mastra-ai/mastra/commit/a049c2a9dfb41d0ee2e7a28874a88cd64fd5669f), [`f084be1`](https://github.com/mastra-ai/mastra/commit/f084be1fcbe33ad7480913e44d6130c421c0976f), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`2a96528`](https://github.com/mastra-ai/mastra/commit/2a9652848dfa3c5a2426f952e9d93554c26fd90f), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04), [`5d302c8`](https://github.com/mastra-ai/mastra/commit/5d302c8eda1a6ac74eab5e442c4f64db6cc97a06), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`a952852`](https://github.com/mastra-ai/mastra/commit/a952852c971a21fb646cd907c75fcf4443cdc963), [`2656d9c`](https://github.com/mastra-ai/mastra/commit/2656d9c2976d4f3354253bfbbbf9b88a1b2bbf34), [`63e3fe1`](https://github.com/mastra-ai/mastra/commit/63e3fe13cc1ea96f91d7c68aea92f400faf9e4da), [`1d4ce8d`](https://github.com/mastra-ai/mastra/commit/1d4ce8daaa54511f325c1b609d31b8e54009d677), [`8c68372`](https://github.com/mastra-ai/mastra/commit/8c68372e85fe0b066ec12c58bd29ffb93e54c552)]:
+  - @mastra/core@1.42.0
+
+## 1.5.2-alpha.0
+
+### Patch Changes
+
+- Added guidance for using `actor` with WorkOS integrations when trusted background jobs, such as cron jobs and scheduled workflows, have no JWT or human membership. ([#17487](https://github.com/mastra-ai/mastra/pull/17487))
+
+- Updated dependencies [[`575f815`](https://github.com/mastra-ai/mastra/commit/575f815c5c3567b71c0b83cbb7fa98c8253a9d9c), [`306909a`](https://github.com/mastra-ai/mastra/commit/306909a693de77d709b38706e2673c9547d24a28), [`5191af8`](https://github.com/mastra-ai/mastra/commit/5191af80c799eea25357c545fc05d91b3883531d), [`43bd3d4`](https://github.com/mastra-ai/mastra/commit/43bd3d421987463fdf35386a45199c49499ed069), [`e6fa79e`](https://github.com/mastra-ai/mastra/commit/e6fa79ec72a2ddffdd25e85270398951e9d552a4), [`904bcdf`](https://github.com/mastra-ai/mastra/commit/904bcdf7b8004aa7be823f9f70ca63580e47e470), [`7f5ee1d`](https://github.com/mastra-ai/mastra/commit/7f5ee1dca46daee8d2817f2ebe49e6335da81956), [`1e9aab5`](https://github.com/mastra-ai/mastra/commit/1e9aab50ff11e6e88fde4d7cbf512c44a9fe8d61), [`bf8eb6d`](https://github.com/mastra-ai/mastra/commit/bf8eb6d0ec213a403eb9265a594ad283c44ab3dc), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`029a414`](https://github.com/mastra-ai/mastra/commit/029a4141719793bd3e898a39eb5a0466a55f5f3a), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`d371ac1`](https://github.com/mastra-ai/mastra/commit/d371ac1d9820afaaf7cfdbc380a475946a994d8f), [`cf182b7`](https://github.com/mastra-ai/mastra/commit/cf182b7fb495767946d9840ef29f19cfa906f31f), [`a049c2a`](https://github.com/mastra-ai/mastra/commit/a049c2a9dfb41d0ee2e7a28874a88cd64fd5669f), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`2a96528`](https://github.com/mastra-ai/mastra/commit/2a9652848dfa3c5a2426f952e9d93554c26fd90f), [`2656d9c`](https://github.com/mastra-ai/mastra/commit/2656d9c2976d4f3354253bfbbbf9b88a1b2bbf34), [`63e3fe1`](https://github.com/mastra-ai/mastra/commit/63e3fe13cc1ea96f91d7c68aea92f400faf9e4da), [`1d4ce8d`](https://github.com/mastra-ai/mastra/commit/1d4ce8daaa54511f325c1b609d31b8e54009d677), [`8c68372`](https://github.com/mastra-ai/mastra/commit/8c68372e85fe0b066ec12c58bd29ffb93e54c552)]:
+  - @mastra/core@1.42.0-alpha.4
+
+## 1.5.1
+
+### Patch Changes
+
+- Removed Hono from @mastra/core and auth package runtime dependencies. Auth providers now receive framework-agnostic request types that support standard Request objects and Hono-compatible request shapes. MCP and deployer avoid relying on core-bundled Hono context types at package boundaries. ([#17410](https://github.com/mastra-ai/mastra/pull/17410))
+
+- Updated dependencies [[`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/core@1.39.0
+
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Removed Hono from @mastra/core and auth package runtime dependencies. Auth providers now receive framework-agnostic request types that support standard Request objects and Hono-compatible request shapes. MCP and deployer avoid relying on core-bundled Hono context types at package boundaries. ([#17410](https://github.com/mastra-ai/mastra/pull/17410))
+
+- Updated dependencies [[`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/core@1.39.0-alpha.0
+
+## 1.5.0
+
+### Minor Changes
+
+- FGA `check()` and `require()` now accept an array of permissions and short-circuit on the first one that resolves to allow (ANY-of semantics). Single-permission usage continues to work unchanged. ([#16605](https://github.com/mastra-ai/mastra/pull/16605))
+
+  ```ts
+  // Before — one permission per call
+  await fgaProvider.check({
+    user,
+    resource: { type: 'agent', id: 'abc' },
+    permission: 'agents:read',
+  });
+
+  // After — single permission or ANY-of array
+  await fgaProvider.check({
+    user,
+    resource: { type: 'agent', id: 'abc' },
+    permission: ['agents:read', 'agents:execute'],
+  });
+  ```
+
+  When all permissions in the array are denied, the thrown `FGADeniedError` lists them as `any of [a, b, c]` in its message.
+
+### Patch Changes
+
+- Updated dependencies [[`452036a`](https://github.com/mastra-ai/mastra/commit/452036a0d965b4f4c1efd93606e4f03b50b807a5), [`c272d50`](https://github.com/mastra-ai/mastra/commit/c272d50610a54496b6b6d92ccd4d37b333a2613a), [`27fd1b7`](https://github.com/mastra-ai/mastra/commit/27fd1b79ac62eb7694f92587eb7d1be05b59be01), [`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`5556cc1`](https://github.com/mastra-ai/mastra/commit/5556cc1befec71518d84f826b3bfe3a079a9daf7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`5499303`](https://github.com/mastra-ai/mastra/commit/54993032c1ebc09642625b78d2014e0cf84a3cae), [`a702009`](https://github.com/mastra-ai/mastra/commit/a702009d3cfaa745120f501e21c783ed4d6a3072), [`9aee493`](https://github.com/mastra-ai/mastra/commit/9aee493ed6089b5133472623dcce49934bf2d509), [`d8692af`](https://github.com/mastra-ai/mastra/commit/d8692afa253028e39cdce2aafa0ac414071a762e), [`1a9cc60`](https://github.com/mastra-ai/mastra/commit/1a9cc6069f9910fc3d59e4953ac8cd95d89ad6f5), [`8cdb86c`](https://github.com/mastra-ai/mastra/commit/8cdb86ceed1137bc2768e147dce85a0692b9fb26), [`8534d79`](https://github.com/mastra-ai/mastra/commit/8534d791fa1cb70fe1c19e2604c4b63cc10dd051), [`eda90c5`](https://github.com/mastra-ai/mastra/commit/eda90c5bfd7de11805ecc9f4552716c895fbaf78), [`a935b0a`](https://github.com/mastra-ai/mastra/commit/a935b0a0977ae3f196b33ec7621f528069c82db0), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`c78f8cd`](https://github.com/mastra-ai/mastra/commit/c78f8cd6222a86e6c60ae5210b6929ad5221b6fb), [`e146aad`](https://github.com/mastra-ai/mastra/commit/e146aadbba66c410ba0e74bac4c50135495cb8dd), [`ac79462`](https://github.com/mastra-ai/mastra/commit/ac79462b98f1062394c45093aa515b0766f27ee2), [`1a0ec78`](https://github.com/mastra-ai/mastra/commit/1a0ec789a26cae443744e9abbd62ed6ee676af39), [`e47bca7`](https://github.com/mastra-ai/mastra/commit/e47bca7b72866d3abd173b9f530ac4318113a8ff), [`afc004f`](https://github.com/mastra-ai/mastra/commit/afc004f5cc7e30697809e7021820b9f5881e6719), [`0031d0f`](https://github.com/mastra-ai/mastra/commit/0031d0f13831d7843ac5d498734a7d92862e2ce3), [`841a222`](https://github.com/mastra-ai/mastra/commit/841a222560d8c19238f8213713f30535cdd82284), [`64c1e0b`](https://github.com/mastra-ai/mastra/commit/64c1e0b35165c96b659818bd0177aa18794ef11f), [`40d83a9`](https://github.com/mastra-ai/mastra/commit/40d83a90d9be31a1b83e04649edb703eb7753e33), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a), [`19281c7`](https://github.com/mastra-ai/mastra/commit/19281c70424f757219782de16c2699743c5e04d0), [`3498b49`](https://github.com/mastra-ai/mastra/commit/3498b4946be94f4313cd817733589680dcda5278), [`d52b6fe`](https://github.com/mastra-ai/mastra/commit/d52b6fe1c56853eb38864baae0bbfa75cc739ccb), [`408be73`](https://github.com/mastra-ai/mastra/commit/408be73449dfab92b51eab8c6623b6c443debc25), [`359439b`](https://github.com/mastra-ai/mastra/commit/359439bb8c635e048176306828195f8297f50021), [`71a820b`](https://github.com/mastra-ai/mastra/commit/71a820b2353fa1406772c50760a3732058a8b337), [`1698f5e`](https://github.com/mastra-ai/mastra/commit/1698f5ec141d34f22a873efdb145ce3cdf848a5e)]:
+  - @mastra/core@1.36.0
+  - @mastra/auth@1.0.2
+
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- FGA `check()` and `require()` now accept an array of permissions and short-circuit on the first one that resolves to allow (ANY-of semantics). Single-permission usage continues to work unchanged. ([#16605](https://github.com/mastra-ai/mastra/pull/16605))
+
+  ```ts
+  // Before — one permission per call
+  await fgaProvider.check({
+    user,
+    resource: { type: 'agent', id: 'abc' },
+    permission: 'agents:read',
+  });
+
+  // After — single permission or ANY-of array
+  await fgaProvider.check({
+    user,
+    resource: { type: 'agent', id: 'abc' },
+    permission: ['agents:read', 'agents:execute'],
+  });
+  ```
+
+  When all permissions in the array are denied, the thrown `FGADeniedError` lists them as `any of [a, b, c]` in its message.
+
+### Patch Changes
+
+- Updated dependencies [[`5ba7253`](https://github.com/mastra-ai/mastra/commit/5ba7253745c85e8df8012a76d954c640ffa336f7), [`f73980d`](https://github.com/mastra-ai/mastra/commit/f73980d651eb5f7f1ab20582de4615a1b6f10fce), [`9c88701`](https://github.com/mastra-ai/mastra/commit/9c8870195b41a38dc40b6ba2aa55eda04df8fa69), [`4e88dc6`](https://github.com/mastra-ai/mastra/commit/4e88dc6b89f154c0eae37221c8126be0c23c569f), [`19018f0`](https://github.com/mastra-ai/mastra/commit/19018f05722af74a5978781a7731a654b26f7f2a)]:
+  - @mastra/core@1.36.0-alpha.2
+  - @mastra/auth@1.0.2
+
+## 1.4.0
+
+### Minor Changes
+
+- Added FGA route policy coverage controls, built-in resource route metadata resolution, and resolver hooks. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+  For example:
+
+  ```ts
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+  import type { FGARouteConfig, FGARouteResolver, IFGAProvider } from '@mastra/core/auth/ee';
+  import { createRoute } from '@mastra/server/server-adapter';
+
+  const routeFGA = {
+    'GET /billing/:accountId': {
+      resourceType: 'account',
+      resourceIdParam: 'accountId',
+      permission: 'billing:read',
+    },
+  } satisfies Record<string, FGARouteConfig>;
+
+  const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+  const fga: IFGAProvider = new MastraFGAWorkos({
+    apiKey: process.env.WORKOS_API_KEY!,
+    clientId: process.env.WORKOS_CLIENT_ID!,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+    resolveRouteFGA,
+    validatePermissions: async permissions => {
+      /* validate mappings */
+    },
+  });
+
+  export const getProjectRoute = createRoute({
+    method: 'GET',
+    path: '/projects/:projectId',
+    responseType: 'json',
+    requiresAuth: true,
+    fga: {
+      resourceType: 'project',
+      resourceIdParam: 'projectId',
+      permission: 'projects:read',
+    },
+    handler: async () => {
+      return { project: null };
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed WorkOS FGA missing resources so authorization checks deny access instead of surfacing provider errors. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+- Updated dependencies [[`b661349`](https://github.com/mastra-ai/mastra/commit/b661349281514691db78941a9044e6e4f1cde7a7), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`271c044`](https://github.com/mastra-ai/mastra/commit/271c044f6b79ff38cfa3409f4385fbd26a0f3185), [`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2), [`816b974`](https://github.com/mastra-ai/mastra/commit/816b974b424e4a1bfae3af30cc41263b6f1c0344), [`b32ba5f`](https://github.com/mastra-ai/mastra/commit/b32ba5fde524b46a4ff1bdf38e30d62a2bb29b04), [`75c7c38`](https://github.com/mastra-ai/mastra/commit/75c7c38a4e9af9821931539dd339f57fcc6414e3)]:
+  - @mastra/core@1.35.0
+  - @mastra/auth@1.0.2
+
+## 1.4.0-alpha.0
+
+### Minor Changes
+
+- Added FGA route policy coverage controls, built-in resource route metadata resolution, and resolver hooks. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+  For example:
+
+  ```ts
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+  import type { FGARouteConfig, FGARouteResolver, IFGAProvider } from '@mastra/core/auth/ee';
+  import { createRoute } from '@mastra/server/server-adapter';
+
+  const routeFGA = {
+    'GET /billing/:accountId': {
+      resourceType: 'account',
+      resourceIdParam: 'accountId',
+      permission: 'billing:read',
+    },
+  } satisfies Record<string, FGARouteConfig>;
+
+  const resolveRouteFGA: FGARouteResolver = ({ route }) => routeFGA[`${route.method} ${route.path}`];
+
+  const fga: IFGAProvider = new MastraFGAWorkos({
+    apiKey: process.env.WORKOS_API_KEY!,
+    clientId: process.env.WORKOS_CLIENT_ID!,
+    requireForProtectedRoutes: true,
+    auditProtectedRoutes: 'warn',
+    resolveRouteFGA,
+    validatePermissions: async permissions => {
+      /* validate mappings */
+    },
+  });
+
+  export const getProjectRoute = createRoute({
+    method: 'GET',
+    path: '/projects/:projectId',
+    responseType: 'json',
+    requiresAuth: true,
+    fga: {
+      resourceType: 'project',
+      resourceIdParam: 'projectId',
+      permission: 'projects:read',
+    },
+    handler: async () => {
+      return { project: null };
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed WorkOS FGA missing resources so authorization checks deny access instead of surfacing provider errors. ([#16485](https://github.com/mastra-ai/mastra/pull/16485))
+
+- Updated dependencies [[`bad08e9`](https://github.com/mastra-ai/mastra/commit/bad08e99c5291884c3ac76743c78c74f53a302c2)]:
+  - @mastra/core@1.35.0-alpha.1
+  - @mastra/auth@1.0.2
+
+## 1.3.0
+
+### Minor Changes
+
+- Added optional `getAvailableRoles` and `getPermissionsForRole` methods to the WorkOS RBAC provider, so consumers can list configured roles and inspect their permissions through `@mastra/auth-workos`. ([#16578](https://github.com/mastra-ai/mastra/pull/16578))
+
+  ```typescript
+  import { MastraRBACWorkos } from '@mastra/auth-workos';
+
+  const rbac = new MastraRBACWorkos({
+    /* config */
+  });
+
+  // List all available roles
+  const roles = await rbac.getAvailableRoles();
+  // [{ id: 'admin', name: 'Admin' }, { id: 'member', name: 'Member' }]
+
+  // Get permissions for a specific role
+  const permissions = await rbac.getPermissionsForRole('member');
+  // ['agents:read', 'workflows:read']
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`20787de`](https://github.com/mastra-ai/mastra/commit/20787de5965234a1af28fe35f49437c537dbfa0d), [`784ad98`](https://github.com/mastra-ai/mastra/commit/784ad989549de91dc5d33ab8ef36caa6f7dcd34e), [`fceae1f`](https://github.com/mastra-ai/mastra/commit/fceae1f5f5db4722cb078a663c6eb4bd22944123), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`bf02acb`](https://github.com/mastra-ai/mastra/commit/bf02acbb8a6110f638ac844e89f1ebf04cb7fe74), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`bdb4cbf`](https://github.com/mastra-ai/mastra/commit/bdb4cbf8ba4b685d7481f28bb9dc3de6c79c9ed2), [`0fd3fbe`](https://github.com/mastra-ai/mastra/commit/0fd3fbe40fb63657aedd72f6e7b38c8e8ee6940d), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804), [`fed0475`](https://github.com/mastra-ai/mastra/commit/fed0475ccfea31e4fc251469ac05640d0742c1f0), [`0d53730`](https://github.com/mastra-ai/mastra/commit/0d53730c1ed87ef80c87caa5701c4170ea8028e6), [`522f44d`](https://github.com/mastra-ai/mastra/commit/522f44d947214bfc06cff50599bae1ef3494880d)]:
+  - @mastra/core@1.34.0
+  - @mastra/auth@1.0.2
+
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- Added optional `getAvailableRoles` and `getPermissionsForRole` methods to the WorkOS RBAC provider, so consumers can list configured roles and inspect their permissions through `@mastra/auth-workos`. ([#16578](https://github.com/mastra-ai/mastra/pull/16578))
+
+  ```typescript
+  import { MastraRBACWorkos } from '@mastra/auth-workos';
+
+  const rbac = new MastraRBACWorkos({
+    /* config */
+  });
+
+  // List all available roles
+  const roles = await rbac.getAvailableRoles();
+  // [{ id: 'admin', name: 'Admin' }, { id: 'member', name: 'Member' }]
+
+  // Get permissions for a specific role
+  const permissions = await rbac.getPermissionsForRole('member');
+  // ['agents:read', 'workflows:read']
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`090a647`](https://github.com/mastra-ai/mastra/commit/090a647ba5a66d36f203f9f49457e03a1ff4e6fb), [`f84447d`](https://github.com/mastra-ai/mastra/commit/f84447d6c80f3471836a9b300d246b331fb47e0d), [`a1a5b3e`](https://github.com/mastra-ai/mastra/commit/a1a5b3e42ab2ca5161ea21db59ebf28442680fa7), [`af84f57`](https://github.com/mastra-ai/mastra/commit/af84f571ed762e92e8e61c5f9a72363520914274), [`8b3c6f9`](https://github.com/mastra-ai/mastra/commit/8b3c6f90f7879833ba7d1bc70937e1d8f69d0804)]:
+  - @mastra/core@1.34.0-alpha.3
+  - @mastra/auth@1.0.2
+
+## 1.2.0
+
+### Minor Changes
+
+- Added `MastraFGAWorkos` provider for Fine-Grained Authorization using the WorkOS Authorization API. Implements `IFGAManager` interface with support for: ([#15410](https://github.com/mastra-ai/mastra/pull/15410))
+  - Authorization checks (`check()`, `require()`, `filterAccessible()`)
+  - Resource management (`createResource()`, `getResource()`, `listResources()`, `updateResource()`, `deleteResource()`)
+  - Role assignments (`assignRole()`, `removeRole()`, `listRoleAssignments()`)
+  - `resourceMapping` and `permissionMapping` for translating Mastra resource types and permissions to WorkOS resource type slugs and permission slugs
+  - Organization scoping that denies access when the user is not a member of the configured organization
+  - Bearer-token / verified JWT support that carries service-token FGA context such as organization membership IDs, while ignoring JWT-derived memberships unless organization claims are trusted
+  - Membership caching and batched accessible-resource discovery for lower per-request latency
+  - Tenant inference and parent-resource filtering for scoped access checks
+  - Paginated organization membership lookup and limited concurrent FGA checks when filtering accessible resources
+  - Typed permission constants accepted in `permissionMapping`
+
+  ```typescript
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+
+  const fga = new MastraFGAWorkos({
+    organizationId: 'org_abc123',
+    resourceMapping: {
+      agent: { fgaResourceType: 'team', deriveId: ctx => ctx.user.teamId },
+    },
+    permissionMapping: {
+      'agents:execute': 'manage-workflows',
+    },
+  });
+
+  // Check whether a user can execute an agent
+  const allowed = await fga.check(user, {
+    resource: { type: 'agent', id: 'my-agent' },
+    permission: 'agents:execute',
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6dcd65f`](https://github.com/mastra-ai/mastra/commit/6dcd65f2a34069e6dc43ba35f1d11119b9b40bef), [`86c0298`](https://github.com/mastra-ai/mastra/commit/86c0298e647306423c842f9d5ac827bd616bd13d), [`c05c9a1`](https://github.com/mastra-ai/mastra/commit/c05c9a13230988cef6d438a62f37760f31927bc7), [`ca28c23`](https://github.com/mastra-ai/mastra/commit/ca28c232a2f18801a6cf20fe053479237b4d4fb0), [`e24aacb`](https://github.com/mastra-ai/mastra/commit/e24aacba07bd66f5d95b636dc24016fca26b52cf), [`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`7fce309`](https://github.com/mastra-ai/mastra/commit/7fce30912b14170bfc41f0ac736cca0f39fe0cd4), [`1d64a76`](https://github.com/mastra-ai/mastra/commit/1d64a765861a0772ea187bab76e5ed37bf82d042), [`1c2dda8`](https://github.com/mastra-ai/mastra/commit/1c2dda805fbfccc0abf55d4cb20cc34402dc3f0c), [`c721164`](https://github.com/mastra-ai/mastra/commit/c7211643f7ac861f83b19a3757cc921487fc9d75), [`1b55954`](https://github.com/mastra-ai/mastra/commit/1b559541c1e08a10e49d01ffc51a634dfc37a286), [`7997c2e`](https://github.com/mastra-ai/mastra/commit/7997c2e55ddd121562a4098cd8d2b89c68433bf1), [`5adc55e`](https://github.com/mastra-ai/mastra/commit/5adc55e63407be8ee977914957d68bcc2a075ceb), [`7679a63`](https://github.com/mastra-ai/mastra/commit/7679a634eae8e8ca459fd87538fdf72b4389b07f), [`a0d9b6d`](https://github.com/mastra-ai/mastra/commit/a0d9b6d6b810aeaa9e177a0dcc99a4402e609634), [`e97ccb9`](https://github.com/mastra-ai/mastra/commit/e97ccb900f8b7a390ce82c9f8eb8d6eb2c5e3777), [`c5daf48`](https://github.com/mastra-ai/mastra/commit/c5daf48556e98c46ae06caf00f92c249912007e9), [`70017d7`](https://github.com/mastra-ai/mastra/commit/70017d72ab741b5d7040e2a15c251a317782e39e), [`cd96779`](https://github.com/mastra-ai/mastra/commit/cd9677937f113b2856dc8b9f3d4bdabcee58bb2e), [`b0c7022`](https://github.com/mastra-ai/mastra/commit/b0c70224f80dad7c0cdbfb22cbff22e0f75c064f), [`e4942bc`](https://github.com/mastra-ai/mastra/commit/e4942bc7fdc903572f7d84f26d5e15f9d39c763d)]:
+  - @mastra/core@1.32.0
+  - @mastra/auth@1.0.2
+
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- Added `MastraFGAWorkos` provider for Fine-Grained Authorization using the WorkOS Authorization API. Implements `IFGAManager` interface with support for: ([#15410](https://github.com/mastra-ai/mastra/pull/15410))
+  - Authorization checks (`check()`, `require()`, `filterAccessible()`)
+  - Resource management (`createResource()`, `getResource()`, `listResources()`, `updateResource()`, `deleteResource()`)
+  - Role assignments (`assignRole()`, `removeRole()`, `listRoleAssignments()`)
+  - `resourceMapping` and `permissionMapping` for translating Mastra resource types and permissions to WorkOS resource type slugs and permission slugs
+  - Organization scoping that denies access when the user is not a member of the configured organization
+  - Bearer-token / verified JWT support that carries service-token FGA context such as organization membership IDs, while ignoring JWT-derived memberships unless organization claims are trusted
+  - Membership caching and batched accessible-resource discovery for lower per-request latency
+  - Tenant inference and parent-resource filtering for scoped access checks
+  - Paginated organization membership lookup and limited concurrent FGA checks when filtering accessible resources
+  - Typed permission constants accepted in `permissionMapping`
+
+  ```typescript
+  import { MastraFGAWorkos } from '@mastra/auth-workos';
+
+  const fga = new MastraFGAWorkos({
+    organizationId: 'org_abc123',
+    resourceMapping: {
+      agent: { fgaResourceType: 'team', deriveId: ctx => ctx.user.teamId },
+    },
+    permissionMapping: {
+      'agents:execute': 'manage-workflows',
+    },
+  });
+
+  // Check whether a user can execute an agent
+  const allowed = await fga.check(user, {
+    resource: { type: 'agent', id: 'my-agent' },
+    permission: 'agents:execute',
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`86c0298`](https://github.com/mastra-ai/mastra/commit/86c0298e647306423c842f9d5ac827bd616bd13d), [`7fce309`](https://github.com/mastra-ai/mastra/commit/7fce30912b14170bfc41f0ac736cca0f39fe0cd4), [`7997c2e`](https://github.com/mastra-ai/mastra/commit/7997c2e55ddd121562a4098cd8d2b89c68433bf1), [`e97ccb9`](https://github.com/mastra-ai/mastra/commit/e97ccb900f8b7a390ce82c9f8eb8d6eb2c5e3777), [`c5daf48`](https://github.com/mastra-ai/mastra/commit/c5daf48556e98c46ae06caf00f92c249912007e9), [`cd96779`](https://github.com/mastra-ai/mastra/commit/cd9677937f113b2856dc8b9f3d4bdabcee58bb2e)]:
+  - @mastra/core@1.32.0-alpha.2
+  - @mastra/auth@1.0.2
+
 ## 1.1.2
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 import { MastraError } from '../../error/index.js';
+import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
+import type { DatasetRecord } from '../../storage/types';
+import { executeTarget } from './executor';
+import type { Target, ExecutionResult } from './executor';
+import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
+import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
 /** Unified item shape used within experiment execution (bridges inline + versioned data) */
 type ExperimentItem = {
@@ -9,12 +15,11 @@ type ExperimentItem = {
   groundTruth?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  /** Resume data for suspended workflow steps, keyed by step ID */
+  resumeSteps?: Record<string, unknown>;
+  /** Flat resume data for single-step suspend workflows */
+  resumeData?: unknown;
 };
-import type { DatasetRecord } from '../../storage/types';
-import { executeTarget } from './executor';
-import type { Target, ExecutionResult } from './executor';
-import { resolveScorers, runScorersForItem } from './scorer';
-import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
 // Re-export types and helpers
 export type {
@@ -117,7 +122,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           datasetVersion: null,
           input: dataItem.input,
           groundTruth: dataItem.groundTruth,
+          requestContext: dataItem.requestContext,
           metadata: dataItem.metadata,
+          resumeSteps: dataItem.resumeSteps,
+          resumeData: dataItem.resumeData,
         };
       });
       datasetVersion = null;
@@ -222,11 +230,31 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     throw err; // unreachable, but satisfies TS control flow
   }
 
+  // Normalize categorized scorer config (AgentScorerConfig | WorkflowScorerConfig) to a flat
+  // array so the existing merge/dedup/resolve logic below is unchanged.
+  // Trajectory dispatch is handled per-scorer in runScorerSafe based on scorer.type.
+  // Step scorers are kept separate (keyed by step ID) and dispatched per-step
+  // after the flat scorers run, mirroring runEvals.
+  let stepsConfigInput: Record<string, (MastraScorer<any, any, any, any> | string)[]> | undefined;
+  const flatScorerInput: (MastraScorer<any, any, any, any> | string)[] | undefined = (() => {
+    if (!scorerInput) return undefined;
+    if (Array.isArray(scorerInput)) return scorerInput;
+    // Categorized shape — flatten flat-style buckets into one array, keep steps separate
+    const flat: (MastraScorer<any, any, any, any> | string)[] = [];
+    if ('agent' in scorerInput && scorerInput.agent) flat.push(...scorerInput.agent);
+    if ('workflow' in scorerInput && scorerInput.workflow) flat.push(...scorerInput.workflow);
+    if ('trajectory' in scorerInput && scorerInput.trajectory) flat.push(...scorerInput.trajectory);
+    if ('steps' in scorerInput && scorerInput.steps) {
+      stepsConfigInput = scorerInput.steps;
+    }
+    return flat;
+  })();
+
   // Merge dataset-attached scorers with explicitly provided scorers, then deduplicate
-  let mergedScorerInput = scorerInput;
+  let mergedScorerInput = flatScorerInput;
   const datasetScorerIds = datasetRecord?.scorerIds ?? [];
   if (datasetScorerIds.length > 0) {
-    mergedScorerInput = [...(scorerInput ?? []), ...datasetScorerIds];
+    mergedScorerInput = [...(flatScorerInput ?? []), ...datasetScorerIds];
   }
   if (mergedScorerInput && mergedScorerInput.length > 0) {
     const seen = new Set<string>();
@@ -243,6 +271,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
   // Resolve scorers
   const scorers = resolveScorers(mastra, mergedScorerInput);
+  // Resolve per-step scorers (keyed by step ID) for workflow targets
+  const stepScorers = resolveStepScorers(mastra, stepsConfigInput);
 
   // 5. Create experiment record (if storage available and not pre-created)
   if (experimentsStore) {
@@ -345,7 +375,16 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         };
 
         // Run scorers (inline, after target completes)
-        const itemScores = await runScorersForItem(
+        const workflowData =
+          execResult.stepResults || execResult.stepExecutionPath
+            ? {
+                stepResults: execResult.stepResults,
+                stepExecutionPath: execResult.stepExecutionPath,
+                spanId: execResult.spanId,
+              }
+            : undefined;
+
+        const flatScores = await runScorersForItem(
           scorers,
           item,
           execResult.output,
@@ -357,7 +396,24 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           execResult.scorerInput,
           execResult.scorerOutput,
           execResult.traceId ?? undefined,
+          workflowData,
         );
+
+        // Per-step scorer dispatch (mirrors runEvals). Only meaningful for workflow
+        // targets; for non-workflow targets stepScorers will be empty.
+        const stepScores = await runStepScorersForItem(
+          stepScorers,
+          item,
+          workflowData,
+          storage ?? null,
+          experimentId,
+          targetType ?? 'agent',
+          targetId ?? 'inline',
+          item.id,
+          execResult.traceId ?? undefined,
+        );
+
+        const itemScores = [...flatScores, ...stepScores];
 
         // Persist result with scores (if storage available)
         if (experimentsStore) {

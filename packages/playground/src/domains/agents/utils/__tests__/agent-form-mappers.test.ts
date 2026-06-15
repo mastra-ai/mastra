@@ -110,12 +110,12 @@ describe('splitModelId / joinModelId round-trip', () => {
 // transformIntegrationToolsForApi / normalizeIntegrationToolsToRecord
 // ---------------------------------------------------------------------------
 describe('transformIntegrationToolsForApi', () => {
-  it('returns undefined for undefined', () => {
-    expect(transformIntegrationToolsForApi(undefined)).toBeUndefined();
+  it('returns empty object for undefined', () => {
+    expect(transformIntegrationToolsForApi(undefined)).toEqual({});
   });
 
-  it('returns undefined for empty object', () => {
-    expect(transformIntegrationToolsForApi({})).toBeUndefined();
+  it('returns empty object for empty object', () => {
+    expect(transformIntegrationToolsForApi({})).toEqual({});
   });
 
   it('skips entries without colon separator', () => {
@@ -170,7 +170,7 @@ describe('integration tools round-trip', () => {
       'github:listRepos': { description: 'List repos' },
       'slack:sendMessage': { description: undefined },
     };
-    const nested = transformIntegrationToolsForApi(flat)!;
+    const nested = transformIntegrationToolsForApi(flat);
     const backToFlat = normalizeIntegrationToolsToRecord(nested);
     expect(backToFlat).toEqual({
       'github:listRepos': { description: 'List repos', rules: undefined },

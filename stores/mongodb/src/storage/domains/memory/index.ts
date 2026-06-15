@@ -888,11 +888,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const collection = await this.getCollection(TABLE_THREADS);
       const result = await collection.findOne<any>({ id: threadId });
-      if (!result) {
+      if (!result || (resourceId !== undefined && result.resourceId !== resourceId)) {
         return null;
       }
 
@@ -1071,6 +1077,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       });
     }
 
+    const now = new Date();
     const updatedThread = {
       ...thread,
       title,
@@ -1078,6 +1085,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
+      updatedAt: now,
     };
 
     try {
@@ -1088,6 +1096,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           $set: {
             title,
             metadata: updatedThread.metadata,
+            updatedAt: now,
           },
         },
       );

@@ -5,7 +5,7 @@ import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
-import { resolveObservabilityContext } from '../../observability';
+import { InternalSpans, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
@@ -139,6 +139,9 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
       name: 'Prompt Injection Detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
+      options: {
+        tracingPolicy: { internal: InternalSpans.ALL },
+      },
     });
   }
 

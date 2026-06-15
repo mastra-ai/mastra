@@ -77,7 +77,19 @@ export type {
 } from './model/base.types';
 export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } from './model/shared.types';
 export { ModelRouterLanguageModel, defaultGateways } from './model/router';
-export { GatewayRegistry, PROVIDER_REGISTRY, parseModelString, getProviderConfig } from './model/provider-registry.js';
+export {
+  GatewayRegistry,
+  PROVIDER_REGISTRY,
+  parseModelString,
+  getProviderConfig,
+  modelSupportsAttachments,
+} from './model/provider-registry.js';
+export type {
+  ModelRouterModelId,
+  Provider,
+  ModelForProvider,
+  AttachmentCapabilities,
+} from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
 
 export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;
@@ -146,7 +158,13 @@ export type LLMStreamObjectOptions<Z extends StandardSchemaWithJSON | undefined 
 } & LLMInnerStreamOptions<Z> &
   DefaultLLMStreamObjectOptions;
 
-export type { ProviderConfig, GatewayLanguageModel } from './model/gateways/base';
+export type {
+  ProviderConfig,
+  GatewayLanguageModel,
+  MastraModelGatewayInterface,
+  GatewayAuthRequest,
+  GatewayAuthResult,
+} from './model/gateways/base';
 export {
   MastraModelGateway,
   NetlifyGateway,
@@ -154,7 +172,13 @@ export {
   AzureOpenAIGateway,
   MastraGateway,
 } from './model/gateways';
-export type { AzureOpenAIGatewayConfig, MastraGatewayConfig } from './model/gateways';
+export type {
+  AzureAccessToken,
+  AzureOpenAIGatewayConfig,
+  AzureTokenCredential,
+  MastraGatewayConfig,
+} from './model/gateways';
 export { GATEWAY_AUTH_HEADER } from './model/gateways/constants';
+export { resolveModelAuth, type ResolveModelAuthArgs } from './model/model-auth-resolver';
 
 export { ModelRouterEmbeddingModel, type EmbeddingModelId, EMBEDDING_MODELS, type EmbeddingModelInfo } from './model';

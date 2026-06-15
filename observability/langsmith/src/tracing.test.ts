@@ -50,6 +50,7 @@ describe('TestLangSmithExporter', () => {
 
     // Set up mocks for RunTree
     mockRunTree = {
+      id: 'ls-run-uuid',
       createChild: vi.fn(),
       postRun: vi.fn().mockResolvedValue(undefined),
       patchRun: vi.fn().mockResolvedValue(undefined),
@@ -1399,6 +1400,141 @@ describe('TestLangSmithExporter', () => {
       // Verify langsmith key is omitted
       const call = MockRunTreeClass.mock.calls[0][0];
       expect(call.metadata.langsmith).toBeUndefined();
+    });
+  });
+
+  describe('onScoreEvent', () => {
+    beforeEach(() => {
+      mockClient.createFeedback = vi.fn().mockResolvedValue({});
+    });
+
+    it('forwards to client.createFeedback using the LangSmith runId allocated for the span', async () => {
+      // First create the LangSmith run for this Mastra span — this is what populates
+      // the spanId → langsmithRunId mapping the onScoreEvent path looks up.
+      const span = createMockSpan({ id: 'mastra-span-1', name: 'agent', isRoot: true, attributes: {} });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-1',
+          timestamp: new Date(),
+          traceId: 'mastra-trace-1',
+          spanId: 'mastra-span-1',
+          scorerId: 'accuracy',
+          scorerName: 'Accuracy',
+          scoreSource: 'live',
+          score: 0.9,
+          reason: 'good',
+          metadata: { foo: 'bar' },
+        },
+      } as any);
+
+      expect(mockClient.createFeedback).toHaveBeenCalledTimes(1);
+      const [runId, key, opts] = mockClient.createFeedback.mock.calls[0];
+      // Assert the LangSmith-allocated runId (from mockRunTree.id), NOT the Mastra spanId.
+      expect(runId).toBe('ls-run-uuid');
+      expect(key).toBe('Accuracy');
+      expect(opts).toMatchObject({
+        score: 0.9,
+        comment: 'good',
+        feedbackId: 'sc-1',
+      });
+      expect(opts.sourceInfo).toMatchObject({ scorerId: 'accuracy', scoreSource: 'live', foo: 'bar' });
+    });
+
+    it('does not let user metadata overwrite authoritative scorerId/scoreSource in sourceInfo', async () => {
+      const span = createMockSpan({ id: 'mastra-span-1', name: 'agent', isRoot: true, attributes: {} });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-override',
+          timestamp: new Date(),
+          traceId: 'mastra-trace-1',
+          spanId: 'mastra-span-1',
+          scorerId: 'accuracy',
+          scoreSource: 'live',
+          score: 0.9,
+          metadata: { scorerId: 'evil', scoreSource: 'evil', foo: 'bar' },
+        },
+      } as any);
+
+      const [, , opts] = mockClient.createFeedback.mock.calls.at(-1)!;
+      expect(opts.sourceInfo).toMatchObject({
+        scorerId: 'accuracy',
+        scoreSource: 'live',
+        foo: 'bar',
+      });
+    });
+
+    it('drops scores with no spanId (trace-level scoring is not yet supported)', async () => {
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-2',
+          timestamp: new Date(),
+          traceId: 'trace-only',
+          scorerId: 'x',
+          score: 0.5,
+        },
+      } as any);
+
+      expect(mockClient.createFeedback).not.toHaveBeenCalled();
+    });
+
+    it('drops scores for spans the exporter has not seen yet', async () => {
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: {
+          scoreId: 'sc-3',
+          timestamp: new Date(),
+          traceId: 'trace-1',
+          spanId: 'never-emitted-span',
+          scorerId: 'x',
+          score: 0.5,
+        },
+      } as any);
+
+      expect(mockClient.createFeedback).not.toHaveBeenCalled();
+    });
+
+    it('evicts the oldest spanId mapping once the cache cap is exceeded', async () => {
+      const cappedExporter = new TestLangSmithExporter({
+        apiKey: 'test-api-key',
+        runIdCacheMaxEntries: 2,
+      });
+
+      const emit = (id: string) =>
+        cappedExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_STARTED,
+          exportedSpan: createMockSpan({ id, name: id, type: SpanType.GENERIC, isRoot: true, attributes: {} }),
+        });
+
+      // Three spans at cap=2 → the oldest (span-a) must be evicted.
+      await emit('span-a');
+      await emit('span-b');
+      await emit('span-c');
+
+      const score = (spanId: string) => ({
+        type: 'score',
+        score: {
+          scoreId: `sc-${spanId}`,
+          timestamp: new Date(),
+          traceId: 't',
+          spanId,
+          scorerId: 'x',
+          score: 1,
+        },
+      });
+
+      await cappedExporter.onScoreEvent(score('span-a') as any);
+      expect(mockClient.createFeedback).not.toHaveBeenCalled();
+
+      await cappedExporter.onScoreEvent(score('span-b') as any);
+      await cappedExporter.onScoreEvent(score('span-c') as any);
+      expect(mockClient.createFeedback).toHaveBeenCalledTimes(2);
     });
   });
 });

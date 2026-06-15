@@ -1,1 +1,1 @@
-export { usePlaygroundStore, useIsDarkMode, type PlaygroundTheme } from '@mastra/playground-ui';
+export { usePlaygroundStore, useTheme, type Theme, type ResolvedTheme } from '@mastra/playground-ui';

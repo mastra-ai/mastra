@@ -13,7 +13,6 @@ import type {
   OAuthClientInformation,
   OAuthClientInformationFull,
   OAuthTokens,
-  AuthorizationServerMetadata,
 } from '../shared/oauth-types.js';
 
 /**
@@ -277,24 +276,9 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
   }
 
   /**
-   * Optional: Custom client authentication for token requests.
-   * Uses default behavior if not implemented.
-   */
-  async addClientAuthentication?(
-    _headers: Headers,
-    _params: URLSearchParams,
-    _url: string | URL,
-    _metadata?: AuthorizationServerMetadata,
-  ): Promise<void> {
-    // Use default MCP SDK behavior
-  }
-
-  /**
    * Invalidate credentials when server indicates they're no longer valid.
    */
-  async invalidateCredentials(
-    scope: 'all' | 'client' | 'tokens' | 'verifier',
-  ): Promise<void> {
+  async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier'): Promise<void> {
     switch (scope) {
       case 'all':
         await this.storage.delete('tokens');

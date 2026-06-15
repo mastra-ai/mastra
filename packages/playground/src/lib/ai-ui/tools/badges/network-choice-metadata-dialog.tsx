@@ -1,6 +1,6 @@
 import {
+  Button,
   CodeEditor,
-  IconButton,
   Txt,
   Dialog,
   DialogContent,
@@ -68,9 +68,9 @@ export const NetworkChoiceMetadataDialogTrigger = ({
   const [isOpen, setIsOpen] = useState(false);
   return (
     <>
-      <IconButton variant="light" size="md" tooltip="Show selection reason" onClick={() => setIsOpen(s => !s)}>
+      <Button variant="default" size="icon-md" tooltip="Show selection reason" onClick={() => setIsOpen(s => !s)}>
         <Share2 className="text-neutral3 size-5" />
-      </IconButton>
+      </Button>
 
       <NetworkChoiceMetadata
         selectionReason={selectionReason || ''}

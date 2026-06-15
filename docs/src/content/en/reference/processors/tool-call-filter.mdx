@@ -21,6 +21,16 @@ const filterAll = new ToolCallFilter()
 const filterSpecific = new ToolCallFilter({
   exclude: ['searchDatabase', 'sendEmail'],
 })
+
+// Enable filtering during agent loops and keep the two most recent tool-producing steps
+const filterAfterRecentTools = new ToolCallFilter({
+  filterAfterToolSteps: 2,
+})
+
+// Preserve compact model-facing output for filtered completed tool results
+const filterWithCompactToolHistory = new ToolCallFilter({
+  preserveModelOutput: true,
+})
 ```
 
 ## Constructor parameters
@@ -42,6 +52,21 @@ const filterSpecific = new ToolCallFilter({
             description:
               'List of specific tool names to exclude. If not provided or undefined, all tool calls are excluded',
             isOptional: true,
+          },
+          {
+            name: 'filterAfterToolSteps',
+            type: 'number',
+            description:
+              'Enables filtering during agent loops and preserves tool calls and results from this many recent tool-producing steps. If undefined, step filtering is disabled',
+            isOptional: true,
+          },
+          {
+            name: 'preserveModelOutput',
+            type: 'boolean',
+            description:
+              'Preserves compact model-facing output from completed filtered tool results with providerMetadata.mastra.modelOutput. Raw tool args and raw results are removed',
+            isOptional: true,
+            defaultValue: 'false',
           },
         ],
       },
@@ -72,8 +97,50 @@ const filterSpecific = new ToolCallFilter({
     description: 'Processes input messages to filter out tool calls and their results based on configuration',
     isOptional: false,
   },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
+    description:
+      'Processes agent loop step input when filterAfterToolSteps is configured. Returns no changes when step filtering is disabled',
+    isOptional: false,
+  },
 ]}
 />
+
+## Step filtering
+
+By default, `ToolCallFilter` filters only the initial input before the agent loop starts. Set `filterAfterToolSteps` to also filter during each loop step.
+
+`filterAfterToolSteps` counts tool-producing steps. For example, `filterAfterToolSteps: 2` keeps tool calls and results from the two most recent tool-producing steps and filters older tool calls and results. Non-tool text remains in context.
+
+Set `filterAfterToolSteps: 0` to filter all previous tool calls and results on each step.
+
+```typescript
+const filter = new ToolCallFilter({
+  filterAfterToolSteps: 2,
+})
+```
+
+## Preserve compact model output
+
+Set `preserveModelOutput: true` to retain compact `toModelOutput` history for completed tool results that the filter removes. This keeps the model-facing output as text in the prompt while removing the raw `toolInvocation.args` and raw `toolInvocation.result` payloads.
+
+Only completed tool results with `providerMetadata.mastra.modelOutput` are preserved. Tool calls, incomplete results, and results without stored model output are still filtered.
+
+```typescript
+const filter = new ToolCallFilter({
+  preserveModelOutput: true,
+})
+```
+
+Combine `preserveModelOutput` with `exclude` to preserve compact output only for filtered tools:
+
+```typescript
+const filter = new ToolCallFilter({
+  exclude: ['searchDatabase'],
+  preserveModelOutput: true,
+})
+```
 
 ## Extended usage example
 
@@ -84,7 +151,7 @@ import { ToolCallFilter } from '@mastra/core/processors'
 export const agent = new Agent({
   name: 'filtered-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: {
     searchDatabase,
     sendEmail,
@@ -109,7 +176,7 @@ import { ToolCallFilter } from '@mastra/core/processors'
 export const agent = new Agent({
   name: 'no-tools-context-agent',
   instructions: 'You are a helpful assistant',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: {
     searchDatabase,
     sendEmail,

@@ -1,4 +1,5 @@
 import { TripWire } from '../agent/trip-wire';
+import type { ActorSignal } from '../auth/ee';
 import { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { SerializedError } from '../error';
@@ -229,6 +230,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       startedAt: number;
       abortController: AbortController;
       requestContext: RequestContext;
+      actor?: ActorSignal;
       outputWriter?: OutputWriter;
       stepSpan?: Span<SpanType.WORKFLOW_STEP>;
       perStep?: boolean;
@@ -615,6 +617,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * Used by durable execution engines to persist context across step replays.
    */
   serializeRequestContext(requestContext: RequestContext): Record<string, any> {
+    if (typeof requestContext.toJSON === 'function') {
+      return requestContext.toJSON();
+    }
     const obj: Record<string, any> = {};
     requestContext.forEach((value, key) => {
       obj[key] = value;
@@ -696,6 +701,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       delay?: number;
     };
     requestContext: RequestContext;
+    actor?: ActorSignal;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     abortController: AbortController;
     outputWriter?: OutputWriter;
@@ -800,6 +806,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         abortController: params.abortController,
         pubsub: params.pubsub,
         requestContext: currentRequestContext,
+        actor: params.actor,
         outputWriter: params.outputWriter,
         disableScorers,
         perStep,

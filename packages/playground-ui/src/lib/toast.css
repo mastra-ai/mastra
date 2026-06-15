@@ -1,0 +1,126 @@
+/* Toast tokens live here — only consumed by `.mastra-toaster` so they don't need to ship in
+   index.css for every component. The bg/border use color-mix on theme-scoped notice tokens,
+   so the single :root declaration computes correctly under `html.light` too. Only the shadow
+   needs an explicit per-theme override (light gets a gloss highlight, dark stays elevation-only). */
+:root {
+  --toast-success-bg: color-mix(in srgb, var(--notice-success) 20%, var(--surface1));
+  --toast-success-border: color-mix(in srgb, var(--notice-success) 45%, var(--surface1));
+  --toast-destructive-bg: color-mix(in srgb, var(--notice-destructive) 20%, var(--surface1));
+  --toast-destructive-border: color-mix(in srgb, var(--notice-destructive) 45%, var(--surface1));
+  --toast-warning-bg: color-mix(in srgb, var(--notice-warning) 20%, var(--surface1));
+  --toast-warning-border: color-mix(in srgb, var(--notice-warning) 45%, var(--surface1));
+  --toast-info-bg: color-mix(in srgb, var(--notice-info) 20%, var(--surface1));
+  --toast-info-border: color-mix(in srgb, var(--notice-info) 45%, var(--surface1));
+  --toast-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 12px 32px -12px oklch(0 0 0 / 0.55);
+}
+html.light {
+  --toast-shadow:
+    inset 0 1px 0 0 oklch(1 0 0 / 0.6), 0 1px 2px oklch(0 0 0 / 0.04), 0 12px 32px -12px oklch(0 0 0 / 0.14);
+}
+
+/* Mastra toast theming — applied to sonner's Toaster wrapper via className.
+   Sonner reads its per-type colors from --success-bg / --error-bg / etc. (richColors mode).
+   The `[data-sonner-toaster][data-sonner-theme]` prefix matches sonner's own theme rules
+   (specificity 0,2,0) and adds our class for (0,3,0) so our notice tokens win without !important. */
+[data-sonner-toaster][data-sonner-theme].mastra-toaster {
+  --normal-bg: var(--surface3);
+  --normal-text: var(--neutral5);
+  --normal-border: var(--border1);
+  --success-bg: var(--toast-success-bg);
+  --success-text: var(--notice-success-fg);
+  --success-border: var(--toast-success-border);
+  --error-bg: var(--toast-destructive-bg);
+  --error-text: var(--notice-destructive-fg);
+  --error-border: var(--toast-destructive-border);
+  --warning-bg: var(--toast-warning-bg);
+  --warning-text: var(--notice-warning-fg);
+  --warning-border: var(--toast-warning-border);
+  --info-bg: var(--toast-info-bg);
+  --info-text: var(--notice-info-fg);
+  --info-border: var(--toast-info-border);
+  --border-radius: var(--radius-xl);
+
+  /* Move the close button to the top-right corner. Sonner's defaults pin it to the LEFT in LTR;
+     we flip start/end and mirror the overhang transform so the chip sits in the same position
+     RTL would normally use. Keeps the icon and the close affordance from competing visually. */
+  --toast-close-button-start: unset;
+  --toast-close-button-end: 0;
+  --toast-close-button-transform: translate(35%, -35%);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast] {
+  box-shadow: var(--toast-shadow);
+}
+
+/* Close button — size + transitions are shared. Per-variant rules below own bg/border colors
+   and beat sonner's per-type rules on specificity (we add .mastra-toaster + [data-type] for 0,5,0). */
+[data-sonner-toaster].mastra-toaster [data-sonner-toast] [data-close-button] {
+  width: 22px;
+  height: 22px;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.25);
+  transition:
+    background-color 160ms var(--ease-out-custom),
+    border-color 160ms var(--ease-out-custom),
+    box-shadow 160ms var(--ease-out-custom),
+    transform 200ms var(--ease-out-custom);
+}
+
+/* Per-variant tint cascade. Three vars per variant — all theme-aware via the underlying tokens:
+     --close-tint     → text/icon color (always strong contrast in both themes)
+     --close-bg       → chip surface, equal to the toast's own bg so the chip blends at rest
+     --close-border   → chip border, equal to the toast's own border so the chip blends at rest */
+[data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]) {
+  --close-tint: var(--neutral5);
+  --close-bg: var(--normal-bg);
+  --close-border: var(--normal-border);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='success'] {
+  --close-tint: var(--notice-success-fg);
+  --close-bg: var(--success-bg);
+  --close-border: var(--success-border);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='error'] {
+  --close-tint: var(--notice-destructive-fg);
+  --close-bg: var(--error-bg);
+  --close-border: var(--error-border);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='warning'] {
+  --close-tint: var(--notice-warning-fg);
+  --close-bg: var(--warning-bg);
+  --close-border: var(--warning-border);
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type='info'] {
+  --close-tint: var(--notice-info-fg);
+  --close-bg: var(--info-bg);
+  --close-border: var(--info-border);
+}
+
+/* Default state: chip mirrors the toast — only the X icon shows. `color` is set explicitly
+   because sonner's theme-conditional color rule won't apply when the Toaster's `theme` prop
+   doesn't match the app theme; var(--close-tint) flips correctly via the underlying tokens. */
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type] [data-close-button],
+[data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]) [data-close-button] {
+  background: var(--close-bg);
+  border-color: var(--close-border);
+  color: var(--close-tint);
+}
+
+/* Hover/focus: chip lifts — bg shifts one tonal step toward the tint, border bumps to a
+   visible-but-soft 55%-mix of the tint. Smooth in dark mode (no stark white edge). */
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type]:hover [data-close-button]:hover,
+[data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]):hover [data-close-button]:hover,
+[data-sonner-toaster].mastra-toaster [data-sonner-toast][data-type] [data-close-button]:focus-visible,
+[data-sonner-toaster].mastra-toaster [data-sonner-toast]:not([data-type]) [data-close-button]:focus-visible {
+  background: color-mix(in srgb, var(--close-bg), var(--close-tint) 14%);
+  border-color: color-mix(in srgb, var(--close-tint) 55%, transparent);
+  box-shadow: 0 4px 12px oklch(0 0 0 / 0.3);
+  transform: var(--toast-close-button-transform) scale(1.08);
+}
+
+[data-sonner-toaster].mastra-toaster [data-sonner-toast] [data-close-button]:active {
+  transform: var(--toast-close-button-transform) scale(0.94);
+  transition-duration: 80ms;
+}
+[data-sonner-toaster].mastra-toaster [data-sonner-toast] [data-close-button] svg {
+  width: 13px;
+  height: 13px;
+}

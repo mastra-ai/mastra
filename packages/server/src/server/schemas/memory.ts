@@ -23,94 +23,109 @@ export const optionalAgentIdQuerySchema = z.object({
 
 /**
  * Storage order by configuration for threads and agents (have both createdAt and updatedAt)
- * Handles JSON parsing from query strings
+ * Handles JSON parsing from query strings.
+ *
+ * The inner object is wrapped in `.optional()` so the preprocess can yield
+ * `undefined` (e.g. when a legacy client sends a bare string like
+ * `?orderBy=updatedAt`) without tripping a "expected object, received undefined"
+ * Zod error. Without that inner `.optional()`, valid optional query usage
+ * regresses into a hard 400.
  */
-const storageOrderBySchema = z.preprocess(
-  val => {
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch {
-        return undefined;
+const storageOrderBySchema = z
+  .preprocess(
+    val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          return undefined;
+        }
       }
-    }
-    return val;
-  },
-  z
-    .object({
-      field: z.enum(['createdAt', 'updatedAt']).optional(),
-      direction: z.enum(['ASC', 'DESC']).optional(),
-    })
-    .optional(),
-);
+      return val;
+    },
+    z
+      .object({
+        field: z.enum(['createdAt', 'updatedAt']).optional(),
+        direction: z.enum(['ASC', 'DESC']).optional(),
+      })
+      .optional(),
+  )
+  .optional();
 
 /**
  * Storage order by configuration for messages (only have createdAt)
- * Handles JSON parsing from query strings
+ * Handles JSON parsing from query strings. See `storageOrderBySchema` for why
+ * the inner object schema is also `.optional()`.
  */
-const messageOrderBySchema = z.preprocess(
-  val => {
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch {
-        return undefined;
+const messageOrderBySchema = z
+  .preprocess(
+    val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          return undefined;
+        }
       }
-    }
-    return val;
-  },
-  z
-    .object({
-      field: z.enum(['createdAt']).optional(),
-      direction: z.enum(['ASC', 'DESC']).optional(),
-    })
-    .optional(),
-);
+      return val;
+    },
+    z
+      .object({
+        field: z.enum(['createdAt']).optional(),
+        direction: z.enum(['ASC', 'DESC']).optional(),
+      })
+      .optional(),
+  )
+  .optional();
 
 /**
  * Include schema for message listing - handles JSON parsing from query strings
  */
-const includeSchema = z.preprocess(
-  val => {
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch {
-        // Return invalid string to fail validation (z.array will reject string type)
-        return val;
+const includeSchema = z
+  .preprocess(
+    val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.array will reject string type)
+          return val;
+        }
       }
-    }
-    return val;
-  },
-  z
-    .array(
+      return val;
+    },
+    z.array(
       z.object({
         id: z.string(),
         threadId: z.string().optional(),
         withPreviousMessages: z.number().optional(),
         withNextMessages: z.number().optional(),
       }),
-    )
-    .optional(),
-);
+    ),
+  )
+  .optional();
 
 /**
  * Filter schema for message listing - handles JSON parsing from query strings
  */
-const filterSchema = z.preprocess(
-  val => {
-    if (typeof val === 'string') {
-      try {
-        return JSON.parse(val);
-      } catch {
-        // Return invalid string to fail validation (z.object will reject string type)
-        return val;
+const filterSchema = z
+  .preprocess(
+    val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.object will reject string type)
+          return val;
+        }
       }
-    }
-    return val;
-  },
-  z
-    .object({
+      return val;
+    },
+    z.object({
       dateRange: z
         .object({
           start: z.coerce.date().optional(),
@@ -120,24 +135,30 @@ const filterSchema = z.preprocess(
         })
         .optional(),
       roles: z.array(z.string()).optional(),
-    })
-    .optional(),
-);
+    }),
+  )
+  .optional();
 
 /**
  * Memory config schema - handles JSON parsing from query strings
  */
-const memoryConfigSchema = z.preprocess(val => {
-  if (typeof val === 'string') {
-    try {
-      return JSON.parse(val);
-    } catch {
-      // Return invalid string to fail validation (z.record will reject string type)
+const memoryConfigSchema = z
+  .preprocess(
+    val => {
+      if (val === undefined) return val;
+      if (typeof val === 'string') {
+        try {
+          return JSON.parse(val);
+        } catch {
+          // Return invalid string to fail validation (z.record will reject string type)
+          return val;
+        }
+      }
       return val;
-    }
-  }
-  return val;
-}, z.record(z.string(), z.unknown()).optional());
+    },
+    z.record(z.string(), z.unknown()),
+  )
+  .optional();
 
 /**
  * Thread object structure
@@ -182,30 +203,69 @@ export const getMemoryStatusQuerySchema = agentIdQuerySchema.extend({
 export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 
 /**
+ * Inner schema for GET /memory/threads. The outer `listThreadsQuerySchema`
+ * wraps this with a back-compat preprocess (see below) that rewrites the
+ * legacy `?orderBy=<field>&sortDirection=<dir>` shape — emitted by
+ * `@mastra/client-js` < 1.18 (e.g. mobile clients pinned to 1.4.x) — into the
+ * current `{ orderBy: { field, direction } }` object shape.
+ */
+const listThreadsQueryInnerSchema = createPagePaginationSchema(100).extend({
+  agentId: z.string().optional(),
+  resourceId: z.string().optional(),
+  metadata: z
+    .preprocess(
+      val => {
+        if (val === undefined) return val;
+        if (typeof val === 'string') {
+          try {
+            return JSON.parse(val);
+          } catch {
+            // Return invalid string to fail validation (z.record will reject string type)
+            return val;
+          }
+        }
+        return val;
+      },
+      z.record(z.string(), z.any()),
+    )
+    .optional(),
+  orderBy: storageOrderBySchema,
+});
+
+/**
  * GET /memory/threads
  * agentId is optional - can use storage fallback when not provided
  * resourceId is optional - when omitted, returns all threads
  * metadata is optional - filters threads by metadata key-value pairs (AND logic)
+ *
+ * Accepts both the current shape (`orderBy[field]=...&orderBy[direction]=...`)
+ * and the legacy shape used by `@mastra/client-js` < 1.18
+ * (`orderBy=<field>&sortDirection=<dir>`). The legacy shape is fused into the
+ * current shape before schema validation, so existing pinned clients continue
+ * to work without server-side breakage.
  */
-export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
-  agentId: z.string().optional(),
-  resourceId: z.string().optional(),
-  metadata: z.preprocess(
-    val => {
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val);
-        } catch {
-          // Return invalid string to fail validation (z.record will reject string type)
-          return val;
-        }
-      }
-      return val;
+export const listThreadsQuerySchema = z.preprocess(val => {
+  if (val === null || typeof val !== 'object' || Array.isArray(val)) return val;
+  const record = val as Record<string, unknown>;
+  const rawOrderBy = record.orderBy;
+  // Only rewrite the legacy bare-string shape. Object / bracket-notation /
+  // JSON-stringified orderBy is left alone and handled by storageOrderBySchema.
+  if (typeof rawOrderBy !== 'string') return val;
+  // A JSON-stringified object is the current "stringified" shape, not legacy —
+  // let storageOrderBySchema's preprocess parse it.
+  const trimmed = rawOrderBy.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return val;
+  // Legacy shape detected: fuse into `{ field, direction }`.
+  const direction = typeof record.sortDirection === 'string' ? record.sortDirection : undefined;
+  const { sortDirection: _legacyDir, ...rest } = record;
+  return {
+    ...rest,
+    orderBy: {
+      field: rawOrderBy,
+      ...(direction !== undefined ? { direction } : {}),
     },
-    z.optional(z.record(z.string(), z.any())),
-  ),
-  orderBy: storageOrderBySchema,
-});
+  };
+}, listThreadsQueryInnerSchema);
 
 /**
  * GET /memory/threads/:threadId
@@ -226,11 +286,14 @@ export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
   orderBy: messageOrderBySchema,
   include: includeSchema,
   filter: filterSchema,
-  includeSystemReminders: z.preprocess(val => {
-    if (val === 'true') return true;
-    if (val === 'false') return false;
-    return val;
-  }, z.boolean().optional()),
+  includeSystemReminders: z
+    .preprocess(val => {
+      if (val === undefined) return val;
+      if (val === 'true') return true;
+      if (val === 'false') return false;
+      return val;
+    }, z.boolean())
+    .optional(),
 });
 
 /**
@@ -278,20 +341,23 @@ export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
   agentId: z.string().optional(),
   resourceId: z.string().optional(),
-  metadata: z.preprocess(
-    val => {
-      if (typeof val === 'string') {
-        try {
-          return JSON.parse(val);
-        } catch {
-          // Return invalid string to fail validation (z.record will reject string type)
-          return val;
+  metadata: z
+    .preprocess(
+      val => {
+        if (val === undefined) return val;
+        if (typeof val === 'string') {
+          try {
+            return JSON.parse(val);
+          } catch {
+            // Return invalid string to fail validation (z.record will reject string type)
+            return val;
+          }
         }
-      }
-      return val;
-    },
-    z.optional(z.record(z.string(), z.any())),
-  ),
+        return val;
+      },
+      z.record(z.string(), z.any()),
+    )
+    .optional(),
   orderBy: storageOrderBySchema,
 });
 
@@ -426,16 +492,16 @@ export const getThreadByIdResponseSchema = threadSchema;
  */
 export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
-  uiMessages: z.unknown(), // Converted messages in UI format
+  uiMessages: z.array(z.any()).nullable(), // Converted messages in UI format
 });
 
 /**
  * Response for GET /memory/threads/:threadId/working-memory
  */
 export const getWorkingMemoryResponseSchema = z.object({
-  workingMemory: z.unknown(), // Can be string or structured object depending on template
+  workingMemory: z.unknown().nullable(), // Can be string or structured object depending on template
   source: z.enum(['thread', 'resource']),
-  workingMemoryTemplate: z.unknown(), // Template structure varies
+  workingMemoryTemplate: z.unknown().nullable(), // Template structure varies
   threadExists: z.boolean(),
 });
 

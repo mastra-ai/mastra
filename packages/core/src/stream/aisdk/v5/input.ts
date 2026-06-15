@@ -47,8 +47,6 @@ export class AISDKV5InputStream extends MastraModelInput {
     // See: https://github.com/mastra-ai/mastra/issues/9909
     const idMap = new Map<string, string>();
 
-    // ReadableStream throws TS errors, if imported not imported. What an annoying thing.
-    // @ts-expect-error - ReadableStream async iteration
     for await (const chunk of stream) {
       const rawChunk = chunk as StreamPart;
 

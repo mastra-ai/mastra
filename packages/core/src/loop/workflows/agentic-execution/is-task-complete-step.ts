@@ -2,7 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { IsTaskCompleteRunResult, MastraDBMessage } from '../../../agent';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import { runStreamCompletionScorers, formatStreamCompletionFeedback } from '../../network/validation';
 import type { StreamCompletionContext } from '../../network/validation';
 import type { OuterLLMRun } from '../../types';
@@ -46,6 +46,17 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
 
       //Also check if the step result is not continued to avoid running scorers before the LLM is done
       if (!hasIsTaskCompleteScorers || inputData.stepResult?.isContinued) {
+        return inputData;
+      }
+
+      // Skip scoring when the only thing this iteration did was update working
+      // memory. Working-memory updates are housekeeping — not a task response —
+      // so grading them would produce misleading scores. The next iteration
+      // (where the LLM actually answers the user) will be scored instead.
+      const iterationToolCalls = (inputData.output.toolCalls || []) as Array<{ toolName: string }>;
+      const isWorkingMemoryTool = (name: string) =>
+        name === 'updateWorkingMemory' || name === 'setWorkingMemory' || name === 'update-working-memory';
+      if (iterationToolCalls.length > 0 && iterationToolCalls.every(tc => isWorkingMemoryTool(tc.toolName))) {
         return inputData;
       }
       // Get the original user message for context

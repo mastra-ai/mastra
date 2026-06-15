@@ -77,6 +77,73 @@ describe('Tools Handlers', () => {
       expect(result).toHaveProperty(mockTool.id);
       expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
     });
+
+    it('should merge tools from mastra.listTools() and registeredTools', async () => {
+      // Simulates MCP tools or other dynamically created tools in mastra instance
+      const dynamicTool: ToolAction = createTool({
+        id: 'dynamic-mcp-tool',
+        description: 'A dynamically created tool (e.g., MCP)',
+        execute: vi.fn(),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        tools: { [dynamicTool.id]: dynamicTool },
+      });
+      // Bundler-discovered tools passed separately
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: mockTools,
+      });
+      // Both sources should be present
+      expect(result).toHaveProperty(mockTool.id);
+      expect(result).toHaveProperty(dynamicTool.id);
+      expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
+      expect(result[dynamicTool.id]).toHaveProperty('id', dynamicTool.id);
+    });
+
+    it('should let registeredTools take precedence on key conflicts', async () => {
+      const mastraTool: ToolAction = createTool({
+        id: 'shared-key',
+        description: 'From mastra instance',
+        execute: vi.fn(),
+      });
+      const bundlerTool: ToolAction = createTool({
+        id: 'shared-key',
+        description: 'From bundler',
+        execute: vi.fn(),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        tools: { 'shared-key': mastraTool },
+      });
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: { 'shared-key': bundlerTool },
+      });
+      expect(result['shared-key']).toHaveProperty('description', 'From bundler');
+    });
+
+    it('should dedupe the same tool registered under different keys, preferring the registered key', async () => {
+      // Mirrors the deployer flow: an agent registers the tool by its intrinsic id
+      // (get-weather) while the CLI bundler registers the same instance by export name
+      // (weatherTool). The merged response must list it once, under the registered key.
+      const weatherTool: ToolAction = createTool({
+        id: 'get-weather',
+        description: 'Get current weather for a location',
+        execute: vi.fn(),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        tools: { [weatherTool.id]: weatherTool },
+      });
+      const result = await LIST_TOOLS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: { weatherTool },
+      });
+      expect(Object.keys(result)).toHaveLength(1);
+      expect(result).toHaveProperty('weatherTool');
+      expect(result).not.toHaveProperty('get-weather');
+    });
   });
 
   describe('getToolByIdHandler', () => {
@@ -100,6 +167,128 @@ describe('Tools Handlers', () => {
       });
       expect(result).toHaveProperty('id', mockTool.id);
       expect(result).toHaveProperty('description', mockTool.description);
+    });
+
+    it('should find a dynamically-resolved tool via agent toolsResolver', async () => {
+      const dynamicTool = createTool({
+        id: 'dynamic-tool',
+        description: 'A dynamically resolved tool',
+        execute: vi.fn(),
+      });
+
+      const agentWithDynamicTools = new Agent({
+        id: 'dynamic-agent',
+        name: 'dynamic-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => ({ 'dynamic-tool': dynamicTool }),
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: { 'dynamic-agent': agentWithDynamicTools as any },
+      });
+
+      const result = await GET_TOOL_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: {},
+        toolId: 'dynamic-tool',
+      });
+
+      expect(result).toHaveProperty('id', 'dynamic-tool');
+      expect(result).toHaveProperty('description', 'A dynamically resolved tool');
+    });
+
+    it('should continue searching other agents when one toolsResolver throws', async () => {
+      const dynamicTool = createTool({
+        id: 'dynamic-tool',
+        description: 'A dynamically resolved tool',
+        execute: vi.fn(),
+      });
+
+      const failingAgent = new Agent({
+        id: 'failing-agent',
+        name: 'failing-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => {
+          throw new Error('toolsResolver failed');
+        },
+      });
+      const workingAgent = new Agent({
+        id: 'working-agent',
+        name: 'working-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => ({ 'dynamic-tool': dynamicTool }),
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'failing-agent': failingAgent as any,
+          'working-agent': workingAgent as any,
+        },
+      });
+
+      const result = await GET_TOOL_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: {},
+        toolId: 'dynamic-tool',
+      });
+
+      expect(result).toHaveProperty('id', 'dynamic-tool');
+    });
+
+    it('should log a warning when an agent toolsResolver throws during fallback', async () => {
+      const dynamicTool = createTool({
+        id: 'dynamic-tool',
+        description: 'A dynamically resolved tool',
+        execute: vi.fn(),
+      });
+
+      const failingAgent = new Agent({
+        id: 'failing-agent',
+        name: 'failing-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => {
+          throw new Error('toolsResolver failed');
+        },
+      });
+      const workingAgent = new Agent({
+        id: 'working-agent',
+        name: 'working-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => ({ 'dynamic-tool': dynamicTool }),
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'failing-agent': failingAgent as any,
+          'working-agent': workingAgent as any,
+        },
+      });
+
+      const warnSpy = vi.fn();
+      vi.spyOn(mastra, 'getLogger').mockReturnValue({ warn: warnSpy } as any);
+
+      await GET_TOOL_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: {},
+        toolId: 'dynamic-tool',
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to list tools for agent while resolving tool by id',
+        expect.objectContaining({
+          agentId: 'failing-agent',
+          toolId: 'dynamic-tool',
+          error: 'toolsResolver failed',
+        }),
+      );
     });
   });
 
@@ -193,6 +382,132 @@ describe('Tools Handlers', () => {
 
       expect(result).toEqual(mockResult);
       expect(mockVercelTool.execute).toHaveBeenCalledWith({ test: 'data' });
+    });
+
+    it('should find and execute a dynamically-resolved tool via agent toolsResolver', async () => {
+      const mockResult = { success: true, dynamic: true };
+      const dynamicToolExecute = vi.fn().mockResolvedValue(mockResult);
+
+      const dynamicTool = createTool({
+        id: 'dynamic-tool',
+        description: 'A dynamically resolved tool',
+        execute: dynamicToolExecute,
+      });
+
+      // Agent uses toolsResolver to provide dynamic tools
+      const agentWithDynamicTools = new Agent({
+        id: 'dynamic-agent',
+        name: 'dynamic-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => ({
+          'dynamic-tool': dynamicTool,
+        }),
+      });
+
+      const mockMastra = new Mastra({
+        logger: false,
+        agents: { 'dynamic-agent': agentWithDynamicTools as any },
+      });
+
+      // registeredTools does NOT contain the dynamic tool
+      const result = await EXECUTE_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        registeredTools: {},
+        toolId: 'dynamic-tool',
+        data: {},
+      });
+
+      expect(result).toEqual(mockResult);
+    });
+    it('should continue searching other agents when one toolsResolver throws', async () => {
+      const mockResult = { success: true, dynamic: true };
+      const dynamicToolExecute = vi.fn().mockResolvedValue(mockResult);
+      const dynamicTool = createTool({
+        id: 'dynamic-tool',
+        description: 'A dynamically resolved tool',
+        execute: dynamicToolExecute,
+      });
+      const failingAgent = new Agent({
+        id: 'failing-agent',
+        name: 'failing-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => {
+          throw new Error('toolsResolver failed');
+        },
+      });
+      const workingAgent = new Agent({
+        id: 'working-agent',
+        name: 'working-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => ({ 'dynamic-tool': dynamicTool }),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'failing-agent': failingAgent as any,
+          'working-agent': workingAgent as any,
+        },
+      });
+      const result = await EXECUTE_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: {},
+        toolId: 'dynamic-tool',
+        data: {},
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it('should log a warning when an agent toolsResolver throws during fallback', async () => {
+      const dynamicTool = createTool({
+        id: 'dynamic-tool',
+        description: 'A dynamically resolved tool',
+        execute: vi.fn().mockResolvedValue({ ok: true }),
+      });
+      const failingAgent = new Agent({
+        id: 'failing-agent',
+        name: 'failing-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => {
+          throw new Error('toolsResolver failed');
+        },
+      });
+      const workingAgent = new Agent({
+        id: 'working-agent',
+        name: 'working-agent',
+        instructions: 'You are a helpful assistant',
+        model: 'gpt-4o' as any,
+        tools: async () => ({ 'dynamic-tool': dynamicTool }),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'failing-agent': failingAgent as any,
+          'working-agent': workingAgent as any,
+        },
+      });
+
+      const warnSpy = vi.fn();
+      vi.spyOn(mastra, 'getLogger').mockReturnValue({ warn: warnSpy } as any);
+
+      await EXECUTE_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        registeredTools: {},
+        toolId: 'dynamic-tool',
+        data: {},
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to list tools for agent while resolving tool by id',
+        expect.objectContaining({
+          agentId: 'failing-agent',
+          toolId: 'dynamic-tool',
+          error: 'toolsResolver failed',
+        }),
+      );
     });
   });
 

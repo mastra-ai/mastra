@@ -10,6 +10,48 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
 
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
+export const MASTRA_USER_KEY = 'mastra__user';
+
+export const MASTRA_USER_PERMISSIONS_KEY = 'mastra__userPermissions';
+
+export const MASTRA_USER_ROLES_KEY = 'mastra__userRoles';
+
+export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
+
+export const MASTRA_IS_STUDIO_KEY = 'mastra__isStudio';
+
+/**
+ * Tracks which auth mode was used for the current request.
+ * Set to 'studio' when studio auth was used, 'server' when server auth was used.
+ * Used to determine which RBAC/FGA provider to use for permission checks.
+ */
+export const MASTRA_AUTH_MODE_KEY = 'mastra__authMode';
+
+export type MastraAuthMode = 'studio' | 'server';
+
+export const MASTRA_CLIENT_TYPE_HEADER = 'x-mastra-client-type';
+
+export const MASTRA_STUDIO_CLIENT_TYPE = 'studio';
+
+const RESERVED_CONTEXT_KEYS = new Set([
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_IS_STUDIO_KEY,
+  MASTRA_AUTH_MODE_KEY,
+]);
+
+export function isReservedRequestContextKey(key: string): boolean {
+  return RESERVED_CONTEXT_KEYS.has(key);
+}
+
+export function isStudioClientTypeHeader(value: string | undefined): boolean {
+  return value?.toLowerCase() === MASTRA_STUDIO_CLIENT_TYPE;
+}
+
 export const WORKSPACE_TOOLS_PREFIX = 'mastra_workspace' as const;
 
 export const WORKSPACE_TOOLS = {

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.afterEach(async () => {
   await resetStorage();
@@ -9,7 +10,7 @@ test('has page title', async ({ page }) => {
   await page.goto('/templates');
 
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('h1')).toHaveText('Templates');
+  await expectCurrentBreadcrumb(page, 'Templates');
 });
 
 test('has filter controls', async ({ page }) => {

@@ -743,6 +743,8 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           modelId: 'test-response-model-id',
           modelProvider: 'mock-provider',
           modelVersion: 'v2',
+          // With direct execution (default), timestamps remain as Date objects.
+          // With evented execution they would be serialized to ISO strings via JSON.stringify.
           timestamp: new Date(10000),
           messages: [
             {
@@ -766,6 +768,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           modelId: 'test-response-model-id',
           modelProvider: 'mock-provider',
           modelVersion: 'v2',
+          // With direct execution (default), timestamps remain as Date objects.
           timestamp: new Date(10000),
           messages: [
             {

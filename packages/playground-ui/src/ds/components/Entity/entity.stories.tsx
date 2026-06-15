@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Entity, EntityIcon, EntityName, EntityDescription, EntityContent } from './Entity';
 import { Bot, Workflow, Database, Settings } from 'lucide-react';
+import { Entity, EntityIcon, EntityName, EntityDescription, EntityContent } from './Entity';
 
 const meta: Meta<typeof Entity> = {
   title: 'Composite/Entity',
@@ -8,7 +8,6 @@ const meta: Meta<typeof Entity> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

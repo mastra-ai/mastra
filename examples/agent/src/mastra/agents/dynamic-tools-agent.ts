@@ -16,7 +16,6 @@
  * 4. On subsequent turns, loaded tools are available via toolsets
  */
 
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { ToolSearchProcessor } from '@mastra/core/processors';
@@ -99,7 +98,7 @@ You: [load_tool for "calculator_add"] -> tool is now loading
 You: "I've found and loaded a calculator tool. Let me add those numbers for you now."
 
 Be proactive about searching for tools when you don't have the capability the user needs.`,
-  model: openai('gpt-5.2'),
+  model: 'openai/gpt-5.2',
   memory,
   inputProcessors: [toolSearchProcessor],
 });

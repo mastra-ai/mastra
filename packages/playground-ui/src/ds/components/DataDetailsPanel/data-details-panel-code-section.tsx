@@ -10,13 +10,13 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { useTheme } from '@/ds/components/ThemeProvider';
 import { cn } from '@/lib/utils';
-import { useIsDarkMode } from '@/store/playground-store';
 
 function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.75rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -35,7 +35,7 @@ function buildLightTheme(): Extension {
       fontSize: '0.75rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -75,7 +75,7 @@ function buildLightTheme(): Extension {
 }
 
 const useCodemirrorTheme = (): Extension => {
-  const isDark = useIsDarkMode();
+  const isDark = useTheme().resolvedTheme === 'dark';
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
 

@@ -14,6 +14,7 @@ import {
   compareMCPClientVersionsResponseSchema,
 } from '../schemas/mcp-client-versions';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { assertStoredResourceScope, getStoredResourceScope } from '../utils';
 
 import { handleError } from './error';
 import {
@@ -40,7 +41,7 @@ export const LIST_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
   summary: 'List MCP client versions',
   description: 'Returns a paginated list of all versions for a stored MCP client',
   tags: ['MCP Client Versions'],
-  handler: async ({ mastra, mcpClientId, page, perPage, orderBy }) => {
+  handler: async ({ mastra, mcpClientId, page, perPage, orderBy, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -57,6 +58,7 @@ export const LIST_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
       if (!mcpClient) {
         throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
       }
+      assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const result = await mcpClientStore.listVersions({
         mcpClientId,
@@ -86,7 +88,7 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
   summary: 'Create MCP client version',
   description: 'Creates a new version snapshot of the current MCP client configuration',
   tags: ['MCP Client Versions'],
-  handler: async ({ mastra, mcpClientId, changeMessage }) => {
+  handler: async ({ mastra, mcpClientId, changeMessage, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -103,6 +105,7 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       if (!mcpClient) {
         throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
       }
+      assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       let currentConfig: Record<string, unknown> = {};
       if (mcpClient.activeVersionId) {
@@ -174,7 +177,7 @@ export const GET_MCP_CLIENT_VERSION_ROUTE = createRoute({
   summary: 'Get MCP client version',
   description: 'Returns a specific version of an MCP client by its version ID',
   tags: ['MCP Client Versions'],
-  handler: async ({ mastra, mcpClientId, versionId }) => {
+  handler: async ({ mastra, mcpClientId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -198,6 +201,8 @@ export const GET_MCP_CLIENT_VERSION_ROUTE = createRoute({
           message: `Version with id ${versionId} not found for MCP client ${mcpClientId}`,
         });
       }
+      const mcpClient = await mcpClientStore.getById(mcpClientId);
+      assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       return version;
     } catch (error) {
@@ -219,7 +224,7 @@ export const ACTIVATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
   summary: 'Activate MCP client version',
   description: 'Sets a specific version as the active version for the MCP client',
   tags: ['MCP Client Versions'],
-  handler: async ({ mastra, mcpClientId, versionId }) => {
+  handler: async ({ mastra, mcpClientId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -236,6 +241,7 @@ export const ACTIVATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       if (!mcpClient) {
         throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
       }
+      assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const version = await mcpClientStore.getVersion(versionId);
       if (!version) {
@@ -280,7 +286,7 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
   summary: 'Restore MCP client version',
   description: 'Restores the MCP client configuration from a version, creating a new version',
   tags: ['MCP Client Versions'],
-  handler: async ({ mastra, mcpClientId, versionId }) => {
+  handler: async ({ mastra, mcpClientId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -297,6 +303,7 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       if (!mcpClient) {
         throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
       }
+      assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const versionToRestore = await mcpClientStore.getVersion(versionId);
       if (!versionToRestore) {
@@ -374,7 +381,7 @@ export const DELETE_MCP_CLIENT_VERSION_ROUTE = createRoute({
   summary: 'Delete MCP client version',
   description: 'Deletes a specific version (cannot delete the active version)',
   tags: ['MCP Client Versions'],
-  handler: async ({ mastra, mcpClientId, versionId }) => {
+  handler: async ({ mastra, mcpClientId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -391,6 +398,7 @@ export const DELETE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       if (!mcpClient) {
         throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
       }
+      assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const version = await mcpClientStore.getVersion(versionId);
       if (!version) {
@@ -437,7 +445,7 @@ export const COMPARE_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
   summary: 'Compare MCP client versions',
   description: 'Compares two versions and returns the differences between them',
   tags: ['MCP Client Versions'],
-  handler: async ({ mastra, mcpClientId, from, to }) => {
+  handler: async ({ mastra, mcpClientId, from, to, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -449,6 +457,8 @@ export const COMPARE_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
       if (!mcpClientStore) {
         throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
       }
+      const mcpClient = await mcpClientStore.getById(mcpClientId);
+      assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const fromVersion = await mcpClientStore.getVersion(from);
       if (!fromVersion) {

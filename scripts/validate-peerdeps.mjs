@@ -8,14 +8,11 @@ import semver from 'semver';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 
-// Read the core package version
 const corePackageJson = JSON.parse(readFileSync(join(rootDir, 'packages/core/package.json'), 'utf-8'));
 const coreVersion = corePackageJson.version;
 
-console.log(`=
- Validating peer dependencies against core version: ${coreVersion}\n`);
+console.log(`Validating peer dependencies against core version: ${coreVersion}\n`);
 
-// Recursively find all package.json files
 function findPackageJsonFiles(dir, basePath = '') {
   const files = [];
   const entries = readdirSync(dir);
@@ -25,7 +22,6 @@ function findPackageJsonFiles(dir, basePath = '') {
     const stat = statSync(fullPath);
     const relativePath = join(basePath, entry);
 
-    // Skip node_modules, dist, build, and .pnpm directories
     if (entry === 'node_modules' || entry === 'dist' || entry === 'build' || entry === '.pnpm') {
       continue;
     }
@@ -40,59 +36,126 @@ function findPackageJsonFiles(dir, basePath = '') {
   return files;
 }
 
-const packageJsonFiles = findPackageJsonFiles(rootDir);
-
-let hasErrors = false;
-const results = [];
-
-for (const packagePath of packageJsonFiles) {
+function readPackageInfo(packagePath) {
   const fullPath = join(rootDir, packagePath);
+  const packageJson = JSON.parse(readFileSync(fullPath, 'utf-8'));
 
+  return {
+    json: packageJson,
+    name: packageJson.name || relative(rootDir, dirname(fullPath)),
+    path: packagePath,
+  };
+}
+
+function getCorePeerDep(packageJson) {
+  return packageJson.peerDependencies?.['@mastra/core'];
+}
+
+function getRuntimeWorkspaceDeps(packageJson) {
+  return {
+    ...(packageJson.dependencies || {}),
+    ...(packageJson.optionalDependencies || {}),
+  };
+}
+
+function coreRangeSubset(range, requiredRange) {
   try {
-    const packageJson = JSON.parse(readFileSync(fullPath, 'utf-8'));
-    const packageName = packageJson.name || relative(rootDir, dirname(fullPath));
-
-    // Skip the core package itself
-    if (packageName === '@mastra/core') {
-      continue;
-    }
-
-    const peerDeps = packageJson.peerDependencies || {};
-    const corePeerDep = peerDeps['@mastra/core'];
-
-    if (corePeerDep) {
-      // Use semver to properly check if the core version satisfies the peer dependency range
-      // Include prerelease option to handle alpha/beta/rc versions correctly
-      const isValid = semver.satisfies(coreVersion, corePeerDep, { includePrerelease: true });
-
-      results.push({
-        package: packageName,
-        path: packagePath,
-        currentPeerDep: corePeerDep,
-        expected: coreVersion,
-        isValid,
-      });
-
-      if (!isValid) {
-        hasErrors = true;
-      }
-    }
-  } catch (error) {
-    console.warn(`�  Could not read ${packagePath}: ${error.message}`);
+    return semver.subset(range, requiredRange, { includePrerelease: true });
+  } catch {
+    return false;
   }
 }
 
-// Display results
-if (results.length === 0) {
-  console.log(' No packages found with @mastra/core peer dependencies');
-} else {
-  console.log('=� Peer dependency validation results:\n');
+const packageJsonFiles = findPackageJsonFiles(rootDir);
+const packages = [];
+const packageByName = new Map();
+const readErrors = [];
+let hasErrors = false;
 
-  const validPackages = results.filter(r => r.isValid);
-  const invalidPackages = results.filter(r => !r.isValid);
+for (const packagePath of packageJsonFiles) {
+  try {
+    const packageInfo = readPackageInfo(packagePath);
+    packages.push(packageInfo);
+
+    if (packageInfo.json.name) {
+      packageByName.set(packageInfo.json.name, packageInfo);
+    }
+  } catch (error) {
+    readErrors.push({ path: packagePath, message: error.message });
+    hasErrors = true;
+  }
+}
+
+const versionResults = [];
+const propagatedPeerErrors = [];
+
+for (const packageInfo of packages) {
+  if (packageInfo.name === '@mastra/core') {
+    continue;
+  }
+
+  const corePeerDep = getCorePeerDep(packageInfo.json);
+
+  if (corePeerDep) {
+    const isValid = semver.satisfies(coreVersion, corePeerDep, { includePrerelease: true });
+
+    versionResults.push({
+      package: packageInfo.name,
+      path: packageInfo.path,
+      currentPeerDep: corePeerDep,
+      expected: coreVersion,
+      isValid,
+    });
+
+    if (!isValid) {
+      hasErrors = true;
+    }
+  }
+
+  const runtimeWorkspaceDeps = getRuntimeWorkspaceDeps(packageInfo.json);
+
+  for (const dependencyName of Object.keys(runtimeWorkspaceDeps)) {
+    const dependencyPackage = packageByName.get(dependencyName);
+    const dependencyCorePeerDep = dependencyPackage ? getCorePeerDep(dependencyPackage.json) : undefined;
+
+    if (!dependencyCorePeerDep) {
+      continue;
+    }
+
+    const corePeerDepFallsBelowDependency = corePeerDep && !coreRangeSubset(corePeerDep, dependencyCorePeerDep);
+
+    if (corePeerDepFallsBelowDependency) {
+      propagatedPeerErrors.push({
+        package: packageInfo.name,
+        path: packageInfo.path,
+        dependency: dependencyName,
+        dependencyPath: dependencyPackage.path,
+        dependencyCorePeerDep,
+        currentPeerDep: corePeerDep,
+      });
+      hasErrors = true;
+    }
+  }
+}
+
+if (readErrors.length > 0) {
+  console.log('Could not read some package.json files:');
+  readErrors.forEach(error => {
+    console.log(`   ${error.path}: ${error.message}`);
+  });
+  console.log();
+}
+
+if (versionResults.length === 0) {
+  console.log('No packages found with @mastra/core peer dependencies');
+} else {
+  console.log('Peer dependency validation results:\n');
+
+  const validPackages = versionResults.filter(r => r.isValid);
+  const invalidPackages = versionResults.filter(r => !r.isValid);
 
   if (validPackages.length > 0) {
-    console.log(' Valid peer dependencies:');
+    console.log('Valid peer dependencies:');
     validPackages.forEach(pkg => {
       console.log(`   ${pkg.package}: ${pkg.currentPeerDep}`);
     });
@@ -100,21 +163,32 @@ if (results.length === 0) {
   }
 
   if (invalidPackages.length > 0) {
-    console.log('L Invalid peer dependencies:');
+    console.log('Invalid peer dependencies:');
     invalidPackages.forEach(pkg => {
-      console.log(`   ${pkg.package}: ${pkg.currentPeerDep} (expected: ${pkg.expected})`);
+      console.log(`   ${pkg.package}: ${pkg.currentPeerDep} (expected to include: ${pkg.expected})`);
       console.log(`      Path: ${pkg.path}`);
     });
     console.log();
   }
 
-  console.log(`=� Summary: ${validPackages.length} valid, ${invalidPackages.length} invalid`);
+  console.log(`Version summary: ${validPackages.length} valid, ${invalidPackages.length} invalid`);
+}
+
+if (propagatedPeerErrors.length > 0) {
+  console.log('\nTransitive @mastra/core peer dependency errors:');
+  propagatedPeerErrors.forEach(error => {
+    const current = error.currentPeerDep ?? '(missing)';
+    console.log(`   ${error.package}: ${current}`);
+    console.log(`      depends on ${error.dependency}, which requires @mastra/core ${error.dependencyCorePeerDep}`);
+    console.log(`      Path: ${error.path}`);
+  });
 }
 
 if (hasErrors) {
-  console.log('\n=� To fix invalid peer dependencies, update them to match the core version:');
-  console.log(`   "@mastra/core": "^${coreVersion}"`);
+  console.log('\nTo fix invalid peer dependencies:');
+  console.log(`   - Ensure package @mastra/core peer ranges include ${coreVersion}`);
+  console.log('   - Ensure a package peer range is a subset of every runtime Mastra dependency core peer range');
   process.exit(1);
-} else {
-  console.log('\n<� All peer dependencies are valid!');
 }
+
+console.log('\nAll peer dependencies are valid!');

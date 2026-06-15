@@ -1,6 +1,7 @@
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
 import type { Processor } from '../index';
+import { REPROCESS_PART_KEY } from '../stream-reprocess';
 
 export type BatchPartsState = {
   batch: ChunkType[];
@@ -50,8 +51,9 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     streamParts: ChunkType[];
     state: Record<string, any>;
     abort: (reason?: string) => never;
+    writer?: { custom: (data: ChunkType) => Promise<void> };
   }): Promise<ChunkType | null> {
-    const { part, state } = args;
+    const { part, state, writer } = args;
 
     // Initialize state if not present
     if (!state.batch) {
@@ -59,6 +61,15 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     }
     if (!state.timeoutTriggered) {
       state.timeoutTriggered = false;
+    }
+
+    // Emit any pending non-text part that was deferred from the previous call
+    if (state.pendingNonText) {
+      const pending = state.pendingNonText;
+      state.pendingNonText = undefined;
+      // Buffer the current part for later emission
+      state.batch.push(part);
+      return pending;
     }
 
     // Check if a timeout has triggered a flush
@@ -73,9 +84,23 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     // If it's a non-text part and we should emit immediately, flush the batch first
     if (this.options.emitOnNonText && part.type !== 'text-delta') {
       const batchedChunk = this.flushBatch(state as BatchPartsState);
-      // Return the batched part if there was one, otherwise return the current part
-      // Don't add the current non-text part to the batch - emit it immediately
       if (batchedChunk) {
+        // We have two parts to emit (the batched text and this non-text part)
+        // but can only return one. When running inside the processor chain,
+        // return the batched text (so it flows through any downstream
+        // processors) and stash the non-text part for the runner to re-drive
+        // through the whole chain right after. This avoids deferring the
+        // non-text part to the next processOutputStream call — which never
+        // happens when the stream stops on this part (e.g. a `stopWhen`
+        // condition halting the agentic loop on a tool result), dropping the
+        // part from the stream entirely.
+        if (writer) {
+          state[REPROCESS_PART_KEY] = part;
+          return batchedChunk;
+        }
+        // No writer (e.g. direct unit invocation): fall back to deferring the
+        // non-text part to the next call.
+        state.pendingNonText = part;
         return batchedChunk;
       }
       return part;
@@ -127,11 +152,12 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
       // Combine all text deltas
       const combinedText = textChunks.map(part => (part.type === 'text-delta' ? part.payload.text : '')).join('');
 
-      // Create a new combined text part
+      // Create a new combined text part, preserving id and runId from the first chunk
+      const firstChunk = textChunks[0] as ChunkType & { type: 'text-delta' };
       const combinedChunk: ChunkType = {
         type: 'text-delta',
-        payload: { text: combinedText, id: 'text-1' },
-        runId: '1',
+        payload: { text: combinedText, id: firstChunk.payload.id },
+        runId: firstChunk.runId,
         from: ChunkFrom.AGENT,
       };
 

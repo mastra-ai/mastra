@@ -6,5 +6,5 @@ export interface NoticeMessageProps {
 }
 
 export function NoticeMessage({ children, className }: NoticeMessageProps) {
-  return <div className={cn('flex-1 text-sm ', className)}>{children}</div>;
+  return <div className={cn('text-ui-md leading-ui-md', className)}>{children}</div>;
 }

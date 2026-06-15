@@ -1,7 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { HorizontalBars, MetricsCard } from '@mastra/playground-ui';
+import { HorizontalBars, MetricsCard, CHART_COLORS } from '@mastra/playground-ui';
 import { useMemo } from 'react';
-import { CHART_COLORS } from '@/domains/metrics/components/metrics-utils';
 
 interface DatasetHealthCardProps {
   experiments?: DatasetExperiment[];

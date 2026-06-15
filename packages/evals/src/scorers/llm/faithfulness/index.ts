@@ -1,7 +1,9 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { roundToTwoDecimals, getAssistantMessageFromRunOutput, getUserMessageFromRunInput } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import {
   createFaithfulnessAnalyzePrompt,
   createFaithfulnessExtractPrompt,
@@ -14,6 +16,16 @@ export interface FaithfulnessMetricOptions {
   context?: string[];
 }
 
+const getToolInvocationContext = (output: unknown): string[] => {
+  if (!Array.isArray(output)) return [];
+
+  return output
+    .filter(message => message?.role === 'assistant')
+    .flatMap(message => message?.content?.toolInvocations ?? [])
+    .filter((toolCall: any) => toolCall.state === 'result')
+    .map((toolCall: any) => JSON.stringify(toolCall.result));
+};
+
 export function createFaithfulnessScorer({
   model,
   options,
@@ -21,7 +33,7 @@ export function createFaithfulnessScorer({
   model: MastraModelConfig;
   options?: FaithfulnessMetricOptions;
 }) {
-  return createScorer({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'faithfulness-scorer',
     name: 'Faithfulness Scorer',
     description: 'A scorer that evaluates the faithfulness of an LLM output to an input',
@@ -33,9 +45,11 @@ export function createFaithfulnessScorer({
   })
     .preprocess({
       description: 'Extract relevant statements from the LLM output',
-      outputSchema: z.object({
-        claims: z.array(z.string()),
-      }),
+      outputSchema: compileSchema(
+        z.object({
+          claims: z.array(z.string()),
+        }),
+      ),
       createPrompt: ({ run }) => {
         const prompt = createFaithfulnessExtractPrompt({ output: getAssistantMessageFromRunOutput(run.output) ?? '' });
         return prompt;
@@ -43,16 +57,12 @@ export function createFaithfulnessScorer({
     })
     .analyze({
       description: 'Score the relevance of the statements to the input',
-      outputSchema: z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
+      outputSchema: compileSchema(
+        z.object({ verdicts: z.array(z.object({ verdict: z.string(), reason: z.string() })) }),
+      ),
       createPrompt: ({ results, run }) => {
         // Use the context provided by the user, or the context from the tool invocations
-        const assistantMessage = run.output.find(({ role }) => role === 'assistant');
-        const context =
-          options?.context ??
-          assistantMessage?.content?.toolInvocations?.map((toolCall: any) =>
-            toolCall.state === 'result' ? JSON.stringify(toolCall.result) : '',
-          ) ??
-          [];
+        const context = options?.context ?? getToolInvocationContext(run.output);
         const prompt = createFaithfulnessAnalyzePrompt({
           claims: results.preprocessStepResult?.claims || [],
           context,
@@ -75,11 +85,10 @@ export function createFaithfulnessScorer({
     .generateReason({
       description: 'Reason about the results',
       createPrompt: ({ run, results, score }) => {
-        const assistantMessage = run.output.find(({ role }) => role === 'assistant');
         const prompt = createFaithfulnessReasonPrompt({
           input: getUserMessageFromRunInput(run.input) ?? '',
           output: getAssistantMessageFromRunOutput(run.output) ?? '',
-          context: assistantMessage?.content?.toolInvocations?.map((toolCall: any) => JSON.stringify(toolCall)) || [],
+          context: options?.context ?? getToolInvocationContext(run.output),
           score,
           scale: options?.scale || 1,
           verdicts: results.analyzeStepResult?.verdicts || [],

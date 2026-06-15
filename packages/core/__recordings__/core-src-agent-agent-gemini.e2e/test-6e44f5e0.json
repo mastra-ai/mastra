@@ -1,0 +1,493 @@
+{
+  "meta": {
+    "name": "test-6e44f5e0",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Tool suspension and resumption > should call findUserWorkflow with suspend and resume via generate when autoResumeSuspendedTools is true",
+    "createdAt": "2026-05-18T10:51:40.289Z",
+    "updatedAt": "2026-05-28T17:34:46.488Z"
+  },
+  "recordings": [
+    {
+      "hash": "014d796f47314402",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Find the name and age of the user - Dero Israel"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are an agent that can get list of users using findUserWorkflow."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "workflow-findUserWorkflow",
+                  "description": "This is a tool that returns name and age",
+                  "parameters": {
+                    "required": ["inputData"],
+                    "type": "object",
+                    "properties": {
+                      "inputData": {
+                        "required": ["name"],
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1779989683985
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 28 May 2026 17:34:44 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=632",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "workflow-findUserWorkflow",
+                      "args": {
+                        "inputData": {
+                          "name": "Dero Israel"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.005622488869862123
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 82,
+            "candidatesTokenCount": 11,
+            "totalTokenCount": 93,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 82
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 11
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "tHwYaoSxEc2k_uMP2-aMsQ4"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ac1f7ef8472d679f",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Find the name and age of the user - Dero Israel"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "He is 25 years old"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"LOvbwNlRECF4hJeV\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"}},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000053\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "workflow-findUserWorkflow",
+                  "description": "This is a tool that returns name and age",
+                  "parameters": {
+                    "required": ["inputData"],
+                    "type": "object",
+                    "properties": {
+                      "inputData": {
+                        "required": ["name"],
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1779989684739
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 28 May 2026 17:34:45 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=946",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "workflow-findUserWorkflow",
+                      "args": {
+                        "resumeData": {
+                          "age": 25
+                        },
+                        "inputData": {
+                          "name": "Dero Israel"
+                        },
+                        "suspendedToolRunId": "00000000-0000-4000-8000-000000000053"
+                      }
+                    }
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.0018852954561060125
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 469,
+            "candidatesTokenCount": 55,
+            "totalTokenCount": 524,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 469
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 55
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "tXwYaqyXAsyY_uMP0PrV6QI"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "17d388fc2b74a22d",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Find the name and age of the user - Dero Israel"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "He is 25 years old"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "name": "workflow-findUserWorkflow",
+                    "args": {
+                      "resumeData": {
+                        "age": 25
+                      },
+                      "inputData": {
+                        "name": "Dero Israel"
+                      },
+                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000053"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "name": "workflow-findUserWorkflow",
+                    "response": {
+                      "name": "workflow-findUserWorkflow",
+                      "content": {
+                        "result": {
+                          "name": "Dero Israel",
+                          "email": "test@test.com",
+                          "age": 25
+                        },
+                        "runId": "00000000-0000-4000-8000-000000000053"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are an agent that can get list of users using findUserWorkflow."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "workflow-findUserWorkflow",
+                  "description": "This is a tool that returns name and age",
+                  "parameters": {
+                    "required": ["inputData"],
+                    "type": "object",
+                    "properties": {
+                      "inputData": {
+                        "required": ["name"],
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1779989685816
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 28 May 2026 17:34:46 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=555",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "The age of Dero Israel is 25."
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.10460191423242743
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 207,
+            "candidatesTokenCount": 11,
+            "totalTokenCount": 218,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 207
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 11
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "tnwYaoexBuqi_uMPn8fdoA8"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

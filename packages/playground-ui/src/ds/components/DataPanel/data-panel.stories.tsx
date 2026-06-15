@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { DataPanel } from './data-panel';
 import { TooltipProvider } from '../Tooltip';
+import { DataPanel } from './data-panel';
 import type { DataPanelProps } from './data-panel-root';
 
 const meta: Meta<typeof DataPanel> = {
@@ -17,8 +17,19 @@ const meta: Meta<typeof DataPanel> = {
   ],
   parameters: {
     layout: 'centered',
+    docs: {
+      description: {
+        component: [
+          'Non-modal panel that lives inside the page layout — no overlay, no Portal, no focus trap.',
+          'It is a layout region, not a dialog: clicking an item reveals its detail in place.',
+          '',
+          'This is the pattern behind the observability trace / span / log detail views, shared by',
+          'both the local Studio and Cloud Studio. For a modal panel that slides in over the page',
+          'with a backdrop, see `Layout/SideDialog`.',
+        ].join('\n'),
+      },
+    },
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

@@ -72,23 +72,24 @@ export abstract class Bundler extends MastraBundler {
         {
           name: 'server',
           version: '1.0.0',
-          description: '',
+          private: true,
           type: 'module',
           main: 'index.mjs',
           scripts: {
             start: 'node ./index.mjs',
           },
-          author: 'Mastra',
-          license: 'ISC',
           dependencies: Object.fromEntries(dependenciesMap.entries()),
           ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
-          pnpm: {
-            neverBuiltDependencies: [],
-          },
         },
         null,
         2,
       ),
+    );
+
+    // pnpm v11 requires build policy via pnpm-workspace.yaml in the output directory
+    await writeFile(
+      join(outputDirectory, 'pnpm-workspace.yaml'),
+      "packages:\n  - '.'\nallowBuilds:\n  bcrypt: true\n  esbuild: true\n  sharp: true\n  protobufjs: true\n  workerd: true\n  bufferutil: true\n  utf-8-validate: true\n",
     );
   }
 
@@ -223,8 +224,7 @@ export abstract class Bundler extends MastraBundler {
       },
       { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset: externals === true },
     );
-    const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
-
+    const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     if (isVirtual) {

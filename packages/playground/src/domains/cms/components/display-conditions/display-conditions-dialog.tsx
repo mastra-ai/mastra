@@ -1,6 +1,6 @@
 import type { JsonSchema, RuleGroup } from '@mastra/playground-ui';
 import {
-  IconButton,
+  Button,
   RuleBuilder,
   countLeafRules,
   Dialog,
@@ -32,15 +32,15 @@ export function DisplayConditionsDialog({ entityName, schema, rules, onRulesChan
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <IconButton
+        <Button
           tooltip={ruleCount > 0 ? `${ruleCount} rules` : 'Display Conditions'}
-          size="sm"
+          size="icon-sm"
           variant="ghost"
           className="relative"
         >
           <Ruler className="text-accent6" />
           {ruleCount > 0 && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-accent1" />}
-        </IconButton>
+        </Button>
       </DialogTrigger>
       <DialogContent className="max-w-5xl w-full">
         <DialogHeader>

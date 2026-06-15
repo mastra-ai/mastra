@@ -30,7 +30,7 @@ import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
-import { mountS3, mountGCS, LOG_PREFIX, runCommand } from './mounts';
+import { mountS3, mountGCS, mountAzure, LOG_PREFIX, runCommand } from './mounts';
 import type { DaytonaMountConfig, MountContext } from './mounts';
 import { DaytonaProcessManager } from './process-manager';
 import type { DaytonaResources } from './types';
@@ -650,6 +650,11 @@ export class DaytonaSandbox extends MastraSandbox {
           await mountGCS(mountPath, config, mountCtx);
           this.logger.debug(`${LOG_PREFIX} Mounted GCS bucket at ${mountPath}`);
           break;
+        case 'azure-blob':
+          this.logger.debug(`${LOG_PREFIX} Mounting Azure Blob at "${mountPath}"...`);
+          await mountAzure(mountPath, config, mountCtx);
+          this.logger.debug(`${LOG_PREFIX} Mounted Azure Blob container at ${mountPath}`);
+          break;
         default: {
           const error = `Unsupported mount type: ${(config as FilesystemMountConfig).type}`;
           this.mounts.set(mountPath, { filesystem, state: 'unsupported', config, error });
@@ -745,7 +750,7 @@ export class DaytonaSandbox extends MastraSandbox {
     try {
       const mountsResult = await runCommand(
         sandbox,
-        `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}'`,
+        `grep -E 'fuse\\.(s3fs|gcsfuse|blobfuse2)' /proc/mounts | awk '{print $2}'`,
         { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
       currentMounts = mountsResult.output

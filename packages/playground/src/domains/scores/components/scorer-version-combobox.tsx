@@ -29,12 +29,12 @@ export function ScorerVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant,
   activeVersionId,
 }: ScorerVersionComboboxProps) {
   const { data, isLoading } = useScorerVersions({
     scorerId,
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const versions = data?.versions ?? [];

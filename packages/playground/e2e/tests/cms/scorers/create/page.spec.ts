@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { expectCurrentBreadcrumb } from '../../../__utils__/route-header';
 import { resetStorage } from '../../../__utils__/reset-storage';
 
 // Helper to generate unique scorer names
@@ -59,9 +60,9 @@ async function fillScorerFields(
 
   if (options.samplingType !== undefined) {
     if (options.samplingType === 'ratio') {
-      await page.getByLabel('Ratio').click();
+      await page.getByRole('radio', { name: 'Ratio' }).click();
     } else {
-      await page.getByLabel('None').click();
+      await page.getByRole('radio', { name: 'None' }).click();
     }
   }
 
@@ -99,7 +100,7 @@ test.describe('Page Structure & Initial State', () => {
     await page.goto('/cms/scorers/create');
 
     await expect(page).toHaveTitle(/Mastra Studio/);
-    await expect(page.locator('h1')).toHaveText('Create a scorer');
+    await expectCurrentBreadcrumb(page, 'Create scorer');
   });
 
   test('displays Create scorer button', async ({ page }) => {
@@ -209,8 +210,8 @@ test.describe('Scorer Creation Persistence', () => {
     // Wait for the edit page to load
     await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
 
-    // Verify h1 contains the scorer name
-    await expect(page.locator('h1')).toContainText(`Edit scorer: ${scorerName}`);
+    // Verify the route header tracks the scorer being edited
+    await expectCurrentBreadcrumb(page, scorerName);
 
     // Verify Publish button is visible
     await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();

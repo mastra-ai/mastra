@@ -4,7 +4,7 @@
  * Allows entering a key or cancelling to proceed without one.
  */
 
-import { Box, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Focusable } from '@mariozechner/pi-tui';
 import { theme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
@@ -69,8 +69,8 @@ export class ApiKeyDialogComponent extends Box implements Focusable {
   }
 
   handleInput(data: string): void {
-    const kb = getEditorKeybindings();
-    if (kb.matches(data, 'selectCancel')) {
+    const kb = getKeybindings();
+    if (kb.matches(data, 'tui.select.cancel')) {
       this.onCancel();
       return;
     }

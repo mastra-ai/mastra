@@ -1,18 +1,23 @@
 import { z } from 'zod/v4';
 import { MASTRA_THREAD_ID_KEY } from '../../request-context';
+import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import type { Tool } from '../../tools';
 import { BM25Index } from '../../workspace/search/bm25';
 import type { TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
+import type { LoadedToolStore, LoadedToolStoreContext } from './tool-search-stores';
+import { LegacyMapLoadedToolStore, ContextLoadedToolStore } from './tool-search-stores';
 
-/**
- * Thread state with timestamp for TTL management
- */
-interface ThreadState {
-  tools: Set<string>;
-  lastAccessed: number;
-}
+export type ToolSearchFilterPhase = 'search' | 'load' | 'active';
+
+export type ToolSearchFilterArgs = {
+  /** The resolved tool id. */
+  toolName: string;
+  tool: Tool<any, any>;
+  requestContext?: RequestContext;
+  phase: ToolSearchFilterPhase;
+};
 
 /**
  * Configuration options for ToolSearchProcessor
@@ -39,15 +44,56 @@ export interface ToolSearchProcessorOptions {
      * @default 0
      */
     minScore?: number;
+
+    /**
+     * When true, tools returned by `search_tools` are activated immediately as a
+     * side effect of the search — there is no separate `load_tool` step and the
+     * `load_tool` meta-tool is not exposed. The discovered tools become available
+     * on the model's next turn.
+     *
+     * This collapses the two-turn `search -> load -> use` flow into a single
+     * `search -> use` flow, mirroring native provider tool-search features that
+     * auto-expand the discovered tool references. Discovery stays model-driven;
+     * only the explicit load decision is removed.
+     *
+     * Because every match is activated, keep `topK` conservative in this mode.
+     * @default false
+     */
+    autoLoad?: boolean;
   };
 
   /**
-   * Time-to-live for thread state in milliseconds.
-   * After this duration of inactivity, thread state will be eligible for cleanup.
-   * Set to 0 to disable TTL cleanup.
+   * Where loaded-tool state lives. The `'context'` store is opt-in.
+   *
+   * - `'in-memory'` (default): the original behavior — loaded state lives in an
+   *   in-memory `Map<threadId, Set>` with TTL cleanup (see `ttl`). Lost on restart;
+   *   anonymous requests share a `'default'` entry.
+   * - `'context'`: derived from the conversation messages. A tool is loaded iff a
+   *   prior `search_tools`/`load_tool` result naming it is still present in the
+   *   conversation. Restart-safe, requires no memory, and de-loads automatically
+   *   when the result block is no longer present in the messages — parity with
+   *   native provider tool-search.
+   *
+   * @default 'in-memory'
+   */
+  storage?: 'in-memory' | 'context';
+
+  /**
+   * Time-to-live for in-memory thread state, in milliseconds. Only applies to the
+   * default `storage: 'in-memory'` store. After this duration of inactivity, thread
+   * state is eligible for cleanup. Set to 0 to disable cleanup.
+   *
+   * Ignored for `storage: 'context'`.
+   *
    * @default 3600000 (1 hour)
    */
   ttl?: number;
+
+  /**
+   * Optional request-aware hook for filtering tools during search, load, and active tool injection.
+   * Return false to hide or block a tool for the current request.
+   */
+  filter?: (args: ToolSearchFilterArgs) => boolean | Promise<boolean>;
 }
 
 /**
@@ -109,74 +155,118 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
 
   private allTools: Record<string, Tool<any, any>>;
   private searchConfig: Required<NonNullable<ToolSearchProcessorOptions['search']>>;
-  private ttl: number;
+  private filter?: ToolSearchProcessorOptions['filter'];
+
+  /** Pluggable backend for loaded-tool state. */
+  private store: LoadedToolStore;
 
   /** BM25 index for tool search */
   private bm25Index: BM25Index;
   /** Map from tool ID to full description (for result formatting) */
   private toolDescriptions = new Map<string, string>();
 
-  /**
-   * Thread-scoped state management for loaded tools with TTL support.
-   * Instance-scoped to prevent cross-processor interference.
-   * Maps threadId -> ThreadState (tools + timestamp)
-   */
-  private threadLoadedTools = new Map<string, ThreadState>();
-
   constructor(options: ToolSearchProcessorOptions) {
     this.allTools = options.tools;
+    this.filter = options.filter;
     this.searchConfig = {
       topK: options.search?.topK ?? 5,
       minScore: options.search?.minScore ?? 0,
+      autoLoad: options.search?.autoLoad ?? false,
     };
-    this.ttl = options.ttl ?? 3600000; // Default: 1 hour
+
+    const storage = options.storage ?? 'in-memory';
+
+    this.store =
+      storage === 'context' ? new ContextLoadedToolStore() : new LegacyMapLoadedToolStore({ ttl: options.ttl });
 
     // Create BM25 index with tool-search-specific tokenization
     this.bm25Index = new BM25Index({}, TOOL_SEARCH_TOKENIZE_OPTIONS);
 
     // Index all tools
     this.indexTools();
+  }
 
-    // Start periodic cleanup if TTL is enabled
-    if (this.ttl > 0) {
-      this.scheduleCleanup();
+  /**
+   * Get the thread ID from the request context, or undefined when no thread is active.
+   * Both stores tolerate an undefined thread ID.
+   */
+  private getThreadId(args: ProcessInputStepArgs): string | undefined {
+    return (args.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) || undefined;
+  }
+
+  private makeStoreContext(args: ProcessInputStepArgs): LoadedToolStoreContext {
+    return { threadId: this.getThreadId(args), args };
+  }
+
+  private findToolById(toolId: string): Tool<any, any> | undefined {
+    return Object.values(this.allTools).find(tool => tool.id === toolId);
+  }
+
+  private findToolForDynamicName(toolName: string): Tool<any, any> | undefined {
+    const toolByKey = this.allTools[toolName];
+    const toolById = this.findToolById(toolName);
+    return this.filter ? (toolById ?? toolByKey) : (toolByKey ?? toolById);
+  }
+
+  private async isToolAllowed(
+    tool: Tool<any, any>,
+    requestContext: RequestContext | undefined,
+    phase: ToolSearchFilterPhase,
+  ): Promise<boolean> {
+    if (!this.filter) {
+      return true;
+    }
+
+    try {
+      return await this.filter({ toolName: tool.id, tool, requestContext, phase });
+    } catch {
+      return false;
     }
   }
 
-  /**
-   * Get the thread ID from the request context, or use 'default' as fallback.
-   */
-  private getThreadId(args: ProcessInputStepArgs): string {
-    return args.requestContext?.get(MASTRA_THREAD_ID_KEY) || 'default';
-  }
+  private async getSuggestedToolNames(toolName: string, requestContext?: RequestContext): Promise<string[]> {
+    const matchesToolName = (name: string) =>
+      name.toLowerCase().includes(toolName.toLowerCase()) || toolName.toLowerCase().includes(name.toLowerCase());
 
-  /**
-   * Get the set of loaded tool names for the current thread.
-   * Updates the lastAccessed timestamp for TTL management.
-   */
-  private getLoadedToolNames(threadId: string): Set<string> {
-    if (!this.threadLoadedTools.has(threadId)) {
-      this.threadLoadedTools.set(threadId, {
-        tools: new Set(),
-        lastAccessed: Date.now(),
-      });
+    if (!this.filter) {
+      return Object.keys(this.allTools).filter(matchesToolName);
     }
-    const state = this.threadLoadedTools.get(threadId)!;
-    state.lastAccessed = Date.now(); // Update timestamp on access
-    return state.tools;
+
+    const allowedNames: string[] = [];
+
+    for (const name of Object.keys(this.allTools)) {
+      if (!matchesToolName(name)) continue;
+
+      const tool = this.findToolForDynamicName(name);
+      if (!tool) continue;
+
+      const isAllowed = await this.isToolAllowed(tool, requestContext, 'load');
+      if (isAllowed) {
+        allowedNames.push(name);
+        if (allowedNames.length >= 3) break;
+      }
+    }
+
+    return allowedNames;
   }
 
   /**
-   * Get loaded tools as Tool objects for the current thread.
+   * Get loaded tools as Tool objects for the given loaded names.
+   * Loaded names are resolved by the configured store.
    */
-  private getLoadedTools(threadId: string): Record<string, Tool<any, any>> {
-    const loadedNames = this.getLoadedToolNames(threadId);
+  private async getLoadedTools(
+    loadedNames: Set<string>,
+    requestContext?: RequestContext,
+  ): Promise<Record<string, Tool<any, any>>> {
     const loadedTools: Record<string, Tool<any, any>> = {};
 
     for (const toolName of loadedNames) {
-      const tool = this.allTools[toolName] || Object.values(this.allTools).find(t => t.id === toolName);
+      const tool = this.findToolForDynamicName(toolName);
       if (tool) {
-        loadedTools[toolName] = tool;
+        const isAllowed = await this.isToolAllowed(tool, requestContext, 'active');
+        if (isAllowed) {
+          loadedTools[toolName] = tool;
+        }
       }
     }
 
@@ -184,92 +274,74 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   }
 
   /**
+   * Get loaded tools for the given request context.
+   * Used by agent resume paths to rebuild tool executors after approval suspension.
+   *
+   * Resolution:
+   * - If `stepArgs` are supplied, resolve through the store with the live messages.
+   * - Otherwise (resume path) resolve from the store using the thread ID derived
+   *   from the request context. The context store falls back to its same-process
+   *   supplemental set.
+   */
+  public async getLoadedToolsForRequestContext(args?: {
+    requestContext?: RequestContext;
+    stepArgs?: ProcessInputStepArgs;
+  }): Promise<Record<string, Tool<any, any>>> {
+    if (args?.stepArgs) {
+      const loadedNames = await this.store.getLoadedNames(this.makeStoreContext(args.stepArgs));
+      // Fall back to the step's own request context so active-phase filtering still
+      // runs when the caller only supplies stepArgs.
+      return this.getLoadedTools(loadedNames, args.requestContext ?? args.stepArgs.requestContext);
+    }
+
+    const threadId = (args?.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) || undefined;
+    const loadedNames = await this.store.getLoadedNames({ threadId, args: undefined });
+    return this.getLoadedTools(loadedNames, args?.requestContext);
+  }
+
+  /**
    * Clear loaded tools for a specific thread (useful for testing).
+   *
+   * Only affects the default `storage: 'in-memory'` store; a no-op for the
+   * `'context'` store, where loaded state lives in the conversation messages.
    *
    * @param threadId - The thread ID to clear, or 'default' if not provided
    */
   public clearState(threadId: string = 'default'): void {
-    this.threadLoadedTools.delete(threadId);
+    if (this.store instanceof LegacyMapLoadedToolStore) this.store.clearState(threadId);
   }
 
   /**
    * Clear all thread state for this processor instance (useful for testing).
+   *
+   * Only affects the default `storage: 'in-memory'` store.
    */
   public clearAllState(): void {
-    this.threadLoadedTools.clear();
+    if (this.store instanceof LegacyMapLoadedToolStore) this.store.clearAllState();
   }
 
   /**
-   * Clean up stale thread state based on TTL.
-   * Removes threads that haven't been accessed within the TTL period.
+   * Get statistics about current in-memory thread state (useful for monitoring).
    *
-   * @returns Number of threads cleaned up
-   */
-  private cleanupStaleState(): number {
-    if (this.ttl <= 0) return 0; // TTL disabled
-
-    const now = Date.now();
-    let cleanedCount = 0;
-
-    for (const [threadId, state] of this.threadLoadedTools.entries()) {
-      if (now - state.lastAccessed > this.ttl) {
-        this.threadLoadedTools.delete(threadId);
-        cleanedCount++;
-      }
-    }
-
-    return cleanedCount;
-  }
-
-  /**
-   * Schedule periodic cleanup of stale thread state.
-   * Runs cleanup every TTL/2 milliseconds to prevent unbounded memory growth.
-   */
-  private scheduleCleanup(): void {
-    // Clean up at half the TTL interval
-    const cleanupInterval = Math.max(this.ttl / 2, 60000); // Minimum 1 minute
-
-    // Use setInterval but don't block process exit
-    const intervalId = setInterval(() => {
-      this.cleanupStaleState();
-    }, cleanupInterval);
-
-    // Allow process to exit even if interval is active
-    if (intervalId.unref) {
-      intervalId.unref();
-    }
-  }
-
-  /**
-   * Get statistics about current thread state (useful for monitoring).
-   *
-   * @returns Object with thread count and oldest access time
+   * Only meaningful for the default `storage: 'in-memory'` store; returns zero
+   * counts for the `'context'` store.
    */
   public getStateStats(): { threadCount: number; oldestAccessTime: number | null } {
-    if (this.threadLoadedTools.size === 0) {
-      return { threadCount: 0, oldestAccessTime: null };
-    }
-
-    let oldest = Date.now();
-    for (const state of this.threadLoadedTools.values()) {
-      if (state.lastAccessed < oldest) {
-        oldest = state.lastAccessed;
-      }
-    }
-
-    return {
-      threadCount: this.threadLoadedTools.size,
-      oldestAccessTime: oldest,
-    };
+    return this.store instanceof LegacyMapLoadedToolStore
+      ? this.store.getStateStats()
+      : { threadCount: 0, oldestAccessTime: null };
   }
 
   /**
-   * Manually trigger cleanup of stale state (useful for testing and monitoring).
+   * Manually trigger cleanup of stale in-memory state (useful for testing).
+   *
+   * Only affects the default `storage: 'in-memory'` store; returns 0 for the
+   * `'context'` store.
    *
    * @returns Number of threads cleaned up
    */
   public cleanupNow(): number {
-    return this.cleanupStaleState();
+    return this.store instanceof LegacyMapLoadedToolStore ? this.store.cleanupStaleState() : 0;
   }
 
   /**
@@ -291,11 +363,14 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
    * @param query - Search keywords
    * @returns Array of matching tools with scores, sorted by relevance
    */
-  private searchTools(query: string): SearchResult[] {
+  private async searchTools(query: string, requestContext?: RequestContext): Promise<SearchResult[]> {
     if (this.bm25Index.size === 0) return [];
 
-    // Get BM25 results (request more than topK to allow for re-ranking after boosting)
-    const bm25Results = this.bm25Index.search(query, this.searchConfig.topK * 2, 0);
+    // Get BM25 results (request more than topK to allow for re-ranking after boosting).
+    // When filtering is enabled, inspect every BM25 match so denied high-ranking tools
+    // do not prevent lower-ranking allowed tools from filling the result set.
+    const searchLimit = this.filter ? this.bm25Index.size : this.searchConfig.topK * 2;
+    const bm25Results = this.bm25Index.search(query, searchLimit, 0);
 
     if (bm25Results.length === 0) return [];
 
@@ -320,41 +395,63 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       return { id: result.id, score };
     });
 
-    // Re-sort after boosting, filter by minScore, apply topK
-    return boostedResults
-      .sort((a, b) => b.score - a.score)
-      .filter(r => r.score > this.searchConfig.minScore)
-      .slice(0, this.searchConfig.topK)
-      .map(r => {
-        const description = this.toolDescriptions.get(r.id) || '';
-        return {
-          name: r.id,
-          description: description.length > 150 ? description.slice(0, 147) + '...' : description,
-          score: Math.round(r.score * 100) / 100,
-        };
-      });
+    const filteredResults: typeof boostedResults = [];
+    for (const result of boostedResults.sort((a, b) => b.score - a.score)) {
+      if (result.score <= this.searchConfig.minScore) continue;
+
+      const tool = this.findToolById(result.id);
+      if (!tool) continue;
+
+      const isAllowed = await this.isToolAllowed(tool, requestContext, 'search');
+      if (isAllowed) {
+        filteredResults.push(result);
+        if (filteredResults.length >= this.searchConfig.topK) break;
+      }
+    }
+
+    // Apply topK and format results.
+    return filteredResults.slice(0, this.searchConfig.topK).map(r => {
+      const description = this.toolDescriptions.get(r.id) || '';
+      return {
+        name: r.id,
+        description: description.length > 150 ? description.slice(0, 147) + '...' : description,
+        score: Math.round(r.score * 100) / 100,
+      };
+    });
   }
 
   async processInputStep(args: ProcessInputStepArgs) {
     const { tools, messageList } = args;
-    const threadId = this.getThreadId(args);
-    const loadedToolNames = this.getLoadedToolNames(threadId);
+    const storeContext = this.makeStoreContext(args);
+    // Snapshot of names already loaded as of this step. Newly activated tools are
+    // recorded via the store and become available on the model's next turn.
+    const loadedToolNames = await this.store.getLoadedNames(storeContext);
+
+    const autoLoad = this.searchConfig.autoLoad;
 
     // Add system instruction about the meta-tools
     messageList.addSystem(
-      'To discover available tools, call search_tools with a keyword query. ' +
-        'To add a tool to the conversation, call load_tool with the tool name. ' +
-        'Tools must be loaded before they can be used.',
+      autoLoad
+        ? 'To discover available tools, call search_tools with a keyword query. ' +
+            'Matching tools are loaded automatically and become available on your next turn — ' +
+            'there is no separate load step. After searching, use the tool directly.'
+        : 'To discover available tools, call search_tools with a keyword query. ' +
+            'To add one or more tools to the conversation, call load_tool with a toolName or toolNames array. ' +
+            'Tools must be loaded before they can be used.',
     );
 
     // Create the search tool with BM25 ranking
     const searchTool = createTool({
       id: 'search_tools',
-      description:
-        'Search for available tools by keyword. ' +
-        "Use this when you need a capability you don't currently have. " +
-        'Returns a list of matching tools with their names and descriptions. ' +
-        'After finding a useful tool, use load_tool to make it available.',
+      description: autoLoad
+        ? 'Search for available tools by keyword. ' +
+          "Use this when you need a capability you don't currently have. " +
+          'Returns a list of matching tools, which are loaded automatically and ' +
+          'become available on your next turn — no separate load step is required.'
+        : 'Search for available tools by keyword. ' +
+          "Use this when you need a capability you don't currently have. " +
+          'Returns a list of matching tools with their names and descriptions. ' +
+          'After finding a useful tool, use load_tool to make it available.',
       inputSchema: z.object({
         query: z.string().describe('Search keywords (e.g., "weather", "github issue", "database query")'),
       }),
@@ -370,7 +467,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       }),
       execute: async ({ query }) => {
         // Use BM25 search for relevance-ranked results
-        const results = this.searchTools(query);
+        const results = await this.searchTools(query, args.requestContext);
 
         if (results.length === 0) {
           return {
@@ -379,87 +476,176 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
           };
         }
 
+        if (autoLoad) {
+          // Activate the matches immediately. They become usable on the next turn —
+          // no explicit load_tool call needed. The store records the activation;
+          // for the context store this result in the conversation messages is the durable record.
+          const newlyLoaded: string[] = [];
+          for (const result of results) {
+            if (!loadedToolNames.has(result.name)) {
+              newlyLoaded.push(result.name);
+            }
+          }
+          await this.store.addLoaded(newlyLoaded, storeContext);
+          for (const name of newlyLoaded) loadedToolNames.add(name);
+
+          return {
+            results,
+            message:
+              `Found and loaded ${results.length} tool(s): ${results.map(r => r.name).join(', ')}. ` +
+              `They are available on your next turn — call them directly.` +
+              (newlyLoaded.length < results.length ? ' Some were already loaded.' : ''),
+          };
+        }
+
         return {
           results,
-          message: `Found ${results.length} tool(s). Use load_tool with the exact tool name to make it available.`,
+          message: `Found ${results.length} tool(s). Use load_tool with an exact toolName or a toolNames array to make them available.`,
         };
       },
     });
 
-    // Create the load tool that uses thread-scoped state
+    // Create the load tool that uses thread-scoped state.
+    // In auto-load mode this meta-tool is not exposed (search_tools activates matches itself).
     const loadTool = createTool({
       id: 'load_tool',
       description:
-        'Load a specific tool into your context. ' +
-        'Call this after finding a tool with search_tools. ' +
-        'Once loaded, the tool will be available for use. ' +
-        'Args: toolName - The exact name of the tool to load (from search results).',
+        'Load one or more tools into your context. ' +
+        'Call this after finding tools with search_tools. ' +
+        'Once loaded, tools will be available for use. ' +
+        'Pass a single toolName or an array of toolNames to load multiple tools at once.',
       inputSchema: z.object({
-        toolName: z.string().describe('The exact name of the tool to load (from search results)'),
+        toolName: z.string().optional().describe('The exact name of a tool to load (from search results)'),
+        toolNames: z
+          .array(z.string())
+          .optional()
+          .describe('Array of exact tool names to load in one call (from search results)'),
       }),
       outputSchema: z.object({
         success: z.boolean(),
         message: z.string(),
+        loadedCount: z.number().optional(),
         toolName: z.string().optional(),
+        loaded: z.array(z.string()).optional(),
+        notFound: z.array(z.string()).optional(),
+        alreadyLoaded: z.array(z.string()).optional(),
       }),
-      execute: async ({ toolName }) => {
-        // Check if tool exists
-        const matchingTool = this.allTools[toolName] ?? Object.values(this.allTools).find(tool => tool.id === toolName);
-
-        if (!matchingTool) {
-          // Generate suggestions for similar tool names
-          const availableToolNames = Object.keys(this.allTools).concat(
-            Object.values(this.allTools)
-              .map(t => t.id)
-              .filter(id => !this.allTools[id]),
-          );
-          const suggestions = availableToolNames.filter(
-            name =>
-              name.toLowerCase().includes(toolName.toLowerCase()) ||
-              toolName.toLowerCase().includes(name.toLowerCase()),
-          );
-
-          let message = `Tool "${toolName}" not found.`;
-          if (suggestions.length > 0) {
-            message += ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
-          } else {
-            message += ' Use search_tools to find available tools.';
-          }
-
+      execute: async ({ toolName, toolNames }) => {
+        // Determine which tools to load
+        let toLoad: string[];
+        const toolNamesProvided = toolNames !== undefined;
+        if (toolNamesProvided && toolNames!.length === 0 && !toolName) {
           return {
             success: false,
-            message,
+            message: 'toolNames array must not be empty.',
+          };
+        }
+        if (toolNamesProvided && toolNames!.length > 0) {
+          // Merge toolName into toolNames if both provided, then dedupe
+          const base: string[] = [...toolNames!];
+          if (toolName) base.push(toolName);
+          toLoad = Array.from(new Set(base));
+        } else if (toolName) {
+          toLoad = [toolName];
+        } else {
+          return {
+            success: false,
+            message: 'You must provide either toolName (string) or toolNames (array) to load.',
           };
         }
 
-        // Check if already loaded (thread-scoped)
-        if (loadedToolNames.has(toolName)) {
+        const notFound: string[] = [];
+        const alreadyLoaded: string[] = [];
+        const loaded: string[] = [];
+
+        for (const name of toLoad) {
+          // Check if tool exists
+          const matchingTool = this.findToolForDynamicName(name);
+
+          if (!matchingTool) {
+            notFound.push(name);
+            continue;
+          }
+
+          const isAllowed = await this.isToolAllowed(matchingTool, args.requestContext, 'load');
+          if (!isAllowed) {
+            notFound.push(name);
+            continue;
+          }
+
+          // Check if already loaded (snapshot of prior steps, plus this call).
+          if (loadedToolNames.has(name) || loaded.includes(name)) {
+            alreadyLoaded.push(name);
+            continue;
+          }
+
+          loaded.push(name);
+        }
+
+        // Record newly loaded tools in the store. For the context store this
+        // result in the conversation messages is the durable record.
+        await this.store.addLoaded(loaded, storeContext);
+        for (const name of loaded) loadedToolNames.add(name);
+
+        // Build response based on how many tools were requested
+        // Only use single-tool backward-compatible shape when using the legacy toolName param
+        if (toLoad.length === 1 && !toolNamesProvided) {
+          // Single-tool response (backward compatible shape)
+          if (notFound.length > 0) {
+            const name = toLoad[0]!;
+            const suggestions = await this.getSuggestedToolNames(name, args.requestContext);
+            let message = `Tool "${name}" not found.`;
+            if (suggestions.length > 0) {
+              message += ` Did you mean: ${suggestions.slice(0, 3).join(', ')}?`;
+            } else {
+              message += ' Use search_tools to find available tools.';
+            }
+            return { success: false, message, toolName: name };
+          }
+          if (alreadyLoaded.length > 0) {
+            return {
+              success: true,
+              message: `Tool "${alreadyLoaded[0]}" is already loaded and available.`,
+              toolName: alreadyLoaded[0],
+            };
+          }
           return {
             success: true,
-            message: `Tool "${toolName}" is already loaded and available.`,
-            toolName,
+            message: `Tool "${loaded[0]}" loaded successfully. It will be available on your next turn.`,
+            toolName: loaded[0],
           };
         }
 
-        // Load the tool (thread-scoped)
-        loadedToolNames.add(toolName);
+        // Multi-tool response
+        const parts: string[] = [];
+        if (loaded.length > 0) parts.push(`Loaded: ${loaded.join(', ')} — available on your next turn`);
+        if (alreadyLoaded.length > 0) parts.push(`Already loaded: ${alreadyLoaded.join(', ')}`);
+        if (notFound.length > 0) parts.push(`Not found: ${notFound.join(', ')}`);
 
         return {
-          success: true,
-          message: `Tool "${toolName}" loaded successfully. It will be available on your next turn.`,
-          toolName,
+          success: notFound.length === 0,
+          message: parts.join(' | '),
+          loadedCount: loaded.length,
+          loaded: loaded.length > 0 ? loaded : undefined,
+          notFound: notFound.length > 0 ? notFound : undefined,
+          alreadyLoaded: alreadyLoaded.length > 0 ? alreadyLoaded : undefined,
         };
       },
     });
 
-    // Get loaded tools for this thread
-    const loadedTools = this.getLoadedTools(threadId);
+    // Get loaded tools as of this step's snapshot.
+    const loadedTools = await this.getLoadedTools(loadedToolNames, args.requestContext);
 
-    // Return merged tools: meta-tools + existing tools + loaded tools
+    // Return merged tools, ordered to keep the cacheable prefix stable:
+    // meta-tool(s) first (always present, fixed position), then existing tools,
+    // then loaded tools appended last. Appending newly activated tools rather than
+    // interleaving them preserves the tool-definition prefix so prompt caching is
+    // not invalidated when a tool is loaded mid-conversation.
     return {
       tools: {
         search_tools: searchTool,
-        load_tool: loadTool,
+        // load_tool is omitted in auto-load mode — search_tools activates matches directly.
+        ...(autoLoad ? {} : { load_tool: loadTool }),
         ...(tools ?? {}),
         ...loadedTools,
       },

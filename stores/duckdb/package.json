@@ -1,6 +1,6 @@
 {
   "name": "@mastra/duckdb",
-  "version": "1.2.0",
+  "version": "1.4.2",
   "description": "DuckDB vector store provider for Mastra - embedded high-performance vector storage with HNSW indexing",
   "type": "module",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint .",
@@ -28,19 +28,20 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@duckdb/node-api": "^1.5.2-r.1"
+    "@duckdb/node-api": "^1.5.2-r.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "rimraf": "^5.0.10",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

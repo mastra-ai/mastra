@@ -36,6 +36,10 @@ const modeConfig: Record<SearchMode, { label: string; icon: React.ReactNode; col
   },
 };
 
+function getWorkspaceSearchResultFileId(result: SearchResult): string {
+  return result.id.replace(/#chunk-\d+$/, '');
+}
+
 export function SearchWorkspacePanel({
   onSearch,
   isSearching,
@@ -80,7 +84,8 @@ export function SearchWorkspacePanel({
               value={query}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
               placeholder="Search workspace files..."
-              className="pl-9 h-10 bg-surface2 border-border1"
+              variant="outline"
+              className="pl-9 h-10"
             />
           </div>
 
@@ -151,7 +156,7 @@ export function SearchWorkspacePanel({
                   key={`${result.id}-${index}`}
                   result={result}
                   rank={index + 1}
-                  onClick={() => onViewResult?.(result.id)}
+                  onClick={() => onViewResult?.(getWorkspaceSearchResultFileId(result))}
                 />
               ))}
             </ul>
@@ -170,6 +175,7 @@ interface WorkspaceSearchResultItemProps {
 
 function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchResultItemProps) {
   const scorePercent = Math.min(100, Math.max(0, result.score * 100));
+  const fileId = getWorkspaceSearchResultFileId(result);
 
   return (
     <li className="border-t border-border1 first:border-t-0">
@@ -178,7 +184,7 @@ function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchRes
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <FolderOpen className="h-3.5 w-3.5 text-neutral4 shrink-0" />
-            <span className="font-mono text-sm text-neutral6 truncate">{result.id}</span>
+            <span className="font-mono text-sm text-neutral6 truncate">{fileId}</span>
             <div className="flex items-center gap-1.5 shrink-0">
               <div className="w-12 h-1 rounded-full bg-surface2 overflow-hidden">
                 <div className="h-full rounded-full bg-accent1" style={{ width: `${scorePercent}%` }} />

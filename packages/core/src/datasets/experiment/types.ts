@@ -1,3 +1,4 @@
+import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
@@ -16,6 +17,30 @@ export interface DataItem<I = unknown, E = unknown> {
   groundTruth?: E;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
+  /** Per-item request context merged over the global request context (item takes precedence) */
+  requestContext?: Record<string, unknown>;
+  /**
+   * Resume data for suspended workflow steps, keyed by step ID.
+   * When a workflow suspends during experiment execution, the executor
+   * looks up the suspended step's ID here and auto-resumes with the value.
+   *
+   * @example
+   * ```ts
+   * { resumeSteps: { "approval-step": { approved: true } } }
+   * ```
+   */
+  resumeSteps?: Record<string, unknown>;
+  /**
+   * Flat resume data for workflows with a single suspended step.
+   * Used as a fallback when `resumeSteps` does not contain an entry
+   * for the suspended step ID.
+   *
+   * @example
+   * ```ts
+   * { resumeData: { approved: true } }
+   * ```
+   */
+  resumeData?: unknown;
 }
 
 /**
@@ -48,8 +73,8 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
 
   // === Scoring ===
 
-  /** Scorers — MastraScorer instances or string IDs */
-  scorers?: (MastraScorer<any, any, any, any> | string)[];
+  /** Scorers — flat array, or the same categorised shape accepted by runEvals */
+  scorers?: (MastraScorer<any, any, any, any> | string)[] | AgentScorerConfig | WorkflowScorerConfig;
 
   // === Options ===
 
@@ -126,6 +151,21 @@ export interface ScorerResult {
   reason: string | null;
   /** Error message if scorer failed */
   error: string | null;
+  /**
+   * Scope this score targets. Mirrors the canonical `ScorerTargetScope`
+   * taxonomy from observability so consumers can differentiate span-level
+   * (agent/workflow/step) and trajectory scores in the flat `scores` array.
+   * Defaults to 'span' when omitted.
+   */
+  targetScope?: 'span' | 'trajectory';
+  /**
+   * ID of the workflow step this score targets. Only set for per-step
+   * dispatch (`scorers: { steps: { ... } }`). Step scores keep
+   * `targetScope: 'span'` and use `stepId` to identify the step, matching
+   * how `runEvals` encodes step identity via `targetEntityType` +
+   * `targetMetadata`.
+   */
+  stepId?: string;
 }
 
 /**

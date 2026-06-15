@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
-const { mockPage, mockContext, mockStagehand, mockCdpSession } = vi.hoisted(() => {
+const { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConstructor } = vi.hoisted(() => {
+  const mockStagehandConstructor = vi.fn();
   const mockCdpSession = {
     send: vi.fn().mockResolvedValue({}),
     on: vi.fn(),
@@ -44,11 +45,15 @@ const { mockPage, mockContext, mockStagehand, mockCdpSession } = vi.hoisted(() =
     ]),
   };
 
-  return { mockPage, mockContext, mockStagehand, mockCdpSession };
+  return { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConstructor };
 });
 
 vi.mock('@browserbasehq/stagehand', () => ({
   Stagehand: class MockStagehand {
+    constructor(options: unknown) {
+      mockStagehandConstructor(options);
+    }
+
     init = mockStagehand.init;
     close = mockStagehand.close;
     context = mockStagehand.context;
@@ -88,6 +93,15 @@ describe('StagehandBrowser', () => {
 
     it('should start in pending status', () => {
       expect(browser.status).toBe('pending');
+    });
+
+    it('defaults headless to true', () => {
+      expect(browser.headless).toBe(true);
+    });
+
+    it('respects headless: false', () => {
+      const visible = new StagehandBrowser({ headless: false });
+      expect(visible.headless).toBe(false);
     });
 
     it('should create instance with custom config', () => {
@@ -170,6 +184,62 @@ describe('StagehandBrowser', () => {
       expect(mockStagehand.init).toHaveBeenCalled();
     });
 
+    it('creates Stagehand with TUI-safe logging defaults', async () => {
+      await browser.launch();
+
+      expect(mockStagehandConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          verbose: 0,
+          disablePino: true,
+          logger: expect.any(Function),
+        }),
+      );
+    });
+
+    it('preserves explicit verbose level and custom logger', async () => {
+      const logger = vi.fn();
+      const customBrowser = new StagehandBrowser({ scope: 'shared', verbose: 2, logger });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          verbose: 2,
+          disablePino: true,
+          logger,
+        }),
+      );
+    });
+
+    it('preserves explicit disablePino override', async () => {
+      const customBrowser = new StagehandBrowser({ scope: 'shared', disablePino: false });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          disablePino: false,
+        }),
+      );
+    });
+
+    it('passes model configuration objects through to Stagehand', async () => {
+      const model = {
+        modelName: '__GATEWAY_OPENAI_MODEL__',
+        apiKey: 'test-openai-compatible-key',
+        baseURL: 'https://openai-compatible.example.com/v1',
+      };
+      const customBrowser = new StagehandBrowser({ scope: 'shared', model });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model,
+        }),
+      );
+    });
+
     it('should close successfully', async () => {
       await browser.launch();
       await browser.close();
@@ -221,9 +291,9 @@ describe('StagehandBrowser', () => {
   });
 
   describe('getTools', () => {
-    it('should return 6 tools', () => {
+    it('should return 7 tools', () => {
       const tools = browser.getTools();
-      expect(Object.keys(tools)).toHaveLength(6);
+      expect(Object.keys(tools)).toHaveLength(7);
     });
 
     it('should include all expected tools', () => {
@@ -237,6 +307,18 @@ describe('StagehandBrowser', () => {
       // expect(tools[STAGEHAND_TOOLS.SCREENSHOT]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.TABS]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.CLOSE]).toBeDefined();
+    });
+
+    it('should include recording tools only when opted in', () => {
+      expect(browser.getTools().browser_record).toBeUndefined();
+      expect(browser.getTools().browser_record_caption).toBeUndefined();
+
+      const recordingBrowser = new StagehandBrowser({ scope: 'shared', recording: { outputDir: '/tmp/recordings' } });
+      const tools = recordingBrowser.getTools();
+
+      expect(tools.browser_record).toBeDefined();
+      expect(tools.browser_record_caption).toBeDefined();
+      expect(tools[STAGEHAND_TOOLS.NAVIGATE]).toBeDefined();
     });
   });
 
@@ -718,14 +800,45 @@ describe('createStagehandTools', () => {
     const browser = new StagehandBrowser();
     const tools = createStagehandTools(browser);
 
-    // Screenshot tool is currently disabled (see COR-761)
-    expect(Object.keys(tools)).toHaveLength(6);
+    expect(Object.keys(tools)).toHaveLength(7);
     expect(tools[STAGEHAND_TOOLS.ACT].id).toBe('stagehand_act');
     expect(tools[STAGEHAND_TOOLS.EXTRACT].id).toBe('stagehand_extract');
     expect(tools[STAGEHAND_TOOLS.OBSERVE].id).toBe('stagehand_observe');
     expect(tools[STAGEHAND_TOOLS.NAVIGATE].id).toBe('stagehand_navigate');
     expect(tools[STAGEHAND_TOOLS.TABS].id).toBe('stagehand_tabs');
     expect(tools[STAGEHAND_TOOLS.CLOSE].id).toBe('stagehand_close');
+    expect(tools[STAGEHAND_TOOLS.SCREENSHOT].id).toBe('stagehand_screenshot');
+  });
+});
+
+describe('excludeTools', () => {
+  it('should filter out excluded tools from getTools()', () => {
+    const browser = new StagehandBrowser({
+      scope: 'shared',
+      excludeTools: ['stagehand_screenshot', 'stagehand_close'],
+    });
+    const tools = browser.getTools();
+
+    expect(tools[STAGEHAND_TOOLS.SCREENSHOT]).toBeUndefined();
+    expect(tools[STAGEHAND_TOOLS.CLOSE]).toBeUndefined();
+    expect(tools[STAGEHAND_TOOLS.ACT].id).toBe('stagehand_act');
+    expect(tools[STAGEHAND_TOOLS.EXTRACT].id).toBe('stagehand_extract');
+    expect(tools[STAGEHAND_TOOLS.OBSERVE].id).toBe('stagehand_observe');
+    expect(tools[STAGEHAND_TOOLS.NAVIGATE].id).toBe('stagehand_navigate');
+    expect(tools[STAGEHAND_TOOLS.TABS].id).toBe('stagehand_tabs');
+    expect(Object.keys(tools)).toHaveLength(5);
+  });
+
+  it('should return all tools when excludeTools is not set', () => {
+    const browser = new StagehandBrowser({ scope: 'shared' });
+    const tools = browser.getTools();
+    expect(Object.keys(tools)).toHaveLength(7);
+  });
+
+  it('should return all tools when excludeTools is empty', () => {
+    const browser = new StagehandBrowser({ scope: 'shared', excludeTools: [] });
+    const tools = browser.getTools();
+    expect(Object.keys(tools)).toHaveLength(7);
   });
 });
 
@@ -735,8 +848,7 @@ describe('STAGEHAND_TOOLS', () => {
     expect(STAGEHAND_TOOLS.EXTRACT).toBe('stagehand_extract');
     expect(STAGEHAND_TOOLS.OBSERVE).toBe('stagehand_observe');
     expect(STAGEHAND_TOOLS.NAVIGATE).toBe('stagehand_navigate');
-    // Screenshot tool is currently disabled (see COR-761)
-    // expect(STAGEHAND_TOOLS.SCREENSHOT).toBe('stagehand_screenshot');
+    expect(STAGEHAND_TOOLS.SCREENSHOT).toBe('stagehand_screenshot');
     expect(STAGEHAND_TOOLS.CLOSE).toBe('stagehand_close');
   });
 });

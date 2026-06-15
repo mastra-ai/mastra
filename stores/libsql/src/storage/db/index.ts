@@ -18,6 +18,7 @@ import {
   prepareStatement,
   prepareUpdateStatement,
 } from './utils';
+import { withClientWriteLock } from './write-lock';
 
 /**
  * Base configuration options shared across LibSQL domain configurations
@@ -182,11 +183,13 @@ export class LibSQLDB extends MastraBase {
     // Filter out columns that don't exist in the actual database table
     const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
     if (Object.keys(filteredRecord).length === 0) return; // No known columns after filtering - skip insert
-    await this.client.execute(
-      prepareStatement({
-        tableName,
-        record: filteredRecord,
-      }),
+    await withClientWriteLock(this.client, () =>
+      this.client.execute(
+        prepareStatement({
+          tableName,
+          record: filteredRecord,
+        }),
+      ),
     );
   }
 
@@ -216,7 +219,9 @@ export class LibSQLDB extends MastraBase {
     // Filter out columns that don't exist in the actual database table
     const filteredData = await this.filterRecordToKnownColumns(tableName, data);
     if (Object.keys(filteredData).length === 0) return; // Nothing to update after filtering
-    await this.client.execute(prepareUpdateStatement({ tableName, updates: filteredData, keys }));
+    await withClientWriteLock(this.client, () =>
+      this.client.execute(prepareUpdateStatement({ tableName, updates: filteredData, keys })),
+    );
   }
 
   /**
@@ -248,7 +253,7 @@ export class LibSQLDB extends MastraBase {
     const nonEmptyRecords = filteredRecords.filter(r => Object.keys(r).length > 0);
     if (nonEmptyRecords.length === 0) return;
     const batchStatements = nonEmptyRecords.map(r => prepareStatement({ tableName, record: r }));
-    await this.client.batch(batchStatements, 'write');
+    await withClientWriteLock(this.client, () => this.client.batch(batchStatements, 'write'));
   }
 
   /**
@@ -312,7 +317,7 @@ export class LibSQLDB extends MastraBase {
       }),
     );
 
-    await this.client.batch(batchStatements, 'write');
+    await withClientWriteLock(this.client, () => this.client.batch(batchStatements, 'write'));
   }
 
   /**
@@ -369,7 +374,7 @@ export class LibSQLDB extends MastraBase {
       }),
     );
 
-    await this.client.batch(batchStatements, 'write');
+    await withClientWriteLock(this.client, () => this.client.batch(batchStatements, 'write'));
   }
 
   /**
@@ -410,7 +415,7 @@ export class LibSQLDB extends MastraBase {
    * Internal single-record delete implementation without retry logic.
    */
   private async doDelete({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<void> {
-    await this.client.execute(prepareDeleteStatement({ tableName, keys }));
+    await withClientWriteLock(this.client, () => this.client.execute(prepareDeleteStatement({ tableName, keys })));
   }
 
   /**
@@ -698,15 +703,21 @@ export class LibSQLDB extends MastraBase {
 
     try {
       // Add any columns from current schema that don't exist in the database
+      const existingColumnsRaw = await this.getTableColumns(TABLE_SPANS);
+      const existingColumns = new Set([...existingColumnsRaw].map(column => column.toLowerCase()));
+      let addedColumns = false;
       for (const [columnName, columnDef] of Object.entries(schema)) {
-        const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
-        if (!columnExists) {
+        if (!existingColumns.has(columnName.toLowerCase())) {
           const sqlType = this.getSqlType(columnDef.type);
           // For new columns, use nullable (no default needed) since existing rows will have NULL
           const alterSql = `ALTER TABLE "${TABLE_SPANS}" ADD COLUMN "${columnName}" ${sqlType}`;
           await this.client.execute(alterSql);
+          addedColumns = true;
           this.logger.debug(`LibSQLDB: Added column '${columnName}' to ${TABLE_SPANS}`);
         }
+      }
+      if (addedColumns) {
+        this.tableColumnsCache.delete(TABLE_SPANS);
       }
 
       // Check if unique index already exists - if so, skip migration
@@ -1053,7 +1064,7 @@ export class LibSQLDB extends MastraBase {
   async deleteData({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     try {
-      await this.client.execute(`DELETE FROM ${parsedTableName}`);
+      await withClientWriteLock(this.client, () => this.client.execute(`DELETE FROM ${parsedTableName}`));
     } catch (e) {
       const mastraError = new MastraError(
         {

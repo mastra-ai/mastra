@@ -1,9 +1,25 @@
+import { visibleWidth } from '@mariozechner/pi-tui';
+import stripAnsi from 'strip-ansi';
 import { describe, it, expect } from 'vitest';
 import { truncateAnsi } from '../ansi.js';
 
 describe('truncateAnsi', () => {
   it('returns the string unchanged when within maxWidth', () => {
     expect(truncateAnsi('hello', 10)).toBe('hello');
+  });
+
+  it('returns the string unchanged when it exactly fills maxWidth', () => {
+    expect(truncateAnsi('hello', 5)).toBe('hello');
+    expect(truncateAnsi('abc界', 5)).toBe('abc界');
+    expect(truncateAnsi('\x1b[31mhello\x1b[0m', 5)).toBe('\x1b[31mhello\x1b[0m');
+  });
+
+  it('returns no visible text when maxWidth is zero', () => {
+    expect(truncateAnsi('hello', 0)).toBe('');
+
+    const out = truncateAnsi('\x1b[31mhello\x1b[0m', 0);
+    expect(stripAnsi(out)).toBe('');
+    expect(visibleWidth(stripAnsi(out))).toBe(0);
   });
 
   it('preserves SGR escape sequences without counting them toward width', () => {
@@ -23,6 +39,21 @@ describe('truncateAnsi', () => {
     // 4 chars + ellipsis + closers
     expect(out).toMatch(/^abcd…/);
     expect(out).toContain('\x1b[0m');
+  });
+
+  it('truncates wide characters by terminal display width', () => {
+    const out = truncateAnsi('界'.repeat(4), 5);
+
+    expect(stripAnsi(out)).toBe('界界…');
+    expect(visibleWidth(stripAnsi(out))).toBe(5);
+  });
+
+  it('preserves ANSI sequences while truncating wide characters by terminal display width', () => {
+    const out = truncateAnsi(`\x1b[31m${'界'.repeat(4)}\x1b[0m`, 5);
+
+    expect(out).toContain('\x1b[31m');
+    expect(stripAnsi(out)).toBe('界界…');
+    expect(visibleWidth(stripAnsi(out))).toBe(5);
   });
 
   it('runs in linear time on pathological input (no ReDoS)', () => {

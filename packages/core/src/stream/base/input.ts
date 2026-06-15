@@ -1,7 +1,7 @@
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MastraBase } from '../../base';
-import { ChunkFrom } from '../types';
+import { attachModelStreamTransport, ChunkFrom, readModelStreamTransport } from '../types';
 import type { ChunkType, CreateStream, OnResult } from '../types';
 
 /**
@@ -58,19 +58,36 @@ export abstract class MastraModelInput extends MastraBase {
     controller: ReadableStreamDefaultController<ChunkType>;
   }): Promise<void>;
 
-  initialize({ runId, createStream, onResult }: { createStream: CreateStream; runId: string; onResult: OnResult }) {
+  initialize({
+    runId,
+    createStream,
+    onResult,
+    abortSignal,
+  }: {
+    createStream: CreateStream;
+    runId: string;
+    onResult: OnResult;
+    abortSignal?: AbortSignal;
+  }) {
     const self = this;
 
-    const stream = new ReadableStream<ChunkType>({
+    let outputStream: ReadableStream<ChunkType>;
+    outputStream = new ReadableStream<ChunkType>({
       async start(controller) {
         try {
           const stream = await createStream();
+          attachModelStreamTransport(outputStream, readModelStreamTransport(stream));
 
-          onResult({
+          const initialChunks = onResult({
             warnings: stream.warnings,
             request: stream.request,
             rawResponse: stream.rawResponse || stream.response || {},
           });
+          if (initialChunks) {
+            for (const chunk of Array.isArray(initialChunks) ? initialChunks : [initialChunks]) {
+              controller.enqueue(chunk);
+            }
+          }
 
           await self.transform({
             runId,
@@ -80,7 +97,7 @@ export abstract class MastraModelInput extends MastraBase {
 
           safeClose(controller);
         } catch (error) {
-          if (isAbortError(error)) {
+          if (isAbortError(error) && abortSignal?.aborted) {
             safeEnqueue(controller, {
               type: 'error',
               runId,
@@ -96,6 +113,6 @@ export abstract class MastraModelInput extends MastraBase {
       },
     });
 
-    return stream;
+    return outputStream;
   }
 }

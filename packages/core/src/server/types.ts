@@ -1,13 +1,20 @@
-import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
+import type { Handler, MiddlewareHandler, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { ZodError } from 'zod/v4';
+import type { FGARouteConfig, IFGAProvider } from '../auth/ee/interfaces/fga';
+import type { MastraFGAPermissionInput } from '../auth/ee/interfaces/permissions.generated';
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
+import type { AuthenticateTokenFn } from './request-types';
+
+type RouteFGAConfig = FGARouteConfig;
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
+
+export type ApiRouteHandler = (c: any) => Response | Promise<Response>;
 
 export type ApiRoute =
   | {
@@ -16,18 +23,30 @@ export type ApiRoute =
       handler: Handler;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
+      cors?: CorsOptions;
       requiresAuth?: boolean;
+      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
+      fga?: RouteFGAConfig;
+      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
+      _mastraInternal?: true;
     }
   | {
       path: string;
       method: Methods;
-      createHandler: ({ mastra }: { mastra: Mastra }) => Promise<Handler>;
+      createHandler: ({ mastra }: { mastra: Mastra }) => Promise<ApiRouteHandler>;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
+      cors?: CorsOptions;
       requiresAuth?: boolean;
+      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
+      fga?: RouteFGAConfig;
+      /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
+      _mastraInternal?: true;
     };
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
+
+export type CorsOptions = Parameters<typeof cors>[0];
 
 export type ContextWithMastra = Context<{
   Variables: {
@@ -51,7 +70,7 @@ export type MastraAuthConfig<TUser = unknown> = {
   /**
    * Public paths for the server
    */
-  authenticateToken?: (token: string, request: HonoRequest) => Promise<TUser>;
+  authenticateToken?: AuthenticateTokenFn<TUser, Promise<TUser>>;
 
   /**
    * Maps the authenticated user to a resource ID for memory/thread scoping.
@@ -127,10 +146,71 @@ export type ValidationErrorResponse = {
   body: unknown;
 };
 
+export type A2AAgentCardSigningConfig = {
+  /**
+   * Private signing key used to sign the Agent Card.
+   * Supports PKCS#8 PEM strings or JsonWebKey.
+   */
+  privateKey: string | JsonWebKey;
+  /**
+   * Protected JWS header values. `alg` is required.
+   * Optional fields like `kid` and `jku` can be supplied here.
+   */
+  protectedHeader: {
+    alg: string;
+    [key: string]: unknown;
+  };
+  /**
+   * Optional unprotected JWS header values.
+   */
+  header?: Record<string, unknown>;
+};
+
+export type A2AConfig = {
+  /**
+   * Optional Agent Card signing configuration.
+   * When provided, Mastra signs the served Agent Card and includes `signatures`.
+   */
+  agentCardSigning?: A2AAgentCardSigningConfig;
+};
+
 export type ValidationErrorHook = (
   error: ZodError,
   context: ValidationErrorContext,
 ) => ValidationErrorResponse | undefined | void;
+
+export type StoredResourceScopeConfig =
+  | boolean
+  | {
+      /**
+       * Metadata key used to persist the resolved stored-resource scope.
+       *
+       * @default 'mastra.resourceId'
+       */
+      metadataKey?: string;
+      /**
+       * Resolve the stored-resource scope for the current request. When omitted,
+       * Mastra uses MASTRA_RESOURCE_ID_KEY from the request context.
+       */
+      resolve?: (context: {
+        requestContext?: RequestContext;
+        user?: unknown;
+      }) => string | undefined | null | Promise<string | undefined | null>;
+      /**
+       * When true, scoped stored-resource routes fail if no scope can be resolved.
+       *
+       * @default true
+       */
+      requireScope?: boolean;
+    };
+
+export type StoredResourcesConfig = {
+  /**
+   * Opt-in tenant/resource scoping for stored resources. When enabled, stored
+   * resource handlers persist and filter a scope value in record metadata.
+   */
+  scope?: StoredResourceScopeConfig;
+};
 
 export type ServerConfig = {
   /**
@@ -187,10 +267,10 @@ export type ServerConfig = {
    */
   middleware?: Middleware | Middleware[];
   /**
-   * CORS configuration for the server
-   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
+   * CORS configuration for the server.
+   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
    */
-  cors?: Parameters<typeof cors>[0] | false;
+  cors?: CorsOptions | false;
   /**
    * Build configuration for the server
    */
@@ -248,6 +328,11 @@ export type ServerConfig = {
   };
 
   /**
+   * A2A-specific server configuration.
+   */
+  a2a?: A2AConfig;
+
+  /**
    * Authentication configuration for the server.
    *
    * Handles WHO the user is (authentication only).
@@ -302,6 +387,20 @@ export type ServerConfig = {
    * ```
    */
   rbac?: IRBACProvider<any>;
+
+  /**
+   * FGA provider for fine-grained authorization (EE feature).
+   *
+   * While `rbac` handles role-based access (WHAT the user can do),
+   * `fga` handles relationship-based access (can this user do this action
+   * on THIS specific resource).
+   */
+  fga?: IFGAProvider<any>;
+
+  /**
+   * Stored-resource route and handler behavior.
+   */
+  storedResources?: StoredResourcesConfig;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.
@@ -370,4 +469,65 @@ export type ServerConfig = {
    * ```
    */
   onValidationError?: ValidationErrorHook;
+};
+
+/**
+ * Configuration for Mastra Studio authentication and authorization.
+ *
+ * Studio authentication is independent from server (API) authentication,
+ * allowing you to use different providers for internal team members (Studio)
+ * vs external customers (API).
+ *
+ * @example Using separate providers for Studio and API
+ * ```typescript
+ * const mastra = new Mastra({
+ *   server: {
+ *     // API authentication for external customers
+ *     auth: new MastraAuthWorkos({ ... }),
+ *     rbac: new MastraRBACWorkos({ ... }),
+ *   },
+ *   studio: {
+ *     // Studio authentication for internal team
+ *     auth: new MastraAuthOkta({ ... }),
+ *     rbac: new StaticRBACProvider({
+ *       roles: DEFAULT_ROLES,
+ *       getUserRoles: (user) => [user.role],
+ *     }),
+ *   },
+ * });
+ * ```
+ */
+export type StudioConfig = {
+  /**
+   * Authentication provider for Studio UI.
+   *
+   * Handles WHO can access Studio (authentication only).
+   * For authorization (WHAT users can do in Studio), use the `rbac` option.
+   *
+   * When not configured, Studio operates without authentication (development mode).
+   */
+  auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+
+  /**
+   * Role-based access control (RBAC) provider for Studio.
+   *
+   * Handles WHAT authenticated Studio users can do.
+   * Controls access to Studio features like team management, user listing, etc.
+   *
+   * @example
+   * ```typescript
+   * rbac: new StaticRBACProvider({
+   *   roles: DEFAULT_ROLES,
+   *   getUserRoles: (user) => [user.role],
+   * }),
+   * ```
+   */
+  rbac?: IRBACProvider<any>;
+
+  /**
+   * FGA provider for fine-grained authorization in Studio.
+   *
+   * Enables relationship-based access control for Studio resources.
+   */
+  fga?: IFGAProvider<any>;
 };

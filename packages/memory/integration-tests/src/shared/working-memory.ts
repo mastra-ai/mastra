@@ -998,7 +998,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         // Second message adding more info
         await agentGenerate(
           agent,
-          'I am 25 years old.',
+          'I am 25 years old. Update my age in working memory.',
           {
             threadId: thread.id,
             resourceId,

@@ -178,7 +178,7 @@ async function registerUser(email: string): Promise<{ success: boolean; id: stri
     throw new Error(`Registration failed with status ${response.status}: ${response.statusText}`);
   }
 
-  return response.json();
+  return response.json() as Promise<{ success: boolean; id: string; key: string; message: string }>;
 }
 
 async function readCourseStep(lessonName: string, stepName: string, _isFirstStep: boolean = false): Promise<string> {

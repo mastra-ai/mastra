@@ -55,7 +55,7 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
   };
 
   return (
-    <div className="w-full h-full bg-surface1">
+    <div className="w-full h-full bg-surface2">
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({

@@ -50,7 +50,6 @@ const results = await vectorDB.query({
   topK: 10,
   filter: { text: 'doc1' },
   includeVector: false,
-  minScore: 0.5,
 });
 
 // Clean up
@@ -136,7 +135,6 @@ const vectorDB = new MongoDBVector({
 
 - Vector similarity search with cosine, euclidean, and dotproduct metrics (Atlas Search)
 - Metadata filtering with MongoDB-style query syntax
-- Minimum score threshold for queries
 - Automatic UUID generation for vectors
 - Collection (index) management: create, list, describe, delete
 - Atlas Search readiness checks for reliable testing
@@ -175,7 +173,7 @@ The following distance metrics are supported:
 
 - `createIndex({indexName, dimension, metric})`: Create a new collection with vector search support
 - `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
-- `query({indexName, queryVector, topK?, filter?, includeVector?, minScore?, documentFilter?})`: Search for similar vectors (optionally filter by document content)
+- `query({indexName, queryVector, topK?, filter?, includeVector?, documentFilter?})`: Search for similar vectors (optionally filter by document content)
 
 > **Note:** `documentFilter` allows filtering results based on the content of the `document` field. Example: `{ $contains: 'specific text' }` will return only vectors whose associated document contains the specified text.
 

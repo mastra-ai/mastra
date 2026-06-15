@@ -1,49 +1,89 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { HarnessRequestContext } from '@mastra/core/harness';
+import { createNotificationInboxTool, NotificationsStorage } from '@mastra/core/notifications';
+import type {
+  CreateNotificationInput,
+  ListDueNotificationsInput,
+  ListNotificationsInput,
+  UpdateNotificationInput,
+} from '@mastra/core/notifications';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { z } from 'zod';
+import type { MastraCompositeStore } from '@mastra/core/storage';
+import type { ToolHooks } from '@mastra/core/tools';
 import type { HookManager } from '../hooks';
 import type { McpManager } from '../mcp';
-import type { stateSchema } from '../schema';
+import type { MastraCodeComposedState } from '../schema';
+import { MC_TOOLS } from '../tool-names.js';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
-type MastraCodeState = z.infer<typeof stateSchema>;
-
 /** Minimal shape for tools passed to createDynamicTools. */
-type ToolLike = {
+export type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
 
-function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookManager): ToolLike {
-  if (!hookManager || typeof tool?.execute !== 'function') {
-    return tool;
+class LazyNotificationsStorage extends NotificationsStorage {
+  constructor(private readonly storage: MastraCompositeStore) {
+    super();
   }
 
+  private async getNotificationsStorage(): Promise<NotificationsStorage> {
+    const notifications = await this.storage.getStore('notifications');
+    if (!notifications) {
+      throw new Error('notification_inbox requires a notifications storage domain');
+    }
+    return notifications;
+  }
+
+  async createNotification(input: CreateNotificationInput) {
+    return (await this.getNotificationsStorage()).createNotification(input);
+  }
+
+  async listNotifications(input: ListNotificationsInput) {
+    return (await this.getNotificationsStorage()).listNotifications(input);
+  }
+
+  async listDueNotifications(input: ListDueNotificationsInput) {
+    return (await this.getNotificationsStorage()).listDueNotifications(input);
+  }
+
+  async getNotification(input: { threadId: string; id: string }) {
+    return (await this.getNotificationsStorage()).getNotification(input);
+  }
+
+  async updateNotification(input: UpdateNotificationInput) {
+    return (await this.getNotificationsStorage()).updateNotification(input);
+  }
+
+  async dangerouslyClearAll() {
+    return (await this.getNotificationsStorage()).dangerouslyClearAll();
+  }
+}
+
+export function createToolHooks(hookManager?: HookManager): ToolHooks | undefined {
+  if (!hookManager) return undefined;
+
   return {
-    ...tool,
-    async execute(input: unknown, toolContext: unknown) {
+    beforeToolCall: async ({ toolName, input }) => {
       const preResult = await hookManager.runPreToolUse(toolName, input);
       if (!preResult.allowed) {
         return {
-          error: preResult.blockReason ?? `Blocked by PreToolUse hook for tool "${toolName}"`,
+          proceed: false as const,
+          output: {
+            error: preResult.blockReason ?? `Blocked by PreToolUse hook for tool "${toolName}"`,
+          },
         };
       }
-
-      let output: unknown;
-      let toolError = false;
-      try {
-        output = await tool.execute?.(input, toolContext);
-        return output;
-      } catch (error) {
-        toolError = true;
-        output = {
-          error: error instanceof Error ? error.message : String(error),
-        };
-        throw error;
-      } finally {
-        await hookManager.runPostToolUse(toolName, input, output, toolError).catch(() => undefined);
-      }
+    },
+    afterToolCall: async ({ toolName, input, output, error }) => {
+      await hookManager
+        .runPostToolUse(
+          toolName,
+          input,
+          error ? { error: error instanceof Error ? error.message : String(error) } : output,
+          Boolean(error),
+        )
+        .catch(() => undefined);
     },
   };
 }
@@ -51,12 +91,12 @@ function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookM
 export function createDynamicTools(
   mcpManager?: McpManager,
   extraTools?: Record<string, ToolLike> | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike>),
-  hookManager?: HookManager,
   disabledTools?: string[],
+  storage?: MastraCompositeStore,
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
-    const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
-    const state = ctx?.getState();
+    const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeComposedState> | undefined;
+    const state = ctx?.getState?.();
 
     const modelId = state?.currentModelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');
@@ -68,6 +108,12 @@ export function createDynamicTools(
     const tools: Record<string, ToolLike> = {
       request_access: requestSandboxAccessTool,
     };
+
+    if (storage) {
+      tools[MC_TOOLS.NOTIFICATION_INBOX] = createNotificationInboxTool({
+        storage: new LazyNotificationsStorage(storage),
+      });
+    }
 
     if (hasTavilyKey()) {
       tools.web_search = createWebSearchTool();
@@ -109,10 +155,6 @@ export function createDynamicTools(
           delete tools[name];
         }
       }
-    }
-
-    for (const [toolName, tool] of Object.entries(tools)) {
-      tools[toolName] = wrapToolWithHooks(toolName, tool, hookManager);
     }
 
     return tools;

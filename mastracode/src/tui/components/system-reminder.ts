@@ -1,27 +1,32 @@
 /**
  * SystemReminderComponent - renders system-generated reminder messages
- * inline with a bordered amber notice style.
+ * inline with an amber notice style.
  */
 
-import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
-import { BOX_INDENT, getTermWidth, theme } from '../theme.js';
+import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 const MAX_COLLAPSED_LINES = 10;
-const GENERIC_DYNAMIC_REMINDER_PREFIX = 'When using guidance from a discovered instruction file';
+const LOADED_INSTRUCTION_INDENT = BOX_INDENT + 2;
 
 export interface SystemReminderOptions {
   message?: string;
   reminderType?: string;
   path?: string;
+  goalMaxTurns?: number;
+  judgeModelId?: string;
 }
 
 export class SystemReminderComponent extends Container {
-  private readonly messageLines: string[];
+  private messageLines: string[];
   private readonly reminderType?: string;
   private readonly path?: string;
+  private readonly goalMaxTurns?: number;
+  private readonly judgeModelId?: string;
   private expanded = false;
 
   isExpanded(): boolean {
@@ -31,15 +36,11 @@ export class SystemReminderComponent extends Container {
   constructor(options: SystemReminderOptions) {
     super();
 
-    const resolvedMessage = resolveReminderMessage(options.message, options.path);
-    this.messageLines = resolvedMessage.length
-      ? resolvedMessage
-          .split('\n')
-          .map(line => line.trimEnd())
-          .filter(line => line.length > 0)
-      : [getLoadingMessage(options.reminderType, options.path)];
+    this.messageLines = splitMessageLines(resolveReminderMessage(options.message));
     this.reminderType = options.reminderType;
     this.path = options.path;
+    this.goalMaxTurns = options.goalMaxTurns;
+    this.judgeModelId = options.judgeModelId;
 
     this.rebuild();
   }
@@ -57,11 +58,26 @@ export class SystemReminderComponent extends Container {
     this.setExpanded(!this.expanded);
   }
 
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'system';
+  }
+
   private rebuild(): void {
     this.clear();
 
-    const border = (char: string) => theme.bold(theme.fg('toolTitle', char));
-    const title = theme.bold(theme.fg('toolTitle', getReminderTitle(this.reminderType, this.path)));
+    if (isLoadedInstructionPathReminder(this.reminderType, this.path)) {
+      const path = formatReminderPath(this.path!);
+      this.addChild(new Text(theme.fg('toolTitle', `loaded ${path}`), LOADED_INSTRUCTION_INDENT, 0));
+      return;
+    }
+
+    const accent = getReminderAccent(this.reminderType);
+    const border = (char: string) => (accent ? chalk.hex(accent).bold(char) : theme.bold(theme.fg('toolTitle', char)));
+    const titleText = getReminderTitle(this.reminderType, this.path, {
+      goalMaxTurns: this.goalMaxTurns,
+      judgeModelId: this.judgeModelId,
+    });
+    const title = accent ? chalk.hex(accent).bold(titleText) : theme.bold(theme.fg('toolTitle', titleText));
     const metadataColor = (text: string) => theme.fg('dim', text);
     const bodyColor = (text: string) => theme.fg('text', text);
     const hintColor = (text: string) => theme.fg('dim', text);
@@ -110,36 +126,40 @@ function renderRow(text: string, width: number, border: (char: string) => string
   return `${border('│')} ${content}${rightPadding}${border('│')}`;
 }
 
-function resolveReminderMessage(message: string | undefined, path: string | undefined): string {
+function splitMessageLines(message: string): string[] {
+  return message
+    .split('\n')
+    .map(line => line.trimEnd())
+    .filter(line => line.length > 0);
+}
+
+function isLoadedInstructionPathReminder(reminderType: string | undefined, path: string | undefined): boolean {
+  return Boolean(path && (reminderType === 'dynamic-agents-md' || isAgentsInstructionPath(path)));
+}
+
+function resolveReminderMessage(message: string | undefined): string {
   const trimmedMessage = message?.trim();
-  if (trimmedMessage && trimmedMessage !== 'undefined' && !trimmedMessage.startsWith(GENERIC_DYNAMIC_REMINDER_PREFIX)) {
-    return trimmedMessage;
-  }
-
-  if (!path) {
-    return trimmedMessage && trimmedMessage !== 'undefined' ? trimmedMessage : '';
-  }
-
-  try {
-    const fileContent = readFileSync(path, 'utf-8').trim();
-    if (fileContent.length > 0) {
-      return fileContent;
-    }
-  } catch {
-    // Fall back to streamed/persisted message when local file content is unavailable.
-  }
-
   return trimmedMessage && trimmedMessage !== 'undefined' ? trimmedMessage : '';
 }
 
-function getReminderTitle(reminderType: string | undefined, path: string | undefined): string {
+function getReminderTitle(
+  reminderType: string | undefined,
+  path: string | undefined,
+  metadata: { goalMaxTurns?: number; judgeModelId?: string } = {},
+): string {
+  if (reminderType === 'goal') {
+    const details = [
+      typeof metadata.goalMaxTurns === 'number' ? `${metadata.goalMaxTurns} max attempts` : undefined,
+      metadata.judgeModelId ? `judge: ${metadata.judgeModelId}` : undefined,
+    ].filter(Boolean);
+    return details.length > 0 ? `Goal (${details.join(', ')})` : 'Goal';
+  }
+  if (reminderType === 'goal-judge') return 'Goal';
   return reminderType === 'dynamic-agents-md' || isAgentsInstructionPath(path) ? 'Loaded AGENTS.md' : 'System Reminder';
 }
 
-function getLoadingMessage(reminderType: string | undefined, path: string | undefined): string {
-  return reminderType === 'dynamic-agents-md' || isAgentsInstructionPath(path)
-    ? 'Loading instruction file contents…'
-    : 'Loading reminder…';
+function getReminderAccent(reminderType: string | undefined): string | undefined {
+  return reminderType === 'goal' || reminderType === 'goal-judge' ? mastraBrand.blue : undefined;
 }
 
 function isAgentsInstructionPath(path: string | undefined): boolean {

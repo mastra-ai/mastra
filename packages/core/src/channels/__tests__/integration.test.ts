@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage/mock';
-import type { ChannelConfig } from '../agent-channels';
+import type { ChannelConfig } from '../types';
 
 // Minimal mock adapter satisfying the Chat SDK Adapter interface
 function createMockAdapter(name: string) {
@@ -113,6 +113,29 @@ describe('Mastra Channel Integration', () => {
         agents: { agent },
       });
       expect(mastra.getChannels()).toEqual({});
+    });
+  });
+
+  describe('logger propagation', () => {
+    it('propagates the Mastra logger to AgentChannels when registered', () => {
+      const agent = createTestAgent('bot-1', {
+        channels: { adapters: { discord: createMockAdapter('discord') } },
+      });
+
+      const mastra = new Mastra({
+        agents: { 'bot-1': agent },
+        storage: new InMemoryStore(),
+      });
+
+      const channels = mastra.getChannels()['bot-1']!;
+      // AgentChannels.__setLogger stores the logger on its internal field; assert
+      // a logger has been propagated from the agent (Mastra wires a DualLogger
+      // on register) rather than remaining unset.
+      const channelLogger = (channels as any).logger;
+      expect(channelLogger).toBeDefined();
+      expect(typeof channelLogger.info).toBe('function');
+      expect(typeof channelLogger.debug).toBe('function');
+      expect(typeof channelLogger.warn).toBe('function');
     });
   });
 

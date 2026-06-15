@@ -12,7 +12,17 @@ The `createMastraCode()` factory function bootstraps Mastra Code and returns a c
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness, mcpManager, hookManager, authStorage } = createMastraCode(options)
+const {
+  harness,
+  mcpManager,
+  hookManager,
+  authStorage,
+  resolveModel,
+  storageWarning,
+  builtinPacks,
+  builtinOmPacks,
+  effectiveDefaults,
+} = createMastraCode(options)
 ```
 
 ### Parameters
@@ -29,6 +39,11 @@ const { harness, mcpManager, hookManager, authStorage } = createMastraCode(optio
 | `mcpManager` | `MCPManager` | Manager for MCP server connections |
 | `hookManager` | `HookManager` | Manager for lifecycle hooks |
 | `authStorage` | `AuthStorage` | Storage for OAuth credentials |
+| `resolveModel` | `(modelId: string, options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext }) => ResolvedModel` | Model resolution function |
+| `storageWarning` | `string \| null` | Warning message if storage fallback occurred |
+| `builtinPacks` | `ModePack[]` | Built-in mode packs |
+| `builtinOmPacks` | `OmPack[]` | Built-in Observational Memory packs |
+| `effectiveDefaults` | `object` | Effective default settings after merging |
 
 ### `CreateMastraCodeOptions`
 
@@ -41,7 +56,7 @@ const { harness, mcpManager, hookManager, authStorage } = createMastraCode(optio
 | `storage` | `StorageConfig` | Local LibSQL | Database configuration |
 | `initialState` | `Partial<MastraCodeState>` | Default state | Initial harness state values |
 | `heartbeatHandlers` | `HeartbeatHandler[]` | Default handlers | Background task definitions |
-| `resolveModel` | `(id: string) => LanguageModel` | Default resolver | Custom model resolution function |
+| `resolveModel` | `(modelId: string, options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext }) => ResolvedModel` | Default resolver | Custom model resolution function |
 
 #### `HarnessMode`
 
@@ -87,8 +102,8 @@ Harness state fields available through `initialState`.
 
 | Field | Type | Default | Description |
 | - | - | - | - |
-| `yolo` | `boolean` | `true` | Auto-approve all tool calls |
-| `thinkingLevel` | `"off" \| "low" \| "medium" \| "high"` | `"off"` | Extended thinking depth for Anthropic models |
+| `yolo` | `boolean` | `false` | Auto-approve all tool calls |
+| `thinkingLevel` | `"off" \| "low" \| "medium" \| "high" \| "xhigh"` | `"off"` | Extended thinking depth for Anthropic models |
 | `smartEditing` | `boolean` | `true` | Use AST-based analysis for code edits |
 | `notifications` | `"bell" \| "system" \| "both" \| "off"` | `"off"` | Alert style when TUI needs attention |
 | `permissionRules` | `PermissionRules` | Default policies | Per-category and per-tool approval policies |
@@ -135,7 +150,7 @@ The `MastraTUI` class provides the terminal interface. Import it separately to b
 import { createMastraCode } from 'mastracode'
 import { MastraTUI } from 'mastracode/tui'
 
-const { harness, mcpManager, hookManager, authStorage } = createMastraCode()
+const { harness, mcpManager, hookManager, authStorage } = await createMastraCode()
 
 const tui = new MastraTUI({
   harness,
@@ -167,7 +182,7 @@ tui.run()
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   cwd: '/path/to/project',
 })
 
@@ -196,7 +211,7 @@ const reviewAgent = new Agent({
   model: 'anthropic/claude-sonnet-4-6',
 })
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   modes: [
     {
       id: 'review',
@@ -229,7 +244,7 @@ const deployTool = createTool({
   },
 })
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   extraTools: { deploy: deployTool },
 })
 ```
@@ -239,7 +254,7 @@ const { harness } = createMastraCode({
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   storage: {
     url: 'libsql://my-db.turso.io',
     authToken: process.env.TURSO_AUTH_TOKEN,
@@ -252,7 +267,7 @@ const { harness } = createMastraCode({
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   initialState: {
     yolo: false,
     permissionRules: {

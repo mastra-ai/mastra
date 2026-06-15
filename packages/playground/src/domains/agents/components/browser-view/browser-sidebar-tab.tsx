@@ -1,4 +1,4 @@
-import { IconButton, StatusBadge, cn } from '@mastra/playground-ui';
+import { Button, StatusBadge, cn } from '@mastra/playground-ui';
 import { Globe, Maximize2, Minimize2, X } from 'lucide-react';
 import { useCallback } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
@@ -84,33 +84,33 @@ export function BrowserSidebarTab() {
             <BrowserViewFrame className="w-full" onFirstFrame={handleFirstFrame} />
             {/* Control buttons overlay */}
             <div className="absolute top-2 right-2 flex gap-1">
-              <IconButton
-                variant="light"
-                size="sm"
+              <Button
+                variant="default"
+                size="icon-sm"
                 tooltip="Center view"
                 onClick={handleCenterView}
                 className="bg-surface1/80 backdrop-blur-sm"
               >
                 <Maximize2 className="h-3.5 w-3.5" />
-              </IconButton>
-              <IconButton
-                variant="light"
-                size="sm"
+              </Button>
+              <Button
+                variant="default"
+                size="icon-sm"
                 tooltip="Minimize to chat"
                 onClick={handleMinimize}
                 className="bg-surface1/80 backdrop-blur-sm"
               >
                 <Minimize2 className="h-3.5 w-3.5" />
-              </IconButton>
-              <IconButton
-                variant="light"
-                size="sm"
+              </Button>
+              <Button
+                variant="default"
+                size="icon-sm"
                 tooltip="Close browser"
                 onClick={handleClose}
                 className="bg-surface1/80 backdrop-blur-sm"
               >
                 <X className="h-3.5 w-3.5" />
-              </IconButton>
+              </Button>
             </div>
           </div>
         </div>

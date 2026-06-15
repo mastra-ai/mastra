@@ -1,7 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { IconButton, TooltipProvider, Tree } from '@mastra/playground-ui';
+import { Button, TooltipProvider, Tree } from '@mastra/playground-ui';
 import { File, FileCode, FileJson, FileText, Folder, FolderOpen, FolderPlus, Image, Plus, Trash2 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
 
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
@@ -153,9 +153,9 @@ export function updateNodeContent(nodes: InMemoryFileNode[], nodeId: string, con
 function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () => void }) {
   return (
     <span className="opacity-0 group-hover:opacity-100">
-      <IconButton size="sm" variant="ghost" tooltip={tooltip} onClick={onClick}>
+      <Button size="icon-sm" variant="ghost" tooltip={tooltip} onClick={onClick}>
         <Plus />
-      </IconButton>
+      </Button>
     </span>
   );
 }
@@ -163,12 +163,12 @@ function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () =>
 function FolderActions({ onAddFile, onAddFolder }: { onAddFile: () => void; onAddFolder: () => void }) {
   return (
     <span className="flex opacity-0 group-hover:opacity-100">
-      <IconButton size="sm" variant="ghost" tooltip="New file" onClick={onAddFile}>
+      <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={onAddFile}>
         <Plus />
-      </IconButton>
-      <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={onAddFolder}>
+      </Button>
+      <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={onAddFolder}>
         <FolderPlus />
-      </IconButton>
+      </Button>
     </span>
   );
 }
@@ -176,17 +176,17 @@ function FolderActions({ onAddFile, onAddFolder }: { onAddFile: () => void; onAd
 function FileDeleteAction({ nodeId, onRemove }: { nodeId: string; onRemove: (id: string) => void }) {
   return (
     <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">
-      <IconButton
-        size="sm"
+      <Button
+        size="icon-sm"
         variant="ghost"
         tooltip="Delete file"
-        onClick={e => {
+        onClick={(e: MouseEvent<HTMLButtonElement>) => {
           e.stopPropagation();
           onRemove(nodeId);
         }}
       >
         <Trash2 />
-      </IconButton>
+      </Button>
     </span>
   );
 }
@@ -220,28 +220,28 @@ function UserNodeList({
       if (node.type === 'folder') {
         const isOpen = openFolders[node.id] ?? true;
         return (
-          <Tree.Folder key={node.id} open={isOpen} onOpenChange={open => onFolderOpenChange(node.id, open)}>
+          <Tree.Folder key={node.id} open={isOpen} onOpenChange={(open: boolean) => onFolderOpenChange(node.id, open)}>
             <Tree.FolderTrigger
               actions={
                 !readOnly && (
                   <span className="flex opacity-0 group-hover:opacity-100">
-                    <IconButton size="sm" variant="ghost" tooltip="New file" onClick={() => onAddFile(node.id)}>
+                    <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={() => onAddFile(node.id)}>
                       <Plus />
-                    </IconButton>
-                    <IconButton size="sm" variant="ghost" tooltip="New folder" onClick={() => onAddFolder(node.id)}>
+                    </Button>
+                    <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={() => onAddFolder(node.id)}>
                       <FolderPlus />
-                    </IconButton>
-                    <IconButton
-                      size="sm"
+                    </Button>
+                    <Button
+                      size="icon-sm"
                       variant="ghost"
                       tooltip="Delete folder"
-                      onClick={e => {
+                      onClick={(e: MouseEvent<HTMLButtonElement>) => {
                         e.stopPropagation();
                         onRemove(node.id);
                       }}
                     >
                       <Trash2 />
-                    </IconButton>
+                    </Button>
                   </span>
                 )
               }
@@ -414,7 +414,10 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
             </Tree.File>
 
             {referencesFolder && (
-              <Tree.Folder open={openFolders.references} onOpenChange={open => setFolderOpen('references', open)}>
+              <Tree.Folder
+                open={openFolders.references}
+                onOpenChange={(open: boolean) => setFolderOpen('references', open)}
+              >
                 <Tree.FolderTrigger
                   actions={
                     !readOnly && (
@@ -454,7 +457,7 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
             )}
 
             {scriptsFolder && (
-              <Tree.Folder open={openFolders.scripts} onOpenChange={open => setFolderOpen('scripts', open)}>
+              <Tree.Folder open={openFolders.scripts} onOpenChange={(open: boolean) => setFolderOpen('scripts', open)}>
                 <Tree.FolderTrigger
                   actions={
                     !readOnly && (
@@ -494,7 +497,7 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
             )}
 
             {assetsFolder && (
-              <Tree.Folder open={openFolders.assets} onOpenChange={open => setFolderOpen('assets', open)}>
+              <Tree.Folder open={openFolders.assets} onOpenChange={(open: boolean) => setFolderOpen('assets', open)}>
                 <Tree.FolderTrigger
                   actions={!readOnly && <FolderAddAction tooltip="Add image" onClick={handleAddImage} />}
                 >

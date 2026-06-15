@@ -2,7 +2,7 @@
 
 Daytona cloud sandbox provider for [Mastra](https://mastra.ai) workspaces.
 
-Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.io/) sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, and filesystem mounting (S3, GCS).
+Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.io/) sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, and filesystem mounting (S3, GCS, Azure Blob).
 
 ## Install
 
@@ -10,7 +10,7 @@ Implements the `WorkspaceSandbox` interface using [Daytona](https://www.daytona.
 pnpm add @mastra/daytona @mastra/core
 
 # For filesystem mounting (optional)
-pnpm add @mastra/s3 @mastra/gcs
+pnpm add @mastra/s3 @mastra/gcs @mastra/azure
 ```
 
 ## Usage
@@ -101,7 +101,7 @@ console.log(result.stdout); // "session 1"
 
 ### Filesystem mounting
 
-Mount S3 or GCS buckets as local directories inside the sandbox.
+Mount S3, GCS, or Azure Blob containers as local directories inside the sandbox.
 
 #### Via workspace mounts config
 
@@ -112,6 +112,7 @@ import { Workspace } from '@mastra/core/workspace';
 import { DaytonaSandbox } from '@mastra/daytona';
 import { GCSFilesystem } from '@mastra/gcs';
 import { S3Filesystem } from '@mastra/s3';
+import { AzureBlobFilesystem } from '@mastra/azure/blob';
 
 const workspace = new Workspace({
   mounts: {
@@ -126,6 +127,11 @@ const workspace = new Workspace({
       bucket: process.env.GCS_BUCKET!,
       projectId: 'my-project-id',
       credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+    }),
+    '/azure-data': new AzureBlobFilesystem({
+      container: process.env.AZURE_STORAGE_CONTAINER!,
+      connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
+      prefix: 'workspace/data',
     }),
   },
   sandbox: new DaytonaSandbox({ language: 'python' }),
@@ -189,6 +195,21 @@ await sandbox.mount(
     bucket: process.env.GCS_BUCKET!,
     projectId: 'my-project-id',
     credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+  }),
+  '/data',
+);
+```
+
+#### Azure Blob
+
+```typescript
+import { AzureBlobFilesystem } from '@mastra/azure/blob';
+
+await sandbox.mount(
+  new AzureBlobFilesystem({
+    container: process.env.AZURE_STORAGE_CONTAINER!,
+    connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
+    prefix: 'workspace/data',
   }),
   '/data',
 );
@@ -270,7 +291,7 @@ console.log(response.text);
 
 ## Mount Configuration
 
-Pass `S3Filesystem` or `GCSFilesystem` instances via the workspace `mounts` config or directly to `sandbox.mount()`.
+Pass `S3Filesystem`, `GCSFilesystem`, or `AzureBlobFilesystem` instances via the workspace `mounts` config or directly to `sandbox.mount()`.
 
 ### S3 environment variables
 
@@ -289,9 +310,16 @@ Pass `S3Filesystem` or `GCSFilesystem` instances via the workspace `mounts` conf
 | `GCS_BUCKET`              | Bucket name                                             |
 | `GCS_SERVICE_ACCOUNT_KEY` | Service account key JSON (full JSON string, not a path) |
 
+### Azure Blob environment variables
+
+| Variable                          | Description               |
+| --------------------------------- | ------------------------- |
+| `AZURE_STORAGE_CONTAINER`         | Container name            |
+| `AZURE_STORAGE_CONNECTION_STRING` | Storage connection string |
+
 ### Reducing cold start latency with a snapshot
 
-By default, `s3fs` and `gcsfuse` are installed at first mount via `apt`, which adds startup time. To eliminate this, prebake them into a Daytona snapshot and pass the snapshot name via the `snapshot` option.
+By default, `s3fs`, `gcsfuse`, and `blobfuse2` are installed at first mount, which adds startup time. To eliminate this, prebake them into a Daytona snapshot and pass the snapshot name via the `snapshot` option.
 
 Create the snapshot once:
 
@@ -320,6 +348,8 @@ await daytona.snapshot.create(
   { onLogs: console.log },
 );
 ```
+
+If you use Azure Blob mounts, also pre-install `blobfuse2` in the snapshot using Azure's supported package for your base image. See Azure's [BlobFuse2 installation guide](https://learn.microsoft.com/en-us/azure/storage/blobs/blobfuse2-how-to-deploy) for supported install options.
 
 Then use the snapshot name in your sandbox config:
 

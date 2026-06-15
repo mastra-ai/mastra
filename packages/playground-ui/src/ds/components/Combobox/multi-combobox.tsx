@@ -2,9 +2,9 @@ import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
 import type { ComboboxOption } from './combobox';
-import { comboboxStyles } from './combobox-styles';
-import { buttonVariants } from '@/ds/components/Button/Button';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { comboboxStyles, comboboxTriggerClass } from './combobox-styles';
+import type { ComboboxVariant } from './combobox-styles';
+import type { TextButtonSize } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 
 export type { ComboboxOption };
@@ -18,8 +18,8 @@ export type MultiComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
-  size?: FormElementSize;
+  variant?: ComboboxVariant;
+  size?: TextButtonSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -63,18 +63,15 @@ export function MultiCombobox({
         open={open}
         onOpenChange={onOpenChange}
       >
-        <BaseCombobox.Trigger
-          className={cn(
-            buttonVariants({ variant, size }),
-            comboboxStyles.trigger,
-            error && comboboxStyles.triggerError,
-            className,
-          )}
-        >
+        <BaseCombobox.Trigger className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}>
           <span className={cn('truncate', selectedOptions.length === 0 && comboboxStyles.placeholder)}>
             {triggerText}
           </span>
-          <ChevronsUpDown className={comboboxStyles.chevron} />
+          {/* Wrap the chevron in a `<span>` so the svg is one level deep and
+              escapes Button's `[&>svg]` adornments — mirrors Select's chevron wrap. */}
+          <span className="flex shrink-0 items-center">
+            <ChevronsUpDown className={comboboxStyles.chevron} />
+          </span>
         </BaseCombobox.Trigger>
 
         <BaseCombobox.Portal container={container}>
@@ -89,7 +86,7 @@ export function MultiCombobox({
                 {(option: ComboboxOption) => {
                   const isSelected = value.includes(option.value);
                   return (
-                    <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.item}>
+                    <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.itemMulti}>
                       <span
                         className={cn(
                           comboboxStyles.checkbox,

@@ -14,3 +14,9 @@ Mastra [workflows](../workflows/overview.mdx) can be executed using the built-in
 Inngest is a developer platform for running background workflows without managing infrastructure. Mastra workflows can be deployed to Inngest, which provides step memoization, automatic retries, real-time monitoring, and suspend/resume capabilities.
 
 Visit the [Inngest deployment guide](/guides/deployment/inngest) for setup instructions and the [Inngest workflow example](https://github.com/mastra-ai/mastra/tree/main/examples/inngest) for a complete implementation.
+
+## Temporal
+
+Temporal is a durable execution platform for orchestrating long-running workflows. Mastra workflows can run on Temporal workers, with each `createStep` mapped to a Temporal activity for automatic retries and durable state.
+
+The `@mastra/temporal` package is experimental and not ready for production use. Visit the [Temporal deployment guide](/guides/deployment/temporal) for setup instructions.

@@ -36,7 +36,6 @@ const docsTabs = [
     label: 'Learn',
     href: '/learn/',
     basePath: '/learn',
-    badge: 'new',
   },
 ]
 

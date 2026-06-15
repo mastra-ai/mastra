@@ -1,6 +1,6 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { ChunkFrom } from '../../../stream/types';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
@@ -53,6 +53,14 @@ export function createBackgroundTaskCheckStep<Tools extends ToolSet = ToolSet, O
       // No running tasks or no manager — pass through
       if (!runningTasks || runningTasks.length === 0) {
         return typedInput;
+      }
+
+      // When the outer caller (e.g. `agent.streamUntilIdle`) is driving
+      // continuation from outside, skip the in-loop wait entirely. The outer
+      // will re-enter via `stream([])` once tasks complete. We still mark the
+      // pending flag so `isTaskCompleteStep` knows to skip scoring.
+      if (_internal?.skipBgTaskWait) {
+        return { ...typedInput, backgroundTaskPending: true };
       }
 
       const taskIds = runningTasks.map(task => task.id);

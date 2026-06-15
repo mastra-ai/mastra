@@ -1,13 +1,14 @@
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/evals';
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import {
   getAssistantMessageFromRunOutput,
   getUserMessageFromRunInput,
   getCombinedSystemPrompt,
   roundToTwoDecimals,
 } from '../../utils';
+import type { ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge } from '../../utils';
 import { PROMPT_ALIGNMENT_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface PromptAlignmentOptions {
@@ -16,38 +17,38 @@ export interface PromptAlignmentOptions {
 }
 
 // Helper for score validation - uses refine() instead of min/max for Anthropic API compatibility
-const scoreSchema = z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' });
-
-const analyzeOutputSchema = z.object({
-  intentAlignment: z.object({
-    score: scoreSchema,
-    primaryIntent: z.string(),
-    isAddressed: z.boolean(),
-    reasoning: z.string(),
+const analyzeOutputSchema = compileSchema(
+  z.object({
+    intentAlignment: z.object({
+      score: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+      primaryIntent: z.string(),
+      isAddressed: z.boolean(),
+      reasoning: z.string(),
+    }),
+    requirementsFulfillment: z.object({
+      requirements: z.array(
+        z.object({
+          requirement: z.string(),
+          isFulfilled: z.boolean(),
+          reasoning: z.string(),
+        }),
+      ),
+      overallScore: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+    }),
+    completeness: z.object({
+      score: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+      missingElements: z.array(z.string()),
+      reasoning: z.string(),
+    }),
+    responseAppropriateness: z.object({
+      score: z.number().refine(n => n >= 0 && n <= 1, { message: 'Score must be between 0 and 1' }),
+      formatAlignment: z.boolean(),
+      toneAlignment: z.boolean(),
+      reasoning: z.string(),
+    }),
+    overallAssessment: z.string(),
   }),
-  requirementsFulfillment: z.object({
-    requirements: z.array(
-      z.object({
-        requirement: z.string(),
-        isFulfilled: z.boolean(),
-        reasoning: z.string(),
-      }),
-    ),
-    overallScore: scoreSchema,
-  }),
-  completeness: z.object({
-    score: scoreSchema,
-    missingElements: z.array(z.string()),
-    reasoning: z.string(),
-  }),
-  responseAppropriateness: z.object({
-    score: scoreSchema,
-    formatAlignment: z.boolean(),
-    toneAlignment: z.boolean(),
-    reasoning: z.string(),
-  }),
-  overallAssessment: z.string(),
-});
+);
 
 // Weight distribution for different aspects of prompt alignment
 const SCORING_WEIGHTS = {
@@ -80,7 +81,7 @@ export function createPromptAlignmentScorerLLM({
   const scale = options?.scale || 1;
   const evaluationMode = options?.evaluationMode || 'both';
 
-  return createScorer<ScorerRunInputForAgent, ScorerRunOutputForAgent>({
+  return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'prompt-alignment-scorer',
     name: 'Prompt Alignment (LLM)',
     description: 'Evaluates how well the agent response aligns with the intent and requirements of the user prompt',
@@ -104,8 +105,8 @@ export function createPromptAlignmentScorerLLM({
         if (evaluationMode === 'system' && !systemPrompt) {
           throw new Error('System prompt is required for system prompt alignment scoring');
         }
-        if (evaluationMode === 'both' && (!userPrompt || !systemPrompt)) {
-          throw new Error('Both user and system prompts are required for combined alignment scoring');
+        if (evaluationMode === 'both' && !userPrompt && !systemPrompt) {
+          throw new Error('A user or system prompt is required for combined alignment scoring');
         }
         if (!agentResponse) {
           throw new Error('Agent response is required for prompt alignment scoring');

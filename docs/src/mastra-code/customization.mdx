@@ -16,7 +16,7 @@ Import `createMastraCode` to bootstrap Mastra Code in your own application:
 ```typescript title="src/custom-agent.ts"
 import { createMastraCode } from 'mastracode'
 
-const { harness, mcpManager, authStorage } = createMastraCode({
+const { harness, mcpManager, authStorage } = await createMastraCode({
   cwd: '/path/to/project',
   initialState: {
     yolo: false,
@@ -53,7 +53,7 @@ const reviewAgent = new Agent({
   model: 'anthropic/claude-sonnet-4-6',
 })
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   modes: [
     {
       id: 'review',
@@ -66,7 +66,7 @@ const { harness } = createMastraCode({
     {
       id: 'build',
       name: 'Build',
-      defaultModelId: 'anthropic/claude-opus-4-6',
+      defaultModelId: 'anthropic/claude-opus-4-7',
       color: '#7c3aed',
       agent: reviewAgent,
     },
@@ -96,7 +96,7 @@ const deployTool = createTool({
   },
 })
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   extraTools: { deploy: deployTool },
 })
 ```
@@ -111,7 +111,7 @@ Override the default Explore/Plan/Execute subagents. Each subagent receives its 
 import { createMastraCode } from 'mastracode'
 import { createTool } from '@mastra/core/tools'
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   subagents: [
     {
       id: 'explore',
@@ -138,7 +138,7 @@ Connect to a remote database instead of the default local SQLite:
 ```typescript title="src/custom-storage.ts"
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   storage: {
     url: 'libsql://my-db.turso.io',
     authToken: 'my-auth-token',
@@ -155,7 +155,7 @@ Replace or extend the default background tasks:
 ```typescript title="src/custom-heartbeats.ts"
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   heartbeatHandlers: [
     {
       id: 'sync-config',
@@ -201,7 +201,7 @@ Control default behavior through `initialState`:
 ```typescript title="src/custom-state.ts"
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { harness } = await createMastraCode({
   initialState: {
     yolo: false,
     thinkingLevel: 'high',

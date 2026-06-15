@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.node.json",
+  "compilerOptions": {
+    "moduleResolution": "bundler"
+  },
+  "include": ["src/**/*", "test-fixtures/**/*", "tsup.config.ts"],
+  "exclude": ["node_modules", "**/*.test.ts", "test-fixtures/cli-project/**"]
+}

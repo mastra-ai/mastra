@@ -17,8 +17,22 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import express from 'express';
 import type { Application } from 'express';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MastraServer } from '../index';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
+  const start = Date.now();
+  while (!assertion()) {
+    if (Date.now() - start > timeout) {
+      throw new Error('Timed out waiting for assertion');
+    }
+    await sleep(1);
+  }
+}
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Express Server Adapter', () => {
@@ -104,6 +118,8 @@ describe('Express Server Adapter', () => {
         const isStream =
           contentType.includes('text/plain') ||
           contentType.includes('text/event-stream') ||
+          contentType.includes('audio/') ||
+          contentType.includes('application/octet-stream') ||
           transferEncoding === 'chunked';
 
         if (isStream && response.body) {
@@ -230,6 +246,156 @@ describe('Express Server Adapter', () => {
       const finish = chunks.find(c => c.type === 'finish');
       expect(finish).toBeDefined();
       expect(finish.payload.metadata.request).toBeUndefined();
+    });
+
+    it('should pass SSE comment chunks through without data wrapping', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-comment',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(': heartbeat\n\n');
+              controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/sse-comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).toContain(': heartbeat\n\n');
+      expect(text).toContain('data: {"type":"text-delta","payload":{"text":"hello"}}\n\n');
+      expect(text).not.toContain('data: ": heartbeat');
+    });
+
+    it('should write SSE connected comment when sseFlushOnConnect is true', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-flush',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        sseFlushOnConnect: true,
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/sse-flush`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      const connectedIndex = text.indexOf(': connected\n\n');
+      const dataIndex = text.indexOf('data: ');
+      expect(connectedIndex).toBeGreaterThanOrEqual(0);
+      expect(dataIndex).toBeGreaterThanOrEqual(0);
+      expect(connectedIndex).toBeLessThan(dataIndex);
+    });
+
+    it('should not write SSE connected comment when sseFlushOnConnect is not set', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-no-flush',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/sse-no-flush`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).not.toContain(': connected');
+      expect(text).toContain('data: ');
     });
 
     it('should NOT redact sensitive data when streamOptions.redact is false', async () => {
@@ -642,6 +808,57 @@ describe('Express Server Adapter', () => {
       expect(receivedAbortSignal).toBeDefined();
       expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
     });
+
+    it('aborts registered route signals when the response closes early', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const signalAbort = vi.fn();
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/stream-close',
+        responseType: 'stream',
+        handler: async (params: any) => {
+          params.abortSignal?.addEventListener('abort', signalAbort);
+          return {
+            fullStream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'text-delta', textDelta: 'one' });
+                await sleep(10);
+                controller.enqueue({ type: 'text-delta', textDelta: 'two' });
+                controller.close();
+              },
+            }),
+          };
+        },
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/stream-close`);
+      const reader = response.body!.getReader();
+      await reader.read();
+      await reader.cancel();
+      await waitFor(() => signalAbort.mock.calls.length > 0);
+
+      expect(signalAbort).toHaveBeenCalledTimes(1);
+    });
   });
 
   // Multipart FormData tests
@@ -783,6 +1000,172 @@ describe('Express Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data).toEqual({ echo: { test: 'data' } });
+    });
+  });
+
+  describe('Custom route stream disconnect handling', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => server!.close(() => resolve()));
+        server = null;
+      }
+    });
+
+    it('cancels a custom route stream when the client cancels the response body', async () => {
+      const cancel = vi.fn();
+      const signalAbort = vi.fn();
+      const customRoutes = [
+        registerApiRoute('/custom/stream', {
+          method: 'GET',
+          handler: async c => {
+            c.req.raw.signal.addEventListener('abort', signalAbort);
+            return new Response(
+              new ReadableStream({
+                async pull(controller) {
+                  controller.enqueue(new TextEncoder().encode('chunk\n'));
+                  await sleep(5);
+                },
+                cancel,
+              }),
+            );
+          },
+        }),
+      ];
+
+      const app = express();
+      app.use(express.json());
+      const adapter = new MastraServer({ app, mastra: new Mastra({}), customApiRoutes: customRoutes });
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/custom/stream`);
+      const reader = response.body!.getReader();
+      await reader.read();
+      await reader.cancel();
+
+      await waitFor(() => cancel.mock.calls.length > 0);
+      await waitFor(() => signalAbort.mock.calls.length > 0);
+    });
+
+    it('does not cancel a custom POST stream when the request completes normally', async () => {
+      const cancel = vi.fn();
+      const signalAbort = vi.fn();
+      const customRoutes = [
+        registerApiRoute('/custom/post-stream', {
+          method: 'POST',
+          handler: async c => {
+            c.req.raw.signal.addEventListener('abort', signalAbort);
+            return new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.enqueue(new TextEncoder().encode('one\n'));
+                  setTimeout(() => {
+                    controller.enqueue(new TextEncoder().encode('two\n'));
+                    controller.close();
+                  }, 10);
+                },
+                cancel,
+              }),
+            );
+          },
+        }),
+      ];
+
+      const app = express();
+      app.use(express.json());
+      const adapter = new MastraServer({ app, mastra: new Mastra({}), customApiRoutes: customRoutes });
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/custom/post-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hello: 'world' }),
+      });
+
+      await expect(response.text()).resolves.toBe('one\ntwo\n');
+      await sleep(10);
+      expect(cancel).not.toHaveBeenCalled();
+      expect(signalAbort).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Custom route prefix validation', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => server!.close(() => resolve()));
+        server = null;
+      }
+    });
+
+    it('should throw when a custom route path starts with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/mastra/custom', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'should not work' }),
+        }),
+      ];
+
+      const app = express();
+      app.use(express.json());
+      const mastra = new Mastra({});
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await expect(adapter.init()).rejects.toThrow(/must not start with "\/mastra"/);
+    });
+
+    it('should allow custom routes at paths not starting with the server prefix', async () => {
+      const customRoutes = [
+        registerApiRoute('/custom/hello', {
+          method: 'GET',
+          handler: async c => c.json({ message: 'Hello from custom route!' }),
+        }),
+      ];
+
+      const app = express();
+      app.use(express.json());
+      const mastra = new Mastra({});
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        prefix: '/mastra',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/custom/hello`);
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data).toEqual({ message: 'Hello from custom route!' });
     });
   });
 });

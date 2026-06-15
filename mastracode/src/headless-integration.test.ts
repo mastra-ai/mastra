@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import type { HarnessEvent } from '@mastra/core/harness';
+import { Mastra } from '@mastra/core/mastra';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
@@ -13,6 +14,7 @@ import { Memory } from '@mastra/memory';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import z from 'zod';
 
+import { HarnessCompat } from './HarnessCompat.js';
 import { runHeadless } from './headless.js';
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -100,22 +102,39 @@ afterEach(() => {
   }
 });
 
+async function captureProcessOutput<T>(fn: () => Promise<T>) {
+  const stdoutChunks: string[] = [];
+  const stderrChunks: string[] = [];
+  const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: unknown) => {
+    stdoutChunks.push(String(chunk));
+    return true;
+  }) as typeof process.stdout.write);
+  const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
+    stderrChunks.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write);
+
+  try {
+    const result = await fn();
+    return {
+      result,
+      stdout: stdoutChunks.join(''),
+      stderr: stderrChunks.join(''),
+      stdoutChunks,
+      stderrChunks,
+    };
+  } finally {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  }
+}
+
 function createHarnessWithAgent(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
   tools?: Record<string, any>;
   inputProcessors?: any[];
   outputProcessors?: any[];
 }) {
-  const agent = new Agent({
-    id: 'test-agent',
-    name: 'Test Agent',
-    instructions: 'You are a test agent.',
-    model: new MastraLanguageModelV2Mock({ doStream: opts.doStream }) as any,
-    tools: opts.tools ?? {},
-    inputProcessors: opts.inputProcessors ?? [],
-    outputProcessors: opts.outputProcessors ?? [],
-  });
-
   const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-'));
   const storePath = join(tempDir, 'test.db');
   tempStorePaths.push(storePath, tempDir);
@@ -125,12 +144,40 @@ function createHarnessWithAgent(opts: {
     url: `file:${storePath}`,
   });
 
+  const agent = new Agent({
+    id: 'test-agent',
+    name: 'Test Agent',
+    instructions: 'You are a test agent.',
+    model: new MastraLanguageModelV2Mock({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        ...(await opts.doStream()),
+      }),
+    }) as any,
+    tools: opts.tools ?? {},
+    inputProcessors: opts.inputProcessors,
+    outputProcessors: opts.outputProcessors,
+  });
+  const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
+  const registeredAgent = mastra.getAgent('test-agent');
+
   const harness = new Harness({
     id: 'test-harness',
     storage,
-    modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    modes: [
+      {
+        id: 'default',
+        name: 'Default',
+        description: 'default',
+        defaultModelId: 'test',
+        instructions: 'you are a test agent',
+        metadata: { default: true },
+      },
+    ],
     initialState: { yolo: true } as any,
   });
+  (harness as any).getAgentForMode = () => registeredAgent;
 
   return harness;
 }
@@ -363,14 +410,6 @@ function createHarnessWithModels(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
   customModels?: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[];
 }) {
-  const agent = new Agent({
-    id: 'test-agent',
-    name: 'Test Agent',
-    instructions: 'You are a test agent.',
-    model: new MastraLanguageModelV2Mock({ doStream: opts.doStream }) as any,
-    tools: {},
-  });
-
   const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-model-'));
   const storePath = join(tempDir, 'test.db');
   tempStorePaths.push(storePath, tempDir);
@@ -380,10 +419,34 @@ function createHarnessWithModels(opts: {
     url: `file:${storePath}`,
   });
 
+  const agent = new Agent({
+    id: 'test-agent',
+    name: 'Test Agent',
+    instructions: 'You are a test agent.',
+    model: new MastraLanguageModelV2Mock({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        ...(await opts.doStream()),
+      }),
+    }) as any,
+  });
+  const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
+  const registeredAgent = mastra.getAgent('test-agent');
+
   const harness = new Harness({
     id: 'test-harness',
     storage,
-    modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    modes: [
+      {
+        id: 'default',
+        name: 'Default',
+        description: 'default',
+        defaultModelId: 'test',
+        metadata: { default: true },
+        instructions: 'You are a test agent.',
+      },
+    ],
     initialState: { yolo: true } as any,
     customModelCatalogProvider: () =>
       (opts.customModels ?? []).map(m => ({
@@ -391,9 +454,189 @@ function createHarnessWithModels(opts: {
         useCount: 0,
       })),
   });
+  (harness as any).getAgentForMode = () => registeredAgent;
 
   return harness;
 }
+
+describe('headless mode — --output-format contracts', () => {
+  it('prints only final assistant text to stdout for text output', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Plain text response') }),
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureProcessOutput(() =>
+      runHeadless(harness, {
+        prompt: 'Hello',
+        format: 'default',
+        outputFormat: 'text',
+        continue_: false,
+        cloneThread: false,
+      }),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe('Plain text response\n');
+    expect(stderr).toBe('');
+  });
+
+  it('prints one final summary object to stdout for json output', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('JSON summary response') }),
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+      stdoutChunks,
+    } = await captureProcessOutput(() =>
+      runHeadless(harness, {
+        prompt: 'Hello',
+        format: 'default',
+        outputFormat: 'json',
+        continue_: false,
+        cloneThread: false,
+      }),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe('');
+    expect(stdoutChunks).toHaveLength(1);
+
+    const summary = JSON.parse(stdout.trim());
+    expect(summary).toMatchObject({
+      text: 'JSON summary response',
+      finishReason: 'complete',
+      toolCalls: [],
+      toolResults: [],
+    });
+    expect(summary.threadId).toEqual(expect.any(String));
+    expect(summary.type).toBeUndefined();
+  });
+
+  it('prints newline-delimited runtime events to stdout for stream-json output', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Streamed JSON response') }),
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureProcessOutput(() =>
+      runHeadless(harness, {
+        prompt: 'Hello',
+        format: 'default',
+        outputFormat: 'stream-json',
+        continue_: false,
+        cloneThread: false,
+      }),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe('');
+
+    const events = stdout
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line));
+    expect(events.map(event => event.type)).toEqual(
+      expect.arrayContaining(['agent_start', 'message_end', 'agent_end']),
+    );
+    expect(events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'complete' });
+    expect(events.some(event => event.text === 'Streamed JSON response')).toBe(false);
+
+    const assistantEnd = events.find(event => event.type === 'message_end' && event.message?.role === 'assistant');
+    expect(assistantEnd?.message.content).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Streamed JSON response' })]),
+    );
+  });
+
+  it('keeps state-signal parts visible in stream-json message events', async () => {
+    let listener: ((event: HarnessEvent) => void) | undefined;
+    const stateSignalPart = {
+      type: 'state_signal',
+      id: 'state-signal-browser-1',
+      stateId: 'browser',
+      mode: 'delta',
+      cacheKey: 'browser:v2',
+      version: 2,
+      message: 'Browser state changed',
+    };
+    const harness = {
+      subscribe: vi.fn((next: (event: HarnessEvent) => void) => {
+        listener = next;
+        return () => {};
+      }),
+      sendMessage: vi.fn(async () => {
+        listener?.({ type: 'agent_start', runId: 'run-state' } as HarnessEvent);
+        listener?.({
+          type: 'message_end',
+          message: {
+            id: 'assistant-state-message',
+            role: 'assistant',
+            content: [stateSignalPart, { type: 'text', text: 'Observed browser state.' }],
+            createdAt: new Date(0),
+          },
+        } as HarnessEvent);
+        listener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
+      }),
+      getCurrentThreadId: vi.fn(() => 'thread-state'),
+    } as unknown as Harness<Record<string, unknown>>;
+
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureProcessOutput(() =>
+      runHeadless(harness, {
+        prompt: 'Describe the browser state',
+        format: 'default',
+        outputFormat: 'stream-json',
+        continue_: false,
+        cloneThread: false,
+      }),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe('');
+
+    const events = stdout
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line));
+    const assistantEnd = events.find(event => event.type === 'message_end' && event.message?.role === 'assistant');
+    expect(assistantEnd?.message.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'state_signal',
+          stateId: 'browser',
+          mode: 'delta',
+          cacheKey: 'browser:v2',
+          message: 'Browser state changed',
+        }),
+      ]),
+    );
+    expect(assistantEnd?.message.content).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Observed browser state.' })]),
+    );
+    expect(events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'complete' });
+  });
+});
 
 describe('headless mode — --model flag', () => {
   it('switches model when a valid --model is provided', async () => {
@@ -843,6 +1086,8 @@ describe('headless mode — thread control', () => {
     const thread = await harness.createThread({ title: 'target-thread' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
@@ -852,6 +1097,9 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
+
+    // Allow fire-and-forget persistTokenUsage to flush
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     // Verify the targeted thread was actually used (updatedAt advanced)
     const threads = await harness.listThreads();
@@ -869,6 +1117,8 @@ describe('headless mode — thread control', () => {
     const thread = await harness.createThread({ title: 'my-feature' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
@@ -878,6 +1128,9 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
+
+    // Allow fire-and-forget persistTokenUsage to flush
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     // Verify the titled thread was actually used
     const threads = await harness.listThreads();
@@ -927,6 +1180,124 @@ describe('headless mode — thread control', () => {
     expect(titled).toBeDefined();
   });
 
+  it('scopes --thread and --continue to the requested resource ID', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Scoped resource response') }),
+    });
+
+    await harness.init();
+    harness.setResourceId({ resourceId: 'resource-a' });
+    const alphaOlderThread = await harness.createThread({ title: 'older-alpha' });
+    harness.setResourceId({ resourceId: 'resource-b' });
+    const betaThread = await harness.createThread({ title: 'shared-title' });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    harness.setResourceId({ resourceId: 'resource-a' });
+    const alphaThread = await harness.createThread({ title: 'shared-title' });
+
+    let exitCode = await runHeadless(harness, {
+      prompt: 'Hello beta',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      resourceId: 'resource-b',
+      thread: 'shared-title',
+    });
+
+    expect(exitCode).toBe(0);
+    expect(harness.getResourceId()).toBe('resource-b');
+    expect(harness.getCurrentThreadId()).toBe(betaThread.id);
+
+    exitCode = await runHeadless(harness, {
+      prompt: 'Hello alpha',
+      format: 'default',
+      continue_: true,
+      cloneThread: false,
+      resourceId: 'resource-a',
+    });
+
+    expect(exitCode).toBe(0);
+    expect(harness.getResourceId()).toBe('resource-a');
+    expect(harness.getCurrentThreadId()).toBe(alphaThread.id);
+    expect(harness.getCurrentThreadId()).not.toBe(alphaOlderThread.id);
+  });
+
+  it('resumes a Harness v1 prefilled thread by title in headless mode', async () => {
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'You are a test agent.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: createTextStream('V1 title resumed!') }),
+      }) as any,
+      tools: {},
+    });
+    const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-v1-title-'));
+    const storePath = join(tempDir, 'test.db');
+    tempStorePaths.push(storePath, tempDir);
+    const storage = new LibSQLStore({ id: 'test-store', url: `file:${storePath}` });
+    const memory = new Memory({ storage });
+    const session = {
+      id: 'sess-prefilled-title',
+      threadId: '',
+      resourceId: '',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      lastActivityAt: new Date('2026-01-02T00:00:00.000Z'),
+      modeId: 'default',
+      modelId: 'openai/custom-thread-model',
+      getMode: vi.fn(() => ({ id: 'default', description: 'Default', metadata: { agentId: 'test-agent' } })),
+      getModelId: vi.fn(() => 'openai/custom-thread-model'),
+      setModelId: vi.fn(),
+      getState: vi.fn(() => ({})),
+      setState: vi.fn(async () => {}),
+    };
+    const harnessV1 = {
+      listSessions: vi.fn(async () => [session]),
+      session: vi.fn(async () => session),
+      getMode: vi.fn(() => ({ id: 'default', description: 'Default', metadata: { agentId: 'test-agent' } })),
+    };
+    const harness = new HarnessCompat(
+      {
+        id: 'test-harness',
+        storage,
+        memory,
+        modes: [{ id: 'default', name: 'Default', default: true, defaultModelId: 'mock-model', agent }],
+        initialState: { yolo: true } as any,
+      },
+      harnessV1 as any,
+    );
+    (harness as any).getAgentForMode = () => agent;
+
+    await harness.init();
+    const thread = await harness.createThread({ title: 'prefilled-title' });
+    session.threadId = thread.id;
+    session.resourceId = thread.resourceId!;
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      thread: 'prefilled-title',
+    });
+
+    expect(exitCode).toBe(0);
+    expect(harness.getCurrentThreadId()).toBe(thread.id);
+    expect(harnessV1.session).toHaveBeenCalledWith({ threadId: thread.id, resourceId: thread.resourceId });
+    // Main's #17558 carries the harness's current model onto the session at
+    // switchThread, so the startup model overrides the prefilled session model.
+    expect(session.setModelId).toHaveBeenCalledWith('mock-model');
+    const threads = await harness.listThreads();
+    const matchingThreads = threads.filter(t => t.id === thread.id);
+    expect(matchingThreads).toHaveLength(1);
+    const targeted = matchingThreads[0]!;
+    expect(targeted.title).toBe('prefilled-title');
+    expect(targeted.metadata).toMatchObject({
+      sessionId: 'sess-prefilled-title',
+      modeId: 'default',
+      modelId: 'openai/custom-thread-model',
+    });
+  });
+
   it('emits thread_cloned event with new thread ID when cloning a named thread', async () => {
     const agent = new Agent({
       id: 'test-agent',
@@ -947,13 +1318,26 @@ describe('headless mode — thread control', () => {
 
     const memory = new Memory({ storage });
 
+    const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
+    const registeredAgent = mastra.getAgent('test-agent');
+
     const harness = new Harness({
       id: 'test-harness',
       storage,
       memory,
-      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          description: 'default',
+          metadata: { default: true },
+          instructions: 'You are a test agent.',
+          defaultModelId: 'test',
+        },
+      ],
       initialState: { yolo: true } as any,
     });
+    (harness as any).getAgentForMode = () => registeredAgent;
 
     await harness.init();
     const sourceThread = await harness.createThread({ title: 'source-thread' });

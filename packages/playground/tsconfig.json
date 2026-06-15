@@ -6,10 +6,12 @@
     },
     {
       "path": "./tsconfig.node.json"
+    },
+    {
+      "path": "./tsconfig.vitest.json"
     }
   ],
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@internal-temp/*": ["./src/vendor/@mastra/*"]

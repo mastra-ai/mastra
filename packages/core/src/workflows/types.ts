@@ -1,6 +1,7 @@
 import type { WritableStream } from 'node:stream/web';
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod/v4';
+import type { ActorSignal } from '../auth/ee';
 import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
@@ -15,15 +16,17 @@ import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { ExecutionEngine } from './execution-engine';
+import type { WorkflowScheduleInput } from './scheduler/types';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
-export type OutputWriter<TChunk = any> = (chunk: TChunk) => Promise<void>;
+export type OutputWriter<TChunk = any> = (chunk: TChunk, options?: { messageId?: string }) => Promise<void>;
 
 /**
  * Options for `Run.start()` beyond the generic `inputData`/`initialState`/`requestContext` fields.
  */
 export type WorkflowRunStartOptions = {
   outputWriter?: OutputWriter;
+  actor?: ActorSignal;
   tracingOptions?: TracingOptions;
   outputOptions?: {
     includeState?: boolean;
@@ -50,6 +53,7 @@ export type RestartExecutionParams = {
   stepResults: Record<string, StepResult<any, any, any, any>>;
   state?: Record<string, any>;
   stepExecutionPath?: string[];
+  isParallelOrConditionalRestarted?: boolean;
 };
 
 export type TimeTravelExecutionParams = {
@@ -271,6 +275,34 @@ export type WorkflowRunStatus =
   | 'bailed'
   | 'paused';
 
+export type WorkflowResumeLabel = {
+  stepId: string;
+  foreachIndex?: number;
+};
+
+export type WorkflowStateSingleStepResult = {
+  status: WorkflowStepStatus;
+  output?: any;
+  payload?: any;
+  resumePayload?: any;
+  suspendPayload?: any;
+  suspendOutput?: any;
+  error?: SerializedError;
+  startedAt?: number;
+  endedAt?: number;
+  suspendedAt?: number;
+  resumedAt?: number;
+  metadata?: StepMetadata;
+};
+
+export type WorkflowStateStepResult = WorkflowStateSingleStepResult | WorkflowStateSingleStepResult[];
+
+export type WorkflowStateTracingContext = {
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+};
+
 /**
  * Unified workflow state that combines metadata with processed execution state.
  */
@@ -300,21 +332,13 @@ export interface WorkflowState {
   // Optional detailed fields (can be excluded for performance)
   activeStepsPath?: Record<string, number[]>;
   serializedStepGraph?: SerializedStepFlowEntry[];
+  suspendedPaths?: Record<string, number[]>;
+  resumeLabels?: Record<string, WorkflowResumeLabel>;
+  waitingPaths?: Record<string, number[]>;
+  requestContext?: Record<string, any>;
+  tracingContext?: WorkflowStateTracingContext;
   // Step Information (processed) - optional when using field filtering
-  steps?: Record<
-    string,
-    {
-      status: WorkflowRunStatus;
-      output?: Record<string, any>;
-      payload?: Record<string, any>;
-      resumePayload?: Record<string, any>;
-      error?: SerializedError;
-      startedAt: number;
-      endedAt: number;
-      suspendedAt?: number;
-      resumedAt?: number;
-    }
-  >;
+  steps?: Record<string, WorkflowStateStepResult>;
   result?: Record<string, any>;
   payload?: Record<string, any>;
   error?: SerializedError;
@@ -324,8 +348,20 @@ export interface WorkflowState {
  * Valid field names for filtering WorkflowState responses.
  * Use with getWorkflowRunById to reduce payload size.
  * Note: Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.
+ * requestContext and tracingContext are only returned when explicitly requested.
  */
-export type WorkflowStateField = 'result' | 'error' | 'payload' | 'steps' | 'activeStepsPath' | 'serializedStepGraph';
+export type WorkflowStateField =
+  | 'result'
+  | 'error'
+  | 'payload'
+  | 'steps'
+  | 'activeStepsPath'
+  | 'serializedStepGraph'
+  | 'suspendedPaths'
+  | 'resumeLabels'
+  | 'waitingPaths'
+  | 'requestContext'
+  | 'tracingContext';
 
 export interface WorkflowRunState {
   // Core state info
@@ -340,13 +376,7 @@ export interface WorkflowRunState {
   activePaths: Array<number>;
   activeStepsPath: Record<string, number[]>;
   suspendedPaths: Record<string, number[]>;
-  resumeLabels: Record<
-    string,
-    {
-      stepId: string;
-      foreachIndex?: number;
-    }
-  >;
+  resumeLabels: Record<string, WorkflowResumeLabel>;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
   /** Tripwire data when status is 'tripwire' */
@@ -357,14 +387,7 @@ export interface WorkflowRunState {
    * Persisted when workflow suspends to enable linking resumed spans
    * as children of the original suspended span.
    */
-  tracingContext?: {
-    /** The trace ID for this workflow run */
-    traceId?: string;
-    /** The span ID of the workflow run span (for linking on resume) */
-    spanId?: string;
-    /** The parent span ID (if this is a nested workflow) */
-    parentSpanId?: string;
-  };
+  tracingContext?: WorkflowStateTracingContext;
 }
 
 /**
@@ -434,6 +457,12 @@ export interface WorkflowErrorCallbackInfo {
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
+  /**
+   * When true, nested runs created by execute() share the parent's pubsub
+   * instance instead of creating an isolated one. Used by durable agent
+   * workflows so inner step events reach the outer subscriber.
+   */
+  sharePubsub?: boolean;
   shouldPersistSnapshot?: (params: {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
@@ -459,6 +488,7 @@ export type WorkflowInfo = {
   allSteps: Record<string, SerializedStep>;
   name: string | undefined;
   description: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   stepGraph: SerializedStepFlowEntry[];
   inputSchema: string | undefined;
   outputSchema: string | undefined;
@@ -793,6 +823,7 @@ export type WorkflowConfig<
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   inputSchema: PublicSchema<TInput>;
   outputSchema: PublicSchema<TOutput>;
   stateSchema?: PublicSchema<TState>;
@@ -811,6 +842,18 @@ export type WorkflowConfig<
   options?: WorkflowOptions;
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   type?: WorkflowType;
+  /**
+   * Optional cron schedule configuration. When set, the Mastra scheduler will
+   * publish a `workflow.start` event on the cron schedule.
+   * Only supported on the evented engine.
+   *
+   * Accepts either a single schedule object or an array of schedule objects.
+   * Array entries must each specify a unique stable `id`. The `inputData`,
+   * `initialState`, and `requestContext` fields on each schedule are
+   * type-checked against the workflow's `inputSchema`, `stateSchema`, and
+   * `requestContextSchema` respectively.
+   */
+  schedule?: WorkflowScheduleInput<NoInfer<TInput>, NoInfer<TState>, NoInfer<TRequestContext>>;
 };
 
 /**

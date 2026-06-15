@@ -1,11 +1,11 @@
-import { useAuiState } from '@assistant-ui/react';
-import { Badge, CodeEditor, IconButton, Icon, cn } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
+import { Badge, Button, CodeEditor, Icon, cn } from '@mastra/playground-ui';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useLinkComponent } from '@/lib/framework';
 
 // Matches the shape returned by workspace.getInfo()
@@ -41,8 +41,9 @@ export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
   toolName: string;
   args: Record<string, unknown> | string;
   result: any;
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   toolCalled?: boolean;
+  dataParts?: ReadonlyArray<DataMessagePart>;
 }
 
 export const FileTreeBadge = ({
@@ -53,6 +54,7 @@ export const FileTreeBadge = ({
   toolApprovalMetadata,
   isNetwork,
   toolCalled: toolCalledProp,
+  dataParts,
 }: FileTreeBadgeProps) => {
   // Expand by default when approval is required (so buttons are visible)
   const [isCollapsed, setIsCollapsed] = useState(!toolApprovalMetadata);
@@ -109,13 +111,11 @@ export const FileTreeBadge = ({
   const toolCalled = toolCalledProp ?? hasResult;
 
   // Extract filesystem metadata from message data parts (via writer.custom), scoped to this tool call
-  const message = useAuiState(s => s.message);
   const workspaceMetadata = useMemo(() => {
-    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.find(
+    return (dataParts ?? []).find(
       part => part.type === 'data' && part.name === 'workspace-metadata' && part.data?.toolCallId === toolCallId,
     );
-  }, [message.content, toolCallId]);
+  }, [dataParts, toolCallId]);
 
   const wsMeta = workspaceMetadata?.data as WorkspaceMetadata | undefined;
 
@@ -181,7 +181,7 @@ export const FileTreeBadge = ({
               {/* Panel header with summary and copy button */}
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-border1 bg-surface3">
                 {summary && <span className="text-neutral6 text-xs">{summary}</span>}
-                <IconButton variant="light" size="sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
+                <Button variant="default" size="icon-sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
                     <span
                       style={{ gridArea: '1/1' }}
@@ -196,7 +196,7 @@ export const FileTreeBadge = ({
                       <CopyIcon size={14} />
                     </span>
                   </span>
-                </IconButton>
+                </Button>
               </div>
 
               {/* Tree content */}

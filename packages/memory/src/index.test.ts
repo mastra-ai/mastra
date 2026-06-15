@@ -35,6 +35,25 @@ function getTextParts(message: MastraDBMessage): string[] {
 }
 
 describe('Memory', () => {
+  describe('constructor', () => {
+    it('throws when working memory vNext is combined with state signals', () => {
+      expect(
+        () =>
+          new Memory({
+            storage: new InMemoryStore(),
+            options: {
+              workingMemory: {
+                enabled: true,
+                template: '# User',
+                version: 'vnext',
+                useStateSignals: true,
+              } as any,
+            },
+          }),
+      ).toThrow("workingMemory.useStateSignals is not supported with workingMemory.version: 'vnext'");
+    });
+  });
+
   describe('updateMessageToHideWorkingMemoryV2', () => {
     const memory = new TestableMemory();
 
@@ -269,6 +288,75 @@ describe('Memory', () => {
       expect(recalled.messages).toHaveLength(2);
       expect(recalled.messages.map(message => message.id)).toEqual(['save-msg-1', 'save-msg-2']);
       expect(recalled.messages.map(message => message.content)).toEqual([messages[0].content, messages[1].content]);
+    });
+
+    it('should not save system messages', async () => {
+      const threadId = 'thread-system-save-test';
+      const resourceId = 'resource-system-save-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'system-msg',
+          threadId,
+          resourceId,
+          role: 'system',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Runtime-only instruction' }] },
+        },
+        {
+          id: 'user-msg',
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        },
+      ];
+
+      const result = await memory.saveMessages({ messages });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]?.id).toBe('user-msg');
+
+      const recalled = await memory.recall({ threadId, resourceId, perPage: false });
+      expect(recalled.messages).toHaveLength(1);
+      expect(recalled.messages[0]?.id).toBe('user-msg');
+    });
+
+    it('should not persist system messages through raw persistMessages', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const threadId = 'thread-system-raw-persist-test';
+      const resourceId = 'resource-system-raw-persist-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      await memory.persistMessages([
+        {
+          id: 'raw-system-msg',
+          threadId,
+          resourceId,
+          role: 'system',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Runtime-only instruction' }] },
+        },
+        {
+          id: 'raw-user-msg',
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        },
+      ]);
+
+      const memoryStore = await storage.getStore('memory');
+      const stored = await memoryStore!.listMessages({ threadId, resourceId, perPage: false });
+
+      expect(stored.messages).toHaveLength(1);
+      expect(stored.messages[0]?.id).toBe('raw-user-msg');
     });
   });
 
@@ -2200,6 +2288,65 @@ describe('Memory', () => {
 
       await expect(memory.deleteThread('thread-789')).resolves.not.toThrow();
       await expect(memory.deleteMessages(['msg-789'])).resolves.not.toThrow();
+    });
+
+    it('passes observation options to the ObservationalMemory engine', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({
+        storage,
+        options: {
+          observationalMemory: {
+            observation: {
+              observeAttachments: 'auto',
+              bufferOnIdle: true,
+            },
+          },
+        },
+      });
+
+      const engine = await (memory as any)._initOMEngine();
+
+      expect(engine?.getObservationConfig().observeAttachments).toBe('auto');
+      expect(engine?.getObservationConfig().bufferOnIdle).toBe(true);
+    });
+
+    it('should clear thread-scoped observational memory when deleting a thread', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({
+        storage,
+        options: {
+          observationalMemory: {
+            scope: 'thread',
+          },
+        },
+      });
+      const memoryStore = await storage.getStore('memory');
+      const threadId = 'thread-with-observations';
+      const resourceId = 'resource-with-observations';
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Thread with observations',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await memoryStore?.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await expect(memoryStore?.getObservationalMemory(threadId, resourceId)).resolves.not.toBeNull();
+
+      await memory.deleteThread(threadId);
+
+      await expect(memory.getThreadById({ threadId })).resolves.toBeNull();
+      await expect(memoryStore?.getObservationalMemory(threadId, resourceId)).resolves.toBeNull();
     });
 
     it('should batch message vector deletions when messageIds exceed batch size', async () => {

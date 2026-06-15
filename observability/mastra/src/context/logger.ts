@@ -87,7 +87,7 @@ export class LoggerContextImpl implements LoggerContext {
    * Build an ExportedLog, check against the minimum level, and emit it through the bus.
    */
   private log(level: LogLevel, message: string, data?: Record<string, unknown>): void {
-    const minLevel = this.config.minLevel ?? 'debug';
+    const minLevel = this.config.minLevel ?? 'warn';
     if (LOG_LEVEL_PRIORITY[level] < LOG_LEVEL_PRIORITY[minLevel]) {
       return;
     }

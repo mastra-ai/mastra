@@ -1,6 +1,7 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
-import { createStep, createWorkflow } from './workflow';
+import { createWorkflow } from './create';
+import { createStep } from './workflow';
 
 describe('Workflow schema type inference', () => {
   describe('schemas with .optional().default()', () => {
@@ -325,6 +326,228 @@ describe('Workflow schema type inference', () => {
 
       // @ts-expect-error - step input schema is incompatible with workflow input
       workflow.then(step);
+    });
+  });
+
+  // Regression: https://github.com/mastra-ai/mastra/issues/15989
+  // foreach/dowhile/dountil dropped the TRequestContext generic on the step
+  // parameter, causing typed requestContextSchema steps to be rejected even
+  // when the workflow declared a matching requestContextSchema.
+  describe('requestContextSchema inference in loop helpers', () => {
+    const requestContextSchema = z.object({
+      propA: z.string(),
+      propB: z.number(),
+    });
+
+    it('foreach should accept a step whose requestContextSchema matches the workflow', () => {
+      const elementSchema = z.object({ value: z.number() });
+
+      const step = createStep({
+        id: 'each-with-ctx',
+        inputSchema: elementSchema,
+        outputSchema: elementSchema,
+        requestContextSchema,
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const workflow = createWorkflow({
+        id: 'foreach-with-ctx',
+        inputSchema: z.array(elementSchema),
+        outputSchema: z.array(elementSchema),
+        requestContextSchema,
+      });
+
+      const chained = workflow.foreach(step);
+      expectTypeOf(chained).not.toBeNever();
+    });
+
+    it('dowhile should accept a step whose requestContextSchema matches the workflow', () => {
+      const schema = z.object({ value: z.number() });
+
+      const step = createStep({
+        id: 'dowhile-with-ctx',
+        inputSchema: schema,
+        outputSchema: schema,
+        requestContextSchema,
+        execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'dowhile-ctx-workflow',
+        inputSchema: schema,
+        outputSchema: schema,
+        requestContextSchema,
+      });
+
+      const chained = workflow.dowhile(step, async ({ inputData }) => inputData.value < 10);
+      expectTypeOf(chained).not.toBeNever();
+    });
+
+    it('dountil should accept a step whose requestContextSchema matches the workflow', () => {
+      const schema = z.object({ value: z.number() });
+
+      const step = createStep({
+        id: 'dountil-with-ctx',
+        inputSchema: schema,
+        outputSchema: schema,
+        requestContextSchema,
+        execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'dountil-ctx-workflow',
+        inputSchema: schema,
+        outputSchema: schema,
+        requestContextSchema,
+      });
+
+      const chained = workflow.dountil(step, async ({ inputData }) => inputData.value >= 10);
+      expectTypeOf(chained).not.toBeNever();
+    });
+
+    it('foreach should accept a step that does not declare a requestContextSchema in a workflow that does', () => {
+      const elementSchema = z.object({ value: z.number() });
+
+      const step = createStep({
+        id: 'each-no-ctx',
+        inputSchema: elementSchema,
+        outputSchema: elementSchema,
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const workflow = createWorkflow({
+        id: 'foreach-with-ctx-noctx-step',
+        inputSchema: z.array(elementSchema),
+        outputSchema: z.array(elementSchema),
+        requestContextSchema,
+      });
+
+      const chained = workflow.foreach(step);
+      expectTypeOf(chained).not.toBeNever();
+    });
+
+    it('foreach should reject a step whose requestContextSchema does not match the workflow', () => {
+      const elementSchema = z.object({ value: z.number() });
+
+      const step = createStep({
+        id: 'each-bad-ctx',
+        inputSchema: elementSchema,
+        outputSchema: elementSchema,
+        requestContextSchema: z.object({ otherProp: z.boolean() }),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const workflow = createWorkflow({
+        id: 'foreach-mismatch',
+        inputSchema: z.array(elementSchema),
+        outputSchema: z.array(elementSchema),
+        requestContextSchema,
+      });
+
+      // @ts-expect-error - step's requestContextSchema does not match the workflow's
+      workflow.foreach(step);
+    });
+
+    it('dowhile should reject a step whose requestContextSchema does not match the workflow', () => {
+      const schema = z.object({ value: z.number() });
+
+      const step = createStep({
+        id: 'dowhile-bad-ctx',
+        inputSchema: schema,
+        outputSchema: schema,
+        requestContextSchema: z.object({ otherProp: z.boolean() }),
+        execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'dowhile-mismatch',
+        inputSchema: schema,
+        outputSchema: schema,
+        requestContextSchema,
+      });
+
+      // @ts-expect-error - step's requestContextSchema does not match the workflow's
+      workflow.dowhile(step, async ({ inputData }) => inputData.value < 10);
+    });
+
+    it('dountil should reject a step whose requestContextSchema does not match the workflow', () => {
+      const schema = z.object({ value: z.number() });
+
+      const step = createStep({
+        id: 'dountil-bad-ctx',
+        inputSchema: schema,
+        outputSchema: schema,
+        requestContextSchema: z.object({ otherProp: z.boolean() }),
+        execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'dountil-mismatch',
+        inputSchema: schema,
+        outputSchema: schema,
+        requestContextSchema,
+      });
+
+      // @ts-expect-error - step's requestContextSchema does not match the workflow's
+      workflow.dountil(step, async ({ inputData }) => inputData.value >= 10);
+    });
+  });
+
+  // Regression: https://github.com/mastra-ai/mastra/issues/16975
+  // parallel() dropped the TRequestContext generic on the step parameter,
+  // causing typed requestContextSchema steps to be rejected with a misleading
+  // "Expected Step with state schema that is a subset of workflow state" error.
+  describe('requestContextSchema inference in parallel', () => {
+    const requestContextSchema = z.object({
+      userId: z.string(),
+    });
+
+    it('parallel should accept steps whose requestContextSchema matches the workflow', () => {
+      const stepA = createStep({
+        id: 'step-a',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ a: z.string() }),
+        requestContextSchema,
+        execute: async ({ inputData }) => ({ a: inputData.name }),
+      });
+
+      const stepB = createStep({
+        id: 'step-b',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ b: z.string() }),
+        requestContextSchema,
+        execute: async () => ({ b: 'step-b' }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'repro',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        requestContextSchema,
+      });
+
+      const chained = workflow.parallel([stepA, stepB]);
+      expectTypeOf(chained).not.toBeNever();
+    });
+
+    it('parallel should reject a step whose requestContextSchema does not match the workflow', () => {
+      const step = createStep({
+        id: 'bad-ctx',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ a: z.string() }),
+        requestContextSchema: z.object({ otherProp: z.boolean() }),
+        execute: async ({ inputData }) => ({ a: inputData.name }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'parallel-mismatch',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        requestContextSchema,
+      });
+
+      // @ts-expect-error - step's requestContextSchema does not match the workflow's
+      workflow.parallel([step]);
     });
   });
 });

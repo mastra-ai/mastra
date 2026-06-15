@@ -42,6 +42,64 @@ export interface WorkspaceSpanHandle {
   error(err: unknown, attrs?: Partial<WorkspaceActionAttributes>): void;
 }
 
+const ENV_FIELD_NAMES = new Set(['env', 'environment', 'process_env']);
+const SECRET_FIELD_PATTERN =
+  /(^|[_-])(api[_-]?key|key|token|secret|password|passwd|pwd|credential|credentials|auth|authorization|cookie|session)([_-]|$)/i;
+
+function normalizeFieldName(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Object.prototype.toString.call(value) === '[object Object]';
+}
+
+function redactEnv(value: unknown) {
+  return {
+    redacted: true,
+    keys: isPlainObject(value) || Array.isArray(value) ? Object.keys(value).sort() : undefined,
+  };
+}
+
+function sanitizeWorkspaceTraceData(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (Array.isArray(value)) {
+    if (seen.has(value)) {
+      return '[redacted:circular]';
+    }
+    seen.add(value);
+    try {
+      return value.map(item => sanitizeWorkspaceTraceData(item, seen));
+    } finally {
+      seen.delete(value);
+    }
+  }
+
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  if (seen.has(value)) {
+    return '[redacted:circular]';
+  }
+  seen.add(value);
+  try {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => {
+        const normalized = normalizeFieldName(key);
+        if (ENV_FIELD_NAMES.has(normalized)) {
+          return [key, redactEnv(entry)];
+        }
+        if (SECRET_FIELD_PATTERN.test(normalized)) {
+          return [key, '[redacted]'];
+        }
+        return [key, sanitizeWorkspaceTraceData(entry, seen)];
+      }),
+    );
+  } finally {
+    seen.delete(value);
+  }
+}
+
 /**
  * Start a WORKSPACE_ACTION child span from the tool execution context.
  *
@@ -82,7 +140,7 @@ export function startWorkspaceSpan(
   const span = currentSpan.createChildSpan<SpanType.WORKSPACE_ACTION>({
     type: SpanType.WORKSPACE_ACTION,
     name: `workspace:${category}:${operation}`,
-    input,
+    input: sanitizeWorkspaceTraceData(input),
     attributes: {
       category,
       workspaceId: workspace?.id,
@@ -95,7 +153,7 @@ export function startWorkspaceSpan(
     span,
     end(attrs?: Partial<WorkspaceActionAttributes>, output?: unknown) {
       span?.end({
-        output,
+        output: sanitizeWorkspaceTraceData(output),
         attributes: {
           ...attrs,
         },

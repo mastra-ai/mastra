@@ -28,11 +28,13 @@ function toRecord(task: BackgroundTask): Record<string, any> {
     args: serializeJson(task.args),
     result: serializeJson(task.result),
     error: serializeJson(task.error),
+    suspend_payload: serializeJson(task.suspendPayload),
     retry_count: task.retryCount,
     max_retries: task.maxRetries,
     timeout_ms: task.timeoutMs,
     createdAt: task.createdAt,
     startedAt: task.startedAt ?? new Date(0),
+    suspendedAt: task.suspendedAt ?? new Date(0),
     completedAt: task.completedAt ?? new Date(0),
   };
 }
@@ -51,6 +53,8 @@ function fromRecord(row: Record<string, any>): BackgroundTask {
   };
 
   const startedAt = row.startedAt instanceof Date ? row.startedAt : row.startedAt ? new Date(row.startedAt) : undefined;
+  const suspendedAt =
+    row.suspendedAt instanceof Date ? row.suspendedAt : row.suspendedAt ? new Date(row.suspendedAt) : undefined;
   const completedAt =
     row.completedAt instanceof Date ? row.completedAt : row.completedAt ? new Date(row.completedAt) : undefined;
 
@@ -66,11 +70,13 @@ function fromRecord(row: Record<string, any>): BackgroundTask {
     runId: row.run_id ?? '',
     result: parseJson(row.result),
     error: parseJson(row.error),
+    suspendPayload: parseJson(row.suspend_payload),
     retryCount: Number(row.retry_count ?? 0),
     maxRetries: Number(row.max_retries ?? 0),
     timeoutMs: Number(row.timeout_ms ?? 300_000),
     createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
     startedAt: startedAt && startedAt.getTime() > 0 ? startedAt : undefined,
+    suspendedAt: suspendedAt && suspendedAt.getTime() > 0 ? suspendedAt : undefined,
     completedAt: completedAt && completedAt.getTime() > 0 ? completedAt : undefined,
   };
 }
@@ -95,6 +101,11 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_BACKGROUND_TASKS,
+      schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+      ifNotExists: ['suspend_payload', 'suspendedAt'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -112,12 +123,15 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
 
     const merged = { ...existing };
     if ('status' in update) merged.status = update.status!;
-    // Keep `result`/`error` raw — `toRecord(merged)` below serializes once.
-    // Serializing twice would double-encode (e.g. `"\"value\""`).
+    // Keep `result`/`error`/`suspendPayload` raw — `toRecord(merged)` below
+    // serializes once. Serializing twice would double-encode (e.g.
+    // `"\"value\""`).
     if ('result' in update) merged.result = update.result;
     if ('error' in update) merged.error = update.error;
+    if ('suspendPayload' in update) merged.suspendPayload = update.suspendPayload;
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
+    if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;
     if ('completedAt' in update) merged.completedAt = update.completedAt;
 
     // LanceDB doesn't have a native partial update — delete and re-add
@@ -156,6 +170,7 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
       if (filter.resourceId) conditions.push(`resource_id = '${escapeStr(filter.resourceId)}'`);
       if (filter.runId) conditions.push(`run_id = '${escapeStr(filter.runId)}'`);
       if (filter.toolName) conditions.push(`tool_name = '${escapeStr(filter.toolName)}'`);
+      if (filter.toolCallId) conditions.push(`tool_call_id = '${escapeStr(filter.toolCallId)}'`);
 
       let query = table.query();
       if (conditions.length > 0) {

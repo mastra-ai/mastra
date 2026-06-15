@@ -54,13 +54,22 @@ export function requireSandbox(context: ToolExecutionContext): {
   return { workspace, sandbox: workspace.sandbox };
 }
 
+export function getDynamicSandboxCacheKeyHint(workspace: Workspace): string {
+  const hasResolver = workspace.hasSandboxResolver();
+  const hasCacheKey = workspace.hasSandboxCacheKey();
+
+  if (!hasResolver || hasCacheKey) return '';
+
+  return ' If this process was started from a dynamic sandbox resolver, configure sandboxCacheKey or have the resolver return the same sandbox for follow-up calls.';
+}
+
 /**
  * Emit workspace metadata as a data chunk so the UI can render workspace info immediately.
  * Should be called at the start of every workspace tool's execute function.
  */
 export async function emitWorkspaceMetadata(context: ToolExecutionContext, toolName: string) {
   const workspace = requireWorkspace(context);
-  const info = await workspace.getInfo();
+  const info = await workspace.getInfo({ requestContext: context?.requestContext, resolveDynamicProviders: false });
   const toolCallId = context?.agent?.toolCallId;
   await context?.writer?.custom({
     type: 'data-workspace-metadata',

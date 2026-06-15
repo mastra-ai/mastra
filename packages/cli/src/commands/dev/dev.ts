@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
@@ -17,6 +17,7 @@ import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
 import { loadAndValidatePresets } from '../../utils/validate-presets.js';
 
+import { acquireDevLock, releaseDevLock, updateDevLock } from './dev-lock';
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
@@ -72,9 +73,10 @@ type ProcessOptions = {
   publicDir: string;
 };
 
-const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port: number }) => {
+const restartAllActiveWorkflowRuns = async ({ host, port, https }: { host: string; port: number; https?: boolean }) => {
+  const scheme = https ? 'https' : 'http';
   try {
-    await fetch(`http://${host}:${port}/__restart-active-workflow-runs`, {
+    await fetch(`${scheme}://${host}:${port}/__restart-active-workflow-runs`, {
       method: 'POST',
     });
   } catch (error) {
@@ -82,7 +84,7 @@ const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port
     // Retry after another second
     await new Promise(resolve => setTimeout(resolve, 1500));
     try {
-      await fetch(`http://${host}:${port}/__restart-active-workflow-runs`, {
+      await fetch(`${scheme}://${host}:${port}/__restart-active-workflow-runs`, {
         method: 'POST',
       });
     } catch {
@@ -141,6 +143,9 @@ const startServer = async (
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_PACKAGES_FILE: packagesFilePath,
+        MASTRA_TELEMETRY_COMMAND: 'dev',
+        MASTRA_PROJECT_ROOT: resolve(dotMastraPath, '..'),
+        ...(getAnalytics()?.getDistinctId() ? { MASTRA_CLI_DISTINCT_ID: getAnalytics()!.getDistinctId() } : {}),
         ...(startOptions?.https
           ? {
               MASTRA_HTTPS_KEY: startOptions.https.key.toString('base64'),
@@ -206,11 +211,12 @@ const startServer = async (
         devLogger.ready(host, port, studioBasePath, apiPrefix, serverStartTime, startOptions.https);
         devLogger.watching();
 
-        await restartAllActiveWorkflowRuns({ host, port });
+        await restartAllActiveWorkflowRuns({ host, port, https: !!startOptions.https });
 
         // Send refresh signal
+        const scheme = startOptions.https ? 'https' : 'http';
         try {
-          await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
+          await fetch(`${scheme}://${host}:${port}${studioBasePath}/__refresh`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -220,7 +226,7 @@ const startServer = async (
           // Retry after another second
           await new Promise(resolve => setTimeout(resolve, 1500));
           try {
-            await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
+            await fetch(`${scheme}://${host}:${port}${studioBasePath}/__refresh`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -292,7 +298,8 @@ async function checkAndRestart(
 
   try {
     // Check if hot reload is disabled due to template installation
-    const response = await fetch(`http://${host}:${port}${studioBasePath}/__hot-reload-status`);
+    const scheme = startOptions.https ? 'https' : 'http';
+    const response = await fetch(`${scheme}://${host}:${port}${studioBasePath}/__hot-reload-status`);
     if (response.ok) {
       const status = (await response.json()) as { disabled: boolean; timestamp: string };
       if (status.disabled) {
@@ -426,6 +433,9 @@ export async function dev({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
+  await mkdir(dotMastraPath, { recursive: true });
+  await acquireDevLock(dotMastraPath);
+
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
@@ -473,6 +483,8 @@ export async function dev({
       }),
     );
   }
+
+  await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
 
   let httpsOptions: HTTPSOptions | undefined = undefined;
 
@@ -581,6 +593,7 @@ export async function dev({
       .close()
       .catch(() => {})
       .finally(() => {
+        releaseDevLock(dotMastraPath);
         clearTimeout(forceExit);
         process.exit(0);
       });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
+import { createSignal } from '../agent/signals';
 import { MastraLanguageModelV3Mock } from '../loop/test-utils/MastraLanguageModelV3Mock';
 import type { RequestContext } from '../request-context';
 import { AgentsMDInjector } from './tool-result-reminder';
@@ -35,22 +36,37 @@ type TestMessageContent = {
 
 class TestMessageList {
   private readonly messages: MastraDBMessage[] = [];
+  private readonly responseMessageIds = new Set<string>();
 
   get get() {
     return {
       all: {
         db: () => this.messages,
       },
+      response: {
+        db: () => this.messages.filter(message => this.responseMessageIds.has(message.id)),
+      },
     };
   }
 
-  add(message: string | MastraDBMessage, _source: 'user' | 'response' | 'input') {
-    this.messages.push(typeof message === 'string' ? createUserMessage(message) : message);
+  add(message: string | MastraDBMessage, source: 'user' | 'response' | 'input') {
+    const resolvedMessage = typeof message === 'string' ? createUserMessage(message) : message;
+    this.messages.push(resolvedMessage);
+    if (source === 'response') {
+      this.responseMessageIds.add(resolvedMessage.id);
+    }
     return this;
   }
 
   push(...messages: MastraDBMessage[]) {
     this.messages.push(...messages);
+  }
+
+  pushResponse(...messages: MastraDBMessage[]) {
+    this.messages.push(...messages);
+    for (const message of messages) {
+      this.responseMessageIds.add(message.id);
+    }
   }
 }
 
@@ -141,15 +157,34 @@ function createProcessInputStepArgs(
     retryCount: 0,
     model: new MastraLanguageModelV3Mock({}),
     writer,
+    sendSignal: async signalInput => {
+      const signal = createSignal(signalInput);
+      rotateResponseMessageId?.();
+      messageList.add(signal.toDBMessage(), 'input');
+      await writer?.custom(signal.toDataPart());
+      return signal;
+    },
   } as ProcessInputStepArgs;
 }
 
 function extractReminderMarkup(messageList: TestMessageList): string[] {
-  return messageList.get.all
-    .db()
-    .filter(message => message.role === 'user')
-    .map(message => getMessageText(message))
-    .filter(text => text.includes('<system-reminder'));
+  return messageList.get.all.db().flatMap(message => {
+    if (message.role === 'signal') {
+      const signalMetadata = message.content.metadata?.signal as
+        | { attributes?: { type?: string }; metadata?: { path?: unknown } }
+        | undefined;
+      if (signalMetadata?.attributes?.type === 'dynamic-agents-md') {
+        const path = signalMetadata.metadata?.path;
+        return typeof path === 'string'
+          ? [`<system-reminder type="dynamic-agents-md" path="${path}">${getMessageText(message)}</system-reminder>`]
+          : [];
+      }
+    }
+
+    if (message.role !== 'user') return [];
+    const text = getMessageText(message);
+    return text.includes('<system-reminder') ? [text] : [];
+  });
 }
 
 function getMessageText(message: MastraDBMessage): string {
@@ -164,8 +199,8 @@ describe('AgentsMDInjector', () => {
   it('injects metadata-rich reminder for direct AGENTS.md path references', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-agents';
-    messageList.push(
-      createUserMessage('Open the instructions'),
+    messageList.push(createUserMessage('Open the instructions'));
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [
@@ -191,18 +226,23 @@ describe('AgentsMDInjector', () => {
       `<system-reminder type="dynamic-agents-md" path="/repo/src/agents/nested/AGENTS.md"># Nested AGENTS\n\nUse the nested instructions when replying.</system-reminder>`,
     ]);
     const injectedReminder = messageList.get.all.db().at(-1);
-    expect(injectedReminder?.content.metadata).toEqual({
-      systemReminder: {
-        path: '/repo/src/agents/nested/AGENTS.md',
-        type: 'dynamic-agents-md',
-      },
-    });
+    expect(injectedReminder?.role).toBe('signal');
+    expect(injectedReminder?.content.metadata).toEqual(
+      expect.objectContaining({
+        signal: expect.objectContaining({
+          type: 'reactive',
+          tagName: 'system-reminder',
+          attributes: expect.objectContaining({ type: 'dynamic-agents-md' }),
+          metadata: expect.objectContaining({ path: '/repo/src/agents/nested/AGENTS.md' }),
+        }),
+      }),
+    );
   });
 
   it('injects reminder for tool calls array format', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-read';
-    messageList.push(
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { filePath: '/repo/CLAUDE.md' }, 'result', { ok: true })],
@@ -232,15 +272,18 @@ describe('AgentsMDInjector', () => {
     );
 
     expect(chunks).toEqual([
-      {
-        type: 'data-system-reminder',
-        data: {
-          message: 'Project guidance from CLAUDE',
-          reminderType: 'dynamic-agents-md',
-          path: '/repo/CLAUDE.md',
-        },
-        transient: true,
-      },
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({
+          type: 'reactive',
+          tagName: 'system-reminder',
+          contents: 'Project guidance from CLAUDE',
+          metadata: {
+            path: '/repo/CLAUDE.md',
+            type: 'dynamic-agents-md',
+          },
+        }),
+      }),
     ]);
     expect(extractReminderMarkup(messageList)).toEqual([
       `<system-reminder type="dynamic-agents-md" path="/repo/CLAUDE.md">Project guidance from CLAUDE</system-reminder>`,
@@ -250,7 +293,7 @@ describe('AgentsMDInjector', () => {
   it('rotates the active response id before persisting an injected reminder', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-result';
-    messageList.push(
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [
@@ -282,7 +325,7 @@ describe('AgentsMDInjector', () => {
   it('does not detect a reminder from tool args while the tool invocation is still missing a result', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-pending';
-    messageList.push(
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { path: 'src/agents/nested' }, 'call')],
@@ -311,10 +354,32 @@ describe('AgentsMDInjector', () => {
     expect(extractReminderMarkup(messageList)).toEqual([]);
   });
 
+  it('does not reinject a reminder from completed tool results in prior response messages', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-old-result';
+    messageList.push(
+      createAssistantMessage({
+        format: 2,
+        parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/index.ts' }, 'result', { ok: true })],
+      }),
+      createUserMessage('Thanks, now keep going.'),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      pathExists: path => String(path) === '/repo/AGENTS.md',
+      isDirectory: path => String(path) !== '/repo/src/index.ts',
+      readFile: () => 'Project guidance from AGENTS',
+    });
+
+    await testProcessor.processInputStep(createProcessInputStepArgs(messageList, []));
+
+    expect(extractReminderMarkup(messageList)).toEqual([]);
+  });
+
   it('does not inject for instruction files already loaded statically', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-static';
-    messageList.push(
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/deep/file.ts' }, 'result', { ok: true })],
@@ -338,7 +403,7 @@ describe('AgentsMDInjector', () => {
   it('falls back to configured reminder text when file cannot be read', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-fallback';
-    messageList.push(
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [
@@ -374,6 +439,8 @@ describe('AgentsMDInjector', () => {
       createUserMessage(
         `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">Project guidance from AGENTS</system-reminder>`,
       ),
+    );
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/index.ts' }, 'result', { ok: true })],
@@ -402,6 +469,8 @@ describe('AgentsMDInjector', () => {
       createUserMessage(
         `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">[truncated older content]</system-reminder>`,
       ),
+    );
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/index.ts' }, 'result', { ok: true })],
@@ -433,6 +502,8 @@ describe('AgentsMDInjector', () => {
           type: 'dynamic-agents-md',
         },
       }),
+    );
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { path: '/repo/src/index.ts' }, 'result', { ok: true })],
@@ -460,6 +531,8 @@ describe('AgentsMDInjector', () => {
       createUserMessage(
         `<system-reminder type="dynamic-agents-md" path="/repo/AGENTS.md">Root guidance</system-reminder>`,
       ),
+    );
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { path: '/repo/nested/file.ts' }, 'result', { ok: true })],
@@ -490,7 +563,7 @@ describe('AgentsMDInjector', () => {
       '',
       ...Array.from({ length: 20 }, () => 'alpha beta gamma delta epsilon zeta'),
     ].join('\n');
-    messageList.push(
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { path: '/repo/AGENTS.md' }, 'result', { ok: true })],
@@ -521,7 +594,7 @@ describe('AgentsMDInjector', () => {
   it('leaves reminder content unchanged when it is under maxTokens', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-short';
-    messageList.push(
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { path: '/repo/AGENTS.md' }, 'result', { ok: true })],
@@ -548,7 +621,7 @@ describe('AgentsMDInjector', () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-newline';
     const content = ['# Root AGENTS', '', 'first line words', 'second line words', 'third line words'].join('\n');
-    messageList.push(
+    messageList.pushResponse(
       createAssistantMessage({
         format: 2,
         parts: [createToolInvocationPart(toolCallId, { path: '/repo/AGENTS.md' }, 'result', { ok: true })],

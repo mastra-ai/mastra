@@ -34,6 +34,12 @@ export interface GCSMountConfig extends FilesystemMountConfig {
   bucket: string;
   /** Service account key JSON (optional - omit for public buckets or ADC) */
   serviceAccountKey?: string;
+  /**
+   * GCS key prefix to scope the mount (without trailing slash).
+   * When set, gcsfuse uses --only-dir to mount only this subdirectory, so
+   * sandbox paths map directly to prefixed GCS keys (matches S3/Azure mounts).
+   */
+  prefix?: string;
 }
 
 /**
@@ -266,6 +272,11 @@ export class GCSFilesystem extends MastraFilesystem {
       config.serviceAccountKey = JSON.stringify(this.credentials);
     }
 
+    // Include prefix so sandbox mounts can use gcsfuse --only-dir for path alignment
+    if (this.prefix) {
+      config.prefix = this.prefix.replace(/\/$/, ''); // Strip trailing slash for mount commands
+    }
+
     return config;
   }
 
@@ -347,8 +358,8 @@ export class GCSFilesystem extends MastraFilesystem {
   }
 
   private toKey(path: string): string {
-    // Remove leading slash and add prefix
-    const cleanPath = path.replace(/^\/+/, '');
+    // Remove leading slashes, then resolve "." and "./" to empty string (root)
+    const cleanPath = path.replace(/^\/+/, '').replace(/^\.(?:\/|$)/, '');
     return this.prefix + cleanPath;
   }
 
@@ -601,6 +612,8 @@ export class GCSFilesystem extends MastraFilesystem {
         path,
         type: 'file',
         size: Number(metadata.size) || 0,
+        // read_file tool gates the native media-part path on `stat.mimeType`.
+        mimeType: typeof metadata.contentType === 'string' ? metadata.contentType : getMimeType(path),
         createdAt: metadata.timeCreated ? new Date(metadata.timeCreated) : new Date(),
         modifiedAt: metadata.updated ? new Date(metadata.updated) : new Date(),
       };

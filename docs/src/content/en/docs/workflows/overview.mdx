@@ -28,36 +28,94 @@ Watch an introduction to workflows, and how they compare to agents on [YouTube (
 
 Mastra workflows operate using these principles:
 
-- Defining **steps** with `createStep`, specifying input/output schemas and business logic.
-- Composing **steps** with `createWorkflow` to define the execution flow.
+- Defining **steps** with [`createStep`](/reference/workflows/step), specifying input/output schemas and business logic.
+- Composing **steps** with [`createWorkflow`](/reference/workflows/workflow) to define the execution flow.
 - Running **workflows** to execute the entire sequence, with built-in support for suspension, resumption, and streaming results.
 
 ## Creating a workflow step
 
-Steps are the building blocks of workflows. Create a step using `createStep()` with `inputSchema` and `outputSchema` to define the data it accepts and returns.
+Steps are the building blocks of workflows. Create a step using `createStep()` with `inputSchema` and `outputSchema` to define the data it accepts and returns. You can define both schemas using [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.).
 
 The `execute` function defines what the step does. Use it to call functions in your codebase, external APIs, agents, or tools.
 
-```typescript {6,9,15} title="src/mastra/workflows/test-workflow.ts"
-import { createStep } from '@mastra/core/workflows'
+<Tabs>
+  <TabItem value="zod" label="Zod">
+    ```typescript {7,10,16} title="src/mastra/workflows/test-workflow.ts"
+    import { createStep } from '@mastra/core/workflows'
+    import { z } from 'zod'
 
-const step1 = createStep({
-  id: 'step-1',
-  inputSchema: z.object({
-    message: z.string(),
-  }),
-  outputSchema: z.object({
-    formatted: z.string(),
-  }),
-  execute: async ({ inputData }) => {
-    const { message } = inputData
+    const step1 = createStep({
+      id: 'step-1',
+      inputSchema: z.object({
+        message: z.string(),
+      }),
+      outputSchema: z.object({
+        formatted: z.string(),
+      }),
+      execute: async ({ inputData }) => {
+        const { message } = inputData
 
-    return {
-      formatted: message.toUpperCase(),
-    }
-  },
-})
-```
+        return {
+          formatted: message.toUpperCase(),
+        }
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="valibot" label="Valibot">
+    ```typescript {9,14,21} title="src/mastra/workflows/test-workflow.ts"
+    import { createStep } from '@mastra/core/workflows'
+    import * as v from 'valibot'
+    import { toStandardJsonSchema } from '@valibot/to-json-schema'
+
+    const step1 = createStep({
+      id: 'step-1',
+      inputSchema: toStandardJsonSchema(
+        v.object({
+          message: v.string(),
+        }),
+      ),
+      outputSchema: toStandardJsonSchema(
+        v.object({
+          formatted: v.string(),
+        }),
+      ),
+      execute: async ({ inputData }) => {
+        const { message } = inputData
+
+        return {
+          formatted: message.toUpperCase(),
+        }
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="arktype" label="ArkType">
+    ```typescript {7,10,16} title="src/mastra/workflows/test-workflow.ts"
+    import { createStep } from '@mastra/core/workflows'
+    import { type } from 'arktype'
+
+    const step1 = createStep({
+      id: 'step-1',
+      inputSchema: type({
+        message: 'string',
+      }),
+      outputSchema: type({
+        formatted: 'string',
+      }),
+      execute: async ({ inputData }) => {
+        const { message } = inputData
+
+        return {
+          formatted: message.toUpperCase(),
+        }
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
 
 :::info
 
@@ -71,26 +129,73 @@ Workflow steps can also call registered agents or import and execute tools direc
 
 ## Creating a workflow
 
-Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema` to define the data it accepts and returns. Add steps using `.then()` and complete the workflow with `.commit()`.
+Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema` to define the data it accepts and returns. You can define both schemas using [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.). Add steps using `.then()` and complete the workflow with `.commit()`.
 
-```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+<Tabs>
+  <TabItem value="zod" label="Zod">
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    import { createWorkflow, createStep } from "@mastra/core/workflows";
+    import { z } from "zod";
 
-const step1 = createStep({...});
+    const step1 = createStep({...});
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  inputSchema: z.object({
-    message: z.string()
-  }),
-  outputSchema: z.object({
-    output: z.string()
-  })
-})
-  .then(step1)
-  .commit();
-```
+    export const testWorkflow = createWorkflow({
+      id: "test-workflow",
+      inputSchema: z.object({
+        message: z.string()
+      }),
+      outputSchema: z.object({
+        output: z.string()
+      })
+    })
+      .then(step1)
+      .commit();
+    ```
+  </TabItem>
+
+  <TabItem value="valibot" label="Valibot">
+    ```typescript {10,13,16,17} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    import { createWorkflow, createStep } from "@mastra/core/workflows";
+    import * as v from "valibot";
+    import { toStandardJsonSchema } from "@valibot/to-json-schema";
+
+    const step1 = createStep({...});
+
+    export const testWorkflow = createWorkflow({
+      id: "test-workflow",
+      inputSchema: toStandardJsonSchema(v.object({
+        message: v.string()
+      })),
+      outputSchema: toStandardJsonSchema(v.object({
+        output: v.string()
+      }))
+    })
+      .then(step1)
+      .commit();
+    ```
+  </TabItem>
+
+  <TabItem value="arktype" label="ArkType">
+    ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" prettier:false
+    import { createWorkflow, createStep } from "@mastra/core/workflows";
+    import { type } from "arktype";
+
+    const step1 = createStep({...});
+
+    export const testWorkflow = createWorkflow({
+      id: "test-workflow",
+      inputSchema: type({
+        message: "string"
+      }),
+      outputSchema: type({
+        output: "string"
+      })
+    })
+      .then(step1)
+      .commit();
+    ```
+  </TabItem>
+</Tabs>
 
 :::info
 

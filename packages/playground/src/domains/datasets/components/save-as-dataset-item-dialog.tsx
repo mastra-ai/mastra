@@ -9,11 +9,11 @@ import {
   SelectValue,
   SelectContent,
   SelectItem,
-  SideDialog,
   TextAndIcon,
   toast,
 } from '@mastra/playground-ui';
-import type { SideDialogRootProps } from '@mastra/playground-ui';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { DatabaseIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
@@ -58,18 +58,56 @@ export function SaveAsDatasetItemDialog({
 
   const prevOpenRef = useRef(false);
   const trajectorySeededRef = useRef(false);
+  const inputSeededRef = useRef(false);
+  const groundTruthSeededRef = useRef(false);
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {
       setInput(initialInput);
       setGroundTruth(initialGroundTruth);
       setExpectedTrajectory(initialTrajectory ?? '');
       trajectorySeededRef.current = !!initialTrajectory;
+      inputSeededRef.current = initialInput !== '{}';
+      groundTruthSeededRef.current = !!initialGroundTruth;
     }
     prevOpenRef.current = isOpen;
     if (!isOpen) {
       trajectorySeededRef.current = false;
+      inputSeededRef.current = false;
+      groundTruthSeededRef.current = false;
     }
   }, [isOpen, initialInput, initialGroundTruth, initialTrajectory]);
+
+  // Mark fields as user-edited so async seeding won't overwrite them.
+  const handleInputChange = (value: string) => {
+    inputSeededRef.current = true;
+    setInput(value);
+  };
+
+  const handleGroundTruthChange = (value: string) => {
+    groundTruthSeededRef.current = true;
+    setGroundTruth(value);
+  };
+
+  const handleExpectedTrajectoryChange = (value: string) => {
+    trajectorySeededRef.current = true;
+    setExpectedTrajectory(value);
+  };
+
+  // Seed input when it arrives asynchronously after the dialog is already open
+  useEffect(() => {
+    if (isOpen && initialInput !== '{}' && !inputSeededRef.current) {
+      setInput(initialInput);
+      inputSeededRef.current = true;
+    }
+  }, [isOpen, initialInput]);
+
+  // Seed groundTruth when it arrives asynchronously after the dialog is already open
+  useEffect(() => {
+    if (isOpen && initialGroundTruth && !groundTruthSeededRef.current) {
+      setGroundTruth(initialGroundTruth);
+      groundTruthSeededRef.current = true;
+    }
+  }, [isOpen, initialGroundTruth]);
 
   // Seed trajectory when it arrives asynchronously after the dialog is already open
   useEffect(() => {
@@ -191,19 +229,24 @@ export function SaveAsDatasetItemDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="item-input">Input (JSON) *</Label>
-            <CodeEditor value={input} onChange={setInput} showCopyButton={false} className="min-h-[120px]" />
+            <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[120px]" />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
-            <CodeEditor value={groundTruth} onChange={setGroundTruth} showCopyButton={false} className="min-h-[80px]" />
+            <CodeEditor
+              value={groundTruth}
+              onChange={handleGroundTruthChange}
+              showCopyButton={false}
+              className="min-h-[80px]"
+            />
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor="item-trajectory">Expected Trajectory (JSON, optional)</Label>
             <CodeEditor
               value={expectedTrajectory}
-              onChange={setExpectedTrajectory}
+              onChange={handleExpectedTrajectoryChange}
               showCopyButton={false}
               className="min-h-[80px]"
             />
@@ -215,7 +258,7 @@ export function SaveAsDatasetItemDialog({
             </Button>
             <Button
               type="submit"
-              variant="light"
+              variant="default"
               disabled={addItem.isPending || trajectoryLoading || !selectedDatasetId || datasets.length === 0}
             >
               {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading trajectory...' : 'Save Item'}

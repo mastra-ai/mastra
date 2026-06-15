@@ -4,7 +4,6 @@ import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
@@ -19,6 +18,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list/index';
 import { MessageList } from '../message-list/index';
+import type { MastraToolInvocationPart } from '../message-list/state/types';
 import { assertNoDuplicateParts } from '../test-utils';
 
 config();
@@ -236,7 +236,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3') {
       const toolResultIds = new Set(
         assistantMsg!.content.parts
           .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-          .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
+          .map(p => (p as MastraToolInvocationPart).toolInvocation.toolCallId),
       );
       expect(assistantMsg!.content?.toolInvocations?.length).toBe(toolResultIds.size);
     }, 500000);
@@ -319,7 +319,7 @@ function runStreamE2ETest(version: 'v1' | 'v2' | 'v3') {
       const toolResultIds = new Set(
         assistantMsg!.content.parts
           .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-          .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
+          .map(p => (p as MastraToolInvocationPart).toolInvocation.toolCallId),
       );
       expect(assistantMsg!.content?.toolInvocations?.length).toBe(toolResultIds.size);
     }, 500000);

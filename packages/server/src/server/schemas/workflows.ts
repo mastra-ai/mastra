@@ -57,6 +57,7 @@ export const workflowInfoSchema = z.object({
   allSteps: z.record(z.string(), serializedStepSchema),
   name: z.string().optional(),
   description: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   stepGraph: z.array(serializedStepFlowEntrySchema),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
@@ -283,4 +284,16 @@ export const createWorkflowRunResponseSchema = z.object({
 export const createWorkflowRunBodySchema = z.object({
   resourceId: z.string().optional(),
   disableScorers: z.boolean().optional(),
+});
+
+/**
+ * Schema for observe workflow query params
+ * Extends runId with optional offset for efficient resume
+ */
+export const observeWorkflowQuerySchema = z.object({
+  runId: z.string().describe('Unique identifier for the run'),
+  offset: z.coerce
+    .number()
+    .optional()
+    .describe('Resume from this event index (0-based). If omitted, replays all events.'),
 });

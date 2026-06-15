@@ -1,0 +1,15 @@
+{
+  "attachment": [
+    "Qwen/Qwen2.5-VL-32B-Instruct",
+    "Qwen/Qwen3.5-397B-A17B-TEE",
+    "Qwen/Qwen3.6-27B-TEE",
+    "google/gemma-4-31B-turbo-TEE",
+    "moonshotai/Kimi-K2.5-TEE",
+    "moonshotai/Kimi-K2.6-TEE",
+    "rednote-hilab/dots.ocr",
+    "unsloth/gemma-3-12b-it",
+    "unsloth/gemma-3-27b-it",
+    "unsloth/gemma-3-4b-it",
+    "zai-org/GLM-4.6V"
+  ]
+}

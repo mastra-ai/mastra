@@ -7,10 +7,11 @@ import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MessageSource } from '../state/types';
 import type { AIV5Type, AIV6Type } from '../types';
-import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
+import { ensureAnthropicCompatibleMessages, sanitizeOrphanedToolPairs } from '../utils/provider-compat';
+import { getResponseProviderItemKey } from '../utils/response-item-metadata';
 
 /**
- * Merges text parts that share the same OpenAI itemId.
+ * Merges text parts that share the same OpenAI-compatible itemId.
  *
  * When OpenAI streams a response with web search, it interleaves `source` chunks
  * with text-deltas. If the streaming pipeline flushes text on these source chunks,
@@ -21,45 +22,60 @@ import { ensureAnthropicCompatibleMessages } from '../utils/provider-compat';
  * the request with: "Duplicate item found with id msg_*"
  *
  * This function merges consecutive text parts with the same itemId into a single part,
- * concatenating their text content and keeping the metadata from the first part.
+ * allowing source annotations between those text flushes, concatenating their text
+ * content, and keeping the metadata from the first part.
  */
+function isTextMergePassThroughPart(part: { type: string }): boolean {
+  // Only source annotations are transparent for text-item merging. Tool,
+  // reasoning, file, and step parts are merge boundaries.
+  return part.type.startsWith('source-');
+}
+
 function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T[]): T[] {
   const result: T[] = [];
 
   for (const part of parts) {
-    // Only process text parts with OpenAI itemId
+    // Only process text parts with OpenAI-compatible itemId
     if (part.type !== 'text') {
       result.push(part);
       continue;
     }
 
     const textPart = part as T & { text: string; providerMetadata?: Record<string, unknown> };
-    const itemId = (textPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId as
-      | string
-      | undefined;
+    const itemId = getResponseProviderItemKey(textPart.providerMetadata);
     if (!itemId) {
       result.push(part);
       continue;
     }
 
-    // Find an existing text part in result with the same itemId
-    const existingIndex = result.findIndex(p => {
-      if (p.type !== 'text') return false;
-      const existingTextPart = p as T & { providerMetadata?: Record<string, unknown> };
-      const existingItemId = (existingTextPart.providerMetadata?.openai as Record<string, unknown> | undefined)?.itemId;
-      return existingItemId === itemId;
-    });
+    let merged = false;
+    for (let index = result.length - 1; index >= 0; index--) {
+      const previous = result[index]!;
+      if (previous.type === 'text') {
+        const previousTextPart = previous as T & { text: string; providerMetadata?: Record<string, unknown> };
+        const previousItemId = getResponseProviderItemKey(previousTextPart.providerMetadata);
 
-    if (existingIndex !== -1) {
-      // Merge: concatenate text into the existing part
-      const existing = result[existingIndex] as T & { text: string };
-      result[existingIndex] = {
-        ...existing,
-        text: existing.text + textPart.text,
-      };
-    } else {
-      result.push(part);
+        if (previousItemId === itemId) {
+          result[index] = {
+            ...previousTextPart,
+            text: previousTextPart.text + textPart.text,
+          };
+          merged = true;
+        }
+
+        break;
+      }
+
+      if (!isTextMergePassThroughPart(previous)) {
+        break;
+      }
     }
+
+    if (merged) {
+      continue;
+    }
+
+    result.push(part);
   }
 
   return result;
@@ -108,57 +124,96 @@ export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
   filterIncompleteToolCalls = false,
 ): AIV5Type.UIMessage[] {
+  // Precompute the index of the last user message. A deferred provider-executed
+  // tool call (e.g. Anthropic non-deterministically defers web_search across
+  // steps N→N+1 within the same run) may legitimately carry `input-available`
+  // state ONLY on the most recent surviving assistant message, AND only if no
+  // user turn has followed it. On any earlier assistant turn (or after a later
+  // user message) an unresolved provider-executed call is an orphan — provider
+  // dropped the result chunk (#15668), run aborted mid-stream (#14148), or a
+  // stale call from an earlier step (#14192) — and must be dropped to keep the
+  // tool-call/tool-result invariant.
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]!.role === 'user') {
+      lastUserIdx = i;
+      break;
+    }
+  }
+
+  const getSafeParts = (m: AIV5Type.UIMessage, assistantTurnStillOpen: boolean) =>
+    m.parts.filter(p => {
+      // Filter out data-* parts (custom streaming data from writer.custom())
+      // These are Mastra extensions not supported by LLM providers.
+      // If not filtered, convertToModelMessages produces empty content arrays
+      // which causes some models to fail with "must include at least one parts field"
+      if (typeof p.type === 'string' && p.type.startsWith('data-')) {
+        return false;
+      }
+
+      // Filter out empty text parts to handle legacy data from before this filtering was implemented.
+      // For assistant messages, preserve empty text parts if they are the only parts (placeholder messages).
+      // For user messages, always filter them out — Anthropic rejects empty user text content blocks.
+      if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {
+        // Always filter empty text parts from user messages
+        if (m.role === 'user') return false;
+
+        // For non-user messages, only filter if there are other non-empty parts
+        const hasNonEmptyParts = m.parts.some(
+          part => !(part.type === 'text' && (!('text' in part) || part.text === '' || part.text?.trim() === '')),
+        );
+        if (hasNonEmptyParts) return false;
+      }
+
+      if (!AIV5.isToolUIPart(p)) return true;
+
+      // When sending messages TO the LLM: keep completed tool calls and provider-executed tools.
+      // Filter out incomplete client-side tool calls (input-available without providerExecuted)
+      // and input-streaming states.
+      if (filterIncompleteToolCalls) {
+        // Completed tools (client or provider) — keep them
+        if (p.state === 'output-available' || p.state === 'output-error') return true;
+        // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
+        // defers web_search when mixed with client tool calls). Keep these so the provider API sees
+        // the server_tool_use block on the next request — but ONLY on the most recent surviving
+        // assistant message. On any earlier assistant turn an unresolved provider-executed call is
+        // an orphan (provider dropped the result chunk, or the run aborted mid-stream) and must be
+        // dropped to keep the tool-call/tool-result invariant required by provider APIs. See #15668, #14148.
+        if (p.state === 'input-available' && p.providerExecuted && assistantTurnStillOpen) return true;
+        return false;
+      }
+
+      // When processing response messages FROM the LLM: keep input-available states
+      // (tool calls waiting for client-side execution) but filter out input-streaming
+      return p.state !== 'input-streaming';
+    });
+
+  let lastSurvivingAssistantIdx = -1;
+  if (lastUserIdx !== messages.length - 1) {
+    for (let i = messages.length - 1; i > lastUserIdx; i--) {
+      const message = messages[i]!;
+      if (message.role !== 'assistant' || message.parts.length === 0) continue;
+      if (getSafeParts(message, true).length > 0) {
+        lastSurvivingAssistantIdx = i;
+        break;
+      }
+    }
+  }
+
   const msgs = messages
-    .map(m => {
+    .map((m, idx) => {
       if (m.parts.length === 0) return false;
 
+      // Deferred-provider-tool behavior is ONLY valid on the most recent surviving
+      // assistant message AND only when no user turn has followed it.
+      const assistantTurnStillOpen = m.role === 'assistant' && idx === lastSurvivingAssistantIdx;
+
       // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
-      const safeParts = m.parts.filter(p => {
-        // Filter out data-* parts (custom streaming data from writer.custom())
-        // These are Mastra extensions not supported by LLM providers.
-        // If not filtered, convertToModelMessages produces empty content arrays
-        // which causes some models to fail with "must include at least one parts field"
-        if (typeof p.type === 'string' && p.type.startsWith('data-')) {
-          return false;
-        }
-
-        // Filter out empty text parts to handle legacy data from before this filtering was implemented.
-        // For assistant messages, preserve empty text parts if they are the only parts (placeholder messages).
-        // For user messages, always filter them out — Anthropic rejects empty user text content blocks.
-        if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {
-          // Always filter empty text parts from user messages
-          if (m.role === 'user') return false;
-
-          // For non-user messages, only filter if there are other non-empty parts
-          const hasNonEmptyParts = m.parts.some(
-            part => !(part.type === 'text' && (!('text' in part) || part.text === '' || part.text?.trim() === '')),
-          );
-          if (hasNonEmptyParts) return false;
-        }
-
-        if (!AIV5.isToolUIPart(p)) return true;
-
-        // When sending messages TO the LLM: keep completed tool calls and provider-executed tools.
-        // Filter out incomplete client-side tool calls (input-available without providerExecuted)
-        // and input-streaming states.
-        if (filterIncompleteToolCalls) {
-          // Completed tools (client or provider) — keep them
-          if (p.state === 'output-available' || p.state === 'output-error') return true;
-          // Provider-executed tools may be deferred by the provider (e.g. Anthropic non-deterministically
-          // defers web_search when mixed with client tool calls). Keep these so the provider API sees
-          // the server_tool_use block on the next request.
-          if (p.state === 'input-available' && p.providerExecuted) return true;
-          return false;
-        }
-
-        // When processing response messages FROM the LLM: keep input-available states
-        // (tool calls waiting for client-side execution) but filter out input-streaming
-        return p.state !== 'input-streaming';
-      });
+      const safeParts = getSafeParts(m, assistantTurnStillOpen);
 
       if (!safeParts.length) return false;
 
-      // Merge text parts with duplicate OpenAI itemIds to prevent "Duplicate item found" errors.
+      // Merge text parts with duplicate OpenAI-compatible itemIds to prevent "Duplicate item found" errors.
       // This can happen when streaming flushes text multiple times for the same response
       // (e.g., when source citations are interleaved with text-deltas).
       const mergedParts = mergeTextPartsWithDuplicateItemIds(safeParts);
@@ -231,6 +286,92 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
 }
 
 /**
+ * Converts MCP-style tool results (`{ content: [...] }`) to model-native
+ * multimodal tool result output without persisting a duplicate modelOutput copy.
+ */
+function convertMcpContentToolResultOutput(output: unknown): unknown {
+  if (!output || typeof output !== 'object') return undefined;
+
+  const content = (output as Record<string, unknown>).content;
+  if (!Array.isArray(content)) return undefined;
+
+  const hasValidMultimodal = content.some(part => {
+    if (!part || typeof part !== 'object') return false;
+    const typedPart = part as Record<string, unknown>;
+    return (typedPart.type === 'image' || typedPart.type === 'audio') && typeof typedPart.data === 'string';
+  });
+  if (!hasValidMultimodal) return undefined;
+
+  const value = content
+    .map(part => {
+      if (!part || typeof part !== 'object') return null;
+      const typedPart = part as Record<string, unknown>;
+      switch (typedPart.type) {
+        case 'text':
+          return { type: 'text', text: String(typedPart.text ?? '') };
+        case 'image':
+          return typeof typedPart.data === 'string'
+            ? { type: 'image-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'image/png') }
+            : { type: 'text', text: JSON.stringify(typedPart) };
+        case 'audio':
+          return typeof typedPart.data === 'string'
+            ? { type: 'file-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'audio/wav') }
+            : { type: 'text', text: JSON.stringify(typedPart) };
+        default:
+          return { type: 'text', text: JSON.stringify(typedPart) };
+      }
+    })
+    .filter(Boolean);
+
+  return value.length > 0 ? { type: 'content', value } : undefined;
+}
+
+function collectRawToolResultOutputs(dbMessages: MastraDBMessage[]): Map<string, unknown> {
+  const outputs = new Map<string, unknown>();
+  for (const message of dbMessages) {
+    if (message.content?.format !== 2 || !message.content.parts) continue;
+
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+      outputs.set(part.toolInvocation.toolCallId, part.toolInvocation.result);
+    }
+  }
+  return outputs;
+}
+
+function isDefaultToolResultOutput(output: unknown, rawOutput: unknown): boolean {
+  if (!output || typeof output !== 'object') return false;
+  const typedOutput = output as Record<string, unknown>;
+  if (typedOutput.type !== 'json') return false;
+  return JSON.stringify(typedOutput.value) === JSON.stringify(rawOutput);
+}
+
+function applyMcpContentToolResultOutputs(
+  modelMessages: AIV5Type.ModelMessage[],
+  dbMessages: MastraDBMessage[],
+): AIV5Type.ModelMessage[] {
+  const rawOutputs = collectRawToolResultOutputs(dbMessages);
+  if (rawOutputs.size === 0) return modelMessages;
+
+  return modelMessages.map(message => {
+    if (message.role !== 'tool' || !Array.isArray(message.content)) return message;
+
+    let modified = false;
+    const content = message.content.map(part => {
+      if (part.type !== 'tool-result' || !rawOutputs.has(part.toolCallId)) return part;
+      const rawOutput = rawOutputs.get(part.toolCallId);
+      if (!isDefaultToolResultOutput(part.output, rawOutput)) return part;
+      const converted = convertMcpContentToolResultOutput(rawOutput);
+      if (!converted) return part;
+      modified = true;
+      return { ...part, output: converted } as typeof part;
+    });
+
+    return modified ? ({ ...message, content } as AIV5Type.ModelMessage) : message;
+  });
+}
+
+/**
  * Restores `providerOptions` on assistant file parts after `convertToModelMessages`.
  *
  * The vendored AI SDK v5 `convertToModelMessages` drops `providerMetadata` from
@@ -295,30 +436,42 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
 
-  const result = restoreAssistantFileProviderMetadata(AIV5.convertToModelMessages(preprocessed), preprocessed);
+  // Convert per UI message: an assistant turn with a tool call splits into
+  // [assistant, tool] model messages, so a batch convert + index-based attach
+  // would misplace message-level providerOptions onto the tool message.
+  const converted: AIV5Type.ModelMessage[] = [];
+  for (const uiMsg of preprocessed) {
+    const produced = AIV5.convertToModelMessages([uiMsg]);
+    if (produced.length === 0) continue;
 
-  // Restore message-level providerOptions from metadata.providerMetadata
-  // This preserves providerOptions through the DB → UI → Model conversion
-  const withProviderOptions = result.map((modelMsg, index) => {
-    const uiMsg = preprocessed[index];
+    const providerMetadata =
+      uiMsg.metadata && typeof uiMsg.metadata === 'object' && 'providerMetadata' in uiMsg.metadata
+        ? (uiMsg.metadata as { providerMetadata?: AIV5Type.ProviderMetadata }).providerMetadata
+        : undefined;
 
-    if (
-      uiMsg?.metadata &&
-      typeof uiMsg.metadata === 'object' &&
-      'providerMetadata' in uiMsg.metadata &&
-      uiMsg.metadata.providerMetadata
-    ) {
-      return {
-        ...modelMsg,
-        providerOptions: uiMsg.metadata.providerMetadata as AIV5Type.ProviderMetadata,
-      } satisfies AIV5Type.ModelMessage;
+    if (providerMetadata) {
+      let target = -1;
+      for (let index = produced.length - 1; index >= 0; index--) {
+        if (produced[index]?.role === uiMsg.role) {
+          target = index;
+          break;
+        }
+      }
+      if (target !== -1) {
+        produced[target] = { ...produced[target], providerOptions: providerMetadata } as AIV5Type.ModelMessage;
+      }
     }
 
-    return modelMsg;
-  });
+    converted.push(...produced);
+  }
+
+  const withFileMetadata = restoreAssistantFileProviderMetadata(converted, preprocessed);
+  const withMcpContentOutputs = applyMcpContentToolResultOutputs(withFileMetadata, dbMessages);
 
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
-  return ensureAnthropicCompatibleMessages(withProviderOptions, dbMessages);
+  const anthropicCompat = ensureAnthropicCompatibleMessages(withMcpContentOutputs, dbMessages);
+
+  return filterIncompleteToolCalls ? sanitizeOrphanedToolPairs(anthropicCompat) : anthropicCompat;
 }
 
 /**

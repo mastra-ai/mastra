@@ -110,8 +110,10 @@ describe('subagent workspace tool integration', () => {
     );
 
     expect(result.isError).toBe(false);
-    // The subagent-meta should show the read_file tool was called successfully
-    expect(result.content).toContain(`${WORKSPACE_TOOLS.FILESYSTEM.READ_FILE}:ok`);
+    // Subagent tool result must not include the internal `<subagent-meta />`
+    // tag in model-facing content (it would otherwise leak into the parent
+    // model's context and could be echoed back as visible assistant text).
+    expect(result.content).not.toContain('<subagent-meta');
   });
 
   it('prepareStep only sends allowed workspace tools to the model', async () => {

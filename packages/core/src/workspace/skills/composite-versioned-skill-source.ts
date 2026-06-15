@@ -35,6 +35,7 @@ export class CompositeVersionedSkillSource implements SkillSource {
   readonly #sources: Map<string, VersionedSkillSource> = new Map();
   readonly #fallback?: SkillSource;
   readonly #fallbackSkills: Set<string>;
+  readonly #maxVersionCreatedAt: Date;
 
   constructor(
     entries: VersionedSkillEntry[],
@@ -46,9 +47,13 @@ export class CompositeVersionedSkillSource implements SkillSource {
       fallbackSkills?: string[];
     },
   ) {
+    let maxTime = 0;
     for (const entry of entries) {
       this.#sources.set(entry.dirName, new VersionedSkillSource(entry.tree, blobStore, entry.versionCreatedAt));
+      const t = entry.versionCreatedAt.getTime();
+      if (t > maxTime) maxTime = t;
     }
+    this.#maxVersionCreatedAt = maxTime > 0 ? new Date(maxTime) : new Date(0);
     this.#fallback = options?.fallback;
     this.#fallbackSkills = new Set(options?.fallbackSkills ?? []);
   }
@@ -132,8 +137,8 @@ export class CompositeVersionedSkillSource implements SkillSource {
         name: '.',
         type: 'directory',
         size: 0,
-        createdAt: new Date(),
-        modifiedAt: new Date(),
+        createdAt: this.#maxVersionCreatedAt,
+        modifiedAt: this.#maxVersionCreatedAt,
       };
     }
 

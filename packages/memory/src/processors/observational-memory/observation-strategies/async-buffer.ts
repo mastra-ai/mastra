@@ -149,7 +149,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   }
 
   async emitEndMarkers(_cycleId: string, processed: ProcessedObservation) {
-    if (!processed.observations || !this.opts.writer) return;
+    if (!processed.observations) return;
 
     const { record, threadId, messages } = this.opts;
     const tokensBuffered = await this.tokenCounter.countMessagesAsync(messages);
@@ -168,13 +168,14 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       threadId,
       observations: processed.observations,
     });
-    void this.opts.writer.custom(endMarker).catch(() => {});
+    if (this.opts.writer) {
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      void this.opts.writer.custom({ ...endMarker, transient: true }).catch(() => {});
+    }
     await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
   }
 
   async emitFailedMarkers(_cycleId: string, error: unknown) {
-    if (!this.opts.writer) return;
-
     const { record, threadId, messages } = this.opts;
     const tokensAttempted = await this.tokenCounter.countMessagesAsync(messages);
     const failedMarker = createBufferingFailedMarker({
@@ -186,7 +187,10 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       recordId: record.id,
       threadId,
     });
-    void this.opts.writer.custom(failedMarker).catch(() => {});
+    if (this.opts.writer) {
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+      void this.opts.writer.custom({ ...failedMarker, transient: true }).catch(() => {});
+    }
     await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
   }
 }

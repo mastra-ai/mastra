@@ -1,4 +1,4 @@
-import { Button, EntryList, Icon, SkillIcon } from '@mastra/playground-ui';
+import { Button, DataList, DataListSkeleton, Icon, SkillIcon } from '@mastra/playground-ui';
 import { AlertTriangle, BookOpen, Plus } from 'lucide-react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
@@ -22,33 +22,18 @@ export interface SkillsTableProps {
   updatingSkillName?: string;
   /** Name of the skill currently being removed (if any) */
   removingSkillName?: string;
-  /** Mount paths for labeling skills by mount (only used when multiple mounts exist) */
-  mountPaths?: string[];
 }
 
 /** Path segment that identifies skills installed via the skills CLI */
 const DOWNLOADED_SKILLS_PATH = '.agents/skills/';
 
-const columns = [
-  { name: 'name', label: 'Skill', size: '1fr' },
-  { name: 'description', label: 'Description', size: '2fr' },
-];
+const baseColumns = [
+  { label: 'Skill', size: 'minmax(8rem,auto)' },
+  { label: 'Path', size: 'minmax(8rem,1fr)' },
+  { label: 'Description', size: 'minmax(0,2fr)' },
+] as const;
 
-const columnsWithActions = [...columns, { name: 'actions', label: '', size: '48px' }];
-
-/**
- * Derive a mount label for a skill by matching its path against known mount paths.
- * Returns the mount path or display name if multiple mounts exist.
- */
-function getMountLabel(skillPath: string | undefined, mountPaths: string[] | undefined): string | null {
-  if (!skillPath || !mountPaths || mountPaths.length === 0) return null;
-  for (const mp of mountPaths) {
-    if (skillPath.startsWith(mp + '/') || skillPath === mp) {
-      return mp;
-    }
-  }
-  return null;
-}
+const columnsWithActions = [...baseColumns, { label: '', size: 'auto' }] as const;
 
 export function SkillsTable({
   skills,
@@ -61,33 +46,24 @@ export function SkillsTable({
   onRemoveSkill,
   updatingSkillName,
   removingSkillName,
-  mountPaths,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
-  const showMountBadges = mountPaths && mountPaths.length > 0;
 
-  // Helper to check if a skill is downloaded (installed via skills CLI)
   const isDownloaded = (skill: SkillMetadata) => skill.path?.includes(DOWNLOADED_SKILLS_PATH) ?? false;
-
-  // Check if any skill is downloaded (for determining if we need the actions column)
-  const hasDownloadedSkills = skills.some(isDownloaded);
-  // For skeleton, assume actions column is needed if callbacks are provided
   const hasActionCallbacks = !!onRemoveSkill || !!onUpdateSkill;
-  const hasRowActions = hasActionCallbacks && hasDownloadedSkills;
-
-  const effectiveColumns = hasRowActions ? columnsWithActions : columns;
+  const activeColumns = hasActionCallbacks ? columnsWithActions : baseColumns;
+  const gridColumns = activeColumns.map(c => c.size).join(' ');
 
   if (!isSkillsConfigured && !isLoading) {
     return <SkillsNotConfigured onAddSkill={onAddSkill} />;
   }
 
   if (isLoading) {
-    return <SkillsTableSkeleton hasRowActions={hasActionCallbacks} />;
+    return <DataListSkeleton columns={gridColumns} />;
   }
 
   return (
     <div className="space-y-4">
-      {/* Header Actions */}
       {onAddSkill && (
         <div className="flex items-center gap-4">
           <Button variant="default" size="sm" onClick={onAddSkill}>
@@ -99,7 +75,6 @@ export function SkillsTable({
         </div>
       )}
 
-      {/* Warning for undiscovered skills */}
       {hasUndiscoveredAgentSkills && (
         <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
           <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
@@ -113,115 +88,78 @@ export function SkillsTable({
         </div>
       )}
 
-      <EntryList>
-        <EntryList.Trim>
-          <EntryList.Header columns={effectiveColumns} />
-          {skills.length > 0 ? (
-            <EntryList.Entries>
-              {skills.map(skill => {
-                const entry = {
-                  id: skill.path,
-                  name: skill.name,
-                  description: skill.description || '—',
-                };
-                const mountLabel = showMountBadges ? getMountLabel(skill.path, mountPaths) : null;
-
-                return (
-                  <EntryList.Entry
-                    key={skill.path}
-                    entry={entry}
-                    columns={effectiveColumns}
-                    onClick={() => {
-                      const url = `${basePath}/${encodeURIComponent(skill.name)}?path=${encodeURIComponent(skill.path)}`;
-                      navigate(url);
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-1.5 rounded bg-surface5">
-                        <SkillIcon className="h-3.5 w-3.5 text-neutral4" />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="font-medium text-neutral6">{skill.name}</span>
-                        {skill.path && (
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            {mountLabel && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral3 shrink-0">
-                                {mountLabel}
-                              </span>
-                            )}
-                            <span className="text-[11px] text-neutral3 truncate" title={skill.path}>
-                              {skill.path}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <EntryList.EntryText>{skill.description || '—'}</EntryList.EntryText>
-                    {hasRowActions && (
-                      <div className="flex justify-end gap-1" onClick={e => e.stopPropagation()}>
-                        {/* Only show actions for downloaded skills */}
-                        {isDownloaded(skill) && (
-                          <>
-                            {onUpdateSkill && (
-                              <SkillUpdateButton
-                                skillName={skill.name}
-                                onUpdate={() => onUpdateSkill(skill.name)}
-                                isUpdating={updatingSkillName === skill.name}
-                              />
-                            )}
-                            {onRemoveSkill && (
-                              <SkillRemoveButton
-                                skillName={skill.name}
-                                onRemove={() => onRemoveSkill(skill.name)}
-                                isRemoving={removingSkillName === skill.name}
-                              />
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </EntryList.Entry>
-                );
-              })}
-            </EntryList.Entries>
-          ) : (
-            <EntryList.Message
-              message={
-                onAddSkill
-                  ? 'No skills discovered. Click "Add Skill" to install from skills.sh.'
-                  : 'No skills discovered. Add SKILL.md files to your skills directory.'
-              }
-            />
-          )}
-        </EntryList.Trim>
-      </EntryList>
-    </div>
-  );
-}
-
-function SkillsTableSkeleton({ hasRowActions }: { hasRowActions?: boolean }) {
-  const effectiveColumns = hasRowActions ? columnsWithActions : columns;
-  return (
-    <EntryList>
-      <EntryList.Trim>
-        <EntryList.Header columns={effectiveColumns} />
-        <EntryList.Entries>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <EntryList.Entry key={i} columns={effectiveColumns} isLoading>
-              <div className="flex items-center gap-3">
-                <div className="h-7 w-7 rounded bg-surface4 animate-pulse" />
-                <div>
-                  <div className="h-4 w-32 rounded bg-surface4 animate-pulse" />
-                  <div className="h-3 w-40 rounded bg-surface4 animate-pulse mt-1" />
-                </div>
-              </div>
-              <div className="h-4 w-48 rounded bg-surface4 animate-pulse" />
-              {hasRowActions && <div className="h-4 w-6 rounded bg-surface4 animate-pulse" />}
-            </EntryList.Entry>
+      <DataList columns={gridColumns}>
+        <DataList.Top>
+          {activeColumns.map(col => (
+            <DataList.TopCell key={col.label}>{col.label}</DataList.TopCell>
           ))}
-        </EntryList.Entries>
-      </EntryList.Trim>
-    </EntryList>
+        </DataList.Top>
+
+        {skills.length === 0 ? (
+          <DataList.NoMatch
+            message={
+              onAddSkill
+                ? 'No skills discovered. Click "Add Skill" to install from skills.sh.'
+                : 'No skills discovered. Add SKILL.md files to your skills directory.'
+            }
+          />
+        ) : (
+          skills.map(skill => {
+            const onClick = () => {
+              navigate(`${basePath}/${encodeURIComponent(skill.name)}?path=${encodeURIComponent(skill.path)}`);
+            };
+
+            const rowContent = (
+              <>
+                <DataList.Cell className="font-medium text-neutral6">{skill.name}</DataList.Cell>
+                <DataList.MonoCell height="default">{skill.path}</DataList.MonoCell>
+                <DataList.Cell className="min-w-0">
+                  <span className="block truncate">{skill.description || '—'}</span>
+                </DataList.Cell>
+              </>
+            );
+
+            if (!hasActionCallbacks) {
+              return (
+                <DataList.RowButton key={skill.path} onClick={onClick}>
+                  {rowContent}
+                </DataList.RowButton>
+              );
+            }
+
+            return (
+              <DataList.RowWrapper key={skill.path}>
+                <DataList.RowButton flushRight flushLeft colEnd={-2} onClick={onClick}>
+                  {rowContent}
+                </DataList.RowButton>
+                <DataList.Cell className="py-0">
+                  <div className="flex items-center justify-end gap-1 pl-2 w-full pr-3">
+                    {isDownloaded(skill) && (
+                      <>
+                        {onUpdateSkill && (
+                          <SkillUpdateButton
+                            skillName={skill.name}
+                            onUpdate={() => onUpdateSkill(skill.name)}
+                            isUpdating={updatingSkillName === skill.name}
+                          />
+                        )}
+                        {onRemoveSkill && (
+                          <SkillRemoveButton
+                            skillName={skill.name}
+                            onRemove={() => onRemoveSkill(skill.name)}
+                            isRemoving={removingSkillName === skill.name}
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                </DataList.Cell>
+              </DataList.RowWrapper>
+            );
+          })
+        )}
+      </DataList>
+    </div>
   );
 }
 
@@ -250,7 +188,7 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
               Add Skill from skills.sh
             </Button>
           )}
-          <Button size="lg" variant="light" as="a" href="https://mastra.ai/en/docs/workspace/skills" target="_blank">
+          <Button size="lg" variant="default" as="a" href="https://mastra.ai/en/docs/workspace/skills" target="_blank">
             <Icon>
               <BookOpen className="h-4 w-4" />
             </Icon>

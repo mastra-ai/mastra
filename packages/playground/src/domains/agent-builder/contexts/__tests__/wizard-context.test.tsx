@@ -1,0 +1,419 @@
+// @vitest-environment jsdom
+import type { BuilderSettingsResponse, StoredSkillResponse } from '@mastra/client-js';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
+import { WizardProvider, useWizard } from '../wizard-context';
+import type { WizardStep } from '../wizard-context';
+import { server } from '@/test/msw-server';
+
+type Features = ReturnType<typeof useBuilderAgentFeatures>;
+
+const DEFAULT_FEATURES: Features = {
+  tools: false,
+  memory: false,
+  workflows: false,
+  agents: false,
+  avatarUpload: false,
+  skills: false,
+  model: false,
+  favorites: false,
+  browser: false,
+};
+
+let featuresMock: Features = { ...DEFAULT_FEATURES };
+let skillsMock: StoredSkillResponse[] = [];
+
+vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
+  useBuilderAgentFeatures: () => featuresMock,
+}));
+
+vi.mock('@/domains/agent-builder/contexts/agent-primitives-context', () => ({
+  useAgentPrimitives: () => ({ availableSkills: skillsMock }),
+}));
+
+const BASE_URL = 'http://localhost:4111';
+
+interface PlatformsFixture {
+  id: string;
+  name: string;
+  isConfigured: boolean;
+}
+
+const usePlatformsHandler = (platforms: PlatformsFixture[]) => {
+  server.use(http.get('*/api/channels/platforms', () => HttpResponse.json(platforms)));
+};
+
+const useBuilderSettingsHandler = (settings: BuilderSettingsResponse) => {
+  server.use(http.get('*/editor/builder/settings', () => HttpResponse.json(settings)));
+};
+
+const INACTIVE_SETTINGS: BuilderSettingsResponse = {
+  enabled: true,
+  modelPolicy: { active: false },
+};
+
+const Probe = () => {
+  const { step, next, prev, steps, isLast } = useWizard();
+  return (
+    <div>
+      <div data-testid="step">{step}</div>
+      <div data-testid="steps">{steps.join('>')}</div>
+      <div data-testid="is-last">{isLast ? 'yes' : 'no'}</div>
+      <button type="button" data-testid="next" onClick={next}>
+        next
+      </button>
+      <button type="button" data-testid="prev" onClick={prev}>
+        prev
+      </button>
+    </div>
+  );
+};
+
+const renderWizard = ({
+  initialStep,
+  hasAgentTools,
+  children,
+}: {
+  initialStep?: WizardStep;
+  hasAgentTools?: boolean;
+  children?: ReactNode;
+} = {}) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <WizardProvider initialStep={initialStep} hasAgentTools={hasAgentTools}>
+          {children ?? <Probe />}
+        </WizardProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>,
+  );
+};
+
+const flushPlatforms = () => act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+
+describe('WizardProvider', () => {
+  beforeEach(() => {
+    featuresMock = { ...DEFAULT_FEATURES };
+    skillsMock = [];
+    usePlatformsHandler([]);
+    useBuilderSettingsHandler(INACTIVE_SETTINGS);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('defaults to end when no initialStep is passed (no fresh-thread starter)', async () => {
+    const { getByTestId } = renderWizard();
+    await flushPlatforms();
+
+    expect(getByTestId('steps').textContent).toBe('instructions>end');
+    expect(getByTestId('step').textContent).toBe('end');
+
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('end');
+  });
+
+  it('walks ready -> identity -> instructions -> library -> end when all features are off and initialStep=ready', async () => {
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
+
+    expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>end');
+    expect(getByTestId('step').textContent).toBe('ready');
+
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('identity');
+
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('instructions');
+
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('library');
+
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('end');
+
+    // No-op at end.
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('end');
+  });
+
+  it('walks backward with prev() and is a no-op on the first step', async () => {
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
+
+    expect(getByTestId('step').textContent).toBe('ready');
+
+    // No-op on first step.
+    fireEvent.click(getByTestId('prev'));
+    expect(getByTestId('step').textContent).toBe('ready');
+
+    fireEvent.click(getByTestId('next')); // ready -> identity
+    fireEvent.click(getByTestId('next')); // identity -> instructions
+    expect(getByTestId('step').textContent).toBe('instructions');
+
+    fireEvent.click(getByTestId('prev')); // instructions -> identity
+    expect(getByTestId('step').textContent).toBe('identity');
+
+    fireEvent.click(getByTestId('prev')); // identity -> ready
+    expect(getByTestId('step').textContent).toBe('ready');
+  });
+
+  it('round-trips next() then prev()', async () => {
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
+
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('identity');
+    fireEvent.click(getByTestId('prev'));
+    expect(getByTestId('step').textContent).toBe('ready');
+  });
+
+  it('builds the full tree when all features are on and a configured platform exists', async () => {
+    featuresMock = {
+      ...DEFAULT_FEATURES,
+      tools: true,
+      model: true,
+      skills: true,
+      browser: true,
+    };
+    skillsMock = [{ id: 'skill-a' } as StoredSkillResponse];
+    usePlatformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]);
+
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+
+    await waitFor(() => {
+      expect(getByTestId('steps').textContent).toBe(
+        'ready>identity>model>tools>instructions>skills>browser>library>integrations>end',
+      );
+    });
+
+    const expectedOrder: WizardStep[] = [
+      'ready',
+      'identity',
+      'model',
+      'tools',
+      'instructions',
+      'skills',
+      'browser',
+      'library',
+      'integrations',
+      'end',
+    ];
+    for (let i = 0; i < expectedOrder.length; i++) {
+      expect(getByTestId('step').textContent).toBe(expectedOrder[i]);
+      if (i < expectedOrder.length - 1) fireEvent.click(getByTestId('next'));
+    }
+
+    // Still no-op at end.
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('end');
+  });
+
+  it('skips a feature step when the matching flag is off (tools off, model on)', async () => {
+    featuresMock = { ...DEFAULT_FEATURES, model: true, tools: false };
+
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
+
+    expect(getByTestId('steps').textContent).toBe('ready>identity>model>instructions>library>end');
+
+    fireEvent.click(getByTestId('next')); // ready -> identity
+    fireEvent.click(getByTestId('next')); // identity -> model
+    expect(getByTestId('step').textContent).toBe('model');
+    fireEvent.click(getByTestId('next')); // model -> instructions
+    expect(getByTestId('step').textContent).toBe('instructions');
+  });
+
+  it('skips a feature step when the matching flag is off (tools on, model off)', async () => {
+    featuresMock = { ...DEFAULT_FEATURES, model: false, tools: true };
+
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
+
+    expect(getByTestId('steps').textContent).toBe('ready>identity>tools>instructions>library>end');
+  });
+
+  it('excludes skills when features.skills is on but no skills are available', async () => {
+    featuresMock = { ...DEFAULT_FEATURES, skills: true };
+    skillsMock = [];
+
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
+
+    expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>end');
+  });
+
+  it('includes skills when features.skills is on and skills are available', async () => {
+    featuresMock = { ...DEFAULT_FEATURES, skills: true };
+    skillsMock = [{ id: 'skill-a' } as StoredSkillResponse];
+
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
+
+    expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>skills>library>end');
+  });
+
+  describe('gating parity with agent-profile-tabs', () => {
+    it('includes model when features.model is off but the admin model policy is active', async () => {
+      featuresMock = { ...DEFAULT_FEATURES, model: false };
+      useBuilderSettingsHandler({ enabled: true, modelPolicy: { active: true } });
+
+      const { getByTestId } = renderWizard({ initialStep: 'ready' });
+
+      await waitFor(() => {
+        expect(getByTestId('steps').textContent).toBe('ready>identity>model>instructions>library>end');
+      });
+    });
+
+    it('includes tools when only features.agents is on and agent tools exist', async () => {
+      featuresMock = { ...DEFAULT_FEATURES, agents: true };
+
+      const { getByTestId } = renderWizard({ initialStep: 'ready', hasAgentTools: true });
+      await flushPlatforms();
+
+      expect(getByTestId('steps').textContent).toBe('ready>identity>tools>instructions>library>end');
+    });
+
+    it('includes tools when only features.workflows is on and agent tools exist', async () => {
+      featuresMock = { ...DEFAULT_FEATURES, workflows: true };
+
+      const { getByTestId } = renderWizard({ initialStep: 'ready', hasAgentTools: true });
+      await flushPlatforms();
+
+      expect(getByTestId('steps').textContent).toBe('ready>identity>tools>instructions>library>end');
+    });
+
+    it('excludes tools when the feature is on but no agent tools are available', async () => {
+      featuresMock = { ...DEFAULT_FEATURES, tools: true };
+
+      const { getByTestId } = renderWizard({ initialStep: 'ready', hasAgentTools: false });
+      await flushPlatforms();
+
+      expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>end');
+    });
+  });
+
+  it('excludes integrations when no platform is configured', async () => {
+    usePlatformsHandler([{ id: 'slack', name: 'Slack', isConfigured: false }]);
+
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await waitFor(() => {
+      // Platforms query has resolved; nothing should have added `integrations`.
+      expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>end');
+    });
+  });
+
+  it('includes integrations when a configured Slack platform exists', async () => {
+    usePlatformsHandler([
+      { id: 'slack', name: 'Slack', isConfigured: true },
+      { id: 'discord', name: 'Discord', isConfigured: false },
+    ]);
+
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await waitFor(() => {
+      expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>integrations>end');
+    });
+  });
+
+  it('excludes integrations when only a non-Slack platform is configured (parity with tabs)', async () => {
+    usePlatformsHandler([
+      { id: 'slack', name: 'Slack', isConfigured: false },
+      { id: 'discord', name: 'Discord', isConfigured: true },
+    ]);
+
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
+    await waitFor(() => {
+      expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>end');
+    });
+  });
+
+  it('clamps initialStep forward when the requested step is gated out', async () => {
+    // model feature is off, but the caller asked us to start on `model`.
+    featuresMock = { ...DEFAULT_FEATURES, model: false };
+
+    const { getByTestId } = renderWizard({ initialStep: 'model' });
+    await flushPlatforms();
+
+    // model is filtered out -> tree is `instructions>end`. We clamp forward
+    // to the first surviving step: `instructions`.
+    expect(getByTestId('steps').textContent).toBe('instructions>end');
+    expect(getByTestId('step').textContent).toBe('instructions');
+  });
+
+  it('returns a safe end-step default when useWizard is called outside the provider', () => {
+    const { getByTestId } = render(<Probe />);
+    expect(getByTestId('step').textContent).toBe('end');
+    expect(getByTestId('steps').textContent).toBe('');
+    expect(getByTestId('is-last').textContent).toBe('no');
+  });
+
+  describe('isLast', () => {
+    it('is true on instructions (the only user-facing step) and false after advancing to end', async () => {
+      const { getByTestId } = renderWizard();
+      await flushPlatforms();
+
+      expect(getByTestId('steps').textContent).toBe('instructions>end');
+      // Default state is 'end', not 'instructions'.
+      expect(getByTestId('step').textContent).toBe('end');
+      expect(getByTestId('is-last').textContent).toBe('no');
+    });
+
+    it('is true on the last user-facing step when starting from ready', async () => {
+      const { getByTestId } = renderWizard({ initialStep: 'ready' });
+      await flushPlatforms();
+
+      // Tree: ready > identity > instructions > library > end. library is the last user step.
+      expect(getByTestId('step').textContent).toBe('ready');
+      expect(getByTestId('is-last').textContent).toBe('no');
+
+      fireEvent.click(getByTestId('next'));
+      expect(getByTestId('step').textContent).toBe('identity');
+      expect(getByTestId('is-last').textContent).toBe('no');
+
+      fireEvent.click(getByTestId('next'));
+      expect(getByTestId('step').textContent).toBe('instructions');
+      expect(getByTestId('is-last').textContent).toBe('no');
+
+      fireEvent.click(getByTestId('next'));
+      expect(getByTestId('step').textContent).toBe('library');
+      expect(getByTestId('is-last').textContent).toBe('yes');
+
+      fireEvent.click(getByTestId('next'));
+      expect(getByTestId('step').textContent).toBe('end');
+      expect(getByTestId('is-last').textContent).toBe('no');
+    });
+
+    it('is false on intermediate steps and true only on the final user-facing one', async () => {
+      featuresMock = { ...DEFAULT_FEATURES, model: true, tools: true };
+
+      const { getByTestId } = renderWizard({ initialStep: 'ready' });
+      await flushPlatforms();
+
+      // Tree: ready > identity > model > tools > instructions > library > end.
+      const order: { step: WizardStep; isLast: 'yes' | 'no' }[] = [
+        { step: 'ready', isLast: 'no' },
+        { step: 'identity', isLast: 'no' },
+        { step: 'model', isLast: 'no' },
+        { step: 'tools', isLast: 'no' },
+        { step: 'instructions', isLast: 'no' },
+        { step: 'library', isLast: 'yes' },
+        { step: 'end', isLast: 'no' },
+      ];
+
+      for (let i = 0; i < order.length; i++) {
+        expect(getByTestId('step').textContent).toBe(order[i].step);
+        expect(getByTestId('is-last').textContent).toBe(order[i].isLast);
+        if (i < order.length - 1) fireEvent.click(getByTestId('next'));
+      }
+    });
+  });
+});

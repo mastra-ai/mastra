@@ -9,7 +9,7 @@ export const writeFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
   description: 'Write content to a file in the workspace filesystem. Creates parent directories if needed.',
   inputSchema: z.object({
-    path: z.string().describe('The path where to write the file (e.g., "/data/output.txt")'),
+    path: z.string().describe('The path where to write the file (e.g., "data/output.txt")'),
     content: z.string().describe('The content to write to the file'),
     overwrite: z.boolean().optional().default(true).describe('Whether to overwrite the file if it already exists'),
   }),

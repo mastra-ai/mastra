@@ -32,6 +32,13 @@ export { ScreencastStream as ScreencastStreamImpl, SCREENCAST_DEFAULTS } from '.
 export type { CdpSessionLike, CdpSessionProvider } from './screencast';
 
 // ============================================================================
+// Recording
+// ============================================================================
+
+export { createBrowserRecordingTools } from './recording';
+export type { BrowserRecordingOptions } from './recording';
+
+// ============================================================================
 // Error handling
 // ============================================================================
 
@@ -44,3 +51,10 @@ export type { ErrorCode, BrowserToolError } from './errors';
 
 export { BrowserContextProcessor } from './processor';
 export type { BrowserContext } from './processor';
+
+// ============================================================================
+// CLI Handler
+// ============================================================================
+
+export { BrowserCliHandler, browserCliHandler } from './cli-handler';
+export type { BrowserCliConfig, BrowserCliProcessResult } from './cli-handler';

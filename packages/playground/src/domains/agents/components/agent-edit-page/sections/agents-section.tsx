@@ -102,7 +102,6 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                         emptyText="No agents available"
                         disabled={isLoading || readOnly}
                         error={error}
-                        variant="light"
                       />
                       {selectedOptions.length > 0 && (
                         <div className="flex flex-col gap-3 mt-2">

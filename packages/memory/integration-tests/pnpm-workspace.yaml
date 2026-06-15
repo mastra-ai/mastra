@@ -1,0 +1,19 @@
+packages:
+  - '.'
+
+overrides:
+  '@mastra/ai-sdk': link:../../../client-sdks/ai-sdk
+  '@mastra/client-js': link:../../../client-sdks/client-js
+  '@mastra/core': link:../../core
+  '@mastra/memory': link:../../memory
+  '@mastra/fastembed': link:../../fastembed
+  '@mastra/libsql': link:../../../stores/libsql
+  '@mastra/pg': link:../../../stores/pg
+  '@mastra/upstash': link:../../../stores/upstash
+  mastra: link:../../cli
+  '@internal/llm-recorder': link:../../_llm-recorder
+  '@internal/test-utils': link:../../_test-utils
+
+allowBuilds:
+  esbuild: false
+  sharp: false

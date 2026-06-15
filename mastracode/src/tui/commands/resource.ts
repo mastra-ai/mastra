@@ -41,8 +41,10 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
     await harness.switchThread({ threadId: latest.id });
     state.chatContainer.clear();
     state.pendingTools.clear();
+    state.pendingTaskToolIds?.clear();
     state.allToolComponents = [];
     state.allSystemReminderComponents = [];
+    state.messageComponentsById.clear();
     state.allShellComponents = [];
     state.pendingNewThread = false;
     await ctx.renderExistingMessages();
@@ -54,8 +56,10 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
   } else {
     state.chatContainer.clear();
     state.pendingTools.clear();
+    state.pendingTaskToolIds?.clear();
     state.allToolComponents = [];
     state.allSystemReminderComponents = [];
+    state.messageComponentsById.clear();
     state.allShellComponents = [];
     state.pendingNewThread = true;
     ctx.showInfo(

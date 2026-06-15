@@ -3,7 +3,21 @@ import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { getImageCacheKey } from '../prompt/image-utils';
 import type { AIV5Type, CoreMessageV4 } from '../types';
+import { getResponseProviderItemKeys } from '../utils/response-item-metadata';
+import { stableStringify } from './stable-stringify';
 import type { MastraMessagePart, UIMessageV4Part } from './types';
+
+function appendResponseProviderItemKeys(cacheKey: string, ...providerSources: unknown[]): string {
+  const itemKeys = new Set(
+    providerSources.flatMap(source => getResponseProviderItemKeys(source as Record<string, unknown> | undefined)),
+  );
+
+  for (const itemKey of itemKeys) {
+    cacheKey += `|${itemKey}`;
+  }
+
+  return cacheKey;
+}
 
 /**
  * CacheKeyGenerator - Centralized cache key generation for message equality checks
@@ -17,7 +31,7 @@ import type { MastraMessagePart, UIMessageV4Part } from './types';
  * Cache key invariants:
  * - Same message content should always produce the same key
  * - Different content should produce different keys
- * - Provider metadata (e.g., OpenAI reasoning itemId) must be included for proper distinction
+ * - Provider metadata (e.g., OpenAI/Azure OpenAI text, reasoning, and tool itemId) must be included for proper distinction
  */
 export class CacheKeyGenerator {
   /**
@@ -39,8 +53,10 @@ export class CacheKeyGenerator {
     let cacheKey = '';
     if (part.type === 'text') {
       cacheKey += part.text;
+      cacheKey = appendResponseProviderItemKeys(cacheKey, (part as any).providerMetadata);
     }
     if (part.type === 'tool-invocation') {
+      if (!part.toolInvocation) return cacheKey;
       cacheKey += part.toolInvocation.toolCallId;
       cacheKey += part.toolInvocation.state;
     }
@@ -53,16 +69,17 @@ export class CacheKeyGenerator {
         return prev;
       }, 0);
 
-      // OpenAI sends reasoning items (rs_...) inside part.providerMetadata.openai.itemId.
+      // OpenAI-compatible Responses providers send reasoning items (rs_...) inside
+      // provider metadata itemId fields such as openai.itemId or azure.itemId.
       // When the reasoning text is empty, the default cache key logic produces "reasoning0"
       // for *all* reasoning parts. This makes distinct rs_ entries appear identical, so the
       // message-merging logic drops the latest reasoning item. The result is that subsequent
-      // OpenAI calls fail with:
+      // OpenAI-compatible calls fail with:
       //
       //   "Item 'fc_...' was provided without its required 'reasoning' item"
       //
-      // To fix this, we incorporate the OpenAI itemId into the cache key so each rs_ entry
-      // is treated as distinct.
+      // To fix this, we incorporate the provider itemId into the cache key so each
+      // rs_ entry is treated as distinct.
       //
       // Note: We cast `part` to `any` here because the AI SDK's ReasoningUIPart V4 type does
       // NOT declare `providerMetadata` (even though Mastra attaches it at runtime). This
@@ -71,16 +88,8 @@ export class CacheKeyGenerator {
 
       const partAny = part as any;
 
-      if (
-        partAny &&
-        Object.hasOwn(partAny, 'providerMetadata') &&
-        partAny.providerMetadata &&
-        Object.hasOwn(partAny.providerMetadata, 'openai') &&
-        partAny.providerMetadata.openai &&
-        Object.hasOwn(partAny.providerMetadata.openai, 'itemId')
-      ) {
-        const itemId = partAny.providerMetadata.openai.itemId;
-        cacheKey += `|${itemId}`;
+      if (partAny && Object.hasOwn(partAny, 'providerMetadata')) {
+        cacheKey = appendResponseProviderItemKeys(cacheKey, partAny.providerMetadata);
       }
     }
     if (part.type === 'file') {
@@ -101,7 +110,7 @@ export class CacheKeyGenerator {
       if (part.type.startsWith('data-')) {
         // Stringify data for proper cache key comparison since data can be any type
         const data = (part as AIV5Type.DataUIPart<AIV5.UIDataTypes>).data;
-        key += JSON.stringify(data);
+        key += stableStringify(data); // order-independent: jsonb vs text storage may reorder keys
       } else {
         // Cast to UIMessageV4Part since we've already handled data-* parts above
         key += CacheKeyGenerator.fromAIV4Part(part as UIMessageV4Part);
@@ -120,9 +129,13 @@ export class CacheKeyGenerator {
       key += part.type;
       if (part.type === 'text') {
         key += part.text.length;
+        const partAny = part as any;
+        key = appendResponseProviderItemKeys(key, partAny.providerMetadata, partAny.providerOptions);
       }
       if (part.type === 'reasoning') {
         key += part.text.length;
+        const partAny = part as any;
+        key = appendResponseProviderItemKeys(key, partAny.providerMetadata, partAny.providerOptions);
       }
       if (part.type === 'tool-call') {
         key += part.toolCallId;
@@ -156,6 +169,7 @@ export class CacheKeyGenerator {
       key += part.type;
       if (part.type === 'text') {
         key += part.text;
+        key = appendResponseProviderItemKeys(key, (part as any).providerMetadata);
       }
       if (AIV5.isToolUIPart(part) || part.type === 'dynamic-tool') {
         key += part.toolCallId;
@@ -163,6 +177,7 @@ export class CacheKeyGenerator {
       }
       if (part.type === 'reasoning') {
         key += part.text;
+        key = appendResponseProviderItemKeys(key, (part as any).providerMetadata);
       }
       if (part.type === 'file') {
         key += part.url.length;
@@ -183,9 +198,11 @@ export class CacheKeyGenerator {
       key += part.type;
       if (part.type === 'text') {
         key += part.text.length;
+        key = appendResponseProviderItemKeys(key, (part as any).providerOptions);
       }
       if (part.type === 'reasoning') {
         key += part.text.length;
+        key = appendResponseProviderItemKeys(key, (part as any).providerOptions);
       }
       if (part.type === 'tool-call') {
         key += part.toolCallId;

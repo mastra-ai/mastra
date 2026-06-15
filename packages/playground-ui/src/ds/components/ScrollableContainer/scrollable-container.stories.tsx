@@ -7,7 +7,6 @@ const meta: Meta<typeof ScrollableContainer> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     scrollSpeed: {
       control: { type: 'number' },

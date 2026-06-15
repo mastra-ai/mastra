@@ -609,7 +609,7 @@ export async function getAgentMemoryTests({
 
     it('should use generateTitle with request context', async () => {
       const threadId = randomUUID();
-      const resourceId = 'gen-title-metadata';
+      const resourceId = 'gen-title-with-request-context';
       const metadata = { foo: 'bar', custom: 123 };
 
       const thread = await memoryWithTitle.createThread({

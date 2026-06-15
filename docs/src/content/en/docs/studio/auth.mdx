@@ -57,6 +57,26 @@ Setting [`server.auth`](/reference/configuration#serverauth) does two things at 
 
 Studio detects available capabilities by calling the `GET /api/auth/capabilities` endpoint. The response tells Studio which login methods to render and, if the user is already authenticated, includes their user info and permissions.
 
+## Pass a token through the URL
+
+When another application embeds or links to Studio, it can hand over an authorization token through the `auth_header` URL parameter. This is useful when an external host already holds a token and wants to open an authenticated Studio session without showing the login screen.
+
+The `auth_header` value always populates the `Authorization` request header. The parameter sets that one header only, so include any scheme prefix the server expects in the value, such as `Bearer`.
+
+Open Studio with the token in the query string:
+
+```
+https://your-studio-host/?auth_header=Bearer%20your-token
+```
+
+Studio handles the token as follows:
+
+- It reads `auth_header` once on load and sends the value as the `Authorization` header on every API request in that session.
+- It removes `auth_header` from the address bar while preserving other query parameters and the hash.
+- It keeps the token in memory only and never writes it to local storage, so the token stays transient and doesn't persist across page reloads.
+
+The token rides in a URL parameter, so the host application is responsible for how that URL is generated and transmitted. URL parameters can be exposed through browser history, referrer headers, and server access logs.
+
 ## Role-based access control
 
 RBAC lets you control what each user can see and do inside Studio. It's separate from authentication: `server.auth` handles who the user is, while `server.rbac` handles what they can do.

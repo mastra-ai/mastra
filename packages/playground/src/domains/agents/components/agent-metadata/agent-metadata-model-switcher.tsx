@@ -1,8 +1,10 @@
 import type { UpdateModelParams } from '@mastra/client-js';
-import { Alert, AlertDescription, AlertTitle, Button, Spinner } from '@mastra/playground-ui';
-import { RotateCcw } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Notice, Button, Spinner } from '@mastra/playground-ui';
+import { Lock, RotateCcw } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
+import { useBuilderModelPolicy } from '@/domains/agent-builder';
+import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
@@ -31,8 +33,10 @@ export const AgentMetadataModelSwitcher = ({
   const [modelOpen, setModelOpen] = useState(false);
 
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
+  const policy = useBuilderModelPolicy();
+  const { models: allowedModels } = useAgentBuilderAllowedModels();
 
-  const providers = dataProviders?.providers || [];
+  const providers = useMemo(() => dataProviders?.providers || [], [dataProviders]);
 
   // Update local state when default props change (e.g., after reset)
   useEffect(() => {
@@ -127,6 +131,7 @@ export const AgentMetadataModelSwitcher = ({
     updateModel,
     providerOpen,
     modelOpen,
+    providers,
   ]);
 
   if (providersLoading) {
@@ -160,6 +165,32 @@ export const AgentMetadataModelSwitcher = ({
 
   const currentProvider = findProviderById(providers, currentModelProvider);
 
+  // Admin locked the picker — surface a non-interactive chip instead.
+  if (policy.active && policy.pickerVisible === false) {
+    const lockedLabel =
+      policy.default && policy.default.provider && policy.default.modelId
+        ? `${policy.default.provider}/${policy.default.modelId}`
+        : selectedProvider && selectedModel
+          ? `${selectedProvider}/${selectedModel}`
+          : 'Locked by admin';
+    return (
+      <div
+        className="flex items-center gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2"
+        data-testid="agent-metadata-model-locked"
+      >
+        <Lock className="h-4 w-4 shrink-0 text-neutral3" />
+        <span className="truncate text-ui-sm text-neutral6">{lockedLabel}</span>
+        <span className="ml-auto shrink-0 text-ui-xs text-neutral3">Set by admin</span>
+      </div>
+    );
+  }
+
+  const stale =
+    Boolean(currentModelProvider && selectedModel) &&
+    policy.active &&
+    policy.allowed !== undefined &&
+    !allowedModels.some(m => cleanProviderId(m.provider) === currentModelProvider && m.model === selectedModel);
+
   return (
     <div className="@container">
       <div className="flex flex-col @xs:flex-row items-stretch @xs:items-center gap-2 w-full">
@@ -183,7 +214,7 @@ export const AgentMetadataModelSwitcher = ({
         </div>
 
         <Button
-          variant="light"
+          variant="default"
           size="md"
           onClick={handleReset}
           disabled={loading}
@@ -194,12 +225,24 @@ export const AgentMetadataModelSwitcher = ({
         </Button>
       </div>
 
+      {stale && (
+        <div className="pt-2 p-2" data-testid="agent-metadata-model-stale-warning">
+          <Notice variant="warning" title="Model not allowed">
+            <Notice.Message>
+              <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
+                {selectedProvider}/{selectedModel}
+              </code>{' '}
+              is no longer allowed by the admin policy. Pick a different model to save changes.
+            </Notice.Message>
+          </Notice>
+        </div>
+      )}
+
       {/* Show warning if selected provider is not connected */}
       {currentProvider && !currentProvider.connected && (
         <div className="pt-2 p-2">
-          <Alert variant="warning">
-            <AlertTitle as="h5">Provider not connected</AlertTitle>
-            <AlertDescription as="p">
+          <Notice variant="warning" title="Provider not connected">
+            <Notice.Message>
               Set the{' '}
               <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
                 {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
@@ -207,8 +250,8 @@ export const AgentMetadataModelSwitcher = ({
               environment{' '}
               {Array.isArray(currentProvider.envVar) && currentProvider.envVar.length > 1 ? 'variables' : 'variable'} to
               use this provider.
-            </AlertDescription>
-          </Alert>
+            </Notice.Message>
+          </Notice>
         </div>
       )}
     </div>

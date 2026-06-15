@@ -29,12 +29,12 @@ export function AgentVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'inputLike',
+  variant,
   activeVersionId,
 }: AgentVersionComboboxProps) {
   const { data, isLoading } = useAgentVersions({
     agentId,
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const versions = data?.versions ?? [];
