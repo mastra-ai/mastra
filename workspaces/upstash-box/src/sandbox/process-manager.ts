@@ -171,7 +171,8 @@ class UpstashBoxProcessHandle extends ProcessHandle {
 
         if (this._exitCode === undefined) {
           if (code !== null && code !== '') {
-            this._exitCode = parseInt(code, 10) || 0;
+            const parsed = Number.parseInt(code, 10);
+            this._exitCode = Number.isNaN(parsed) ? 1 : parsed;
           } else if (this._killed) {
             this._exitCode = 137;
           } else {
@@ -193,7 +194,7 @@ class UpstashBoxProcessHandle extends ProcessHandle {
   }
 
   private async _doWait(): Promise<CommandResult> {
-    if (this._timeout) {
+    if (this._timeout !== undefined) {
       const remaining = this._startTime + this._timeout - Date.now();
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timedOut = new Promise<'timeout'>(resolve => {

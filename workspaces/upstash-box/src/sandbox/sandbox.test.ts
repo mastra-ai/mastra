@@ -515,6 +515,17 @@ describe('UpstashBoxProcessManager', () => {
     expect(result.exitCode).toBe(2);
   });
 
+  it('treats malformed exit code content as failure (never coerces to success)', async () => {
+    queueProc({ code: 'not-a-number' });
+
+    const sandbox = await startedSandbox();
+    const handle = await sandbox.processes.spawn('cmd');
+    const result = await handle.wait();
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(1);
+  });
+
   it('wait() is idempotent — returns the same result on repeated calls', async () => {
     queueProc({ out: 'out\n', code: '0' });
 
@@ -591,6 +602,18 @@ describe('UpstashBoxProcessManager', () => {
     expect(result.exitCode).toBe(124);
     expect(result.success).toBe(false);
     expect(result.killed).toBe(true);
+    expect(result.timedOut).toBe(true);
+  }, 5000);
+
+  it('timeout: 0 triggers immediate timeout handling', async () => {
+    queueProc({ runningPolls: Infinity });
+
+    const sandbox = await startedSandbox();
+    const handle = await sandbox.processes.spawn('sleep 100', { timeout: 0 });
+    const result = await handle.wait();
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(124);
     expect(result.timedOut).toBe(true);
   }, 5000);
 
