@@ -77,8 +77,8 @@ function createState() {
         bufferingMessages: false,
         bufferingObservations: false,
       })),
-      listModes: vi.fn(() => [{ id: 'build', name: 'build', color: '#00ff00' }]),
-      getCurrentMode: vi.fn(() => ({ id: 'build', name: 'build', color: '#00ff00' })),
+      listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
+      getCurrentMode: vi.fn(() => ({ id: 'build', name: 'build', metadata: { color: '#00ff00' } })),
       getCurrentModeId: vi.fn(() => 'build'),
       getCurrentThreadId: vi.fn(() => 'thread-1'),
       getResourceId: vi.fn(() => 'resource-1'),
@@ -272,8 +272,8 @@ describe('updateStatusLine', () => {
   it('shows judge mode and judge model while goal judge is active', () => {
     const state = createState();
     state.harness.listModes.mockReturnValue([
-      { id: 'build', name: 'build', color: '#00ff00' },
-      { id: 'fast', name: 'Fast', color: '#f97316' },
+      { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
+      { id: 'fast', name: 'Fast', metadata: { color: '#f97316' } },
     ]);
     state.activeGoalJudge = { modelId: 'openrouter/openai/gpt-5.4-mini' };
 
