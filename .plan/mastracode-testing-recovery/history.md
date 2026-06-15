@@ -39,11 +39,13 @@ Latest full terminal-backend audit:
 | hybrid terminal, `--jobs 4` | did not stabilize | varies | Terminal scenarios mostly pass, but repeated full runs exposed worker exit 139 and load-sensitive autocomplete/GitHub-signal fallback flakes. |
 | terminal workers only, `--jobs 8` | 69/120 passed | not measured | Historical baseline before entrypoint fallback and parity fixes: 33 custom-entrypoint fast-fails plus 18 same-app parity/timeouts. |
 
-Remaining hardening work:
+Non-blocking future hardening:
 
 1. Investigate the terminal-worker exit 139 at `--jobs 3/4` before raising CI concurrency above 2.
 2. Reduce subprocess fallback over time by adding an injectable-terminal entrypoint contract for bespoke programs where it makes sense.
 3. Keep `COREPACK_ENABLE_PROJECT_SPEC=1` on local validation commands if the pnpm shim resolves the wrong package-manager version.
+
+These items are CI performance/architecture improvements, not unfinished recovery coverage: the recovery tracker is complete at 56/56 validated rows and the stable full-corpus hybrid command passes 120/120 at `--jobs 2`.
 
 ### Full-suite shard parallelization proof (2026-06-14)
 

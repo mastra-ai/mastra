@@ -25,6 +25,10 @@ The previous recovery pass added valuable focused unit/integration/component/hea
 
 Real-world fixture data may be pulled from the local Mastra Code database under the user's Application Support directory, transformed into sanitized AIMock-compatible fixtures, and then committed only as scrubbed deterministic test data. Do not point CI tests at the live local database.
 
+## Completion summary — 2026-06-15
+
+Current recovery queue status: **56/56 tracker rows are `validated`; 0 rows are unfinished**. The tracker includes every feature-map row that was `Missing` or `Partial`, plus every `High` risk row. Each non-deferred row records checked-in regression-shield coverage, TUI e2e coverage where user-visible or TUI-triggered, verification evidence, break-validation evidence when practical, and committed evidence. Remaining terminal-backend concurrency hardening (`--jobs 3/4`) is future CI performance work and is not an unfinished mapped feature row; the stable full-corpus validation command is `COREPACK_ENABLE_PROJECT_SPEC=1 pnpm --filter ./mastracode run e2e:test -- --backend terminal --jobs 2`, which passed 120/120 with valid AIMock request counts.
+
 ## Tracker
 
 | Feature card | Risk | Feature-map tests | Required contract categories | Recovery status | TUI e2e status | New/updated tests | Verification evidence | Break-validation evidence | Commit(s) | Notes |
