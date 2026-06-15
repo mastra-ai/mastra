@@ -7,6 +7,7 @@ import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
+import { TASKS_STATE_ID } from '@mastra/core/tools';
 import chalk from 'chalk';
 import {
   insertChatComponentWithBoundarySpacing,
@@ -39,6 +40,7 @@ const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
 // These are internal control-plane signals handled by GithubSignals. The user-visible
 // result is rendered by github-sync-status, so showing these would duplicate the UI.
 const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+const GOAL_STATE_SIGNAL_ID = 'goal';
 
 function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
@@ -58,11 +60,11 @@ function getPendingUserMessageLabel(isInterjection?: boolean): string | undefine
 }
 
 function getCurrentModeColor(state: TUIState): string | undefined {
-  return state.harness.getCurrentMode?.()?.color;
+  return state.harness.getCurrentMode?.()?.metadata?.color as string;
 }
 
 // =============================================================================
-// renderCompletedTasksInline / renderClearedTasksInline
+// renderClearedTasksInline
 // =============================================================================
 
 class TaskHistoryComponent extends Container {
@@ -77,44 +79,6 @@ function insertTaskHistoryComponent(state: TUIState, component: Component, inser
     component,
     insertIndex >= 0 ? insertIndex : state.chatContainer.children.length,
   );
-}
-
-/**
- * Render a completed task list inline in the chat history.
- */
-export function renderCompletedTasksInline(
-  state: TUIState,
-  tasks: TaskItemSnapshot[],
-  insertIndex = -1,
-  collapsed = false,
-): void {
-  const headerText =
-    theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
-
-  const container = new TaskHistoryComponent();
-  container.addChild(new Text(headerText, BOX_INDENT, 0));
-  const MAX_VISIBLE = 4;
-  const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
-  const visible = shouldCollapse ? tasks.slice(0, MAX_VISIBLE) : tasks;
-  const remaining = shouldCollapse ? tasks.length - MAX_VISIBLE : 0;
-
-  for (const task of visible) {
-    const icon = chalk.hex(mastra.green)('✓');
-    const text = chalk.hex(mastra.green)(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
-  }
-  if (remaining > 0) {
-    container.addChild(
-      new Text(
-        theme.fg('dim', `  ... ${remaining} more completed task${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
-        BOX_INDENT,
-        0,
-      ),
-    );
-  }
-  container.addChild(new Spacer(1));
-
-  insertTaskHistoryComponent(state, container, insertIndex);
 }
 
 /**
@@ -139,12 +103,9 @@ function renderTaskTransitionFromHistory(
   previousTasks: TaskItemSnapshot[],
   nextTasks: TaskItemSnapshot[],
 ): { tasks: TaskItemSnapshot[]; replacedWithInline: boolean } {
-  const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
-
   if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
-    if (!wasAllCompleted) {
-      renderCompletedTasksInline(state, nextTasks, -1, state.quietMode);
-    }
+    // A fully-completed list hides its pinned view and leaves no inline receipt
+    // (matches the live path); the transcript already narrates completion.
     return { tasks: nextTasks, replacedWithInline: true };
   }
 
@@ -361,6 +322,17 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   const stateSignalPart = message.content.find(content => (content as { type?: string }).type === 'state_signal') as
     | { type: 'state_signal'; stateId: string; mode: 'snapshot' | 'delta'; version?: number; message?: string }
     | undefined;
+
+  // The `tasks` state signal is rendered by the pinned task list UI (replayed
+  // from task tool history), so skip its raw <current-task-list> snapshot here.
+  // The `goal` state signal is surfaced by the goal/judge UI, so likewise skip
+  // its raw <current-objective> snapshot.
+  if (
+    stateSignalPart &&
+    (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_SIGNAL_ID)
+  ) {
+    return;
+  }
 
   if (stateSignalPart) {
     const component = new StateSignalComponent({

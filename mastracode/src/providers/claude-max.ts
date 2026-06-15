@@ -14,6 +14,18 @@ import { AuthStorage } from '../auth/storage.js';
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
 const claudeCodeIdentity = "You are Claude Code, Anthropic's official CLI for Claude.";
 
+// Betas required for Claude Max plan OAuth. Merged with (not replacing) any
+// betas the AI SDK already set on the request — e.g. the SDK adds
+// `server-side-fallback-2026-06-01` when `providerOptions.anthropic.fallbacks`
+// is configured; dropping it makes the API reject the `fallbacks` body field
+// with "Extra inputs are not permitted".
+const OAUTH_REQUIRED_BETAS = [
+  'oauth-2025-04-20',
+  'claude-code-20250219',
+  'interleaved-thinking-2025-05-14',
+  'fine-grained-tool-streaming-2025-05-14',
+];
+
 // Singleton auth storage instance
 let authStorageInstance: AuthStorage | null = null;
 
@@ -168,10 +180,11 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: AuthStorage } = {
     }
 
     headers.set('Authorization', `Bearer ${accessToken}`);
-    headers.set(
-      'anthropic-beta',
-      'oauth-2025-04-20,claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14',
-    );
+    const requestBetas = (headers.get('anthropic-beta') ?? '')
+      .split(',')
+      .map(beta => beta.trim())
+      .filter(Boolean);
+    headers.set('anthropic-beta', Array.from(new Set([...OAUTH_REQUIRED_BETAS, ...requestBetas])).join(','));
     headers.set('anthropic-version', '2023-06-01');
 
     try {

@@ -17,6 +17,7 @@ export * from './capabilities';
 // License
 export {
   validateLicense,
+  startLicenseValidation,
   isLicenseValid,
   isEELicenseValid,
   isFeatureEnabled,
@@ -39,7 +40,7 @@ export {
   getMCPToolFGAResourceId,
   type CheckFGAOptions,
   type RequireFGAOptions,
-  type SystemActorSignal,
+  type ActorSignal,
 } from './fga-check';
 
 // Default implementations
