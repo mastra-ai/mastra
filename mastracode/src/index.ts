@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-import { hostname } from 'node:os';
 import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
@@ -14,11 +12,9 @@ import type {
   HarnessSubagent,
   HarnessRequestContext,
 } from '@mastra/core/harness';
-// import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
 import type { HarnessMode as HarnessModeV1 } from '@mastra/core/harness/v1';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
-import type { StorageThreadType } from '@mastra/core/memory';
 import {
   AgentsMDInjector,
   PrefillErrorHandler,
@@ -43,10 +39,13 @@ import {
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
 import { getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
+import { buildMode } from './agents/modes/build.js';
+import { fastMode } from './agents/modes/explore.js';
+import { planMode } from './agents/modes/plan.js';
 import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions.js';
-import { executeSubagent } from './agents/subagents/execute.js';
-import { exploreSubagent } from './agents/subagents/explore.js';
-import { planSubagent } from './agents/subagents/plan.js';
+// import { executeSubagent } from './agents/subagents/execute.js';
+// import { exploreSubagent } from './agents/subagents/explore.js';
+// import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
 
@@ -54,7 +53,6 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { v1ModeToLegacy } from './HarnessCompat';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
@@ -99,26 +97,6 @@ const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
 
 const CODE_AGENT_ID = 'code-agent';
 
-function hash(value: string): string {
-  return createHash('sha256').update(value).digest('hex').slice(0, 32);
-}
-
-function legacyModeToV1(mode: HarnessMode<MastraCodeState>, fallbackAgent: Agent): HarnessModeV1 {
-  const agent = typeof mode.agent === 'function' ? mode.agent({} as MastraCodeState) : mode.agent;
-  return {
-    id: mode.id,
-    defaultModelId: mode.defaultModelId ?? 'openai/gpt-5.5',
-    description: mode.name,
-    ...(mode.id === 'plan' ? { transitionsTo: 'build' } : {}),
-    metadata: {
-      agentId: (agent ?? fallbackAgent).id,
-      color: mode.color,
-      default: mode.default,
-      name: mode.name,
-    },
-  };
-}
-
 function applyEffectiveDefaultsToV1Modes(
   modes: HarnessModeV1[],
   effectiveDefaults: Record<string, string>,
@@ -139,7 +117,7 @@ export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
   cwd?: string;
   /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
-  modes?: HarnessMode<MastraCodeState>[];
+  modes?: HarnessMode[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: HarnessSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
@@ -499,35 +477,28 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
 
-  const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
+  // const defaultSubAgents: Array<HarnessSubagent> = [];
+  // const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
-  const defaultModesV1: HarnessModeV1[] = [
+  const defaultModes: HarnessMode[] = [
     {
-      id: 'build',
-      description: 'Build',
-      defaultModelId: 'anthropic/claude-opus-4-7',
+      ...buildMode,
       metadata: {
-        agentId: CODE_AGENT_ID,
+        ...buildMode.metadata,
         color: mastra.green,
-        default: true,
       },
     },
     {
-      id: 'plan',
-      description: 'Plan',
-      transitionsTo: 'build',
-      defaultModelId: 'openai/gpt-5.5',
+      ...planMode,
       metadata: {
-        agentId: CODE_AGENT_ID,
+        ...planMode.metadata,
         color: mastra.purple,
       },
     },
     {
-      id: 'fast',
-      description: 'Fast',
-      defaultModelId: 'cerebras/zai-glm-4.7',
+      ...fastMode,
       metadata: {
-        agentId: CODE_AGENT_ID,
+        ...fastMode.metadata,
         color: mastra.orange,
       },
     },
@@ -596,43 +567,20 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
-  const modesV1 = applyEffectiveDefaultsToV1Modes(
-    config?.modes ? config.modes.map(mode => legacyModeToV1(mode, codeAgent)) : defaultModesV1,
-    effectiveDefaults,
-  );
+  const modes = applyEffectiveDefaultsToV1Modes(config?.modes ? config.modes : defaultModes, effectiveDefaults);
   const defaultModeId =
-    modesV1.find(mode => mode.metadata?.default === true)?.id ??
-    modesV1.find(mode => mode.id === 'plan')?.id ??
-    modesV1[0]?.id;
+    modes.find(mode => mode.metadata?.default === true)?.id ??
+    modes.find(mode => mode.id === 'plan')?.id ??
+    modes[0]?.id;
   if (!defaultModeId) {
     throw new Error('MastraCode requires at least one mode');
   }
-  const modes: HarnessMode<MastraCodeState>[] = modesV1.map(mode => v1ModeToLegacy(mode, codeAgent));
 
   // Map subagent types to mode models: explore→fast, plan→plan, execute→build
-  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  // const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
   // Subagents inherit workspace tools from the parent agent's workspace automatically.
   // Apply disabledTools filter to both default and custom subagents.
-  const subagents = (config?.subagents ?? defaultSubagents).map(sa => {
-    const modeId = subagentModeMap[sa.id];
-    const model = modeId ? effectiveDefaults[modeId] : undefined;
-    let filtered = sa;
-    if (config?.disabledTools?.length) {
-      if (sa.allowedWorkspaceTools) {
-        filtered = {
-          ...filtered,
-          allowedWorkspaceTools: sa.allowedWorkspaceTools.filter(t => !config.disabledTools!.includes(t)),
-        };
-      }
-      if (sa.tools) {
-        filtered = {
-          ...filtered,
-          tools: Object.fromEntries(Object.entries(sa.tools).filter(([k]) => !config.disabledTools!.includes(k))),
-        };
-      }
-    }
-    return model ? { ...filtered, defaultModelId: model } : filtered;
-  });
+  // const subagents = [];
 
   // Build initial state with global preferences
   const globalInitialState: Partial<MastraCodeState> = {};
@@ -670,38 +618,38 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     }
   }
 
-  const { threads } = (await (
-    await storage.getStore('memory')
-  )?.listThreads({
-    perPage: false,
-    filter: {
-      resourceId: project.resourceId,
-    },
-  })) ?? { threads: [] as StorageThreadType[] };
-  const ownerId = `mastracode-${hash(`${hostname()}\0${project.rootPath}`)}`;
+  // const { threads } = (await (
+  //   await storage.getStore('memory')
+  // )?.listThreads({
+  //   perPage: false,
+  //   filter: {
+  //     resourceId: project.resourceId,
+  //   },
+  // })) ?? { threads: [] as StorageThreadType[] };
+  // const ownerId = `mastracode-${hash(`${hostname()}\0${project.rootPath}`)}`;
 
   // temporary prefill sessions from threads
-  await Promise.all(
-    threads.map(thread => {
-      const sessionHash = hash(`${thread.resourceId}\0${thread.id}`);
+  // await Promise.all(
+  //   threads.map(thread => {
+  //     const sessionHash = hash(`${thread.resourceId}\0${thread.id}`);
 
-      const meta = thread.metadata as Record<string, unknown> | undefined;
-      const modeId = typeof meta?.currentModeId === 'string' ? meta.currentModeId : defaultModeId;
-      const mode = modesV1.find(mode => mode.id === modeId) ?? modesV1.find(mode => mode.id === defaultModeId)!;
-      const modelId = typeof meta?.currentModelId === 'string' ? meta.currentModelId : mode.defaultModelId;
-      return harnessStorage.saveSession({
-        id: `sess-${sessionHash}`,
-        ownerId,
-        resourceId: thread.resourceId,
-        threadId: thread.id,
-        modeId: mode.id,
-        modelId,
-        origin: 'top-level',
-        createdAt: thread.createdAt,
-        lastActivityAt: thread.updatedAt,
-      });
-    }),
-  );
+  //     const meta = thread.metadata as Record<string, unknown> | undefined;
+  //     const modeId = typeof meta?.currentModeId === 'string' ? meta.currentModeId : defaultModeId;
+  //     const mode = modesV1.find(mode => mode.id === modeId) ?? modesV1.find(mode => mode.id === defaultModeId)!;
+  //     const modelId = typeof meta?.currentModelId === 'string' ? meta.currentModelId : mode.defaultModelId;
+  //     return harnessStorage.saveSession({
+  //       id: `sess-${sessionHash}`,
+  //       ownerId,
+  //       resourceId: thread.resourceId,
+  //       threadId: thread.id,
+  //       modeId: mode.id,
+  //       modelId,
+  //       origin: 'top-level',
+  //       createdAt: thread.createdAt,
+  //       lastActivityAt: thread.updatedAt,
+  //     });
+  //   }),
+  // );
 
   // const harnessV1 = new HarnessV1({
   //   ownerId,
@@ -721,7 +669,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     memory,
     pubsub: signalsPubSub,
     stateSchema: typedStateSchema,
-    subagents,
+    agent: codeAgent,
+    subagents: [],
     resolveModel: modelId => resolveModel(modelId) as LanguageModel,
     toolCategoryResolver: getToolCategory,
     initialState: {
