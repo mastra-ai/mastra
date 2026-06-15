@@ -28,7 +28,7 @@ The Builder UI calls several resources on load, so a usable `member` role needs 
 
 | Permission | Used for |
 | - | - |
-| `agent-builder:*` | Load Builder actions, runs, and stream Builder workflows |
+| `agent-builder:*` | Load Builder actions and run Builder workflows. The derived Builder actions are `agent-builder:read` and `agent-builder:execute`; the wildcard grants both. |
 | `agents:read`, `agents:execute` | List registered agents and chat with the Builder agent |
 | `stored-agents:*` | List, view, create, and edit agents |
 | `stored-skills:*` | List, view, create, and edit stored skills |

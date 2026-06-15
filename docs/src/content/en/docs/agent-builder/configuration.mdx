@@ -49,19 +49,21 @@ new MastraEditor({
         tools: true,
         agents: true,
         workflows: true,
+        scorers: true,
         skills: true,
         memory: true,
+        variables: true,
+        favorites: true,
+        avatarUpload: true,
         model: true,
         browser: true,
-        avatarUpload: true,
-        favorites: true,
       },
     },
   },
 })
 ```
 
-The shipping UI consumes these `AgentFeatures` keys: `tools`, `agents`, `workflows`, `skills`, `memory`, `model`, `browser`, `avatarUpload`, and `favorites`. See the [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) for the full schema.
+The shipping UI consumes these `AgentFeatures` keys: `tools`, `agents`, `workflows`, `scorers`, `skills`, `memory`, `variables`, `favorites`, `avatarUpload`, `model`, and `browser`. See the [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) for the full schema.
 
 ## Admin defaults
 

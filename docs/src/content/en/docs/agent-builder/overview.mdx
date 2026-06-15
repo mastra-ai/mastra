@@ -72,7 +72,7 @@ The Agent Builder requires:
 
 - **Storage**: An `@mastra/core` storage adapter on the `Mastra` instance. Agents, memory, and workspace state all persist through `Mastra.storage`.
 - **The Builder agent**: Register a Builder agent created with the `createBuilderAgent()` factory from `@mastra/editor/ee` on `Mastra.agents`. The chat-based editor invokes it through the same `Mastra.getAgent(id)` lookup as any other agent. Without this registration, the chat-based editor returns 404.
-- **`OPENAI_API_KEY`**: The Builder agent created by `createBuilderAgent()` runs on an OpenAI model, so an `OPENAI_API_KEY` environment variable is required.
+- **Model credentials**: `createBuilderAgent()` uses `openai/gpt-5.5` by default, which requires `OPENAI_API_KEY`. To use a different provider, pass a `model` override to `createBuilderAgent({ model })` and set that provider's credentials instead.
 
 ## Disabling the Builder
 
