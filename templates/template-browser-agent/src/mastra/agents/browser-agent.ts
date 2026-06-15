@@ -1,27 +1,47 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { AgentBrowser } from '@mastra/agent-browser';
+import { AgentBrowser, AgentBrowserThreadManager } from '@mastra/agent-browser';
+import type { AgentBrowserThreadManagerConfig } from '@mastra/agent-browser';
+import { execFileSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import 'playwright-chromium';
 
-const browser = process.env.BROWSER_CDP_URL
-  ? new AgentBrowser({
-      headless: process.env.BROWSER_HEADLESS !== 'false',
-      cdpUrl: process.env.BROWSER_CDP_URL,
-      scope: 'shared',
-    })
-  : process.env.BROWSER_ALLOW_LOCAL_CHROMIUM === 'true'
-    ? new AgentBrowser({
-        headless: process.env.BROWSER_HEADLESS !== 'false',
-      })
-    : undefined;
+const require = createRequire(import.meta.url);
+let linuxDepsInstalled = false;
 
-const browserInstructions = browser
-  ? `**Navigation:** browser_goto (open URL), browser_back (go back), browser_tabs (list/switch tabs), browser_close (close tab).
-**Observation:** browser_snapshot (get page accessibility tree with ref ids — this is your primary way to "see" the page), browser_screenshot (visual capture).
-**Interaction:** browser_click (click by ref), browser_type (type into input by ref), browser_press (press key combo), browser_select (select dropdown option), browser_scroll (scroll up/down), browser_hover (hover element), browser_drag (drag between refs).
-**Other:** browser_wait (pause for ms), browser_dialog (accept/dismiss dialog), browser_evaluate (run arbitrary JS — escape hatch only).`
-  : `Browser tools are disabled because BROWSER_CDP_URL is not set and BROWSER_ALLOW_LOCAL_CHROMIUM is not true. Use web_search for lookups and explain that browser automation needs BROWSER_CDP_URL in server deployments.`;
+function installPlaywrightLinuxDeps() {
+  if (linuxDepsInstalled || process.env.BROWSER_SKIP_INSTALL_DEPS === 'true') {
+    return;
+  }
+
+  linuxDepsInstalled = true;
+
+  if (process.platform !== 'linux' || process.getuid?.() !== 0 || process.env.BROWSER_CDP_URL) {
+    return;
+  }
+
+  const playwrightCli = join(dirname(require.resolve('playwright-chromium')), 'cli.js');
+  execFileSync(process.execPath, [playwrightCli, 'install-deps', 'chromium'], { stdio: 'inherit' });
+}
+
+class RuntimeDepsThreadManager extends AgentBrowserThreadManager {
+  constructor(config: AgentBrowserThreadManagerConfig) {
+    super(config);
+  }
+
+  override async getPageForThread(threadId?: string) {
+    installPlaywrightLinuxDeps();
+    return super.getPageForThread(threadId);
+  }
+}
+
+const browser = new AgentBrowser({
+  headless: process.env.BROWSER_HEADLESS !== 'false',
+  ...(process.env.BROWSER_CDP_URL ? { cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' as const } : {}),
+  createThreadManager: config => new RuntimeDepsThreadManager(config),
+});
 
 export const browserAgent = new Agent({
   id: 'browser-agent',
@@ -30,7 +50,10 @@ export const browserAgent = new Agent({
 
 ## Your tools
 
-${browserInstructions}
+**Navigation:** browser_goto (open URL), browser_back (go back), browser_tabs (list/switch tabs), browser_close (close tab).
+**Observation:** browser_snapshot (get page accessibility tree with ref ids — this is your primary way to "see" the page), browser_screenshot (visual capture).
+**Interaction:** browser_click (click by ref), browser_type (type into input by ref), browser_press (press key combo), browser_select (select dropdown option), browser_scroll (scroll up/down), browser_hover (hover element), browser_drag (drag between refs).
+**Other:** browser_wait (pause for ms), browser_dialog (accept/dismiss dialog), browser_evaluate (run arbitrary JS — escape hatch only).
 **Search:** web_search (quick factual lookup without opening a browser).
 
 ## Core workflow
@@ -55,7 +78,7 @@ ${browserInstructions}
   defaultOptions: {
     maxSteps: 100,
   },
-  ...(browser ? { browser } : {}),
+  browser,
   tools: {
     web_search: openai.tools.webSearch({}),
   },
