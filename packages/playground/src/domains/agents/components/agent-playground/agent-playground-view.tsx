@@ -1,6 +1,7 @@
-import { Txt, PanelSeparator, CollapsiblePanel, PanelDrawer, useIsMobile } from '@mastra/playground-ui';
-import { Group, useDefaultLayout } from 'react-resizable-panels';
+import { Txt } from '@mastra/playground-ui';
 
+import { AgentLayout } from '../agent-layout';
+import { SidebarPanel } from '../sidebar-panel';
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
@@ -94,27 +95,25 @@ function LeftPanel({
   });
 
   return (
-    <div className="h-full w-full pb-2 pl-2">
-      <div className="flex flex-col h-full overflow-hidden bg-surface3 rounded-studio-panel border border-border1">
-        {versionSelector}
+    <SidebarPanel>
+      {versionSelector}
 
-        <div className="px-4 pt-3">
-          <Txt variant="ui-sm" className="text-neutral3">
-            Edit your agent's system prompt, tools, and variables below.
-          </Txt>
-        </div>
-
-        <div className="flex-1 min-h-0">
-          <AgentPlaygroundConfig
-            agentId={agentId}
-            selectedVersionId={selectedVersionId}
-            latestVersionId={latestVersionId}
-          />
-        </div>
-
-        {actionBar}
+      <div className="px-4 pt-3">
+        <Txt variant="ui-sm" className="text-neutral3">
+          Edit your agent's system prompt, tools, and variables below.
+        </Txt>
       </div>
-    </div>
+
+      <div className="flex-1 min-h-0">
+        <AgentPlaygroundConfig
+          agentId={agentId}
+          selectedVersionId={selectedVersionId}
+          latestVersionId={latestVersionId}
+        />
+      </div>
+
+      {actionBar}
+    </SidebarPanel>
   );
 }
 
@@ -143,112 +142,43 @@ export function AgentPlaygroundView({
   onOpenPr,
   isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
-  const isMobile = useIsMobile();
-  const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `agent-playground`,
-    storage: localStorage,
-  });
-
-  // Side-by-side resizable panels don't fit small viewports: the chat takes
-  // the full width and the configuration moves into an edge drawer.
-  if (isMobile) {
-    return (
-      <div className="relative flex h-full flex-col overflow-hidden">
-        <div className="min-h-0 flex-1">
-          <AgentPlaygroundTestChat
-            agentId={agentId}
-            agentName={agentName}
-            modelVersion={modelVersion}
-            agentVersionId={agentVersionId}
-            hasMemory={hasMemory}
-          />
-        </div>
-        <PanelDrawer direction="left" label="Open configuration">
-          <LeftPanel
-            agentId={agentId}
-            activeVersionId={activeVersionId}
-            selectedVersionId={selectedVersionId}
-            latestVersionId={latestVersionId}
-            onVersionSelect={onVersionSelect}
-            isDirty={isDirty}
-            isSavingDraft={isSavingDraft}
-            isPublishing={isPublishing}
-            hasDraft={hasDraft}
-            readOnly={readOnly}
-            isCodeSourceAgent={isCodeSourceAgent}
-            showCodeModeActions={showCodeModeActions}
-            canOpenPr={canOpenPr}
-            openPrTitle={openPrTitle}
-            onSaveDraft={onSaveDraft}
-            onPublish={onPublish}
-            onDownloadJson={onDownloadJson}
-            onOpenPr={onOpenPr}
-            isViewingPreviousVersion={isViewingPreviousVersion}
-          />
-        </PanelDrawer>
-      </div>
-    );
-  }
-
+  // Shares the same resizable layout (and persisted panel size) as the agent
+  // chat page — only the sidebar content differs between the two routes.
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <Group className="flex-1 min-h-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
-        {/* Left panel - Version Bar + Configuration + Action Bar */}
-        <CollapsiblePanel
-          direction="left"
-          id="playground-config"
-          minSize={420}
-          defaultSize="50%"
-          collapsedSize={0}
-          collapsible
-        >
-          <LeftPanel
-            agentId={agentId}
-            activeVersionId={activeVersionId}
-            selectedVersionId={selectedVersionId}
-            latestVersionId={latestVersionId}
-            onVersionSelect={onVersionSelect}
-            isDirty={isDirty}
-            isSavingDraft={isSavingDraft}
-            isPublishing={isPublishing}
-            hasDraft={hasDraft}
-            readOnly={readOnly}
-            isCodeSourceAgent={isCodeSourceAgent}
-            showCodeModeActions={showCodeModeActions}
-            canOpenPr={canOpenPr}
-            openPrTitle={openPrTitle}
-            onSaveDraft={onSaveDraft}
-            onPublish={onPublish}
-            onDownloadJson={onDownloadJson}
-            onOpenPr={onOpenPr}
-            isViewingPreviousVersion={isViewingPreviousVersion}
-          />
-        </CollapsiblePanel>
-
-        <PanelSeparator />
-
-        {/* Right panel - Test Chat */}
-        <CollapsiblePanel
-          direction="right"
-          id="playground-chat"
-          minSize={420}
-          defaultSize="50%"
-          collapsedSize={0}
-          collapsible
-        >
-          <div className="flex flex-col h-full overflow-hidden">
-            <div className="flex-1 min-h-0">
-              <AgentPlaygroundTestChat
-                agentId={agentId}
-                agentName={agentName}
-                modelVersion={modelVersion}
-                agentVersionId={agentVersionId}
-                hasMemory={hasMemory}
-              />
-            </div>
-          </div>
-        </CollapsiblePanel>
-      </Group>
-    </div>
+    <AgentLayout
+      agentId={agentId}
+      leftDrawerLabel="Open configuration"
+      leftSlot={
+        <LeftPanel
+          agentId={agentId}
+          activeVersionId={activeVersionId}
+          selectedVersionId={selectedVersionId}
+          latestVersionId={latestVersionId}
+          onVersionSelect={onVersionSelect}
+          isDirty={isDirty}
+          isSavingDraft={isSavingDraft}
+          isPublishing={isPublishing}
+          hasDraft={hasDraft}
+          readOnly={readOnly}
+          isCodeSourceAgent={isCodeSourceAgent}
+          showCodeModeActions={showCodeModeActions}
+          canOpenPr={canOpenPr}
+          openPrTitle={openPrTitle}
+          onSaveDraft={onSaveDraft}
+          onPublish={onPublish}
+          onDownloadJson={onDownloadJson}
+          onOpenPr={onOpenPr}
+          isViewingPreviousVersion={isViewingPreviousVersion}
+        />
+      }
+    >
+      <AgentPlaygroundTestChat
+        agentId={agentId}
+        agentName={agentName}
+        modelVersion={modelVersion}
+        agentVersionId={agentVersionId}
+        hasMemory={hasMemory}
+      />
+    </AgentLayout>
   );
 }

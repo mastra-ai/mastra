@@ -4,10 +4,12 @@ import { Save } from 'lucide-react';
 import { useMemo } from 'react';
 import { useFormState } from 'react-hook-form';
 
+import { ActivatedSkillsProvider } from '../../context/activated-skills-context';
 import { AgentSettingsProvider } from '../../context/agent-context';
 import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { BrowserSessionProvider } from '../../context/browser-session-provider';
 import { useAgent } from '../../hooks/use-agent';
+import { buildAgentDefaultSettings } from '../../utils/agent-default-settings';
 import { AgentChat } from '../agent-chat';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
@@ -67,33 +69,35 @@ export function AgentPlaygroundTestChat({
 
   const editFormCtx = useOptionalAgentEditFormContext();
   const { data: agent } = useAgent(agentId);
+  const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
   return (
-    <AgentSettingsProvider agentId={agentId} defaultSettings={{ modelSettings: {} }}>
+    <AgentSettingsProvider agentId={agentId} defaultSettings={defaultSettings}>
       <BrowserSessionProvider agentId={agentId} threadId={testThreadId} enabled={Boolean(agent?.browserTools?.length)}>
-        <DatasetSaveProvider
-          enabled
-          threadId={testThreadId}
-          agentId={agentId}
-          requestContext={hasRequestContext ? mergedRequestContext : undefined}
-        >
-          <div className="flex flex-col h-full">
-            {editFormCtx && <UnsavedChangesBanner ctx={editFormCtx} />}
-            <div className="flex-1 min-h-0">
-              <AgentChat
-                key={testThreadId}
-                agentId={agentId}
-                agentName={agentName}
-                modelVersion={modelVersion}
-                agentVersionId={agentVersionId}
-                threadId={testThreadId}
-                memory={hasMemory}
-                refreshThreadList={async () => {}}
-                isNewThread
-              />
+        <ActivatedSkillsProvider key={testThreadId}>
+          <DatasetSaveProvider
+            enabled
+            threadId={testThreadId}
+            agentId={agentId}
+            requestContext={hasRequestContext ? mergedRequestContext : undefined}
+          >
+            <div className="flex flex-col h-full">
+              {editFormCtx && <UnsavedChangesBanner ctx={editFormCtx} />}
+              <div className="flex-1 min-h-0">
+                <AgentChat
+                  key={testThreadId}
+                  agentId={agentId}
+                  agentName={agentName}
+                  modelVersion={modelVersion}
+                  agentVersionId={agentVersionId}
+                  threadId={testThreadId}
+                  memory={hasMemory}
+                  isNewThread
+                />
+              </div>
             </div>
-          </div>
-        </DatasetSaveProvider>
+          </DatasetSaveProvider>
+        </ActivatedSkillsProvider>
       </BrowserSessionProvider>
     </AgentSettingsProvider>
   );

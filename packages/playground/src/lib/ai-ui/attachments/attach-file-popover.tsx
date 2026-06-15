@@ -1,0 +1,104 @@
+import { Button, Icon, Input, Label, Popover, PopoverContent, PopoverTrigger, Txt } from '@mastra/playground-ui';
+
+import { CloudUpload, Link, PlusIcon } from 'lucide-react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
+import { useComposerAttachments } from './composer-attachments';
+
+/**
+ * "+" composer action opening a popover to attach a file via public URL or
+ * from the local file system.
+ */
+export const AttachFilePopover = () => {
+  const [open, setOpen] = useState(false);
+  const { addFiles, addUrl } = useComposerAttachments();
+
+  const openFilePicker = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.hidden = true;
+    document.body.appendChild(input);
+
+    input.onchange = e => {
+      const fileList = (e.target as HTMLInputElement).files;
+      if (fileList && fileList.length > 0) {
+        addFiles(fileList);
+        setOpen(false);
+      }
+      document.body.removeChild(input);
+    };
+
+    input.oncancel = () => {
+      if (!input.files || input.files.length === 0) {
+        document.body.removeChild(input);
+      }
+    };
+
+    input.click();
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    // The popover is portaled out of the composer form in the DOM, but React
+    // still bubbles the submit event through the component tree — stop it so
+    // adding a URL doesn't also send the chat message.
+    e.stopPropagation();
+
+    const formData = new FormData(e.target as HTMLFormElement);
+    const url = formData.get('url-attachment')?.toString();
+
+    if (url) {
+      await addUrl(url);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="default" size="icon-md" type="button" tooltip="Add attachment">
+          <PlusIcon className="h-5 w-5 text-neutral3 hover:text-neutral6" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-4">
+        <form onSubmit={handleSubmit} className="flex flex-row items-end gap-2">
+          <div className="w-full space-y-1">
+            <Label htmlFor="url-attachment" className="text-neutral3 text-ui-md">
+              Public URL
+            </Label>
+            <Input
+              type="text"
+              name="url-attachment"
+              id="url-attachment"
+              className="w-full"
+              placeholder="https://placehold.co/600x400/png"
+            />
+          </div>
+          <Button type="submit" className="h-8!" variant="default">
+            <Icon>
+              <Link />
+            </Icon>
+            Add
+          </Button>
+        </form>
+
+        <hr className="my-3 border-border1" />
+
+        <div className="space-y-2">
+          <Txt variant="ui-md" className="text-neutral3">
+            Or from your computer
+          </Txt>
+          <button
+            type="button"
+            onClick={openFilePicker}
+            className="w-full h-28 border border-border1 rounded-lg text-neutral3 border-dashed flex flex-col items-center justify-center gap-2 hover:bg-surface2 active:bg-surface3"
+          >
+            <CloudUpload className="size-8" />
+            <Txt variant="ui-lg">Add a local file</Txt>
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};

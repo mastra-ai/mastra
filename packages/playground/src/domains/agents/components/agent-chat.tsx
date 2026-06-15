@@ -20,11 +20,13 @@ export const AgentChat = ({
   messageId,
   isNewThread,
   hideModelSwitcher,
+  runOptionsSlot,
 }: Omit<ChatProps, 'initialMessages'> & {
   memory?: boolean;
   messageId?: string;
   isNewThread?: boolean;
   hideModelSwitcher?: boolean;
+  runOptionsSlot?: React.ReactNode;
 }) => {
   const { settings } = useAgentSettings();
   const requestContext = useMergedRequestContext();
@@ -82,6 +84,7 @@ export const AgentChat = ({
         threadId={threadId}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
+        runOptionsSlot={runOptionsSlot}
       />
     </ChatProvider>
   );

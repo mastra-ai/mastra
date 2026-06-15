@@ -36,17 +36,16 @@ vi.mock('@mastra/playground-ui', async () => {
 
 afterEach(cleanup);
 
-function expectResizableLayoutContract(mainPanelClassNames: string[]) {
+function expectPanelGroupContract() {
   const panelGroup = screen.getByTestId('panel-group');
   expect(panelGroup.className).toContain('h-full');
   expect(panelGroup.className).toContain('min-h-0');
   expect(panelGroup.className).toContain('w-full');
   expect(panelGroup.className).toContain('min-w-0');
   expect(panelGroup.className).not.toContain('min-w-min');
+}
 
-  expect(screen.getByTestId('collapsible-left-slot').className).toContain('min-w-0');
-  expect(screen.getByTestId('collapsible-right-slot').className).toContain('min-w-0');
-
+function expectMainPanelContract(mainPanelClassNames: string[]) {
   const mainPanel = screen.getByTestId('panel-main-slot');
   expect(mainPanel.className).toContain('min-w-0');
   for (const className of mainPanelClassNames) {
@@ -55,14 +54,23 @@ function expectResizableLayoutContract(mainPanelClassNames: string[]) {
 }
 
 describe('resizable service layouts', () => {
-  it('keeps the agent panel group shrinkable when side slots are present', () => {
+  it('renders the agent layout as a two-panel group with a non-collapsible left slot', () => {
     render(
-      <AgentLayout agentId="chef-agent" leftSlot={<div>threads</div>} rightSlot={<div>agent information</div>}>
+      <AgentLayout agentId="chef-agent" leftSlot={<div>threads</div>}>
         <div>chat</div>
       </AgentLayout>,
     );
 
-    expectResizableLayoutContract(['grid', 'overflow-y-auto']);
+    expectPanelGroupContract();
+    expectMainPanelContract(['grid', 'overflow-y-auto']);
+
+    // The left slot is a plain resizable panel (no collapse affordance) …
+    expect(screen.getByTestId('panel-left-slot').className).toContain('min-w-0');
+    expect(screen.queryByTestId('collapsible-left-slot')).toBeNull();
+
+    // … and the right information panel is gone for good.
+    expect(screen.queryByTestId('panel-right-slot')).toBeNull();
+    expect(screen.queryByTestId('collapsible-right-slot')).toBeNull();
   });
 
   it('keeps the workflow panel group shrinkable when side slots are present', () => {
@@ -72,6 +80,9 @@ describe('resizable service layouts', () => {
       </WorkflowLayout>,
     );
 
-    expectResizableLayoutContract(['overflow-y-auto']);
+    expectPanelGroupContract();
+    expectMainPanelContract(['overflow-y-auto']);
+    expect(screen.getByTestId('collapsible-left-slot').className).toContain('min-w-0');
+    expect(screen.getByTestId('collapsible-right-slot').className).toContain('min-w-0');
   });
 });

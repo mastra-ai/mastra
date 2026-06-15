@@ -1,16 +1,15 @@
 import { Tab, TabList, Tabs, Tooltip, TooltipContent, TooltipTrigger, Txt, Icon } from '@mastra/playground-ui';
-import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch, Radio } from 'lucide-react';
+import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
-export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces' | 'channels';
+export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces' | 'settings';
 
 interface AgentPageTabsProps {
   agentId: string;
   activeTab: AgentPageTab;
   showPlayground?: boolean;
   showObservability?: boolean;
-  showChannels?: boolean;
   reviewBadge?: number;
   rightSlot?: React.ReactNode;
 }
@@ -85,7 +84,6 @@ export function AgentPageTabs({
   activeTab,
   showPlayground = false,
   showObservability = false,
-  showChannels = false,
   reviewBadge,
   rightSlot,
 }: AgentPageTabsProps) {
@@ -110,7 +108,9 @@ export function AgentPageTabs({
     evaluate: `/agents/${agentId}/evaluate`,
     review: `/agents/${agentId}/review`,
     traces: `/agents/${agentId}/traces`,
-    channels: `/agents/${agentId}/channels`,
+    // Settings is reachable from the agent view header, not from a tab; the
+    // entry only exists so the tab bar can stay unhighlighted on that route.
+    settings: `/agents/${agentId}/settings`,
   };
 
   const handleTabChange = (value: AgentPageTab) => {
@@ -118,8 +118,15 @@ export function AgentPageTabs({
   };
 
   return (
-    <div className="flex min-w-0 items-center gap-2 p-1.5">
-      <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="flex-1 min-w-0">
+    // Below lg the rightSlot buttons wrap onto their own line (right-aligned)
+    // when the full tab list no longer fits, so the tabs keep the full row width.
+    <div className="flex min-w-0 items-center gap-2 p-1.5 max-lg:flex-wrap">
+      <Tabs
+        value={activeTab}
+        defaultTab={activeTab}
+        onValueChange={handleTabChange}
+        className="flex-1 min-w-0 max-lg:flex-auto"
+      >
         <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab
@@ -151,10 +158,9 @@ export function AgentPageTabs({
             disabled={!showObservability}
             disabledReason={observabilityDisabledReason}
           />
-          {showChannels && <AgentTab value="channels" icon={<Radio />} label="Channels" />}
         </TabList>
       </Tabs>
-      {rightSlot && <div className="flex items-center gap-2">{rightSlot}</div>}
+      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
     </div>
   );
 }

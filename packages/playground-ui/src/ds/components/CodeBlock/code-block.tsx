@@ -1,3 +1,4 @@
+import React from 'react';
 import { Code } from '../Code';
 import { CopyButton } from '../CopyButton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
@@ -27,6 +28,9 @@ export interface CodeBlockProps {
   overflow?: CodeBlockOverflow;
   copyMessage?: string;
   copyTooltip?: string;
+  /** Rendered at the inline end of the header row (tabs, select, or file name),
+   *  for consumer controls that belong with the code surface — e.g. a mode toggle. */
+  actions?: React.ReactNode;
   className?: string;
 }
 
@@ -41,6 +45,7 @@ export function CodeBlock({
   overflow = 'wrap',
   copyMessage,
   copyTooltip,
+  actions,
   className,
 }: CodeBlockProps) {
   const hasOptions = options && options.length > 0;
@@ -57,13 +62,21 @@ export function CodeBlock({
     >
       {useTabs && options && (
         <Tabs defaultTab={options[0].value} value={activeValue} onValueChange={onValueChange ?? (() => {})}>
-          <TabList>
-            {options.map(opt => (
-              <Tab key={opt.value} value={opt.value}>
-                {opt.label}
-              </Tab>
-            ))}
-          </TabList>
+          <div className="flex items-stretch">
+            <div className="min-w-0 flex-1">
+              <TabList>
+                {options.map(opt => (
+                  <Tab key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </Tab>
+                ))}
+              </TabList>
+            </div>
+            {actions && (
+              /* Same border token as the `line` TabList so the header rule runs unbroken under the actions. */
+              <div className="flex shrink-0 items-center border-b border-border1 pr-2 pl-3">{actions}</div>
+            )}
+          </div>
         </Tabs>
       )}
 
@@ -81,13 +94,19 @@ export function CodeBlock({
               ))}
             </SelectContent>
           </Select>
+          {actions && <div className="ml-auto flex items-center">{actions}</div>}
         </div>
       )}
 
       {!hasOptions && fileName && (
         <div className="flex items-center border-b border-border2/40 px-4 py-2">
           <figcaption className="font-mono text-ui-sm text-neutral4">{fileName}</figcaption>
+          {actions && <div className="ml-auto flex items-center">{actions}</div>}
         </div>
+      )}
+
+      {!hasOptions && !fileName && actions && (
+        <div className="flex items-center justify-end border-b border-border2/40 px-2 py-1.5">{actions}</div>
       )}
 
       <div className="relative">

@@ -87,6 +87,8 @@ interface UseChatSendHandlerArgs {
   refreshObservationalMemory: (operationType?: string) => void;
   handleActivation: (data: any) => void;
   resetObservationalMemoryStreamState: () => void;
+  /** Receives every raw stream chunk so token usage can be accumulated */
+  recordUsageChunk?: (chunk: unknown) => void;
 }
 
 const buildRequestContext = (deps: SendDeps) => {
@@ -131,6 +133,7 @@ export const useChatSendHandler = ({
   refreshObservationalMemory,
   handleActivation,
   resetObservationalMemoryStreamState,
+  recordUsageChunk,
 }: UseChatSendHandlerArgs) => {
   const baseClient = useMastraClient();
   const queryClient = useQueryClient();
@@ -252,6 +255,7 @@ export const useChatSendHandler = ({
             modelSettings: deps.modelSettingsArgs,
             tracingOptions: deps.tracingOptions,
             onChunk: async (chunk: any) => {
+              recordUsageChunk?.(chunk);
               if (chunk.type === 'finish') {
                 if (isMaxStepsFinishChunk(chunk)) {
                   setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, deps.maxSteps)]);
@@ -289,6 +293,7 @@ export const useChatSendHandler = ({
       completeObservationalMemoryBuffering,
       handleHandledChunk,
       isRunningStream,
+      recordUsageChunk,
       refreshThreadList,
       refreshWorkingMemory,
       resetObservationalMemoryStreamState,

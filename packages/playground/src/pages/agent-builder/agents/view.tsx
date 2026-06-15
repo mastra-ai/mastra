@@ -55,8 +55,8 @@ const ViewPageForm = ({ storedAgent }: ViewPageFormProps) => {
   const body = (
     <AgentBuilderViewLayout
       topBar={<ViewTopBarSlot />}
-      chat={<AgentChatPanelChat hasBrowser={hasBrowser} hideBrowserSidebar />}
-      browserOverlay={hasBrowser ? <BrowserViewPanel hideSidebar /> : undefined}
+      chat={<AgentChatPanelChat hasBrowser={hasBrowser} />}
+      browserOverlay={hasBrowser ? <BrowserViewPanel /> : undefined}
     />
   );
 

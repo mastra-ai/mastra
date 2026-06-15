@@ -4,14 +4,15 @@ import { useParams, useLocation } from 'react-router';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
 import { AgentTopBarControls } from '@/domains/agents/components/agent-top-bar-controls';
+import { AgentTracingControls } from '@/domains/agents/components/agent-tracing-controls';
 import { PlaygroundModelProvider } from '@/domains/agents/context/playground-model-context';
 import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
-import { useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
 import { cleanProviderId } from '@/domains/llm/utils';
+import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
@@ -19,8 +20,6 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const { isCmsAvailable } = useIsCmsAvailable();
   const { hasObservability } = useHasObservability();
-  const { data: channelPlatforms } = useChannelPlatforms();
-  const hasChannels = Boolean(channelPlatforms?.length);
 
   const isExperimentalFeatures = coreFeatures.has('datasets');
   const showPlayground = isCmsAvailable && isExperimentalFeatures;
@@ -40,13 +39,18 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         ? 'review'
         : location.pathname.includes('/traces')
           ? 'traces'
-          : location.pathname.includes('/channels')
-            ? 'channels'
+          : location.pathname.includes('/settings')
+            ? 'settings'
             : 'chat';
 
   const showTopBarControls =
     (activeTab === 'versions' || activeTab === 'evaluate' || activeTab === 'review') &&
     (showPlayground || showObservability);
+
+  // Tracing options are run-scoped but rarely touched: they live in the tab
+  // bar instead of the chat composer.
+  const showTracingControls =
+    activeTab === 'chat' || activeTab === 'versions' || activeTab === 'evaluate' || activeTab === 'review';
 
   const content = (
     <MainContentLayout>
@@ -55,20 +59,28 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         activeTab={activeTab}
         showPlayground={showPlayground}
         showObservability={showObservability}
-        showChannels={hasChannels}
-        rightSlot={showTopBarControls ? <AgentTopBarControls requestContextSchema={requestContextSchema} /> : undefined}
+        rightSlot={
+          showTopBarControls || showTracingControls ? (
+            <>
+              {showTopBarControls && <AgentTopBarControls requestContextSchema={requestContextSchema} />}
+              {showTracingControls && <AgentTracingControls />}
+            </>
+          ) : undefined
+        }
       />
       {children}
     </MainContentLayout>
   );
 
   return (
-    <SchemaRequestContextProvider>
-      <PlaygroundModelProvider defaultProvider={defaultProvider} defaultModel={defaultModel}>
-        <GenerationProvider>
-          <ReviewQueueProvider>{content}</ReviewQueueProvider>
-        </GenerationProvider>
-      </PlaygroundModelProvider>
-    </SchemaRequestContextProvider>
+    <TracingSettingsProvider entityId={agentId!} entityType="agent">
+      <SchemaRequestContextProvider>
+        <PlaygroundModelProvider defaultProvider={defaultProvider} defaultModel={defaultModel}>
+          <GenerationProvider>
+            <ReviewQueueProvider>{content}</ReviewQueueProvider>
+          </GenerationProvider>
+        </PlaygroundModelProvider>
+      </SchemaRequestContextProvider>
+    </TracingSettingsProvider>
   );
 };

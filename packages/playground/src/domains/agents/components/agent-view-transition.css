@@ -1,0 +1,109 @@
+/*
+ * Chat <-> Settings view transition choreography.
+ *
+ * The header toggle navigates with `viewTransition: true`, so browsers with the
+ * View Transitions API animate between route snapshots in the top layer. The
+ * named pieces below move independently of the default root crossfade:
+ *
+ * - opening settings: the composer slides down toward the bottom edge while the
+ *   settings panel slides in from under the header
+ * - closing settings: the settings panel slides back up while the composer
+ *   rises from the bottom edge
+ *
+ * Direction needs no JS state: the composer only exists in the chat view and
+ * the settings panel only in the settings view, so each is always either the
+ * `old` (exit) or `new` (enter) half of its image pair.
+ *
+ * Snapshots animate in the top layer without affecting layout, which also
+ * avoids the scrollbar flash the old in-flow translate animation caused.
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(agent-chat-composer) {
+    animation: agent-vt-sink 200ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  ::view-transition-new(agent-chat-composer) {
+    animation: agent-vt-rise 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  ::view-transition-old(agent-settings-view) {
+    animation: agent-vt-tuck 200ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+
+  ::view-transition-new(agent-settings-view) {
+    animation: agent-vt-drop 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes agent-vt-sink {
+  to {
+    opacity: 0;
+    transform: translateY(48px);
+  }
+}
+
+@keyframes agent-vt-rise {
+  from {
+    opacity: 0;
+    transform: translateY(48px);
+  }
+}
+
+@keyframes agent-vt-tuck {
+  to {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+}
+
+@keyframes agent-vt-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+}
+
+/*
+ * Fallback for browsers without the View Transitions API (applied only there —
+ * see pages/agents/agent/index.tsx). Opacity-only: an in-flow translate would
+ * overflow the main panel and flash its scrollbar during the animation.
+ */
+@keyframes agent-view-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.agent-view-enter {
+  animation: agent-view-enter 200ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-view-enter {
+    animation: none;
+  }
+}
+
+/* Memory card expansion: the detail content fades in once the card has grown */
+@keyframes memory-card-content-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.memory-card-content {
+  animation: memory-card-content-enter 200ms ease-out 100ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-card-content {
+    animation: none;
+  }
+}
