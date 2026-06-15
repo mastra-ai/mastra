@@ -1,8 +1,10 @@
 import { Drawer as DrawerPrimitive } from '@base-ui/react/drawer';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
+import { XIcon } from 'lucide-react';
 import * as React from 'react';
 
+import { Button } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
 
 // Swipe/stack transforms live in drawer.css — unreadable as Tailwind arbitrary values.
@@ -352,7 +354,7 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
       aria-hidden
       data-slot="drawer-side-handle"
       className={cn(
-        'absolute top-1/2 z-10 flex h-20 w-5 -translate-y-1/2 touch-none select-none items-center justify-center cursor-ew-resize',
+        'absolute top-1/2 z-10 flex h-20 w-5 -translate-y-1/2 touch-none select-none items-center justify-center cursor-ew-resize lg:hidden',
         side === 'right' ? '-left-2' : '-right-2',
       )}
     >
@@ -365,12 +367,14 @@ DrawerFloatingSideHandle.displayName = 'DrawerFloatingSideHandle';
 type DrawerContentProps = Omit<DrawerPrimitive.Popup.Props, 'className' | 'children'> & {
   className?: string;
   children?: React.ReactNode;
+  /** Shows the built-in top-right close button. Defaults to `true`. */
+  showCloseButton?: boolean;
 } & Pick<DrawerPopupVariantsProps, 'variant'>;
 
 // Opinionated bundle: Portal + Backdrop + Viewport + Popup, with handle on top/bottom sheets.
 // Drop to the primitives for non-modal pages, custom portal targets, or chrome outside the popup.
 const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
-  ({ className, children, variant, ...props }, ref) => {
+  ({ className, children, variant, showCloseButton = true, ...props }, ref) => {
     const { side, variant: contextVariant, resolvedOverlay } = useDrawerContext();
     const resolvedVariant = variant ?? contextVariant;
     const showHandle = side === 'top' || side === 'bottom';
@@ -383,6 +387,7 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
             {showHandle && side === 'bottom' && <DrawerHandleBar />}
             <DrawerFloatingSideHandle side={side} variant={resolvedVariant} />
             <div data-slot="drawer-content" className={cn('relative flex min-h-0 flex-1 flex-col', nestedFadeClass)}>
+              {showCloseButton && <DrawerDefaultCloseButton />}
               {children}
             </div>
             {showHandle && side === 'top' && <DrawerHandleBar />}
@@ -394,8 +399,21 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
 );
 DrawerContent.displayName = 'DrawerContent';
 
+const DrawerDefaultCloseButton = () => (
+  <DrawerClose asChild>
+    <Button type="button" variant="ghost" size="icon-sm" className="absolute top-3 right-3 z-10" aria-label="Close">
+      <XIcon />
+    </Button>
+  </DrawerClose>
+);
+DrawerDefaultCloseButton.displayName = 'DrawerDefaultCloseButton';
+
 const DrawerHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div data-slot="drawer-header" className={cn('flex flex-col gap-0.5 px-4 py-3 text-left', className)} {...props} />
+  <div
+    data-slot="drawer-header"
+    className={cn('flex flex-col gap-0.5 px-4 py-3 pr-12 text-left', className)}
+    {...props}
+  />
 );
 DrawerHeader.displayName = 'DrawerHeader';
 
