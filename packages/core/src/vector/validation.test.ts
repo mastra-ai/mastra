@@ -35,6 +35,10 @@ function catchMastraError(fn: () => void): MastraError {
   }
 }
 
+function expectErrorDetailsMessage(err: MastraError, pattern: RegExp): void {
+  expect(err.details?.message).toEqual(expect.stringMatching(pattern));
+}
+
 const STORE = 'TEST_STORE';
 
 // ---------------------------------------------------------------------------
@@ -78,7 +82,7 @@ describe('validateUpsertInput', () => {
   it('throws MastraError when vectors is null', () => {
     const err = catchMastraError(() => validateUpsertInput(STORE, null));
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/empty/i);
+    expectErrorDetailsMessage(err, /empty/i);
   });
 
   it('throws MastraError when vectors is undefined', () => {
@@ -89,7 +93,7 @@ describe('validateUpsertInput', () => {
   it('throws MastraError when vectors is an empty array', () => {
     const err = catchMastraError(() => validateUpsertInput(STORE, []));
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/empty/i);
+    expectErrorDetailsMessage(err, /empty/i);
   });
 
   it('error id contains the store name for empty vectors', () => {
@@ -111,12 +115,12 @@ describe('validateUpsertInput', () => {
       ),
     );
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/metadata/i);
+    expectErrorDetailsMessage(err, /metadata/i);
   });
 
-  it('error message for metadata mismatch mentions length', () => {
+  it('error details message for metadata mismatch mentions length', () => {
     const err = catchMastraError(() => validateUpsertInput(STORE, [[1, 2]], [{ a: 1 }, { b: 2 }]));
-    expect(err.message).toMatch(/length/i);
+    expectErrorDetailsMessage(err, /length/i);
   });
 
   // --- ids length mismatch ---
@@ -134,12 +138,12 @@ describe('validateUpsertInput', () => {
       ),
     );
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/ids/i);
+    expectErrorDetailsMessage(err, /ids/i);
   });
 
-  it('error message for ids mismatch mentions length', () => {
+  it('error details message for ids mismatch mentions length', () => {
     const err = catchMastraError(() => validateUpsertInput(STORE, [[1, 2]], undefined, ['id-1', 'id-2']));
-    expect(err.message).toMatch(/length/i);
+    expectErrorDetailsMessage(err, /length/i);
   });
 });
 
@@ -167,7 +171,7 @@ describe('validateTopK', () => {
   it('throws MastraError for topK = 0', () => {
     const err = catchMastraError(() => validateTopK(STORE, 0));
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/positive integer/i);
+    expectErrorDetailsMessage(err, /positive integer/i);
   });
 
   it('throws MastraError for negative topK', () => {
@@ -178,7 +182,7 @@ describe('validateTopK', () => {
   it('throws MastraError for a float topK', () => {
     const err = catchMastraError(() => validateTopK(STORE, 1.5));
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/positive integer/i);
+    expectErrorDetailsMessage(err, /positive integer/i);
   });
 
   it('throws MastraError for NaN', () => {
@@ -228,7 +232,7 @@ describe('validateVectorValues', () => {
     const vectors = [[1, 2], null] as any;
     const err = catchMastraError(() => validateVectorValues(STORE, vectors));
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/null or undefined/i);
+    expectErrorDetailsMessage(err, /null or undefined/i);
   });
 
   // --- invalid component values ---
@@ -236,13 +240,13 @@ describe('validateVectorValues', () => {
   it('throws MastraError for NaN in a vector component', () => {
     const err = catchMastraError(() => validateVectorValues(STORE, [[1, NaN, 3]]));
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/invalid value/i);
+    expectErrorDetailsMessage(err, /invalid value/i);
   });
 
   it('throws MastraError for Infinity in a vector component', () => {
     const err = catchMastraError(() => validateVectorValues(STORE, [[1, Infinity, 3]]));
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/invalid value/i);
+    expectErrorDetailsMessage(err, /invalid value/i);
   });
 
   it('throws MastraError for -Infinity in a vector component', () => {
@@ -254,7 +258,7 @@ describe('validateVectorValues', () => {
     const vectors = [[null, 0.5] as any as number[]];
     const err = catchMastraError(() => validateVectorValues(STORE, vectors));
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/invalid value/i);
+    expectErrorDetailsMessage(err, /invalid value/i);
   });
 
   it('includes vector index in the error details', () => {
@@ -263,12 +267,12 @@ describe('validateVectorValues', () => {
       [3, NaN],
     ] as number[][];
     const err = catchMastraError(() => validateVectorValues(STORE, vectors));
-    expect(err.message).toMatch(/\[1\]/);
+    expectErrorDetailsMessage(err, /\[1\]/);
   });
 
   it('includes component index in the error details', () => {
     const err = catchMastraError(() => validateVectorValues(STORE, [[1, 2, NaN]]));
-    expect(err.message).toMatch(/\[2\]/);
+    expectErrorDetailsMessage(err, /\[2\]/);
   });
 
   it('error id contains the store name', () => {
@@ -306,7 +310,7 @@ describe('validateUpsert', () => {
   it('throws for NaN values when validateValues = true', () => {
     const err = catchMastraError(() => validateUpsert(STORE, [[NaN, 0.5]], undefined, undefined, true));
     expect(err).toBeInstanceOf(MastraError);
-    expect(err.message).toMatch(/invalid value/i);
+    expectErrorDetailsMessage(err, /invalid value/i);
   });
 
   it('throws for Infinity values when validateValues = true', () => {
