@@ -26,9 +26,9 @@ new MastraEditor({
       agent: {
         models: {
           allowed: [
-            { provider: 'openai', modelId: 'gpt-5.4-mini' },
-            { provider: 'openai', modelId: 'gpt-5.4' },
-            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+            { provider: 'openai', modelId: '__GATEWAY_OPENAI_MODEL_MINI__' },
+            { provider: 'openai', modelId: '__GATEWAY_OPENAI_MODEL__' },
+            { provider: 'anthropic', modelId: '__GATEWAY_ANTHROPIC_MODEL_OPUS__' },
           ],
         },
       },
@@ -53,6 +53,6 @@ See the [`builder.configuration.agent.models`](/reference/editor/agent-builder/b
 
 ## Related
 
-- [Configuration](/docs/agent-builder/configuration) — wire the model policy into the broader Builder config.
-- [`builder.configuration.agent.models`](/reference/editor/agent-builder/builder-models) — full property list.
-- [Provider registry](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/llm/model/provider-registry.json) — every model ID Mastra recognizes out of the box.
+- [Configuration](/docs/agent-builder/configuration): Wire the model policy into the broader Builder config.
+- [`builder.configuration.agent.models`](/reference/editor/agent-builder/builder-models): Full property list.
+- [Provider registry](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/llm/model/provider-registry.json): Every model ID Mastra recognizes out of the box.
