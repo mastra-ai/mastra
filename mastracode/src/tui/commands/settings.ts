@@ -16,7 +16,8 @@ import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
 function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
-  return ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+  const color = ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+  return typeof color === 'string' ? color : undefined;
 }
 
 function commandExists(command: string): Promise<boolean> {

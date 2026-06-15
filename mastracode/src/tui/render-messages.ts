@@ -60,7 +60,8 @@ function getPendingUserMessageLabel(isInterjection?: boolean): string | undefine
 }
 
 function getCurrentModeColor(state: TUIState): string | undefined {
-  return state.harness.getCurrentMode?.()?.metadata?.color as string;
+  const color = state.harness.getCurrentMode?.()?.metadata?.color;
+  return typeof color === 'string' ? color : undefined;
 }
 
 // =============================================================================

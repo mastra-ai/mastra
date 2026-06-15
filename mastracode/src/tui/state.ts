@@ -379,7 +379,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     if (result.activeGoalJudge) {
       return mastra.blue;
     }
-    return options.harness.getCurrentMode()?.metadata?.color;
+    const color = options.harness.getCurrentMode()?.metadata?.color;
+    return typeof color === 'string' ? color : undefined;
   };
   return result;
 }
