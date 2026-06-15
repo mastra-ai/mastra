@@ -1519,7 +1519,7 @@ export class MastraTUI {
         this.state.ui,
       );
 
-      this.state.chatContainer.addChild(component);
+      insertChatComponentWithBoundarySpacing(this.state.chatContainer, component);
       this.state.activeInlineQuestion = component;
       component.focused = true;
       this.state.ui.requestRender();

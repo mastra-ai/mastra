@@ -2,15 +2,15 @@
  * Event handlers for agent lifecycle events:
  * agent_start, agent_end (normal / aborted / error).
  */
-import { Spacer, Text } from '@earendil-works/pi-tui';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 
 import { getCurrentGitBranchAsync } from '../../utils/project.js';
+import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
+import { showError } from '../display.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import { clearPendingUserMessages, removePendingUserMessage } from '../render-messages.js';
-import { BOX_INDENT, theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -147,8 +147,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.streamingMessage = undefined;
   } else if (state.userInitiatedAbort) {
     // Show standalone "Interrupted" if user pressed Ctrl+C but no streaming component
-    state.chatContainer.addChild(new Text(theme.fg('error', 'Interrupted'), BOX_INDENT, 0));
-    state.chatContainer.addChild(new Spacer(1));
+    showError(state, 'Interrupted');
   }
   state.userInitiatedAbort = false;
   if (state.activeGoalJudge) {
@@ -233,7 +232,7 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
       component,
     };
     state.activeGoalJudge = activeGoalJudge;
-    state.chatContainer.addChild(component);
+    insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   }
 
   activeGoalJudge.component.setEvaluation(payload);

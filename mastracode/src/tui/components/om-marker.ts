@@ -3,8 +3,9 @@
  * Supports updating in-place (start → end/failed).
  */
 
-import { Container, Text, Spacer } from '@earendil-works/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 /**
  * Format token count for display (e.g., 7234 -> "7.2k", 234 -> "0.2k", 0 -> "0")
@@ -95,7 +96,6 @@ export class OMMarkerComponent extends Container {
     super();
     this.textChild = new Text(formatMarker(data), BOX_INDENT, 0);
     this.addChild(this.textChild);
-    this.addChild(new Spacer(1));
   }
 
   /**
@@ -103,6 +103,10 @@ export class OMMarkerComponent extends Container {
    */
   update(data: OMMarkerData): void {
     this.textChild.setText(formatMarker(data));
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
   }
 }
 function formatMarker(data: OMMarkerData): string {

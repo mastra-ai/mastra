@@ -16,13 +16,13 @@ import {
   Container,
   getKeybindings,
   Input,
-  Spacer,
   truncateToWidth,
   visibleWidth,
   wrapTextWithAnsi,
 } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 import { MultilineInput } from './multiline-input.js';
 import { WrappingSelectList } from './wrapping-select-list.js';
 
@@ -387,7 +387,6 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     }
 
     this.addChild(this.borderedBox as any);
-    this.addChild(new Spacer(1));
   }
 
   /**
@@ -606,5 +605,9 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       }
       this.input.handleInput(data);
     }
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
   }
 }

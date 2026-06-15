@@ -1,4 +1,4 @@
-import { Container, Spacer, Text } from '@earendil-works/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -29,7 +29,6 @@ export class NotificationSummaryComponent extends Container {
     this.addChild(
       new Text(theme.fg('dim', 'Use notification_inbox to inspect pending notifications.'), BOX_INDENT + 2, 0),
     );
-    this.addChild(new Spacer(1));
   }
 
   getChatSpacingKind(): ChatSpacingKind {

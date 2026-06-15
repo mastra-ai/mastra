@@ -6,6 +6,7 @@
 import { Box, Container, Text, Spacer } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 import { CollapsibleComponent } from './collapsible.js';
 
 export interface ErrorInfo {
@@ -205,8 +206,10 @@ export class ErrorDisplayComponent extends Container {
     // Add bottom border
     const borderBottom = new Text(theme.fg('error', '╰' + '─'.repeat(59) + '╯'), 0, 0);
     box.addChild(borderBottom);
+  }
 
-    this.addChild(new Spacer(1));
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
   }
 
   private createCodeContext(context: NonNullable<ErrorInfo['context']>, errorLine?: number): Container {
