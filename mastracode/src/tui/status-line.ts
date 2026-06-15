@@ -2,7 +2,7 @@
  * Status line rendering — builds the bottom-of-screen status bar
  * showing model, mode, memory progress, and project path.
  */
-import { visibleWidth } from '@mariozechner/pi-tui';
+import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';

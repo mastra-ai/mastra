@@ -78,6 +78,7 @@ minimumReleaseAgeExclude:
   - 'mastra'
   - 'create-mastra'
   - 'mastracode'
+  - '@earendil-works/pi-tui'
   - railway@3.3.1
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).

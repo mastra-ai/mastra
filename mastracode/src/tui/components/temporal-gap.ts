@@ -2,7 +2,7 @@
  * Lightweight inline indicator for temporal gaps between messages.
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Spacer, Text } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
 
 export interface TemporalGapOptions {

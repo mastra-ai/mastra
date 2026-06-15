@@ -3,8 +3,8 @@
  *
  * Pure functions that operate on TUIState — no class dependency.
  */
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Component } from '@mariozechner/pi-tui';
+import { Container, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import { TASKS_STATE_ID } from '@mastra/core/tools';

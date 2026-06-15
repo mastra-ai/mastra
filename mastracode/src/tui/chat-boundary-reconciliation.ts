@@ -1,4 +1,4 @@
-import type { Component, Container } from '@mariozechner/pi-tui';
+import type { Component, Container } from '@earendil-works/pi-tui';
 import { ChatBoundarySpacer, isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
 import { getChatSpacingKind } from './components/chat-spacing.js';
 import type { CompactToolLabelColor } from './components/tool-execution-interface.js';

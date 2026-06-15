@@ -1,5 +1,5 @@
-import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { SelectItem } from '@mariozechner/pi-tui';
+import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import type { SelectItem } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 
 import { setClipboardText } from '../../clipboard/index.js';

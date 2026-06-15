@@ -2,7 +2,7 @@
  * Event handlers for agent lifecycle events:
  * agent_start, agent_end (normal / aborted / error).
  */
-import { Spacer, Text } from '@mariozechner/pi-tui';
+import { Spacer, Text } from '@earendil-works/pi-tui';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 
 import { getCurrentGitBranchAsync } from '../../utils/project.js';

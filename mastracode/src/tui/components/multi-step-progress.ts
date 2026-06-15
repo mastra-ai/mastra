@@ -3,7 +3,7 @@
  * Shows detailed progress with steps, timing, and visual feedback.
  */
 
-import { Container, matchesKey, Text, Spacer } from '@mariozechner/pi-tui';
+import { Container, matchesKey, Text, Spacer } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { theme, mastra } from '../theme.js';
 

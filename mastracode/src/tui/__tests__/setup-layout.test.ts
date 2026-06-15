@@ -15,7 +15,7 @@ vi.mock('node:fs', () => ({
   default: {},
 }));
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   CombinedAutocompleteProvider: class {},
   Spacer: class {
     type = 'spacer';
