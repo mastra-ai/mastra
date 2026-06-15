@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { composeObservationExtractors, composeReflectionExtractors } from '../built-in-extractors';
 import { applyExtractorHooks } from '../extracted-values';
+import { extractStructuredValues } from '../extraction-runner';
 import {
   Extractor,
   buildExtractorPriorLines,
@@ -86,6 +87,32 @@ describe('Extractor', () => {
 
     expect(buildExtractorPriorLines([keep, skip], { keep: 'previous', skip: 'hidden' })).toEqual([
       '<keep>\nprevious\n</keep>',
+    ]);
+  });
+
+  it('returns extractor failures when the structured extraction call fails', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const profile = new Extractor({
+      name: 'Profile',
+      instructions: 'Extract profile.',
+      schema: z.object({ tier: z.string() }),
+    });
+    const agent = {
+      generate: vi.fn().mockRejectedValue(new Error('structured call failed')),
+    };
+
+    const result = await extractStructuredValues({
+      agent: agent as any,
+      source: 'observer',
+      extractors: [priority, profile],
+      sourceMessages: [],
+      sourceOutput: '<observations>Keep the original observation.</observations>',
+    });
+
+    expect(result.values).toEqual({});
+    expect(result.failures).toEqual([
+      { slug: 'priority', error: 'structured call failed' },
+      { slug: 'profile', error: 'structured call failed' },
     ]);
   });
 

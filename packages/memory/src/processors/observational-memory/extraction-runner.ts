@@ -51,18 +51,28 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
 
 ${opts.sourceOutput}${opts.observations ? `\n\n## Parsed Observations\n\n${opts.observations}` : ''}`;
 
-  const output = await opts.agent.generate(
-    [...opts.sourceMessages, { role: 'assistant', content: opts.sourceOutput }, { role: 'user', content: prompt }],
-    {
-      structuredOutput: { schema },
-      ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),
-      ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
-      ...opts.observabilityContext,
-    },
-  );
-  const object = output.object ?? {};
   const values: Record<string, unknown> = {};
   const failures: Array<{ slug: string; error: string }> = [];
+
+  let object: Record<string, unknown>;
+  try {
+    const output = await opts.agent.generate(
+      [...opts.sourceMessages, { role: 'assistant', content: opts.sourceOutput }, { role: 'user', content: prompt }],
+      {
+        structuredOutput: { schema },
+        ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),
+        ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
+        ...opts.observabilityContext,
+      },
+    );
+    object = output.object ?? {};
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      values,
+      failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
+    };
+  }
 
   for (const extractor of structuredExtractors) {
     const value = (object as Record<string, unknown>)[extractor.slug];

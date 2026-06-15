@@ -189,7 +189,11 @@ function parseActivationTTL(
 
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
-import { buildExtractedValueContextSections } from './extracted-values';
+import {
+  buildExtractedValueContextSections,
+  buildThreadMetadataFromExtractedValues,
+  getPriorExtractedValues,
+} from './extracted-values';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
@@ -3472,6 +3476,9 @@ ${formattedMessages}
     registerOp(record.id, 'reflecting');
 
     try {
+      const thread = await this.storage.getThreadById({ threadId });
+      const previousOmMetadata = getThreadOMMetadata(thread?.metadata);
+      const priorExtractedValues = getPriorExtractedValues(previousOmMetadata);
       const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
       const reflectResult = await this.reflector.call(
         record.activeObservations,
@@ -3482,7 +3489,7 @@ ${formattedMessages}
         undefined,
         undefined,
         requestContext,
-        undefined,
+        priorExtractedValues,
         observabilityContext,
         undefined,
       );
@@ -3494,8 +3501,21 @@ ${formattedMessages}
         tokenCount: reflectionTokenCount,
       });
 
-      // Note: Thread metadata (currentTask, suggestedResponse) is preserved on each thread
-      // and doesn't need to be updated during reflection - it was set during observation
+      if (thread && reflectResult.extractedValues) {
+        const metadataUpdate = buildThreadMetadataFromExtractedValues(reflectResult.extractedValues);
+        const newMetadata = setThreadOMMetadata(thread.metadata, {
+          currentTask: metadataUpdate.currentTask ?? previousOmMetadata?.currentTask,
+          suggestedResponse: metadataUpdate.suggestedResponse ?? previousOmMetadata?.suggestedResponse,
+          threadTitle: metadataUpdate.threadTitle ?? previousOmMetadata?.threadTitle,
+          extracted: { ...(previousOmMetadata?.extracted ?? {}), ...(metadataUpdate.extracted ?? {}) },
+        });
+        await this.storage.updateThread({
+          id: threadId,
+          title: thread.title ?? '',
+          metadata: newMetadata,
+        });
+      }
+
       const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
       return { reflected: true, record: updatedRecord, usage: reflectResult.usage };
     } catch (error) {
