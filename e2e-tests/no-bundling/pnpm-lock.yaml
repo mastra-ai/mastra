@@ -22,7 +22,7 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       rollup:
-        specifier: ^4.59.0
+        specifier: ^4.61.1
         version: 4.61.1
       tinyglobby:
         specifier: ^0.2.16
@@ -34,7 +34,7 @@ importers:
         specifier: ^10.3.1
         version: 10.3.3
       vitest:
-        specifier: ^4.1.0
+        specifier: ^4.1.8
         version: 4.1.8(@types/node@25.9.2)(vite@8.0.16(@types/node@25.9.2))
 
 packages:
