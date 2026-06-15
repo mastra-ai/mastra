@@ -1,6 +1,7 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
+import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -2584,8 +2585,11 @@ describe('Observer Agent Helpers', () => {
           ],
         };
 
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_THREAD_ID_KEY, 'test-thread');
+
         await observer.call(undefined, [message], undefined, {
-          requestContext: { threadId: 'test-thread' } as any,
+          requestContext,
         });
 
         // The function model should be resolved with requestContext, looked up,
@@ -2698,8 +2702,11 @@ describe('Observer Agent Helpers', () => {
           ],
         };
 
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_THREAD_ID_KEY, 'test-thread');
+
         await observer.call(undefined, [message], undefined, {
-          requestContext: { threadId: 'test-thread' } as any,
+          requestContext,
         });
 
         expect(spy).toHaveBeenCalledWith('openai/gpt-4o');
