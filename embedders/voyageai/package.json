@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voyageai",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "VoyageAI embeddings integration for Mastra - text, multimodal, and contextualized chunk embeddings",
   "license": "Apache-2.0",
   "type": "module",
@@ -49,10 +49,10 @@
     "@internal/ai-v6": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsup": "^8.5.0",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

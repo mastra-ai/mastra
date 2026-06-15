@@ -147,6 +147,13 @@ Use stagehand_extract to get data from pages.`,
     isOptional: true,
   },
   {
+    name: 'recording',
+    type: 'BrowserRecordingOptions',
+    description:
+      'Alpha option for adding browser recording tools. Provide outputDir to add browser_record and browser_record_caption to the toolset.',
+    isOptional: true,
+  },
+  {
     name: 'excludeTools',
     type: 'StagehandToolName[]',
     description:
@@ -158,7 +165,11 @@ Use stagehand_extract to get data from pages.`,
 
 ## Tools
 
-`StagehandBrowser` provides 7 AI-powered tools for browser automation:
+`StagehandBrowser` provides 7 AI-powered tools for browser automation.
+
+When `recording` is configured, `StagehandBrowser` also adds the alpha `browser_record` and `browser_record_caption` tools. See [Browser recording (alpha)](/docs/browser/recording).
+
+Core tools:
 
 | Tool | Description |
 | - | - |

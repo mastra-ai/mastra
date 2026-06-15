@@ -88,12 +88,18 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
         <DialogTrigger asChild>
           <button
             type="button"
-            className="flex flex-col items-end gap-1 rounded-lg p-1 hover:bg-sidebar-nav-hover transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring"
+            className="flex rounded-lg p-1 hover:bg-sidebar-nav-hover transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring"
           >
-            {isLoadingUpdates && <Spinner className="size-3 text-neutral3" />}
-            {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
-            {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
-            <span className={versionBadgeClassName}>v{mainVersion}</span>
+            <span className="relative inline-flex">
+              {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
+                <span className="absolute -right-1.5 -top-1.5 flex items-center gap-1">
+                  {isLoadingUpdates && <Spinner className="size-3 text-neutral3" />}
+                  {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
+                  {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
+                </span>
+              )}
+              <span className={versionBadgeClassName}>v{mainVersion}</span>
+            </span>
           </button>
         </DialogTrigger>
       </div>
