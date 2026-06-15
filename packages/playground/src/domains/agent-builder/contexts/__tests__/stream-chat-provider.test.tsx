@@ -9,13 +9,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const chatState: { isRunning: boolean; messages: unknown[] } = { isRunning: false, messages: [] };
 const chatListeners = new Set<() => void>();
 const sentMessages: unknown[] = [];
+const useChatCalls: Array<Record<string, unknown>> = [];
 
 const triggerRerender = () => {
   for (const listener of chatListeners) listener();
 };
 
 vi.mock('@mastra/react', () => {
-  const useChat = () => {
+  const useChat = (options: Record<string, unknown>) => {
+    useChatCalls.push(options);
     // Force consumers to subscribe so they re-render when state changes.
     const [, setTick] = useState(0);
     const ref = useRef<() => void>(() => {});
@@ -81,12 +83,36 @@ describe('StreamChatProvider', () => {
     chatState.isRunning = false;
     chatState.messages = [];
     sentMessages.length = 0;
+    useChatCalls.length = 0;
     vi.useFakeTimers();
   });
 
   afterEach(() => {
+    delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
     cleanup();
     vi.useRealTimers();
+  });
+
+  it('opts the agent builder into thread signals by default', () => {
+    renderWithProviders(
+      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
+        <RenderTracker hook={useStreamRunning} onRender={() => {}} />
+      </StreamChatProvider>,
+    );
+
+    expect(useChatCalls.at(-1)).toMatchObject({ enableThreadSignals: true });
+  });
+
+  it('preserves the explicit thread signals opt-out', () => {
+    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
+
+    renderWithProviders(
+      <StreamChatProvider agentId="a" threadId="t" initialMessages={[]}>
+        <RenderTracker hook={useStreamRunning} onRender={() => {}} />
+      </StreamChatProvider>,
+    );
+
+    expect(useChatCalls.at(-1)).toMatchObject({ enableThreadSignals: false });
   });
 
   it('only re-renders running subscribers when isRunning changes (not when messages change)', () => {
@@ -208,7 +234,10 @@ describe('StreamChatProvider', () => {
     expect(payload).toMatchObject({
       message: 'hi',
       threadId: 'thread-xyz',
-      modelSettings: { instructions: 'snapshot-text' },
+      modelSettings: {
+        instructions: 'snapshot-text',
+        providerOptions: { openai: { reasoningEffort: 'low' } },
+      },
     });
     expect(payload).not.toHaveProperty('instructions');
   });
@@ -236,6 +265,9 @@ describe('StreamChatProvider', () => {
     expect((sentMessages[0] as { modelSettings?: { instructions?: string } }).modelSettings).not.toHaveProperty(
       'instructions',
     );
+    expect(sentMessages[0]).toMatchObject({
+      modelSettings: { providerOptions: { openai: { reasoningEffort: 'low' } } },
+    });
 
     rerender(
       <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="">
@@ -247,6 +279,9 @@ describe('StreamChatProvider', () => {
     expect((sentMessages[1] as { modelSettings?: { instructions?: string } }).modelSettings).not.toHaveProperty(
       'instructions',
     );
+    expect(sentMessages[1]).toMatchObject({
+      modelSettings: { providerOptions: { openai: { reasoningEffort: 'low' } } },
+    });
   });
 
   it('does not call sendMessage when extraInstructions changes between sends', () => {
@@ -280,7 +315,12 @@ describe('StreamChatProvider', () => {
 
     send!('go');
     expect(sentMessages).toHaveLength(1);
-    expect(sentMessages[0]).toMatchObject({ modelSettings: { instructions: 'v2' } });
+    expect(sentMessages[0]).toMatchObject({
+      modelSettings: {
+        instructions: 'v2',
+        providerOptions: { openai: { reasoningEffort: 'low' } },
+      },
+    });
   });
 
   it('keeps the chat messages state limited to the user message after a send (snapshot is invisible)', () => {

@@ -1,5 +1,6 @@
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import type {
+  AgentEditorConfig,
   AgentMessageInput,
   AgentModelManagerConfig,
   AgentSignalInput,
@@ -43,6 +44,8 @@ import {
   approveToolCallBodySchema,
   declineToolCallBodySchema,
   toolCallResponseSchema,
+  sendToolApprovalBodySchema,
+  sendToolApprovalResponseSchema,
   updateAgentModelBodySchema,
   reorderAgentModelListBodySchema,
   updateAgentModelInModelListBodySchema,
@@ -58,10 +61,13 @@ import {
   sendAgentSignalBodySchema,
   queueAgentMessageBodySchema,
   subscribeAgentThreadBodySchema,
+  abortAgentThreadBodySchema,
+  abortAgentThreadResponseSchema,
   streamUntilIdleBodySchema,
   resumeStreamBodySchema,
   resumeStreamUntilIdleBodySchema,
 } from '../schemas/agents';
+import type { ProviderListItem } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
 import type { InferParams, RouteSchemas, ServerRoute } from '../server-adapter/routes';
@@ -254,6 +260,7 @@ export interface SerializedAgent {
   provider?: string;
   modelId?: string;
   modelVersion?: string;
+  supportsMemory?: boolean;
   modelList?: Array<
     Omit<AgentModelManagerConfig, 'model'> & {
       model: {
@@ -274,6 +281,7 @@ export interface SerializedAgent {
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
+  editor?: AgentEditorConfig;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -656,6 +664,10 @@ async function formatAgentList({
   }
 
   const model = llm?.getModel();
+  const supportsMemory =
+    typeof (agent as Agent & { supportsMemory?: () => boolean }).supportsMemory === 'function'
+      ? (agent as Agent & { supportsMemory: () => boolean }).supportsMemory()
+      : true;
 
   let models: Awaited<ReturnType<Agent['getModelList']>> | undefined;
   try {
@@ -703,12 +715,14 @@ async function formatAgentList({
         : llm?.getProvider(),
     modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
+    supportsMemory,
     defaultOptions,
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    editor: agent.__getEditorConfig?.(),
     ...(agent.toRawConfig()?.status
       ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
       : {}),
@@ -901,6 +915,10 @@ async function formatAgent({
   const defaultOptions = await agent.getDefaultOptions({ requestContext });
 
   const model = llm?.getModel();
+  const supportsMemory =
+    typeof (agent as Agent & { supportsMemory?: () => boolean }).supportsMemory === 'function'
+      ? (agent as Agent & { supportsMemory: () => boolean }).supportsMemory()
+      : true;
   const models = await agent.getModelList(requestContext);
   const modelList = models?.map(md => ({
     ...md,
@@ -971,12 +989,14 @@ async function formatAgent({
         : llm?.getProvider(),
     modelId: typeof agent.model === 'string' ? parseModelString(agent.model).modelId : llm?.getModelId(),
     modelVersion: model?.specificationVersion,
+    supportsMemory,
     modelList,
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
     requestContextSchema: serializedRequestContextSchema,
     source: (agent as any).source ?? 'code',
+    editor: agent.__getEditorConfig?.(),
     ...(agent.toRawConfig()?.status
       ? { status: agent.toRawConfig()!.status as 'draft' | 'published' | 'archived' }
       : {}),
@@ -1051,9 +1071,22 @@ export const LIST_AGENTS_ROUTE = createRoute({
           storedAgentsResult = null;
         }
 
+        // Build a set of code-defined agent IDs (keys in #agents may be config keys,
+        // not agent.id). Stored configs sharing one of these IDs are overrides and
+        // should not be hydrated as standalone stored agents.
+        const codeAgentIds = new Set<string>();
+        for (const [key, agent] of Object.entries(codeAgents)) {
+          codeAgentIds.add(key);
+          if (agent?.id) codeAgentIds.add(agent.id);
+        }
+
         if (storedAgentsResult?.agents) {
           // Process each agent individually to avoid one bad agent breaking the whole list
           for (const storedAgentConfig of storedAgentsResult.agents) {
+            // Skip stored configs that overlay an existing code-defined agent.
+            // Those are overrides (no standalone model), not standalone stored agents,
+            // and trying to hydrate them as standalone would fail model validation.
+            if (codeAgentIds.has(storedAgentConfig.id)) continue;
             try {
               const agent = await editor?.agent.getById(storedAgentConfig.id, { status: 'draft' });
               if (!agent) continue;
@@ -1430,7 +1463,23 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
             sendUsage: true,
             sendReasoning: true,
             getErrorMessage: (error: any) => {
-              return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+              // Sanitize the error message to prevent leaking internal details,
+              // stack traces, or provider-specific error metadata to the client.
+              // See: https://github.com/mastra-ai/mastra/issues/15827
+              if (error instanceof Error) {
+                const safeMessage = error.message
+                  // Strip file paths (e.g. /home/user/..., C:\users\...)
+                  .replace(/([A-Za-z]:)?[\/][^\s,)]+/g, '<path>')
+                  // Strip stack-trace lines ("at Foo (bar.js:10:5)")
+                  .replace(/\s+at\s+[^\n]*/g, '')
+                  // Strip aiohttp/provider response bodies embedded in messages
+                  .replace(/Response body:.*/s, '')
+                  .trim();
+                return `An error occurred while processing your request. ${safeMessage || 'Unknown error'}`;
+              }
+              // For non-Error objects, avoid JSON.stringify which could dump
+              // entire error payloads (including secrets from provider responses).
+              return 'An error occurred while processing your request.';
             },
           });
 
@@ -1440,6 +1489,63 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
     }
   },
 });
+
+/**
+ * Collect the full list of configured AI model providers (static registry +
+ * gateway providers) in the shape returned by `GET /agents/providers`.
+ *
+ * Extracted so the agent-builder available-models endpoint can reuse the exact
+ * same source data before applying the model policy.
+ */
+export async function buildProvidersList(mastra: Context['mastra']): Promise<ProviderListItem[]> {
+  const allProviders: Record<string, ProviderConfig> = {};
+
+  for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
+    allProviders[id] = provider as ProviderConfig;
+  }
+
+  // Include gateway providers (defaults + user-registered)
+  if (mastra) {
+    const allGateways = mastra.listGateways();
+    if (allGateways) {
+      for (const gateway of Object.values(allGateways)) {
+        // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+        if (gateway.id === 'models.dev') continue;
+        try {
+          const gatewayProviders = await gateway.fetchProviders();
+          for (const [providerId, config] of Object.entries(gatewayProviders)) {
+            // Apply the same prefixing logic as registry-generator to avoid
+            // creating duplicate entries alongside PROVIDER_REGISTRY data.
+            // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
+            // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
+            const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
+            // Only add if not already present from PROVIDER_REGISTRY to prevent
+            // duplicates when PROVIDER_REGISTRY already has the prefixed key
+            // (e.g. dev mode where GatewayRegistry includes custom gateways).
+            if (!(prefixedId in allProviders)) {
+              allProviders[prefixedId] = config;
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
+        }
+      }
+    }
+  }
+
+  return Object.entries(allProviders).map(([id, provider]) => {
+    return {
+      id,
+      name: provider.name,
+      label: (provider as any).label || provider.name,
+      description: (provider as any).description || '',
+      envVar: provider.apiKeyEnvVar,
+      connected: isProviderConnected(id, allProviders),
+      docUrl: provider.docUrl,
+      models: [...provider.models],
+    };
+  });
+}
 
 export const GET_PROVIDERS_ROUTE = createRoute({
   method: 'GET',
@@ -1453,48 +1559,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   requiresPermission: ['agents:read'],
   handler: async ({ mastra }) => {
     try {
-      const allProviders: Record<string, ProviderConfig> = {};
-
-      for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-        allProviders[id] = provider as ProviderConfig;
-      }
-
-      // Include gateway providers (defaults + user-registered)
-      if (mastra) {
-        const allGateways = mastra.listGateways();
-        if (allGateways) {
-          for (const gateway of Object.values(allGateways)) {
-            // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
-            if (gateway.id === 'models.dev') continue;
-            try {
-              const gatewayProviders = await gateway.fetchProviders();
-              for (const [providerId, config] of Object.entries(gatewayProviders)) {
-                // Apply the same prefixing logic as registry-generator to avoid
-                // creating duplicate entries alongside PROVIDER_REGISTRY data.
-                // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
-                // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
-                const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
-                allProviders[prefixedId] = config;
-              }
-            } catch (error) {
-              console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
-            }
-          }
-        }
-      }
-
-      const providers = Object.entries(allProviders).map(([id, provider]) => {
-        return {
-          id,
-          name: provider.name,
-          label: (provider as any).label || provider.name,
-          description: (provider as any).description || '',
-          envVar: provider.apiKeyEnvVar,
-          connected: isProviderConnected(id, allProviders),
-          docUrl: provider.docUrl,
-          models: [...provider.models],
-        };
-      });
+      const providers = await buildProvidersList(mastra);
       return { providers };
     } catch (error) {
       return handleError(error, 'Error fetching providers');
@@ -1594,14 +1659,20 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         };
       }
 
-      const { structuredOutput, ...restOptions } = rest;
+      const { structuredOutput, untilIdle, ...restOptions } = rest;
 
-      const options = {
+      const options: Record<string, any> = {
         ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
       };
+
+      // Support `untilIdle` option on the /stream endpoint — delegates to
+      // the idle-loop wrapper internally (same behaviour as /stream-until-idle).
+      if (untilIdle) {
+        options.untilIdle = untilIdle;
+      }
 
       const streamResult = structuredOutput
         ? await agent.stream(messages, { ...options, structuredOutput })
@@ -1856,6 +1927,50 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
   },
 });
 
+export const ABORT_AGENT_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/threads/abort',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: abortAgentThreadBodySchema,
+  responseSchema: abortAgentThreadResponseSchema,
+  summary: 'Abort active agent thread run',
+  description: 'Aborts the currently active stream run for a memory thread without changing thread subscriptions',
+  tags: ['Agents', 'Streaming'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, resourceId, threadId, requestContext: serverRequestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext: serverRequestContext });
+      if (typeof (agent as { abortThreadStream?: unknown }).abortThreadStream !== 'function') {
+        throw new HTTPException(501, {
+          message: 'agent thread aborts are not supported by this Mastra core version',
+        });
+      }
+
+      const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
+
+      if (!effectiveThreadId) {
+        throw new HTTPException(400, { message: 'threadId is required' });
+      }
+
+      if (effectiveResourceId) {
+        const memory = await agent.getMemory({ requestContext: serverRequestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          await validateThreadOwnership(thread, effectiveResourceId);
+        }
+      }
+
+      const aborted = await agent.abortThreadStream({ resourceId: effectiveResourceId, threadId: effectiveThreadId });
+      return { aborted };
+    } catch (error) {
+      return handleError(error, 'error aborting agent thread');
+    }
+  },
+});
+
 export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/threads/subscribe',
@@ -1911,7 +2026,6 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         if (cleanedUp) return;
         cleanedUp = true;
         clearHeartbeat();
-        subscription.abort();
         subscription.unsubscribe();
         if (closeController) {
           try {
@@ -2221,6 +2335,85 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   },
 });
 
+async function validateSubscriptionToolCallThreadAccess({
+  agent,
+  requestContext,
+  resourceId,
+  threadId,
+}: {
+  agent: Agent;
+  requestContext: RequestContext;
+  resourceId?: string;
+  threadId?: string;
+}) {
+  const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+  const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
+
+  if (!effectiveThreadId) {
+    throw new HTTPException(400, { message: 'threadId is required' });
+  }
+
+  if (effectiveResourceId) {
+    const memory = await agent.getMemory({ requestContext });
+    if (memory) {
+      const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+      await validateThreadOwnership(thread, effectiveResourceId);
+    }
+  }
+
+  return { effectiveResourceId: effectiveResourceId ?? '', effectiveThreadId };
+}
+
+export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/send-tool-approval',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  bodySchema: sendToolApprovalBodySchema,
+  responseSchema: sendToolApprovalResponseSchema,
+  summary: 'Send tool approval',
+  description: 'Approves or declines a pending tool call and publishes resumed chunks to thread subscribers',
+  tags: ['Agents', 'Tools'],
+  requiresAuth: true,
+  requiresPermission: 'agents:execute',
+  handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
+    try {
+      const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
+      const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
+
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions,
+        requestContext: serverRequestContext,
+      });
+
+      if (!params.toolCallId) {
+        throw new HTTPException(400, { message: 'Tool call id is required' });
+      }
+
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      sanitizeBody(params, ['tools']);
+      const { effectiveResourceId, effectiveThreadId } = await validateSubscriptionToolCallThreadAccess({
+        agent,
+        requestContext: serverRequestContext,
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+      });
+
+      return await agent.sendToolApproval({
+        ...params,
+        resourceId: effectiveResourceId,
+        threadId: effectiveThreadId,
+        requestContext: serverRequestContext,
+        abortSignal,
+      });
+    } catch (error) {
+      return handleError(error, 'error sending tool approval');
+    }
+  },
+});
+
 export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/decline-tool-call',
@@ -2347,9 +2540,9 @@ export const RESUME_STREAM_ROUTE = createRoute({
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
 
-      const { structuredOutput, ...restOptions } = rest;
+      const { structuredOutput, untilIdle, ...restOptions } = rest;
 
-      const options = {
+      const options: Record<string, any> = {
         runId,
         toolCallId,
         ...restOptions,
@@ -2357,6 +2550,12 @@ export const RESUME_STREAM_ROUTE = createRoute({
         memory: authorizedMemoryOption,
         abortSignal,
       };
+
+      // Support `untilIdle` option on the /resume-stream endpoint — delegates
+      // to the idle-loop wrapper internally (same behaviour as /resume-stream-until-idle).
+      if (untilIdle) {
+        options.untilIdle = untilIdle;
+      }
 
       const streamResult = structuredOutput
         ? await agent.resumeStream(resumeData, { ...options, structuredOutput })

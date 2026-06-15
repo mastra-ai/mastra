@@ -1,16 +1,3 @@
-export const formElementSizes = {
-  sm: 'h-form-sm',
-  md: 'h-form-md',
-  default: 'h-form-default',
-  lg: 'h-form-lg',
-} as const;
-
-// Enhanced focus states with glow effect and smooth transition
-export const formElementFocus =
-  'focus:outline-hidden focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring transition-shadow duration-normal';
-
-export const sharedFormElementFocusStyle =
-  'outline-hidden focus-visible:outline-hidden focus-visible:border-accent1 focus-visible:ring-1 focus-visible:ring-accent1/40';
 export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:cursor-not-allowed';
 
 // Focus indicator for the (green-less) input family. Instead of a heavy ring we
@@ -23,11 +10,17 @@ export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:curs
 export const inputFocusBorderVisible = 'focus-visible:border-neutral5/50';
 export const inputFocusBorderWithin = 'focus-within:border-neutral5/50';
 
-// Hover border for the wrapper variants (InputGroup, Searchbar), guarded with
-// :not(:focus-within) so it can never clobber the focus border. Tailwind emits the
-// `focus-within` variant BEFORE `hover`, so an unguarded `hover:border-*` of equal
-// specificity would win on a field that is focused AND hovered. The bare <Input>
-// does not need this — its `focus-visible` variant is emitted after `hover`.
+// Canonical focus indicator for a bare interactive control (Button, etc.) in the
+// non-accent input/border language: suppress the browser outline and let the 1px
+// border brighten to the same translucent neutral the input family uses. This is
+// what unifies button focus with input focus (no green accent ring). Wrappers
+// whose focus lives on a nested control use `inputFocusBorderWithin` instead.
+export const controlFocusBorderVisible = `outline-hidden focus-visible:outline-hidden ${inputFocusBorderVisible}`;
+
+// Hover borders are guarded so they can never clobber the focus border. Tailwind
+// can emit focus variants before hover variants, so an unguarded `hover:border-*`
+// of equal specificity may win on a field that is focused AND hovered.
+export const inputHoverBorderVisible = '[&:hover:not(:focus-visible)]:border-border2';
 export const inputHoverBorderWithin = '[&:hover:not(:focus-within)]:border-border2';
 
 // Background-agnostic surface + focus recipe shared by Input and Textarea.
@@ -36,18 +29,20 @@ export const inputHoverBorderWithin = '[&:hover:not(:focus-within)]:border-borde
 // single-line inputs, `rounded-xl` for textareas).
 export const inputSurfaceAndFocusStyle =
   'bg-surface-overlay-soft border border-border1 text-neutral5 ' +
-  'hover:text-neutral6 hover:bg-surface-overlay-strong hover:border-border2 ' +
+  'hover:text-neutral6 hover:bg-surface-overlay-strong ' +
+  inputHoverBorderVisible +
+  ' ' +
   'outline-hidden focus-visible:outline-hidden focus-visible:bg-surface-overlay-strong ' +
   inputFocusBorderVisible;
 
 export const inputOutlineAndFocusStyle =
   'bg-transparent border border-border1 text-neutral5 ' +
-  'hover:text-neutral6 hover:border-border2 ' +
+  'hover:text-neutral6 ' +
+  inputHoverBorderVisible +
+  ' ' +
   'outline-hidden focus-visible:outline-hidden ' +
   inputFocusBorderVisible;
 
 // Unstyled variant baseline — strips all chrome but still suppresses the
 // browser default focus ring so the field sits cleanly inside a styled parent.
 export const unstyledFormElementStyle = 'border-0 bg-transparent outline-hidden focus-visible:outline-hidden';
-
-export type FormElementSize = keyof typeof formElementSizes;

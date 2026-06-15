@@ -17,6 +17,7 @@ const VALID_EVENTS: HookEventName[] = [
   'UserPromptSubmit',
   'SessionStart',
   'SessionEnd',
+  'Notification',
 ];
 
 export function loadHooksConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): HooksConfig {

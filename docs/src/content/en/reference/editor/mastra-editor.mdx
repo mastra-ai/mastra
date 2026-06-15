@@ -98,6 +98,21 @@ export const mastra = new Mastra({
       'Agent Builder configuration. See the AgentBuilderOptions reference. Omit or set `enabled: false` to disable the Builder.',
     isOptional: true,
   },
+  {
+    name: 'source',
+    type: "'code' | 'db'",
+    description:
+      "Where agent overrides are stored. With 'db', overrides live in the configured storage backend and Studio shows the save and publish flow. With 'code', overrides live as per-agent JSON files on disk (routed through a local FilesystemStore) and Studio shows filesystem actions. See the Editor overview for the difference.",
+    isOptional: true,
+    defaultValue: "'db'",
+  },
+  {
+    name: 'codePath',
+    type: 'string',
+    description: "Directory used by the 'code' source for per-agent JSON files. Ignored when source is not 'code'.",
+    isOptional: true,
+    defaultValue: "'./mastra/editor/'",
+  },
 ]}
 />
 
@@ -449,3 +464,15 @@ Returns all registered sandbox providers.
 #### `getBlobStoreProviders()`
 
 Returns all registered blob store providers.
+
+### Source
+
+#### `getSource()`
+
+Returns the configured source (`'code'` or `'db'`), or `undefined` when the editor was constructed without an explicit `source`.
+
+```typescript
+const source = mastra.getEditor()?.getSource()
+```
+
+Returns: `'code' | 'db' | undefined`

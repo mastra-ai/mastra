@@ -57,6 +57,7 @@ Each provider page includes installation instructions, configuration parameters,
 - [DynamoDB](/reference/storage/dynamodb)
 - [LanceDB](/reference/storage/lance)
 - [Microsoft SQL Server](/reference/storage/mssql)
+- [Google Cloud Spanner](/reference/storage/spanner)
 
 :::tip
 libSQL is the easiest way to get started because it doesn’t require running a separate database server.
@@ -202,7 +203,7 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       generateTitle: {
-        model: '__OPENAI_MODEL_MINI__',
+        model: '__GATEWAY_OPENAI_MODEL_MINI__',
         instructions: 'Generate a 1 word title',
       },
     },

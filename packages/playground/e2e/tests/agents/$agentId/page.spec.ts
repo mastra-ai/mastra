@@ -26,8 +26,6 @@ test('overall layout information', async ({ page }) => {
   await expect(page.locator('button:has-text("weather-agent")')).toBeVisible();
   const overviewPane = await page.locator('button:has-text("Overview")');
   await expect(overviewPane).toHaveAttribute('aria-selected', 'true');
-  const memoryPane = await page.locator('button:has-text("Memory")');
-  await expect(memoryPane).toHaveAttribute('aria-selected', 'false');
 });
 
 test.describe('agent panels', () => {
@@ -52,9 +50,13 @@ test.describe('composer model settings', () => {
 
     await expect(generateRadio).toBeVisible();
     await expect(generateRadio).toHaveAttribute('aria-checked', 'false');
-    const streamRadio = page.getByRole('radio', { name: 'Stream' });
+    const streamSubscriptionRadio = page.getByRole('radio', { name: 'Stream subscription (default)' });
+    await expect(streamSubscriptionRadio).toBeVisible();
+    await expect(streamSubscriptionRadio).toHaveAttribute('aria-checked', 'true');
+
+    const streamRadio = page.getByRole('radio', { name: 'Stream', exact: true });
     await expect(streamRadio).toBeVisible();
-    await expect(streamRadio).toHaveAttribute('aria-checked', 'true');
+    await expect(streamRadio).toHaveAttribute('aria-checked', 'false');
 
     const networkRadio = page.getByRole('radio', { name: 'Network' });
     await expect(networkRadio).toBeVisible();

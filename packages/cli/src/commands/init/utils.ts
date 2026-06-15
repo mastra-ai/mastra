@@ -654,7 +654,7 @@ export const getAPIKey = async (provider: LLMProvider) => {
       key = 'GROQ_API_KEY';
       return key;
     case 'google':
-      key = 'GOOGLE_GENERATIVE_AI_API_KEY';
+      key = 'GOOGLE_API_KEY';
       return key;
     case 'cerebras':
       key = 'CEREBRAS_API_KEY';

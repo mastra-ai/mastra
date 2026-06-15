@@ -288,9 +288,9 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
         },
       },
     });
-    expect(capturedParts.filter((part: any) => part.type === 'data-system-reminder')).toEqual([
+    expect(capturedParts.filter((part: any) => part.type === 'data-signal')).toEqual([
       expect.objectContaining({
-        type: 'data-system-reminder',
+        type: 'data-signal',
         data: expect.objectContaining({
           type: 'reactive',
           tagName: 'system-reminder',
@@ -392,7 +392,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     await processor.processInputStep(args);
 
     expect(messageList.get.all.db().filter(message => message.id.startsWith('__temporal_gap_'))).toHaveLength(1);
-    expect(capturedParts.filter((part: any) => part.type === 'data-system-reminder')).toHaveLength(1);
+    expect(capturedParts.filter((part: any) => part.type === 'data-signal')).toHaveLength(1);
   });
 
   it('does not reinsert temporal markers on later steps', async () => {
@@ -481,7 +481,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     const markerCountAfterStep0 = messageList.get.all
       .db()
       .filter(message => message.id.startsWith('__temporal_gap_')).length;
-    const reminderCountAfterStep0 = capturedParts.filter((part: any) => part.type === 'data-system-reminder').length;
+    const reminderCountAfterStep0 = capturedParts.filter((part: any) => part.type === 'data-signal').length;
 
     messageList.add(
       createMessage({
@@ -512,8 +512,6 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     expect(messageList.get.all.db().filter(message => message.id.startsWith('__temporal_gap_'))).toHaveLength(
       markerCountAfterStep0,
     );
-    expect(capturedParts.filter((part: any) => part.type === 'data-system-reminder')).toHaveLength(
-      reminderCountAfterStep0,
-    );
+    expect(capturedParts.filter((part: any) => part.type === 'data-signal')).toHaveLength(reminderCountAfterStep0);
   });
 });

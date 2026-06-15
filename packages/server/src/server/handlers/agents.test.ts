@@ -12,11 +12,16 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
+  abortAgentThreadBodySchema,
+  approveToolCallBodySchema,
+  declineToolCallBodySchema,
   queueAgentMessageBodySchema,
   sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
+  sendToolApprovalBodySchema,
 } from '../schemas/agents';
+import { AGENTS_ROUTES } from '../server-adapter/routes/agents';
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
@@ -24,9 +29,11 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  SEND_TOOL_APPROVAL_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
+  ABORT_AGENT_THREAD_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
   isProviderConnected,
   extractVersionOptions,
@@ -967,6 +974,7 @@ describe('Agent Routes Authorization', () => {
         runId: 'test-run-id',
         resumeData: { workflowResult: 'approved' },
         toolCallId: 'tool-call-123',
+        approved: true,
       } as any);
 
       expect(capturedResumeData).toEqual({ workflowResult: 'approved' });
@@ -1094,6 +1102,24 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('SIGNAL_ROUTES', () => {
+    it('should register subscription approval routes with execute permissions', () => {
+      const routeMetadata = AGENTS_ROUTES.map(route => ({
+        path: route.path,
+        method: route.method,
+        requiresPermission: route.requiresPermission,
+      }));
+
+      expect(routeMetadata).toEqual(
+        expect.arrayContaining([
+          {
+            path: '/agents/:agentId/send-tool-approval',
+            method: 'POST',
+            requiresPermission: 'agents:execute',
+          },
+        ]),
+      );
+    });
+
     it('should validate typed user-message signal contents and attributes', () => {
       const body = {
         signal: {
@@ -1306,13 +1332,167 @@ describe('Agent Routes Authorization', () => {
       ).toBe(false);
     });
 
-    it('should accept subscribe thread bodies', () => {
-      expect(
-        subscribeAgentThreadBodySchema.safeParse({
+    it('should accept subscribe, abort, and tool approval bodies', () => {
+      const body = {
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+      };
+      const toolCallBody = {
+        runId: 'run-123',
+        toolCallId: 'tool-call-123',
+      };
+      const subscriptionToolCallBody = {
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+        toolCallId: 'tool-call-123',
+        approved: true,
+      };
+
+      expect(subscribeAgentThreadBodySchema.safeParse(body).success).toBe(true);
+      expect(abortAgentThreadBodySchema.safeParse(body).success).toBe(true);
+      expect(approveToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
+      expect(declineToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
+      expect(sendToolApprovalBodySchema.safeParse(subscriptionToolCallBody).success).toBe(true);
+      expect(sendToolApprovalBodySchema.safeParse(toolCallBody).success).toBe(false);
+    });
+
+    it('should approve a tool call for thread subscriptions with a JSON ack', async () => {
+      (mockAgent as any).sendToolApproval = vi.fn(async params => ({
+        accepted: true,
+        runId: 'run-123',
+        toolCallId: params.toolCallId,
+      }));
+
+      const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+        toolCallId: 'tool-call-123',
+        approved: true,
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+      expect((mockAgent as any).sendToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
           resourceId: 'resource-123',
           threadId: 'thread-123',
-        }).success,
-      ).toBe(true);
+          toolCallId: 'tool-call-123',
+          approved: true,
+        }),
+      );
+    });
+
+    it('should decline a tool call for thread subscriptions with a JSON ack', async () => {
+      (mockAgent as any).sendToolApproval = vi.fn(async params => ({
+        accepted: true,
+        runId: 'run-123',
+        toolCallId: params.toolCallId,
+      }));
+
+      const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+        toolCallId: 'tool-call-123',
+        approved: false,
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+      expect((mockAgent as any).sendToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+          toolCallId: 'tool-call-123',
+          approved: false,
+        }),
+      );
+    });
+
+    it('should reject subscription tool approval for a thread owned by another resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'approval-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Approval Thread B',
+      });
+      (mockAgent as any).sendToolApproval = vi.fn();
+
+      await expect(
+        SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          resourceId: 'user-a',
+          threadId: 'approval-thread-owned-by-b',
+          toolCallId: 'tool-call-123',
+          approved: true,
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      expect((mockAgent as any).sendToolApproval).not.toHaveBeenCalled();
+    });
+
+    it('should reject subscription tool decline for a thread owned by another resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'decline-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Decline Thread B',
+      });
+      (mockAgent as any).sendToolApproval = vi.fn();
+
+      await expect(
+        SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          resourceId: 'user-a',
+          threadId: 'decline-thread-owned-by-b',
+          toolCallId: 'tool-call-123',
+          approved: true,
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      expect((mockAgent as any).sendToolApproval).not.toHaveBeenCalled();
+    });
+
+    it('should approve subscription tool calls using context resource and thread values', async () => {
+      await mockMemory.createThread({
+        threadId: 'approval-thread-from-context',
+        resourceId: 'user-a',
+        title: 'Approval Thread A',
+      });
+      (mockAgent as any).sendToolApproval = vi.fn(async params => ({
+        accepted: true,
+        runId: 'run-123',
+        toolCallId: params.toolCallId,
+      }));
+
+      await SEND_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({
+          resourceId: 'user-a',
+          threadId: 'approval-thread-from-context',
+        }),
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-b',
+        threadId: 'client-thread-ignored',
+        toolCallId: 'tool-call-123',
+        approved: true,
+      } as any);
+
+      expect((mockAgent as any).sendToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resourceId: 'user-a',
+          threadId: 'approval-thread-from-context',
+          toolCallId: 'tool-call-123',
+        }),
+      );
     });
 
     it('should send a signal using context resource and thread values', async () => {
@@ -1574,7 +1754,7 @@ describe('Agent Routes Authorization', () => {
       expect(abort).not.toHaveBeenCalled();
       expect(unsubscribe).not.toHaveBeenCalled();
       await reader.cancel();
-      expect(abort).toHaveBeenCalledTimes(1);
+      expect(abort).not.toHaveBeenCalled();
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
 
@@ -1652,7 +1832,7 @@ describe('Agent Routes Authorization', () => {
         abortController.abort();
         await Promise.resolve();
 
-        expect(abort).toHaveBeenCalledTimes(1);
+        expect(abort).not.toHaveBeenCalled();
         expect(unsubscribe).toHaveBeenCalledTimes(1);
         expect(vi.getTimerCount()).toBe(0);
         await vi.advanceTimersByTimeAsync(25_000);
@@ -1660,6 +1840,35 @@ describe('Agent Routes Authorization', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it('should abort an active thread run without unsubscribing listeners', async () => {
+      await mockMemory.createThread({
+        threadId: 'abort-thread-owned-by-context',
+        resourceId: 'user-a',
+        title: 'Abort Thread',
+      });
+      const requestContext = createContextWithReservedKeys({
+        resourceId: 'user-a',
+        threadId: 'abort-thread-owned-by-context',
+      });
+      const abortThreadStream = vi.fn(() => true);
+      (mockAgent as any).abortThreadStream = abortThreadStream;
+
+      await expect(
+        ABORT_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          resourceId: 'ignored-resource',
+          threadId: 'ignored-thread',
+        } as any),
+      ).resolves.toEqual({ aborted: true });
+
+      expect(abortThreadStream).toHaveBeenCalledWith({
+        resourceId: 'user-a',
+        threadId: 'abort-thread-owned-by-context',
+      });
     });
 
     it('should reject subscribing to a thread owned by a different resource', async () => {

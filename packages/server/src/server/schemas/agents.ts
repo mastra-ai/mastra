@@ -183,6 +183,14 @@ const modelConfigSchema = z.object({
   // Additional fields from AgentModelManagerConfig can be added here
 });
 
+const agentEditorConfigSchema = z.union([
+  z.literal(false),
+  z.object({
+    instructions: z.boolean().optional(),
+    tools: z.union([z.boolean(), z.object({ description: z.boolean().optional() })]).optional(),
+  }),
+]);
+
 /**
  * Main schema for serialized agent representation
  */
@@ -199,13 +207,16 @@ export const serializedAgentSchema = z.object({
   provider: z.string().optional(),
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
+  supportsMemory: z.boolean().optional(),
   modelList: z.array(modelConfigSchema).optional(),
   defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  source: z.enum(['code', 'stored']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
   hasDraft: z.boolean().optional(),
+  editor: agentEditorConfigSchema.optional(),
 });
 
 /**
@@ -235,6 +246,8 @@ export const providerSchema = z.object({
 export const providersResponseSchema = z.object({
   providers: z.array(providerSchema),
 });
+
+export type ProviderListItem = z.infer<typeof providerSchema>;
 
 /**
  * Schema for list agents endpoint response
@@ -365,6 +378,9 @@ export const agentExecutionBodySchema = z
         fallbackValue: z.any().optional(),
       })
       .optional(),
+
+    // Idle-loop streaming (collapses streamUntilIdle into stream)
+    untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
   })
   .passthrough(); // Allow additional fields for forward compatibility
 
@@ -380,6 +396,7 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
 
 export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
   maxIdleMs: z.number().int().positive().optional(),
+  untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
 });
 
 export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
@@ -451,6 +468,12 @@ export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
  */
 export const toolCallResponseSchema = z.object({
   fullStream: z.any(), // ReadableStream
+});
+
+export const sendToolApprovalResponseSchema = z.object({
+  accepted: z.literal(true),
+  runId: z.string(),
+  toolCallId: z.string().optional(),
 });
 
 // ============================================================================
@@ -596,6 +619,23 @@ export const queueAgentMessageBodySchema = sendAgentMessageBodySchema;
 export const subscribeAgentThreadBodySchema = z.object({
   resourceId: z.string().optional(),
   threadId: z.string(),
+});
+
+export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema;
+
+export const sendToolApprovalBodySchema = z.object({
+  resourceId: z.string(),
+  threadId: z.string(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+  toolCallId: z.string(),
+  approved: z.boolean(),
+  format: z.string().optional(),
+  messages: z.array(coreMessageSchema).optional(),
+  streamOptions: z.any().optional(),
+});
+
+export const abortAgentThreadResponseSchema = z.object({
+  aborted: z.boolean(),
 });
 
 /**

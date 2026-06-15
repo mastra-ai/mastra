@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -500,6 +500,144 @@ describe('FilesystemStore', () => {
 
       raw = JSON.parse(readFileSync(join(dir, 'agents.json'), 'utf-8'));
       expect(raw['a1']).toBeUndefined();
+    });
+
+    it('writes code-mode agent overrides to deterministic per-agent files', async () => {
+      store.__registerMastra({
+        getAgentById: (id: string) =>
+          id === 'weatherAgent'
+            ? { source: 'code', __getEditorConfig: () => ({ instructions: true, tools: true }) }
+            : undefined,
+      });
+      const agents = await store.getStore('agents');
+      await agents!.create({
+        agent: {
+          id: 'weatherAgent',
+          name: 'Weather Agent',
+          instructions: 'Use the weather tools',
+          model: { provider: 'openai', name: 'gpt-4' },
+          tools: { getWeather: { description: 'Fetch weather' } },
+        },
+      });
+
+      const v1 = await agents!.getLatestVersion('weatherAgent');
+      await agents!.update({ id: 'weatherAgent', activeVersionId: v1!.id, status: 'published' });
+
+      // The shared agents.json should not be created for a code-mode-only
+      // workspace — only per-entity files. (If a shared file already exists
+      // from db-mode usage it would still be written and exclude the code
+      // agent.)
+      expect(existsSync(join(dir, 'agents.json'))).toBe(false);
+
+      const agentRaw = JSON.parse(readFileSync(join(dir, 'agents', 'weatherAgent.json'), 'utf-8'));
+      // Code-mode per-entity files exclude fields that are not editable from
+      // Studio (`name` and `model`) so the committed override JSON only carries
+      // user-controlled overrides.
+      expect(agentRaw).toEqual({
+        instructions: 'Use the weather tools',
+        tools: { getWeather: { description: 'Fetch weather' } },
+      });
+      expect(agentRaw).not.toHaveProperty('name');
+      expect(agentRaw).not.toHaveProperty('model');
+    });
+
+    it('hydrates code-mode agent overrides from per-agent files', async () => {
+      store.__registerMastra({
+        getAgentById: (id: string) =>
+          id === 'weatherAgent'
+            ? { source: 'code', __getEditorConfig: () => ({ instructions: true, tools: true }) }
+            : undefined,
+      });
+      const agents = await store.getStore('agents');
+      await agents!.create({
+        agent: {
+          id: 'weatherAgent',
+          name: 'Weather Agent',
+          instructions: 'Use the weather tools',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      const v1 = await agents!.getLatestVersion('weatherAgent');
+      await agents!.update({ id: 'weatherAgent', activeVersionId: v1!.id, status: 'published' });
+
+      const nextStore = new FilesystemStore({ dir });
+      await nextStore.init();
+      nextStore.__registerMastra({
+        getAgentById: (id: string) =>
+          id === 'weatherAgent'
+            ? { source: 'code', __getEditorConfig: () => ({ instructions: true, tools: true }) }
+            : undefined,
+      });
+      const nextAgents = await nextStore.getStore('agents');
+      const restored = await nextAgents!.getByIdResolved('weatherAgent', { status: 'published' });
+
+      expect(restored?.id).toBe('weatherAgent');
+      expect(restored?.instructions).toBe('Use the weather tools');
+    });
+
+    it('writes per-entity code-mode JSON with alphabetically sorted keys for stable diffs', async () => {
+      store.__registerMastra({
+        getAgentById: (id: string) =>
+          id === 'weatherAgent'
+            ? { source: 'code', __getEditorConfig: () => ({ instructions: true, tools: true }) }
+            : undefined,
+      });
+      const agents = await store.getStore('agents');
+      await agents!.create({
+        agent: {
+          id: 'weatherAgent',
+          name: 'Weather Agent',
+          // Build instructions with keys deliberately out of alphabetical order
+          // to confirm the on-disk JSON normalizes ordering.
+          instructions: [{ type: 'prompt_block', content: 'block content here' }] as unknown as string,
+          model: { provider: 'openai', name: 'gpt-4' },
+          tools: { getWeather: { description: 'Fetch weather' } },
+        },
+      });
+
+      const v1 = await agents!.getLatestVersion('weatherAgent');
+      await agents!.update({ id: 'weatherAgent', activeVersionId: v1!.id, status: 'published' });
+
+      const raw = readFileSync(join(dir, 'agents', 'weatherAgent.json'), 'utf-8');
+      const parsed = JSON.parse(raw);
+
+      // Top-level keys are alphabetical
+      expect(Object.keys(parsed)).toEqual([...Object.keys(parsed)].sort());
+      // Nested prompt-block keys are alphabetical (`content` before `type`)
+      expect(Object.keys(parsed.instructions[0])).toEqual(['content', 'type']);
+
+      // The shared agents.json should not be written when every published
+      // agent is stored in per-entity files — otherwise git tracks an
+      // always-empty stub file alongside the real per-agent files.
+      expect(existsSync(join(dir, 'agents.json'))).toBe(false);
+    });
+
+    it('removes per-agent files when code-mode overrides are deleted', async () => {
+      store.__registerMastra({
+        getAgentById: (id: string) =>
+          id === 'weatherAgent'
+            ? { source: 'code', __getEditorConfig: () => ({ instructions: true, tools: true }) }
+            : undefined,
+      });
+      const agents = await store.getStore('agents');
+      await agents!.create({
+        agent: {
+          id: 'weatherAgent',
+          name: 'Weather Agent',
+          instructions: 'Use the weather tools',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      const v1 = await agents!.getLatestVersion('weatherAgent');
+      await agents!.update({ id: 'weatherAgent', activeVersionId: v1!.id, status: 'published' });
+      const agentFile = join(dir, 'agents', 'weatherAgent.json');
+      expect(existsSync(agentFile)).toBe(true);
+
+      await agents!.delete('weatherAgent');
+
+      expect(existsSync(agentFile)).toBe(false);
     });
   });
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/stagehand",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "AI-powered browser automation for Mastra agents using Stagehand",
   "type": "module",
   "files": [
@@ -37,10 +37,10 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

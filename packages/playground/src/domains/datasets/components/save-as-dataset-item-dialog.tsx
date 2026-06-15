@@ -9,11 +9,11 @@ import {
   SelectValue,
   SelectContent,
   SelectItem,
-  SideDialog,
   TextAndIcon,
   toast,
 } from '@mastra/playground-ui';
-import type { SideDialogRootProps } from '@mastra/playground-ui';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { DatabaseIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';

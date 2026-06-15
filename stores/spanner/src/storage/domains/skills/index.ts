@@ -7,6 +7,7 @@ import {
   SkillsStorage,
   SKILLS_SCHEMA,
   SKILL_VERSIONS_SCHEMA,
+  TABLE_FAVORITES,
   TABLE_SKILLS,
   TABLE_SKILL_VERSIONS,
 } from '@mastra/core/storage';
@@ -134,9 +135,16 @@ export class SkillsSpanner extends SkillsStorage {
       status: transformed.status,
       activeVersionId: transformed.activeVersionId ?? undefined,
       authorId: transformed.authorId ?? undefined,
+      visibility: (transformed.visibility as 'private' | 'public' | undefined) ?? undefined,
+      // Denormalized favorite counter maintained by the favorites domain. Surface
+      // it as 0 when absent so list/get responses carry a stable numeric value.
+      favoriteCount:
+        transformed.favoriteCount === null || transformed.favoriteCount === undefined
+          ? 0
+          : Number(transformed.favoriteCount),
       createdAt: transformed.createdAt,
       updatedAt: transformed.updatedAt,
-    };
+    } as StorageSkillType;
   }
 
   /** Decodes a raw Spanner version row into the public version shape. */
@@ -195,7 +203,8 @@ export class SkillsSpanner extends SkillsStorage {
     const { skill } = input;
     try {
       const now = new Date();
-      const { id: _id, authorId: _authorId, ...snapshot } = skill;
+      const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshot } = skill as any;
+      const visibility = (skill as any).visibility ?? (skill.authorId ? 'private' : null);
       const versionId = globalThis.crypto?.randomUUID
         ? globalThis.crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -214,6 +223,7 @@ export class SkillsSpanner extends SkillsStorage {
                 status: 'draft',
                 activeVersionId: null,
                 authorId: skill.authorId ?? null,
+                visibility,
                 createdAt: now,
                 updatedAt: now,
               },
@@ -298,6 +308,7 @@ export class SkillsSpanner extends SkillsStorage {
       // a new version through the server's auto-versioning layer.
       const updateData: Record<string, unknown> = { updatedAt: new Date() };
       if (updates.authorId !== undefined) updateData.authorId = updates.authorId;
+      if ((updates as any).visibility !== undefined) updateData.visibility = (updates as any).visibility;
       if (updates.activeVersionId !== undefined) updateData.activeVersionId = updates.activeVersionId;
       if (updates.status !== undefined) updateData.status = updates.status;
 
@@ -365,7 +376,17 @@ export class SkillsSpanner extends SkillsStorage {
 
   /** Paginated listing with optional authorId filter. */
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      status,
+      visibility,
+      entityIds,
+      pinFavoritedFor,
+      favoritedOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -384,17 +405,53 @@ export class SkillsSpanner extends SkillsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const tableName = quoteIdent(TABLE_SKILLS, 'table name');
-      const conditions: string[] = [];
-      const params: Record<string, any> = {};
-      if (authorId !== undefined) {
-        conditions.push(`${quoteIdent('authorId', 'column name')} = @authorId`);
-        params.authorId = authorId;
+      // Empty entityIds can never match a row — short-circuit before querying.
+      if (entityIds && entityIds.length === 0) {
+        return { skills: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
       }
 
+      const tableName = quoteIdent(TABLE_SKILLS, 'table name');
+      const favoritesTable = quoteIdent(TABLE_FAVORITES, 'table name');
+      const conditions: string[] = [];
+      const params: Record<string, any> = {};
+
+      const useJoin = Boolean(pinFavoritedFor);
+      if (useJoin) params.pinUserId = pinFavoritedFor;
+
+      if (status !== undefined) {
+        conditions.push(`a.${quoteIdent('status', 'column name')} = @status`);
+        params.status = status;
+      }
+      if (visibility !== undefined) {
+        conditions.push(`a.${quoteIdent('visibility', 'column name')} = @visibility`);
+        params.visibility = visibility;
+      }
+      if (authorId !== undefined) {
+        conditions.push(`a.${quoteIdent('authorId', 'column name')} = @authorId`);
+        params.authorId = authorId;
+      }
+      if (entityIds && entityIds.length > 0) {
+        const placeholders = entityIds.map((id, i) => {
+          const param = `eid${i}`;
+          params[param] = id;
+          return `@${param}`;
+        });
+        conditions.push(`a.${quoteIdent('id', 'column name')} IN (${placeholders.join(', ')})`);
+      }
+      if (useJoin && favoritedOnly) {
+        conditions.push(`s.${quoteIdent('userId', 'column name')} IS NOT NULL`);
+      } else if (favoritedOnly) {
+        conditions.push('1 = 0');
+      }
+
+      const joinClause = useJoin
+        ? `LEFT JOIN ${favoritesTable} s ON s.${quoteIdent('entityType', 'column name')} = 'skill'` +
+          ` AND s.${quoteIdent('entityId', 'column name')} = a.${quoteIdent('id', 'column name')}` +
+          ` AND s.${quoteIdent('userId', 'column name')} = @pinUserId`
+        : '';
       const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       const [countRows] = await this.database.run({
-        sql: `SELECT COUNT(*) AS count FROM ${tableName} ${whereSql}`,
+        sql: `SELECT COUNT(*) AS count FROM ${tableName} a ${joinClause} ${whereSql}`,
         params,
         json: true,
       });
@@ -405,9 +462,15 @@ export class SkillsSpanner extends SkillsStorage {
 
       const limit = perPageInput === false ? total : perPage;
       const dirSql = (direction || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      const orderParts: string[] = [];
+      if (useJoin) {
+        orderParts.push(`(s.${quoteIdent('userId', 'column name')} IS NOT NULL) DESC`);
+      }
+      orderParts.push(`a.${quoteIdent(field, 'column name')} ${dirSql}`);
+      orderParts.push(`a.${quoteIdent('id', 'column name')} ${dirSql}`);
       const [rows] = await this.database.run({
-        sql: `SELECT * FROM ${tableName} ${whereSql}
-              ORDER BY ${quoteIdent(field, 'column name')} ${dirSql}, id ${dirSql}
+        sql: `SELECT a.* FROM ${tableName} a ${joinClause} ${whereSql}
+              ORDER BY ${orderParts.join(', ')}
               LIMIT @limit OFFSET @offset`,
         params: { ...params, limit, offset },
         json: true,

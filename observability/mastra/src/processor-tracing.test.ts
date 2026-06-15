@@ -69,6 +69,8 @@ class ProcessorTestExporter implements ObservabilityExporter {
     this.events.push(event);
   }
 
+  async flush() {}
+
   async shutdown() {}
 
   reset() {
@@ -161,14 +163,23 @@ class ProcessorTestExporter implements ObservabilityExporter {
     expect(timeA).toBeLessThanOrEqual(timeB);
   }
 
-  finalExpectations() {
+  async finalExpectations() {
     try {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const incompleteSpans = Array.from(this.spanStates.values()).filter(state => !state.hasEnd);
+        if (incompleteSpans.length === 0) {
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
       const allSpans = this.getAllSpans();
       const traceIds = [...new Set(allSpans.map(span => span?.traceId))];
       expect(traceIds).toHaveLength(1);
 
+      const completedTraceId = traceIds[0];
       const incompleteSpans = Array.from(this.spanStates.entries())
-        .filter(([_, state]) => !state.hasEnd)
+        .filter(([_, state]) => !state.hasEnd && state.events[0]?.exportedSpan.traceId === completedTraceId)
         .map(([spanId, state]) => ({ spanId, span: state.events[0]?.exportedSpan }));
 
       expect(incompleteSpans, `Found incomplete spans`).toHaveLength(0);
@@ -490,7 +501,7 @@ describe('Processor Tracing Tests', () => {
       // EXECUTION ORDER: input processor starts before MODEL_GENERATION
       testExporter.expectStartedBefore(inputProcessorSpan, modelSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -551,7 +562,7 @@ describe('Processor Tracing Tests', () => {
       // EXECUTION ORDER: MODEL_GENERATION starts before output processor
       testExporter.expectStartedBefore(modelSpan, outputProcessorSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -635,7 +646,7 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(secondSpan, thirdSpan);
       testExporter.expectStartedBefore(thirdSpan, modelSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -700,7 +711,7 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(modelSpan, firstSpan);
       testExporter.expectStartedBefore(firstSpan, secondSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -766,7 +777,7 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(inputSpan, modelSpan);
       testExporter.expectStartedBefore(modelSpan, outputSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -848,7 +859,7 @@ describe('Processor Tracing Tests', () => {
       const firstChunkInInference = chunkSpansInInference[0];
       testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -923,7 +934,7 @@ describe('Processor Tracing Tests', () => {
       const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
       testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1015,7 +1026,7 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
       testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1079,7 +1090,7 @@ describe('Processor Tracing Tests', () => {
       expect(streamSpan1?.parentSpanId).toBe(agentSpan?.id);
       expect(streamSpan2?.parentSpanId).toBe(agentSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1157,7 +1168,7 @@ describe('Processor Tracing Tests', () => {
       // Internal agent completes within processor span
       testExporter.expectStartedBefore(internalAgentSpan, mainAgentModelSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1262,7 +1273,7 @@ describe('Processor Tracing Tests', () => {
           .join(', ')}`,
       ).toHaveLength(0);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     it("exports the internal moderation agent's spans when includeInternalSpans is true", async () => {
@@ -1298,7 +1309,7 @@ describe('Processor Tracing Tests', () => {
       const processorSpan = testExporter.getProcessorSpans()[0];
       expect(moderationAgentSpan?.parentSpanId).toBe(processorSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1397,7 +1408,7 @@ describe('Processor Tracing Tests', () => {
       // EXECUTION ORDER: workflow processor runs before MODEL_GENERATION
       testExporter.expectStartedBefore(inputWorkflowSpan, modelSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1510,7 +1521,7 @@ describe('Processor Tracing Tests', () => {
       // EXECUTION ORDER: MODEL_GENERATION runs before workflow processor
       testExporter.expectStartedBefore(modelSpan, outputWorkflowSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1599,7 +1610,7 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(simpleInputSpan, modelSpan);
       testExporter.expectStartedBefore(fullInputSpan, modelSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1678,7 +1689,7 @@ describe('Processor Tracing Tests', () => {
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1748,7 +1759,7 @@ describe('Processor Tracing Tests', () => {
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1822,7 +1833,7 @@ describe('Processor Tracing Tests', () => {
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1894,7 +1905,7 @@ describe('Processor Tracing Tests', () => {
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1987,7 +1998,7 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.attributes?.model).toBe('overridden-model');
       expect(modelSpan?.attributes?.provider).toBe('overridden-provider');
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -2040,7 +2051,7 @@ describe('Processor Tracing Tests', () => {
         maxOutputTokens: 4096,
       });
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -2126,7 +2137,7 @@ describe('Processor Tracing Tests', () => {
         temperature: 0.1,
       });
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -2170,7 +2181,7 @@ describe('Processor Tracing Tests', () => {
       // AGENT_RUN span should reflect the overridden active tools
       expect(agentSpan?.attributes?.availableTools).toEqual(['search', 'calculate']);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -2231,7 +2242,7 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.attributes?.model).toBe('test-model');
       expect(modelSpan?.attributes?.provider).toBe('test-provider');
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -2300,7 +2311,7 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.attributes?.model).toBe('stream-model');
       expect(modelSpan?.attributes?.provider).toBe('stream-provider');
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -2344,7 +2355,7 @@ describe('Processor Tracing Tests', () => {
       // AGENT_RUN span availableTools should be cleared to an empty array
       expect(agentSpan?.attributes?.availableTools).toEqual([]);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 });

@@ -4,23 +4,33 @@ import { computeNextFireAt } from '@mastra/core/workflows';
 import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
 
-import { weatherAgent, omAgent, omAdaptiveAgent } from './agents';
+import {
+  builderAgent,
+  codeOverrideEditableAgent,
+  codeOverrideLockedAgent,
+  omAdaptiveAgent,
+  omAgent,
+  weatherAgent,
+} from './agents';
 import { simpleMcpServer } from './mcps';
 import { loggingProcessor, contentFilterProcessor } from './processors';
 import { responseQualityScorer, responseTimeScorer } from './scorers';
-import { storage } from './storage';
+import { initE2EStorage, storage } from './storage';
 import { complexWorkflow, enumWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 import { scheduledWorkflow, multiScheduledWorkflow } from './workflows/scheduled-workflow';
 
+await initE2EStorage();
+
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow, enumWorkflow, scheduledWorkflow, multiScheduledWorkflow },
-  agents: { weatherAgent, omAgent, omAdaptiveAgent },
+  agents: { weatherAgent, omAgent, omAdaptiveAgent, codeOverrideEditableAgent, codeOverrideLockedAgent, builderAgent },
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'error',
   }),
   storage,
   editor: new MastraEditor({
+    source: 'code',
     builder: {
       enabled: true,
       features: {
@@ -47,6 +57,8 @@ export const mastra = new Mastra({
       registerApiRoute('/e2e/reset-storage', {
         method: 'POST',
         handler: async c => {
+          await initE2EStorage();
+
           const clearTasks: Promise<void>[] = [];
 
           const workflowStore = await storage.getStore('workflows');
@@ -120,8 +132,8 @@ export const mastra = new Mastra({
                     ...schedule,
                     status: 'active',
                     nextFireAt,
-                    lastFireAt: null,
-                    lastRunId: null,
+                    lastFireAt: undefined,
+                    lastRunId: undefined,
                     createdAt: now,
                     updatedAt: now,
                   });

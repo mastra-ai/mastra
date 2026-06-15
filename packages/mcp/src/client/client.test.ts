@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -15,6 +16,137 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod/v3';
 
 import { InternalMastraMCPClient } from './client.js';
+
+describe('InternalMastraMCPClient - server instructions', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mockSdkConnection(instructions: string | undefined) {
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined as any);
+    vi.spyOn(Client.prototype, 'getInstructions').mockReturnValue(instructions);
+    vi.spyOn(StreamableHTTPClientTransport.prototype, 'close').mockResolvedValue(undefined as any);
+  }
+
+  it('retrieves instructions after connect', async () => {
+    mockSdkConnection('Validate schemas before migrations.');
+
+    const client = new InternalMastraMCPClient({
+      name: 'db-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+
+    expect(client.instructions).toBe('Validate schemas before migrations.');
+    await client.disconnect();
+  });
+
+  it('refreshes instructions on forceReconnect', async () => {
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined as any);
+    vi.spyOn(Client.prototype, 'getInstructions')
+      .mockReturnValueOnce('Use the old schema policy.')
+      .mockReturnValueOnce('Use the new schema policy.');
+    vi.spyOn(StreamableHTTPClientTransport.prototype, 'close').mockResolvedValue(undefined as any);
+
+    const client = new InternalMastraMCPClient({
+      name: 'db-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+    expect(client.instructions).toBe('Use the old schema policy.');
+
+    await client.forceReconnect();
+    expect(client.instructions).toBe('Use the new schema policy.');
+
+    await client.disconnect();
+  });
+
+  it('handles empty instructions', async () => {
+    mockSdkConnection(undefined);
+
+    const client = new InternalMastraMCPClient({
+      name: 'empty-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+
+    expect(client.instructions).toBeUndefined();
+    await client.disconnect();
+  });
+
+  it('adds forwarding metadata to MCP tools', async () => {
+    mockSdkConnection('Only run read-only checks.');
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'check',
+          description: 'Check state',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ],
+    } as any);
+
+    const client = new InternalMastraMCPClient({
+      name: 'audit-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+        forwardInstructions: false,
+        instructionsMaxLength: 16,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(tools.check.mcpMetadata).toMatchObject({
+      serverName: 'audit-tools',
+      serverInstructions: 'Only run read-only checks.',
+      forwardInstructions: false,
+      instructionsMaxLength: 16,
+    });
+
+    await client.disconnect();
+  });
+
+  it('defaults forwardInstructions to false (opt-in)', async () => {
+    mockSdkConnection('Only run read-only checks.');
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'check',
+          description: 'Check state',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ],
+    } as any);
+
+    const client = new InternalMastraMCPClient({
+      name: 'audit-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(tools.check.mcpMetadata).toMatchObject({
+      serverName: 'audit-tools',
+      forwardInstructions: false,
+    });
+
+    await client.disconnect();
+  });
+});
 
 async function setupTestServer(withSessionManagement: boolean) {
   const httpServer: HttpServer = createServer();
@@ -3145,4 +3277,51 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
 
     tokenWaiters.forEach(cancel => cancel());
   }, 20000);
+});
+
+describe('InternalMastraMCPClient - transport cleanup on close (issue #16693)', () => {
+  let testServer: Awaited<ReturnType<typeof setupTestServer>>;
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'test-close-cleanup-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('closes and clears the stale transport when the connection closes', async () => {
+    const staleTransport = (client as any).transport;
+    expect(staleTransport).toBeDefined();
+    const closeSpy = vi.spyOn(staleTransport, 'close');
+
+    // Simulate a server-initiated close firing the SDK client's onclose handler.
+    (client as any).client.onclose?.();
+
+    expect((client as any).transport).toBeUndefined();
+    expect((client as any).isConnected).toBeNull();
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+
+    // Let the fire-and-forget close settle.
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
+  it('does not throw when the stale transport close rejects', async () => {
+    const staleTransport = (client as any).transport;
+    vi.spyOn(staleTransport, 'close').mockRejectedValueOnce(new Error('already closed'));
+
+    expect(() => (client as any).client.onclose?.()).not.toThrow();
+    expect((client as any).transport).toBeUndefined();
+    expect((client as any).isConnected).toBeNull();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
 });

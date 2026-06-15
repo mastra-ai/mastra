@@ -28,7 +28,7 @@ vi.mock('../auth/orgs.js', () => ({
   resolveCurrentOrg: vi.fn(),
 }));
 
-const { promptForObservability, writeObservabilityEnv } = await import('./utils');
+const { getAPIKey, promptForObservability, writeObservabilityEnv } = await import('./utils');
 const prompts = await import('@clack/prompts');
 const { getToken, loadCredentials } = await import('../auth/credentials.js');
 const { resolveCurrentOrg } = await import('../auth/orgs.js');
@@ -37,6 +37,12 @@ const selectMock = vi.mocked(prompts.select);
 const getTokenMock = vi.mocked(getToken);
 const loadCredentialsMock = vi.mocked(loadCredentials);
 const resolveCurrentOrgMock = vi.mocked(resolveCurrentOrg);
+
+describe('getAPIKey', () => {
+  test('returns GOOGLE_API_KEY for Google provider', async () => {
+    await expect(getAPIKey('google')).resolves.toBe('GOOGLE_API_KEY');
+  });
+});
 
 describe('promptForObservability', () => {
   beforeEach(() => {

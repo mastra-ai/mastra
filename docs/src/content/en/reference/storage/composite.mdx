@@ -274,12 +274,44 @@ const storage = new MastraCompositeStore({
 
 :::note
 
-`ObservabilityStorageClickhouseVNext` is the current observability domain implementation. The legacy `ObservabilityStorageClickhouse` class is also exported and remains supported for projects that have not migrated. See the [ClickHouse storage reference](/reference/storage/clickhouse) for details.
+`ObservabilityStorageClickhouseVNext` is the current observability domain implementation. The legacy `ObservabilityStorageClickhouse` class is also exported and remains supported for projects that haven't migrated. See the [ClickHouse storage reference](/reference/storage/clickhouse) for details.
 
 :::
 
+### Replicated ClickHouse for multi-replica clusters
+
+For self-managed ClickHouse clusters with multiple replicas, set `replication` so Mastra emits `ReplicatedMergeTree` engines and applies `ON CLUSTER` to its DDL:
+
+```typescript
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
+import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
+
+const storage = new MastraCompositeStore({
+  id: 'composite',
+  domains: {
+    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    observability: new ObservabilityStorageClickhouseVNext({
+      url: process.env.CLICKHOUSE_URL,
+      username: process.env.CLICKHOUSE_USERNAME,
+      password: process.env.CLICKHOUSE_PASSWORD,
+      replication: {
+        cluster: 'production_cluster',
+        // Optional (defaults shown):
+        // zookeeperPath: '/clickhouse/tables/{shard}/{database}/{table}',
+        // replicaName: '{replica}',
+      },
+    }),
+  },
+})
+```
+
+Do not set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side. See the [ClickHouse storage reference](/reference/storage/clickhouse) for the full config shape and operator notes.
+
 :::info
 
-This approach is also required when using storage providers that don't support observability (like Convex, DynamoDB, or Cloudflare). See the [MastraStorageExporter documentation](/docs/observability/tracing/exporters/mastra-storage#storage-provider-support) for the full list of supported providers.
+This approach is also required when using storage providers that don't support observability (like Convex, DynamoDB, or Cloudflare). See the [MastraStorageExporter documentation](/docs/observability/integrations/exporters/mastra-storage#storage-provider-support) for the full list of supported providers.
 
 :::

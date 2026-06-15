@@ -1,5 +1,39 @@
 # @mastra/voice-openai-realtime
 
+## 0.12.5
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
+- Fix `OpenAIRealtimeVoice` against the General Availability Realtime API. Previously, `connect()` failed against `wss://api.openai.com/v1/realtime` with errors like `Unknown parameter: 'session.voice'`, because the WebSocket handshake and initial session update were still using the legacy beta shape. Text-only responses also stopped emitting `writing` events because the GA endpoint renamed `response.text.*` to `response.output_text.*`. ([#16941](https://github.com/mastra-ai/mastra/pull/16941))
+
+  Also fix a separate duplicate-`response.create` issue when the model returned multiple `function_call` outputs in one response. Each call previously emitted its own `response.create` from `handleFunctionCall`'s `finally`, racing the server (which surfaced as `already has an active response in progress`). The send is now consolidated to a single `response.create` after all function calls in the response have been handled.
+
+  `voice.connect()` now succeeds against the GA endpoint, text-only responses fire `writing` events on both legacy beta and GA endpoints, and multi-function-call responses no longer race the server — all with no code changes required.
+
+- Remove the deprecated `OpenAI-Beta: realtime=v1` header from realtime voice connections. OpenAI removed the beta realtime interface, so sending this header broke all realtime voice connections. ([#17330](https://github.com/mastra-ai/mastra/pull/17330))
+
+- Updated dependencies [[`00eca42`](https://github.com/mastra-ai/mastra/commit/00eca4252393aa114dc8c9a5e1da68df91fa06cf), [`ff9d743`](https://github.com/mastra-ai/mastra/commit/ff9d743f71d7e072927725c0d700632aca0c1fee)]:
+  - @mastra/schema-compat@1.2.11
+
+## 0.12.5-alpha.1
+
+### Patch Changes
+
+- Fix `OpenAIRealtimeVoice` against the General Availability Realtime API. Previously, `connect()` failed against `wss://api.openai.com/v1/realtime` with errors like `Unknown parameter: 'session.voice'`, because the WebSocket handshake and initial session update were still using the legacy beta shape. Text-only responses also stopped emitting `writing` events because the GA endpoint renamed `response.text.*` to `response.output_text.*`. ([#16941](https://github.com/mastra-ai/mastra/pull/16941))
+
+  Also fix a separate duplicate-`response.create` issue when the model returned multiple `function_call` outputs in one response. Each call previously emitted its own `response.create` from `handleFunctionCall`'s `finally`, racing the server (which surfaced as `already has an active response in progress`). The send is now consolidated to a single `response.create` after all function calls in the response have been handled.
+
+  `voice.connect()` now succeeds against the GA endpoint, text-only responses fire `writing` events on both legacy beta and GA endpoints, and multi-function-call responses no longer race the server — all with no code changes required.
+
+- Remove the deprecated `OpenAI-Beta: realtime=v1` header from realtime voice connections. OpenAI removed the beta realtime interface, so sending this header broke all realtime voice connections. ([#17330](https://github.com/mastra-ai/mastra/pull/17330))
+
+- Updated dependencies [[`00eca42`](https://github.com/mastra-ai/mastra/commit/00eca4252393aa114dc8c9a5e1da68df91fa06cf), [`ff9d743`](https://github.com/mastra-ai/mastra/commit/ff9d743f71d7e072927725c0d700632aca0c1fee)]:
+  - @mastra/schema-compat@1.2.11-alpha.0
+
 ## 0.12.5-alpha.0
 
 ### Patch Changes

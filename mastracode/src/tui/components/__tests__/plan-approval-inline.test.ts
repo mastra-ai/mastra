@@ -1,3 +1,4 @@
+import { visibleWidth } from '@mariozechner/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
 
 import { PlanApprovalInlineComponent, PlanResultComponent } from '../plan-approval-inline.js';
@@ -70,6 +71,56 @@ describe('PlanApprovalInlineComponent', () => {
     expect(ui.requestRender).toHaveBeenCalledWith(true);
     expect(rendered).toContain('Provide feedback for revision:');
     expect(rendered).toContain('a');
+  });
+
+  it('keeps the submitted plan visible while typing requested-change feedback', () => {
+    const ui = { requestRender: vi.fn() };
+    const component = new PlanApprovalInlineComponent(
+      {
+        planId: 'plan-1',
+        title: 'Ship it',
+        plan: 'Build the feature\n\n- Run tests\n- Update docs',
+        onApprove: vi.fn(),
+        onGoal: vi.fn(),
+        onReject: vi.fn(),
+      },
+      ui as any,
+    );
+
+    (component as any).handleSelection('edit');
+    component.handleInput('a');
+    component.handleInput('d');
+    component.handleInput('d');
+    const lines = component.render(80);
+    const planLineIndex = lines.findIndex(line => line.includes('Build the feature'));
+    const feedbackPromptIndex = lines.findIndex(line => line.includes('Provide feedback for revision:'));
+    const typedFeedbackIndex = lines.findIndex(line => line.includes('add'));
+
+    expect(planLineIndex).toBeGreaterThan(-1);
+    expect(feedbackPromptIndex).toBeGreaterThan(planLineIndex);
+    expect(typedFeedbackIndex).toBeGreaterThan(feedbackPromptIndex);
+  });
+
+  it('keeps long plan lines within the rendered width on narrow terminals', () => {
+    const component = new PlanApprovalInlineComponent(
+      {
+        planId: 'plan-1',
+        title: 'Ship it',
+        plan: `Build ${'VeryLongPlanToken'.repeat(12)} safely`,
+        onApprove: vi.fn(),
+        onGoal: vi.fn(),
+        onReject: vi.fn(),
+      },
+      {} as any,
+    );
+
+    const width = 42;
+    const lines = component.render(width);
+
+    expect(lines.some(line => line.includes('VeryLongPlanToken'))).toBe(true);
+    for (const line of lines) {
+      expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+    }
   });
 
   it('renders requested changes below the plan after feedback is submitted', () => {

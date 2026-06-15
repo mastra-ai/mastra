@@ -1,15 +1,17 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import { TripWire } from '../../agent';
 import { coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
-import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
+// Inlined to avoid importing structured-output.ts which pulls in the agent
+// barrel and creates an ESM init-time cycle.
+const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
@@ -388,21 +390,47 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 0,
                 streamWriter,
               );
-              if (blocked) {
-                // Emit a tripwire chunk so downstream knows about the abort
+              const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
                 controller.enqueue({
                   type: 'tripwire',
                   payload: {
-                    reason: reason || 'Output processor blocked content',
-                    retry: tripwireOptions?.retry,
-                    metadata: tripwireOptions?.metadata,
-                    processorId,
+                    reason: r || 'Output processor blocked content',
+                    retry: opts?.retry,
+                    metadata: opts?.metadata,
+                    processorId: pid,
                   },
                 } as ChunkType<OUTPUT>);
+              };
+
+              if (blocked) {
+                // Emit a tripwire chunk so downstream knows about the abort
+                enqueueTripwire(reason, tripwireOptions, processorId);
                 return;
               }
               if (processed) {
                 controller.enqueue(processed as ChunkType<OUTPUT>);
+              }
+
+              // Emit any parts a processor stashed for reprocessing (e.g. the
+              // non-text part that triggered a BatchPartsProcessor flush),
+              // pushing each back through the whole chain for downstream
+              // processing.
+              const reprocessed = await processorRunner.drainReprocessParts(
+                processorStates,
+                resolveObservabilityContext(options),
+                options.requestContext,
+                self.messageList,
+                0,
+                streamWriter,
+              );
+              for (const r of reprocessed) {
+                if (r.blocked) {
+                  enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
+                  return;
+                }
+                if (r.part != null) {
+                  controller.enqueue(r.part as ChunkType<OUTPUT>);
+                }
               }
             }
           },
@@ -676,9 +704,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 response: {
                   id: chunk.payload.id || '',
                   timestamp: (chunk.payload.metadata?.timestamp as Date) || new Date(),
+                  ...otherMetadata,
                   modelId:
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
-                  ...otherMetadata,
                   messages: chunk.payload.messages?.nonUser || [],
                   dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too

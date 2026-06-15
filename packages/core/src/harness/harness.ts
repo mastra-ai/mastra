@@ -1,14 +1,22 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Agent } from '../agent';
+import { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
-import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
+import type {
+  AgentThreadSubscription,
+  SendAgentNotificationSignalOptions,
+  SendAgentNotificationSignalResult,
+  ToolsInput,
+  ToolsetsInput,
+} from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import { getServerSideFallbackInfo } from '../llm/model/server-side-fallback';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
+import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
@@ -49,7 +57,6 @@ import type {
   HarnessMessage,
   HarnessMessageContent,
   HarnessMode,
-  HarnessQuestionAnswer,
   HarnessRequestContext,
   HarnessSession,
   HarnessThread,
@@ -65,7 +72,127 @@ type HarnessStreamState = {
   isSuspended: boolean;
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
+  /**
+   * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
+   * `error`, `length`). Carries the user-facing message so the run finalizes
+   * into an explicit terminal error state instead of silently completing.
+   */
+  terminalError?: string;
 };
+
+function validateModes(modes: HarnessMode[]): void {
+  const modeIds = new Set<string>();
+
+  for (const mode of modes) {
+    if (modeIds.has(mode.id)) {
+      throw new Error(`Duplicate mode id "${mode.id}" found when creating the Harness`);
+    }
+
+    modeIds.add(mode.id);
+
+    const modeRecord = mode as unknown as { id: string; tools?: unknown; additionalTools?: unknown };
+    if (modeRecord.tools && modeRecord.additionalTools) {
+      throw new Error(
+        `Mode "${modeRecord.id}" cannot set both "tools" and "additionalTools" - choose replace OR augment`,
+      );
+    }
+  }
+
+  for (const mode of modes) {
+    if (mode.transitionsTo && !modeIds.has(mode.transitionsTo)) {
+      throw new Error(`Mode "${mode.id}" transitionsTo references unknown mode "${mode.transitionsTo}"`);
+    }
+  }
+}
+
+type HarnessSendNotificationSignalOptions = {
+  ifActive?: SendAgentNotificationSignalOptions['ifActive'];
+  ifIdle?: SendAgentNotificationSignalOptions['ifIdle'];
+  tracingContext?: TracingContext;
+  tracingOptions?: TracingOptions;
+  requestContext?: RequestContext;
+};
+
+/**
+ * Build a user-facing message for a non-success stream finish reason.
+ *
+ * Anthropic's classifier blocks / model refusals (e.g. `claude-fable-5`) surface
+ * through the AI SDK as a `content-filter` finish reason, with details on
+ * `providerMetadata.anthropic.stopDetails`. Without explicit handling these
+ * runs end on an empty assistant message with no error, so the run appears to
+ * silently stop. Returning a message here lets the harness finalize the run
+ * into an explicit terminal error state.
+ */
+export function describeNonSuccessFinishReason(reason: string, providerMetadata: unknown): string | undefined {
+  switch (reason) {
+    case 'content-filter': {
+      const stopDetails = (providerMetadata as { anthropic?: { stopDetails?: Record<string, unknown> } } | undefined)
+        ?.anthropic?.stopDetails;
+      const explanation =
+        stopDetails && typeof stopDetails.explanation === 'string' ? stopDetails.explanation : undefined;
+      const category = stopDetails && typeof stopDetails.category === 'string' ? stopDetails.category : undefined;
+      const detail = explanation ?? (category ? `category: ${category}` : undefined);
+      return detail ? `The model stopped on a content filter (${detail}).` : 'The model stopped on a content filter.';
+    }
+    case 'error':
+      return 'The model stream ended with an error before producing a final response.';
+    case 'length':
+      return 'The model stopped because it reached its maximum output length before finishing.';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The Anthropic model that `claude-fable-5` runs are automatically retried on
+ * server-side when fable-5's safety classifiers block a turn. See
+ * {@link buildFableFallbackProviderOptions}.
+ */
+const FABLE_FALLBACK_MODEL = 'claude-opus-4-8';
+
+/**
+ * Returns Anthropic `providerOptions` that enable a server-side fallback to
+ * {@link FABLE_FALLBACK_MODEL} when the active model is `claude-fable-5`, and
+ * `undefined` otherwise.
+ *
+ * fable-5 can have a turn blocked server-side by its safety classifiers. With
+ * a fallback configured, Anthropic transparently retries the blocked turn on
+ * the fallback model and returns that model's answer instead of refusing. If
+ * the whole chain refuses, the run still ends on a `content-filter` finish
+ * reason, which is handled as a terminal error.
+ *
+ * The match is suffix-based so it covers `anthropic/claude-fable-5`, a bare
+ * `claude-fable-5`, and any pack/provider-prefixed form.
+ */
+export function buildFableFallbackProviderOptions(
+  modelId: string,
+): { anthropic: { fallbacks: { model: string }[] } } | undefined {
+  if (!/(^|\/)claude-fable-5$/.test(modelId)) {
+    return undefined;
+  }
+  return { anthropic: { fallbacks: [{ model: FABLE_FALLBACK_MODEL }] } };
+}
+
+/**
+ * Build a user-facing notice when a turn was served by an Anthropic
+ * server-side fallback model instead of the primary model.
+ *
+ * When the primary model's safety classifiers decline a turn and a fallback
+ * chain is configured (see {@link buildFableFallbackProviderOptions}), the API
+ * transparently retries on the fallback model and reports this via
+ * `fallback_message` entries in `providerMetadata.anthropic.iterations`.
+ * Without a notice the user has no way to tell that the response did not come
+ * from the model they selected.
+ */
+export function describeServerSideFallback(providerMetadata: unknown): string | undefined {
+  const fallback = getServerSideFallbackInfo(providerMetadata);
+  if (!fallback) {
+    return undefined;
+  }
+  return fallback.model
+    ? `The selected model declined this turn; the response was generated by fallback model ${fallback.model}.`
+    : 'The selected model declined this turn; the response was generated by a fallback model.';
+}
 
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
   const value = usage[key];
@@ -130,8 +257,8 @@ function toSystemReminderContent(
 ): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
   const metadata = getRecordValue(payload.metadata);
-  const message = getStringValue(payload.contents);
-  if (message === undefined) return undefined;
+  const message = signalContentsToText(payload.contents);
+  if (!message) return undefined;
 
   return {
     type: 'system_reminder',
@@ -180,6 +307,98 @@ function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage |
     content,
     createdAt: signal.createdAt,
     attributes: signal.attributes,
+  };
+}
+
+function signalContentsToText(contents: unknown): string {
+  if (typeof contents === 'string') return contents;
+  if (!Array.isArray(contents)) return '';
+  return contents
+    .filter((part): part is { type: 'text'; text: string } => getRecordValue(part)?.type === 'text')
+    .map(part => part.text)
+    .join('\n');
+}
+
+function toStateSignalContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'state_signal' }> | undefined {
+  const stateMetadata = getRecordValue(getRecordValue(payload.metadata)?.state);
+  const stateId = getStringValue(stateMetadata?.id) ?? getStringValue(payload.tagName) ?? 'state';
+
+  return {
+    type: 'state_signal',
+    id: getStringValue(payload.id),
+    stateId,
+    mode: stateMetadata?.mode === 'delta' ? 'delta' : 'snapshot',
+    cacheKey: getStringValue(stateMetadata?.cacheKey),
+    version: typeof stateMetadata?.version === 'number' ? stateMetadata.version : undefined,
+    message: signalContentsToText(payload.contents),
+  };
+}
+
+function toNotificationSummaryContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'notification_summary' }> | undefined {
+  const metadataSummary = getRecordValue(getRecordValue(payload.metadata)?.notificationSummary);
+  const bySource = getRecordValue(metadataSummary?.bySource) ?? {};
+  const byPriority = getRecordValue(metadataSummary?.byPriority) ?? {};
+  const notificationIds = Array.isArray(metadataSummary?.notificationIds)
+    ? metadataSummary.notificationIds.filter((id): id is string => typeof id === 'string')
+    : [];
+  const pending = typeof metadataSummary?.pending === 'number' ? metadataSummary.pending : undefined;
+
+  return {
+    type: 'notification_summary',
+    id: getStringValue(payload.id),
+    message: signalContentsToText(payload.contents),
+    pending: pending ?? notificationIds.length,
+    bySource: Object.fromEntries(
+      Object.entries(bySource).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+    ),
+    byPriority: Object.fromEntries(
+      Object.entries(byPriority).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+    ),
+    notificationIds,
+  };
+}
+
+function toReactiveSignalContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'reactive_signal' }> | undefined {
+  const tagName = getStringValue(payload.tagName);
+  if (!tagName) return undefined;
+
+  return {
+    type: 'reactive_signal',
+    id: getStringValue(payload.id),
+    tagName,
+    message: signalContentsToText(payload.contents),
+    attributes: getRecordValue(payload.attributes),
+    metadata: getRecordValue(payload.metadata),
+  };
+}
+
+function toNotificationContent(
+  payload: Record<string, unknown>,
+): Extract<HarnessMessageContent, { type: 'notification' }> | undefined {
+  const attributes = getRecordValue(payload.attributes) ?? {};
+  const metadata = getRecordValue(payload.metadata) ?? {};
+  const notificationMetadata = getRecordValue(metadata.notification);
+  const message = signalContentsToText(payload.contents);
+  if (!message) return undefined;
+
+  return {
+    type: 'notification',
+    id: getStringValue(payload.id),
+    notificationId: getStringValue(attributes.id) ?? getStringValue(notificationMetadata?.recordId),
+    message,
+    source: getStringValue(attributes.source) ?? getStringValue(notificationMetadata?.source),
+    kind:
+      getStringValue(attributes.kind) ?? getStringValue(attributes.type) ?? getStringValue(notificationMetadata?.kind),
+    priority: getStringValue(attributes.priority) ?? getStringValue(notificationMetadata?.priority),
+    status: getStringValue(attributes.status) ?? getStringValue(notificationMetadata?.status),
+    attributes,
+    metadata,
   };
 }
 
@@ -233,16 +452,19 @@ export class Harness<TState = {}> {
     | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
     | null = null;
   private pendingApprovalToolName: string | null = null;
-  private pendingSuspensionRunId: string | null = null;
-  private pendingSuspensionToolCallId: string | null = null;
-  private pendingQuestions = new Map<string, (answer: HarnessQuestionAnswer) => void>();
-  private pendingPlanApprovals = new Map<
-    string,
-    (result: { action: 'approved' | 'rejected'; feedback?: string }) => void
-  >();
+  /**
+   * Tool calls currently suspended via the native tool-suspension primitive,
+   * keyed by `toolCallId`. Each entry records the `runId` to resume. A Map (rather
+   * than single fields) lets multiple tools (e.g. parallel `ask_user` calls in one
+   * step — see issue #13642) stay suspended and be resumed independently.
+   */
+  private pendingSuspensions = new Map<string, { runId: string; toolName: string }>();
   private workspace: Workspace | undefined = undefined;
   private workspaceFn:
-    | ((ctx: { requestContext: RequestContext }) => Promise<Workspace | undefined> | Workspace | undefined)
+    | ((ctx: {
+        requestContext: RequestContext;
+        mastra?: Mastra;
+      }) => Promise<Workspace | undefined> | Workspace | undefined)
     | undefined = undefined;
   private workspaceInitialized = false;
   private browser: MastraBrowser | undefined = undefined;
@@ -258,13 +480,18 @@ export class Harness<TState = {}> {
   private switchModeVersion: number = 0;
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
+  readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
+  #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
   constructor(config: HarnessConfig<TState>) {
+    validateModes(config.modes);
+
     this.id = config.id;
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
     this.defaultResourceId = this.resourceId;
+    this.#instructions = config.instructions;
 
     // Convert PublicSchema to StandardSchemaWithJSON at the boundary
     this.stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
@@ -275,10 +502,15 @@ export class Harness<TState = {}> {
       ...config.initialState,
     } as TState;
 
-    // Find default mode
-    const defaultMode = config.modes.find(m => m.default) ?? config.modes[0];
+    const defaultMode = config.defaultModeId
+      ? config.modes.find(mode => mode.id === config.defaultModeId)
+      : (config.modes.find(mode => mode.default || mode.metadata?.default === true) ?? config.modes[0]);
     if (!defaultMode) {
-      throw new Error('Harness requires at least one agent mode');
+      throw new Error(
+        config.defaultModeId
+          ? `Default mode not found: ${config.defaultModeId}`
+          : 'Harness requires at least one agent mode',
+      );
     }
     this.currentModeId = defaultMode.id;
 
@@ -324,8 +556,7 @@ export class Harness<TState = {}> {
     this.browserFn = undefined;
 
     for (const mode of this.config.modes) {
-      const agent = typeof mode.agent === 'function' ? null : mode.agent;
-      if (!agent || agent.hasOwnBrowser()) continue;
+      const agent = this.getAgentForMode(mode);
       agent.setBrowser(browser);
     }
   }
@@ -382,8 +613,7 @@ export class Harness<TState = {}> {
 
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub to mode agents (after workspace init)
     for (const mode of this.config.modes) {
-      const agent = typeof mode.agent === 'function' ? null : mode.agent;
-      if (!agent) continue;
+      const agent = this.getAgentForMode(mode);
       this.propagateRuntimeServicesToAgent(agent);
     }
 
@@ -516,7 +746,7 @@ export class Harness<TState = {}> {
   // Mode Management
   // ===========================================================================
 
-  listModes(): HarnessMode<TState>[] {
+  listModes(): HarnessMode[] {
     return this.config.modes;
   }
 
@@ -524,7 +754,7 @@ export class Harness<TState = {}> {
     return this.currentModeId;
   }
 
-  getCurrentMode(): HarnessMode<TState> {
+  getCurrentMode(): HarnessMode {
     const mode = this.config.modes.find(m => m.id === this.currentModeId);
     if (!mode) {
       throw new Error(`Mode not found: ${this.currentModeId}`);
@@ -619,13 +849,61 @@ export class Harness<TState = {}> {
     return agent;
   }
 
+  private getAgentForMode(mode: HarnessMode): Agent<any, any, any, any> {
+    if (!this.#legacyAgentMode[mode.id]) {
+      const instructions = [this.#instructions ?? '', mode.instructions].filter(Boolean).join('\n');
+      const modeTools = {
+        ...mode.tools,
+        ...mode.additionalTools,
+      };
+
+      if (mode.agent) {
+        this.#legacyAgentMode[mode.id] = mode.agent;
+      } else if (this.config.agent) {
+        const forkedAgent = this.config.agent.__fork();
+        if (instructions) {
+          forkedAgent.__updateInstructions(instructions);
+        }
+        if (mode.tools || mode.additionalTools) {
+          forkedAgent.__setTools(modeTools as any);
+        }
+        this.#legacyAgentMode[mode.id] = forkedAgent;
+      } else {
+        if (!mode.defaultModelId) {
+          throw new Error(`Mode ${mode.id} requires a defaultModelId when no backing agent is configured`);
+        }
+
+        const model = this.config.resolveModel ? this.config.resolveModel(mode.defaultModelId) : mode.defaultModelId;
+        const forkedAgent = new Agent({
+          id: `${this.id}-agent`,
+          name: `Harness ${this.id} agent`,
+          model,
+          instructions,
+          // TODO move to permissions and global tools
+          tools: modeTools,
+        });
+
+        this.#legacyAgentMode[mode.id] = forkedAgent;
+      }
+    }
+
+    return this.#legacyAgentMode[mode.id]!;
+  }
+
   /**
    * Get the agent for the current mode.
    */
-  private getCurrentAgent(): Agent {
+  /**
+   * Resolve the Agent backing the current mode, with runtime services (storage,
+   * pubsub, telemetry) propagated. Public so consumers like MastraCode's
+   * GoalManager can drive the agent's native objective methods
+   * (`setObjective`/`getObjective`/`clearObjective`/`updateObjectiveOptions`),
+   * which read/write the durable `threadState` `'goal'` slot.
+   */
+  getCurrentAgent(): Agent {
     const mode = this.getCurrentMode();
-    const agent = typeof mode.agent === 'function' ? mode.agent(this.state) : mode.agent;
-    return this.propagateRuntimeServicesToAgent(agent);
+
+    return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
   }
 
   /**
@@ -1676,11 +1954,27 @@ export class Harness<TState = {}> {
       ...(tracingOptions && { tracingOptions }),
     };
     streamOptions.toolsets = await this.buildToolsets(requestContext);
+
+    // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
+    // block is transparently retried on the fallback model instead of failing.
+    const fableFallback = buildFableFallbackProviderOptions(this.getCurrentModelId());
+    if (fableFallback) {
+      const existing = streamOptions.providerOptions as Record<string, unknown> | undefined;
+      const existingAnthropic = (existing?.anthropic as Record<string, unknown> | undefined) ?? {};
+      streamOptions.providerOptions = {
+        ...existing,
+        anthropic: { ...existingAnthropic, ...fableFallback.anthropic },
+      };
+    }
+
     return streamOptions;
   }
 
-  private async drainFollowUpQueue(options?: { tracingContext?: TracingContext; tracingOptions?: TracingOptions }) {
-    if (this.followUpQueue.length === 0) return;
+  private async drainFollowUpQueue(options?: {
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  }): Promise<boolean> {
+    if (this.followUpQueue.length === 0) return false;
 
     const next = this.followUpQueue.shift()!;
     try {
@@ -1706,6 +2000,7 @@ export class Harness<TState = {}> {
           tracingOptions: options?.tracingOptions,
         });
       }
+      return true;
     } catch (error) {
       this.followUpQueue.unshift(next);
       this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
@@ -1792,13 +2087,23 @@ export class Harness<TState = {}> {
             chunk.type === 'tool-call-suspended'
           ) {
             const finishedRunId: string | null = chunkRunId ?? this.currentRunId;
+            const suspended =
+              chunk.type === 'tool-call-suspended' ||
+              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
+              undefined;
+            const aborted = chunk.type === 'abort';
+            // A non-success terminal finish reason (e.g. a `claude-fable-5`
+            // content-filter refusal) is surfaced as an explicit error so the
+            // run never silently stops without a visible terminal state.
+            let isError = chunk.type === 'error';
+            if (currentRun.terminalError && !isError && !aborted && !this.abortRequested && !suspended) {
+              isError = true;
+              this.emit({ type: 'error', error: new Error(currentRun.terminalError) });
+            }
             await this.finishSubscribedStreamRun({
-              suspended:
-                chunk.type === 'tool-call-suspended' ||
-                (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-                undefined,
-              error: chunk.type === 'error',
-              aborted: chunk.type === 'abort',
+              suspended,
+              error: isError,
+              aborted,
             });
             lastFinishedRunId = finishedRunId;
             currentRun = undefined;
@@ -1874,6 +2179,45 @@ export class Harness<TState = {}> {
   }
 
   /**
+   * Send a notification signal to the current agent/thread.
+   */
+  async sendNotificationSignal(
+    input: SendNotificationSignalInput,
+    options: HarnessSendNotificationSignalOptions = {},
+  ): Promise<SendAgentNotificationSignalResult> {
+    const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
+    if (!this.currentThreadId) {
+      const thread = await this.createThread();
+      this.currentThreadId = thread.id;
+    }
+
+    const agent = this.getCurrentAgent();
+    await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
+
+    if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
+      return agent.sendNotificationSignal(input, {
+        resourceId: this.resourceId,
+        threadId: this.currentThreadId,
+        ifActive,
+        ifIdle,
+      });
+    }
+
+    const streamOptions = await this.buildAgentMessageStreamOptions({
+      requestContext: requestContextInput,
+      tracingContext,
+      tracingOptions,
+    });
+
+    return agent.sendNotificationSignal(input, {
+      resourceId: this.resourceId,
+      threadId: this.currentThreadId,
+      ifActive,
+      ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+    });
+  }
+
+  /**
    * Send a message to the current agent.
    * Streams the response and emits events.
    */
@@ -1910,7 +2254,7 @@ export class Harness<TState = {}> {
       await new Promise(resolve => setTimeout(resolve, 0));
       await this.waitForCurrentThreadStreamIdle();
       unsubscribeAgentEnd?.();
-      if (!emittedAgentEnd && !this.pendingSuspensionRunId) {
+      if (!emittedAgentEnd && this.pendingSuspensions.size === 0) {
         this.emit({ type: 'agent_end', reason: 'complete' });
       }
     }
@@ -2073,21 +2417,94 @@ export class Harness<TState = {}> {
         }
       }
 
+      if (signal.type === 'state') {
+        const stateSignal = toStateSignalContent({
+          id: signal.id,
+          type: signal.type,
+          tagName: signal.tagName,
+          contents: signal.contents,
+          metadata: signal.metadata,
+        });
+        if (stateSignal) {
+          content.push(stateSignal);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
       if (signal.type === 'reactive' && signal.tagName === 'system-reminder') {
         const reminder = toSystemReminderContent({
           type: signal.type,
-          contents:
-            typeof signal.contents === 'string'
-              ? signal.contents
-              : signal.contents
-                  .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-                  .map(p => p.text)
-                  .join('\n'),
+          contents: signalContentsToText(signal.contents),
           attributes: signal.attributes ?? msg.content.metadata,
           metadata: signal.metadata,
         });
         if (reminder) {
           content.push(reminder);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
+      if (signal.type === 'notification' && signal.tagName === 'notification-summary') {
+        const notificationSummary = toNotificationSummaryContent({
+          id: signal.id,
+          contents: signal.contents,
+          attributes: signal.attributes,
+          metadata: signal.metadata,
+        });
+        if (notificationSummary) {
+          content.push(notificationSummary);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
+      if (signal.type === 'notification' && signal.tagName === 'notification') {
+        const notification = toNotificationContent({
+          id: signal.id,
+          contents: signal.contents,
+          attributes: signal.attributes,
+          metadata: signal.metadata,
+        });
+        if (notification) {
+          content.push(notification);
+        }
+
+        return {
+          id: msg.id,
+          role: 'user',
+          content,
+          createdAt: msg.createdAt,
+        };
+      }
+
+      if (signal.type === 'reactive') {
+        const reactiveSignal = toReactiveSignalContent({
+          id: signal.id,
+          type: signal.type,
+          tagName: signal.tagName,
+          contents: signal.contents,
+          attributes: signal.attributes,
+          metadata: signal.metadata,
+        });
+        if (reactiveSignal) {
+          content.push(reactiveSignal);
         }
 
         return {
@@ -2181,6 +2598,26 @@ export class Harness<TState = {}> {
           });
           break;
         }
+        case 'data-signal': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          if (data.type === 'state') {
+            const stateSignal = toStateSignalContent(data);
+            if (stateSignal) content.push(stateSignal);
+          } else if (data.type === 'reactive' && data.tagName === 'system-reminder') {
+            const reminder = toSystemReminderContent(data);
+            if (reminder) content.push(reminder);
+          } else if (data.type === 'notification' && data.tagName === 'notification-summary') {
+            const notificationSummary = toNotificationSummaryContent(data);
+            if (notificationSummary) content.push(notificationSummary);
+          } else if (data.type === 'notification' && data.tagName === 'notification') {
+            const notification = toNotificationContent(data);
+            if (notification) content.push(notification);
+          } else if (data.type === 'reactive') {
+            const reactiveSignal = toReactiveSignalContent(data);
+            if (reactiveSignal) content.push(reactiveSignal);
+          }
+          break;
+        }
         case 'data-user-message': {
           const data = (part as { data?: Record<string, unknown> }).data ?? {};
           const message = toUserSignalMessage(data);
@@ -2189,6 +2626,7 @@ export class Harness<TState = {}> {
           }
           break;
         }
+        // Back-compat: persisted streams may still contain data-system-reminder parts
         case 'data-system-reminder': {
           const data = (part as { data?: Record<string, unknown> }).data ?? {};
           const reminder = toSystemReminderContent(data);
@@ -2306,6 +2744,15 @@ export class Harness<TState = {}> {
     }
 
     result ??= this.finishStreamState(state);
+
+    // A non-success terminal finish reason (e.g. a `claude-fable-5`
+    // content-filter refusal) is surfaced as an explicit error so the run never
+    // silently stops without a visible terminal state.
+    if (state.terminalError && !error && !aborted && !this.abortRequested && !result.suspended) {
+      error = true;
+      this.emit({ type: 'error', error: new Error(state.terminalError) });
+    }
+
     this.emit({
       type: 'agent_end',
       reason: error
@@ -2502,6 +2949,11 @@ export class Harness<TState = {}> {
         const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', chunk.payload.suspendPayload);
         const suspResumeSchema = chunk.payload.resumeSchema;
 
+        if (this.currentRunId) {
+          this.pendingSuspensions.set(suspToolCallId, { runId: this.currentRunId, toolName: suspToolName });
+        }
+        state.isSuspended = true;
+
         this.emit({
           type: 'tool_suspended',
           toolCallId: suspToolCallId,
@@ -2511,10 +2963,6 @@ export class Harness<TState = {}> {
           resumeSchema: suspResumeSchema,
         });
 
-        this.pendingSuspensionRunId = this.currentRunId;
-        this.pendingSuspensionToolCallId = suspToolCallId;
-
-        state.isSuspended = true;
         break;
       }
 
@@ -2568,13 +3016,41 @@ export class Harness<TState = {}> {
 
       case 'finish': {
         const finishReason = chunk.payload.stepResult?.reason;
+        const finishProviderMetadata = chunk.payload?.metadata?.providerMetadata ?? chunk.payload?.providerMetadata;
+        // A server-side fallback means the turn was answered by a different
+        // model than the one the user selected (e.g. fable-5 declined and the
+        // fallback served the response). Surface that, otherwise the
+        // substitution is invisible.
+        const fallbackNotice = describeServerSideFallback(finishProviderMetadata);
+        if (fallbackNotice) {
+          this.emit({ type: 'info', message: fallbackNotice });
+        }
         if (finishReason === 'stop' || finishReason === 'end-turn') {
           state.currentMessage.stopReason = 'complete';
         } else if (finishReason === 'tool-calls') {
           state.currentMessage.stopReason = 'tool_use';
         } else {
-          state.currentMessage.stopReason = 'complete';
+          // Non-success terminal reasons (e.g. `content-filter` from a
+          // `claude-fable-5` refusal, `error`, or `length`) must surface as an
+          // explicit terminal error rather than a silent `complete`. Otherwise
+          // the run ends with no final message and no error, leaving the user
+          // unable to tell whether it completed, failed, or is still active.
+          const errorMessage = describeNonSuccessFinishReason(finishReason, finishProviderMetadata);
+          if (errorMessage) {
+            state.currentMessage.stopReason = 'error';
+            state.currentMessage.errorMessage = errorMessage;
+            state.terminalError = errorMessage;
+          } else {
+            state.currentMessage.stopReason = 'complete';
+          }
         }
+        break;
+      }
+
+      case 'goal': {
+        // In-loop goal evaluation. Forward the payload so consumers (the TUI's
+        // judge display) can render judge progress and the decision.
+        this.emit({ type: 'goal_evaluation', payload: chunk.payload });
         break;
       }
 
@@ -2738,6 +3214,41 @@ export class Harness<TState = {}> {
         }
         break;
       }
+      case 'data-signal': {
+        const payload = (chunk as any).data as Record<string, unknown> | undefined;
+        if (payload?.type === 'state') {
+          const stateSignal = toStateSignalContent(payload);
+          if (stateSignal) {
+            state.currentMessage.content.push(stateSignal);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'reactive' && payload.tagName === 'system-reminder') {
+          const reminder = toSystemReminderContent(payload);
+          if (reminder) {
+            state.currentMessage.content.push(reminder);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'notification' && payload.tagName === 'notification-summary') {
+          const notificationSummary = toNotificationSummaryContent(payload);
+          if (notificationSummary) {
+            state.currentMessage.content.push(notificationSummary);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'notification' && payload.tagName === 'notification') {
+          const notification = toNotificationContent(payload);
+          if (notification) {
+            state.currentMessage.content.push(notification);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        } else if (payload?.type === 'reactive') {
+          const reactiveSignal = toReactiveSignalContent(payload);
+          if (reactiveSignal) {
+            state.currentMessage.content.push(reactiveSignal);
+            this.emit({ type: 'message_update', message: state.currentMessage });
+          }
+        }
+        break;
+      }
       case 'data-user-message': {
         const payload = (chunk as any).data as Record<string, unknown> | undefined;
         const message = payload ? toUserSignalMessage(payload) : undefined;
@@ -2759,6 +3270,7 @@ export class Harness<TState = {}> {
         }
         break;
       }
+      // Back-compat: persisted streams may still contain data-system-reminder parts
       case 'data-system-reminder': {
         const payload = (chunk as any).data as Record<string, unknown> | undefined;
         const reminder = payload ? toSystemReminderContent(payload) : undefined;
@@ -2840,6 +3352,13 @@ export class Harness<TState = {}> {
    */
   abort(): void {
     this.abortRequested = true;
+    // Drop any tool suspensions parked awaiting a resume. A run sitting in a
+    // tool suspend() (e.g. ask_user / request_access) is not actively streaming,
+    // so aborting the AbortController alone leaves it orphaned. Clearing the map
+    // ensures the harness no longer considers itself awaiting resumes after an
+    // abort, and that a later respondToToolSuspension is a safe no-op.
+    this.pendingSuspensions.clear();
+    this.displayState.pendingSuspensions.clear();
     try {
       this.agentThreadSubscription?.abort();
     } catch {}
@@ -2849,6 +3368,20 @@ export class Harness<TState = {}> {
       } catch {}
       this.abortController = null;
     }
+  }
+
+  /**
+   * Detach from the current thread's event stream without switching to another
+   * thread. Used by the TUI `/new` command to stop receiving cross-process
+   * events from the old thread while the new thread creation is deferred until
+   * the first user message.
+   *
+   * The current thread ID is preserved so that {@link createThread} can still
+   * release the thread lock (when configured) for the previous thread.
+   */
+  detachFromCurrentThread(): void {
+    this.abort();
+    this.cleanupAgentThreadSubscription();
   }
 
   /**
@@ -2879,6 +3412,17 @@ export class Harness<TState = {}> {
 
   isRunning(): boolean {
     return this.abortController !== null;
+  }
+
+  /**
+   * True when one or more tools are parked awaiting a resume (e.g. ask_user /
+   * request_access suspensions). A suspended run nulls the AbortController, so
+   * isRunning() returns false even though the run is still pending — callers that
+   * need to know whether the harness is awaiting user input (e.g. to allow abort)
+   * should check this too.
+   */
+  hasPendingSuspensions(): boolean {
+    return this.pendingSuspensions.size > 0;
   }
 
   getCurrentRunId(): string | null {
@@ -2946,9 +3490,7 @@ export class Harness<TState = {}> {
     this.displayState.activeTools = new Map();
     this.displayState.toolInputBuffers = new Map();
     this.displayState.pendingApproval = null;
-    this.displayState.pendingSuspension = null;
-    this.displayState.pendingQuestion = null;
-    this.displayState.pendingPlanApproval = null;
+    this.displayState.pendingSuspensions = new Map();
     this.displayState.activeSubagents = new Map();
     this.displayState.currentMessage = null;
     this.followUpQueue = [];
@@ -2992,19 +3534,42 @@ export class Harness<TState = {}> {
   /**
    * Respond to a pending tool suspension from the UI.
    * Provides resume data so the suspended tool can continue execution.
+   *
+   * `toolCallId` selects which suspended tool to resume — required when more than
+   * one tool is suspended concurrently (e.g. parallel `ask_user` calls, see issue
+   * #13642). When omitted it resolves to the sole pending suspension.
    */
   async respondToToolSuspension({
     resumeData,
+    toolCallId,
     requestContext,
   }: {
     resumeData: any;
+    toolCallId?: string;
     requestContext?: RequestContext;
   }): Promise<void> {
-    if (!this.pendingSuspensionRunId) return;
+    const resolvedToolCallId = this.resolvePendingSuspensionToolCallId(toolCallId);
+    if (!resolvedToolCallId) return;
+
+    const suspension = this.pendingSuspensions.get(resolvedToolCallId);
 
     try {
+      // `submit_plan` resumes carry a plan-approval decision. Approval additionally
+      // switches the Harness from its planning mode to its default execution mode, so
+      // it is handled separately from a plain tool resume. Non-Harness consumers skip
+      // this entirely and resume the tool directly via agent.resumeStream.
+      if (suspension?.toolName === 'submit_plan') {
+        await this.handlePlanApprovalResume({
+          toolCallId: resolvedToolCallId,
+          response: resumeData as { action: 'approved' | 'rejected'; feedback?: string },
+          requestContext,
+        });
+        return;
+      }
+
       await this.handleToolResume({
         resumeData,
+        toolCallId: resolvedToolCallId,
         requestContext,
       });
     } catch (error) {
@@ -3014,83 +3579,80 @@ export class Harness<TState = {}> {
     }
   }
 
-  // ===========================================================================
-  // Question & Plan Approval
-  // ===========================================================================
-
   /**
-   * Register a pending question resolver.
-   * Called by agent tools (e.g., ask_user) to pause execution until the UI responds.
+   * Resolve which suspended tool call to act on. With an explicit `toolCallId` it
+   * must match a pending suspension; without one it returns the single pending
+   * suspension (or undefined when there are zero or several).
    */
-  registerQuestion({
-    questionId,
-    resolve,
-  }: {
-    questionId: string;
-    resolve: (answer: HarnessQuestionAnswer) => void;
-  }): void {
-    this.pendingQuestions.set(questionId, resolve);
-  }
-
-  /**
-   * Resolve a pending question with the user's answer.
-   * Called by the UI when the user responds to a question dialog.
-   */
-  respondToQuestion({ questionId, answer }: { questionId: string; answer: HarnessQuestionAnswer }): void {
-    const resolve = this.pendingQuestions.get(questionId);
-    if (resolve) {
-      this.pendingQuestions.delete(questionId);
-      resolve(answer);
+  private resolvePendingSuspensionToolCallId(toolCallId?: string): string | undefined {
+    if (toolCallId) {
+      return this.pendingSuspensions.has(toolCallId) ? toolCallId : undefined;
     }
+    if (this.pendingSuspensions.size === 1) {
+      return this.pendingSuspensions.keys().next().value;
+    }
+    return undefined;
   }
 
-  /**
-   * Register a pending plan approval resolver.
-   * Called by agent tools (e.g., submit_plan) to pause execution until approval.
-   */
-  registerPlanApproval({
-    planId,
-    resolve,
-  }: {
-    planId: string;
-    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void;
-  }): void {
-    this.pendingPlanApprovals.set(planId, resolve);
-  }
+  // ===========================================================================
+  // Plan Approval
+  // ===========================================================================
 
   /**
-   * Respond to a pending plan approval.
-   * On approval: resolves the suspended plan tool, then switches to the default mode.
-   * On rejection: resolves with feedback (stays in current mode).
+   * Respond to a suspended `submit_plan` tool call.
+   *
+   * `submit_plan` is an agent-agnostic tool that pauses via the native tool-suspension
+   * primitive. The Harness layers its planning UX on top of that generic pause here:
+   *
+   * - On **rejection**, the plan-mode run is resumed with the feedback so the agent can
+   *   revise and submit again. This is an ordinary tool resume.
+   * - On **approval**, the parked plan-mode suspension is abandoned and the Harness
+   *   switches to its default (execution) mode. switchMode aborts the plan-mode run, so
+   *   there is no point resuming it first; the next signal/message drives the fresh
+   *   default-mode run. The model still sees the "approved" tool result on the rebuilt
+   *   message history when the default-mode run starts.
+   *
+   * Non-Harness consumers (a plain Agent in Studio or a customer app) instead resume the
+   * tool directly via `agent.resumeStream({ action, feedback })` — no modes involved.
    */
-  async respondToPlanApproval({
-    planId,
+  private async handlePlanApprovalResume({
+    toolCallId,
     response,
+    requestContext,
   }: {
-    planId: string;
+    toolCallId: string;
     response: { action: 'approved' | 'rejected'; feedback?: string };
+    requestContext?: RequestContext;
   }): Promise<void> {
-    const resolve = this.pendingPlanApprovals.get(planId);
-    if (!resolve) return;
+    if (response.action === 'rejected') {
+      await this.handleToolResume({ resumeData: response, toolCallId, requestContext });
+      return;
+    }
 
-    this.pendingPlanApprovals.delete(planId);
-    resolve(response);
+    // Approved: drop the parked suspension (its run is about to be aborted by the mode
+    // switch) and move to the default execution mode.
+    this.pendingSuspensions.delete(toolCallId);
 
-    if (response.action === 'approved') {
-      const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
-      if (defaultMode && defaultMode.id !== this.currentModeId) {
-        await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-        await this.switchMode({ modeId: defaultMode.id });
-        // switchMode aborts the in-flight run but does not wait for it to
-        // finalize. If the caller (e.g. mastracode's plan-approval handler)
-        // immediately fires a system-reminder signal, that signal can land in
-        // the dying run's pending queue and later get drained with the run's
-        // already-aborted abortSignal — manifesting as a hang where the agent
-        // never resumes after "The user has approved the plan, begin
-        // executing.". Waiting for the stream to be fully idle here ensures
-        // the next sendSignal() always starts a fresh run.
-        await this.waitForCurrentThreadStreamIdle();
-      }
+    const currentMode = this.getCurrentMode();
+    const transitionModeId =
+      currentMode.transitionsTo ??
+      this.config.defaultModeId ??
+      this.config.modes.find(mode => mode.default || mode.metadata?.default === true)?.id ??
+      this.config.modes[0]?.id;
+
+    const transitionMode = this.listModes().find(mode => mode.id === transitionModeId);
+    if (transitionMode && transitionMode.id !== this.currentModeId) {
+      await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
+      await this.switchMode({ modeId: transitionMode.id });
+      // switchMode aborts the in-flight run but does not wait for it to
+      // finalize. If the caller (e.g. mastracode's plan-approval handler)
+      // immediately fires a system-reminder signal, that signal can land in
+      // the dying run's pending queue and later get drained with the run's
+      // already-aborted abortSignal — manifesting as a hang where the agent
+      // never resumes after "The user has approved the plan, begin
+      // executing.". Waiting for the stream to be fully idle here ensures
+      // the next sendSignal() always starts a fresh run.
+      await this.waitForCurrentThreadStreamIdle();
     }
   }
 
@@ -3155,12 +3717,15 @@ export class Harness<TState = {}> {
 
   private async handleToolResume({
     resumeData,
+    toolCallId,
     requestContext: requestContextInput,
   }: {
     resumeData: any;
+    toolCallId: string;
     requestContext?: RequestContext;
   }): Promise<void> {
-    if (!this.pendingSuspensionRunId) {
+    const suspension = this.pendingSuspensions.get(toolCallId);
+    if (!suspension) {
       throw new Error('No active suspension to resume');
     }
 
@@ -3170,11 +3735,18 @@ export class Harness<TState = {}> {
       this.abortController = new AbortController();
     }
 
+    // Remove before resuming so a re-suspend during the resumed run can re-register
+    // the same toolCallId without being clobbered by this cleanup. Drop the matching
+    // display-state entry too so the UI stops rendering only the resolved prompt
+    // while any other parked suspensions stay visible.
+    this.pendingSuspensions.delete(toolCallId);
+    this.displayState.pendingSuspensions.delete(toolCallId);
+
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const output = await agent.resumeStream(resumeData, {
-      runId: this.pendingSuspensionRunId,
-      toolCallId: this.pendingSuspensionToolCallId ?? undefined,
+      runId: suspension.runId,
+      toolCallId,
       requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
@@ -3182,9 +3754,6 @@ export class Harness<TState = {}> {
       toolsets: await this.buildToolsets(requestContext),
     });
     await this.processStream(output, requestContext);
-
-    this.pendingSuspensionRunId = null;
-    this.pendingSuspensionToolCallId = null;
   }
 
   // ===========================================================================
@@ -3284,17 +3853,21 @@ export class Harness<TState = {}> {
         ds.toolInputBuffers = new Map();
         ds.currentMessage = null;
         ds.pendingApproval = null;
-        ds.pendingSuspension = null;
+        // Parked tool suspensions are intentionally NOT cleared here: resuming
+        // one parked tool restarts the run (a fresh agent_start) and the other
+        // parallel prompts must stay rendered until they are resolved.
         break;
 
       case 'agent_end':
         ds.isRunning = false;
         ds.pendingApproval = null;
+        // A suspended run keeps its pending tool suspensions alive so the UI can
+        // still render the prompts (e.g. `ask_user`, which pauses via the native
+        // tool-suspension primitive). When the run ends for any other reason the
+        // parked suspensions are abandoned, so clear them all.
         if (event.reason !== 'suspended') {
-          ds.pendingSuspension = null;
+          ds.pendingSuspensions.clear();
         }
-        ds.pendingQuestion = null;
-        ds.pendingPlanApproval = null;
         // Mark any still-running tools as errored (handles abort mid-run)
         for (const [, tool] of ds.activeTools) {
           if (tool.status === 'running' || tool.status === 'streaming_input') {
@@ -3417,35 +3990,13 @@ export class Harness<TState = {}> {
         break;
 
       case 'tool_suspended':
-        ds.pendingSuspension = {
+        ds.pendingSuspensions.set(event.toolCallId, {
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           args: event.args,
           suspendPayload: event.suspendPayload,
           resumeSchema: event.resumeSchema,
-        };
-        break;
-
-      // ── Interactive prompts ────────────────────────────────────────────
-      case 'ask_question':
-        ds.pendingQuestion = {
-          questionId: event.questionId,
-          question: event.question,
-          options: event.options,
-          selectionMode: event.selectionMode,
-        };
-        break;
-
-      case 'plan_approval_required':
-        ds.pendingPlanApproval = {
-          planId: event.planId,
-          title: event.title,
-          plan: event.plan,
-        };
-        break;
-
-      case 'plan_approved':
-        ds.pendingPlanApproval = null;
+        });
         break;
 
       // ── Subagent tracking ──────────────────────────────────────────────
@@ -3786,15 +4337,19 @@ export class Harness<TState = {}> {
       abortSignal: this.abortController?.signal,
       workspace: this.workspace,
       emitEvent: event => this.emit(event),
-      registerQuestion: params => this.registerQuestion(params),
-      registerPlanApproval: params => this.registerPlanApproval(params),
       getSubagentModelId: params => this.getSubagentModelId(params),
     };
 
     requestContext.set('harness', harnessContext);
 
     if (this.workspaceFn) {
-      const resolved = await Promise.resolve(this.workspaceFn({ requestContext }));
+      // Pass the internal Mastra instance so the workspace factory can dedupe
+      // against the registered workspace (getWorkspaceById). Without it, a
+      // dynamic factory would build a *separate* Workspace/filesystem instance
+      // from the one the agent resolves and registers — leaving harness-side
+      // tools (e.g. request_access) mutating a different filesystem than the
+      // agent's workspace tools (e.g. view) read from.
+      const resolved = await Promise.resolve(this.workspaceFn({ requestContext, mastra: this.#internalMastra }));
       harnessContext.workspace = resolved;
       // Cache for getWorkspace() so callers outside request flow (e.g. /skills) can access it
       this.workspace = resolved;
@@ -3906,8 +4461,8 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   private startHeartbeats(): void {
-    const handlers = this.config.heartbeatHandlers;
-    if (!handlers?.length) return;
+    const handlers = [...(this.config.heartbeatHandlers ?? [])];
+    if (!handlers.length) return;
 
     for (const hb of handlers) {
       if (this.heartbeatTimers.has(hb.id)) continue;

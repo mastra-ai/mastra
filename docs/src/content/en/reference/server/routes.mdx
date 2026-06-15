@@ -20,7 +20,8 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `POST` | `/api/agents/:agentId/send-message` | Send a user message to an active or idle thread |
 | `POST` | `/api/agents/:agentId/queue-message` | Queue a user message for the next thread turn |
 | `POST` | `/api/agents/:agentId/signals` | Send a lower-level signal to an active or idle thread |
-| `POST` | `/api/agents/:agentId/subscribe-thread` | Subscribe to a thread stream |
+| `POST` | `/api/agents/:agentId/threads/subscribe` | Subscribe to a thread stream |
+| `POST` | `/api/agents/:agentId/send-tool-approval` | Approve or decline a tool call and resume through a thread subscription |
 | `POST` | `/api/agents/:agentId/resume-stream` | Resume a suspended agent stream with custom data |
 | `GET` | `/api/agents/:agentId/tools` | List agent tools |
 | `POST` | `/api/agents/:agentId/tools/:toolId/execute` | Execute agent tool |
@@ -144,6 +145,32 @@ Both routes return:
   accepted: true;
   runId: string;
   signal?: CreatedAgentSignal;
+}
+```
+
+### Subscription tool approval routes
+
+Use `POST /api/agents/:agentId/send-tool-approval` when the client already has an active thread subscription. The route resumes the run and returns a JSON acknowledgement. Resumed stream chunks are delivered through `POST /api/agents/:agentId/threads/subscribe`.
+
+The route accepts this request body:
+
+```typescript prettier:false
+{
+  resourceId: string;
+  threadId: string;
+  toolCallId: string;
+  approved: boolean;
+  requestContext?: Record<string, unknown>;
+}
+```
+
+The route returns:
+
+```typescript prettier:false
+{
+  accepted: true;
+  runId: string;
+  toolCallId?: string;
 }
 ```
 

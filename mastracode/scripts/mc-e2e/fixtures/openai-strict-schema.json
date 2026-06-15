@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Check OpenAI strict schema compatibility for available tools.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC OpenAI strict schema compatibility response"
+      }
+    }
+  ]
+}

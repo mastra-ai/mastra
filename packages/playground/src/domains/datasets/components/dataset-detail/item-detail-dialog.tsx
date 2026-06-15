@@ -6,15 +6,15 @@ import {
   KeyValueList,
   Label,
   Sections,
-  SideDialog,
   TextAndIcon,
   getShortId,
   Icon,
   toast,
 } from '@mastra/playground-ui';
-import type { SideDialogRootProps } from '@mastra/playground-ui';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { format } from 'date-fns/format';
-import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon, Pencil, Trash2 } from 'lucide-react';
+import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon, BracesIcon, Pencil, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
@@ -49,6 +49,7 @@ export function ItemDetailDialog({
   const [groundTruthValue, setGroundTruthValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
   const [trajectoryValue, setTrajectoryValue] = useState('');
+  const [requestContextValue, setRequestContextValue] = useState('');
 
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -60,9 +61,11 @@ export function ItemDetailDialog({
       setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
+      setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.id]);
 
   if (!item) return null;
@@ -128,6 +131,17 @@ export function ItemDetailDialog({
       }
     }
 
+    // Parse requestContext if provided
+    let parsedRequestContext: Record<string, unknown> | undefined;
+    if (requestContextValue.trim()) {
+      try {
+        parsedRequestContext = JSON.parse(requestContextValue);
+      } catch {
+        toast.error('Request Context must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId,
@@ -136,6 +150,7 @@ export function ItemDetailDialog({
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
         expectedTrajectory: parsedTrajectory,
+        requestContext: parsedRequestContext,
       });
 
       toast.success('Item updated successfully');
@@ -151,6 +166,7 @@ export function ItemDetailDialog({
     setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
+    setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
     setIsEditing(false);
   };
 
@@ -216,6 +232,8 @@ export function ItemDetailDialog({
             setMetadataValue={setMetadataValue}
             trajectoryValue={trajectoryValue}
             setTrajectoryValue={setTrajectoryValue}
+            requestContextValue={requestContextValue}
+            setRequestContextValue={setRequestContextValue}
             onSave={handleSave}
             onCancel={handleCancel}
             isSaving={updateItem.isPending}
@@ -252,6 +270,7 @@ export function ItemDetailDialog({
 function ReadOnlyContent({ item }: { item: DatasetItem }) {
   const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
   const trajectoryDisplay = item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : null;
+  const requestContextDisplay = item.requestContext ? JSON.stringify(item.requestContext, null, 2) : null;
 
   return (
     <>
@@ -298,6 +317,10 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
           <SideDialog.CodeSection title="Expected Trajectory" icon={<RouteIcon />} codeStr={trajectoryDisplay} />
         )}
 
+        {requestContextDisplay && (
+          <SideDialog.CodeSection title="Request Context" icon={<BracesIcon />} codeStr={requestContextDisplay} />
+        )}
+
         {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
       </Sections>
     </>
@@ -316,6 +339,8 @@ interface EditModeContentProps {
   setMetadataValue: (value: string) => void;
   trajectoryValue: string;
   setTrajectoryValue: (value: string) => void;
+  requestContextValue: string;
+  setRequestContextValue: (value: string) => void;
   onSave: () => void;
   onCancel: () => void;
   isSaving: boolean;
@@ -330,6 +355,8 @@ function EditModeContent({
   setMetadataValue,
   trajectoryValue,
   setTrajectoryValue,
+  requestContextValue,
+  setRequestContextValue,
   onSave,
   onCancel,
   isSaving,
@@ -363,6 +390,16 @@ function EditModeContent({
           <CodeEditor
             value={trajectoryValue}
             onChange={setTrajectoryValue}
+            showCopyButton={false}
+            className="min-h-[80px]"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Request Context (JSON, optional)</Label>
+          <CodeEditor
+            value={requestContextValue}
+            onChange={setRequestContextValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />

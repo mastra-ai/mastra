@@ -373,7 +373,7 @@ interface WatchPayload {
   [key: string]: unknown;
 }
 
-interface TripwirePayload<TMetadata = unknown> {
+export interface TripwirePayload<TMetadata = unknown> {
   /** The reason for the tripwire */
   reason: string;
   /** If true, the agent should retry with the tripwire reason as feedback */
@@ -387,7 +387,7 @@ interface TripwirePayload<TMetadata = unknown> {
 /**
  * Payload for is-task-complete events emitted during stream/generate scoring.
  */
-interface IsTaskCompletePayload {
+export interface IsTaskCompletePayload {
   /** Current iteration number */
   iteration: number;
   /** Whether all/any scorers passed based on strategy */
@@ -403,6 +403,35 @@ interface IsTaskCompletePayload {
   /** Whether the maximum iteration was reached */
   maxIterationReached: boolean;
   /** Whether to suppress the completion feedback message */
+  suppressFeedback: boolean;
+}
+
+/**
+ * Payload for `goal` events emitted by the in-loop goal scorer. Consumers (TUIs,
+ * `@mastra/client-js`) use this to render judge progress and the result.
+ */
+export interface GoalEvaluationPayload {
+  /** The objective being judged. */
+  objective: string;
+  /** Goal evaluations consumed so far (runsUsed after this evaluation). */
+  iteration: number;
+  /** Max evaluations before the goal stops. */
+  maxRuns: number;
+  /** Whether the goal is judged complete. */
+  passed: boolean;
+  /** The objective status after this evaluation. */
+  status: 'active' | 'paused' | 'done';
+  /** Individual scorer results. */
+  results: ScorerResult[];
+  /** Judge feedback / stop reason. */
+  reason?: string;
+  /** Total duration of the goal scoring check. */
+  duration: number;
+  /** Whether scoring timed out. */
+  timedOut: boolean;
+  /** Whether the run budget (`maxRuns`) was reached. */
+  maxRunsReached: boolean;
+  /** Whether the goal feedback message is suppressed from memory. */
   suppressFeedback: boolean;
 }
 
@@ -800,6 +829,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
   | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
+  | (BaseChunkType & { type: 'goal'; payload: GoalEvaluationPayload })
   | (BaseChunkType & {
       type: 'background-task-started';
       payload: BackgroundTaskStartedPayload;
@@ -957,7 +987,7 @@ export interface LanguageModelV2StreamResult {
   warnings?: LLMStepResult['warnings'];
 }
 
-export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void;
+export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void | ChunkType | ChunkType[];
 export type CreateStream = () => Promise<LanguageModelV2StreamResult>;
 
 export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };

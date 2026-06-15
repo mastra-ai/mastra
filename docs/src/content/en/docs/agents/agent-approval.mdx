@@ -99,6 +99,24 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
+#### Conditional approval with a function
+
+Instead of a boolean, `requireToolApproval` accepts a function that decides per tool call. It receives the `toolName`, the `args` the model passed, the `requestContext`, and the `workspace`. Return `true` to require approval for that call, or `false` to allow it. This lets you gate approval dynamically — for example, only for tools whose name matches a pattern:
+
+```typescript
+const stream = await agent.stream('Clean up old records', {
+  requireToolApproval: ({ toolName }) => /^delete_/.test(toolName),
+})
+```
+
+A tool's own `requireApproval` setting still takes precedence: if a tool defines its own approval rule, that rule decides for that tool and the function above doesn't override it. If the function throws, the call requires approval (fail-safe).
+
+:::note
+
+Function-based `requireToolApproval` is only available on regular `stream()` / `generate()` calls. Durable agents and stored agents persist their options, and a function can't be serialized, so they accept only a boolean. If you pass a function in those contexts it falls back to requiring approval for every tool call.
+
+:::
+
 ### Runtime suspension with `suspend()`
 
 A tool can also pause _during_ its `execute` function by calling `suspend()`. This is useful when the tool starts running and then discovers it needs additional user input or confirmation before it can finish.
@@ -107,7 +125,7 @@ The stream emits a `tool-call-suspended` chunk with a custom payload defined by 
 
 :::note
 
-`suspend()` does not throw — return immediately after calling it (e.g. `return await suspend({ ... })`). Code after `await suspend(...)` still runs before the tool pauses.
+`suspend()` doesn't throw — return immediately after calling it (e.g. `return await suspend({ ... })`). Code after `await suspend(...)` still runs before the tool pauses.
 
 :::
 

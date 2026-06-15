@@ -34,10 +34,10 @@
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
-    "@types/node": "^22.14.0",
-    "tsup": "^8.4.0",
+    "@types/node": "^22.19.21",
+    "tsup": "^8.5.1",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.1",
+    "vitest": "^4.1.8",
     "zod": "catalog:"
   },
   "peerDependencies": {

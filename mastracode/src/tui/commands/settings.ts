@@ -1,14 +1,177 @@
+import { execFile, spawn } from 'node:child_process';
+import { access } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
+import { Box, Spacer, Text, matchesKey } from '@mariozechner/pi-tui';
+import type { TUI } from '@mariozechner/pi-tui';
 import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { SettingsComponent } from '../components/settings.js';
 import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
+import { askModalQuestion } from '../modal-question.js';
 import type { NotificationMode } from '../notify.js';
 import { showModalOverlay } from '../overlay.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
 function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
-  return ctx.state.harness.getCurrentMode?.()?.color;
+  return ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+}
+
+function commandExists(command: string): Promise<boolean> {
+  return new Promise(resolve => {
+    execFile('/bin/sh', ['-lc', `command -v ${command}`], error => resolve(!error));
+  });
+}
+
+class GitcrawlSetupProgress extends Box {
+  private lines: string[] = [];
+  private _focused = false;
+
+  constructor(
+    private title: string,
+    private command: string,
+    private onCancel: () => void,
+  ) {
+    super(2, 1);
+    this.rebuild();
+  }
+
+  get focused(): boolean {
+    return this._focused;
+  }
+
+  set focused(value: boolean) {
+    this._focused = value;
+  }
+
+  handleInput(data: string): void {
+    if (matchesKey(data, 'escape') || data === '\x1b' || data === '\x1b\x1b') {
+      this.onCancel();
+    }
+  }
+
+  addOutput(chunk: Buffer | string): void {
+    const text = chunk.toString();
+    const lines = text
+      .split(/\r?\n/)
+      .map(line => line.trimEnd())
+      .filter(Boolean);
+    this.lines = [...this.lines, ...lines].slice(-4);
+    this.rebuild();
+  }
+
+  private rebuild(): void {
+    this.clear();
+    this.addChild(new Text(this.title, 0, 0));
+    this.addChild(new Text(this.command, 0, 0));
+    this.addChild(new Text('Press Esc to cancel.', 0, 0));
+    this.addChild(new Spacer(1));
+    const output = this.lines.length > 0 ? this.lines : ['Waiting for Homebrew output...'];
+    for (const line of output) {
+      this.addChild(new Text(line, 0, 0));
+    }
+  }
+}
+
+function runGitcrawlSetupCommand(
+  tui: TUI,
+  title: string,
+  command: string,
+  executable: string,
+  args: string[],
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      overlay.hide();
+      callback();
+    };
+    const progress = new GitcrawlSetupProgress(title, command, () => {
+      child.kill('SIGTERM');
+      finish(() => reject(new Error(`${title} cancelled`)));
+    });
+    const overlay = showModalOverlay(tui, progress, { maxHeight: '50%' });
+    overlay.focus();
+
+    child.stdout.on('data', chunk => {
+      progress.addOutput(chunk);
+      tui.requestRender();
+    });
+    child.stderr.on('data', chunk => {
+      progress.addOutput(chunk);
+      tui.requestRender();
+    });
+    child.on('error', error => finish(() => reject(error)));
+    child.on('close', code => {
+      finish(() => {
+        if (code === 0) resolve();
+        else reject(new Error(`${command} exited with code ${code}`));
+      });
+    });
+  });
+}
+
+function installGitcrawl(tui: TUI): Promise<void> {
+  return runGitcrawlSetupCommand(tui, 'Installing gitcrawl', 'brew install openclaw/tap/gitcrawl', 'brew', [
+    'install',
+    'openclaw/tap/gitcrawl',
+  ]);
+}
+
+function gitcrawlConfigPath(): string {
+  return join(homedir(), '.config', 'gitcrawl', 'config.toml');
+}
+
+async function gitcrawlConfigExists(): Promise<boolean> {
+  try {
+    await access(gitcrawlConfigPath());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function initGitcrawl(tui: TUI): Promise<void> {
+  return runGitcrawlSetupCommand(tui, 'Configuring gitcrawl', 'gitcrawl init --json', 'gitcrawl', ['init', '--json']);
+}
+
+async function ensureGitcrawlInstalled(ctx: SlashCommandContext): Promise<boolean> {
+  if (await commandExists('gitcrawl')) return true;
+
+  const answer = await askModalQuestion(ctx.state.ui, {
+    question: 'gitcrawl is required for GitHub signals. Install it with Homebrew now?',
+    options: [
+      { label: 'Install', description: 'Run: brew install openclaw/tap/gitcrawl' },
+      { label: 'Cancel', description: 'Leave GitHub signals disabled' },
+    ],
+  });
+  if (answer !== 'Install') return false;
+
+  await installGitcrawl(ctx.state.ui);
+  return true;
+}
+
+async function ensureGitcrawlConfigured(ctx: SlashCommandContext): Promise<boolean> {
+  if (await gitcrawlConfigExists()) return true;
+
+  await initGitcrawl(ctx.state.ui);
+  return true;
+}
+
+async function ensureGitcrawlReady(ctx: SlashCommandContext): Promise<boolean> {
+  try {
+    return (await ensureGitcrawlInstalled(ctx)) && (await ensureGitcrawlConfigured(ctx));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.endsWith(' cancelled')) ctx.showInfo(`${message}.`);
+    else ctx.showError(`Failed to set up gitcrawl: ${message}`);
+    return false;
+  }
 }
 
 function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean, previewLineLimit: number): void {
@@ -39,6 +202,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
+    experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
   };
 
   return new Promise<void>(resolve => {
@@ -91,6 +255,14 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         const label = backend === 'pg' ? 'PostgreSQL' : 'LibSQL';
         console.info(`\nStorage backend changed to ${label}. Restarting is required.\n`);
         process.exit(0);
+      },
+      onExperimentalGithubSignalsChange: async enabled => {
+        if (enabled && !(await ensureGitcrawlReady(ctx))) return false;
+        const current = loadSettings();
+        current.signals.experimentalGithubSignals = enabled;
+        saveSettings(current);
+        ctx.showInfo(`Experimental GitHub signals: ${enabled ? 'on' : 'off'} (restart required)`);
+        return true;
       },
       onApiKeys: () => {
         ctx.state.ui.hideOverlay();

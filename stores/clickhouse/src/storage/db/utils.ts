@@ -31,7 +31,11 @@ import {
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
   TABLE_TOOL_PROVIDER_CONNECTIONS,
+  TABLE_NOTIFICATIONS,
+  TABLE_HARNESS_SESSIONS,
+  TABLE_THREAD_STATE,
 } from '@mastra/core/storage';
+import type { ClickhouseReplicationConfig } from './replication';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
@@ -69,8 +73,11 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   mastra_background_tasks: `ReplacingMergeTree()`,
   [TABLE_SCHEDULES]: `ReplacingMergeTree()`,
   [TABLE_SCHEDULE_TRIGGERS]: `MergeTree()`,
+  [TABLE_NOTIFICATIONS]: `ReplacingMergeTree()`,
+  [TABLE_HARNESS_SESSIONS]: `ReplacingMergeTree()`,
   mastra_channel_installations: `ReplacingMergeTree()`,
   mastra_channel_config: `ReplacingMergeTree()`,
+  [TABLE_THREAD_STATE]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
@@ -101,6 +108,7 @@ export type ClickhouseConfig = {
   url: string;
   username: string;
   password: string;
+  replication?: ClickhouseReplicationConfig;
   ttl?: {
     [TableKey in TABLE_NAMES]?: {
       row?: { interval: number; unit: IntervalUnit; ttlKey?: string };

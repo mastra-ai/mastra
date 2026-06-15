@@ -17,6 +17,30 @@ export interface DataItem<I = unknown, E = unknown> {
   groundTruth?: E;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
+  /** Per-item request context merged over the global request context (item takes precedence) */
+  requestContext?: Record<string, unknown>;
+  /**
+   * Resume data for suspended workflow steps, keyed by step ID.
+   * When a workflow suspends during experiment execution, the executor
+   * looks up the suspended step's ID here and auto-resumes with the value.
+   *
+   * @example
+   * ```ts
+   * { resumeSteps: { "approval-step": { approved: true } } }
+   * ```
+   */
+  resumeSteps?: Record<string, unknown>;
+  /**
+   * Flat resume data for workflows with a single suspended step.
+   * Used as a fallback when `resumeSteps` does not contain an entry
+   * for the suspended step ID.
+   *
+   * @example
+   * ```ts
+   * { resumeData: { approved: true } }
+   * ```
+   */
+  resumeData?: unknown;
 }
 
 /**
