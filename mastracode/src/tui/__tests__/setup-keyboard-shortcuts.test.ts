@@ -148,7 +148,7 @@ describe('setupKeyboardShortcuts', () => {
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
-    expect(commandNames).toContain('judge');
+    expect(commandNames).not.toContain('judge');
     expect(commandNames).not.toContain('notify');
     const goalCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'goal') as
       | { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> }
@@ -158,6 +158,7 @@ describe('setupKeyboardShortcuts', () => {
       'pause',
       'resume',
       'clear',
+      'judge',
     ]);
     expect(goalCommand?.getArgumentCompletions?.('pa').map(command => command.value)).toEqual(['pause']);
     const githubCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'github') as
@@ -171,7 +172,6 @@ describe('setupKeyboardShortcuts', () => {
     ]);
     expect(githubCommand?.getArgumentCompletions?.('un').map(command => command.value)).toEqual(['unsubscribe']);
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
-    expect(commandNames.indexOf('goal')).toBeLessThan(commandNames.indexOf('judge'));
     expect(commandNames).toContain('skill/');
     expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
