@@ -45,10 +45,6 @@ export class ThreadStateLibSQL extends ThreadStateStorage {
     );
   }
 
-  supportsConcurrentUpdates(): boolean {
-    return true;
-  }
-
   private async setupPragmaSettings() {
     try {
       // Set busy timeout to wait longer before returning busy errors

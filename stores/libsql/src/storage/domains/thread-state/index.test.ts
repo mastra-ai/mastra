@@ -125,14 +125,16 @@ describe('ThreadStateLibSQL', () => {
       return originalExecute(stmt);
     });
 
-    await busyStore.setState({ threadId: 'thread-1', type: 'task', value: tasks() });
+    try {
+      await busyStore.setState({ threadId: 'thread-1', type: 'task', value: tasks() });
 
-    // The first attempt threw SQLITE_BUSY, the retry succeeded — so 2 write attempts total.
-    expect(writeAttempts).toBe(2);
-    const result = await busyStore.getState<Task[]>({ threadId: 'thread-1', type: 'task' });
-    expect(result).toEqual(tasks());
-
-    spy.mockRestore();
-    busyClient.close();
+      // The first attempt threw SQLITE_BUSY, the retry succeeded — so 2 write attempts total.
+      expect(writeAttempts).toBe(2);
+      const result = await busyStore.getState<Task[]>({ threadId: 'thread-1', type: 'task' });
+      expect(result).toEqual(tasks());
+    } finally {
+      spy.mockRestore();
+      busyClient.close();
+    }
   });
 });
