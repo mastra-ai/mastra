@@ -54,17 +54,20 @@ vi.mock('@/domains/datasets/hooks/use-datasets', () => ({
   }),
 }));
 
+const addItemMutateAsync = vi.fn();
+
 vi.mock('@/domains/datasets/hooks/use-dataset-mutations', () => ({
   useDatasetMutations: () => ({
     addItem: {
       isPending: false,
-      mutateAsync: vi.fn(),
+      mutateAsync: addItemMutateAsync,
     },
   }),
 }));
 
 afterEach(() => {
   cleanup();
+  addItemMutateAsync.mockReset();
 });
 
 function renderDialog(props: Partial<Parameters<typeof SaveAsDatasetItemDialog>[0]> = {}) {
@@ -169,6 +172,56 @@ describe('SaveAsDatasetItemDialog async seeding', () => {
       expect(getEditors()[0].value).toBe('{"next":2}');
       expect(getEditors()[1].value).toBe('{"expected":"next"}');
       expect(getEditors()[2].value).toBe('{"steps":["next"]}');
+    });
+  });
+
+  it('renders a Tool Mocks editor and seeds it from initialToolMocks', () => {
+    renderDialog({ initialToolMocks: '[{"toolName":"getWeather","args":{"city":"Seattle"},"output":{"temp":52}}]' });
+
+    expect(screen.getByText('Tool Mocks (JSON, optional)')).not.toBeNull();
+    // Editors: 0=input, 1=groundTruth, 2=trajectory, 3=toolMocks
+    expect(getEditors()[3].value).toBe('[{"toolName":"getWeather","args":{"city":"Seattle"},"output":{"temp":52}}]');
+  });
+
+  it('hydrates tool mocks when async trace data arrives after opening', async () => {
+    const { rerender } = renderDialog();
+
+    expect(getEditors()[3].value).toBe('');
+
+    rerender(
+      <SaveAsDatasetItemDialog
+        initialInput="{}"
+        initialGroundTruth=""
+        initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+        breadcrumb={<span>Trace</span>}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getEditors()[3].value).toBe('[{"toolName":"search","args":{},"output":"ok"}]');
+    });
+  });
+
+  it('preserves user tool-mock edits when async trace data arrives later', async () => {
+    const { rerender } = renderDialog();
+
+    fireEvent.change(getEditors()[3], { target: { value: 'manual mocks' } });
+
+    rerender(
+      <SaveAsDatasetItemDialog
+        initialInput="{}"
+        initialGroundTruth=""
+        initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+        breadcrumb={<span>Trace</span>}
+        isOpen
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getEditors()[3].value).toBe('manual mocks');
     });
   });
 });

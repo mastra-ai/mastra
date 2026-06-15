@@ -70,6 +70,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'requestContext', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'source', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'expectedTrajectory', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMocks', 'TEXT');
 
     // T3.24/T3.25 — idempotent indexes
     await this.#client.batch(
@@ -141,6 +142,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
+      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source as string) : undefined,
@@ -159,6 +161,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
+      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source as string) : undefined,
@@ -450,7 +453,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [args.datasetId],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               id,
               args.datasetId,
@@ -458,6 +461,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
               jsonbArg(args.input)!,
               jsonbArg(args.groundTruth),
               jsonbArg(args.expectedTrajectory),
+              jsonbArg(args.toolMocks),
               jsonbArg(args.requestContext),
               jsonbArg(args.metadata),
               jsonbArg(args.source),
@@ -482,6 +486,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         input: args.input,
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
+        toolMocks: args.toolMocks,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -531,6 +536,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
+      const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -547,7 +553,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [args.datasetId, args.id],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               args.id,
               args.datasetId,
@@ -555,6 +561,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
               jsonbArg(mergedInput)!,
               jsonbArg(mergedGroundTruth),
               jsonbArg(mergedExpectedTrajectory),
+              jsonbArg(mergedToolMocks),
               jsonbArg(mergedRequestContext),
               jsonbArg(mergedMetadata),
               jsonbArg(mergedSource),
@@ -578,6 +585,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
+        toolMocks: mergedToolMocks,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -959,7 +967,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         const id = crypto.randomUUID();
         items.push({ id, input: itemInput });
         statements.push({
-          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
           args: [
             id,
             input.datasetId,
@@ -967,6 +975,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             jsonbArg(itemInput.input)!,
             jsonbArg(itemInput.groundTruth),
             jsonbArg(itemInput.expectedTrajectory),
+            jsonbArg(itemInput.toolMocks),
             jsonbArg(itemInput.requestContext),
             jsonbArg(itemInput.metadata),
             jsonbArg(itemInput.source),
@@ -992,6 +1001,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
         expectedTrajectory: itemInput.expectedTrajectory,
+        toolMocks: itemInput.toolMocks,
         requestContext: itemInput.requestContext,
         metadata: itemInput.metadata,
         source: itemInput.source,

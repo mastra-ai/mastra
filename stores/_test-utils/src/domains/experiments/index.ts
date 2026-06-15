@@ -335,6 +335,32 @@ export function createExperimentsTests({ storage }: { storage: MastraStorage }) 
         expect(result.retryCount).toBe(1);
       });
 
+      it('addExperimentResult persists toolMockReport and reads it back', async () => {
+        const toolMockReport = {
+          served: [{ mockIndex: 0, toolName: 'getWeather', args: { city: 'Seattle' } }],
+          unconsumed: [{ mockIndex: 1, toolName: 'getWeather', args: { city: 'Paris' } }],
+          liveCalls: [{ toolName: 'search', args: { q: 'x' } }],
+          failure: { code: 'TOOL_MOCK_MISMATCH' as const, toolName: 'getWeather', args: { city: 'NYC' } },
+        };
+        const created = await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-mock',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: null,
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          toolMockReport,
+        });
+        expect(created.toolMockReport).toEqual(toolMockReport);
+
+        const found = await experimentsStorage.getExperimentResultById({ id: created.id });
+        expect(found!.toolMockReport).toEqual(toolMockReport);
+      });
+
       it('getExperimentResultById returns result or null', async () => {
         const result = await experimentsStorage.addExperimentResult({
           experimentId: exp.id,

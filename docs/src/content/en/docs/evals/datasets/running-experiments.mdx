@@ -143,6 +143,60 @@ Visit the [Scorers overview](/docs/evals/overview) for details on available and 
 
 :::
 
+## Tool mocks
+
+When an experiment runs an agent that calls side-effecting tools, you can make the run deterministic by attaching static tool mocks to individual dataset items. During the experiment, a mocked tool returns its declared output instead of executing. Tools that have no mock on the item run live.
+
+Mocks live on the dataset item, so they version with the row and travel with the test case. Each mock declares a tool name, the arguments it expects, and the output to return:
+
+```typescript title="src/mastra/experiments/tool-mocks.ts"
+await dataset.addItem({
+  input: 'What is the weather in Seattle?',
+  toolMocks: [
+    {
+      toolName: 'getWeather',
+      args: { city: 'Seattle' },
+      output: { temperature: 60, conditions: 'rainy' },
+    },
+  ],
+})
+```
+
+Tool mocks are supported for `agent` targets only.
+
+### Matching and consumption
+
+Arguments are matched strictly: object key order is ignored, array order is significant, and there is no type coercion. A mock is served only when the agent calls the tool with arguments that deep-equal the mock's `args`.
+
+When an item declares several mocks for the same tool and arguments, they are consumed in order — the first call gets the first mock, the next call gets the second, and so on. Ordering is tracked per `(toolName, args)` group and is independent across different arguments.
+
+### Failures
+
+A mocked tool call fails the item when the arguments do not match or all matching mocks have been consumed:
+
+- `TOOL_MOCK_MISMATCH` — the tool was called with arguments that no mock matches.
+- `TOOL_MOCK_EXHAUSTED` — every matching mock has already been consumed.
+
+These failures are deterministic, so they are not retried. Mocks that are declared but never used do not fail the item — they are reported as unconsumed.
+
+### Diagnostics
+
+Each item result carries a `toolMockReport` describing what the run did with the item's mocks:
+
+```typescript
+for (const item of summary.results) {
+  const report = item.toolMockReport
+  if (!report) continue
+
+  console.log(report.served) // mocks matched and returned
+  console.log(report.unconsumed) // mocks declared but never used
+  console.log(report.liveCalls) // unmocked tools that ran live
+  console.log(report.failure) // the mismatch/exhausted failure, if any
+}
+```
+
+In [Studio](/docs/studio/overview), edit a dataset item to author tool mocks as a JSON array, and open an experiment result to see the same report.
+
 ## Async experiments
 
 `startExperiment()` blocks until every item completes. For long-running datasets, use [`startExperimentAsync()`](/reference/datasets/startExperimentAsync) to start the experiment in the background:

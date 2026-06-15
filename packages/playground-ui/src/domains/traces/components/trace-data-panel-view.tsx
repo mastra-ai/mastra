@@ -7,6 +7,7 @@ import {
   Link2Icon,
   Loader2Icon,
   SaveIcon,
+  WrenchIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
@@ -34,6 +35,8 @@ export interface TraceDataPanelViewProps {
   onEvaluateTrace?: () => void;
   /** When set, a "Save as Dataset Item" button appears; the consumer owns the dialog. */
   onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
+  /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
+  onAddTraceMocksToItem?: (args: { traceId: string }) => void;
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -68,6 +71,7 @@ export function TraceDataPanelView({
   onSpanSelect,
   onEvaluateTrace,
   onSaveAsDatasetItem,
+  onAddTraceMocksToItem,
   initialSpanId,
   onPrevious,
   onNext,
@@ -215,8 +219,8 @@ export function TraceDataPanelView({
           <DataPanel.Content ref={contentRef}>
             {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} className="mb-6" />}
 
-            {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem) && (
-              <div className="mb-6 flex justify-between items-center gap-4">
+            {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem || onAddTraceMocksToItem) && (
+              <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
                 {onEvaluateTrace && (
                   <Button size="sm" onClick={onEvaluateTrace}>
                     <Icon>
@@ -233,10 +237,22 @@ export function TraceDataPanelView({
                     Save as Dataset Item
                   </Button>
                 )}
+                {onAddTraceMocksToItem && (
+                  <Button size="sm" onClick={() => onAddTraceMocksToItem({ traceId })}>
+                    <Icon>
+                      <WrenchIcon />
+                    </Icon>
+                    Add tool mocks to item
+                  </Button>
+                )}
               </div>
             )}
 
-            {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && showUnavailableFeaturesMsg && (
+            {!isOnTracePage &&
+              !onEvaluateTrace &&
+              !onSaveAsDatasetItem &&
+              !onAddTraceMocksToItem &&
+              showUnavailableFeaturesMsg && (
               <Notice variant="info" className="mb-6">
                 <Notice.Message>
                   Evaluating traces and saving them as dataset items is available in Mastra Studio (local or deployed).

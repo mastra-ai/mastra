@@ -118,6 +118,33 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         expect(notFound).toBeNull();
       });
 
+      it('toolMocks round-trip through add, get, and SCD-2 update', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-tool-mocks' });
+        const toolMocks = [
+          { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } },
+          { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 48 } },
+        ];
+
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' }, toolMocks });
+        expect(item.toolMocks).toEqual(toolMocks);
+
+        const fetched = await datasetsStorage.getItemById({ id: item.id });
+        expect(fetched!.toolMocks).toEqual(toolMocks);
+
+        // Updating an unrelated field must preserve toolMocks through versioning.
+        const updated = await datasetsStorage.updateItem({ id: item.id, datasetId: ds.id, input: { q: 'hi2' } });
+        expect(updated.datasetVersion).toBe(2);
+        expect(updated.toolMocks).toEqual(toolMocks);
+
+        // Explicitly replacing toolMocks updates them.
+        const replaced = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          toolMocks: [{ toolName: 'other', args: {}, output: 1 }],
+        });
+        expect(replaced.toolMocks).toEqual([{ toolName: 'other', args: {}, output: 1 }]);
+      });
+
       it('updateItem creates new version row', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'item-update' });
         const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'v1' } });

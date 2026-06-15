@@ -8,7 +8,10 @@ import type { VersionOverrides } from '../../mastra/types';
 import { resolveObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
+import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
+import type { ItemToolMock, ToolMockReport } from './tool-mocks';
+import { ToolMockMatcher } from './tool-mocks';
 
 /**
  * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
@@ -54,6 +57,8 @@ export interface ExecutionResult {
   stepResults?: Record<string, StepResult<any, any, any, any>>;
   /** Order in which workflow steps actually executed */
   stepExecutionPath?: string[];
+  /** Diagnostic receipt for item-level tool mocks (agent targets only) */
+  toolMockReport?: ToolMockReport;
 }
 
 /**
@@ -119,6 +124,8 @@ export async function executeTarget(
     requestContext?: Record<string, unknown>;
     experimentId?: string;
     versions?: VersionOverrides;
+    /** Item-level static tool mocks (agent targets only). */
+    toolMocks?: ItemToolMock[];
   },
 ): Promise<ExecutionResult> {
   try {
@@ -139,6 +146,7 @@ export async function executeTarget(
           options?.requestContext,
           options?.experimentId,
           options?.versions,
+          options?.toolMocks,
         );
         break;
       case 'workflow':
@@ -211,6 +219,7 @@ async function executeAgent(
   requestContext?: Record<string, unknown>,
   experimentId?: string,
   versions?: VersionOverrides,
+  toolMocks?: ItemToolMock[],
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
@@ -225,6 +234,11 @@ async function executeAgent(
   // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
   const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
 
+  // Build a fresh matcher per item run so ordered consumption is deterministic and
+  // not leaked across retries. Compose with the agent's configured hooks.
+  const matcher = new ToolMockMatcher(toolMocks);
+  const mockHooks = matcher.hasMocks ? buildToolMockHooks(agent, matcher) : undefined;
+
   const rawResult = isSupportedLanguageModel(model)
     ? await agent.generate(input, {
         scorers: {},
@@ -233,12 +247,14 @@ async function executeAgent(
         ...(reqCtx ? { requestContext: reqCtx } : {}),
         ...(tracingOptions ? { tracingOptions } : {}),
         ...(versions ? { versions } : {}),
+        ...(mockHooks ? { hooks: mockHooks } : {}),
       })
     : await agent.generateLegacy(input, {
         scorers: {},
         returnScorerData: true,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
         ...(tracingOptions ? { tracingOptions } : {}),
+        ...(mockHooks ? { hooks: mockHooks } : {}),
       });
 
   // Narrow to the common fields we need — both v1 and v2 results share these
@@ -246,6 +262,23 @@ async function executeAgent(
 
   const traceId = result.traceId ?? null;
   const scoringData = result.scoringData;
+
+  const toolMockReport = matcher.hasMocks ? matcher.report() : undefined;
+
+  // A mocked tool was mis-called (wrong args or all matching mocks consumed):
+  // fail the item deterministically with the coded error. The tool never ran live
+  // (the hook short-circuited), so the model output is discarded.
+  if (toolMockReport?.failure) {
+    return {
+      output: null,
+      error: {
+        message: `Mocked tool "${toolMockReport.failure.toolName}" was called with arguments that did not match an available mock (${toolMockReport.failure.code}).`,
+        code: toolMockReport.failure.code,
+      },
+      traceId,
+      ...(toolMockReport ? { toolMockReport } : {}),
+    };
+  }
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
   // duplicate messages, steps trace, and other debugging internals
@@ -268,6 +301,72 @@ async function executeAgent(
     traceId,
     scorerInput: scoringData?.input,
     scorerOutput: scoringData?.output,
+    ...(toolMockReport ? { toolMockReport } : {}),
+  };
+}
+
+/**
+ * Compose item-level tool mocks with the agent's configured tool hooks into a
+ * single set of run-level hooks.
+ *
+ * Composition order (per spec):
+ *  1. User `beforeToolCall` (if `{ proceed: false }`, short-circuit — the mock is
+ *     left unconsumed and reported as such; user `afterToolCall` is NOT called,
+ *     matching the agent's own short-circuit behavior).
+ *  2. Mock matcher — `serve` returns the mocked output; `fail` records the failure
+ *     and short-circuits (the live tool never runs); `live` falls through to the
+ *     real tool.
+ *  3. User `afterToolCall` runs for both live and mocked outputs.
+ *
+ * A mutex serializes resolution so ordered consumption of repeated `(toolName, args)`
+ * mocks is deterministic even if the provider issues parallel tool calls.
+ */
+function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher): ToolHooks {
+  const userHooks = agent.getConfiguredToolHooks();
+
+  // Serialize all before-hook resolutions through a single promise chain so that
+  // parallel tool calls consume mocks in deterministic arrival order.
+  let queue: Promise<void> = Promise.resolve();
+  const runSequential = <T>(fn: () => Promise<T>): Promise<T> => {
+    const run = queue.then(fn);
+    // Keep the chain alive regardless of individual outcome.
+    queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
+
+  return {
+    beforeToolCall: context =>
+      runSequential(async () => {
+        // 1. User hook first — a short-circuit leaves the mock unconsumed.
+        const userResult = await userHooks?.beforeToolCall?.(context);
+        if (userResult?.proceed === false) {
+          return userResult;
+        }
+
+        // 2. Mock matcher.
+        const resolution = matcher.resolve(context.toolName, context.input);
+        if (resolution.kind === 'serve') {
+          // Mocked output also runs the user's afterToolCall (the agent skips it on
+          // short-circuit, so invoke it here to honor the documented composition).
+          await userHooks?.afterToolCall?.({ ...context, output: resolution.output });
+          return { proceed: false, output: resolution.output };
+        }
+        if (resolution.kind === 'fail') {
+          // Short-circuit so the live tool never runs. The item fails after generate
+          // via the recorded failure; surface a marker as the tool output.
+          return {
+            proceed: false,
+            output: { error: resolution.code },
+          };
+        }
+
+        // 3. `live` — fall through to the real tool.
+        return undefined;
+      }),
+    afterToolCall: context => userHooks?.afterToolCall?.(context),
   };
 }
 
