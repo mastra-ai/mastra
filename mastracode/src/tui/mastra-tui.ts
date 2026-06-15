@@ -117,7 +117,12 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   }
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
   state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
-  state.goalManager.loadFromThreadMetadata(metadata);
+  // Prefer the durable ThreadState objective; fall back to the legacy
+  // thread-metadata goal for threads created before the migration.
+  await state.goalManager.loadFromThread(state);
+  if (!state.goalManager.getGoal()) {
+    state.goalManager.loadFromThreadMetadata(metadata);
+  }
 }
 
 function shouldUseCaffeinate(): boolean {
@@ -1374,7 +1379,7 @@ export class MastraTUI {
     const tools = this.state.allToolComponents.filter(
       (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
     );
-    const modeColor = this.state.harness?.getCurrentMode?.()?.color;
+    const modeColor = this.state.harness?.getCurrentMode?.()?.metadata?.color;
     for (const tool of tools) {
       tool.setCompactToolModeColor?.(modeColor);
       tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');

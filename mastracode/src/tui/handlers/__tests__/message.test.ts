@@ -216,6 +216,24 @@ describe('handleMessageUpdate system reminders', () => {
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
   });
 
+  it('does not render the goal state signal inline (the goal/judge UI shows it)', () => {
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'state_signal',
+          stateId: 'goal',
+          mode: 'snapshot',
+          cacheKey: 'goal:v1',
+          message: '<current-objective>\n  Ship the goal feature\n</current-objective>',
+        } as never,
+        { type: 'text', text: 'Goal set.' },
+      ]),
+    );
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+  });
+
   it('renders a streamed notification summary as an inline component', () => {
     handleMessageUpdate(
       ctx,
