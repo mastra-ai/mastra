@@ -509,6 +509,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     {
       id: 'gateway-sync',
       intervalMs: 5 * 60 * 1000,
+      immediate: false,
       handler: () => syncGateways(),
     },
   ];
