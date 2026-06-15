@@ -92,7 +92,9 @@ function validateModes(modes: HarnessMode[]): void {
 
     const modeRecord = mode as unknown as { id: string; tools?: unknown; additionalTools?: unknown };
     if (modeRecord.tools && modeRecord.additionalTools) {
-      throw new Error(`Mode "${modeRecord.id}" cannot set both "tools" and "additionalTools" - choose replace OR augment`);
+      throw new Error(
+        `Mode "${modeRecord.id}" cannot set both "tools" and "additionalTools" - choose replace OR augment`,
+      );
     }
   }
 
