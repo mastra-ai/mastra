@@ -153,9 +153,9 @@ async function main() {
         emit({
           type: 'signal-result',
           sigId,
-          accepted: result.accepted,
+          accepted: true,
         });
-        const ownerSettled = result.outcome
+        const ownerSettled = result.accepted
           .then(settled => {
             emit({
               type: 'owner-stream-resolved',
