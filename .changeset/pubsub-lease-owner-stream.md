@@ -3,16 +3,18 @@
 '@mastra/redis-streams': minor
 ---
 
-Added a lease API to `PubSub` (`acquireLease` / `releaseLease` / `renewLease` / `getLeaseOwner`) and returned an `ownerStream` from `agent.sendSignal` / `sendMessage` / `queueMessage` / `sendStateSignal` / `sendNotificationSignal`.
+Added a lease API to `PubSub` (`acquireLease` / `releaseLease` / `renewLease` / `getLeaseOwner`) and returned an `outcome` promise from `agent.sendSignal` / `sendMessage` / `queueMessage` / `sendStateSignal` / `sendNotificationSignal` that resolves once Mastra has decided what to do with the signal.
 
-When multiple processes (e.g. serverless Lambdas) race to wake the same agent thread, they now first try to acquire a lease in the shared pubsub. The winner runs the agent stream and returns the `ownerStream` so the caller can `consumeStream()` it in-process. Losers publish a `signal-enqueued` event so the winner picks up their message, and resolve `ownerStream` to `undefined`.
+`outcome` resolves to a discriminated union describing what the runtime did: `{ action: 'wake'; output }` when the signal started (or won the lease to start) the agent run, or `{ action: 'deliver' | 'persist' | 'discard' }` otherwise. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`. When multiple processes (e.g. serverless Lambdas) race to wake the same agent thread, they first try to acquire a lease in the shared pubsub. The winner runs the agent stream and resolves `outcome` to `{ action: 'wake', output }` so the caller can `consumeStream()` it in-process. Losers publish a `signal-enqueued` event so the winner picks up their message, and resolve to `{ action: 'wake', output: undefined }`.
 
 ```ts
-const result = await agent.sendSignal(signal);
+const result = agent.sendSignal(signal, { resourceId, threadId });
 ctx.waitUntil(
-  result.ownerStream?.then(async stream => {
-    if (stream) await stream.consumeStream();
-  }) ?? Promise.resolve(),
+  result.outcome.then(async settled => {
+    if (settled.action === 'wake' && settled.output) {
+      await settled.output.consumeStream();
+    }
+  }),
 );
 ```
 

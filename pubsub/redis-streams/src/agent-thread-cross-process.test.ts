@@ -4,7 +4,7 @@
  * Spawns N tsx child processes, each holding its own ThreadStreamRuntime +
  * stub Agent bound to a shared RedisStreamsPubSub. Drives rapid-fire signals
  * from independent processes and asserts:
- *   - exactly one worker wins the lease (gets ownerStream defined)
+ *   - exactly one worker wins the lease (its result resolves to a wake outcome with output)
  *   - the remaining signals are delivered to the winner via signal-enqueued
  *   - all runs eventually complete (no signal dropped)
  *

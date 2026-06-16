@@ -151,6 +151,30 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
     };
 
 /**
+ * What `sendSignal` did with a signal once active/idle policy was applied.
+ *
+ * `action` mirrors the winning `behavior` from `ifActive`/`ifIdle` — the value
+ * is whichever behavior the runtime actually applied, not the request.
+ *
+ * - `wake`    — started (or attempted to start) a new run for an idle thread.
+ *               `output` is the run's `MastraModelOutput` only on the runtime
+ *               that won the wake race; it is `undefined` on runtimes that
+ *               lost the race (the winner owns the stream and delivers chunks
+ *               via PubSub).
+ * - `deliver` — the thread was already active; the signal was queued onto the
+ *               in-flight run. No new run was started and no stream is owned.
+ * - `persist` — the signal was written to memory by a `persist` behavior.
+ * - `discard` — policy dropped the signal; nothing ran and nothing was stored.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SendAgentSignalOutcome<OUTPUT = unknown> =
+  | { action: 'wake'; output: MastraModelOutput<OUTPUT> | undefined }
+  | { action: 'deliver' }
+  | { action: 'persist' }
+  | { action: 'discard' };
+
+/**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export interface SendAgentSignalResult<OUTPUT = unknown> {
@@ -160,16 +184,14 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
   /**
-   * Resolves with the run's `MastraModelOutput` only on the runtime that won
-   * the wake race for this thread. Other runtimes (and follow-up signals that
-   * are merely queued onto an existing active run) resolve to `undefined`.
+   * Resolves once the runtime has settled what it did with the signal.
    *
-   * Callers in serverless environments use this to keep their invocation
-   * alive (e.g. via `waitUntil`) and consume the stream so platform delivery
-   * (chunks → Slack/Discord/etc) actually happens. When `undefined`, another
-   * runtime owns the stream and will deliver chunks via PubSub.
+   * On the `wake` action, `output` is the run's `MastraModelOutput` on the
+   * runtime that won the wake race for this thread, and `undefined` on runtimes
+   * that lost the race or on follow-up signals merely queued onto an existing
+   * active run.
    */
-  ownerStream?: Promise<MastraModelOutput<OUTPUT> | undefined>;
+  outcome: Promise<SendAgentSignalOutcome<OUTPUT>>;
 }
 
 /**
@@ -235,12 +257,12 @@ export type SendAgentNotificationSignalResult<OUTPUT = unknown> = {
   signal?: CreatedAgentSignal;
   persisted?: Promise<void>;
   /**
-   * Present only when the notification's underlying signal woke a new run.
-   * See {@link SendAgentSignalResult.ownerStream}.
+   * Present only when the notification's underlying signal was accepted and
+   * dispatched. See {@link SendAgentSignalResult.outcome}.
    *
    * @experimental
    */
-  ownerStream?: Promise<MastraModelOutput<OUTPUT> | undefined>;
+  outcome?: Promise<SendAgentSignalOutcome<OUTPUT>>;
 };
 
 export interface AgentThreadRun<OUTPUT = unknown> {

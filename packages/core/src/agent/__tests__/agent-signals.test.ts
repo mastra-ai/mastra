@@ -2567,7 +2567,7 @@ describe('Agent signals', () => {
     senderSubscription.unsubscribe();
   });
 
-  it('grants ownerStream to exactly one runtime when two race to wake an idle thread', async () => {
+  it('grants the wake output to exactly one runtime when two race to wake an idle thread', async () => {
     const pubsub = new EventEmitterPubSub();
     const runtimeA = new AgentThreadStreamRuntime();
     const runtimeB = new AgentThreadStreamRuntime();
@@ -2612,12 +2612,16 @@ describe('Agent signals', () => {
 
     expect(resultA.accepted).toBe(true);
     expect(resultB.accepted).toBe(true);
-    expect(resultA.ownerStream).toBeDefined();
-    expect(resultB.ownerStream).toBeDefined();
+    expect(resultA.outcome).toBeDefined();
+    expect(resultB.outcome).toBeDefined();
 
-    const [ownerA, ownerB] = await Promise.all([resultA.ownerStream!, resultB.ownerStream!]);
+    const [settledA, settledB] = await Promise.all([resultA.outcome!, resultB.outcome!]);
 
-    // Exactly one runtime gets a defined ownerStream (the winner).
+    // Both took the wake path; exactly one carries the owned stream (the winner).
+    expect(settledA.action).toBe('wake');
+    expect(settledB.action).toBe('wake');
+    const ownerA = settledA.action === 'wake' ? settledA.output : undefined;
+    const ownerB = settledB.action === 'wake' ? settledB.output : undefined;
     const winners = [ownerA, ownerB].filter(s => s !== undefined);
     const losers = [ownerA, ownerB].filter(s => s === undefined);
     expect(winners).toHaveLength(1);
