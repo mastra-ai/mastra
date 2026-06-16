@@ -55,6 +55,11 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   }
+  // Drop the live judge reference so that a continuation turn creates a fresh
+  // JudgeDisplayComponent *after* the new streaming text. Without this the
+  // reused component stays at the position of the previous turn's evaluation,
+  // causing the new turn's text to visually overwrite the old text + judge.
+  state.activeGoalJudge = undefined;
   state.followUpComponents = [];
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
