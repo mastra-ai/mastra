@@ -33,7 +33,7 @@ The integration is powered by the Mastra GitHub App. The App reads repository co
 
 <Steps>
   <StepItem>
-    In the [Mastra platform dashboard](https://projects.mastra.ai), open your organization settings and select **GitHub**.
+    In the [Mastra platform dashboard](https://projects.mastra.ai), open your organization settings. The page includes a **GitHub App** section.
   </StepItem>
 
   <StepItem>
@@ -45,7 +45,7 @@ The integration is powered by the Mastra GitHub App. The App reads repository co
   <StepItem>
     Select the repositories the App can access. You can scope to specific repositories or grant access to all repositories on the account.
 
-    Mastra requests only the permissions needed for push-to-deploy and check runs. You can revoke or change repository access at any time from GitHub's App settings.
+    You can revoke or change repository access at any time from GitHub's App settings.
   </StepItem>
 </Steps>
 
@@ -61,11 +61,11 @@ When a non-admin requests the App on an organization, the request stays pending 
 - Lets the same user request access to multiple GitHub accounts at once.
 - Reconciles pending state against GitHub when you open the page, removing requests an admin has declined or the requester has withdrawn.
 
-Mastra has no API to cancel a pending request. Withdraw it from GitHub.com if you no longer need it.
+To cancel a pending request, select **Cancel** next to it in the dashboard.
 
 ## Create a project from a template
 
-Templates are the fastest way to start. The platform creates a new repository from a Mastra template, links it to a fresh project, provisions any managed databases the template declares, and runs the first deploy.
+Templates are the fastest way to get started. The platform creates a new repository from a Mastra template, links it to a fresh project, provisions any managed databases the template declares, and runs the first deploy.
 
 <Steps>
   <StepItem>
@@ -145,36 +145,11 @@ You can also trigger a deploy from the dashboard without pushing. Open the proje
 
 ## Track deploys
 
-### Project setup page
-
 After a project is created from a template or linked to a repository, the **Setup** page shows one row per deploy target. Each row:
 
 - Displays a live status badge that polls the deploy until it finishes.
 - Links to the deploy detail page via the deploy ID.
 - Exposes a **Show logs** toggle that streams build and runtime logs inline. Server logs poll every three seconds while the deploy is active.
-
-### Deploy detail page
-
-The deploy detail header shows the commit SHA and, when the deploy is linked to a pull request, a colored pull-request button that links to the PR on GitHub. The button reflects the PR's current state:
-
-| State | Color |
-| - | - |
-| Draft | Grey |
-| Open | Green |
-| Closed | Red |
-| Merged | Purple |
-
-The platform resolves PR status through the GitHub App so the badge works for private repositories.
-
-### Deploy source
-
-Every deploy records how it was triggered:
-
-- **CLI**: `mastra studio deploy` or `mastra server deploy`
-- **GitHub Push**: A push to a configured branch
-- **GitHub Workflow**: A manual deploy from the dashboard
-
-The deploy list and detail pages show the source as a badge and you can filter the list by source.
 
 ## Permissions and revocation
 
