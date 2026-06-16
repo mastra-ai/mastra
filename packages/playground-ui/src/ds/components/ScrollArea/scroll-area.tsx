@@ -33,6 +33,12 @@ export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPr
   mask?: ScrollAreaMask;
   /** @deprecated Use `mask` instead. Retained for backward compatibility. */
   showMask?: boolean;
+  /**
+   * Ref to the scrolling viewport element. Use this as the scroll element for a
+   * virtualizer (`getScrollElement: () => viewportRef.current`) so the list can
+   * virtualize while still using the ScrollArea's overlay scrollbar + masks.
+   */
+  viewportRef?: React.Ref<HTMLDivElement>;
 };
 
 type ResolvedMask = { top: boolean; bottom: boolean; left: boolean; right: boolean };
@@ -82,12 +88,24 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
       orientation = 'vertical',
       mask,
       showMask,
+      viewportRef,
       ...props
     },
     ref,
   ) => {
     const areaRef = React.useRef<HTMLDivElement>(null);
     useAutoscroll(areaRef, { enabled: autoScroll });
+
+    // Keep the internal autoscroll ref while also exposing the viewport to callers
+    // (e.g. a virtualizer's scroll element).
+    const setViewportRef = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        areaRef.current = node;
+        if (typeof viewportRef === 'function') viewportRef(node);
+        else if (viewportRef) (viewportRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+      },
+      [viewportRef],
+    );
 
     const effectiveMask: ScrollAreaMask | undefined = mask !== undefined ? mask : showMask;
     const sides = resolveMask(effectiveMask, orientation);
@@ -116,7 +134,7 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
     return (
       <ScrollAreaPrimitive.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props}>
         <ScrollAreaPrimitive.Viewport
-          ref={areaRef}
+          ref={setViewportRef}
           className={cn('h-full w-full rounded-[inherit]', maskClasses(sides), viewPortClassName)}
           style={viewportStyle}
         >
