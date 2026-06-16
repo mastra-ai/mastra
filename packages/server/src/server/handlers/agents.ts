@@ -1774,9 +1774,10 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
           ...(ifActive ? { ifActive } : {}),
         });
+        const settledRunId = (await result.outcome).runId;
         return result.signal === undefined
-          ? { accepted: result.accepted, runId: result.runId }
-          : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+          ? { accepted: result.accepted, runId: settledRunId }
+          : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
       }
 
       if (!effectiveResourceId || !effectiveThreadId) {
@@ -1789,9 +1790,10 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         ...(ifActive ? { ifActive } : {}),
         ...ifIdleWithContext,
       });
+      const settledRunId = (await result.outcome).runId;
       return result.signal === undefined
-        ? { accepted: result.accepted, runId: result.runId }
-        : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+        ? { accepted: result.accepted, runId: settledRunId }
+        : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
     } catch (error) {
       return handleError(error, 'error sending agent signal');
     }
@@ -1864,9 +1866,10 @@ async function handleAgentMessageRoute({
       ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
       ...(ifActive ? { ifActive } : {}),
     } as any);
+    const settledRunId = (await result.outcome)?.runId ?? result.runId;
     return result.signal === undefined
-      ? { accepted: result.accepted, runId: result.runId }
-      : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+      ? { accepted: result.accepted, runId: settledRunId }
+      : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
   }
 
   if (!effectiveResourceId || !effectiveThreadId) {
@@ -1879,9 +1882,10 @@ async function handleAgentMessageRoute({
     ...(ifActive ? { ifActive } : {}),
     ...ifIdleWithContext,
   } as any);
+  const settledRunId = (await result.outcome)?.runId ?? result.runId;
   return result.signal === undefined
-    ? { accepted: result.accepted, runId: result.runId }
-    : { accepted: result.accepted, runId: result.runId, signal: result.signal };
+    ? { accepted: result.accepted, runId: settledRunId }
+    : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
 }
 
 export const SEND_AGENT_MESSAGE_ROUTE = createRoute({

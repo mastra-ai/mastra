@@ -1256,7 +1256,7 @@ export class AgentThreadStreamRuntime {
         accepted: true,
         runId: queuedRunId,
         signal,
-        outcome: Promise.resolve({ action: 'deliver' as const }),
+        outcome: Promise.resolve({ action: 'deliver' as const, runId: queuedRunId }),
       };
     }
 
@@ -1388,22 +1388,20 @@ export class AgentThreadStreamRuntime {
           threadId,
           target.ifIdle?.streamOptions?.requestContext,
         );
-        const outcome = persisted.then(() => ({ action: 'persist' as const }));
         void persisted.catch(() => {});
-        void outcome.catch(() => {});
         return {
           accepted: true,
           runId: runId!,
           signal,
           persisted,
-          outcome,
+          outcome: Promise.resolve({ action: 'persist' as const, runId: runId! }),
         };
       }
       return {
         accepted: true,
         runId: runId!,
         signal,
-        outcome: Promise.resolve({ action: 'discard' as const }),
+        outcome: Promise.resolve({ action: 'discard' as const, runId: runId! }),
       };
     }
 
@@ -1432,7 +1430,7 @@ export class AgentThreadStreamRuntime {
             accepted: true,
             runId,
             signal,
-            outcome: Promise.resolve({ action: 'deliver' as const }),
+            outcome: Promise.resolve({ action: 'deliver' as const, runId }),
           };
         }
       }
@@ -1460,7 +1458,7 @@ export class AgentThreadStreamRuntime {
           accepted: true,
           runId,
           signal,
-          outcome: Promise.resolve({ action: 'deliver' as const }),
+          outcome: Promise.resolve({ action: 'deliver' as const, runId }),
         };
       }
     }
@@ -1483,15 +1481,13 @@ export class AgentThreadStreamRuntime {
         threadId,
         target.ifIdle?.streamOptions?.requestContext,
       );
-      const outcome = persisted.then(() => ({ action: 'persist' as const }));
       void persisted.catch(() => {});
-      void outcome.catch(() => {});
       return {
         accepted: true,
         runId,
         signal,
         persisted,
-        outcome,
+        outcome: Promise.resolve({ action: 'persist' as const, runId }),
       };
     }
     if (idleBehavior !== 'wake') {
@@ -1499,7 +1495,7 @@ export class AgentThreadStreamRuntime {
         accepted: true,
         runId,
         signal,
-        outcome: Promise.resolve({ action: 'discard' as const }),
+        outcome: Promise.resolve({ action: 'discard' as const, runId }),
       };
     }
 
@@ -1516,7 +1512,7 @@ export class AgentThreadStreamRuntime {
         accepted: true,
         runId,
         signal,
-        outcome: Promise.resolve({ action: 'deliver' as const }),
+        outcome: Promise.resolve({ action: 'deliver' as const, runId }),
       };
     }
 
@@ -1564,7 +1560,7 @@ export class AgentThreadStreamRuntime {
             sourceId: this.#getSourceId(),
           }).catch(() => {});
         }
-        return { action: 'deliver' as const };
+        return { action: 'deliver' as const, runId: winnerRunId ?? reservedRunId };
       }
 
       // We own the lease. Start the renewal timer so it survives runs
@@ -1576,7 +1572,7 @@ export class AgentThreadStreamRuntime {
           runId: reservedRunId,
           memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
         });
-        return { action: 'wake' as const, output };
+        return { action: 'wake' as const, runId: reservedRunId, output };
       } catch (error) {
         state.threadKeysByRunId.delete(reservedRunId);
         this.#cleanupPreparedRun(state, reservedRunId);

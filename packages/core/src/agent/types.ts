@@ -156,47 +156,56 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
  * `action` mirrors the winning `behavior` from `ifActive`/`ifIdle` — the value
  * is whichever behavior the runtime actually applied, not the request.
  *
- * - `wake`    — started (or attempted to start) a new run for an idle thread.
+ * Every member carries `runId`, the authoritative id of the run the signal was
+ * associated with. This is the correlatable id (matching the stream, trace
+ * spans, and persisted messages) and should be preferred over the best-effort
+ * top-level {@link SendAgentSignalResult.runId}.
+ *
+ * - `wake`    — this process started a new run for an idle thread and owns it.
  *               `output` is the run's `MastraModelOutput` for in-process
  *               consumption. Only the runtime that actually runs the agent
  *               resolves to `wake`.
- * - `deliver` — the signal was queued onto an in-flight run rather than starting
- *               one here. This covers a follow-up signal joining an already-active
- *               run and the loser of a cross-process wake race (whose signal is
- *               forwarded to the winning run). No new run was started locally and
- *               no stream is owned.
- * - `persist` — the signal was written to memory by a `persist` behavior. The
- *               outcome promise for this action only settles once that write
- *               completes (it resolves with the same timing as `persisted`).
+ * - `deliver` — the signal was handed off rather than started here. This covers
+ *               a follow-up signal joining an already-active run and the loser
+ *               of a cross-process wake race (whose signal is forwarded to the
+ *               winning run). No new run was started locally and no stream is
+ *               owned; `runId` is the run the signal joined.
+ * - `persist` — the signal was written to memory by a `persist` behavior. To
+ *               await the storage write, use the top-level `persisted` promise.
  * - `discard` — policy dropped the signal; nothing ran and nothing was stored.
  *
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SendAgentSignalOutcome<OUTPUT = unknown> =
-  | { action: 'wake'; output: MastraModelOutput<OUTPUT> }
-  | { action: 'deliver' }
-  | { action: 'persist' }
-  | { action: 'discard' };
+  | { action: 'wake'; runId: string; output: MastraModelOutput<OUTPUT> }
+  | { action: 'deliver'; runId: string }
+  | { action: 'persist'; runId: string }
+  | { action: 'discard'; runId: string };
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export interface SendAgentSignalResult<OUTPUT = unknown> {
   accepted: true;
-  runId: string;
+  /**
+   * Best-effort run id known synchronously at return time. This is `undefined`
+   * when a cross-process wake race is lost (the real run lives in another
+   * process). Prefer the authoritative `(await outcome).runId`, which is always
+   * the correlatable id.
+   */
+  runId?: string;
   signal: CreatedAgentSignal;
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
   /**
-   * Resolves once the runtime has settled what it did with the signal. For
-   * `wake`/`deliver`/`discard` this is the moment the behavior is decided, before
-   * any woken run finishes; for `persist` it resolves after the memory write
-   * completes (same timing as `persisted`).
+   * Resolves once the runtime has decided what to do with the signal. This
+   * settles at decision-time for every action — it never waits for a woken run
+   * to finish or for a `persist` write to land.
    *
    * `wake` means this process ran the agent and `output` is its
    * `MastraModelOutput`. A signal queued onto an existing run, or one whose
    * cross-process wake race was lost (and forwarded to the winning run),
-   * resolves to `deliver`.
+   * resolves to `deliver`. To await a `persist` write, use `persisted`.
    */
   outcome: Promise<SendAgentSignalOutcome<OUTPUT>>;
 }

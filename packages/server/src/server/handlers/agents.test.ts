@@ -1511,7 +1511,11 @@ describe('Agent Routes Authorization', () => {
       (mockAgent as any).sendSignal = vi.fn((signal, target) => {
         capturedSignal = signal;
         capturedTarget = target;
-        return { accepted: true, runId: 'signal-run-id' };
+        return {
+          accepted: true,
+          runId: 'signal-run-id',
+          outcome: Promise.resolve({ action: 'deliver', runId: 'signal-run-id' }),
+        };
       });
 
       const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
@@ -1638,7 +1642,11 @@ describe('Agent Routes Authorization', () => {
 
       (mockAgent as any).sendSignal = vi.fn((_signal, target) => {
         capturedTarget = target;
-        return { accepted: true, runId: 'signal-run-with-context' };
+        return {
+          accepted: true,
+          runId: 'signal-run-with-context',
+          outcome: Promise.resolve({ action: 'deliver', runId: 'signal-run-with-context' }),
+        };
       });
 
       const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
