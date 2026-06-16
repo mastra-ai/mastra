@@ -15,14 +15,14 @@ import {
   Text,
   truncateToWidth,
   visibleWidth,
-} from '@mariozechner/pi-tui';
-import type { Component, Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
+} from '@earendil-works/pi-tui';
+import type { Component, Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
 export interface PlanApprovalInlineOptions {
-  planId: string;
+  toolCallId: string;
   title: string;
   plan: string;
   onApprove: () => void;
@@ -97,7 +97,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   static createStreaming(ui: TUI): PlanApprovalInlineComponent {
     const component = new PlanApprovalInlineComponent(
       {
-        planId: '',
+        toolCallId: '',
         title: 'Untitled plan',
         plan: '',
         onApprove: () => {},

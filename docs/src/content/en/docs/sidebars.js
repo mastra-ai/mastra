@@ -113,6 +113,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/goals',
+          label: 'Goals',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/background-tasks',
           label: 'Background Tasks',
           customProps: {
@@ -327,6 +335,7 @@ const sidebars = {
             { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
             { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
             { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+            { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
             { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
             { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
           ],
@@ -444,6 +453,11 @@ const sidebars = {
           type: 'doc',
           id: 'browser/stagehand',
           label: 'Stagehand',
+        },
+        {
+          type: 'doc',
+          id: 'browser/recording',
+          label: 'Recording',
         },
         {
           type: 'doc',

@@ -4,8 +4,8 @@
  * and other modules can operate on the state without coupling to the
  * MastraTUI class.
  */
-import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
-import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
+import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Text } from '@earendil-works/pi-tui';
 import type { Harness, HarnessMessage } from '@mastra/core/harness';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
@@ -379,7 +379,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     if (result.activeGoalJudge) {
       return mastra.blue;
     }
-    return options.harness.getCurrentMode()?.color;
+    const color = options.harness.getCurrentMode()?.metadata?.color;
+    return typeof color === 'string' ? color : undefined;
   };
   return result;
 }

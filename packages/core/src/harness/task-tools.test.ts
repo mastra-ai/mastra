@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import z from 'zod';
 
 import { Agent } from '../agent';
@@ -6,47 +6,8 @@ import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 
 import { Harness } from './harness';
-import { assignTaskIds, taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from './tools';
-import type { TaskItem, TaskItemSnapshot } from './tools';
-import type { HarnessEvent, HarnessRequestContext } from './types';
-
-function createTaskContext(
-  initialTasks: Array<{ id?: string; content: string; status: TaskItem['status']; activeForm: string }> = [],
-) {
-  const events: HarnessEvent[] = [];
-  const state = { tasks: initialTasks };
-  const setState = vi.fn(async updates => {
-    Object.assign(state, updates);
-  });
-  const updateState = vi.fn(async updater => {
-    const update = await updater(state);
-    if (update.updates) {
-      await setState(update.updates);
-    }
-    for (const event of update.events ?? []) {
-      events.push(event);
-    }
-    return update.result;
-  });
-
-  const requestContext = new RequestContext();
-  const harnessCtx: Partial<HarnessRequestContext<typeof state>> = {
-    state,
-    getState: () => state,
-    setState,
-    updateState,
-    emitEvent: event => events.push(event),
-  };
-  requestContext.set('harness', harnessCtx);
-
-  return {
-    events,
-    requestContext,
-    setState,
-    state,
-    updateState,
-  };
-}
+import { assignTaskIds, taskWriteTool } from './tools';
+import type { HarnessEvent } from './types';
 
 function createHarness() {
   const agent = new Agent({
@@ -192,12 +153,13 @@ describe('assignTaskIds', () => {
   });
 });
 
-describe('task state transactions', () => {
-  it('serializes state updates against the latest task state', async () => {
+// Generic harness state serialization. Tasks are no longer a harness session
+// state source of truth (they live on the agent state-signal lane), so these
+// tests exercise `updateState`/`setState` ordering with neutral state keys.
+describe('harness state transactions', () => {
+  it('serializes state updates against the latest committed state', async () => {
     const harness = createHarness();
-    await harness.setState({
-      tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
-    });
+    await harness.setState({ counter: 0 });
 
     let releaseFirst!: () => void;
     const firstUpdateGate = new Promise<void>(resolve => {
@@ -206,26 +168,20 @@ describe('task state transactions', () => {
 
     const firstUpdate = (harness as any).updateState(async (state: Record<string, unknown>) => {
       await firstUpdateGate;
-      const tasks = state.tasks as TaskItemSnapshot[];
-      const updatedTasks = tasks.map(task =>
-        task.id === 'tests' ? { ...task, status: 'in_progress' as const } : task,
-      );
-      return { updates: { tasks: updatedTasks }, result: updatedTasks };
+      const next = (state.counter as number) + 1;
+      return { updates: { counter: next }, result: next };
     });
 
     const secondUpdate = (harness as any).updateState((state: Record<string, unknown>) => {
-      const tasks = state.tasks as TaskItemSnapshot[];
-      expect(tasks[0]!.status).toBe('in_progress');
-      const updatedTasks = tasks.map(task => (task.id === 'tests' ? { ...task, status: 'completed' as const } : task));
-      return { updates: { tasks: updatedTasks }, result: updatedTasks };
+      expect(state.counter).toBe(1);
+      const next = (state.counter as number) + 1;
+      return { updates: { counter: next }, result: next };
     });
 
     releaseFirst();
     await Promise.all([firstUpdate, secondUpdate]);
 
-    expect(harness.getState().tasks).toEqual([
-      { id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' },
-    ]);
+    expect(harness.getState().counter).toBe(2);
   });
 
   it('serializes direct setState calls with queued state transactions', async () => {
@@ -240,7 +196,7 @@ describe('task state transactions', () => {
       storage: new InMemoryStore(),
       stateSchema: z
         .object({
-          tasks: z.array(z.unknown()).optional(),
+          seed: z.string().optional(),
           marker: z.string().optional(),
         })
         .superRefine(async () => {
@@ -263,13 +219,9 @@ describe('task state transactions', () => {
       ],
     });
 
-    const setStatePromise = harness.setState({
-      tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
-    });
+    const setStatePromise = harness.setState({ seed: 'initial' });
     const transactionPromise = (harness as any).updateState((state: Record<string, unknown>) => {
-      expect(state.tasks).toEqual([
-        { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-      ]);
+      expect(state.seed).toBe('initial');
       return { updates: { marker: 'after-set-state' }, result: undefined };
     });
 
@@ -277,7 +229,7 @@ describe('task state transactions', () => {
     await Promise.all([setStatePromise, transactionPromise]);
 
     expect(harness.getState()).toMatchObject({
-      tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
+      seed: 'initial',
       marker: 'after-set-state',
     });
   });
@@ -330,480 +282,45 @@ describe('task tool permissions', () => {
   });
 });
 
-describe('taskWriteTool', () => {
-  it('rejects writes without harness context', async () => {
-    const result = await (taskWriteTool as any).execute(
-      {
-        tasks: [{ content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
-      },
-      {},
-    );
-
-    expect(result).toEqual({
-      content: 'Unable to update task list (no harness context)',
-      tasks: [],
-      isError: true,
-    });
-  });
-
-  it('assigns ids to tasks that omit them', async () => {
-    const ctx = createTaskContext();
-
-    const result = await (taskWriteTool as any).execute(
-      {
-        tasks: [{ content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(result.isError).toBe(false);
-    expect(ctx.state.tasks).toHaveLength(1);
-    expect(ctx.state.tasks[0]!.id).toBe('task_write_tests');
-    expect(ctx.events).toEqual([{ type: 'task_updated', tasks: ctx.state.tasks }]);
-    expect(result.content).toContain(`${ctx.state.tasks[0]!.id}: Write tests`);
-  });
-
-  it('preserves provided ids', async () => {
-    const ctx = createTaskContext();
-
-    await (taskWriteTool as any).execute(
-      {
-        tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(ctx.state.tasks).toEqual([
-      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-    ]);
-  });
-
-  it('reuses existing ids when replacing a list with matching task content', async () => {
-    const ctx = createTaskContext([
-      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-    ]);
-
-    await (taskWriteTool as any).execute(
-      {
-        tasks: [{ content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' }],
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(ctx.state.tasks).toEqual([
-      { id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' },
-    ]);
-  });
-
-  it('does not reuse existing ids by position when omitted during a content change', async () => {
-    const ctx = createTaskContext([
-      { id: 'investigate', content: 'Investigate issue', status: 'completed', activeForm: 'Investigating issue' },
-      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-    ]);
-
-    await (taskWriteTool as any).execute(
-      {
-        tasks: [
-          { content: 'Investigate issue', status: 'completed', activeForm: 'Investigating issue' },
-          { content: 'Add regression tests', status: 'in_progress', activeForm: 'Adding regression tests' },
-        ],
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(ctx.state.tasks).toEqual([
-      { id: 'investigate', content: 'Investigate issue', status: 'completed', activeForm: 'Investigating issue' },
-      {
-        id: 'task_add_regression_tests',
-        content: 'Add regression tests',
-        status: 'in_progress',
-        activeForm: 'Adding regression tests',
-      },
-    ]);
-  });
-
-  it('keeps matching ids stable when a new task is inserted before existing tasks', async () => {
-    const ctx = createTaskContext([
-      { id: 'a', content: 'Review code', status: 'pending', activeForm: 'Reviewing code' },
-      { id: 'b', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-    ]);
-
-    await (taskWriteTool as any).execute(
-      {
-        tasks: [
-          { content: 'Update docs', status: 'pending', activeForm: 'Updating docs' },
-          { content: 'Review code', status: 'pending', activeForm: 'Reviewing code' },
-          { content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-        ],
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(ctx.state.tasks).toEqual([
-      { id: 'task_update_docs', content: 'Update docs', status: 'pending', activeForm: 'Updating docs' },
-      { id: 'a', content: 'Review code', status: 'pending', activeForm: 'Reviewing code' },
-      { id: 'b', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-    ]);
-  });
-
-  it('rejects task lists with multiple in-progress tasks', async () => {
-    const initialTasks = [
-      { id: 'existing', content: 'Existing task', status: 'pending' as const, activeForm: 'Tracking existing task' },
-    ];
-    const ctx = createTaskContext(initialTasks);
-
-    const result = await (taskWriteTool as any).execute(
-      {
-        tasks: [
-          { id: 'one', content: 'First task', status: 'in_progress', activeForm: 'Doing first task' },
-          { id: 'two', content: 'Second task', status: 'in_progress', activeForm: 'Doing second task' },
-        ],
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(result).toEqual({
-      content: 'Only one task can be in_progress at a time.',
-      tasks: initialTasks,
-      isError: true,
-    });
-    expect(ctx.state.tasks).toBe(initialTasks);
-    expect(ctx.setState).not.toHaveBeenCalled();
-    expect(ctx.events).toEqual([]);
-  });
-
-  it('returns deterministic omitted ids that still resolve if an older schema strips ids', async () => {
-    const ctx = createTaskContext();
-    ctx.setState.mockImplementation(async updates => {
-      Object.assign(ctx.state, {
-        tasks: updates.tasks.map(({ id: _id, ...task }: TaskItemSnapshot) => task),
-      });
-    });
-
-    const writeResult = await (taskWriteTool as any).execute(
-      {
-        tasks: [{ content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(writeResult.isError).toBe(false);
-    expect(writeResult.tasks[0]!.id).toBe('task_write_tests');
-    expect(ctx.state.tasks).toEqual([{ content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }]);
-
-    const updateResult = await (taskUpdateTool as any).execute(
-      {
-        id: 'task_write_tests',
-        status: 'in_progress',
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(updateResult.isError).toBe(false);
-    expect(updateResult.tasks[0]).toMatchObject({
-      id: 'task_write_tests',
-      content: 'Write tests',
-      status: 'in_progress',
-    });
-  });
-});
-
-describe('taskUpdateTool', () => {
-  it('patches one task by id and emits the full task list', async () => {
-    const ctx = createTaskContext([
-      { id: 'investigate', content: 'Investigate issue', status: 'completed', activeForm: 'Investigating issue' },
-      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-    ]);
-
-    const result = await (taskUpdateTool as any).execute(
-      {
-        id: 'tests',
-        status: 'in_progress',
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(result.isError).toBe(false);
-    expect(ctx.state.tasks).toEqual([
-      { id: 'investigate', content: 'Investigate issue', status: 'completed', activeForm: 'Investigating issue' },
-      { id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' },
-    ]);
-    expect(ctx.events).toEqual([{ type: 'task_updated', tasks: ctx.state.tasks }]);
-  });
-
-  it('rejects an unknown task id without changing state', async () => {
-    const initialTasks = [
-      { id: 'tests', content: 'Write tests', status: 'pending' as const, activeForm: 'Writing tests' },
-    ];
-    const ctx = createTaskContext(initialTasks);
-
-    const result = await (taskUpdateTool as any).execute(
-      {
-        id: 'missing',
-        status: 'completed',
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(result).toMatchObject({
-      content: expect.stringContaining('Task not found: missing'),
-      tasks: initialTasks,
-      isError: true,
-    });
-    expect(ctx.state.tasks).toBe(initialTasks);
-    expect(ctx.setState).not.toHaveBeenCalled();
-    expect(ctx.events).toEqual([]);
-  });
-
-  it('auto-demotes previous in-progress task when updating another to in_progress', async () => {
-    const initialTasks = [
-      {
-        id: 'investigate',
-        content: 'Investigate issue',
-        status: 'in_progress' as const,
-        activeForm: 'Investigating issue',
-      },
-      { id: 'tests', content: 'Write tests', status: 'pending' as const, activeForm: 'Writing tests' },
-    ];
-    const ctx = createTaskContext(initialTasks);
-
-    const result = await (taskUpdateTool as any).execute(
-      {
-        id: 'tests',
-        status: 'in_progress',
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(result.isError).toBe(false);
-    expect(ctx.state.tasks).toEqual([
-      { id: 'investigate', content: 'Investigate issue', status: 'pending', activeForm: 'Investigating issue' },
-      { id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' },
-    ]);
-  });
-
-  it('preserves the explicitly updated earlier task when setting it to in_progress', async () => {
-    const initialTasks = [
-      {
-        id: 'investigate',
-        content: 'Investigate issue',
-        status: 'pending' as const,
-        activeForm: 'Investigating issue',
-      },
-      {
-        id: 'tests',
-        content: 'Write tests',
-        status: 'in_progress' as const,
-        activeForm: 'Writing tests',
-      },
-    ];
-    const ctx = createTaskContext(initialTasks);
-
-    const result = await (taskUpdateTool as any).execute(
-      {
-        id: 'investigate',
-        status: 'in_progress',
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(result.isError).toBe(false);
-    expect(ctx.state.tasks).toEqual([
-      { id: 'investigate', content: 'Investigate issue', status: 'in_progress', activeForm: 'Investigating issue' },
-      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-    ]);
-  });
-});
-
-describe('taskCompleteTool', () => {
-  it('marks only the matching task completed and preserves order', async () => {
-    const ctx = createTaskContext([
-      { id: 'investigate', content: 'Investigate issue', status: 'in_progress', activeForm: 'Investigating issue' },
-      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-    ]);
-
-    const result = await (taskCompleteTool as any).execute(
-      {
-        id: 'investigate',
-      },
-      { requestContext: ctx.requestContext },
-    );
-
-    expect(result.isError).toBe(false);
-    expect(ctx.state.tasks).toEqual([
-      { id: 'investigate', content: 'Investigate issue', status: 'completed', activeForm: 'Investigating issue' },
-      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-    ]);
-  });
-
-  it('uses getState for restored tasks when the compatibility state projection is stale', async () => {
-    const restoredState = {
-      tasks: [
-        { id: 'restored', content: 'Restored task', status: 'in_progress', activeForm: 'Restoring task' },
-        { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-      ],
-    };
-    const requestContext = new RequestContext();
-    const setState = vi.fn(async updates => Object.assign(restoredState, updates));
-    const events: HarnessEvent[] = [];
-    requestContext.set('harness', {
-      state: { tasks: [] },
-      getState: () => restoredState,
-      setState,
-      emitEvent: (event: HarnessEvent) => events.push(event),
-    });
-
-    const result = await (taskCompleteTool as any).execute({ id: 'restored' }, { requestContext });
-
-    expect(result.isError).toBe(false);
-    expect(result.tasks).toEqual([
-      { id: 'restored', content: 'Restored task', status: 'completed', activeForm: 'Restoring task' },
-      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
-    ]);
-    expect(setState).toHaveBeenCalledWith({ tasks: result.tasks });
-    expect(restoredState.tasks).toEqual(result.tasks);
-    expect(events).toEqual([{ type: 'task_updated', tasks: result.tasks }]);
-  });
-});
-
-describe('taskCheckTool', () => {
-  it('waits for queued task mutations before reading task state', async () => {
+describe('task tool display bridge', () => {
+  it('emits task_updated and updates the display snapshot when a task tool runs with a harness context', async () => {
     const harness = createHarness();
-    await harness.setState({
-      tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
-    });
-    const requestContext = await (harness as any).buildRequestContext();
 
-    let releaseFirst!: () => void;
-    const firstUpdateGate = new Promise<void>(resolve => {
-      releaseFirst = resolve;
-    });
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
 
-    const firstUpdate = (harness as any).updateState(async (state: Record<string, unknown>) => {
-      await firstUpdateGate;
-      const tasks = state.tasks as TaskItemSnapshot[];
-      const updatedTasks = tasks.map(task => (task.id === 'tests' ? { ...task, status: 'completed' as const } : task));
-      return { updates: { tasks: updatedTasks }, result: updatedTasks };
-    });
+    // Real harness request context — wires emitEvent -> harness.emit, the
+    // display-only bridge the agnostic task tools call when present.
+    const requestContext: RequestContext = await (harness as any).buildRequestContext();
 
-    const checkResultPromise = (taskCheckTool as any).execute({}, { requestContext });
+    // Storage with the always-wired threadState domain so the tool can persist.
+    const storage = new InMemoryStore();
 
-    releaseFirst();
-    await firstUpdate;
-    const checkResult = await checkResultPromise;
+    const result = await (taskWriteTool as any).execute(
+      { tasks: [{ content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }] },
+      {
+        requestContext,
+        mastra: { getStorage: () => storage },
+        // Memory-backed agent context so the tool is not gated to a no-op.
+        agent: { threadId: 'thread-1', resourceId: 'resource-1', messages: [] },
+      },
+    );
 
-    expect(checkResult.summary).toMatchObject({
-      completed: 1,
-      incomplete: 0,
-      allCompleted: true,
-    });
-    expect(checkResult.tasks).toEqual([
-      { id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' },
-    ]);
-  });
+    expect(result.isError).toBe(false);
 
-  it('returns structured summary fields and incomplete task ids', async () => {
-    const ctx = createTaskContext([
-      { id: 'investigate', content: 'Investigate issue', status: 'in_progress', activeForm: 'Investigating issue' },
-      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
+    const taskUpdated = events.filter(event => event.type === 'task_updated');
+    expect(taskUpdated).toHaveLength(1);
+    expect((taskUpdated[0] as Extract<HarnessEvent, { type: 'task_updated' }>).tasks).toEqual([
+      { id: 'task_write_tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
     ]);
 
-    const result = await (taskCheckTool as any).execute({}, { requestContext: ctx.requestContext });
-
-    expect(result).toMatchObject({
-      content: expect.stringContaining('investigate: Investigate issue'),
-      tasks: ctx.state.tasks,
-      summary: {
-        total: 2,
-        completed: 0,
-        inProgress: 1,
-        pending: 1,
-        incomplete: 2,
-        hasTasks: true,
-        allCompleted: false,
-      },
-      incompleteTasks: ctx.state.tasks,
-      isError: false,
-    });
-    expect(result.content).toContain('All tasks completed: NO');
-    expect(result.content).toContain('tests: Write tests');
-  });
-
-  it('returns an empty structured summary when no tasks are tracked', async () => {
-    const ctx = createTaskContext();
-
-    const result = await (taskCheckTool as any).execute({}, { requestContext: ctx.requestContext });
-
-    expect(result).toMatchObject({
-      content: expect.stringContaining('No tasks found'),
-      tasks: [],
-      summary: {
-        total: 0,
-        completed: 0,
-        inProgress: 0,
-        pending: 0,
-        incomplete: 0,
-        hasTasks: false,
-        allCompleted: false,
-      },
-      incompleteTasks: [],
-      isError: false,
-    });
-  });
-
-  it('returns allCompleted only when tracked tasks are completed', async () => {
-    const ctx = createTaskContext([
-      { id: 'investigate', content: 'Investigate issue', status: 'completed', activeForm: 'Investigating issue' },
-      { id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' },
+    // The harness display snapshot tracks the emitted task list (display-only;
+    // the task list itself lives on the agent state-signal lane, not in state).
+    expect(harness.getDisplayState().tasks).toEqual([
+      { id: 'task_write_tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
     ]);
 
-    const result = await (taskCheckTool as any).execute({}, { requestContext: ctx.requestContext });
-
-    expect(result).toMatchObject({
-      content: expect.stringContaining('All tasks completed: YES'),
-      tasks: ctx.state.tasks,
-      summary: {
-        total: 2,
-        completed: 2,
-        inProgress: 0,
-        pending: 0,
-        incomplete: 0,
-        hasTasks: true,
-        allCompleted: true,
-      },
-      incompleteTasks: [],
-      isError: false,
-    });
-  });
-
-  it('returns structured error fields when harness context is missing', async () => {
-    const result = await (taskCheckTool as any).execute({}, {});
-
-    expect(result).toEqual({
-      content: 'Unable to access task list (no harness context)',
-      tasks: [],
-      summary: {
-        total: 0,
-        completed: 0,
-        inProgress: 0,
-        pending: 0,
-        incomplete: 0,
-        hasTasks: false,
-        allCompleted: false,
-      },
-      incompleteTasks: [],
-      isError: true,
-    });
-  });
-
-  it('returns unique deterministic ids for legacy tasks with colliding slugs', async () => {
-    const ctx = createTaskContext([
-      { content: '!!!', status: 'pending', activeForm: 'Tracking first task' },
-      { content: '???', status: 'pending', activeForm: 'Tracking second task' },
-    ]);
-
-    const result = await (taskCheckTool as any).execute({}, { requestContext: ctx.requestContext });
-
-    expect(result.tasks.map((task: TaskItemSnapshot) => task.id)).toEqual(['task_item', 'task_item_2']);
+    // Tasks are no longer mirrored into harness session state.
+    expect(harness.getState().tasks).toBeUndefined();
   });
 });

@@ -6,6 +6,7 @@ import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lu
 
 import { useCurrentRun } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
+import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { Clock } from './workflow-clock';
 import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
@@ -39,6 +40,7 @@ export function WorkflowNestedNode({
 }: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
   const { steps } = useCurrentRun();
   const { selectedStepId, hoverStepId, setHoverStepId } = useWorkflowSelectedStep();
+  const { showNestedGraph } = useWorkflowStepDetail();
 
   const {
     label,
@@ -177,7 +179,7 @@ export function WorkflowNestedNode({
           error={step?.error}
           tripwire={isTripwire ? step?.tripwire : undefined}
           mapConfig={mapConfig}
-          nestedGraph={{ label, fullStep: fullLabel, stepGraph }}
+          onShowNestedGraph={stepGraph ? () => showNestedGraph({ label, fullStep: fullLabel, stepGraph }) : undefined}
           status={displayStatus}
           stepKey={stepKey}
           stepsFlow={stepsFlow}

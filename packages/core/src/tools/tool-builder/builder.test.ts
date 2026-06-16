@@ -146,6 +146,57 @@ describe('CoreToolBuilder FGA', () => {
     expect(fgaProvider.require).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it('bypasses membership resolution for a tenant-scoped trusted actor', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const testTool = createTool({
+      id: 'search',
+      description: 'Search',
+      inputSchema: z.object({ query: z.string() }),
+      execute,
+    });
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+    const fgaProvider = {
+      require: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'search',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        requestContext,
+        mastra: {
+          getServer: () => ({ fga: fgaProvider }),
+        } as any,
+      },
+    });
+
+    const actor = { actorKind: 'system', sourceWorkflow: 'nightly-workflow' } as const;
+    const builtTool = builder.build();
+    await builtTool.execute!(
+      { query: 'docs' },
+      {
+        toolCallId: 'call-1',
+        messages: [],
+        actor,
+      },
+    );
+
+    expect(fgaProvider.require).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith(
+      { query: 'docs' },
+      expect.objectContaining({
+        actor,
+      }),
+    );
+  });
 });
 
 describe('MCP Tool Tracing', () => {

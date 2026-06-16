@@ -4,6 +4,7 @@ import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
+import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
 import type { AgentChannels } from '../channels/agent-channels';
@@ -338,6 +339,40 @@ export type AgentEditorConfig =
       tools?: boolean | { description?: boolean };
     };
 
+/**
+ * Agent-level goal configuration. When set, the agent gains a native goal
+ * mechanism: an objective set via {@link Agent.setObjective} is judged in the
+ * execution loop (like `isTaskComplete`) and the agent keeps working until the
+ * objective is complete or the run budget is exhausted.
+ *
+ * These values are the defaults; the per-thread {@link GoalObjectiveRecord} in
+ * thread state overrides them when it carries a value. A judge model is required
+ * at runtime (resolved from the objective record or `judge` here) — without one
+ * the goal step is a no-op.
+ *
+ * @experimental Agent goals are experimental and may change in a future release.
+ */
+export interface GoalConfig {
+  /**
+   * Judge model used to evaluate goal completion. Required (here or per
+   * objective) for the goal to do anything. Defaults to `undefined` (no-op).
+   *
+   * May be a model id / model object, or a resolver function (so a consumer can
+   * inject provider credentials and read the current judge selection at runtime);
+   * the function may return `undefined` to keep the goal step a no-op.
+   */
+  judge?: DynamicArgument<MastraModelConfig | undefined>;
+  /** Max goal evaluations before the goal stops. Defaults to 50. */
+  maxRuns?: number;
+  /** Extra judge guidance. Defaults to the built-in goal judge prompt. */
+  prompt?: string;
+  /**
+   * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
+   * omitted, a default rubric scorer judges the objective with the judge model.
+   */
+  scorer?: MastraScorer | string;
+}
+
 interface AgentConfigBase<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -646,6 +681,14 @@ interface AgentConfigBase<
    */
   signals?: SignalProvider[];
   /**
+   * Native goal configuration. When set, an objective set via
+   * {@link Agent.setObjective} is judged in the execution loop and the agent
+   * keeps working until the objective is complete or the budget is exhausted.
+   *
+   * @experimental Agent goals are experimental and may change in a future release.
+   */
+  goal?: GoalConfig;
+  /**
    * Optional agent-level transform policy for tool payloads before they are
    * serialized into display streams or user-visible transcripts.
    */
@@ -733,6 +776,8 @@ export type AgentGenerateOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /** Trusted server-side signal for this agent FGA check. */
+  actor?: ActorSignal;
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.
@@ -834,6 +879,8 @@ export type AgentStreamOptions<
   experimental_output?: EXPERIMENTAL_OUTPUT;
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /** Trusted server-side signal for this agent FGA check. */
+  actor?: ActorSignal;
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.

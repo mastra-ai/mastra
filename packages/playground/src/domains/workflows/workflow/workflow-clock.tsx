@@ -1,3 +1,4 @@
+import { Txt, toSigFigs } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 
 interface ClockProps {
@@ -16,7 +17,11 @@ export const Clock = ({ startedAt, endedAt }: ClockProps) => {
     return () => clearInterval(interval);
   }, [startedAt]);
 
-  const timeDiff = (endedAt ? endedAt - startedAt : time - startedAt) / 1000;
+  const timeDiff = endedAt ? endedAt - startedAt : time - startedAt;
 
-  return <span className="text-xs text-neutral3">{Number(timeDiff.toPrecision(3))}s</span>;
+  return (
+    <Txt variant="ui-xs" className="font-mono text-neutral3 whitespace-nowrap">
+      {toSigFigs(timeDiff, 3)}ms
+    </Txt>
+  );
 };
