@@ -423,8 +423,15 @@ export interface GoalEvaluationPayload {
   status: 'active' | 'paused' | 'done';
   /** Individual scorer results. */
   results: ScorerResult[];
-  /** Judge feedback / stop reason. */
+  /** Judge feedback / stop reason. Falls back to the pause reason when parked. */
   reason?: string;
+  /**
+   * Why the objective is parked, set when `status === 'paused'` (judge failure,
+   * an explicit waiting checkpoint, or budget exhaustion). Cleared otherwise.
+   */
+  pausedReason?: string;
+  /** True when the scorer/judge itself errored (as opposed to scoring 0). */
+  judgeFailed?: boolean;
   /** Total duration of the goal scoring check. */
   duration: number;
   /** Whether scoring timed out. */

@@ -231,7 +231,8 @@ describe('in-loop goal scoring', () => {
 
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record?.runsUsed).toBe(2);
-    expect(record?.status).toBe('active');
+    // Exhausting the budget without completing parks the goal as `paused`.
+    expect(record?.status).toBe('paused');
   });
 
   it('emits no goal chunk when there is no active objective', async () => {
@@ -263,24 +264,30 @@ describe('in-loop goal scoring', () => {
     }
 
     expect(goalChunks.length).toBe(2);
-    expect(goalChunks[goalChunks.length - 1].payload.maxRunsReached).toBe(true);
+    const last = goalChunks[goalChunks.length - 1].payload;
+    expect(last.maxRunsReached).toBe(true);
     expect(goalChunks.every(c => c.payload.passed === false)).toBe(true);
+    // Budget exhaustion parks the goal visibly as `paused` (with a reason)
+    // rather than leaving it silently `active`.
+    expect(last.status).toBe('paused');
+    expect(last.pausedReason).toContain('budget');
 
     const record = await agent.getObjective({ threadId: THREAD });
-    expect(record?.status).toBe('active');
+    expect(record?.status).toBe('paused');
+    expect(record?.pausedReason).toContain('budget');
     expect(record?.runsUsed).toBe(2);
   });
 
-  it('does not re-score a budget-exhausted (still active) objective on a later run', async () => {
-    // An objective that stopped at the run budget stays `active` (so raising
-    // maxRuns can resume it). A subsequent run on the same thread must not burn
-    // another judge call or push runsUsed past the budget — it stops the loop and
-    // emits a terminal goal chunk without scoring.
+  it('does not re-score a budget-exhausted (now paused) objective on a later run', async () => {
+    // An objective that stops at the run budget is parked as `paused`. A
+    // subsequent run on the same thread must not burn another judge call or push
+    // runsUsed past the budget — a paused goal is gated out before scoring and
+    // emits no goal chunk (it is parked, not iterating).
     const scorer = passingScorer(0, 'Not yet');
     const agent = makeAgent({ judge: 'mock-model-id', scorer: scorer as any, maxRuns: 2 });
     await agent.setObjective('Unreachable goal', { threadId: THREAD, resourceId: RESOURCE });
 
-    // First run exhausts the budget (runsUsed → 2, status stays active).
+    // First run exhausts the budget (runsUsed → 2, status → paused).
     const firstStream = await agent.stream('go', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
       maxSteps: 10,
@@ -289,9 +296,10 @@ describe('in-loop goal scoring', () => {
       void _;
     }
     expect(scorer.run).toHaveBeenCalledTimes(2);
+    expect((await agent.getObjective({ threadId: THREAD }))?.status).toBe('paused');
     expect((await agent.getObjective({ threadId: THREAD }))?.runsUsed).toBe(2);
 
-    // Second run on the same thread: the budget guard fires before any scoring.
+    // Second run on the same thread: a paused goal is gated out before scoring.
     const goalChunks: any[] = [];
     const secondStream = await agent.stream('again', {
       memory: { resource: RESOURCE, thread: { id: THREAD } },
@@ -301,21 +309,51 @@ describe('in-loop goal scoring', () => {
       if (chunk.type === 'goal') goalChunks.push(chunk);
     }
 
-    // No additional scorer calls beyond the two from the first run.
+    // No additional scorer calls, no goal chunk: the paused goal is inert until
+    // the user resumes it.
     expect(scorer.run).toHaveBeenCalledTimes(2);
-    // A terminal goal chunk is still emitted so consumers can render the state.
-    expect(goalChunks.length).toBeGreaterThan(0);
-    expect(goalChunks[0].payload).toMatchObject({
-      iteration: 2,
-      maxRuns: 2,
-      passed: false,
-      maxRunsReached: true,
-      results: [],
-    });
+    expect(goalChunks.length).toBe(0);
 
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record?.runsUsed).toBe(2);
-    expect(record?.status).toBe('active');
+    expect(record?.status).toBe('paused');
+  });
+
+  it('resumes a budget-exhausted goal when maxRuns is raised and status is set back to active', async () => {
+    // The documented resume path: updateObjectiveOptions raises maxRuns AND
+    // flips status back to `active`, which re-admits the goal to the scorer.
+    const scorer = passingScorer(0, 'Not yet');
+    const agent = makeAgent({ judge: 'mock-model-id', scorer: scorer as any, maxRuns: 1 });
+    await agent.setObjective('Unreachable goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    // First run exhausts the (tiny) budget and parks the goal.
+    const firstStream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const _ of firstStream.fullStream) {
+      void _;
+    }
+    expect(scorer.run).toHaveBeenCalledTimes(1);
+    expect((await agent.getObjective({ threadId: THREAD }))?.status).toBe('paused');
+
+    // Resume: raise the budget and reactivate. The stale pause reason is cleared
+    // on the next scoring write.
+    await agent.updateObjectiveOptions({ threadId: THREAD, maxRuns: 3, status: 'active' });
+
+    const goalChunks: any[] = [];
+    const secondStream = await agent.stream('again', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of secondStream.fullStream) {
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    // The resumed goal re-scores (more scorer calls) and a goal chunk is emitted.
+    expect(scorer.run.mock.calls.length).toBeGreaterThan(1);
+    expect(goalChunks.length).toBeGreaterThan(0);
+    expect((await agent.getObjective({ threadId: THREAD }))?.runsUsed).toBeGreaterThan(1);
   });
 
   it('invokes a model-resolver function for goal.judge and scores when it resolves a model', async () => {

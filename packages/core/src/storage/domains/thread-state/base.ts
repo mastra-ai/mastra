@@ -38,6 +38,12 @@ export interface GoalObjectiveRecord {
   judgeModelId?: string;
   /** Extra judge guidance. Falls back to agent `goal.prompt` (default = built-in goal judge prompt). */
   prompt?: string;
+  /**
+   * Why the objective is `paused`, when applicable. Distinguishes the pause
+   * causes for the UI / resume flow: an explicit user checkpoint requested by
+   * the goal ("waiting"), or a judge/scorer failure. Unset for `active`/`done`.
+   */
+  pausedReason?: string;
   startedAt: number;
   updatedAt: number;
 }

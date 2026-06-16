@@ -29,6 +29,16 @@ export const GOAL_STATE_TYPE = 'goal';
 export const DEFAULT_GOAL_MAX_RUNS = 50;
 
 /**
+ * Score the default goal scorer emits to signal an explicit "waiting for the
+ * user" checkpoint (tri-state decision `waiting`). It is deliberately neither 1
+ * (complete) nor 0 (continue): the generic completion reducer treats it as "not
+ * passed" (so the loop does not declare the goal done), while the goal step
+ * detects this exact value and parks the objective as `paused` with the judge's
+ * reason. Shared between `scorer.ts` (producer) and `goal-step.ts` (consumer).
+ */
+export const GOAL_SCORE_WAITING = 0.5;
+
+/**
  * Default goal-judge system prompt. Ported from MastraCode's `JUDGE_SYSTEM_PROMPT`
  * so the native goal scorer behaves like the original `/goal` judge. A
  * user-supplied `goal.prompt` (or per-objective `prompt`) overrides this.
@@ -37,11 +47,14 @@ export const DEFAULT_GOAL_JUDGE_PROMPT = `You are the goal judge. Your decision 
 
 Given a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied. Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.
 
-The goal is complete when its requirements have been fully achieved.
-The goal is NOT complete when the assistant should keep working autonomously toward the objective, including when it asked for input that the goal did not explicitly require.
-If the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification.
+Choose exactly one decision:
+- "done": the goal's requirements have been fully achieved.
+- "continue": the assistant should keep working autonomously toward the objective. Use this even when the assistant asked for input that the goal did not explicitly require — do not let the assistant stall the goal by asking for confirmation the goal never requested.
+- "waiting": ONLY when the goal text itself explicitly instructs the assistant to stop and wait for the user (a human) to review, approve, confirm, or provide input before continuing — e.g. "implement X, then stop and wait for my review". This parks the goal until the user resumes it.
 
-When the goal is not yet complete, be specific about what still needs to be accomplished and write your feedback as an instruction for what the assistant should do next.`;
+Important: if the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, or validate, treat your own decision as that signal and decide "done" or "continue" yourself — that is NOT a "waiting" case. Only an explicit request for the human/user to act is "waiting". When in doubt between "continue" and "waiting", choose "continue".
+
+When you choose "continue", be specific about what still needs to be accomplished and write your reason as an instruction for what the assistant should do next. When you choose "waiting", write your reason as a short note describing what you are waiting on the user for.`;
 
 /**
  * Effective goal settings resolved per evaluation. `judgeModelId` is `undefined`
