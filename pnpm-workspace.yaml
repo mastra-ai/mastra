@@ -142,6 +142,7 @@ allowBuilds:
   msgpackr-extract: false
   msw: false
   node-pty: true
+  playwright-chromium: true
   onnxruntime-node: false
   protobufjs: false
   sharp: false
