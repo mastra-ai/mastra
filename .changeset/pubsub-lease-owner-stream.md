@@ -10,9 +10,9 @@ Added a lease API to `PubSub` (`acquireLease` / `releaseLease` / `renewLease` / 
 ```ts
 const result = agent.sendSignal(signal, { resourceId, threadId });
 ctx.waitUntil(
-  result.outcome.then(async settled => {
-    if (settled.action === 'wake' && settled.output) {
-      await settled.output.consumeStream();
+  result.outcome.then(async ({ action, output }) => {
+    if (action === 'wake' && output) {
+      await output.consumeStream();
     }
   }),
 );
