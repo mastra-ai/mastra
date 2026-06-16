@@ -39,7 +39,13 @@ const createHookDrivenAgent = (options: MockAgentOptions): Agent =>
     getModel: vi.fn().mockResolvedValue({ specificationVersion: 'v2' }),
     generate: vi.fn().mockImplementation(async (_input: unknown, runOptions: any) => {
       const hooks = runOptions?.hooks;
+      const abortSignal: AbortSignal | undefined = runOptions?.abortSignal;
       for (const call of options.toolCalls) {
+        // Mirror the real run: once aborted (e.g. by a mock failure), the model
+        // stops issuing further tool calls instead of plowing ahead.
+        if (abortSignal?.aborted) {
+          throw abortSignal.reason instanceof Error ? abortSignal.reason : new Error('aborted');
+        }
         const context = { toolName: call.toolName, input: call.input, context: {}, metadata: {} };
         const before = await hooks?.beforeToolCall?.(context);
         if (before?.proceed === false) {
@@ -217,5 +223,41 @@ describe('executeTarget agent tool mocks', () => {
     await executeTarget(agent, 'agent', { input: 'hi' }, { toolMocks: mocks });
 
     expect(seen).toEqual(['first', 'second']);
+  });
+
+  it('aborts immediately on mock mismatch: a later live tool never runs (Fix 1)', async () => {
+    const liveExecutions: ToolCall[] = [];
+    const agent = createHookDrivenAgent({
+      toolCalls: [
+        // A: mocked but mis-called → must abort the run here
+        { toolName: 'getWeather', input: { city: 'Paris' } },
+        // B: a live, side-effecting tool the model would call *after* A → must NOT run
+        { toolName: 'sendEmail', input: { to: 'a@b.c' } },
+      ],
+      liveExecutions,
+    });
+    const mocks: ItemToolMock[] = [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }];
+
+    const result = await executeTarget(agent, 'agent', { input: 'hi' }, { toolMocks: mocks });
+
+    expect(result.output).toBeNull();
+    expect(result.error?.code).toBe(TOOL_MOCK_MISMATCH);
+    // The whole point: B's live execution must be blocked by the abort.
+    expect(liveExecutions).toEqual([]);
+    expect(result.toolMockReport?.failure?.code).toBe(TOOL_MOCK_MISMATCH);
+  });
+
+  it('forces sequential tool execution when the item has mocks (toolCallConcurrency: 1)', async () => {
+    const liveExecutions: ToolCall[] = [];
+    const agent = createHookDrivenAgent({
+      toolCalls: [{ toolName: 't', input: { a: 1 } }],
+      liveExecutions,
+    });
+    const mocks: ItemToolMock[] = [{ toolName: 't', args: { a: 1 }, output: 'x' }];
+
+    await executeTarget(agent, 'agent', { input: 'hi' }, { toolMocks: mocks });
+
+    const runOptions = (agent.generate as any).mock.calls[0][1];
+    expect(runOptions.toolCallConcurrency).toBe(1);
   });
 });

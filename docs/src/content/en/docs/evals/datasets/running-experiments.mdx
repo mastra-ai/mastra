@@ -177,7 +177,9 @@ A mocked tool call fails the item when the arguments do not match or all matchin
 - `TOOL_MOCK_MISMATCH` — the tool was called with arguments that no mock matches.
 - `TOOL_MOCK_EXHAUSTED` — every matching mock has already been consumed.
 
-These failures are deterministic, so they are not retried. Mocks that are declared but never used do not fail the item — they are reported as unconsumed.
+When a mocked tool is mis-called, the agent run is aborted immediately, so the model cannot go on to call any further tools — including unmocked, side-effecting tools that would otherwise run live. These failures are deterministic, so they are not retried. Mocks that are declared but never used do not fail the item — they are reported as unconsumed.
+
+While an item has mocks, the agent's tools execute sequentially so repeated `(toolName, args)` mocks are consumed in the provider's call order. This serialization applies only to items that declare mocks.
 
 ### Diagnostics
 
@@ -196,6 +198,11 @@ for (const item of summary.results) {
 ```
 
 In [Studio](/docs/studio/overview), edit a dataset item to author tool mocks as a JSON array, and open an experiment result to see the same report.
+
+### Limitations
+
+- **No tool span for mocked calls.** A mocked call returns its output before the tool executes, so it does not create a tool span. Trajectory scorers backed by stored traces may therefore not see mocked tool calls. Trajectory extraction that falls back to the agent's message output still sees them, so trajectory scoring can differ depending on your observability configuration.
+- **Storage support.** Tool mocks and tool mock reports are persisted by the LibSQL, PostgreSQL, MongoDB, and Spanner adapters. The MySQL adapter does not support them and rejects writes that carry tool mocks or a tool mock report so the feature never silently runs tools live.
 
 ## Async experiments
 
