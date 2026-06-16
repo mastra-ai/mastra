@@ -1774,7 +1774,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
           ...(ifActive ? { ifActive } : {}),
         });
-        const settledRunId = (await result.outcome).runId;
+        const settledRunId = await result.outcome.then(o => o.runId).catch(() => result.runId ?? runId);
         return result.signal === undefined
           ? { accepted: result.accepted, runId: settledRunId }
           : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
@@ -1790,7 +1790,11 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         ...(ifActive ? { ifActive } : {}),
         ...ifIdleWithContext,
       });
-      const settledRunId = (await result.outcome).runId;
+      // `outcome.runId` is the authoritative settled id (non-optional on every action).
+      // The `.catch` only fires on a rejectable `wake` startup, where the synchronous
+      // best-effort `result.runId` is the locally-reserved id (always present on the
+      // local idle-start path). The wire contract is `runId: string`.
+      const settledRunId = (await result.outcome.then(o => o.runId).catch(() => result.runId)) as string;
       return result.signal === undefined
         ? { accepted: result.accepted, runId: settledRunId }
         : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
@@ -1866,7 +1870,9 @@ async function handleAgentMessageRoute({
       ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
       ...(ifActive ? { ifActive } : {}),
     } as any);
-    const settledRunId = (await result.outcome)?.runId ?? result.runId;
+    const settledRunId = (await Promise.resolve(result.outcome)
+      .then(o => o?.runId ?? result.runId)
+      .catch(() => result.runId)) as string;
     return result.signal === undefined
       ? { accepted: result.accepted, runId: settledRunId }
       : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
@@ -1882,7 +1888,9 @@ async function handleAgentMessageRoute({
     ...(ifActive ? { ifActive } : {}),
     ...ifIdleWithContext,
   } as any);
-  const settledRunId = (await result.outcome)?.runId ?? result.runId;
+  const settledRunId = (await Promise.resolve(result.outcome)
+    .then(o => o?.runId ?? result.runId)
+    .catch(() => result.runId)) as string;
   return result.signal === undefined
     ? { accepted: result.accepted, runId: settledRunId }
     : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
