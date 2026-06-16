@@ -6,9 +6,17 @@ import { mcpClient } from '../mcp';
 
 /**
  * Linear and Notion tools are loaded dynamically from MCP servers (when configured).
- * Tool names are discovered at runtime, prefixed with `linear_` and `notion_`.
+ * Tool names are discovered lazily, prefixed with `linear_` and `notion_`.
  */
-const mcpTools = await mcpClient.listTools();
+let mcpToolsPromise: ReturnType<typeof mcpClient.listTools> | undefined;
+
+async function getMcpTools() {
+  mcpToolsPromise ??= mcpClient.listTools().catch(error => {
+    console.warn(`MCP export tools unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return {};
+  });
+  return mcpToolsPromise;
+}
 
 export const meetingNotesOutputSchema = z.object({
   title: z.string(),
@@ -83,10 +91,10 @@ If a user asks to export but no matching tools are available, tell them to confi
   defaultOptions: {
     maxSteps: 100,
   },
-  tools: {
+  tools: async () => ({
     ...zoomTools,
-    ...mcpTools,
-  },
+    ...(await getMcpTools()),
+  }),
   memory: new Memory({
     options: {
       lastMessages: 10,

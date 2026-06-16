@@ -1,46 +1,12 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { AgentBrowser, AgentBrowserThreadManager } from '@mastra/agent-browser';
-import type { AgentBrowserThreadManagerConfig } from '@mastra/agent-browser';
-import { execFileSync } from 'node:child_process';
-import { dirname, join } from 'node:path';
-import { createRequire } from 'node:module';
+import { AgentBrowser } from '@mastra/agent-browser';
 import 'playwright-chromium';
-
-const require = createRequire(import.meta.url);
-let linuxDepsInstalled = false;
-
-function installPlaywrightLinuxDeps() {
-  if (linuxDepsInstalled || process.env.BROWSER_SKIP_INSTALL_DEPS === 'true') {
-    return;
-  }
-
-  linuxDepsInstalled = true;
-
-  if (process.platform !== 'linux' || process.getuid?.() !== 0 || process.env.BROWSER_CDP_URL) {
-    return;
-  }
-
-  const playwrightCli = join(dirname(require.resolve('playwright-chromium')), 'cli.js');
-  execFileSync(process.execPath, [playwrightCli, 'install-deps', 'chromium'], { stdio: 'inherit' });
-}
-
-class RuntimeDepsThreadManager extends AgentBrowserThreadManager {
-  constructor(config: AgentBrowserThreadManagerConfig) {
-    super(config);
-  }
-
-  protected override async createSession(threadId: string) {
-    installPlaywrightLinuxDeps();
-    return super.createSession(threadId);
-  }
-}
 
 const browser = new AgentBrowser({
   headless: process.env.BROWSER_HEADLESS !== 'false',
   ...(process.env.BROWSER_CDP_URL ? { cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' as const } : {}),
-  createThreadManager: config => new RuntimeDepsThreadManager(config),
 });
 
 export const browserAgent = new Agent({
