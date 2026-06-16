@@ -5,6 +5,7 @@ import type { PanelProps } from 'react-resizable-panels';
 import { Panel, usePanelRef } from 'react-resizable-panels';
 import { PanelEdgeIcon } from './panel-edge-icon';
 import { panelIconButtonClass } from './panel-icon-button';
+import { useClampedElementCursor } from './use-clamped-element-cursor';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
@@ -15,12 +16,6 @@ export interface CollapsiblePanelProps extends PanelProps {
 // The expand pill follows the pointer vertically along the edge, clamped so
 // it never bleeds past the strip's ends.
 const PILL_EDGE_MARGIN = 22;
-
-const trackPillY = (strip: HTMLElement, clientY: number) => {
-  const rect = strip.getBoundingClientRect();
-  const y = Math.min(rect.height - PILL_EDGE_MARGIN, Math.max(PILL_EDGE_MARGIN, clientY - rect.top));
-  strip.style.setProperty('--pill-y', `${y}px`);
-};
 
 type PanelElementRef = RefObject<HTMLDivElement | null>;
 
@@ -92,8 +87,17 @@ const useCollapsedEdgePill = ({
   elementRef: PanelElementRef;
 }) => {
   const expandButtonRef = useRef<HTMLButtonElement | null>(null);
-  const stripRef = useRef<HTMLButtonElement | null>(null);
   const pillRef = useRef<HTMLSpanElement | null>(null);
+  const {
+    beginTracking: beginPillTracking,
+    elementRef: stripRef,
+    endTracking: endPillTracking,
+    updateTracking: updatePillTracking,
+  } = useClampedElementCursor<HTMLButtonElement>({
+    axis: 'y',
+    margin: PILL_EDGE_MARGIN,
+    variableName: '--pill-y',
+  });
 
   const setEdgeHovered = useCallback((hovered: boolean) => {
     const expandButton = expandButtonRef.current;
@@ -102,20 +106,22 @@ const useCollapsedEdgePill = ({
     if (pill) pill.dataset.edgeHovered = hovered ? 'true' : 'false';
   }, []);
 
-  const spawnPill = useCallback((clientY: number) => {
-    const strip = stripRef.current;
+  const spawnPill = useCallback((point: { clientX: number; clientY: number }) => {
     const pill = pillRef.current;
-    if (!strip || !pill) return;
-    trackPillY(strip, clientY);
+    if (!pill) return;
+    beginPillTracking(point);
     pill.style.transitionProperty = 'opacity, translate';
     requestAnimationFrame(() => {
       pill.style.transitionProperty = '';
     });
-  }, []);
+  }, [beginPillTracking]);
 
-  const trackPillPosition = useCallback((clientY: number) => {
-    if (stripRef.current) trackPillY(stripRef.current, clientY);
-  }, []);
+  const trackPillPosition = useCallback(
+    (point: { clientX: number; clientY: number }) => {
+      updatePillTracking(point);
+    },
+    [updatePillTracking],
+  );
 
   useEffect(() => {
     if (!collapsed) return;
@@ -125,10 +131,13 @@ const useCollapsedEdgePill = ({
 
     const show = (event: PointerEvent) => {
       setEdgeHovered(true);
-      spawnPill(event.clientY);
+      spawnPill(event);
     };
-    const hide = () => setEdgeHovered(false);
-    const follow = (event: PointerEvent) => trackPillPosition(event.clientY);
+    const hide = () => {
+      setEdgeHovered(false);
+      endPillTracking();
+    };
+    const follow = (event: PointerEvent) => trackPillPosition(event);
     separator.addEventListener('pointerenter', show);
     separator.addEventListener('pointerleave', hide);
     separator.addEventListener('pointermove', follow);
@@ -137,10 +146,11 @@ const useCollapsedEdgePill = ({
       separator.removeEventListener('pointerleave', hide);
       separator.removeEventListener('pointermove', follow);
       setEdgeHovered(false);
+      endPillTracking();
     };
-  }, [collapsed, direction, elementRef, setEdgeHovered, spawnPill, trackPillPosition]);
+  }, [collapsed, direction, elementRef, endPillTracking, setEdgeHovered, spawnPill, trackPillPosition]);
 
-  return { expandButtonRef, stripRef, pillRef, spawnPill, trackPillPosition };
+  return { endPillTracking, expandButtonRef, stripRef, pillRef, spawnPill, trackPillPosition };
 };
 
 export const CollapsiblePanel = ({
@@ -157,7 +167,7 @@ export const CollapsiblePanel = ({
   const panelRef = usePanelRef();
   const elementRef = useRef<HTMLDivElement | null>(null);
   const { booted, boot, enableSizeTransitions } = usePanelSizeTransitions(elementRef);
-  const { expandButtonRef, stripRef, pillRef, spawnPill, trackPillPosition } = useCollapsedEdgePill({
+  const { endPillTracking, expandButtonRef, stripRef, pillRef, spawnPill, trackPillPosition } = useCollapsedEdgePill({
     collapsed,
     direction,
     elementRef,
@@ -239,8 +249,9 @@ export const CollapsiblePanel = ({
             tabIndex={-1}
             aria-hidden="true"
             onClick={expand}
-            onPointerEnter={event => spawnPill(event.clientY)}
-            onPointerMove={event => trackPillPosition(event.clientY)}
+            onPointerEnter={event => spawnPill(event)}
+            onPointerLeave={endPillTracking}
+            onPointerMove={event => trackPillPosition(event)}
             style={{ '--pill-y': '50%' } as CSSProperties}
             className={cn(
               'group/expand absolute inset-y-0 z-10 w-4 cursor-pointer focus-visible:outline-hidden',
