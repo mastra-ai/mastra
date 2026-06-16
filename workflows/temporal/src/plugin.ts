@@ -11,6 +11,7 @@ const CACHE_PATH = 'node_modules/.mastra';
 const WORKFLOW_FILE_NAME = 'workflow.mjs';
 const ACTIVITIES_FILE_NAME = 'activities.mjs';
 const ACTIVITY_BINDINGS_FILE_NAME = 'activity-bindings.json';
+const EXECUTABLE_WORKFLOW_STEP_PATTERN = /\.(?:then|parallel|branch|dowhile|dountil|foreach)\(/;
 
 function getGeneratedWorkflowModulePath(outputDir: string): string {
   return path.join(outputDir, WORKFLOW_FILE_NAME);
@@ -54,13 +55,24 @@ export class MastraPlugin implements WorkerPlugin {
     const temporalOutputDir = path.resolve(projectRoot, CACHE_PATH);
     const compiledEntryPath = await this.#bundleMastra(entryFile, projectRoot, temporalOutputDir);
 
-    await buildTemporalWorkflowModule(compiledEntryPath, temporalOutputDir, WORKFLOW_FILE_NAME);
+    const { outputPath: workflowOutputPath } = await buildTemporalWorkflowModule(
+      compiledEntryPath,
+      temporalOutputDir,
+      WORKFLOW_FILE_NAME,
+    );
 
     const { activityBindings } = await buildTemporalActivitiesModule(
       compiledEntryPath,
       temporalOutputDir,
       ACTIVITIES_FILE_NAME,
     );
+
+    const workflowSource = readFileSync(workflowOutputPath, 'utf8');
+    if (activityBindings.length === 0 && EXECUTABLE_WORKFLOW_STEP_PATTERN.test(workflowSource)) {
+      throw new Error(
+        'MastraPlugin.prebuild() found workflow steps but generated zero Temporal activities. Ensure every workflow step is created with createStep() or a local factory that returns createStep().',
+      );
+    }
 
     await writeFile(getActivityBindingsPath(temporalOutputDir), JSON.stringify(activityBindings, null, 2), 'utf8');
 

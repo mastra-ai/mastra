@@ -50,6 +50,59 @@ describe('activity transform', () => {
     ]);
   });
 
+  it('collects factory-created activity bindings by declaration export name and step id', () => {
+    const bindings = collectTemporalActivityBindings(
+      `
+        import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+        function makeFetchWeather() {
+          return createStep({ id: 'fetch-weather', execute: async () => ({}) });
+        }
+
+        const fetchWeather = makeFetchWeather();
+        export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then(fetchWeather);
+      `,
+      '/virtual/weather-workflow.mjs',
+    );
+
+    expect(bindings).toEqual([{ exportName: 'fetchWeather', stepId: 'fetch-weather' }]);
+  });
+
+  it('collects exported factory-created activity bindings', () => {
+    const bindings = collectTemporalActivityBindings(
+      `
+        import { createStep } from '@mastra/core/workflows';
+
+        const makeFetchWeather = () => createStep({ id: 'fetch-weather', execute: async () => ({}) });
+        export const fetchWeather = makeFetchWeather();
+      `,
+      '/virtual/weather-workflow.mjs',
+    );
+
+    expect(bindings).toEqual([{ exportName: 'fetchWeather', stepId: 'fetch-weather' }]);
+  });
+
+  it('collects nested factory-created activity bindings', () => {
+    const bindings = collectTemporalActivityBindings(
+      `
+        import { createStep } from '@mastra/core/workflows';
+
+        function makeFetchWeather() {
+          return createStep({ id: 'fetch-weather', execute: async () => ({}) });
+        }
+
+        function wrapFetchWeather() {
+          return makeFetchWeather();
+        }
+
+        const fetchWeather = wrapFetchWeather();
+      `,
+      '/virtual/weather-workflow.mjs',
+    );
+
+    expect(bindings).toEqual([{ exportName: 'fetchWeather', stepId: 'fetch-weather' }]);
+  });
+
   it('uses a local mastra binding in the injected helper', async () => {
     const output = await transform(`
       import { createStep } from '@mastra/core/workflows';
@@ -61,6 +114,25 @@ describe('activity transform', () => {
     expect(output).toMatch(/args\.execute\(\{[\s\S]*\.\.\.params,[\s\S]*mastra[\s\S]*\}\)/);
     expect(output).not.toMatch(/await import\(/);
     expect(output).toContain('const fetchWeather = createStep({');
+  });
+
+  it('extracts factory-created createStep declarations as named exports', async () => {
+    const output = await transform(`
+      import { createStep } from '@mastra/core/workflows';
+
+      function makeFetchWeather() {
+        return createStep({
+          id: 'fetch-weather',
+          execute: async () => ({ ok: true }),
+        });
+      }
+
+      const fetchWeather = makeFetchWeather();
+    `);
+
+    expect(output).toContain('function makeFetchWeather()');
+    expect(output).toContain('const fetchWeather = makeFetchWeather();');
+    expect(output).toMatch(/export\s*(const\s+fetchWeather\s*=|\{\s*fetchWeather\s*\})/);
   });
 
   it('keeps supporting declarations needed by extracted activities while stripping workflow setup', async () => {

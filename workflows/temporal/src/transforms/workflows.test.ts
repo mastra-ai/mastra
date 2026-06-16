@@ -76,6 +76,64 @@ describe('workflow transform', () => {
     expect(result).not.toContain('.then("subWorkflow")');
   });
 
+  it('rewrites factory-created step references to step ids', async () => {
+    const result = await transform(`
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      function makeFetchWeather() {
+        return createStep({ id: 'fetch-weather', execute: async () => ({}) });
+      }
+
+      const fetchWeather = makeFetchWeather();
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then(fetchWeather);
+    `);
+
+    expect(result).toContain('.then("fetch-weather")');
+    expect(result).not.toContain('fetchWeather =');
+  });
+
+  it('rewrites multiple factory-created step references to step ids', async () => {
+    const result = await transform(`
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      function makeFetchWeather() {
+        return createStep({ id: 'fetch-weather', execute: async () => ({}) });
+      }
+
+      function makePlanActivities() {
+        return createStep({ id: 'plan-activities', execute: async () => ({}) });
+      }
+
+      const fetchWeather = makeFetchWeather();
+      const planActivities = makePlanActivities();
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).parallel([
+        fetchWeather,
+        planActivities,
+      ]);
+    `);
+
+    expect(result).toContain('.parallel(["fetch-weather", "plan-activities"])');
+  });
+
+  it('rewrites nested factory-created step references to step ids', async () => {
+    const result = await transform(`
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      function makeFetchWeather() {
+        return createStep({ id: 'fetch-weather', execute: async () => ({}) });
+      }
+
+      function wrapFetchWeather() {
+        return makeFetchWeather();
+      }
+
+      const fetchWeather = wrapFetchWeather();
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then(fetchWeather);
+    `);
+
+    expect(result).toContain('.then("fetch-weather")');
+  });
+
   it('injects the helper runtime from the dedicated module into transformed output', async () => {
     const output = await transform(`
       import { createWorkflow } from '@mastra/core/workflows';

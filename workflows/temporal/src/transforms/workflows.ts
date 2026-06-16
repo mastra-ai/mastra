@@ -7,6 +7,7 @@ import { rollup } from 'rollup';
 import { toWorkflowType } from '../utils';
 import {
   collectImportedNames,
+  collectStepFactoryReturns,
   getCreateStepId,
   getObjectPropertyName,
   isCreateWorkflowCall,
@@ -18,6 +19,7 @@ import {
   parseModule,
   parserPlugins,
   pruneUnusedTopLevelBindings,
+  resolveCreateStepCall,
 } from './shared';
 
 /**
@@ -125,6 +127,7 @@ function parseWorkflowChain(
  */
 function collectStepBindings(program: t.Program): Map<string, string> {
   const stepBindings = new Map<string, string>();
+  const factoryReturns = collectStepFactoryReturns(program);
 
   for (const statement of program.body) {
     if (
@@ -143,7 +146,7 @@ function collectStepBindings(program: t.Program): Map<string, string> {
         continue;
       }
 
-      const stepId = getCreateStepId(declaration.init);
+      const stepId = getCreateStepId(resolveCreateStepCall(declaration.init, factoryReturns));
       if (stepId) {
         stepBindings.set(declaration.id.name, stepId);
       }

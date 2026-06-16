@@ -6,6 +6,7 @@ import { rollup } from 'rollup';
 import {
   collectImportedNames,
   collectInlineCreateSteps,
+  collectStepFactoryReturns,
   createExportedStepStatement,
   getCreateStepId,
   getStepNameFromCall,
@@ -17,6 +18,7 @@ import {
   nodeReferencesName,
   parserPlugins,
   pruneUnusedTopLevelBindings,
+  resolveCreateStepCall,
   walk,
 } from './shared';
 
@@ -39,9 +41,9 @@ export function collectTemporalActivityBindings(sourceText: string, filePath: st
 
   const bindings: TemporalActivityBinding[] = [];
   const seenNames = new Set<string>();
+  const factoryReturns = collectStepFactoryReturns(ast.program);
 
-  const addBinding = (call: t.CallExpression): void => {
-    const exportName = getStepNameFromCall(call);
+  const addBinding = (call: t.CallExpression, exportName = getStepNameFromCall(call)): void => {
     const stepId = getCreateStepId(call);
 
     if (!exportName || !stepId || seenNames.has(exportName)) {
@@ -78,7 +80,13 @@ export function collectTemporalActivityBindings(sourceText: string, filePath: st
         }
 
         if (isCreateStepCall(declaration.init)) {
-          addBinding(declaration.init);
+          addBinding(declaration.init, t.isIdentifier(declaration.id) ? declaration.id.name : undefined);
+          continue;
+        }
+
+        const resolvedStepCall = resolveCreateStepCall(declaration.init, factoryReturns);
+        if (resolvedStepCall) {
+          addBinding(resolvedStepCall, t.isIdentifier(declaration.id) ? declaration.id.name : undefined);
           continue;
         }
 
@@ -259,6 +267,7 @@ export async function buildTemporalActivitiesModule(
           const workflowBindingNames = collectWorkflowBindingNames(ast);
           const sourceFilePath = id;
           const hasMastraBinding = hasLocalMastraBinding(ast);
+          const factoryReturns = collectStepFactoryReturns(ast.program);
           let helperInserted = false;
 
           const ensureHelperInserted = () => {
@@ -358,6 +367,14 @@ export async function buildTemporalActivitiesModule(
                   continue;
                 }
 
+                const resolvedStepCall = resolveCreateStepCall(declaration.init, factoryReturns);
+                if (resolvedStepCall) {
+                  seenNames.add(declaration.id.name);
+                  addActivityBinding(declaration.id.name, resolvedStepCall);
+                  statements.push(createExportedStepStatement(declaration.id.name, declaration.init));
+                  continue;
+                }
+
                 if (hasCreateWorkflowCall(declaration.init)) {
                   workflowBindingNames.add(declaration.id.name);
                   strippedNames.add(declaration.id.name);
@@ -407,6 +424,14 @@ export async function buildTemporalActivitiesModule(
                 if (isCreateStepCall(declaration.init)) {
                   seenNames.add(declaration.id.name);
                   addActivityBinding(declaration.id.name, declaration.init);
+                  statements.push(createExportedStepStatement(declaration.id.name, declaration.init));
+                  continue;
+                }
+
+                const resolvedStepCall = resolveCreateStepCall(declaration.init, factoryReturns);
+                if (resolvedStepCall) {
+                  seenNames.add(declaration.id.name);
+                  addActivityBinding(declaration.id.name, resolvedStepCall);
                   statements.push(createExportedStepStatement(declaration.id.name, declaration.init));
                   continue;
                 }

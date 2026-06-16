@@ -91,6 +91,105 @@ export function isCreateStepCall(node: t.Node): node is t.CallExpression {
   return t.isCallExpression(node) && isIdentifierNamed(node.callee, 'createStep');
 }
 
+function getFunctionReturnExpression(node: t.FunctionDeclaration | t.FunctionExpression | t.ArrowFunctionExpression): t.Expression | null {
+  if (t.isArrowFunctionExpression(node) && t.isExpression(node.body)) {
+    return node.body;
+  }
+
+  if (!t.isBlockStatement(node.body)) {
+    return null;
+  }
+
+  for (const statement of node.body.body) {
+    if (t.isReturnStatement(statement) && t.isExpression(statement.argument)) {
+      return statement.argument;
+    }
+  }
+
+  return null;
+}
+
+function getVariableFunction(
+  declaration: t.VariableDeclarator,
+): t.FunctionExpression | t.ArrowFunctionExpression | null {
+  if (!t.isIdentifier(declaration.id) || !declaration.init) {
+    return null;
+  }
+
+  return t.isFunctionExpression(declaration.init) || t.isArrowFunctionExpression(declaration.init)
+    ? declaration.init
+    : null;
+}
+
+export function collectStepFactoryReturns(program: t.Program): Map<string, t.Expression> {
+  const factoryReturns = new Map<string, t.Expression>();
+
+  for (const statement of program.body) {
+    const declarationStatement = t.isExportNamedDeclaration(statement) ? statement.declaration : statement;
+
+    if (t.isFunctionDeclaration(declarationStatement) && declarationStatement.id) {
+      const returnExpression = getFunctionReturnExpression(declarationStatement);
+      if (returnExpression) {
+        factoryReturns.set(declarationStatement.id.name, returnExpression);
+      }
+      continue;
+    }
+
+    if (!t.isVariableDeclaration(declarationStatement)) {
+      continue;
+    }
+
+    for (const declaration of declarationStatement.declarations) {
+      if (!t.isIdentifier(declaration.id)) {
+        continue;
+      }
+
+      const functionExpression = getVariableFunction(declaration);
+      const returnExpression = functionExpression ? getFunctionReturnExpression(functionExpression) : null;
+      if (returnExpression) {
+        factoryReturns.set(declaration.id.name, returnExpression);
+      }
+    }
+  }
+
+  return factoryReturns;
+}
+
+export function resolveCreateStepCall(
+  node: t.Node | null | undefined,
+  factoryReturns: Map<string, t.Expression>,
+  seenFactories = new Set<string>(),
+): t.CallExpression | null {
+  if (!node) {
+    return null;
+  }
+
+  if (!t.isCallExpression(node)) {
+    return null;
+  }
+
+  if (isIdentifierNamed(node.callee, 'createStep')) {
+    return node;
+  }
+
+  if (!t.isIdentifier(node.callee)) {
+    return null;
+  }
+
+  const factoryName = node.callee.name;
+  if (seenFactories.has(factoryName)) {
+    return null;
+  }
+
+  const returnExpression = factoryReturns.get(factoryName);
+  if (!returnExpression) {
+    return null;
+  }
+
+  seenFactories.add(factoryName);
+  return resolveCreateStepCall(returnExpression, factoryReturns, seenFactories);
+}
+
 export function getObjectPropertyName(property: t.ObjectProperty | t.ObjectMethod): string | null {
   if (property.computed) {
     return null;
