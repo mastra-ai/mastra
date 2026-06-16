@@ -1,4 +1,4 @@
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const reportIssueCommandScenario: McE2eScenario = {
@@ -22,7 +22,6 @@ export const reportIssueCommandScenario: McE2eScenario = {
     runtime.printScreen('after /report-issue', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

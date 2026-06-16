@@ -1,4 +1,4 @@
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const visibleCommandsScenario: McE2eScenario = {
@@ -29,7 +29,6 @@ export const visibleCommandsScenario: McE2eScenario = {
     runtime.printScreen('after invalid /theme', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const firstRunOnboardingScenario: McE2eScenario = {
@@ -19,7 +19,6 @@ export const firstRunOnboardingScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Skip/i, terminal);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
@@ -32,6 +31,5 @@ export const firstRunOnboardingScenario: McE2eScenario = {
     }
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
 };

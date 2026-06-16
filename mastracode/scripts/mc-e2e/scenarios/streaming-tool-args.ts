@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const streamingToolArgsScenario: McE2eScenario = {
@@ -25,7 +25,6 @@ export const streamingToolArgsScenario: McE2eScenario = {
     terminal.submit('Inspect the streaming args fixture file.');
 
     await runtime.waitForScreenText(/view\s+src\/streaming-args\.ts/i, terminal, 8_000);
-    await runtime.sleep(400);
     if (terminal.serialize().view.includes('src/streaming-args.ts:12-18')) {
       throw new Error('Expected partial streamed args before final view range appeared');
     }
@@ -34,7 +33,6 @@ export const streamingToolArgsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Streaming view tool e2e complete\./i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) {

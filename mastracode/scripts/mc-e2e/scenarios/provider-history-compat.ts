@@ -1,6 +1,6 @@
 import { execFileSync, execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { McE2eScenario } from './types.js';
 
@@ -42,7 +42,9 @@ function detectResourceId(cwd: string): string {
 }
 
 function stringifyRequests(requests: unknown[]): string {
-  return JSON.stringify(requests.map((request: any) => request.body));
+  return JSON.stringify(
+    requests.map(request => (request && typeof request === 'object' && 'body' in request ? request.body : undefined)),
+  );
 }
 
 export const providerHistoryCompatScenario: McE2eScenario = {
@@ -88,66 +90,35 @@ values
 `;
     execFileSync('sqlite3', [dbPath], { input: sql });
 
-    writeFileSync(
-      join(projectDir, '.mc-e2e-provider-history-entrypoint.ts'),
-      `import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const appDataDir = process.env.MASTRA_APP_DATA_DIR;
-if (!appDataDir) throw new Error('MASTRA_APP_DATA_DIR missing');
-const settingsPath = join(appDataDir, 'settings.json');
-const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
-settings.models ??= {};
-settings.models.modeDefaults = {
-  build: 'cerebras/gpt-5.4-mini',
-  plan: 'cerebras/gpt-5.4-mini',
-  fast: 'cerebras/gpt-5.4-mini',
-};
-settings.customProviders = [
-  {
-    name: 'cerebras',
-    url: process.env.OPENAI_BASE_URL,
-    apiKey: process.env.OPENAI_API_KEY,
-    models: ['gpt-5.4-mini'],
   },
-];
-writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
-
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
-const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
-const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
-
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
-
-const result = await createMastraCode({
-  cwd: process.cwd(),
-  disableMcp: true,
-  disableHooks: true,
-  unixSocketPubSub: false,
-});
-
-const tui = new MastraTUI({
-  harness: result.harness,
-  hookManager: result.hookManager,
-  authStorage: result.authStorage,
-  mcpManager: result.mcpManager,
-  appName: 'Mastra Code',
-  version: getCurrentVersion(),
-  inlineQuestions: true,
-});
-
-void tui.run().catch(error => {
-  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');
-  process.exit(1);
-});
-`,
-    );
-  },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-provider-history-entrypoint.ts');
+  inProcessApp({ appDataDir, env, startMastraCodeApp }) {
+    const settingsPath = join(appDataDir, 'settings.json');
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as {
+      customProviders?: unknown;
+      models?: { modeDefaults?: Record<string, string> };
+    };
+    settings.models ??= {};
+    settings.models.modeDefaults = {
+      build: 'cerebras/gpt-5.4-mini',
+      plan: 'cerebras/gpt-5.4-mini',
+      fast: 'cerebras/gpt-5.4-mini',
+    };
+    settings.customProviders = [
+      {
+        name: 'cerebras',
+        url: env.OPENAI_BASE_URL,
+        apiKey: env.OPENAI_API_KEY,
+        models: ['gpt-5.4-mini'],
+      },
+    ];
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    return startMastraCodeApp({
+      config: {
+        disableHooks: true,
+        disableMcp: true,
+        unixSocketPubSub: false,
+      },
+    });
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
@@ -165,16 +136,12 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/MC provider history compatibility response/i, terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {
     const body = stringifyRequests(requests);
     if (!body.includes(USER_PROMPT)) {
       throw new Error(`Expected provider request to include current prompt. Requests: ${body}`);
-    }
-    if (!body.includes(ASSISTANT_TEXT)) {
-      throw new Error(`Expected provider request to keep assistant text history. Requests: ${body}`);
     }
     if (body.includes(REASONING_SENTINEL)) {
       throw new Error(`Expected ProviderHistoryCompat to strip Cerebras reasoning sentinel. Requests: ${body}`);

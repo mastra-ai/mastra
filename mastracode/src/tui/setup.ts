@@ -503,9 +503,9 @@ export function setupKeyHandlers(
     stop: () => void;
     doubleCtrlCMs: number;
   },
-): void {
+): () => void {
   // Handle Ctrl+C via process signal (backup for when editor doesn't capture it)
-  process.on('SIGINT', () => {
+  const sigintHandler = () => {
     const now = Date.now();
     if (now - state.lastCtrlCTime < callbacks.doubleCtrlCMs) {
       callbacks.stop();
@@ -524,12 +524,17 @@ export function setupKeyHandlers(
     state.pendingAskUserComponents?.clear();
     state.userInitiatedAbort = true;
     state.harness.abort();
-  });
+  };
+  process.on('SIGINT', sigintHandler);
 
   // Use onDebug callback for Shift+Ctrl+D
   state.ui.onDebug = () => {
     // Toggle debug mode or show debug info
     // Currently unused - could add debug panel in future
+  };
+
+  return () => {
+    process.off('SIGINT', sigintHandler);
   };
 }
 

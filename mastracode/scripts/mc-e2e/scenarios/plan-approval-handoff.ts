@@ -1,4 +1,4 @@
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const planApprovalHandoffScenario: McE2eScenario = {
@@ -26,7 +26,6 @@ export const planApprovalHandoffScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Build handoff e2e acknowledged\./i, terminal, 15_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length < 2) {

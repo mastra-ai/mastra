@@ -1,4 +1,3 @@
-import { expect } from '@microsoft/tui-test';
 import type { McE2eScenario } from './types.js';
 
 export const modalAndShellScenario: McE2eScenario = {
@@ -9,9 +8,7 @@ export const modalAndShellScenario: McE2eScenario = {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
 
-    await (
-      expect(terminal.getByText(/Mastra Code|Build|Plan|Fast|Type|Press|>/gi, { full: true, strict: false })) as any
-    ).toBeVisible();
+    await runtime.waitForScreenText(/Mastra Code|Build|Plan|Fast|Type|Press|>/i, terminal);
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('/sandbox');
@@ -20,7 +17,7 @@ export const modalAndShellScenario: McE2eScenario = {
     runtime.printScreen('after /sandbox modal', terminal);
 
     terminal.write('\x1b');
-    await runtime.sleep(500);
+    await runtime.waitForScreenTextAbsent(/Sandbox settings \(no extra paths\)/i, terminal, 8_000);
     runtime.printScreen('after sandbox escape', terminal);
 
     terminal.submit("!printf 'mc shell e2e stdout\\n'");
@@ -29,7 +26,6 @@ export const modalAndShellScenario: McE2eScenario = {
     runtime.printScreen('after shell passthrough', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

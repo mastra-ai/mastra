@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 const OBJECTIVE = 'Persist the goal command e2e objective across status commands.';
@@ -40,7 +40,6 @@ export const persistentGoalCommandsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/No goal set\. Use \/goal <text> to set one\./i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length < 1) {

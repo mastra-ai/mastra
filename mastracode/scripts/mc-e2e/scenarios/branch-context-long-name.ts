@@ -1,4 +1,4 @@
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const branchContextLongNameScenario: McE2eScenario = {
@@ -18,11 +18,10 @@ export const branchContextLongNameScenario: McE2eScenario = {
         }),
       ) as any
     ).toBeVisible();
-    await runtime.waitForScreenText(/feature\/supe\.\.tra-long/, terminal);
+    await runtime.waitForScreenText(/feature\/(?:supe\.\.tra-long|su…)/, terminal);
     runtime.printScreen('after branch context assertion', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };

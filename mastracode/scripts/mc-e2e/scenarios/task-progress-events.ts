@@ -1,4 +1,4 @@
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const taskProgressEventsScenario: McE2eScenario = {
@@ -19,7 +19,6 @@ export const taskProgressEventsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Task tool progress e2e complete\./i, terminal, 8_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) {

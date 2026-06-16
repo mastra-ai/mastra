@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 function quoteSql(value: string): string {
@@ -77,7 +77,6 @@ values
     );
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length < 3) {

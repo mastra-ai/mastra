@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const workspaceToolOutputRenderingScenario: McE2eScenario = {
@@ -26,7 +26,6 @@ export const workspaceToolOutputRenderingScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Workspace tool output rendering complete\./i, terminal, 15_000);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) {

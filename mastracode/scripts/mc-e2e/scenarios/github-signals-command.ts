@@ -33,7 +33,7 @@ create table pull_request_details (thread_id integer primary key, repo_id intege
 create table pull_request_checks (thread_id integer not null, name text, status text, conclusion text, workflow_name text, details_url text, started_at text, completed_at text, fetched_at text, raw_json text not null);
 create table github_workflow_runs (repo_id integer not null, head_sha text, workflow_name text, status text, conclusion text, html_url text, updated_at_gh text, raw_json text not null);
 create table pull_request_review_threads (thread_id integer not null, review_thread_id text not null, path text, line integer not null default 0, start_line integer not null default 0, is_resolved integer not null default 0, is_outdated integer not null default 0, viewer_can_resolve integer not null default 0, viewer_can_unresolve integer not null default 0, viewer_can_reply integer not null default 0, first_author_login text, first_author_type text, first_comment_body text, first_comment_url text, first_comment_created_at text, first_comment_updated_at text, comments_json text not null, raw_json text not null, fetched_at text not null);
-create table comments (thread_id integer not null, author_login text, author_type text, is_bot integer not null default 0, created_at_gh text, updated_at_gh text, raw_json text not null);
+create table comments (thread_id integer not null, author_login text, author_type text, is_bot integer not null default 0, body text, created_at_gh text, updated_at_gh text, raw_json text not null);
 insert into repositories (id, owner, name, full_name, raw_json, updated_at) values (1, ${sqlString(prFixture.owner)}, ${sqlString(prFixture.repo)}, ${sqlString(`${prFixture.owner}/${prFixture.repo}`)}, '{}', ${sqlString(prFixture.updatedAt)});
 insert into threads (id, repo_id, github_id, number, kind, state, title, body, author_login, author_type, html_url, labels_json, assignees_json, raw_json, content_hash, created_at_gh, updated_at_gh, updated_at) values (1, 1, 'PR_kwDOfixture', ${prFixture.number}, 'pull_request', 'open', ${sqlString(prFixture.title)}, 'Sanitized gitcrawl fixture body.', 'octocat', 'User', ${sqlString(prFixture.htmlUrl)}, '[]', '[]', '{}', ${sqlString(prFixture.contentHash)}, '2026-06-05T23:00:18Z', ${sqlString(prFixture.updatedAt)}, ${sqlString(prFixture.updatedAt)});
 insert into pull_request_details (thread_id, repo_id, number, head_sha, head_ref, mergeable_state, raw_json, fetched_at, updated_at) values (1, 1, ${prFixture.number}, ${sqlString(prFixture.headSha)}, ${sqlString(prFixture.headRef)}, ${sqlString(prFixture.mergeableState)}, '{}', ${sqlString(prFixture.updatedAt)}, ${sqlString(prFixture.updatedAt)});
@@ -73,7 +73,7 @@ export const githubSignalsCommandScenario = {
     mkdirSync(context.projectDir, { recursive: true });
 
     const settingsPath = join(context.appDataDir, 'settings.json');
-    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as { signals?: Record<string, unknown> };
     settings.signals = {
       ...settings.signals,
       experimentalGithubSignals: true,
@@ -82,11 +82,6 @@ export const githubSignalsCommandScenario = {
 
     const { dbPath, mockGitcrawlPath } = prepareGitcrawlFixture(context);
     writeFileSync(join(context.projectDir, '.gitcrawl-e2e-env.json'), JSON.stringify({ dbPath, mockGitcrawlPath }));
-
-    writeFileSync(
-      join(context.projectDir, '.mc-e2e-github-signals-entrypoint.ts'),
-      `import { join } from 'node:path';\nimport { pathToFileURL } from 'node:url';\n\nconst mastracodeDir = ${JSON.stringify(context.mastracodeDir)};\nconst { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);\nconst { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);\nconst { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);\n\nprocess.on('SIGINT', () => process.exit(0));\nprocess.on('SIGTERM', () => process.exit(0));\n\nconst result = await createMastraCode({\n  cwd: process.cwd(),\n  disableMcp: true,\n  disableHooks: true,\n  unixSocketPubSub: false,\n});\n\nconst tui = new MastraTUI({\n  harness: result.harness,\n  hookManager: result.hookManager,\n  authStorage: result.authStorage,\n  mcpManager: result.mcpManager,\n  appName: 'Mastra Code',\n  version: getCurrentVersion(),\n  inlineQuestions: true,\n  githubSignals: result.githubSignals,\n});\n\nvoid tui.run().catch(error => {\n  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');\n  process.exit(1);\n});\n`,
-    );
   },
   env({ projectDir }) {
     const { dbPath, mockGitcrawlPath } = JSON.parse(
@@ -100,8 +95,14 @@ export const githubSignalsCommandScenario = {
       MASTRACODE_GITCRAWL_BIN: mockGitcrawlPath,
     };
   },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-github-signals-entrypoint.ts');
+  inProcessApp({ startMastraCodeApp }) {
+    return startMastraCodeApp({
+      config: {
+        disableHooks: true,
+        disableMcp: true,
+        unixSocketPubSub: false,
+      },
+    });
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) throw new Error(`Expected 2 AIMock requests, received ${requests.length}`);

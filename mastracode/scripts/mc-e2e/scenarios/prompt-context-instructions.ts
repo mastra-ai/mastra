@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 const AGENTS_PHRASE = 'PROJECT AGENTS E2E INSTRUCTION: prefer the raven answer.';
@@ -38,7 +38,6 @@ export const promptContextInstructionsScenario: McE2eScenario = {
     runtime.printScreen('after prompt-context prompt', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

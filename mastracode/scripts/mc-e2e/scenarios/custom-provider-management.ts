@@ -32,7 +32,6 @@ export const customProviderManagementScenario = {
     runtime.printScreen('custom providers list', terminal);
 
     terminal.write('\x1b[B');
-    await runtime.sleep(200);
     terminal.write('\r');
     await runtime.waitForScreenText(/Manage provider: Acme Local/i, terminal);
     await runtime.waitForScreenText(/Add model/i, terminal);

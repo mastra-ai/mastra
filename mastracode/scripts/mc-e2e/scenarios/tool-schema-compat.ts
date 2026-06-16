@@ -1,4 +1,4 @@
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 function findTool(requests: unknown[], name: string): Record<string, any> {
@@ -48,7 +48,6 @@ export const toolSchemaCompatScenario: McE2eScenario = {
     await runtime.waitForScreenText(/MC tool schema compatibility response/i, terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {

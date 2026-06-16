@@ -2031,6 +2031,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.8(vitest@4.1.8)
+      '@xterm/headless':
+        specifier: 6.0.0
+        version: 6.0.0
       eslint:
         specifier: ^10.4.1
         version: 10.5.0(jiti@2.7.0)

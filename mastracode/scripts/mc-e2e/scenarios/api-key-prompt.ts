@@ -1,4 +1,4 @@
-import { expect } from '@microsoft/tui-test';
+import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
 export const apiKeyPromptScenario: McE2eScenario = {
@@ -25,7 +25,7 @@ export const apiKeyPromptScenario: McE2eScenario = {
 
     const secret = 'mc-e2e-secret-key';
     terminal.write(secret);
-    await runtime.sleep(500);
+    await runtime.waitForScreenText(/\*{17}/, terminal, 2_000);
     const maskedScreen = terminal.serialize().view;
     expect(maskedScreen).not.toContain(secret);
     expect(maskedScreen).toMatch(/\*{17}/);
@@ -36,7 +36,6 @@ export const apiKeyPromptScenario: McE2eScenario = {
     runtime.printScreen('after save', terminal);
 
     terminal.keyCtrlC();
-    await runtime.sleep(300);
     runtime.printScreen('after Ctrl-C', terminal);
   },
 };
