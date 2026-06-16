@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
-import { z } from 'zod';
 
 const judgeModel = 'openai/gpt-4o-mini';
 

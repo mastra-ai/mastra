@@ -1,6 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../../agent';
-import type { ToolsInput } from '../../../agent/types';
 import {
   createGoalScorer,
   GOAL_SCORE_WAITING,
@@ -10,6 +9,7 @@ import {
   writeObjective,
 } from '../../../agent/goal';
 import type { ResolvedGoalStore } from '../../../agent/goal';
+import type { ToolsInput } from '../../../agent/types';
 import type { MastraScorer } from '../../../evals';
 import { resolveModelConfig } from '../../../llm';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
