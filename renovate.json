@@ -125,18 +125,24 @@
         "@datastax/astra-db-ts",
         "@duckdb/node-api",
         "@elastic/elasticsearch",
+        "@lancedb/lancedb",
         "@libsql/client",
         "@opensearch-project/opensearch",
         "@pinecone-database/pinecone",
+        "@qdrant/js-client-rest",
         "@supabase/supabase-js",
         "@turbopuffer/turbopuffer",
+        "@types/mssql",
+        "@types/pg",
+        "chromadb",
+        "convex",
         "couchbase",
+        "electrodb",
         "ioredis",
         "mongodb",
         "mssql",
         "pg",
-        "redis",
-        "@types/pg"
+        "redis"
       ],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -391,7 +397,7 @@
       "groupName": "Composio",
       "commitMessageTopic": "Composio",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["@composio/core", "@composio/mastra"],
+      "matchPackageNames": ["@composio/*"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
@@ -436,20 +442,6 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "Vector Databases",
-      "commitMessageTopic": "Vector Databases",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": [
-        "@lancedb/lancedb",
-        "@pinecone-database/pinecone",
-        "@qdrant/js-client-rest",
-        "@turbopuffer/turbopuffer",
-        "chromadb"
-      ],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
-    },
-    {
       "groupName": "WorkOS",
       "commitMessageTopic": "WorkOS",
       "matchFileNames": ["+(package.json)", "**/package.json"],
@@ -458,18 +450,18 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
-      "groupName": "Workflow Platforms",
-      "commitMessageTopic": "Workflow Platforms",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["convex", "electrodb"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
-    },
-    {
       "groupName": "Workspace providers",
       "commitMessageTopic": "Workspace providers",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["@blaxel/core", "@daytonaio/sdk", "agentfs-sdk", "e2b", "files-sdk", "modal", "@vercel/sandbox"],
+      "matchPackageNames": [
+        "@blaxel/core",
+        "@daytonaio/sdk",
+        "agentfs-sdk",
+        "e2b",
+        "files-sdk",
+        "modal",
+        "@vercel/sandbox"
+      ],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     }
