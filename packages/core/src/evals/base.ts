@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
 import type { ToolsInput } from '../agent/types';
-import { tryGenerateWithJsonFallback } from '../agent/utils';
+import { tryStreamWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
@@ -891,13 +891,15 @@ class MastraScorer<
     if (scorerStep.name === 'generateScore') {
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await tryGenerateWithJsonFallback(judge, prompt, {
+        result = await tryStreamWithJsonFallback(judge, prompt, {
           structuredOutput: {
             schema: z.object({ score: z.number() }),
             jsonPromptInjection,
           },
           ...observabilityContext,
         });
+        const object = await result.object;
+        return { result: (object as { score: number }).score, prompt, judgeModel };
       } else {
         const schema = z.object({
           score: z.number(),
@@ -907,18 +909,18 @@ class MastraScorer<
           output: standardSchemaToJSONSchema(standardSchema),
           ...observabilityContext,
         });
+        return { result: (result.object as { score: number }).score, prompt, judgeModel };
       }
-      return { result: (result.object as { score: number }).score, prompt, judgeModel };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await judge.generate(prompt, { ...observabilityContext });
+        result = await judge.stream(prompt, { ...observabilityContext });
       } else {
         result = await judge.generateLegacy(prompt, { ...observabilityContext });
       }
-      return { result: result.text, prompt, judgeModel };
+      return { result: await result.text, prompt, judgeModel };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
       // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
@@ -927,20 +929,22 @@ class MastraScorer<
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
         // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
-        result = await tryGenerateWithJsonFallback(judge, prompt, {
+        result = await tryStreamWithJsonFallback(judge, prompt, {
           structuredOutput: {
             schema: standardSchema as any,
             jsonPromptInjection,
           },
           ...observabilityContext,
         });
+        const object = await result.object;
+        return { result: object, prompt, judgeModel };
       } else {
         result = await judge.generateLegacy(prompt, {
           output: standardSchemaToJSONSchema(standardSchema),
           ...observabilityContext,
         });
+        return { result: result.object, prompt, judgeModel };
       }
-      return { result: result.object, prompt, judgeModel };
     }
   }
 

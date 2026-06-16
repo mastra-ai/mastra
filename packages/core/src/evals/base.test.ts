@@ -195,8 +195,8 @@ describe('createScorer', () => {
       expect(result).toMatchSnapshot();
     });
 
-    it('forwards judge.jsonPromptInjection to agent.generate', async () => {
-      const generateSpy = vi.spyOn(Agent.prototype, 'generate');
+    it('forwards judge.jsonPromptInjection to agent.stream', async () => {
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream');
       try {
         const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
 
@@ -216,15 +216,15 @@ describe('createScorer', () => {
 
         await scorer.run(testData.scoringInput);
 
-        const [, options] = (generateSpy.mock.calls[0] ?? []) as any[];
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
         expect(options?.structuredOutput?.jsonPromptInjection).toBe(true);
       } finally {
-        generateSpy.mockRestore();
+        streamSpy.mockRestore();
       }
     });
 
     it('lets the per-step judge override the scorer-level jsonPromptInjection', async () => {
-      const generateSpy = vi.spyOn(Agent.prototype, 'generate');
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream');
       try {
         const model = createMockModel({ mockText: { value: 1 }, version: 'v2' });
 
@@ -252,10 +252,10 @@ describe('createScorer', () => {
 
         await scorer.run(testData.scoringInput);
 
-        const [, options] = (generateSpy.mock.calls[0] ?? []) as any[];
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
         expect(options?.structuredOutput?.jsonPromptInjection).toBe(false);
       } finally {
-        generateSpy.mockRestore();
+        streamSpy.mockRestore();
       }
     });
 
@@ -264,10 +264,10 @@ describe('createScorer', () => {
       // produce no parseable structured object. The judge must recover via the
       // jsonPromptInjection retry instead of crashing when it reads result.object.
       const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
-      const generateSpy = vi
-        .spyOn(Agent.prototype, 'generate')
-        .mockResolvedValueOnce({ object: undefined } as any)
-        .mockResolvedValueOnce({ object: { score: 1 } } as any);
+      const streamSpy = vi
+        .spyOn(Agent.prototype, 'stream')
+        .mockResolvedValueOnce({ object: Promise.resolve(undefined) } as any)
+        .mockResolvedValueOnce({ object: Promise.resolve({ score: 1 }) } as any);
       try {
         const scorer = createScorer({
           id: 'json-fallback-recovery-scorer',
@@ -284,14 +284,14 @@ describe('createScorer', () => {
 
         const result = await scorer.run(testData.scoringInput);
 
-        // Two generate calls: the failed first attempt + the jsonPromptInjection retry.
-        expect(generateSpy).toHaveBeenCalledTimes(2);
-        expect((generateSpy.mock.calls[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
-        expect((generateSpy.mock.calls[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
+        // Two stream calls: the failed first attempt + the jsonPromptInjection retry.
+        expect(streamSpy).toHaveBeenCalledTimes(2);
+        expect((streamSpy.mock.calls[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
+        expect((streamSpy.mock.calls[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
         // The scorer recovered and produced the retried score.
         expect(result.score).toBe(1);
       } finally {
-        generateSpy.mockRestore();
+        streamSpy.mockRestore();
       }
     });
   });
