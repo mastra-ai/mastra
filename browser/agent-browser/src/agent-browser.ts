@@ -21,6 +21,7 @@ import type { Tool } from '@mastra/core/tools';
 import { BrowserManager } from 'agent-browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page, Locator } from 'playwright-core';
+import { installPlaywrightLinuxDeps } from './playwright-deps';
 import type {
   GotoInput,
   SnapshotInput,
@@ -42,7 +43,6 @@ import type { CreateAgentBrowserThreadManager } from './thread-manager';
 import { createAgentBrowserTools } from './tools';
 import type { BrowserConfig } from './types';
 import { getBrowserPid } from './utils';
-import { installPlaywrightLinuxDeps } from './playwright-deps';
 
 /** AgentBrowser accepts an optional thread-manager factory (see {@link CreateAgentBrowserThreadManager}). */
 export type AgentBrowserConfig = BrowserConfig & {

@@ -10,8 +10,8 @@ import type { BrowserState, ThreadSession, ThreadManagerConfig } from '@mastra/c
 import { BrowserManager } from 'agent-browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page } from 'playwright-core';
-import type { BrowserConfig } from './types';
 import { installPlaywrightLinuxDeps } from './playwright-deps';
+import type { BrowserConfig } from './types';
 
 /**
  * Extended session info for AgentBrowser.

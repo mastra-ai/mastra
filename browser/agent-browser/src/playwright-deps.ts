@@ -43,8 +43,8 @@ export function installPlaywrightLinuxDeps({
     return;
   }
 
-  linuxDepsInstalled = true;
   execFileSync(process.execPath, [playwrightCli, 'install-deps', 'chromium'], { stdio: 'inherit' });
+  linuxDepsInstalled = true;
 }
 
 export function resetPlaywrightLinuxDepsForTest(): void {
