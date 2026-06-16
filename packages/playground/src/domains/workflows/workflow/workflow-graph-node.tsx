@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
+import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import type { WorkflowCardDisplayStatus, WorkflowConditionCodeCondition } from './components/types';
 import { WorkflowConditionCardView } from './components/workflow-condition-card-view';
@@ -34,6 +35,7 @@ const WorkflowStepCard = ({
   stepsFlow: Record<string, string[]>;
 }) => {
   const { steps } = useCurrentRun();
+  const { selectedStepId, hoverStepId, setHoverStepId } = useWorkflowSelectedStep();
   const { showNestedGraph } = useWorkflowStepDetail();
   const { label, stepId, description } = data;
   const mapConfig = data.mapConfig ?? ('step' in data.workflowStep ? data.workflowStep.step?.mapConfig : undefined);
@@ -41,6 +43,8 @@ const WorkflowStepCard = ({
     data.stepGraph ?? ('step' in data.workflowStep ? data.workflowStep.step?.serializedStepFlow : undefined);
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
   const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
+  const isSelected = selectedStepId === stepKey;
+  const isHovered = hoverStepId === stepKey;
   const step = steps[stepKey];
   const { displayStatus, isTripwire } = getDisplayStatus(step);
 
@@ -51,6 +55,10 @@ const WorkflowStepCard = ({
       displayStatus={displayStatus}
       hasStep={Boolean(step)}
       isNestedWorkflowStep={data.workflowStep.kind === 'nested-workflow-step'}
+      stepKey={stepKey}
+      isSelected={isSelected}
+      isHovered={isHovered}
+      onHoverChange={hovered => setHoverStepId(hovered ? stepKey : null)}
       duration={data.duration}
       date={data.date}
       isForEach={data.isForEach}

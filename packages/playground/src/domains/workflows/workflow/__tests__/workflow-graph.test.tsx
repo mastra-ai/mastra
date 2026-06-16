@@ -13,6 +13,7 @@ import { useWorkflowSelectedStep } from '../../context/use-workflow-selected-ste
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
+import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-provider';
 import { WorkflowGraph } from '../workflow-graph';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { server } from '@/test/msw-server';
@@ -104,8 +105,10 @@ function Harness({ snapshot, selectableStepId }: { snapshot: WorkflowRunState; s
   return (
     <WorkflowSelectedStepProvider>
       <WorkflowRunContext.Provider value={{ snapshot } as never}>
-        <WorkflowGraph workflowId="wf" workflow={workflow} />
-        {selectableStepId && <SelectStepButton stepId={selectableStepId} />}
+        <WorkflowStepDetailProvider>
+          <WorkflowGraph workflowId="wf" workflow={workflow} />
+          {selectableStepId && <SelectStepButton stepId={selectableStepId} />}
+        </WorkflowStepDetailProvider>
       </WorkflowRunContext.Provider>
     </WorkflowSelectedStepProvider>
   );
@@ -132,7 +135,9 @@ function providerGraphUi(queryClient: QueryClient, initialRunId?: string) {
         <TracingSettingsProvider entityId={WORKFLOW_ID} entityType="workflow">
           <WorkflowSelectedStepProvider>
             <WorkflowRunProvider workflowId={WORKFLOW_ID} initialRunId={initialRunId}>
-              <WorkflowGraph workflowId={WORKFLOW_ID} workflow={workflow} />
+              <WorkflowStepDetailProvider>
+                <WorkflowGraph workflowId={WORKFLOW_ID} workflow={workflow} />
+              </WorkflowStepDetailProvider>
             </WorkflowRunProvider>
           </WorkflowSelectedStepProvider>
         </TracingSettingsProvider>

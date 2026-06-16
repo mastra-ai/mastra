@@ -70,7 +70,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
               <div className="flex-none border-b border-border1/50 px-4 py-4">
                 <Button
                   as={Link}
-                  to={paths.workflowLink(workflowId)}
+                  href={`${paths.workflowLink(workflowId)}/graph`}
                   variant="primary"
                   className="w-full"
                   onClick={() => {

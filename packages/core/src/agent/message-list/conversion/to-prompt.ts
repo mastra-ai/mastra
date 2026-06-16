@@ -2,7 +2,7 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1Prompt, CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 
 import { convertDataContentToBase64String } from '../prompt/data-content';
-import { categorizeFileData, createDataUri } from '../prompt/image-utils';
+import { categorizeFileData } from '../prompt/image-utils';
 import type { AIV5Type } from '../types';
 import { sanitizeToolName } from '../utils/tool-name';
 
@@ -102,11 +102,10 @@ export function aiV4CoreMessageToV1PromptMessage(coreMessage: CoreMessageV4): La
           const categorized = categorizeFileData(part.image, part.mimeType);
 
           if (categorized.type === 'raw') {
-            // Raw base64 - convert to data URI before creating URL
-            const dataUri = createDataUri(part.image, part.mimeType || 'image/png');
-            processedImage = new URL(dataUri);
+            // Raw base64 — keep as Uint8Array so providers receive raw bytes
+            // and don't double-wrap in a data URI (e.g. Gemini inline_data.data)
+            processedImage = new Uint8Array(Buffer.from(part.image, 'base64'));
           } else {
-            // It's already a URL or data URI
             processedImage = new URL(part.image);
           }
         }

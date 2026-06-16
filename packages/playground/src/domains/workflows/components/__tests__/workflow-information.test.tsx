@@ -152,19 +152,23 @@ function RouteBackToWorkflowHarness({ initialRunId }: { initialRunId: string }) 
   );
 
   const RouteLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }>(
-    ({ children, to, href, onClick, ...props }, ref) => (
-      <a
-        ref={ref}
-        href={to ?? href}
-        onClick={event => {
-          onClick?.(event);
-          setRouteRunId(undefined);
-        }}
-        {...props}
-      >
-        {children}
-      </a>
-    ),
+    ({ children, to, href, onClick, ...props }, ref) => {
+      const target = to ?? href;
+
+      return (
+        <a
+          ref={ref}
+          href={target}
+          onClick={event => {
+            onClick?.(event);
+            setRouteRunId(target?.endsWith('/graph') ? undefined : initialRunId);
+          }}
+          {...props}
+        >
+          {children}
+        </a>
+      );
+    },
   );
 
   return (
@@ -219,7 +223,7 @@ describe('WorkflowInformation', () => {
       renderInformation('run-success-1');
 
       const button = await screen.findByText('New workflow run');
-      expect(button.closest('a')?.getAttribute('href')).toBe(paths.workflowLink(WORKFLOW_ID));
+      expect(button.closest('a')?.getAttribute('href')).toBe(`${paths.workflowLink(WORKFLOW_ID)}/graph`);
     });
 
     it('shows the "New workflow run" button while the sidebar is showing the current execution', async () => {
@@ -230,7 +234,7 @@ describe('WorkflowInformation', () => {
       renderInformation(undefined, 'current-run-1');
 
       const button = await screen.findByText('New workflow run');
-      expect(button.closest('a')?.getAttribute('href')).toBe(paths.workflowLink(WORKFLOW_ID));
+      expect(button.closest('a')?.getAttribute('href')).toBe(`${paths.workflowLink(WORKFLOW_ID)}/graph`);
     });
 
     it('clears the current run header after clicking "New workflow run"', async () => {
