@@ -135,7 +135,8 @@
         "mongodb",
         "mssql",
         "pg",
-        "redis"
+        "redis",
+        "@types/pg"
       ],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
@@ -289,7 +290,15 @@
       "groupName": "Schema",
       "commitMessageTopic": "Schema",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["zod", "json-schema", "zod-to-json-schema"],
+      "matchPackageNames": [
+        "zod",
+        "json-schema",
+        "zod-to-json-schema",
+        "zod-from-json-schema",
+        "zod-from-json-schema-v3",
+        "zod-to-ts",
+        "json-schema-to-zod"
+      ],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false
@@ -350,7 +359,7 @@
       "groupName": "Inngest",
       "commitMessageTopic": "Inngest",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["inngest", "inngest-cli"],
+      "matchPackageNames": ["inngest", "inngest-cli", "@inngest/*"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
@@ -363,10 +372,88 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
+      "groupName": "Browser automation",
+      "commitMessageTopic": "Browser automation",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@browserbasehq/stagehand", "agent-browser", "firecrawl"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Chat adapter",
+      "commitMessageTopic": "Chat adapter",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@chat-adapter/slack", "chat"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Composio",
+      "commitMessageTopic": "Composio",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@composio/core", "@composio/mastra"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "MCP",
+      "commitMessageTopic": "MCP",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@modelcontextprotocol/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "OpenCode",
+      "commitMessageTopic": "OpenCode",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@opencode-ai/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "React Hook Form",
+      "commitMessageTopic": "React Hook Form",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["react-hook-form", "@hookform/resolvers"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Smithy",
+      "commitMessageTopic": "Smithy",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@smithy/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Tailwind ecosystem",
+      "commitMessageTopic": "Tailwind ecosystem",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@tailwindcss/typography", "prettier-plugin-tailwindcss", "tailwind-merge"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
       "groupName": "Vector Databases",
       "commitMessageTopic": "Vector Databases",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["@qdrant/js-client-rest", "chromadb", "lancedb", "turbopuffer"],
+      "matchPackageNames": [
+        "@lancedb/lancedb",
+        "@pinecone-database/pinecone",
+        "@qdrant/js-client-rest",
+        "@turbopuffer/turbopuffer",
+        "chromadb"
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "WorkOS",
+      "commitMessageTopic": "WorkOS",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@workos-inc/node", "@workos/authkit-session"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
@@ -374,7 +461,15 @@
       "groupName": "Workflow Platforms",
       "commitMessageTopic": "Workflow Platforms",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["convex", "@daytona-io/sdk", "electrodb"],
+      "matchPackageNames": ["convex", "electrodb"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "groupName": "Workspace providers",
+      "commitMessageTopic": "Workspace providers",
+      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchPackageNames": ["@blaxel/core", "@daytonaio/sdk", "agentfs-sdk", "e2b", "files-sdk", "modal", "@vercel/sandbox"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     }
