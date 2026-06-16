@@ -490,11 +490,8 @@ export class Harness<TState = {}> {
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
-  /**
-   * Tracks which mode's instructions are currently applied to the shared
-   * `config.agent`. Avoids redundant `__updateInstructions` calls.
-   */
-  #appliedModeId: string | null = null;
+  /** Whether the dynamic mode-aware instructions have been installed on config.agent. */
+  #dynamicInstructionsInstalled = false;
 
   constructor(config: HarnessConfig<TState>) {
     validateModes(config.modes);
@@ -892,10 +889,11 @@ export class Harness<TState = {}> {
     }
 
     // Shared backing agent — reuse the single instance.
-    // Mode instructions are applied in-place; mode tools are resolved
-    // at execution time via buildToolsets.
+    // Mode instructions are resolved dynamically via the function installed
+    // in installDynamicModeInstructions(); mode tools are resolved at
+    // execution time via buildToolsets.
     if (this.config.agent) {
-      this.applyModeInstructions(mode);
+      this.installDynamicModeInstructions();
       return this.config.agent;
     }
 
@@ -924,16 +922,25 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Apply the given mode's instructions to the shared `config.agent`.
-   * No-ops if the mode is already applied.
+   * Install a dynamic instructions function on the shared `config.agent` that
+   * resolves the current mode's instructions at execution time. This avoids
+   * mutating the agent on every mode switch and ensures instructions are always
+   * fresh for the active mode.
    */
-  private applyModeInstructions(mode: HarnessMode): void {
-    if (this.#appliedModeId === mode.id) return;
-    const instructions = [this.#instructions ?? '', mode.instructions].filter(Boolean).join('\n');
-    if (instructions) {
-      this.config.agent!.__updateInstructions(instructions);
-    }
-    this.#appliedModeId = mode.id;
+  private installDynamicModeInstructions(): void {
+    if (this.#dynamicInstructionsInstalled) return;
+    this.#dynamicInstructionsInstalled = true;
+
+    const harnessInstructions = this.#instructions ?? '';
+    const modes = this.config.modes;
+    // Capture a reference to the harness so the closure can read currentModeId.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const harness = this;
+
+    this.config.agent!.__updateInstructions(() => {
+      const mode = modes.find(m => m.id === harness.currentModeId);
+      return [harnessInstructions, mode?.instructions ?? ''].filter(Boolean).join('\n');
+    });
   }
 
   /**
