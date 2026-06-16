@@ -30,11 +30,6 @@ import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
 import {
-  CRITICAL_DISPLAY_STATE_EVENT_TYPES,
-  DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS,
-  DisplayStateScheduler,
-} from './display-state-scheduler';
-import {
   askUserTool,
   createSubagentTool,
   submitPlanTool,
@@ -50,8 +45,6 @@ import type {
   HeartbeatHandler,
   HarnessConfig,
   HarnessDisplayState,
-  HarnessDisplayStateListener,
-  HarnessDisplayStateSubscriptionOptions,
   HarnessEvent,
   HarnessEventListener,
   HarnessMessage,
@@ -152,6 +145,18 @@ export function describeNonSuccessFinishReason(reason: string, providerMetadata:
  * {@link buildFableFallbackProviderOptions}.
  */
 const FABLE_FALLBACK_MODEL = 'claude-opus-4-8';
+
+/**
+ * Step budget applied to every harness-driven agent run.
+ *
+ * This MUST be passed to both the initial stream and `resumeStream`: when a run
+ * suspends on an interactive tool (e.g. `ask_user`) and then resumes, the
+ * resumed call merges over the agent's *default* options, whose `maxSteps` is
+ * small (~5). Without re-supplying this budget the resumed run is silently
+ * capped and ends with `reason:"complete"` after a few steps — the agent stops
+ * mid-task even though it promised to continue. See {@link buildSharedRunOptions}.
+ */
+const HARNESS_MAX_STEPS = 1000;
 
 /**
  * Returns Anthropic `providerOptions` that enable a server-side fallback to
@@ -442,7 +447,6 @@ export class Harness<TState = {}> {
   private resourceId: string;
   private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
-  private displayStateSchedulers = new Set<DisplayStateScheduler>();
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
   private currentRunId: string | null = null;
@@ -1881,33 +1885,42 @@ export class Harness<TState = {}> {
     this.abortRequested = false;
     this.abortController ??= new AbortController();
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const streamOptions: Record<string, unknown> = {
+      ...this.buildSharedRunOptions(),
       memory: { thread: this.currentThreadId, resource: this.resourceId },
       abortSignal: this.abortController.signal,
       requestContext,
-      maxSteps: 1000,
-      savePerStep: false,
-      requireToolApproval: !isYolo,
-      modelSettings: { temperature: 1 },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
     };
     streamOptions.toolsets = await this.buildToolsets(requestContext);
 
+    return streamOptions;
+  }
+
+  /**
+   * Options that every harness-driven agent run must carry — the initial stream
+   * AND every `resumeStream`. Centralized so the two paths can't drift: a
+   * missing `maxSteps` on resume silently caps the resumed run at the agent's
+   * small default and ends it mid-task (see {@link HARNESS_MAX_STEPS}).
+   */
+  private buildSharedRunOptions(): Record<string, unknown> {
+    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const shared: Record<string, unknown> = {
+      maxSteps: HARNESS_MAX_STEPS,
+      savePerStep: false,
+      requireToolApproval: !isYolo,
+      modelSettings: { temperature: 1 },
+    };
+
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
     // block is transparently retried on the fallback model instead of failing.
     const fableFallback = buildFableFallbackProviderOptions(this.getCurrentModelId());
     if (fableFallback) {
-      const existing = streamOptions.providerOptions as Record<string, unknown> | undefined;
-      const existingAnthropic = (existing?.anthropic as Record<string, unknown> | undefined) ?? {};
-      streamOptions.providerOptions = {
-        ...existing,
-        anthropic: { ...existingAnthropic, ...fableFallback.anthropic },
-      };
+      shared.providerOptions = { anthropic: { ...fableFallback.anthropic } };
     }
 
-    return streamOptions;
+    return shared;
   }
 
   private async drainFollowUpQueue(options?: {
@@ -3419,7 +3432,7 @@ export class Harness<TState = {}> {
   restoreDisplayTasks(tasks: TaskItemSnapshot[]): void {
     this.displayState.previousTasks = [...this.displayState.tasks];
     this.displayState.tasks = [...tasks];
-    this.dispatchDisplayStateChanged(false);
+    this.dispatchDisplayStateChanged();
   }
 
   /**
@@ -3683,16 +3696,19 @@ export class Harness<TState = {}> {
     this.displayState.pendingSuspensions.delete(toolCallId);
 
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+
     const output = await agent.resumeStream(resumeData, {
+      // Re-supply the shared run budget (maxSteps, etc). Without it the resumed
+      // run merges over the agent's small default maxSteps and stops mid-task.
+      ...this.buildSharedRunOptions(),
       runId: suspension.runId,
       toolCallId,
-      requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
       abortSignal: this.abortController.signal,
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
+
     await this.processStream(output, requestContext);
   }
 
@@ -3713,29 +3729,6 @@ export class Harness<TState = {}> {
     };
   }
 
-  /**
-   * Subscribe to coalesced display state snapshots.
-   *
-   * Use this for UI rendering paths that only need the latest display state.
-   * Raw event consumers should continue to use `subscribe()`.
-   */
-  subscribeDisplayState(
-    listener: HarnessDisplayStateListener,
-    options: HarnessDisplayStateSubscriptionOptions = {},
-  ): () => void {
-    const scheduler = new DisplayStateScheduler(
-      listener,
-      options.windowMs ?? DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS.windowMs,
-      options.maxWaitMs ?? DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS.maxWaitMs,
-    );
-    this.displayStateSchedulers.add(scheduler);
-
-    return () => {
-      this.displayStateSchedulers.delete(scheduler);
-      scheduler.dispose();
-    };
-  }
-
   private emit(event: HarnessEvent): void {
     // Update display state based on the event (before dispatching to listeners)
     this.applyDisplayStateUpdate(event);
@@ -3743,12 +3736,11 @@ export class Harness<TState = {}> {
     this.dispatchToListeners(event);
 
     if (event.type !== 'display_state_changed') {
-      const isCritical = CRITICAL_DISPLAY_STATE_EVENT_TYPES.has(event.type);
-      this.dispatchDisplayStateChanged(isCritical);
+      this.dispatchDisplayStateChanged();
     }
   }
 
-  private dispatchDisplayStateChanged(isCritical: boolean): void {
+  private dispatchDisplayStateChanged(): void {
     // After every event, emit display_state_changed so UIs that prefer a single
     // subscribe-and-render pattern can do so. We dispatch directly to listeners
     // (not through emit()) to avoid infinite recursion.
@@ -3756,12 +3748,6 @@ export class Harness<TState = {}> {
       type: 'display_state_changed',
       displayState: this.displayState,
     });
-
-    if (this.displayStateSchedulers.size > 0) {
-      for (const scheduler of Array.from(this.displayStateSchedulers)) {
-        scheduler.notify(this.displayState, isCritical);
-      }
-    }
   }
 
   private dispatchToListeners(event: HarnessEvent): void {
@@ -4478,10 +4464,6 @@ export class Harness<TState = {}> {
 
   async destroy(): Promise<void> {
     this.cleanupAgentThreadSubscription();
-    for (const scheduler of this.displayStateSchedulers) {
-      scheduler.dispose();
-    }
-    this.displayStateSchedulers.clear();
     await this.stopHeartbeats();
     await this.destroyWorkspace();
   }
