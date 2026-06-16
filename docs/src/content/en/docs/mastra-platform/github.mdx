@@ -137,7 +137,7 @@ After a repository is linked, every push to a configured branch triggers a deplo
 
 Each deploy carries the commit SHA, branch, and (when available) the pull request number that introduced the commit. Builds run inside the platform and report status back to GitHub as check runs on the commit.
 
-Only one build per project runs at a time. If a new push arrives while a build is in progress, the platform cancels older queued builds for the same target and runs the latest.
+Only one build per deploy target runs at a time. If a new push arrives while a build is in progress, the platform cancels older queued builds for that same target and runs the latest. Studio and Server builds are tracked independently, so they can run in parallel when both targets are configured.
 
 ### Manual GitHub deploys
 
