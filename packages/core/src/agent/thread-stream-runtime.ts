@@ -1489,7 +1489,7 @@ export class AgentThreadStreamRuntime {
       // if multiple processes hit the same pubsub failure simultaneously they can each
       // start a stream for the same thread (the bug this lease is supposed to prevent),
       // but failing closed would silently drop user messages on any Redis blip which
-      // is the worse failure mode. Lease TTL + heartbeat still bound the duplicate
+      // is the worse failure mode. Lease TTL + renewal still bound the duplicate
       // window to a single run, and the next clean acquireLease re-serializes callers.
       const lease = await resolvedPubSub
         .acquireLease(reservedKey, reservedRunId, AGENT_THREAD_LEASE_TTL_MS)
