@@ -19,14 +19,14 @@ type SessionStateFields = {
   modeId?: string;
 };
 
-export function v1ModeToLegacy<TState = {}>(mode: HarnessMode, agent: Agent): HarnessModeLegacy<TState> {
+export function v1ModeToLegacy(mode: HarnessMode, agent: Agent): HarnessModeLegacy {
   const meta = mode.metadata ?? {};
   return {
     id: mode.id,
     name: mode.description,
     default: meta.default === true,
     defaultModelId: mode.defaultModelId,
-    color: typeof meta.color === 'string' ? meta.color : undefined,
+    metadata: meta,
     agent,
   };
 }
@@ -130,6 +130,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
         return {
           id: session.threadId,
           resourceId: session.resourceId,
+          title: legacyThread?.title,
           createdAt: session.createdAt,
           updatedAt: session.lastActivityAt,
           metadata: {
@@ -206,7 +207,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     };
   }
 
-  getCurrentMode(): HarnessModeLegacy<TState> {
+  getCurrentMode(): HarnessModeLegacy {
     if (!this.#session) {
       return super.getCurrentMode();
     }
@@ -217,7 +218,14 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       throw new Error('HarnessCompat requires an initialized Mastra instance');
     }
 
-    return v1ModeToLegacy(mode, mastra.getAgentById(mode.agentId));
+    // Harness v1 modes no longer carry an `agentId` field (#17534); MastraCode
+    // stores the backing agent id in mode metadata instead.
+    const agentId = mode.metadata?.agentId;
+    if (typeof agentId !== 'string') {
+      return super.getCurrentMode();
+    }
+
+    return v1ModeToLegacy(mode, mastra.getAgentById(agentId));
   }
 
   /**

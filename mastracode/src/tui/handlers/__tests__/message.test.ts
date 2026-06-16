@@ -1,4 +1,4 @@
-import { Container, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,7 @@ import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-
 import { UserMessageComponent } from '../../components/user-message.js';
 import { addPendingUserMessage, addUserMessage } from '../../render-messages.js';
 import type { TUIState } from '../../state.js';
-import { handleMessageUpdate } from '../message.js';
+import { handleMessageEnd, handleMessageUpdate } from '../message.js';
 import type { EventHandlerContext } from '../types.js';
 
 function visibleChildren(state: TUIState) {
@@ -196,6 +196,42 @@ describe('handleMessageUpdate system reminders', () => {
     ]);
     expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
     expect(stripAnsi(state.streamingComponent!.render(80).join('\n'))).toContain('Done.');
+  });
+
+  it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'state_signal',
+          stateId: 'tasks',
+          mode: 'snapshot',
+          cacheKey: 'tasks:v1',
+          message: '<current-task-list>\n  ○ [pending] {id: alpha} Alpha\n</current-task-list>',
+        } as never,
+        { type: 'text', text: 'Tasks created.' },
+      ]),
+    );
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+  });
+
+  it('does not render the goal state signal inline (the goal/judge UI shows it)', () => {
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'state_signal',
+          stateId: 'goal',
+          mode: 'snapshot',
+          cacheKey: 'goal:v1',
+          message: '<current-objective>\n  Ship the goal feature\n</current-objective>',
+        } as never,
+        { type: 'text', text: 'Goal set.' },
+      ]),
+    );
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
   });
 
   it('renders a streamed notification summary as an inline component', () => {
@@ -447,7 +483,46 @@ describe('handleMessageUpdate system reminders', () => {
       streamingMessage,
     ]);
     expect(state.allSystemReminderComponents[0]).toBeInstanceOf(TemporalGapComponent);
+    // TemporalGapComponent now participates in spacing, so boundary spacers
+    // are placed above both the temporal gap and the optimistic user message.
     expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    expect(isChatBoundarySpacer(state.chatContainer.children[3]!)).toBe(true);
+  });
+
+  it('surfaces failed pending tools in quiet mode when the assistant run errors', () => {
+    state.quietMode = true;
+    state.quietModeMaxToolPreviewLines = 2;
+
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'tool_call',
+          id: 'tool-1',
+          name: 'ask_user',
+          args: { question: 'Deploy now?' },
+        } as never,
+      ]),
+    );
+
+    const tool = state.pendingTools.get('tool-1');
+    expect(tool).toBeInstanceOf(ToolExecutionComponentEnhanced);
+
+    handleMessageEnd(ctx, {
+      id: 'msg-1',
+      role: 'assistant',
+      content: [],
+      stopReason: 'error',
+      errorMessage: 'Tool execution failed: permission denied',
+      createdAt: new Date(),
+    } as HarnessMessage);
+
+    expect(state.pendingTools.size).toBe(0);
+    const output = stripAnsi((tool as ToolExecutionComponentEnhanced).render(100).join('\n'));
+    expect(output).toContain('ask_user');
+    expect(output).toContain('✗');
+    expect(output).toContain('Tool execution failed: permission denied');
+    expect(output).not.toContain('╭──');
   });
 
   it('dedupes state signals with same stateId but different cacheKey/mode', () => {

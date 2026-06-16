@@ -41,7 +41,7 @@ function LatencyChart({ data, onPointClick }: { data: LatencyPoint[]; onPointCli
         onPointClick
           ? point => {
               const p = point as LatencyPoint;
-              if (typeof p?.rawTimestamp === 'string') onPointClick(p);
+              if (typeof p?.tsMs === 'number' && Number.isFinite(p.tsMs)) onPointClick(p);
             }
           : undefined
       }

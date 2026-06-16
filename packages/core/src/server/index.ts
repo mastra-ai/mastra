@@ -3,7 +3,7 @@ import type { DescribeRouteOptions } from 'hono-openapi';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
-import type { ApiRoute, MastraAuthConfig, Methods } from './types';
+import type { ApiRoute, ApiRouteHandler, MastraAuthConfig, Methods } from './types';
 
 export type {
   MastraAuthConfig,
@@ -12,10 +12,13 @@ export type {
   ContextWithMastra,
   CorsOptions,
   ApiRoute,
+  ApiRouteHandler,
   HttpLoggingConfig,
   ValidationErrorContext,
   ValidationErrorResponse,
   ValidationErrorHook,
+  StudioConfig,
+  Middleware,
 } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
@@ -50,15 +53,7 @@ type RegisterApiRouteOptions<P extends string> = {
     P,
     ParamsFromPath<P>
   >;
-  createHandler?: (c: Context) => Promise<
-    Handler<
-      {
-        Variables: CustomRouteVariables;
-      },
-      P,
-      ParamsFromPath<P>
-    >
-  >;
+  createHandler?: (c: Context) => Promise<ApiRouteHandler>;
   middleware?: MiddlewareHandler | MiddlewareHandler[];
   /**
    * Route-specific CORS configuration.

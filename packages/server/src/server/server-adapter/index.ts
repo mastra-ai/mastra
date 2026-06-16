@@ -13,11 +13,13 @@ import { z } from 'zod/v4';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { coreAuthMiddleware } from '../auth/helpers';
 import {
+  MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
 } from '../constants';
+import type { MastraAuthMode } from '../constants';
 import { formatZodError } from '../handlers/error';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
@@ -29,12 +31,14 @@ import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 export * from './routes';
 export { redactStreamChunk } from './redact';
 export {
+  MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
 } from '../constants';
+export type { MastraAuthMode } from '../constants';
 
 export { WorkflowRegistry, normalizeRoutePath } from '../utils';
 
@@ -135,7 +139,16 @@ function formatRoute(route: Pick<ServerRoute, 'method' | 'path'>): string {
   return `${route.method} ${route.path}`;
 }
 
-function getFGAProvider(mastra: any): IFGAProvider | undefined {
+function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
+  // If we have request context, check auth mode to determine which FGA provider to use
+  if (requestContext) {
+    const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY);
+    if (authMode === 'studio') {
+      const studioFga = mastra?.getStudio?.()?.fga;
+      if (studioFga) return studioFga as IFGAProvider;
+    }
+  }
+  // Fall back to server FGA
   return mastra?.getServer?.()?.fga as IFGAProvider | undefined;
 }
 
@@ -453,13 +466,82 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   /**
+   * Determines which auth configuration to use for the current request.
+   *
+   * Request routing logic:
+   * 1. If `x-mastra-client-type: studio` header is present AND `studio.auth` is configured:
+   *    → Use studio auth (for internal team members accessing Studio UI)
+   * 2. If studio header is present but `studio.auth` is NOT configured:
+   *    → No auth required (Studio development mode)
+   * 3. Otherwise:
+   *    → Use server auth (for external customers calling API)
+   *
+   * Security note: The header is only for routing - auth validation happens
+   * via session cookies/tokens. If someone spoofs the studio header but doesn't
+   * have a valid studio session, they'll get a 401 (not fall back to server auth).
+   */
+  protected getEffectiveAuthConfig(
+    getHeader: (name: string) => string | undefined,
+  ): { authConfig: unknown; authMode: MastraAuthMode } | null {
+    const isStudioRequest = isStudioClientTypeHeader(getHeader(MASTRA_CLIENT_TYPE_HEADER));
+    const studioAuth = this.mastra.getStudio()?.auth;
+    const serverAuth = this.mastra.getServer()?.auth;
+
+    // Dual auth is opt-in: if studio.auth is configured, Studio requests use it exclusively
+    if (isStudioRequest && studioAuth) {
+      return { authConfig: studioAuth, authMode: 'studio' };
+    }
+
+    // Otherwise (non-studio request, OR studio request without studio.auth configured),
+    // fall back to server.auth for backward compatibility
+    if (serverAuth) {
+      return { authConfig: serverAuth, authMode: 'server' };
+    }
+
+    // No auth configured
+    return null;
+  }
+
+  /**
+   * Gets the effective RBAC provider for the current request based on auth mode.
+   */
+  protected getEffectiveRBACProvider(requestContext: RequestContext) {
+    const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
+
+    if (authMode === 'studio') {
+      return this.mastra.getStudio()?.rbac ?? this.mastra.getServer()?.rbac;
+    }
+
+    return this.mastra.getServer()?.rbac;
+  }
+
+  /**
+   * Gets the effective FGA provider for the current request based on auth mode.
+   */
+  protected getEffectiveFGAProvider(requestContext: RequestContext) {
+    const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
+
+    if (authMode === 'studio') {
+      return this.mastra.getStudio()?.fga ?? this.mastra.getServer()?.fga;
+    }
+
+    return this.mastra.getServer()?.fga;
+  }
+
+  /**
    * Check if the current request should be authenticated/authorized.
    * Returns null if auth passes, or an error response if it fails.
    *
    * This is a thin wrapper around coreAuthMiddleware that:
-   * 1. Handles route-level requiresAuth opt-out (not available in global middleware)
-   * 2. Delegates all other auth logic to coreAuthMiddleware
-   * 3. Translates the AuthResult into the {status, error} format adapters expect
+   * 1. Routes to the correct auth provider (studio vs server) based on request headers
+   * 2. Handles route-level requiresAuth opt-out (not available in global middleware)
+   * 3. Delegates all other auth logic to coreAuthMiddleware
+   * 4. Translates the AuthResult into the {status, error} format adapters expect
+   *
+   * Security: When `x-mastra-client-type: studio` header is present and studio auth
+   * is configured, we ONLY use studio auth. If authentication fails, we return 401
+   * and redirect to login - we do NOT fall back to server auth. This prevents
+   * external users from spoofing the studio header to access Studio UI.
    */
   protected async checkRouteAuth(
     route: ServerRoute,
@@ -475,12 +557,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       buildAuthorizeContext?: () => unknown;
     },
   ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
-    const authConfig = this.mastra.getServer()?.auth;
+    // Determine which auth config to use based on request type
+    const effectiveAuth = this.getEffectiveAuthConfig(context.getHeader);
 
     // No auth config means no auth required
-    if (!authConfig) {
+    if (!effectiveAuth) {
       return null;
     }
+
+    const { authConfig, authMode } = effectiveAuth;
+
+    // Store auth mode in request context for downstream RBAC/FGA provider selection
+    context.requestContext.set(MASTRA_AUTH_MODE_KEY, authMode);
 
     // Check route-level requiresAuth flag first (explicit per-route setting)
     // This opt-out is route-specific and not available in the global middleware
@@ -509,7 +597,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       method: context.method,
       getHeader: context.getHeader,
       mastra: this.mastra,
-      authConfig,
+      authConfig: authConfig as any,
       customRouteAuthConfig: this.customRouteAuthConfig,
       requestContext: context.requestContext,
       rawRequest:
@@ -548,14 +636,33 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * @param userPermissions - The user's permissions from the request context
    * @returns Error response if permission denied, null if allowed
    */
+  /**
+   * Check if the user has the required permission for a route.
+   *
+   * Uses convention-based permission derivation:
+   * 1. If route has explicit `requiresPermission`, use that
+   * 2. Otherwise, derive permission from path/method (e.g., GET /agents → agents:read)
+   * 3. Routes with `requiresAuth: false` skip permission checks
+   *
+   * Permission checks use the RBAC provider that corresponds to the auth mode
+   * (studio vs server) that was used for authentication.
+   *
+   * @param route - The route being accessed
+   * @param userPermissions - The user's permissions from the request context
+   * @param hasPermissionFn - Function to check if user permissions match required permission
+   * @param requestContext - Request context to determine which RBAC provider to use
+   * @returns Error response if permission denied, null if allowed
+   */
   protected checkRoutePermission(
     route: ServerRoute,
     userPermissions: string[] | undefined,
     hasPermissionFn: (userPerms: string[], required: string) => boolean,
+    requestContext?: RequestContext,
   ): { status: number; error: string; message: string } | null {
     // If RBAC is not configured, skip permission checks entirely
     // Auth-only mode = authenticated users get full access
-    const rbacProvider = this.mastra.getServer()?.rbac;
+    const rbacProvider = requestContext ? this.getEffectiveRBACProvider(requestContext) : this.mastra.getServer()?.rbac;
+
     if (!rbacProvider) {
       return null;
     }
@@ -609,9 +716,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    */
   async validateEELicense(): Promise<void> {
     const serverConfig = this.mastra.getServer();
-    const configuredFeatures = [serverConfig?.rbac ? 'RBAC' : null, serverConfig?.fga ? 'FGA' : null].filter(
-      (feature): feature is string => feature !== null,
-    );
+    const studioConfig = this.mastra.getStudio?.();
+    // Check both server and studio configs for EE features
+    const configuredFeatures = [
+      serverConfig?.rbac || studioConfig?.rbac ? 'RBAC' : null,
+      serverConfig?.fga || studioConfig?.fga ? 'FGA' : null,
+    ].filter((feature): feature is string => feature !== null);
 
     if (configuredFeatures.length === 0) return;
 
@@ -674,7 +784,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    */
   async validateFGAPolicyCoverage(): Promise<void> {
     const serverConfig = this.mastra.getServer();
-    const fgaProvider = serverConfig?.fga;
+    const studioConfig = this.mastra.getStudio?.();
+    // Check both server and studio FGA providers
+    const fgaProvider = serverConfig?.fga ?? studioConfig?.fga;
     if (!fgaProvider) return;
 
     const customRoutes = (this.customApiRoutes ?? serverConfig?.apiRoutes ?? []).filter(
@@ -1056,7 +1168,8 @@ export async function checkRouteFGA(
   requestContext: RequestContext,
   params: Record<string, unknown>,
 ): Promise<{ status: number; error: string; message: string } | null> {
-  const fgaProvider = getFGAProvider(mastra);
+  // Use request context to determine which FGA provider to use (studio vs server)
+  const fgaProvider = getFGAProvider(mastra, requestContext);
   if (!fgaProvider) return null;
 
   const fgaConfig = await resolveRouteFGAConfig(fgaProvider, route, requestContext, params);

@@ -1,8 +1,8 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { Tabs, Tab, TabContent, TabList, EmptyState, Button } from '@mastra/playground-ui';
-import { ChatThreads } from '@/domains/agents/components/chat-threads';
-import { AgentMemory } from '@/domains/agents/components/agent-information/agent-memory';
 import { useMemorySidebarTab } from './use-memory-sidebar-tab';
+import { AgentMemory } from '@/domains/agents/components/agent-information/agent-memory';
+import { ChatThreads } from '@/domains/agents/components/chat-threads';
 
 export interface MemorySidebarProps {
   agentId: string;
@@ -26,7 +26,7 @@ export function MemorySidebar({
   const { selectedTab, handleTabChange } = useMemorySidebarTab();
 
   return (
-    <div className="h-full w-full min-w-0 p-2">
+    <div className="h-full w-full min-w-0 p-2 pr-0">
       <div className="bg-surface3 rounded-studio-panel border border-border1/50 flex h-full min-h-0 flex-col overflow-hidden">
         {hasMemory ? (
           <Tabs

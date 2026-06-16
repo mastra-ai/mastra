@@ -1,5 +1,4 @@
 import { delay } from '@ai-sdk/provider-utils-v5';
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { tool } from '@internal/ai-sdk-v5';
 import {
   convertArrayToReadableStream as convertArrayToReadableStreamV2,
@@ -21,6 +20,7 @@ import {
   testUsage2,
 } from './utils';
 import { testUsageV3, testUsageV3_2 } from './utils-v3';
+import { convertAsyncIterableToArray } from './stream-helpers';
 import { MastraLanguageModelV2Mock } from './MastraLanguageModelV2Mock';
 import { MastraLanguageModelV3Mock } from './MastraLanguageModelV3Mock';
 

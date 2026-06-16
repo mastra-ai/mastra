@@ -22,9 +22,8 @@ export function LatencyCard() {
       isLoading={isLoading}
       isError={isError}
       onPointClick={(tab, point) => {
-        const tsMs = new Date(String(point.rawTimestamp)).getTime();
-        if (Number.isFinite(tsMs)) {
-          void navigate(getBucketTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab] }, tsMs, '1h'));
+        if (Number.isFinite(point.tsMs)) {
+          void navigate(getBucketTracesHref({ rootEntityType: TAB_TO_ROOT_ENTITY[tab] }, point.tsMs, '1h'));
         }
       }}
       actions={(tab: LatencyTab) => (

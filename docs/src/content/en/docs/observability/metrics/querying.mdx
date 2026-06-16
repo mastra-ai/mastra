@@ -20,7 +20,7 @@ Mastra exposes the same five OLAP queries (`getMetricAggregate`, `getMetricBreak
 For setup of the observability store itself, see the [Metrics overview](/docs/observability/metrics/overview). For the list of metric names you can query, see the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics).
 
 :::note
-Metric queries are served by the observability domain, which requires an OLAP-capable store (DuckDB locally, ClickHouse in production). See [Metrics overview](/docs/observability/metrics/overview) for setup. If the observability store is not configured, `getStore('observability')` returns `null`.
+Metric queries are served by the observability domain, which requires an OLAP-capable store (DuckDB locally, ClickHouse in production). See [Metrics overview](/docs/observability/metrics/overview) for setup. If the observability store isn't configured, `getStore('observability')` returns `null`.
 :::
 
 ## Surfaces
@@ -56,7 +56,7 @@ export const agentLatencyTool = createTool({
 })
 ```
 
-`getStore('observability')` returns `null` when the configured backend does not support OLAP queries.
+`getStore('observability')` returns `null` when the configured backend doesn't support OLAP queries.
 
 ### HTTP
 

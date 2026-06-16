@@ -1,17 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const gatewayRegistrySyncGateways = vi.fn();
-const gatewayRegistryGetProviders = vi.fn(() => ({}));
-const gatewayRegistryGetInstance = vi.fn(() => ({
-  syncGateways: gatewayRegistrySyncGateways,
-  getProviders: gatewayRegistryGetProviders,
-}));
+const providerRegistryMock: Record<string, unknown> = {};
+const mastraCodeGatewayMock = {
+  id: 'mastracode',
+  name: 'MastraCode Gateway',
+  fetchProviders: vi.fn(async () => ({})),
+  buildUrl: vi.fn((modelId: string) => modelId),
+  getApiKey: vi.fn(async () => ''),
+  resolveLanguageModel: vi.fn(),
+};
+const createMastraCodeGatewayMock = vi.fn(() => mastraCodeGatewayMock);
+const mastraCodeCatalogProviderMock = vi.fn();
+const createMastraCodeModelCatalogProviderMock = vi.fn(() => mastraCodeCatalogProviderMock);
+const resolveModelMock = vi.fn();
 
 vi.mock('@mastra/core/llm', () => ({
-  GatewayRegistry: {
-    getInstance: gatewayRegistryGetInstance,
-  },
-  PROVIDER_REGISTRY: {},
+  PROVIDER_REGISTRY: providerRegistryMock,
 }));
 
 vi.mock('@mastra/core/agent', () => ({
@@ -27,6 +31,8 @@ const agentConstructorMock = vi.fn();
 
 const harnessConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
+const getAvailableModePacksMock = vi.fn(() => []);
+const getAvailableOmPacksMock = vi.fn(() => []);
 const harnessSubscribeMock = vi.fn();
 const detectProjectMock = vi.fn(() => ({
   mode: 'none',
@@ -40,6 +46,11 @@ const harnessGetCurrentThreadIdMock = vi.fn();
 const harnessListThreadsMock = vi.fn();
 const harnessSetStateMock = vi.fn();
 const harnessSetThreadSettingMock = vi.fn();
+const createMcpManagerMock = vi.fn();
+const hookManagerConstructorMock = vi.fn();
+const getStorageConfigMock = vi.fn(() => ({ type: 'memory' }));
+const getResourceIdOverrideMock = vi.fn(() => undefined);
+const getDynamicWorkspaceMock = vi.fn();
 let harnessStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
@@ -139,62 +150,72 @@ vi.mock('@mastra/core/processors', () => ({
   },
 }));
 
-vi.mock('./agents/instructions.js', () => ({
+vi.mock('../agents/instructions.js', () => ({
   getDynamicInstructions: vi.fn(),
 }));
 
 const getDynamicMemoryMock = vi.fn();
 
-vi.mock('./agents/memory.js', () => ({
+vi.mock('../agents/memory.js', () => ({
   getDynamicMemory: getDynamicMemoryMock,
 }));
 
-vi.mock('./agents/model.js', () => ({
+vi.mock('../agents/model.js', () => ({
+  createMastraCodeGateway: createMastraCodeGatewayMock,
+  createMastraCodeModelCatalogProvider: createMastraCodeModelCatalogProviderMock,
   getDynamicModel: vi.fn(),
-  resolveModel: vi.fn(),
+  getGoalJudgeModel: vi.fn(),
+  resolveModel: resolveModelMock,
 }));
 
-vi.mock('./agents/subagents/execute.js', () => ({
+vi.mock('../agents/subagents/execute.js', () => ({
   executeSubagent: {},
 }));
 
-vi.mock('./agents/subagents/explore.js', () => ({
+vi.mock('../agents/subagents/explore.js', () => ({
   exploreSubagent: {},
 }));
 
-vi.mock('./agents/subagents/plan.js', () => ({
+vi.mock('../agents/subagents/plan.js', () => ({
   planSubagent: {},
 }));
 
-vi.mock('./agents/tools.js', () => ({
+vi.mock('../agents/tools.js', () => ({
   createDynamicTools: vi.fn(),
   createToolHooks: vi.fn(),
 }));
 
-vi.mock('./agents/workspace.js', () => ({
-  getDynamicWorkspace: vi.fn(),
+vi.mock('../agents/workspace.js', () => ({
+  getDynamicWorkspace: getDynamicWorkspaceMock,
 }));
 
-vi.mock('./auth/storage.js', () => ({
+vi.mock('../auth/storage.js', () => ({
   AuthStorage: class {
     get() {
+      return undefined;
+    }
+    getStoredApiKey() {
       return undefined;
     }
     loadStoredApiKeysIntoEnv() {}
   },
 }));
 
-vi.mock('./hooks/index.js', () => ({
-  HookManager: class {},
+vi.mock('../hooks/index.js', () => ({
+  HookManager: class {
+    constructor(...args: unknown[]) {
+      hookManagerConstructorMock(...args);
+    }
+  },
 }));
 
-vi.mock('./mcp/index.js', () => ({
-  createMcpManager: vi.fn(),
+vi.mock('../mcp/index.js', () => ({
+  createMcpManager: createMcpManagerMock,
 }));
 
-vi.mock('./onboarding/packs.js', () => ({
-  getAvailableModePacks: vi.fn(() => []),
-  getAvailableOmPacks: vi.fn(() => []),
+vi.mock('../onboarding/packs.js', () => ({
+  getAvailableModePacks: getAvailableModePacksMock,
+  getAvailableOmPacks: getAvailableOmPacksMock,
 }));
 
 vi.mock('../onboarding/settings.js', () => ({
@@ -208,53 +229,62 @@ vi.mock('../onboarding/settings.js', () => ({
   toCustomProviderModelId: vi.fn(),
 }));
 
-vi.mock('./permissions.js', () => ({
+vi.mock('../permissions.js', () => ({
   getToolCategory: vi.fn(),
 }));
 
-vi.mock('./providers/claude-max.js', () => ({
+vi.mock('../providers/claude-max.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
-vi.mock('./providers/openai-codex.js', () => ({
+vi.mock('../providers/openai-codex.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
-vi.mock('./providers/github-copilot.js', () => ({
+vi.mock('../providers/github-copilot.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
-vi.mock('./tools/index.js', () => ({
+vi.mock('../tools/index.js', () => ({
   defaultTools: {},
 }));
 
-vi.mock('./schema.js', () => ({
+vi.mock('../schema.js', () => ({
   stateSchema: {},
 }));
 
-vi.mock('./tui/theme.js', () => ({
+vi.mock('../tui/theme.js', () => ({
   mastra: {},
 }));
 
-vi.mock('./utils/gateway-sync.js', () => ({
+vi.mock('../utils/gateway-sync.js', () => ({
   syncGateways: vi.fn(),
 }));
 
-vi.mock('./utils/project.js', () => ({
+vi.mock('../utils/project.js', () => ({
   detectProject: detectProjectMock,
-  getStorageConfig: vi.fn(() => ({ type: 'memory' })),
-  getResourceIdOverride: vi.fn(() => undefined),
+  getAppDataDir: vi.fn(() => '/tmp/mastracode-app-data'),
+  getDatabasePath: vi.fn(() => '/tmp/mastracode-app-data/mastra.db'),
+  getVectorDatabasePath: vi.fn(() => '/tmp/mastracode-app-data/mastra-vectors.db'),
+  getObservabilityDatabasePath: vi.fn(() => '/tmp/mastracode-app-data/observability.duckdb'),
+  getCurrentGitBranch: vi.fn(() => undefined),
+  getCurrentGitBranchAsync: vi.fn(async () => undefined),
+  getOmScope: vi.fn(() => 'thread'),
+  getUserId: vi.fn(() => 'test-user'),
+  getUserName: vi.fn(() => 'Test User'),
+  getStorageConfig: getStorageConfigMock,
+  getResourceIdOverride: getResourceIdOverrideMock,
 }));
 
 const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({ storage: {} }));
 const createVectorStoreMock = vi.fn(() => ({}));
 
-vi.mock('./utils/storage-factory.js', () => ({
+vi.mock('../utils/storage-factory.js', () => ({
   createStorage: createStorageMock,
   createVectorStore: createVectorStoreMock,
 }));
 
-vi.mock('./utils/thread-lock.js', () => ({
+vi.mock('../utils/thread-lock.js', () => ({
   acquireThreadLock: vi.fn(),
   releaseThreadLock: vi.fn(),
 }));
@@ -262,15 +292,20 @@ vi.mock('./utils/thread-lock.js', () => ({
 describe('createMastraCode', () => {
   beforeEach(() => {
     vi.resetModules();
-    gatewayRegistrySyncGateways.mockReset();
-    gatewayRegistryGetProviders.mockReset();
-    gatewayRegistryGetProviders.mockReturnValue({});
-    gatewayRegistryGetInstance.mockClear();
+    createMastraCodeGatewayMock.mockClear();
+    createMastraCodeModelCatalogProviderMock.mockClear();
+    mastraCodeCatalogProviderMock.mockClear();
+    resolveModelMock.mockClear();
+    mastraCodeGatewayMock.fetchProviders.mockClear();
+    mastraCodeGatewayMock.buildUrl.mockClear();
+    mastraCodeGatewayMock.getApiKey.mockClear();
+    mastraCodeGatewayMock.resolveLanguageModel.mockClear();
     createStorageMock.mockReset();
     createStorageMock.mockReturnValue({ storage: {}, backend: 'memory' });
     createVectorStoreMock.mockReset();
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
+    getDynamicMemoryMock.mockReturnValue(() => undefined);
     harnessSubscribeMock.mockReset();
     harnessGetCurrentThreadIdMock.mockReset();
     harnessGetCurrentThreadIdMock.mockReturnValue(undefined);
@@ -280,6 +315,13 @@ describe('createMastraCode', () => {
     harnessSetStateMock.mockResolvedValue(undefined);
     harnessSetThreadSettingMock.mockReset();
     harnessSetThreadSettingMock.mockResolvedValue(undefined);
+    createMcpManagerMock.mockReset();
+    hookManagerConstructorMock.mockReset();
+    getStorageConfigMock.mockReset();
+    getStorageConfigMock.mockReturnValue({ type: 'memory' });
+    getResourceIdOverrideMock.mockReset();
+    getResourceIdOverrideMock.mockReturnValue(undefined);
+    getDynamicWorkspaceMock.mockReset();
     detectProjectMock.mockReset();
     detectProjectMock.mockReturnValue({
       mode: 'none',
@@ -294,33 +336,73 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
     harnessConstructorMock.mockReset();
-    gatewayRegistryGetInstance.mockImplementation(() => ({
-      syncGateways: gatewayRegistrySyncGateways,
-      getProviders: gatewayRegistryGetProviders,
-    }));
+    getAvailableModePacksMock.mockClear();
+    getAvailableOmPacksMock.mockClear();
+    for (const key of Object.keys(providerRegistryMock)) {
+      delete providerRegistryMock[key];
+    }
+    delete process.env.MC_E2E_PRIMARY_KEY;
+    delete process.env.MC_E2E_SECONDARY_KEY;
+    delete process.env.MASTRA_GATEWAY_API_KEY;
   });
 
-  it('enables dynamic provider registry loading before bootstrapping auth and models', async () => {
+  it('registers the MastraCode gateway and app-provided model hooks on Harness', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const subagent = { id: 'review', name: 'Review', instructions: 'Review changes' };
+
+    await createMastraCode({ subagents: [subagent as any] });
+
+    expect(createMastraCodeGatewayMock).toHaveBeenCalledWith({
+      mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
+      mastraGatewayApiKey: undefined,
+      routeThroughMastraGateway: false,
+      settingsPath: undefined,
+    });
+
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | {
+          gateways?: unknown[];
+          resolveModel?: unknown;
+          modelAuthChecker?: unknown;
+          customModelCatalogProvider?: unknown;
+          subagents?: unknown[];
+        }
+      | undefined;
+    expect(harnessConfig?.gateways).toEqual([mastraCodeGatewayMock]);
+    expect(harnessConfig?.subagents).toEqual([subagent]);
+    expect(harnessConfig?.resolveModel).toBe(resolveModelMock);
+    expect(createMastraCodeModelCatalogProviderMock).toHaveBeenCalledWith(mastraCodeGatewayMock);
+    expect(harnessConfig?.modelAuthChecker).toBeUndefined();
+    expect(harnessConfig?.customModelCatalogProvider).toBe(mastraCodeCatalogProviderMock);
+  }, 10_000);
+
+  it('uses configured memory gateway settings when creating the MastraCode gateway', async () => {
+    const settings = createMockSettings();
+    settings.memoryGateway = { baseUrl: 'https://gateway.example.com/v1' };
+    loadSettingsMock.mockReturnValue(settings);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ settingsPath: '/tmp/settings.json' });
+
+    expect(createMastraCodeGatewayMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mastraGatewayBaseUrl: 'https://gateway.example.com',
+        settingsPath: '/tmp/settings.json',
+      }),
+    );
+  });
+
+  it('treats registry providers with any configured API-key env var as startup provider access', async () => {
+    providerRegistryMock['multi-env-provider'] = {
+      apiKeyEnvVar: ['MC_E2E_PRIMARY_KEY', 'MC_E2E_SECONDARY_KEY'],
+    };
+    process.env.MC_E2E_SECONDARY_KEY = 'configured';
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
-    expect(gatewayRegistryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
-  }, 10_000);
-
-  it('starts gateway sync in the background after loading stored API keys', async () => {
-    let resolveSync: (() => void) | undefined;
-    gatewayRegistrySyncGateways.mockReturnValue(
-      new Promise<void>(resolve => {
-        resolveSync = resolve;
-      }),
-    );
-    const { createMastraCode } = await import('../index.js');
-
-    await expect(createMastraCode()).resolves.toBeTruthy();
-
-    expect(gatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
-    resolveSync?.();
+    expect(getAvailableModePacksMock).toHaveBeenCalledWith(expect.objectContaining({ 'multi-env-provider': 'apikey' }));
+    expect(getAvailableOmPacksMock).toHaveBeenCalledWith(expect.objectContaining({ 'multi-env-provider': 'apikey' }));
   });
 
   it('always configures dynamic local memory at startup', async () => {
@@ -331,6 +413,73 @@ describe('createMastraCode', () => {
     expect(harnessConstructorMock).toHaveBeenCalled();
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof harnessConfig?.memory).toBe('function');
+  });
+
+  it('uses caller memory while applying configDir to startup services and state', async () => {
+    const projectPath = '/tmp/mastracode-project';
+    const customMemory = { id: 'custom-memory' };
+    detectProjectMock.mockReturnValue({
+      mode: 'none',
+      rootPath: projectPath,
+      resourceId: 'project-resource',
+      packageManager: 'pnpm',
+      hasGit: false,
+      contextFiles: [],
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({
+      cwd: projectPath,
+      configDir: '.acme-code',
+      memory: customMemory as any,
+      initialState: { configDir: '.wrong-code' },
+    });
+
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { memory?: unknown; initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessConfig?.memory).toBe(customMemory);
+    expect(harnessConfig?.initialState?.configDir).toBe('.acme-code');
+    expect(getDynamicMemoryMock).not.toHaveBeenCalled();
+    expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
+  });
+
+  it('passes custom workspace config through to Harness without using the default factory', async () => {
+    const customWorkspace = { id: 'custom-workspace' };
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ workspace: customWorkspace as any });
+
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
+    expect(harnessConfig?.workspace).toBe(customWorkspace);
+    expect(getDynamicWorkspaceMock).not.toHaveBeenCalled();
+  });
+
+  it('uses a workspace factory when no custom workspace is configured', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
+    expect(typeof harnessConfig?.workspace).toBe('function');
+    expect(harnessConfig?.workspace).not.toEqual({ id: 'custom-workspace' });
+  });
+
+  it('registers the TaskSignalProvider on the code agent so task tools persist via state signals', async () => {
+    const { TaskSignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
+      .find(config => config?.id === 'code-agent');
+
+    expect(codeAgentConfig).toBeDefined();
+    expect(codeAgentConfig?.signals?.some(provider => provider instanceof TaskSignalProvider)).toBe(true);
   });
 
   it('uses the configured default mode when constructing Harness', async () => {
@@ -383,6 +532,62 @@ describe('createMastraCode', () => {
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(harnessConfig?.initialState?.projectPath).toBe(projectPath);
+  });
+
+  it('uses configured configDir consistently for startup services and runtime state', async () => {
+    const projectPath = '/tmp/mastracode-project';
+    detectProjectMock.mockReturnValue({
+      mode: 'none',
+      rootPath: projectPath,
+      resourceId: 'project-resource',
+      packageManager: 'pnpm',
+      hasGit: false,
+      contextFiles: [],
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({
+      cwd: projectPath,
+      configDir: '.acme-code',
+      initialState: { configDir: '.wrong-code' },
+    });
+
+    expect(getResourceIdOverrideMock).toHaveBeenCalledWith(projectPath, '.acme-code');
+    expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessConfig?.initialState?.configDir).toBe('.acme-code');
+  });
+
+  it('passes programmatic MCP servers into the startup manager with project and configDir', async () => {
+    const projectPath = '/tmp/mastracode-project';
+    const cwd = `${projectPath}/packages/app`;
+    const mcpServers = {
+      remoteDocs: {
+        url: 'https://mcp.example.com/sse',
+        headers: { Authorization: 'Bearer token' },
+      },
+      localFs: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', projectPath],
+      },
+    };
+    detectProjectMock.mockReturnValue({
+      mode: 'none',
+      rootPath: projectPath,
+      resourceId: 'project-resource',
+      packageManager: 'pnpm',
+      hasGit: false,
+      contextFiles: [],
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ cwd, configDir: '.acme-code', mcpServers });
+
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', mcpServers);
   });
 
   it('rejects cross-process PubSub mode without a PubSub instance', async () => {
@@ -482,7 +687,7 @@ describe('createMastraCode', () => {
     expect(harnessSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
-  it('enables OpenAI Responses stream error retries by default', async () => {
+  it('runs stream error retries before provider-specific error recovery processors', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -491,7 +696,11 @@ describe('createMastraCode', () => {
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
       | { errorProcessors?: Array<{ id?: string }> }
       | undefined;
-    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('stream-error-retry-processor');
+    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
+      'stream-error-retry-processor',
+      'prefill-error-handler',
+      'provider-history-compat',
+    ]);
   });
 
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
