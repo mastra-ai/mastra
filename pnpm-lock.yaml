@@ -47,6 +47,7 @@ overrides:
   better-auth: ^1.4.18
   js-yaml: ^3.14.2
   glob@<=10.5.0: 10.5.0
+  '@mastra/memory>image-size': 1.2.1
   body-parser@<=2.2.1: 2.2.2
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.7.1
@@ -4474,8 +4475,8 @@ importers:
         specifier: ^8.0.3
         version: 8.0.3
       image-size:
-        specifier: ^2.0.2
-        version: 2.0.2
+        specifier: 1.2.1
+        version: 1.2.1
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
@@ -21931,6 +21932,11 @@ packages:
     resolution: {integrity: sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg==}
     engines: {node: '>= 4'}
 
+  image-size@1.2.1:
+    resolution: {integrity: sha512-rH+46sQJ2dlwfjfhCyNx5thzrv+dtmBIhPHk0zgRUukHzZ/kRueTJXoYYsclBaKcSMBWuGbOFXtioLpzTb5euw==}
+    engines: {node: '>=16.x'}
+    hasBin: true
+
   image-size@2.0.2:
     resolution: {integrity: sha512-IRqXKlaXwgSMAMtpNzZa1ZAe8m+Sa1770Dhk8VkSsP9LS+iHD62Zd8FQKs8fbPiagBE7BzoFX23cxFnwshpV6w==}
     engines: {node: '>=16.x'}
@@ -25384,6 +25390,9 @@ packages:
 
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
+
+  queue@6.0.2:
+    resolution: {integrity: sha512-iHZWu+q3IdFZFX36ro/lKBkSvfkztY5Y7HMiPlOUjhupPcG2JMfst2KKEpu5XndviX/3UhFbRngUPNKtgvtZiA==}
 
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
@@ -45357,6 +45366,10 @@ snapshots:
 
   ignore@7.0.5: {}
 
+  image-size@1.2.1:
+    dependencies:
+      queue: 6.0.2
+
   image-size@2.0.2: {}
 
   immediate@3.0.6: {}
@@ -49519,6 +49532,10 @@ snapshots:
   querystringify@2.2.0: {}
 
   queue-microtask@1.2.3: {}
+
+  queue@6.0.2:
+    dependencies:
+      inherits: 2.0.4
 
   quick-format-unescaped@4.0.4: {}
 
