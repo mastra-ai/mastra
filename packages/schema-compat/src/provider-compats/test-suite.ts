@@ -144,6 +144,47 @@ export function createSuite(layer: SchemaCompatLayer) {
     });
   });
 
+  describe('Null Coercion', () => {
+    it('should convert null to undefined for optional fields', () => {
+      const schema = z.object({
+        name: z.string(),
+        age: z.number().optional(),
+      });
+
+      const processed = layer.processToCompatSchema(schema);
+
+      const result = processed['~standard'].validate({ name: 'John', age: null }) as SuccessResult;
+      expect(result.issues).toBeUndefined();
+      expect(result.value).toEqual({ name: 'John', age: undefined });
+    });
+
+    it('should apply default value when null is received for default fields', () => {
+      const schema = z.object({
+        name: z.string(),
+        confidence: z.number().default(1),
+      });
+
+      const processed = layer.processToCompatSchema(schema);
+
+      const result = processed['~standard'].validate({ name: 'John', confidence: null }) as SuccessResult;
+      expect(result.issues).toBeUndefined();
+      expect(result.value).toEqual({ name: 'John', confidence: 1 });
+    });
+
+    it('should preserve null for explicitly nullable fields', () => {
+      const schema = z.object({
+        name: z.string(),
+        deletedAt: z.string().nullable(),
+      });
+
+      const processed = layer.processToCompatSchema(schema);
+
+      const result = processed['~standard'].validate({ name: 'John', deletedAt: null }) as SuccessResult;
+      expect(result.issues).toBeUndefined();
+      expect(result.value).toEqual({ name: 'John', deletedAt: null });
+    });
+  });
+
   describe('shouldApply', () => {
     it('should apply for OpenAI models without structured outputs', () => {
       expect(layer.shouldApply()).toBe(true);

@@ -49,7 +49,7 @@ export class MetaSchemaCompatLayer extends SchemaCompatLayer {
 
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4) {
     const compat = this.processToCompatSchema(zodSchema);
-    const transformedJsonSchema = standardSchemaToJSONSchema(compat);
+    const transformedJsonSchema = standardSchemaToJSONSchema(compat, { io: 'input' });
 
     return jsonSchema(transformedJsonSchema, {
       validate: (value: unknown) => {
@@ -133,9 +133,14 @@ export class MetaSchemaCompatLayer extends SchemaCompatLayer {
     }
 
     const obj = value as Record<string, unknown>;
+    const required = (resolved.required ?? []) as string[];
     for (const key in obj) {
       if (properties[key]) {
-        obj[key] = this.#traverse(obj[key], properties[key]);
+        if (obj[key] === null && !required.includes(key)) {
+          obj[key] = undefined;
+        } else {
+          obj[key] = this.#traverse(obj[key], properties[key]);
+        }
       }
     }
 

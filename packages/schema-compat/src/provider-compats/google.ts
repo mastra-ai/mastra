@@ -244,7 +244,7 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
 
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4): Schema {
     const compat = this.processToCompatSchema(zodSchema);
-    const transformedJsonSchema = standardSchemaToJSONSchema(compat);
+    const transformedJsonSchema = standardSchemaToJSONSchema(compat, { io: 'input' });
     const fixedJsonSchema = fixAISDKNullableUnionTypes(transformedJsonSchema as Record<string, any>) as JSONSchema7;
 
     return jsonSchema(fixedJsonSchema, {
@@ -395,9 +395,14 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
     }
 
     const obj = value as Record<string, unknown>;
+    const required = (resolved.required ?? []) as string[];
     for (const key in obj) {
       if (properties[key]) {
-        obj[key] = this.#traverse(obj[key], properties[key]);
+        if (obj[key] === null && !required.includes(key)) {
+          obj[key] = undefined;
+        } else {
+          obj[key] = this.#traverse(obj[key], properties[key]);
+        }
       }
     }
 
