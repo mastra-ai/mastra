@@ -8,7 +8,11 @@ import StepItem from "@site/src/components/StepItem";
 
 # GitHub integration on Mastra platform
 
-The GitHub integration links a Mastra platform project to a GitHub repository so that pushes to a branch deploy Studio and Server automatically. Use it when you want push-to-deploy instead of running `mastra studio deploy` or `mastra server deploy` from your terminal or CI.
+The GitHub integration links a Mastra platform project to a GitHub repository. When you push changes to your repository Studio and Server will automatically be deployed.
+
+:::note
+The integration only works with repositories hosted on GitHub.com. Self-hosted GitHub Enterprise instances are not currently supported.
+:::
 
 After a repository is linked, the platform:
 
