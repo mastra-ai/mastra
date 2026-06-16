@@ -39,7 +39,20 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
   }
 
   try {
-    return await agent.generate(prompt, options);
+    const result = await agent.generate(prompt, options);
+    // Some models resolve without throwing but produce no parseable structured
+    // object (empty/malformed JSON). Treat that the same as a thrown error so the
+    // caller still gets the json-prompt-injection retry instead of a downstream
+    // crash when it reads `result.object`. Mirrors tryStreamWithJsonFallback.
+    if (!result.object) {
+      throw new MastraError({
+        id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'structuredOutput object is undefined',
+      });
+    }
+    return result;
   } catch (error) {
     console.warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
     return await agent.generate(prompt, {
