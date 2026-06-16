@@ -8,8 +8,12 @@ Add a lease API to `PubSub` (`acquireLease` / `releaseLease` / `renewLease` / `g
 When multiple processes (e.g. serverless Lambdas) race to wake the same agent thread, they now first try to acquire a lease in the shared pubsub. The winner runs the agent stream and returns the `ownerStream` so the caller can `consumeStream()` it in-process. Losers publish a `signal-enqueued` event so the winner picks up their message, and resolve `ownerStream` to `undefined`.
 
 ```ts
-const { ownerStream } = await agent.sendSignal(signal);
-ctx.waitUntil(ownerStream?.then(stream => stream?.consumeStream()) ?? Promise.resolve());
+const result = await agent.sendSignal(signal);
+ctx.waitUntil(
+  result.ownerStream?.then(async stream => {
+    if (stream) await stream.consumeStream();
+  }) ?? Promise.resolve(),
+);
 ```
 
 The default `PubSub` implementation (single process) trivially acquires the lease. `EventEmitterPubSub` uses an in-memory `Map` with TTL. `RedisStreamsPubSub` uses `SET NX PX` plus a Lua compare-and-delete release, which is the standard distributed-lock pattern (atomic claim, crash-safe TTL, owner-verified release).

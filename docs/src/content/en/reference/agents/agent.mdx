@@ -431,8 +431,12 @@ Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?
 In serverless handlers, pass `ownerStream` to your platform's `waitUntil` equivalent so the winning process can drain the stream after the HTTP response returns.
 
 ```typescript
-const { ownerStream } = await agent.sendSignal(signal);
-ctx.waitUntil(ownerStream?.then(stream => stream?.consumeStream()) ?? Promise.resolve());
+const result = await agent.sendSignal(signal);
+ctx.waitUntil(
+  result.ownerStream?.then(async stream => {
+    if (stream) await stream.consumeStream();
+  }) ?? Promise.resolve(),
+);
 ```
 
 ### `sendStateSignal(state, options)`

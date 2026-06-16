@@ -181,7 +181,11 @@ export class AgentThreadStreamRuntime {
       void pubsub
         .renewLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
         .then(renewed => {
-          if (!renewed) this.#stopLeaseRenewal(pubsub, runId);
+          if (!renewed) {
+            // If renewLease reports the lease is gone, stop renewing; the current stream may still finish,
+            // but another process can now claim the thread until this run completes or errors.
+            this.#stopLeaseRenewal(pubsub, runId);
+          }
         })
         .catch(() => {});
     }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
