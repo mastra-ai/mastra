@@ -2587,10 +2587,12 @@ export interface DatasetItemSource {
 export interface DatasetItemToolMock {
   /** Name of the tool this mock applies to. */
   toolName: string;
-  /** Arguments to strict-match against the tool call (deep equality, no coercion). */
+  /** Arguments to match against the tool call (deep equality when matchArgs is 'strict'). */
   args: Record<string, unknown>;
   /** Output served to the agent when this mock is matched and consumed. */
   output: unknown;
+  /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only. */
+  matchArgs?: 'strict' | 'ignore';
 }
 
 /** Diagnostic receipt for item-level tool mocks, returned on experiment results. */

@@ -107,4 +107,36 @@ describe('ToolMockMatcher', () => {
     matcher.resolve('t', { a: 1 }); // would serve, but failure already recorded
     expect(matcher.report().failure).toEqual({ code: TOOL_MOCK_MISMATCH, toolName: 't', args: { a: 99 } });
   });
+
+  it("matchArgs 'ignore' serves regardless of the call args", () => {
+    const matcher = new ToolMockMatcher([
+      { toolName: 'agent-balanceAgent', args: { prompt: 'authored at record time' }, output: { text: 'YJ: $100' }, matchArgs: 'ignore' },
+    ]);
+    // Different prompt + runtime-injected fields → still serves.
+    const res = matcher.resolve('agent-balanceAgent', { prompt: 'totally different', threadId: 'x', maxSteps: 5 });
+    expect(res).toEqual({ kind: 'serve', output: { text: 'YJ: $100' } });
+    expect(matcher.report().failure).toBeUndefined();
+  });
+
+  it("matchArgs 'ignore' still consumes in declared order and reports EXHAUSTED when overcalled", () => {
+    const matcher = new ToolMockMatcher([
+      { toolName: 'sub', args: {}, output: 'first', matchArgs: 'ignore' },
+      { toolName: 'sub', args: {}, output: 'second', matchArgs: 'ignore' },
+    ]);
+    expect(matcher.resolve('sub', { a: 1 })).toEqual({ kind: 'serve', output: 'first' });
+    expect(matcher.resolve('sub', { b: 2 })).toEqual({ kind: 'serve', output: 'second' });
+    expect(matcher.resolve('sub', { c: 3 })).toEqual({ kind: 'fail', code: TOOL_MOCK_EXHAUSTED });
+  });
+
+  it("mixes 'ignore' and 'strict' mocks for the same tool", () => {
+    // strict entry first; an ignore entry as a catch-all fallback.
+    const matcher = new ToolMockMatcher([
+      { toolName: 't', args: { city: 'Seattle' }, output: 'strict-hit' },
+      { toolName: 't', args: {}, output: 'ignore-fallback', matchArgs: 'ignore' },
+    ]);
+    // Exact args → strict entry consumed first.
+    expect(matcher.resolve('t', { city: 'Seattle' })).toEqual({ kind: 'serve', output: 'strict-hit' });
+    // Different args → strict no longer matches, ignore fallback serves.
+    expect(matcher.resolve('t', { city: 'Paris' })).toEqual({ kind: 'serve', output: 'ignore-fallback' });
+  });
 });

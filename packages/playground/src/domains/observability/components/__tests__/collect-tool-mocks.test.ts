@@ -31,7 +31,7 @@ describe('collectToolMocks', () => {
     ]);
   });
 
-  it('walks nested children depth-first to preserve recorded call order', () => {
+  it('walks non-tool container children depth-first to preserve recorded call order', () => {
     const steps: ToolCallTrajectoryStep[] = [
       { name: 'first', stepType: 'tool_call', toolArgs: {}, toolResult: 1 },
       {
@@ -45,6 +45,40 @@ describe('collectToolMocks', () => {
     ];
 
     expect(collectToolMocks(steps).map(m => m.toolName)).toEqual(['first', 'nested', 'leaf']);
+  });
+
+  it('collects the sub-agent delegation call but not its internal tool calls', () => {
+    const steps: ToolCallTrajectoryStep[] = [
+      {
+        name: "tool: 'agent-balanceAgent'",
+        stepType: 'tool_call',
+        toolArgs: { prompt: 'look up YJ balance' },
+        toolResult: { text: 'The account balance for YJ is 100.' },
+        children: [
+          // The sub-agent's own internal tool call — must be skipped, it never
+          // reaches the parent agent's tool-mock matcher.
+          { name: "tool: 'lookupBalance'", stepType: 'tool_call', toolArgs: { user: 'YJ' }, toolResult: { balance: 100 } },
+        ],
+      },
+    ];
+
+    expect(collectToolMocks(steps)).toEqual([
+      {
+        toolName: 'agent-balanceAgent',
+        args: { prompt: 'look up YJ balance' },
+        output: { text: 'The account balance for YJ is 100.' },
+        matchArgs: 'ignore',
+      },
+    ]);
+  });
+
+  it('does not set matchArgs for ordinary (non-sub-agent) tool calls', () => {
+    const steps: ToolCallTrajectoryStep[] = [
+      { name: "tool: 'getWeather'", stepType: 'tool_call', toolArgs: { city: 'Seattle' }, toolResult: { temp: 52 } },
+    ];
+    const [mock] = collectToolMocks(steps);
+    expect(mock).toEqual({ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } });
+    expect('matchArgs' in mock).toBe(false);
   });
 
   it('ignores non-tool steps and defaults missing args to an empty object', () => {

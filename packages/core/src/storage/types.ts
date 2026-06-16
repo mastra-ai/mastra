@@ -2409,6 +2409,8 @@ export interface DatasetItemToolMock {
   toolName: string;
   args: Record<string, unknown>;
   output: unknown;
+  /** Argument matching mode. `strict` (default) deep-equals args; `ignore` matches on toolName only. */
+  matchArgs?: 'strict' | 'ignore';
 }
 
 /**

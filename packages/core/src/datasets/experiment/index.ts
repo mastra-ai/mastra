@@ -42,6 +42,7 @@ export {
   TOOL_MOCK_MISMATCH,
   TOOL_MOCK_EXHAUSTED,
   type ItemToolMock,
+  type ToolMockMatchArgs,
   type ToolMockReport,
   type ToolMockResolution,
   type ToolMockFailureCode,

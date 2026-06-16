@@ -7,17 +7,28 @@ import { deepEqual } from '../../utils';
  * executing the real tool. Error mocks are intentionally not supported in v1
  * (the agent `beforeToolCall` hook can only short-circuit with an output).
  */
+/**
+ * How a mock's `args` are matched against the agent's tool call.
+ * - `strict` (default): deep-equality on `args` (key order ignored, array order
+ *   significant, no coercion).
+ * - `ignore`: match on `toolName` only; `args` are not compared. Useful for
+ *   tools whose arguments are noisy or LLM-authored — notably sub-agent
+ *   delegation calls (`agent-*`), whose `prompt` is free text.
+ */
+export type ToolMockMatchArgs = 'strict' | 'ignore';
+
 export interface ItemToolMock {
   /** Name of the tool this mock applies to. */
   toolName: string;
   /**
-   * Arguments to strict-match against the agent's tool call.
-   * Compared with deep equality: object key order ignored, array order
-   * significant, no type coercion.
+   * Arguments to match against the agent's tool call. Compared with deep
+   * equality when `matchArgs` is `strict`; ignored when `matchArgs` is `ignore`.
    */
   args: Record<string, unknown>;
   /** Output served to the agent when this mock is matched and consumed. */
   output: unknown;
+  /** Argument matching mode for this mock. Defaults to `strict`. */
+  matchArgs?: ToolMockMatchArgs;
 }
 
 /** Deterministic failure codes surfaced via `ExecutionResult.error.code`. */
@@ -49,6 +60,7 @@ interface MockEntry {
   toolName: string;
   args: Record<string, unknown>;
   output: unknown;
+  matchArgs: ToolMockMatchArgs;
   consumed: boolean;
 }
 
@@ -71,6 +83,7 @@ export class ToolMockMatcher {
       toolName: mock.toolName,
       args: mock.args,
       output: mock.output,
+      matchArgs: mock.matchArgs ?? 'strict',
       consumed: false,
     }));
   }
@@ -83,8 +96,9 @@ export class ToolMockMatcher {
   /**
    * Resolve a single tool call:
    * - no mock for this tool → `live`
-   * - unconsumed mock with matching args → `serve`
-   * - tool is mocked but args don't match an unconsumed entry → `fail`
+   * - unconsumed mock whose args match (deep-equal for `strict`, always for
+   *   `ignore`) → `serve`
+   * - tool is mocked but no unconsumed entry matches → `fail`
    *   (`TOOL_MOCK_EXHAUSTED` if args matched but all consumed, else `TOOL_MOCK_MISMATCH`)
    */
   resolve(toolName: string, args: unknown): ToolMockResolution {
@@ -95,14 +109,16 @@ export class ToolMockMatcher {
       return { kind: 'live' };
     }
 
-    const next = candidates.find(entry => !entry.consumed && deepEqual(entry.args, args));
+    const argsMatch = (entry: MockEntry): boolean => entry.matchArgs === 'ignore' || deepEqual(entry.args, args);
+
+    const next = candidates.find(entry => !entry.consumed && argsMatch(entry));
     if (next) {
       next.consumed = true;
       this.#served.push({ mockIndex: next.mockIndex, toolName, args });
       return { kind: 'serve', output: next.output };
     }
 
-    const argsMatchedButConsumed = candidates.some(entry => deepEqual(entry.args, args));
+    const argsMatchedButConsumed = candidates.some(entry => argsMatch(entry));
     const code: ToolMockFailureCode = argsMatchedButConsumed ? TOOL_MOCK_EXHAUSTED : TOOL_MOCK_MISMATCH;
     // Record only the first failure — the item fails on it and stops.
     this.#failure ??= { code, toolName, args };

@@ -85336,12 +85336,14 @@ export type GetDatasetsDatasetIdItems_Response = {
       | {
           /** Name of the tool this mock applies to */
           toolName: string;
-          /** Arguments to strict-match against the tool call */
+          /** Arguments to match against the tool call */
           args: {
             [key: string]: unknown;
           };
           /** Output served to the agent when matched */
           output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
         }[]
       | undefined;
     requestContext?:
@@ -85661,12 +85663,14 @@ export type PostDatasetsDatasetIdItems_Body = {
     | {
         /** Name of the tool this mock applies to */
         toolName: string;
-        /** Arguments to strict-match against the tool call */
+        /** Arguments to match against the tool call */
         args: {
           [key: string]: unknown;
         };
         /** Output served to the agent when matched */
         output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
       }[]
     | undefined;
   /** Request context preset for this item */
@@ -85704,12 +85708,14 @@ export type PostDatasetsDatasetIdItems_Response = {
     | {
         /** Name of the tool this mock applies to */
         toolName: string;
-        /** Arguments to strict-match against the tool call */
+        /** Arguments to match against the tool call */
         args: {
           [key: string]: unknown;
         };
         /** Output served to the agent when matched */
         output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
       }[]
     | undefined;
   requestContext?:
@@ -86021,12 +86027,14 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
       | {
           /** Name of the tool this mock applies to */
           toolName: string;
-          /** Arguments to strict-match against the tool call */
+          /** Arguments to match against the tool call */
           args: {
             [key: string]: unknown;
           };
           /** Output served to the agent when matched */
           output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
         }[]
       | undefined;
     requestContext?:
@@ -86064,12 +86072,14 @@ export type PostDatasetsDatasetIdItemsBatch_Response = {
       | {
           /** Name of the tool this mock applies to */
           toolName: string;
-          /** Arguments to strict-match against the tool call */
+          /** Arguments to match against the tool call */
           args: {
             [key: string]: unknown;
           };
           /** Output served to the agent when matched */
           output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
         }[]
       | undefined;
     requestContext?:
@@ -86178,12 +86188,14 @@ export type GetDatasetsDatasetIdItemsItemId_Response = {
     | {
         /** Name of the tool this mock applies to */
         toolName: string;
-        /** Arguments to strict-match against the tool call */
+        /** Arguments to match against the tool call */
         args: {
           [key: string]: unknown;
         };
         /** Output served to the agent when matched */
         output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
       }[]
     | undefined;
   requestContext?:
@@ -86496,12 +86508,14 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
     | {
         /** Name of the tool this mock applies to */
         toolName: string;
-        /** Arguments to strict-match against the tool call */
+        /** Arguments to match against the tool call */
         args: {
           [key: string]: unknown;
         };
         /** Output served to the agent when matched */
         output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
       }[]
     | undefined;
   /** Request context preset for this item */
@@ -86539,12 +86553,14 @@ export type PatchDatasetsDatasetIdItemsItemId_Response = {
     | {
         /** Name of the tool this mock applies to */
         toolName: string;
-        /** Arguments to strict-match against the tool call */
+        /** Arguments to match against the tool call */
         args: {
           [key: string]: unknown;
         };
         /** Output served to the agent when matched */
         output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
       }[]
     | undefined;
   requestContext?:
@@ -86692,12 +86708,14 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
       | {
           /** Name of the tool this mock applies to */
           toolName: string;
-          /** Arguments to strict-match against the tool call */
+          /** Arguments to match against the tool call */
           args: {
             [key: string]: unknown;
           };
           /** Output served to the agent when matched */
           output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
         }[]
       | undefined;
     metadata?:
@@ -86753,12 +86771,14 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = {
     | {
         /** Name of the tool this mock applies to */
         toolName: string;
-        /** Arguments to strict-match against the tool call */
+        /** Arguments to match against the tool call */
         args: {
           [key: string]: unknown;
         };
         /** Output served to the agent when matched */
         output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
       }[]
     | undefined;
   requestContext?:

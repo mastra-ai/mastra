@@ -123,6 +123,7 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         const toolMocks = [
           { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } },
           { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 48 } },
+          { toolName: 'agent-balanceAgent', args: { prompt: 'lookup YJ' }, output: { text: 'YJ: $100' }, matchArgs: 'ignore' as const },
         ];
 
         const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' }, toolMocks });

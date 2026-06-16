@@ -183,8 +183,12 @@ const datasetItemSourceSchema = z
 // Item-level static tool mocks (agent targets only).
 const itemToolMockSchema = z.object({
   toolName: z.string().describe('Name of the tool this mock applies to'),
-  args: z.record(z.string(), z.unknown()).describe('Arguments to strict-match against the tool call'),
+  args: z.record(z.string(), z.unknown()).describe('Arguments to match against the tool call'),
   output: z.unknown().describe('Output served to the agent when matched'),
+  matchArgs: z
+    .enum(['strict', 'ignore'])
+    .optional()
+    .describe("Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only"),
 });
 
 const toolMocksSchema = z
