@@ -1,5 +1,36 @@
 # Mastra Code testing recovery history
 
+### Full zero-subprocess Vitest terminal audit (2026-06-16)
+
+Completed the zero-`mastracode`-subprocess port for the full checked-in `mc-e2e` corpus. All custom-entrypoint scenarios now expose in-process app factories through `inProcessApp`, and the prior soft subprocess markers were removed after their in-process gaps were resolved or restated to match the in-process behavior under test.
+
+Verification:
+
+```sh
+COREPACK_ENABLE_PROJECT_SPEC=1 pnpm run build:mastracode
+MC_E2E_VITEST_SCENARIOS=all COREPACK_ENABLE_PROJECT_SPEC=1 pnpm --filter ./mastracode exec vitest run --config scripts/mc-e2e/vitest.config.ts --reporter=dot
+COREPACK_ENABLE_PROJECT_SPEC=1 pnpm --filter ./mastracode check
+COREPACK_ENABLE_PROJECT_SPEC=1 pnpm --filter ./mastracode lint
+```
+
+Result: build passed, registry recount reports **120 total scenarios, 120 in-process, 0 entrypoint exclusions, 0 subprocess-marked scenarios**, and the full zero-subprocess Vitest terminal audit passed **120/120 scenarios** in **369.26s**. Check and lint passed after the port.
+
+Follow-up cleanup made the runner shippable for CI: static shard files now run the same all-in-process corpus in one Vitest command via `pnpm --filter ./mastracode run e2e:test:vitest`. After removing stale generated-entrypoint cruft, scoping global patches, adding package/docs wiring, restoring GitHub signal thread seeds, and cleaning process-level SIGINT handlers, the sharded runner passed **120/120 scenarios** in **96.06s**. `pnpm run build:mastracode`, `pnpm --filter ./mastracode check`, and `pnpm --filter ./mastracode lint` also passed.
+
+### Serial Vitest terminal backend audit (2026-06-15)
+
+Added a single-process Vitest wrapper for terminal-owned `mc-e2e` scenarios so the in-process terminal backend can run without worker threads, `tsx` worker IPC, or `@microsoft/tui-test` subprocesses. This keeps the same checked-in scenario definitions and AIMock verification, selects scenarios with `MC_E2E_VITEST_SCENARIOS`, and excludes scenarios marked `terminalBackend: 'subprocess'` or custom `entrypoint()` scenarios from the in-process set.
+
+Verification:
+
+```sh
+MC_E2E_VITEST_SCENARIOS=startup,automated-chat,modal-and-shell COREPACK_ENABLE_PROJECT_SPEC=1 pnpm --filter ./mastracode exec vitest run --config scripts/mc-e2e/vitest.config.ts --reporter=dot
+MC_E2E_VITEST_SCENARIOS=all COREPACK_ENABLE_PROJECT_SPEC=1 pnpm --filter ./mastracode exec vitest run --config scripts/mc-e2e/vitest.config.ts --reporter=dot
+COREPACK_ENABLE_PROJECT_SPEC=1 pnpm --filter ./mastracode run e2e:test custom-provider-modal-validation -- --backend terminal --jobs 1
+```
+
+Result: the focused 3-scenario slice passed in 7.03s, the first broader serial Vitest audit passed **83/83 terminal-owned scenarios** in **184.34s**, and the current zero-`mastracode`-subprocess set passes **89/89 in-process scenarios** in **194.13s** (`real 194.83`). The increase came from moving `autocomplete-wrapping-navigation` and `file-autocomplete` back into the in-process bucket and adding an `inProcessApp` factory contract, now proven by porting `harness-api-config`, `custom-config-dir`, `debug-logging`, and `mcp-server-config` off their custom subprocess entrypoints. `custom-provider-modal-validation` and `active-signal-followup` remain marked `terminalBackend: 'subprocess'` until their real in-process prompt/active-run gaps are fixed.
+
 ### Experimental terminal backend vertical slice (2026-06-15)
 
 Added an experimental `mc-e2e --backend terminal` path that runs the same checked-in scenario corpus without `@microsoft/tui-test` subprocesses. The backend injects a pi-tui `Terminal` into `MastraTUI`, implements that terminal with `@xterm/headless`, runs scenarios in worker threads, and preserves AIMock request verification. Scenario files now import a local lightweight `expect` wrapper so they can run both under tui-test and the standalone terminal workers.

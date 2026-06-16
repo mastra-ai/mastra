@@ -87,7 +87,7 @@ export const githubSignalsPollingInboxScenario = {
     mkdirSync(context.projectDir, { recursive: true });
 
     const settingsPath = join(context.appDataDir, 'settings.json');
-    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as { signals?: Record<string, unknown> };
     settings.signals = {
       ...settings.signals,
       experimentalGithubSignals: true,
@@ -138,63 +138,6 @@ values
   ('msg-github-polling-inbox-assistant', ${sqlString(threadFixture.threadId)}, ${sqlString(assistantContent)}, 'assistant', 'v2', ${sqlString(new Date(now.getTime() + 1000).toISOString())}, ${sqlString(threadFixture.resourceId)});
 `;
     execFileSync('sqlite3', [context.dbPath], { input: sql });
-
-    writeFileSync(
-      join(context.projectDir, '.mc-e2e-github-signals-polling-inbox-entrypoint.ts'),
-      `import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(context.mastracodeDir)};
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
-const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
-const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
-
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
-
-const result = await createMastraCode({
-  cwd: process.cwd(),
-  disableMcp: true,
-  disableHooks: true,
-  unixSocketPubSub: false,
-});
-
-const agent = result.harness.getMastra()?.getAgentById('code-agent');
-const originalSendNotificationSignal = agent?.sendNotificationSignal?.bind(agent);
-if (agent && originalSendNotificationSignal) {
-  agent.sendNotificationSignal = (notification, target) => {
-    const scopedTarget = target && typeof target === 'object'
-      ? { resourceId: target.resourceId, threadId: target.threadId }
-      : target;
-    return originalSendNotificationSignal(notification, scopedTarget);
-  };
-}
-
-const pollTimer = setTimeout(() => {
-  void result.githubSignals?.startPollingForThread(
-    { threadId: ${JSON.stringify(threadFixture.threadId)}, resourceId: ${JSON.stringify(threadFixture.resourceId)} },
-    { pollImmediately: true },
-  );
-}, 250);
-pollTimer.unref?.();
-
-const tui = new MastraTUI({
-  harness: result.harness,
-  hookManager: result.hookManager,
-  authStorage: result.authStorage,
-  mcpManager: result.mcpManager,
-  appName: 'Mastra Code',
-  version: getCurrentVersion(),
-  inlineQuestions: true,
-  githubSignals: result.githubSignals,
-});
-
-void tui.run().catch(error => {
-  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');
-  process.exit(1);
-});
-`,
-    );
   },
   env({ projectDir }) {
     const { dbPath, mockGitcrawlPath } = JSON.parse(
@@ -210,11 +153,44 @@ void tui.run().catch(error => {
     };
   },
   disableMemory: false,
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-github-signals-polling-inbox-entrypoint.ts');
+  async inProcessApp({ startMastraCodeApp }) {
+    const app = await startMastraCodeApp({
+      config: {
+        disableHooks: true,
+        disableMcp: true,
+        unixSocketPubSub: false,
+      },
+      onCreated: result => {
+        const agent = result.harness.getMastra()?.getAgentById('code-agent');
+        const originalSendNotificationSignal = agent?.sendNotificationSignal?.bind(agent);
+        if (!agent || !originalSendNotificationSignal) return;
+        type SendNotificationSignal = typeof agent.sendNotificationSignal;
+        const sendScopedNotificationSignal = ((notification: unknown, target: unknown) => {
+          const scopedTarget =
+            target && typeof target === 'object'
+              ? {
+                  resourceId: (target as { resourceId?: string }).resourceId,
+                  threadId: (target as { threadId?: string }).threadId,
+                }
+              : target;
+          return (originalSendNotificationSignal as (notification: unknown, target: unknown) => unknown)(notification, scopedTarget);
+        }) as SendNotificationSignal;
+        agent.sendNotificationSignal = sendScopedNotificationSignal;
+        const pollTimer = setTimeout(() => {
+          void result.githubSignals?.startPollingForThread(
+            { threadId: threadFixture.threadId, resourceId: threadFixture.resourceId },
+            { pollImmediately: true },
+          );
+        }, 250);
+        pollTimer.unref?.();
+      },
+    });
+    return app;
   },
   verifyAimockRequests(requests) {
-    const serialized = JSON.stringify(requests.map((request: any) => request.body));
+    const serialized = JSON.stringify(
+      requests.map(request => (typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined)),
+    );
     if (!serialized.includes('github-signals-polling-inbox')) {
       throw new Error('Expected the polling-delivered notification context to reach AIMock');
     }

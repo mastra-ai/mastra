@@ -12,7 +12,6 @@ export const autocompleteWrappingNavigationScenario = {
   name: 'autocomplete-wrapping-navigation',
   description: 'Wraps long custom slash descriptions while arrow navigation remains item-based.',
   testName: 'wraps long slash autocomplete descriptions and selects the next item with one Down arrow',
-  terminalBackend: 'subprocess',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
   aimockFixture: 'autocomplete-wrapping-navigation.json',

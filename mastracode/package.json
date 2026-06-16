@@ -55,6 +55,7 @@
     "lint": "eslint .",
     "e2e:list": "tsx scripts/mc-e2e.ts --list",
     "e2e:test": "tsx scripts/mc-e2e.ts --run --default-all",
+    "e2e:test:vitest": "vitest run --config scripts/mc-e2e/vitest.shards.config.ts",
     "e2e:observe": "tsx scripts/mc-e2e.ts --observe"
   },
   "keywords": [],

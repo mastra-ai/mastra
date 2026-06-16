@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { installOpenAIFetchCapture } from './openai-fetch-capture.js';
 import type { McE2eScenario } from './types.js';
 
 const PASTE_START = '\x1b[200~';
@@ -28,6 +29,10 @@ process.stdin.on('end', () => {
 `;
 }
 
+function getRequestBody(request: unknown): unknown {
+  return typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined;
+}
+
 export const fileAttachmentBlockedRetryScenario = {
   name: 'file-attachment-blocked-retry',
   description: 'Preserves a pasted image when a user prompt hook blocks the first submit and succeeds on retry.',
@@ -38,7 +43,7 @@ export const fileAttachmentBlockedRetryScenario = {
   env() {
     return { MASTRACODE_DISABLE_HOOKS: '0' };
   },
-  prepare({ appDataDir, mastracodeDir, projectDir }) {
+  prepare({ projectDir }) {
     rmSync(RAW_REQUEST_CAPTURE_PATH, { force: true });
 
     const hooksDir = join(projectDir, '.mastracode');
@@ -61,34 +66,16 @@ export const fileAttachmentBlockedRetryScenario = {
         2,
       ),
     );
-
-    const wrapperPath = join(appDataDir, 'file-attachment-blocked-retry-main.ts');
-    const mainPath = join(mastracodeDir, 'src/main.ts');
-    writeFileSync(
-      wrapperPath,
-      `import { writeFileSync } from 'node:fs';\n` +
-        `import { pathToFileURL } from 'node:url';\n` +
-        `const capturePath = ${JSON.stringify(RAW_REQUEST_CAPTURE_PATH)};\n` +
-        `const originalFetch = globalThis.fetch.bind(globalThis);\n` +
-        `globalThis.fetch = async (input, init) => {\n` +
-        `  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;\n` +
-        `  if (url.includes('/v1/responses') && init?.body) {\n` +
-        `    const body = init.body;\n` +
-        `    let bodyText;\n` +
-        `    let nextInit = init;\n` +
-        `    if (typeof body === 'string') bodyText = body;\n` +
-        `    else if (body instanceof Uint8Array) bodyText = new TextDecoder().decode(body);\n` +
-        `    else if (typeof body.text === 'function') { bodyText = await body.text(); nextInit = { ...init, body: bodyText }; }\n` +
-        `    if (bodyText) writeFileSync(capturePath, bodyText);\n` +
-        `    return originalFetch(input, nextInit);\n` +
-        `  }\n` +
-        `  return originalFetch(input, init);\n` +
-        `};\n` +
-        `await import(pathToFileURL(${JSON.stringify(mainPath)}).href);\n`,
-    );
   },
-  entrypoint({ appDataDir }) {
-    return join(appDataDir, 'file-attachment-blocked-retry-main.ts');
+  async inProcessApp({ startMastraCodeApp }) {
+    const restoreFetch = installOpenAIFetchCapture({ capturePath: RAW_REQUEST_CAPTURE_PATH });
+    const app = await startMastraCodeApp();
+    return {
+      stop: async () => {
+        await app.stop?.();
+        restoreFetch();
+      },
+    };
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
@@ -116,7 +103,7 @@ export const fileAttachmentBlockedRetryScenario = {
     if (requests.length !== 1) {
       throw new Error(`Expected one AIMock request after retry, received ${requests.length}`);
     }
-    const body = JSON.stringify((requests[0] as any).body);
+    const body = JSON.stringify(getRequestBody(requests[0]));
     if (!body.includes(promptText)) {
       throw new Error('Expected retried prompt text in AIMock request');
     }

@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { expect } from './expect.js';
 
-import type { McE2ePrepareContext, McE2eScenario } from './types.js';
+import type { McE2eScenario } from './types.js';
 
 const DEBUG_SENTINEL = 'MC_E2E_DEBUG_LOG_SENTINEL';
 export const debugLoggingScenario: McE2eScenario = {
@@ -16,56 +16,22 @@ export const debugLoggingScenario: McE2eScenario = {
       MC_E2E_DEBUG_LOG_PATH: join(appDataDir, 'debug.log'),
     };
   },
-  prepare({ mastracodeDir, projectDir }: McE2ePrepareContext) {
-    mkdirSync(projectDir, { recursive: true });
-    const entrypoint = join(projectDir, '.mc-e2e-debug-logging-entrypoint.ts');
-    const source = `import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { setupDebugLogging } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/debug-log.ts')).href);
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
-const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
-const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
-
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
-
-setupDebugLogging();
-console.warn(${JSON.stringify(DEBUG_SENTINEL)});
-
-const result = await createMastraCode({
-  cwd: process.cwd(),
-  disableMcp: true,
-  disableHooks: true,
-  unixSocketPubSub: false,
-  memory: false,
-});
-
-const tui = new MastraTUI({
-  harness: result.harness,
-  hookManager: result.hookManager,
-  authStorage: result.authStorage,
-  mcpManager: result.mcpManager,
-  appName: 'Mastra Code',
-  version: getCurrentVersion(),
-  inlineQuestions: true,
-});
-
-void tui.run().catch(error => {
-  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');
-  process.exit(1);
-});
-`;
-    writeFileSync(entrypoint, source, 'utf8');
-  },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-debug-logging-entrypoint.ts');
+  inProcessApp({ startMastraCodeApp }) {
+    return startMastraCodeApp({
+      config: {
+        disableHooks: true,
+        disableMcp: true,
+        memory: false,
+        unixSocketPubSub: false,
+      },
+      setupDebugLogging: true,
+      startupWarnings: [DEBUG_SENTINEL],
+    });
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
 
-    await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
+    await expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })).toBeVisible();
     const screen = terminal.serialize().view;
     expect(screen).not.toContain(DEBUG_SENTINEL);
 

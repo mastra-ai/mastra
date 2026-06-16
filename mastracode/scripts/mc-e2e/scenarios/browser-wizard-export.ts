@@ -1,19 +1,23 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { AgentBrowser } from '@mastra/agent-browser';
+import { createGlobalPatchScope } from './global-patches.js';
 import type { McE2eScenario } from './types.js';
 
 const cdpUrl = 'ws://127.0.0.1:65535/devtools/browser/browser-wizard-export-e2e';
 const exportPath = '/tmp/mastracode-browser-wizard-export-storage-state.json';
 
+type AgentBrowserExportStorageState = typeof AgentBrowser.prototype.exportStorageState;
+
 export const browserWizardExportScenario = {
   name: 'browser-wizard-export',
   description: 'Configures AgentBrowser through the interactive /browser wizard and exports storage state.',
   testName: 'saves browser wizard settings and exports AgentBrowser storage state',
-  prepare({ appDataDir, mastracodeDir, projectDir }) {
+  prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
-    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
     settings.onboarding = {
-      ...settings.onboarding,
+      ...((typeof settings.onboarding === 'object' && settings.onboarding !== null ? settings.onboarding : {}) as Record<string, unknown>),
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
@@ -28,26 +32,20 @@ export const browserWizardExportScenario = {
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
     rmSync(exportPath, { force: true });
-
-    mkdirSync(projectDir, { recursive: true });
-    writeFileSync(
-      join(projectDir, '.mc-e2e-browser-wizard-entrypoint.ts'),
-      `import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { AgentBrowser } = await import('@mastra/agent-browser');
-AgentBrowser.prototype.exportStorageState = async function exportStorageState(path) {
-  writeFileSync(path, JSON.stringify({ source: 'browser-wizard-export-e2e', provider: 'agent-browser' }, null, 2));
-};
-
-await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
-`,
-    );
   },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-browser-wizard-entrypoint.ts');
+  async inProcessApp({ startMastraCodeApp }) {
+    const patches = createGlobalPatchScope();
+    patches.setProperty(AgentBrowser.prototype, 'exportStorageState', async function exportStorageState(path: string) {
+      writeFileSync(path, JSON.stringify({ source: 'browser-wizard-export-e2e', provider: 'agent-browser' }, null, 2));
+    } satisfies AgentBrowserExportStorageState);
+
+    try {
+      const app = await startMastraCodeApp();
+      return { stop: () => patches.stopApp(app.stop) };
+    } catch (error) {
+      patches.restore();
+      throw error;
+    }
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);

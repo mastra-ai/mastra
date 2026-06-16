@@ -1,89 +1,65 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { expect } from './expect.js';
-import type { McE2eScenario } from './types.js';
+import type { McE2eInProcessApp, McE2eScenario } from './types.js';
 
-export const notificationInboxToolFlowScenario: McE2eScenario = {
+function getRequestBodies(requests: unknown[]): unknown[] {
+  return requests.map(request => (typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined));
+}
+
+export const notificationInboxToolFlowScenario = {
   name: 'notification-inbox-tool-flow',
   description: 'Summarize an active notification, then read it through the real notification_inbox tool.',
   testName: 'reads a summarized notification through notification_inbox and renders the delivered details',
   useOpenAIModel: true,
   aimockFixture: 'notification-inbox-tool-flow.json',
-  prepare({ mastracodeDir, projectDir }) {
-    mkdirSync(projectDir, { recursive: true });
-    writeFileSync(
-      join(projectDir, '.mc-e2e-notification-inbox-entrypoint.ts'),
-      `import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
-const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
-const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
-
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
-
-const result = await createMastraCode({
-  cwd: process.cwd(),
-  disableMcp: true,
-  disableHooks: true,
-  unixSocketPubSub: false,
-});
-
-let sent = false;
-const timer = setInterval(async () => {
-  try {
-    const threadId = result.harness.getCurrentThreadId();
-    if (sent || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
-    sent = true;
-    clearInterval(timer);
-    const agent = result.harness.getMastra()?.getAgentById('code-agent');
-    await agent?.sendNotificationSignal(
-      {
-        source: 'github',
-        kind: 'ci-status',
-        priority: 'medium',
-        summary: 'Notification inbox e2e detail: CI is queued for review',
-        dedupeKey: 'mc-e2e-notification-inbox-tool-flow',
+  async inProcessApp({ startMastraCodeApp }): Promise<McE2eInProcessApp> {
+    let sent = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const app = await startMastraCodeApp({
+      config: {
+        disableHooks: true,
+        disableMcp: true,
+        unixSocketPubSub: false,
       },
-      {
-        resourceId: result.harness.getResourceId(),
-        threadId,
-        ifIdle: { behavior: 'wake' },
+      onCreated: result => {
+        timer = setInterval(() => {
+          const threadId = result.harness.getCurrentThreadId();
+          if (sent || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
+          sent = true;
+          if (timer) clearInterval(timer);
+          const agent = result.harness.getMastra()?.getAgentById('code-agent');
+          void agent?.sendNotificationSignal(
+            {
+              source: 'github',
+              kind: 'ci-status',
+              priority: 'medium',
+              summary: 'Notification inbox e2e detail: CI is queued for review',
+              dedupeKey: 'mc-e2e-notification-inbox-tool-flow',
+            },
+            {
+              resourceId: result.harness.getResourceId(),
+              threadId,
+              ifIdle: { behavior: 'wake' },
+            },
+          );
+        }, 100);
+        timer.unref?.();
       },
-    );
-  } catch (error) {
-    process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');
-  }
-}, 100);
+    });
 
-timer.unref?.();
-
-const tui = new MastraTUI({
-  harness: result.harness,
-  hookManager: result.hookManager,
-  authStorage: result.authStorage,
-  mcpManager: result.mcpManager,
-  version: getCurrentVersion(),
-  inlineQuestions: true,
-});
-
-void tui.run().catch(error => {
-  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');
-  process.exit(1);
-});
-`,
-    );
-  },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-notification-inbox-entrypoint.ts');
+    return {
+      stop: async () => {
+        if (timer) clearInterval(timer);
+        await app.stop?.();
+      },
+    };
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
 
-    await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
+    await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as ReturnType<
+      typeof expect
+    >).toBeVisible();
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('Start notification inbox lifecycle host run.');
@@ -102,10 +78,10 @@ void tui.run().catch(error => {
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
-    const serialized = JSON.stringify(requests.map((request: any) => request.body));
+    const serialized = JSON.stringify(getRequestBodies(requests));
     expect(serialized).toContain('Start notification inbox lifecycle host run.');
     expect(serialized).toContain('Notification inbox e2e detail: CI is queued for review');
     expect(serialized).toContain('notification_inbox');
     expect(serialized).toContain('Read the pending notification from the inbox.');
   },
-};
+} satisfies McE2eScenario;

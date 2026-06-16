@@ -18,6 +18,12 @@ const prFixture = {
   checkName: 'E2E Tests / GitHub Signals incremental',
 };
 
+const threadFixture = {
+  resourceId: 'mc-e2e-github-incremental-resource',
+  threadId: 'thread-mc-e2e-github-incremental',
+  title: 'E2E GitHub incremental subscription fixture',
+};
+
 function sqlString(value: string) {
   return `'${value.replaceAll("'", "''")}'`;
 }
@@ -81,7 +87,7 @@ export const githubSignalsIncrementalScenario = {
     mkdirSync(context.projectDir, { recursive: true });
 
     const settingsPath = join(context.appDataDir, 'settings.json');
-    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as { signals?: Record<string, unknown> };
     settings.signals = {
       ...settings.signals,
       experimentalGithubSignals: true,
@@ -92,9 +98,6 @@ export const githubSignalsIncrementalScenario = {
     writeFileSync(join(context.projectDir, '.gitcrawl-incremental-e2e-env.json'), JSON.stringify({ dbPath, mockGitcrawlPath }));
 
     const now = new Date('2026-06-11T16:01:00.000Z');
-    const resourceId = 'mc-e2e-github-incremental-resource';
-    const threadId = 'thread-mc-e2e-github-incremental';
-    const title = 'E2E GitHub incremental subscription fixture';
     const metadata = {
       projectPath: context.projectDir,
       mastra: {
@@ -124,22 +127,17 @@ export const githubSignalsIncrementalScenario = {
     const userContent = JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'Seeded GitHub incremental thread.' }] });
     const assistantContent = JSON.stringify({
       format: 2,
-      parts: [{ type: 'text', text: 'Ready to sync the GitHub incremental fixture.' }],
+      parts: [{ type: 'text', text: 'Ready for GitHub incremental fixture.' }],
     });
     const sql = `
 insert into mastra_threads (id, resourceId, title, metadata, createdAt, updatedAt)
-values (${sqlString(threadId)}, ${sqlString(resourceId)}, ${sqlString(title)}, ${sqlString(JSON.stringify(metadata))}, ${sqlString(now.toISOString())}, ${sqlString(now.toISOString())});
+values (${sqlString(threadFixture.threadId)}, ${sqlString(threadFixture.resourceId)}, ${sqlString(threadFixture.title)}, ${sqlString(JSON.stringify(metadata))}, ${sqlString(now.toISOString())}, ${sqlString(now.toISOString())});
 insert into mastra_messages (id, thread_id, content, role, type, createdAt, resourceId)
 values
-  ('msg-github-incremental-user', ${sqlString(threadId)}, ${sqlString(userContent)}, 'user', 'v2', ${sqlString(now.toISOString())}, ${sqlString(resourceId)}),
-  ('msg-github-incremental-assistant', ${sqlString(threadId)}, ${sqlString(assistantContent)}, 'assistant', 'v2', ${sqlString(new Date(now.getTime() + 1000).toISOString())}, ${sqlString(resourceId)});
+  ('msg-github-incremental-user', ${sqlString(threadFixture.threadId)}, ${sqlString(userContent)}, 'user', 'v2', ${sqlString(now.toISOString())}, ${sqlString(threadFixture.resourceId)}),
+  ('msg-github-incremental-assistant', ${sqlString(threadFixture.threadId)}, ${sqlString(assistantContent)}, 'assistant', 'v2', ${sqlString(new Date(now.getTime() + 1000).toISOString())}, ${sqlString(threadFixture.resourceId)});
 `;
     execFileSync('sqlite3', [context.dbPath], { input: sql });
-
-    writeFileSync(
-      join(context.projectDir, '.mc-e2e-github-signals-incremental-entrypoint.ts'),
-      `import { join } from 'node:path';\nimport { pathToFileURL } from 'node:url';\n\nconst mastracodeDir = ${JSON.stringify(context.mastracodeDir)};\nconst { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);\nconst { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);\nconst { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);\n\nprocess.on('SIGINT', () => process.exit(0));\nprocess.on('SIGTERM', () => process.exit(0));\n\nconst result = await createMastraCode({\n  cwd: process.cwd(),\n  disableMcp: true,\n  disableHooks: true,\n  unixSocketPubSub: false,\n});\n\nconst tui = new MastraTUI({\n  harness: result.harness,\n  hookManager: result.hookManager,\n  authStorage: result.authStorage,\n  mcpManager: result.mcpManager,\n  appName: 'Mastra Code',\n  version: getCurrentVersion(),\n  inlineQuestions: true,\n  githubSignals: result.githubSignals,\n});\n\nvoid tui.run().catch(error => {\n  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');\n  process.exit(1);\n});\n`,
-    );
   },
   env({ projectDir }) {
     const { dbPath, mockGitcrawlPath } = JSON.parse(
@@ -153,8 +151,14 @@ values
       MASTRACODE_GITCRAWL_BIN: mockGitcrawlPath,
     };
   },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-github-signals-incremental-entrypoint.ts');
+  inProcessApp({ startMastraCodeApp }) {
+    return startMastraCodeApp({
+      config: {
+        disableHooks: true,
+        disableMcp: true,
+        unixSocketPubSub: false,
+      },
+    });
   },
   verifyAimockRequests(requests) {
     if (requests.length < 1) throw new Error(`Expected at least 1 AIMock request, received ${requests.length}`);

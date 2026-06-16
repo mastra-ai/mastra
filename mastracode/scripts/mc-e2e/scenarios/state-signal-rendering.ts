@@ -1,5 +1,3 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
@@ -9,83 +7,59 @@ export const stateSignalRenderingScenario: McE2eScenario = {
   description: 'Emit a real processor-style state signal into an active TUI thread and verify inline rendering.',
   testName: 'renders a live state signal emitted into the active TUI thread',
   useOpenAIModel: true,
+  disableMemory: false,
   aimockFixture: 'state-signal-rendering.json',
-  prepare({ mastracodeDir, projectDir }) {
-    mkdirSync(projectDir, { recursive: true });
-    writeFileSync(
-      join(projectDir, '.mc-e2e-state-signal-entrypoint.ts'),
-      `import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
-const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
-const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
-
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
-
-const result = await createMastraCode({
-  cwd: process.cwd(),
-  disableMcp: true,
-  disableHooks: true,
-  unixSocketPubSub: false,
-});
-
-let sent = false;
-const timer = setInterval(async () => {
-  try {
-    const threadId = result.harness.getCurrentThreadId();
-    if (sent || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
-    sent = true;
-    clearInterval(timer);
-    const agent = result.harness.getMastra()?.getAgentById('code-agent');
-    await agent?.sendStateSignal(
-      {
-        id: 'browser',
-        cacheKey: 'browser:e2e:v1',
-        mode: 'snapshot',
-        contents: 'Browser state e2e snapshot: https://example.test/state',
-        value: { activeUrl: 'https://example.test/state' },
+  async inProcessApp({ startMastraCodeApp }) {
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const app = await startMastraCodeApp({
+      config: {
+        disableHooks: true,
+        disableMcp: true,
+        unixSocketPubSub: false,
       },
-      {
-        resourceId: result.harness.getResourceId(),
-        threadId,
-        ifActive: { attributes: { source: 'mc-e2e' } },
-        ifIdle: { behavior: 'persist' },
+      onCreated(result) {
+        let sent = false;
+        timer = setInterval(async () => {
+          try {
+            const threadId = result.harness.getCurrentThreadId();
+            if (sent || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
+            sent = true;
+            if (timer) clearInterval(timer);
+            const agent = result.harness.getMastra()?.getAgentById('code-agent');
+            await agent?.sendStateSignal(
+              {
+                id: 'browser',
+                cacheKey: 'browser:e2e:v1',
+                mode: 'snapshot',
+                contents: 'Browser state e2e snapshot: https://example.test/state',
+                value: { activeUrl: 'https://example.test/state' },
+              },
+              {
+                resourceId: result.harness.getResourceId(),
+                threadId,
+                ifActive: { attributes: { source: 'mc-e2e' } },
+                ifIdle: { behavior: 'persist' },
+              },
+            );
+          } catch (error) {
+            process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\n');
+          }
+        }, 100);
+        timer.unref?.();
       },
-    );
-  } catch (error) {
-    process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');
-  }
-}, 100);
-
-timer.unref?.();
-
-const tui = new MastraTUI({
-  harness: result.harness,
-  hookManager: result.hookManager,
-  authStorage: result.authStorage,
-  mcpManager: result.mcpManager,
-  version: getCurrentVersion(),
-  inlineQuestions: true,
-});
-
-void tui.run().catch(error => {
-  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');
-  process.exit(1);
-});
-`,
-    );
-  },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-state-signal-entrypoint.ts');
+    });
+    return {
+      async stop() {
+        if (timer) clearInterval(timer);
+        await app.stop?.();
+      },
+    };
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
 
-    await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
+    await expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })).toBeVisible();
     terminal.keyCtrlC();
     await runtime.waitForScreenTextAbsent(/\[WorkspaceSkills\].*Expected string/i, terminal, 8_000);
     runtime.printScreen('after startup', terminal);
@@ -101,7 +75,9 @@ void tui.run().catch(error => {
     runtime.printScreen('after Ctrl-C', terminal);
   },
   verifyAimockRequests(requests) {
-    const serialized = JSON.stringify(requests.map((request: any) => request.body));
+    const serialized = JSON.stringify(
+      requests.map(request => (request && typeof request === 'object' && 'body' in request ? request.body : undefined)),
+    );
     expect(serialized).toContain('Start state signal host run.');
     expect(serialized).toContain('Browser state e2e snapshot: https://example.test/state');
   },

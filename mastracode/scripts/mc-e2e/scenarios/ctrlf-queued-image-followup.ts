@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { installOpenAIFetchCapture } from './openai-fetch-capture.js';
 import type { McE2eScenario } from './types.js';
 
 const PASTE_START = '\x1b[200~';
@@ -10,41 +11,28 @@ const START_PROMPT = 'Start a slow Ctrl F queue run.';
 const QUEUED_PROMPT = 'Queued Ctrl F image follow-up';
 const RAW_REQUEST_CAPTURE_PATH = join(process.cwd(), '.tmp-mc-e2e', 'ctrlf-queued-image-followup-openai-requests.jsonl');
 
+function getRequestBody(request: unknown): unknown {
+  return typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined;
+}
+
 export const ctrlfQueuedImageFollowupScenario = {
   name: 'ctrlf-queued-image-followup',
   description: 'Queues a pasted-image follow-up with Ctrl+F during an active run and drains it afterward.',
   testName: 'queues and drains a Ctrl+F pasted-image follow-up in the real TUI',
   useOpenAIModel: true,
   aimockFixture: 'ctrlf-queued-image-followup.json',
-  prepare({ appDataDir, mastracodeDir }) {
+  prepare() {
     rmSync(RAW_REQUEST_CAPTURE_PATH, { force: true });
-    const wrapperPath = join(appDataDir, 'ctrlf-queued-image-followup-main.ts');
-    const mainPath = join(mastracodeDir, 'src/main.ts');
-    writeFileSync(
-      wrapperPath,
-      `import { appendFileSync } from 'node:fs';\n` +
-        `import { pathToFileURL } from 'node:url';\n` +
-        `const capturePath = ${JSON.stringify(RAW_REQUEST_CAPTURE_PATH)};\n` +
-        `const originalFetch = globalThis.fetch.bind(globalThis);\n` +
-        `globalThis.fetch = async (input, init) => {\n` +
-        `  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;\n` +
-        `  if (url.includes('/v1/responses') && init?.body) {\n` +
-        `    const body = init.body;\n` +
-        `    let bodyText;\n` +
-        `    let nextInit = init;\n` +
-        `    if (typeof body === 'string') bodyText = body;\n` +
-        `    else if (body instanceof Uint8Array) bodyText = new TextDecoder().decode(body);\n` +
-        `    else if (typeof body.text === 'function') { bodyText = await body.text(); nextInit = { ...init, body: bodyText }; }\n` +
-        `    if (bodyText) appendFileSync(capturePath, JSON.stringify({ url, body: bodyText }) + '\\n');\n` +
-        `    return originalFetch(input, nextInit);\n` +
-        `  }\n` +
-        `  return originalFetch(input, init);\n` +
-        `};\n` +
-        `await import(pathToFileURL(${JSON.stringify(mainPath)}).href);\n`,
-    );
   },
-  entrypoint({ appDataDir }) {
-    return join(appDataDir, 'ctrlf-queued-image-followup-main.ts');
+  async inProcessApp({ startMastraCodeApp }) {
+    const restoreFetch = installOpenAIFetchCapture({ capturePath: RAW_REQUEST_CAPTURE_PATH, append: true });
+    const app = await startMastraCodeApp();
+    return {
+      stop: async () => {
+        await app.stop?.();
+        restoreFetch();
+      },
+    };
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
@@ -78,7 +66,7 @@ export const ctrlfQueuedImageFollowupScenario = {
       throw new Error(`Expected initial and queued AIMock requests, received ${requests.length}`);
     }
 
-    const bodies = JSON.stringify(requests.map((request: any) => request.body));
+    const bodies = JSON.stringify(requests.map(getRequestBody));
     if (!bodies.includes(START_PROMPT) || !bodies.includes(QUEUED_PROMPT)) {
       throw new Error(`Expected both initial and queued prompts in AIMock requests: ${bodies.slice(0, 2000)}`);
     }

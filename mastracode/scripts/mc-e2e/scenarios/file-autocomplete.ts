@@ -6,7 +6,6 @@ export const fileAutocompleteScenario = {
   name: 'file-autocomplete',
   description: 'shows and inserts @ file autocomplete suggestions from an isolated fixture project',
   testName: 'inserts a file reference from real TUI autocomplete',
-  terminalBackend: 'subprocess',
   projectFixture: 'long-branch',
   prepare({ projectDir }) {
     const srcDir = join(projectDir, 'src');

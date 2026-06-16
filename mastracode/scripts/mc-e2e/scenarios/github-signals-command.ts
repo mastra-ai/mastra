@@ -73,7 +73,7 @@ export const githubSignalsCommandScenario = {
     mkdirSync(context.projectDir, { recursive: true });
 
     const settingsPath = join(context.appDataDir, 'settings.json');
-    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as { signals?: Record<string, unknown> };
     settings.signals = {
       ...settings.signals,
       experimentalGithubSignals: true,
@@ -82,11 +82,6 @@ export const githubSignalsCommandScenario = {
 
     const { dbPath, mockGitcrawlPath } = prepareGitcrawlFixture(context);
     writeFileSync(join(context.projectDir, '.gitcrawl-e2e-env.json'), JSON.stringify({ dbPath, mockGitcrawlPath }));
-
-    writeFileSync(
-      join(context.projectDir, '.mc-e2e-github-signals-entrypoint.ts'),
-      `import { join } from 'node:path';\nimport { pathToFileURL } from 'node:url';\n\nconst mastracodeDir = ${JSON.stringify(context.mastracodeDir)};\nconst { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);\nconst { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);\nconst { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);\n\nprocess.on('SIGINT', () => process.exit(0));\nprocess.on('SIGTERM', () => process.exit(0));\n\nconst result = await createMastraCode({\n  cwd: process.cwd(),\n  disableMcp: true,\n  disableHooks: true,\n  unixSocketPubSub: false,\n});\n\nconst tui = new MastraTUI({\n  harness: result.harness,\n  hookManager: result.hookManager,\n  authStorage: result.authStorage,\n  mcpManager: result.mcpManager,\n  appName: 'Mastra Code',\n  version: getCurrentVersion(),\n  inlineQuestions: true,\n  githubSignals: result.githubSignals,\n});\n\nvoid tui.run().catch(error => {\n  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');\n  process.exit(1);\n});\n`,
-    );
   },
   env({ projectDir }) {
     const { dbPath, mockGitcrawlPath } = JSON.parse(
@@ -100,8 +95,14 @@ export const githubSignalsCommandScenario = {
       MASTRACODE_GITCRAWL_BIN: mockGitcrawlPath,
     };
   },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-github-signals-entrypoint.ts');
+  inProcessApp({ startMastraCodeApp }) {
+    return startMastraCodeApp({
+      config: {
+        disableHooks: true,
+        disableMcp: true,
+        unixSocketPubSub: false,
+      },
+    });
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) throw new Error(`Expected 2 AIMock requests, received ${requests.length}`);

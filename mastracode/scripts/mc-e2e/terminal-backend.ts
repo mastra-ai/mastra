@@ -3,8 +3,16 @@ import type { Terminal } from '@mariozechner/pi-tui';
 import type { Terminal as XtermTerminalType } from '@xterm/headless';
 import xterm from '@xterm/headless';
 
+import type { MastraCodeConfig } from '../../src/index.js';
 import { getScenario } from './scenarios/index.js';
-import type { McE2eScenarioRuntime, McE2eTerminal, ScenarioName } from './scenarios/index.js';
+import type {
+  McE2eInProcessApp,
+  McE2ePrepareContext,
+  McE2eScenarioRuntime,
+  McE2eStartMastraCodeAppOptions,
+  McE2eTerminal,
+  ScenarioName,
+} from './scenarios/types.js';
 
 export type TerminalRunConfig = {
   scenarioName: ScenarioName;
@@ -13,6 +21,7 @@ export type TerminalRunConfig = {
   liveOutput: boolean;
   env: Record<string, string | null>;
   cwd: string;
+  context: McE2ePrepareContext;
 };
 
 const XtermTerminal = xterm.Terminal;
@@ -22,9 +31,9 @@ function isTruthyEnv(name: string): boolean {
   return ['1', 'true', 'yes', 'on'].includes(process.env[name]?.trim().toLowerCase() ?? '');
 }
 
-function resolveInitialStateFromEnv() {
+function resolveInitialStateFromEnv(): MastraCodeConfig['initialState'] {
   const currentModelId = process.env.MASTRACODE_MODEL_ID?.trim();
-  const initialState: Record<string, unknown> = {};
+  const initialState: MastraCodeConfig['initialState'] = {};
   if (currentModelId) initialState.currentModelId = currentModelId;
   if (process.env.HOME) initialState.homeDir = process.env.HOME;
   if (isTruthyEnv('MASTRACODE_YOLO')) initialState.yolo = true;
@@ -232,6 +241,33 @@ async function waitForScreenTextAbsent(pattern: RegExp, terminal: McE2eTerminal,
   throw new Error('Timed out waiting for ' + pattern + ' to disappear\n\n' + terminal.serialize().view);
 }
 
+function writeConsoleLineToTerminal(terminal: Terminal, values: unknown[]): void {
+  const text = values.map(value => (typeof value === 'string' ? value : String(value))).join(' ');
+  terminal.write(`${text}\r\n`);
+}
+
+async function withTerminalProcessOutput<T>(terminal: Terminal, run: () => Promise<T>): Promise<T> {
+  const runtimeConsole = globalThis['console'];
+  const previousConsoleInfo = runtimeConsole.info;
+  const previousConsoleLog = runtimeConsole.log;
+  const previousExit = process.exit;
+  runtimeConsole.info = (...values: unknown[]) => writeConsoleLineToTerminal(terminal, values);
+  runtimeConsole.log = (...values: unknown[]) => writeConsoleLineToTerminal(terminal, values);
+  process.exit = ((code?: string | number | null | undefined) => {
+    if (code !== undefined && code !== null && code !== 0 && code !== '0') {
+      throw new Error(`process.exit(${String(code)}) called during terminal backend run`);
+    }
+    return undefined;
+  }) as unknown as typeof process.exit;
+  try {
+    return await run();
+  } finally {
+    runtimeConsole.info = previousConsoleInfo;
+    runtimeConsole.log = previousConsoleLog;
+    process.exit = previousExit;
+  }
+}
+
 function withRunEnvironment<T>(runConfig: TerminalRunConfig, run: () => Promise<T>): Promise<T> {
   const previousCwd = process.cwd();
   const previousProcessCwd = process.cwd;
@@ -262,10 +298,85 @@ function withRunEnvironment<T>(runConfig: TerminalRunConfig, run: () => Promise<
   });
 }
 
+async function startMastraCodeApp(
+  runConfig: TerminalRunConfig,
+  terminal: Terminal,
+  options?: McE2eStartMastraCodeAppOptions,
+): Promise<McE2eInProcessApp> {
+  const [{ createMastraCode }, { MastraTUI }, { createBrowserFromSettings, loadSettings }] = await Promise.all([
+    import('../../src/index.js'),
+    import('../../src/tui/index.js'),
+    import('../../src/onboarding/settings.js'),
+  ]);
+  if (options?.setupDebugLogging) {
+    const { setupDebugLogging } = await import('../../src/utils/debug-log.js');
+    setupDebugLogging();
+  }
+  const warn = globalThis.console.warn;
+  for (const warning of options?.startupWarnings ?? []) warn(warning);
+  const settings = loadSettings();
+  const envInitialState = resolveInitialStateFromEnv();
+  const configuredInitialState = options?.config?.initialState;
+  const initialState: MastraCodeConfig['initialState'] =
+    envInitialState || configuredInitialState ? { ...(envInitialState ?? {}), ...(configuredInitialState ?? {}) } : undefined;
+  const result = await createMastraCode({
+    unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
+    disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
+    disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
+    ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false } : {}),
+    cwd: runConfig.cwd,
+    ...(process.env.HOME ? { homeDir: process.env.HOME } : {}),
+    ...(options?.config ?? {}),
+    ...(initialState ? { initialState } : {}),
+  });
+
+  if (result.storageWarning) terminal.write(`⚠ ${result.storageWarning}\r\n`);
+  if (result.observabilityWarning) terminal.write(`⚠ ${result.observabilityWarning}\r\n`);
+  await options?.onCreated?.(result);
+
+  const tui = new MastraTUI({
+    harness: result.harness,
+    hookManager: result.hookManager,
+    authStorage: result.authStorage,
+    mcpManager: result.mcpManager,
+    appName: 'Mastra Code',
+    version: process.env.npm_package_version ?? 'mc-e2e-terminal',
+    inlineQuestions: true,
+    githubSignals: result.githubSignals,
+    terminal,
+    ...(options?.tui ?? {}),
+  });
+
+  void tui.run().catch(error => {
+    process.stderr.write(`[mc-e2e:terminal] TUI run failed: ${error instanceof Error ? error.stack : String(error)}\n`);
+  });
+
+  if (settings.browser.enabled) {
+    const browser = await createBrowserFromSettings(settings.browser);
+    if (browser) {
+      result.harness.setBrowser(browser);
+      await result.harness.setState({ activeBrowserSettings: settings.browser });
+    }
+  }
+
+  return {
+    async stop() {
+      tui.stop();
+      const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+      await Promise.allSettled([
+        result.mcpManager?.disconnect(),
+        result.harness.getMastra()?.stopWorkers(),
+        result.harness.stopHeartbeats(),
+        closeSignalsPubSub?.(),
+      ]);
+    },
+  };
+}
+
 export async function runTerminalBackend(runConfig: TerminalRunConfig): Promise<number> {
   if (runConfig.liveOutput) throw new Error('terminal backend only supports run mode');
   const scenario = getScenario(runConfig.scenarioName);
-  if (scenario.entrypoint) {
+  if (scenario.entrypoint && !scenario.inProcessApp) {
     throw new Error(`Terminal backend does not yet support custom entrypoint scenarios: ${scenario.name}`);
   }
 
@@ -284,65 +395,31 @@ export async function runTerminalBackend(runConfig: TerminalRunConfig): Promise<
   };
 
   return withRunEnvironment(runConfig, async () => {
-    const [{ createMastraCode }, { MastraTUI }, { releaseAllThreadLocks }, { createBrowserFromSettings, loadSettings }] =
-      await Promise.all([
-        import('../../src/index.js'),
-        import('../../src/tui/index.js'),
-        import('../../src/utils/thread-lock.js'),
-        import('../../src/onboarding/settings.js'),
-      ]);
-    const settings = loadSettings();
-    const initialState = resolveInitialStateFromEnv();
-    const result = await createMastraCode({
-      unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
-      disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
-      disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
-      ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
-      ...(initialState ? { initialState: initialState as never } : {}),
-      cwd: runConfig.cwd,
-      ...(process.env.HOME ? { homeDir: process.env.HOME } : {}),
-    });
-
-    if (result.storageWarning) terminal.write(`⚠ ${result.storageWarning}\r\n`);
-    if (result.observabilityWarning) terminal.write(`⚠ ${result.observabilityWarning}\r\n`);
-
-    const tui = new MastraTUI({
-      harness: result.harness,
-      hookManager: result.hookManager,
-      authStorage: result.authStorage,
-      mcpManager: result.mcpManager,
-      appName: 'Mastra Code',
-      version: process.env.npm_package_version ?? 'mc-e2e-terminal',
-      inlineQuestions: true,
-      githubSignals: result.githubSignals,
-      terminal,
-    });
-
-    void tui.run().catch(error => {
-      process.stderr.write(`[mc-e2e:terminal] TUI run failed: ${error instanceof Error ? error.stack : String(error)}\n`);
-    });
-
-    if (settings.browser.enabled) {
-      const browser = await createBrowserFromSettings(settings.browser);
-      if (browser) {
-        result.harness.setBrowser(browser);
-        await result.harness.setState({ activeBrowserSettings: settings.browser });
-      }
-    }
+    const { releaseAllThreadLocks } = await import('../../src/utils/thread-lock.js');
+    let stopApp: (() => Promise<void> | void) | undefined;
 
     try {
-      await scenario.run({ terminal: scenarioTerminal, runtime });
+      if (scenario.inProcessApp) {
+        const app = await scenario.inProcessApp({
+          ...runConfig.context,
+          columns: runConfig.columns,
+          cwd: runConfig.cwd,
+          env: runConfig.env,
+          rows: runConfig.rows,
+          startMastraCodeApp: options => startMastraCodeApp(runConfig, terminal, options),
+          terminal,
+        });
+        stopApp = app.stop;
+      } else {
+        const app = await startMastraCodeApp(runConfig, terminal);
+        stopApp = app.stop;
+      }
+
+      await withTerminalProcessOutput(terminal, () => scenario.run({ terminal: scenarioTerminal, runtime }));
       return 0;
     } finally {
-      tui.stop();
+      await stopApp?.();
       releaseAllThreadLocks();
-      const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-      await Promise.allSettled([
-        result.mcpManager?.disconnect(),
-        result.harness.getMastra()?.stopWorkers(),
-        result.harness.stopHeartbeats(),
-        closeSignalsPubSub?.(),
-      ]);
     }
   });
 }

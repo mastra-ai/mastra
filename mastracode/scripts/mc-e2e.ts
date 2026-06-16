@@ -7,6 +7,7 @@ import { Worker } from 'node:worker_threads';
 import { LibSQLStore } from '@mastra/libsql';
 import { getScenario, listScenarios } from './mc-e2e/scenarios/index.js';
 import type { McE2eScenario, ScenarioName } from './mc-e2e/scenarios/index.js';
+import type { McE2ePrepareContext } from './mc-e2e/scenarios/types.js';
 
 type RunMode = 'observe' | 'run';
 type RunBackend = 'subprocess' | 'terminal';
@@ -39,6 +40,7 @@ type TuiRunConfig = {
   programArgs: string[];
   env: Record<string, string | null>;
   cwd: string;
+  context: McE2ePrepareContext;
 };
 
 const scenarioNames = new Set(listScenarios().map(scenario => scenario.name));
@@ -383,6 +385,7 @@ async function prepareScenarioRun({
       programFile,
       programArgs,
       cwd: launchCwd,
+      context: scenarioContext,
       env: {
         ...(aimockBaseUrl
           ? {
@@ -464,11 +467,11 @@ let status: number | null;
 if (options.backend === 'terminal') {
   const terminalRuns = runs.filter(run => {
     const scenario = getScenario(run.scenarioName);
-    return !scenario.entrypoint && scenario.terminalBackend !== 'subprocess';
+    return (!scenario.entrypoint || scenario.inProcessApp) && scenario.terminalBackend !== 'subprocess';
   });
   const subprocessRuns = runs.filter(run => {
     const scenario = getScenario(run.scenarioName);
-    return Boolean(scenario.entrypoint) || scenario.terminalBackend === 'subprocess';
+    return (Boolean(scenario.entrypoint) && !scenario.inProcessApp) || scenario.terminalBackend === 'subprocess';
   });
   if (subprocessRuns.length > 0) {
     process.stdout.write(`[mc-e2e] [terminal] routing ${subprocessRuns.length} scenarios through subprocess fallback\n`);

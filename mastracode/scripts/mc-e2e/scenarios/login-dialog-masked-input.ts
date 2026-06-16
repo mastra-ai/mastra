@@ -1,6 +1,9 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { anthropicOAuthProvider } from '../../../src/auth/providers/anthropic.js';
 import { expect } from './expect.js';
+import { createGlobalPatchScope } from './global-patches.js';
 import type { McE2eScenario } from './types.js';
 
 const secret = 'mc-login-mask-code-12345#state';
@@ -10,36 +13,32 @@ export const loginDialogMaskedInputScenario = {
   name: 'login-dialog-masked-input',
   description: 'Exercises login-dialog masked prompt input through the real TUI.',
   testName: 'masks login prompt input while submitting the raw authorization code',
-  prepare({ appDataDir, mastracodeDir, projectDir }) {
+  prepare({ appDataDir, projectDir }) {
     rmSync(join(appDataDir, 'auth.json'), { force: true });
     mkdirSync(projectDir, { recursive: true });
-    writeFileSync(
-      join(projectDir, '.mc-e2e-login-dialog-masked-input-entrypoint.ts'),
-      `import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { anthropicOAuthProvider } = await import(pathToFileURL(join(mastracodeDir, 'src/auth/providers/anthropic.ts')).href);
-
-anthropicOAuthProvider.login = async callbacks => {
-  const code = await callbacks.onPrompt?.({
-    message: 'Paste the masked login authorization code:',
-    placeholder: 'mc-login-mask-code#state',
-  });
-  callbacks.onProgress?.('MC_LOGIN_MASK_CODE_LENGTH=' + String(code?.length ?? 0));
-  return {
-    access: 'access:' + code,
-    refresh: 'refresh:' + code,
-    expires: Date.now() + 60 * 60 * 1000,
-  };
-};
-
-await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
-`,
-    );
   },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-login-dialog-masked-input-entrypoint.ts');
+  async inProcessApp({ startMastraCodeApp }) {
+    const patches = createGlobalPatchScope();
+    patches.setProperty(anthropicOAuthProvider, 'login', async callbacks => {
+      const code = await callbacks.onPrompt?.({
+        message: 'Paste the masked login authorization code:',
+        placeholder: 'mc-login-mask-code#state',
+      });
+      callbacks.onProgress?.('MC_LOGIN_MASK_CODE_LENGTH=' + String(code?.length ?? 0));
+      return {
+        access: 'access:' + code,
+        refresh: 'refresh:' + code,
+        expires: Date.now() + 60 * 60 * 1000,
+      };
+    });
+
+    try {
+      const app = await startMastraCodeApp();
+      return { stop: () => patches.stopApp(app.stop) };
+    } catch (error) {
+      patches.restore();
+      throw error;
+    }
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);

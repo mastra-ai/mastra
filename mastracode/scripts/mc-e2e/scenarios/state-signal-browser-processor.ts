@@ -1,15 +1,81 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MastraBrowser } from '@mastra/core/browser';
+import type { BrowserState } from '@mastra/core/browser';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
+
+class BrowserProcessorFixture extends MastraBrowser {
+  readonly id = 'mc-e2e-browser-processor';
+  readonly name = 'MC E2E Browser Processor';
+  readonly provider = 'mc-e2e-browser';
+  readonly providerType = 'sdk' as const;
+  private readonly statePath: string;
+  private lastState: BrowserState | undefined;
+
+  constructor(statePath: string) {
+    super({ headless: false });
+    this.statePath = statePath;
+    this.status = 'ready';
+  }
+
+  protected async doLaunch(): Promise<void> {
+    this.status = 'ready';
+  }
+
+  protected async doClose(): Promise<void> {
+    this.status = 'closed';
+  }
+
+  protected async getActivePage(): Promise<{ url(): string } | null> {
+    const state = this.readState();
+    const activeTab = state.tabs[state.activeTabIndex];
+    return { url: () => activeTab?.url ?? '' };
+  }
+
+  protected getBrowserStateForThread(): BrowserState | null {
+    return this.lastState ?? this.readState();
+  }
+
+  getLastBrowserState(): BrowserState | undefined {
+    return this.lastState;
+  }
+
+  async getCurrentUrl(): Promise<string | null> {
+    const state = this.readState();
+    return state.tabs[state.activeTabIndex]?.url ?? null;
+  }
+
+  async getBrowserState(): Promise<BrowserState | null> {
+    return this.readState();
+  }
+
+  getTools(): Record<string, never> {
+    return {};
+  }
+
+  private readState(): BrowserState {
+    const state = JSON.parse(readFileSync(this.statePath, 'utf8')) as BrowserState;
+    this.lastState = state;
+    return state;
+  }
+}
+
+function getRequestBody(request: unknown): unknown {
+  if (request && typeof request === 'object' && 'body' in request) {
+    return request.body;
+  }
+  return undefined;
+}
 
 export const stateSignalBrowserProcessorScenario = {
   name: 'state-signal-browser-processor',
   description: 'Runs a deterministic browser context processor through the TUI and verifies live snapshot/delta state signals.',
   testName: 'renders browser processor state snapshots and deltas during live turns',
   useOpenAIModel: true,
+  disableMemory: false,
   aimockFixture: 'state-signal-browser-processor.json',
-  prepare({ appDataDir, mastracodeDir, projectDir }) {
+  prepare({ appDataDir, projectDir }) {
     mkdirSync(projectDir, { recursive: true });
     const statePath = join(appDataDir, 'browser-state-processor.json');
     writeFileSync(
@@ -19,95 +85,19 @@ export const stateSignalBrowserProcessorScenario = {
         activeTabIndex: 0,
       }),
     );
-    writeFileSync(
-      join(projectDir, '.mc-e2e-browser-processor-entrypoint.ts'),
-      `import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const appDataDir = process.env.MASTRA_APP_DATA_DIR;
-if (!appDataDir) throw new Error('MASTRA_APP_DATA_DIR is required');
-const statePath = join(appDataDir, 'browser-state-processor.json');
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
-const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
-const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
-const { BrowserContextProcessor } = await import(pathToFileURL(join(mastracodeDir, '..', 'packages/core/src/browser/index.ts')).href);
-
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
-
-let lastState;
-function readState() {
-  const parsed = JSON.parse(readFileSync(statePath, 'utf8'));
-  lastState = parsed;
-  return parsed;
-}
-
-const browser = {
-  id: 'mc-e2e-browser-processor',
-  name: 'MC E2E Browser Processor',
-  provider: 'mc-e2e-browser',
-  providerType: 'sdk',
-  headless: false,
-  status: 'ready',
-  getInputProcessors(configuredProcessors = []) {
-    const hasProcessor = configuredProcessors.some(processor => processor && 'id' in processor && processor.id === 'browser-context');
-    return hasProcessor ? [] : [new BrowserContextProcessor()];
   },
-  getTools() {
-    return {};
-  },
-  hasThreadSession() {
-    return true;
-  },
-  isBrowserRunning() {
-    return true;
-  },
-  getSessionId(threadId) {
-    return 'mc-e2e-browser-session:' + (threadId || 'shared');
-  },
-  getCdpUrl() {
-    return null;
-  },
-  getLastBrowserState() {
-    return lastState;
-  },
-  async getCurrentUrl() {
-    const state = readState();
-    return state.tabs?.[state.activeTabIndex || 0]?.url || null;
-  },
-  async getBrowserState() {
-    return readState();
-  },
-};
-
-const result = await createMastraCode({
-  cwd: process.cwd(),
-  disableMcp: true,
-  disableHooks: true,
-  unixSocketPubSub: false,
-  browser,
-});
-
-const tui = new MastraTUI({
-  harness: result.harness,
-  hookManager: result.hookManager,
-  authStorage: result.authStorage,
-  mcpManager: result.mcpManager,
-  version: getCurrentVersion(),
-  inlineQuestions: true,
-});
-
-void tui.run().catch(error => {
-  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');
-  process.exit(1);
-});
-`,
-    );
-  },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-browser-processor-entrypoint.ts');
+  inProcessApp({ appDataDir, startMastraCodeApp }) {
+    const browser = new BrowserProcessorFixture(join(appDataDir, 'browser-state-processor.json'));
+    return startMastraCodeApp({
+      config: {
+        disableHooks: true,
+        disableMcp: true,
+        unixSocketPubSub: false,
+      },
+      onCreated(result) {
+        result.harness.setBrowser(browser);
+      },
+    });
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
@@ -132,7 +122,7 @@ void tui.run().catch(error => {
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
-    const serialized = JSON.stringify(requests.map((request: any) => request.body));
+    const serialized = JSON.stringify(requests.map(getRequestBody));
     expect(serialized).toContain('Capture browser processor snapshot.');
     expect(serialized).toContain('Active tab URL: https://example.test/browser-snapshot.');
     expect(serialized).toContain('Capture browser processor delta.');

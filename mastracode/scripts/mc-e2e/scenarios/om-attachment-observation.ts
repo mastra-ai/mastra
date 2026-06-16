@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { installOpenAIFetchCapture } from './openai-fetch-capture.js';
 import type { McE2eScenario } from './types.js';
 
 const PASTE_START = '\x1b[200~';
@@ -18,20 +19,20 @@ export const omAttachmentObservationScenario = {
   env() {
     return { MASTRACODE_DISABLE_MEMORY: '0' };
   },
-  prepare({ appDataDir, mastracodeDir }) {
+  prepare({ appDataDir }) {
     rmSync(RAW_REQUEST_CAPTURE_PATH, { force: true });
 
     const settingsPath = join(appDataDir, 'settings.json');
-    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
     settings.onboarding = {
-      ...settings.onboarding,
+      ...((typeof settings.onboarding === 'object' && settings.onboarding !== null ? settings.onboarding : {}) as Record<string, unknown>),
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
       quietModePreferenceSelected: true,
     };
     settings.models = {
-      ...settings.models,
+      ...((typeof settings.models === 'object' && settings.models !== null ? settings.models : {}) as Record<string, unknown>),
       observerModelOverride: 'openai/gpt-5.4-mini',
       reflectorModelOverride: 'openai/gpt-5.4-mini',
       omObservationThreshold: 2100,
@@ -39,38 +40,16 @@ export const omAttachmentObservationScenario = {
       omObserveAttachments: true,
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
-
-    const wrapperPath = join(appDataDir, 'om-attachment-observation-main.ts');
-    const mainPath = join(mastracodeDir, 'src/main.ts');
-    writeFileSync(
-      wrapperPath,
-      `import { appendFileSync } from 'node:fs';\n` +
-        `import { pathToFileURL } from 'node:url';\n` +
-        `const capturePath = ${JSON.stringify(RAW_REQUEST_CAPTURE_PATH)};\n` +
-        `const originalFetch = globalThis.fetch.bind(globalThis);\n` +
-        `globalThis.fetch = async (input, init) => {\n` +
-        `  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;\n` +
-        `  if (url.includes('/v1/responses/input_tokens')) {\n` +
-        `    if (init?.body) appendFileSync(capturePath, JSON.stringify({ url, body: typeof init.body === 'string' ? init.body : '<non-string body>' }) + '\\n');\n` +
-        `    return new Response(JSON.stringify({ input_tokens: 2600 }), { status: 200, headers: { 'Content-Type': 'application/json' } });\n` +
-        `  }\n` +
-        `  if (url.includes('/v1/responses') && init?.body) {\n` +
-        `    const body = init.body;\n` +
-        `    let bodyText;\n` +
-        `    let nextInit = init;\n` +
-        `    if (typeof body === 'string') bodyText = body;\n` +
-        `    else if (body instanceof Uint8Array) bodyText = new TextDecoder().decode(body);\n` +
-        `    else if (typeof body.text === 'function') { bodyText = await body.text(); nextInit = { ...init, body: bodyText }; }\n` +
-        `    if (bodyText) appendFileSync(capturePath, JSON.stringify({ url, body: bodyText }) + '\\n');\n` +
-        `    return originalFetch(input, nextInit);\n` +
-        `  }\n` +
-        `  return originalFetch(input, init);\n` +
-        `};\n` +
-        `await import(pathToFileURL(${JSON.stringify(mainPath)}).href);\n`,
-    );
   },
-  entrypoint({ appDataDir }) {
-    return join(appDataDir, 'om-attachment-observation-main.ts');
+  async inProcessApp({ startMastraCodeApp }) {
+    const restoreFetch = installOpenAIFetchCapture({ capturePath: RAW_REQUEST_CAPTURE_PATH, append: true, inputTokens: 2600 });
+    const app = await startMastraCodeApp();
+    return {
+      stop: async () => {
+        await app.stop?.();
+        restoreFetch();
+      },
+    };
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);

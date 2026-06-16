@@ -99,4 +99,3 @@
 - TUI e2e is explicitly not applicable for this row: headless prompt mode bypasses TUI construction by design and is validated through CLI/headless unit and integration tests.
 - Existing break validation covers the user-observable headless contracts: text output buffering, JSON summary output, and stream-json NDJSON event emission.
 - Adjacent startup/TUI fallback surfaces remain covered by checked-in TUI e2e scenarios (`startup`, `automated-chat`, and the full e2e suite).
-

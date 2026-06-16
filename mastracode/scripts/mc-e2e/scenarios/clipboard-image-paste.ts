@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { installOpenAIFetchCapture } from './openai-fetch-capture.js';
 import type { McE2eScenario } from './types.js';
 
 const PASTE_START = '\x1b[200~';
@@ -7,41 +8,28 @@ const PASTE_END = '\x1b[201~';
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
 const RAW_REQUEST_CAPTURE_PATH = join(process.cwd(), '.tmp-mc-e2e', 'clipboard-image-paste-openai-request.json');
 
+function getRequestBody(request: unknown): unknown {
+  return typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined;
+}
+
 export const clipboardImagePasteScenario = {
   name: 'clipboard-image-paste',
   description: 'pastes an image path through bracketed paste and submits it as an attachment',
   testName: 'pastes an image path and submits it as an image attachment in the real TUI',
   useOpenAIModel: true,
   aimockFixture: 'clipboard-image-paste.json',
-  prepare({ appDataDir, mastracodeDir }) {
+  prepare() {
     rmSync(RAW_REQUEST_CAPTURE_PATH, { force: true });
-    const wrapperPath = join(appDataDir, 'clipboard-image-paste-main.ts');
-    const mainPath = join(mastracodeDir, 'src/main.ts');
-    writeFileSync(
-      wrapperPath,
-      `import { writeFileSync } from 'node:fs';\n` +
-        `import { pathToFileURL } from 'node:url';\n` +
-        `const capturePath = ${JSON.stringify(RAW_REQUEST_CAPTURE_PATH)};\n` +
-        `const originalFetch = globalThis.fetch.bind(globalThis);\n` +
-        `globalThis.fetch = async (input, init) => {\n` +
-        `  const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;\n` +
-        `  if (url.includes('/v1/responses') && init?.body) {\n` +
-        `    const body = init.body;\n` +
-        `    let bodyText;\n` +
-        `    let nextInit = init;\n` +
-        `    if (typeof body === 'string') bodyText = body;\n` +
-        `    else if (body instanceof Uint8Array) bodyText = new TextDecoder().decode(body);\n` +
-        `    else if (typeof body.text === 'function') { bodyText = await body.text(); nextInit = { ...init, body: bodyText }; }\n` +
-        `    if (bodyText) writeFileSync(capturePath, bodyText);\n` +
-        `    return originalFetch(input, nextInit);\n` +
-        `  }\n` +
-        `  return originalFetch(input, init);\n` +
-        `};\n` +
-        `await import(pathToFileURL(${JSON.stringify(mainPath)}).href);\n`,
-    );
   },
-  entrypoint({ appDataDir }) {
-    return join(appDataDir, 'clipboard-image-paste-main.ts');
+  async inProcessApp({ startMastraCodeApp }) {
+    const restoreFetch = installOpenAIFetchCapture({ capturePath: RAW_REQUEST_CAPTURE_PATH });
+    const app = await startMastraCodeApp();
+    return {
+      stop: async () => {
+        await app.stop?.();
+        restoreFetch();
+      },
+    };
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
@@ -67,8 +55,7 @@ export const clipboardImagePasteScenario = {
     if (requests.length !== 1) {
       throw new Error(`Expected one AIMock request, received ${requests.length}`);
     }
-    const request = requests[0] as any;
-    const body = JSON.stringify(request.body);
+    const body = JSON.stringify(getRequestBody(requests[0]));
     if (!body.includes('Please inspect the pasted image')) {
       throw new Error('Expected submitted text content in AIMock request');
     }

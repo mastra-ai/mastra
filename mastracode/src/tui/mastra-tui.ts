@@ -142,6 +142,7 @@ export class MastraTUI {
   private state: TUIState;
   private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
   private idleCounterTimer: ReturnType<typeof setInterval> | null = null;
+  private cleanupKeyHandlers: (() => void) | null = null;
   private hasShownUpdateBanner = false;
   private caffeinateProcess: ChildProcess | null = null;
   private lastStreamError: string | null = null;
@@ -523,6 +524,9 @@ export class MastraTUI {
       this.idleCounterTimer = null;
     }
 
+    this.cleanupKeyHandlers?.();
+    this.cleanupKeyHandlers = null;
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -557,7 +561,7 @@ export class MastraTUI {
     buildLayout(this.state, () => this.refreshModelAuthStatus());
 
     // Setup key handlers
-    setupKeyHandlers(this.state, {
+    this.cleanupKeyHandlers = setupKeyHandlers(this.state, {
       stop: () => this.stop(),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
     });

@@ -1,38 +1,37 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { anthropicOAuthProvider } from '../../../src/auth/providers/anthropic.js';
+import { createGlobalPatchScope } from './global-patches.js';
 import type { McE2eScenario } from './types.js';
 
 export const setupLoginRefreshScenario = {
   name: 'setup-login-refresh',
   description: 'Refreshes onboarding model packs after a successful login without restarting the TUI.',
   testName: 'refreshes available setup packs after login succeeds',
-  prepare({ appDataDir, mastracodeDir, projectDir }) {
+  prepare({ appDataDir, projectDir }) {
     rmSync(join(appDataDir, 'settings.json'), { force: true });
     rmSync(join(appDataDir, 'auth.json'), { force: true });
     mkdirSync(projectDir, { recursive: true });
-    writeFileSync(
-      join(projectDir, '.mc-e2e-setup-login-refresh-entrypoint.ts'),
-      `import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { anthropicOAuthProvider } = await import(pathToFileURL(join(mastracodeDir, 'src/auth/providers/anthropic.ts')).href);
-
-anthropicOAuthProvider.login = async callbacks => {
-  callbacks.onProgress?.('MC_SETUP_LOGIN_REFRESH_FAKE_LOGIN');
-  return {
-    access: 'mc-setup-login-refresh-access',
-    refresh: 'mc-setup-login-refresh-refresh',
-    expires: Date.now() + 60 * 60 * 1000,
-  };
-};
-
-await import(pathToFileURL(join(mastracodeDir, 'src/main.ts')).href);
-`,
-    );
   },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-setup-login-refresh-entrypoint.ts');
+  async inProcessApp({ startMastraCodeApp }) {
+    const patches = createGlobalPatchScope();
+    patches.setProperty(anthropicOAuthProvider, 'login', async callbacks => {
+      callbacks.onProgress?.('MC_SETUP_LOGIN_REFRESH_FAKE_LOGIN');
+      return {
+        access: 'mc-setup-login-refresh-access',
+        refresh: 'mc-setup-login-refresh-refresh',
+        expires: Date.now() + 60 * 60 * 1000,
+      };
+    });
+
+    try {
+      const app = await startMastraCodeApp();
+      return { stop: () => patches.stopApp(app.stop) };
+    } catch (error) {
+      patches.restore();
+      throw error;
+    }
   },
   env() {
     return {

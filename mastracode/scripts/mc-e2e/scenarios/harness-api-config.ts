@@ -11,7 +11,7 @@ export const harnessApiConfigScenario: McE2eScenario = {
   description: 'Launch a custom createMastraCode entrypoint and verify public config reaches the real TUI.',
   testName: 'honors createMastraCode configDir and initialState in the TUI',
   projectFixture: 'long-branch',
-  prepare({ mastracodeDir, projectDir }) {
+  prepare({ projectDir }) {
     const configRoot = join(projectDir, CONFIG_DIR);
     const wrongConfigRoot = join(projectDir, WRONG_CONFIG_DIR);
     mkdirSync(join(configRoot, 'commands'), { recursive: true });
@@ -26,59 +26,30 @@ export const harnessApiConfigScenario: McE2eScenario = {
       `---\ndescription: Wrong initialState configDir command\n---\nThis command should not load\n`,
     );
 
-    writeFileSync(
-      join(projectDir, '.mc-e2e-harness-api-entrypoint.ts'),
-      `import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
-const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
-const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
-
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
-
-const result = await createMastraCode({
-  cwd: process.cwd(),
-  configDir: '${CONFIG_DIR}',
-  disableMcp: true,
-  disableHooks: true,
-  unixSocketPubSub: false,
-  memory: false,
-  initialState: {
-    yolo: false,
-    configDir: '${WRONG_CONFIG_DIR}',
   },
-});
-
-const tui = new MastraTUI({
-  harness: result.harness,
-  hookManager: result.hookManager,
-  authStorage: result.authStorage,
-  mcpManager: result.mcpManager,
-  appName: 'Harness API Code',
-  version: getCurrentVersion(),
-  inlineQuestions: true,
-});
-
-void tui.run().catch(error => {
-  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');
-  process.exit(1);
-});
-`,
-    );
-  },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-harness-api-entrypoint.ts');
+  inProcessApp({ startMastraCodeApp }) {
+    return startMastraCodeApp({
+      config: {
+        configDir: CONFIG_DIR,
+        disableHooks: true,
+        disableMcp: true,
+        initialState: {
+          configDir: WRONG_CONFIG_DIR,
+          yolo: false,
+        },
+        memory: false,
+        unixSocketPubSub: false,
+      },
+      tui: {
+        appName: 'Harness API Code',
+      },
+    });
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
 
-    await (
-      expect(terminal.getByText(/Harness API Code|Project:|Resource ID:/gi, { full: true, strict: false })) as any
-    ).toBeVisible();
+    await expect(terminal.getByText(/Harness API Code|Project:|Resource ID:/gi, { full: true, strict: false })).toBeVisible();
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('/help');

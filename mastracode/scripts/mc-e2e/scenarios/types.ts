@@ -1,3 +1,8 @@
+import type { Terminal } from '@mariozechner/pi-tui';
+
+import type { createMastraCode, MastraCodeConfig } from '../../../src/index.js';
+import type { MastraTUIOptions } from '../../../src/tui/index.js';
+
 export type ScenarioName =
   | 'startup'
   | 'branch-context-long-name'
@@ -122,6 +127,7 @@ export type ScenarioName =
 
 export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;
+  flushInput?: () => Promise<void>;
   keyCtrlC: () => void;
   serialize: () => { view: string };
   submit: (text: string) => void;
@@ -144,6 +150,29 @@ export type McE2ePrepareContext = {
   projectDir: string;
 };
 
+export type McE2eInProcessApp = {
+  stop?: () => Promise<void> | void;
+};
+
+export type McE2eMastraCodeAppResult = Awaited<ReturnType<typeof createMastraCode>>;
+
+export type McE2eStartMastraCodeAppOptions = {
+  config?: MastraCodeConfig;
+  onCreated?: (result: McE2eMastraCodeAppResult) => Promise<void> | void;
+  setupDebugLogging?: boolean;
+  startupWarnings?: string[];
+  tui?: Partial<Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'verbose'>>;
+};
+
+export type McE2eInProcessAppContext = McE2ePrepareContext & {
+  columns: number;
+  cwd: string;
+  env: Record<string, string | null>;
+  rows: number;
+  startMastraCodeApp: (options?: McE2eStartMastraCodeAppOptions) => Promise<McE2eInProcessApp>;
+  terminal: Terminal;
+};
+
 export type McE2eScenario = {
   name: ScenarioName;
   description: string;
@@ -154,6 +183,7 @@ export type McE2eScenario = {
   aimockFixture?: string;
   env?: (context: McE2ePrepareContext) => Record<string, string>;
   entrypoint?: (context: McE2ePrepareContext) => string;
+  inProcessApp?: (context: McE2eInProcessAppContext) => Promise<McE2eInProcessApp> | McE2eInProcessApp;
   terminalBackend?: 'subprocess';
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
   run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime }) => Promise<void>;

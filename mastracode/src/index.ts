@@ -187,7 +187,7 @@ export interface MastraCodeConfig {
    * Use this when your models are served by a custom provider (e.g. Augment)
    * that mastracode's `resolveModel` cannot resolve.
    */
-  memory?: HarnessConfig<MastraCodeState>['memory'];
+  memory?: HarnessConfig<MastraCodeState>['memory'] | false;
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
   browser?: HarnessConfig<MastraCodeState>['browser'];
   /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
@@ -403,7 +403,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // Vector store for recall search (separate DB file to avoid bloating main storage)
   const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
 
-  const memory = config?.memory ?? getDynamicMemory(storage, vectorStore);
+  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vectorStore));
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);

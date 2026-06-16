@@ -7,7 +7,7 @@ export const mcpSkippedValidationScenario = {
   description: 'Shows skipped MCP server validation reasons in status text and the interactive selector.',
   testName: 'renders skipped MCP validation reasons through /mcp status and selector',
   projectFixture: 'long-branch',
-  prepare({ mastracodeDir, projectDir }) {
+  prepare({ projectDir }) {
     mkdirSync(projectDir, { recursive: true });
     mkdirSync(join(projectDir, '.mastracode'), { recursive: true });
     writeFileSync(
@@ -35,48 +35,20 @@ export const mcpSkippedValidationScenario = {
         2,
       ),
     );
-    writeFileSync(
-      join(projectDir, '.mc-e2e-mcp-skipped-entrypoint.ts'),
-      `import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
-const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
-const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
-
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
-
-const result = await createMastraCode({
-  cwd: process.cwd(),
-  disableHooks: true,
-  unixSocketPubSub: false,
-});
-
-const tui = new MastraTUI({
-  harness: result.harness,
-  hookManager: result.hookManager,
-  authStorage: result.authStorage,
-  mcpManager: result.mcpManager,
-  appName: 'Mastra Code',
-  version: getCurrentVersion(),
-  inlineQuestions: true,
-  githubSignals: result.githubSignals,
-});
-
-void tui.run().catch(error => {
-  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');
-  process.exit(1);
-});
-`,
-    );
   },
-  entrypoint({ projectDir }) {
-    return join(projectDir, '.mc-e2e-mcp-skipped-entrypoint.ts');
+  inProcessApp({ startMastraCodeApp }) {
+    return startMastraCodeApp({
+      config: {
+        disableHooks: true,
+        disableMcp: false,
+        unixSocketPubSub: false,
+      },
+    });
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
+
+    await runtime.waitForScreenText(/Project:|Resource ID:|>/i, terminal, 10_000);
 
     terminal.submit('/mcp status');
     await runtime.waitForScreenText(/MCP Servers:/i, terminal, 8_000);
