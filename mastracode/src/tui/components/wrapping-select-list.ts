@@ -5,8 +5,8 @@
  * navigation stays predictable regardless of label height.
  */
 
-import { getKeybindings, wrapTextWithAnsi } from '@mariozechner/pi-tui';
-import type { Component, SelectItem, SelectListTheme } from '@mariozechner/pi-tui';
+import { getKeybindings, wrapTextWithAnsi } from '@earendil-works/pi-tui';
+import type { Component, SelectItem, SelectListTheme } from '@earendil-works/pi-tui';
 
 const SELECTED_PREFIX = '→ ';
 const UNSELECTED_PREFIX = '  ';

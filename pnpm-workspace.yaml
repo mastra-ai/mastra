@@ -78,7 +78,13 @@ minimumReleaseAgeExclude:
   - 'mastra'
   - 'create-mastra'
   - 'mastracode'
+  - '@earendil-works/pi-tui'
   - railway@3.3.1
+  # Turso-recommended busy_timeout fix (libsql-client-ts#288/#345). Adopted
+  # immediately on their guidance; pinned so the release-age gate still applies
+  # to any later @libsql/client versions.
+  - '@libsql/client@0.17.4'
+  - '@libsql/core@0.17.4'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,

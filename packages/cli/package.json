@@ -66,7 +66,7 @@
     "local-pkg": "^1.1.2",
     "openapi-fetch": "^0.17.0",
     "picocolors": "^1.1.1",
-    "posthog-node": "^5.30.6",
+    "posthog-node": "^5.37.0",
     "semver": "^7.7.4",
     "serve": "^14.2.6",
     "serve-handler": "^6.1.7",

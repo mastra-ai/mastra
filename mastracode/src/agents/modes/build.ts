@@ -46,6 +46,6 @@ End with a structured summary:
 . **Notes**: Follow-up needed (if any)`,
   defaultModelId: 'openai/gpt-5.5',
   metadata: {
-    default: false,
+    default: true,
   },
 };

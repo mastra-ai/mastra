@@ -1,4 +1,5 @@
 import { formatSkillActivation } from '@mastra/core/workspace';
+import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './send-slash-command-message.js';
 import { isUserInvocable } from './skill-filters.js';
@@ -113,7 +114,7 @@ export async function handleSkillCommand(ctx: SlashCommandContext, skillName: st
     if (!isCurrentThreadActive(ctx)) {
       const component = new SlashCommandComponent(`skill/${skill.name}`, content);
       ctx.state.allSlashCommandComponents.push(component);
-      ctx.state.chatContainer.addChild(component);
+      insertChatComponentWithBoundarySpacing(ctx.state.chatContainer, component);
       ctx.state.ui.requestRender();
     }
 

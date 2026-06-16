@@ -27,7 +27,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@libsql/client": "^0.17.3"
+    "@libsql/client": "^0.17.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -44,7 +44,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.34.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.42.1-0 <2.0.0-0"
   },
   "files": [
     "dist",
