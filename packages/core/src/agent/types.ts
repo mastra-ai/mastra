@@ -151,6 +151,34 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
     };
 
 /**
+ * What `sendSignal` did with a signal once active/idle policy was applied.
+ *
+ * `action` mirrors the winning `behavior` from `ifActive`/`ifIdle` — the value
+ * is whichever behavior the runtime actually applied, not the request.
+ *
+ * - `wake`    — started (or attempted to start) a new run for an idle thread.
+ *               `output` is the run's `MastraModelOutput` for in-process
+ *               consumption. Only the runtime that actually runs the agent
+ *               resolves to `wake`.
+ * - `deliver` — the signal was queued onto an in-flight run rather than starting
+ *               one here. This covers a follow-up signal joining an already-active
+ *               run and the loser of a cross-process wake race (whose signal is
+ *               forwarded to the winning run). No new run was started locally and
+ *               no stream is owned.
+ * - `persist` — the signal was written to memory by a `persist` behavior. The
+ *               outcome promise for this action only settles once that write
+ *               completes (it resolves with the same timing as `persisted`).
+ * - `discard` — policy dropped the signal; nothing ran and nothing was stored.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SendAgentSignalOutcome<OUTPUT = unknown> =
+  | { action: 'wake'; output: MastraModelOutput<OUTPUT> }
+  | { action: 'deliver' }
+  | { action: 'persist' }
+  | { action: 'discard' };
+
+/**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export interface SendAgentSignalResult<OUTPUT = unknown> {
@@ -160,16 +188,17 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
   /**
-   * Resolves with the run's `MastraModelOutput` only on the runtime that won
-   * the wake race for this thread. Other runtimes (and follow-up signals that
-   * are merely queued onto an existing active run) resolve to `undefined`.
+   * Resolves once the runtime has settled what it did with the signal. For
+   * `wake`/`deliver`/`discard` this is the moment the behavior is decided, before
+   * any woken run finishes; for `persist` it resolves after the memory write
+   * completes (same timing as `persisted`).
    *
-   * Callers in serverless environments use this to keep their invocation
-   * alive (e.g. via `waitUntil`) and consume the stream so platform delivery
-   * (chunks → Slack/Discord/etc) actually happens. When `undefined`, another
-   * runtime owns the stream and will deliver chunks via PubSub.
+   * `wake` means this process ran the agent and `output` is its
+   * `MastraModelOutput`. A signal queued onto an existing run, or one whose
+   * cross-process wake race was lost (and forwarded to the winning run),
+   * resolves to `deliver`.
    */
-  ownerStream?: Promise<MastraModelOutput<OUTPUT> | undefined>;
+  outcome: Promise<SendAgentSignalOutcome<OUTPUT>>;
 }
 
 /**
@@ -235,12 +264,12 @@ export type SendAgentNotificationSignalResult<OUTPUT = unknown> = {
   signal?: CreatedAgentSignal;
   persisted?: Promise<void>;
   /**
-   * Present only when the notification's underlying signal woke a new run.
-   * See {@link SendAgentSignalResult.ownerStream}.
+   * Present only when the notification's underlying signal was accepted and
+   * dispatched. See {@link SendAgentSignalResult.outcome}.
    *
    * @experimental
    */
-  ownerStream?: Promise<MastraModelOutput<OUTPUT> | undefined>;
+  outcome?: Promise<SendAgentSignalOutcome<OUTPUT>>;
 };
 
 export interface AgentThreadRun<OUTPUT = unknown> {

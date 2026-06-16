@@ -2567,7 +2567,7 @@ describe('Agent signals', () => {
     senderSubscription.unsubscribe();
   });
 
-  it('grants ownerStream to exactly one runtime when two race to wake an idle thread', async () => {
+  it('grants the wake output to exactly one runtime when two race to wake an idle thread', async () => {
     const pubsub = new EventEmitterPubSub();
     const runtimeA = new AgentThreadStreamRuntime();
     const runtimeB = new AgentThreadStreamRuntime();
@@ -2612,16 +2612,20 @@ describe('Agent signals', () => {
 
     expect(resultA.accepted).toBe(true);
     expect(resultB.accepted).toBe(true);
-    expect(resultA.ownerStream).toBeDefined();
-    expect(resultB.ownerStream).toBeDefined();
+    expect(resultA.outcome).toBeDefined();
+    expect(resultB.outcome).toBeDefined();
 
-    const [ownerA, ownerB] = await Promise.all([resultA.ownerStream!, resultB.ownerStream!]);
+    const [settledA, settledB] = await Promise.all([resultA.outcome!, resultB.outcome!]);
 
-    // Exactly one runtime gets a defined ownerStream (the winner).
+    // Exactly one runtime won the lease and ran the stream (`wake` + owned output); the
+    // loser forwarded its signal to the winner and resolves to `deliver`.
+    const ownerA = settledA.action === 'wake' ? settledA.output : undefined;
+    const ownerB = settledB.action === 'wake' ? settledB.output : undefined;
     const winners = [ownerA, ownerB].filter(s => s !== undefined);
-    const losers = [ownerA, ownerB].filter(s => s === undefined);
     expect(winners).toHaveLength(1);
-    expect(losers).toHaveLength(1);
+
+    const actions = [settledA.action, settledB.action].sort();
+    expect(actions).toEqual(['deliver', 'wake']);
 
     // Only the winner's agent.stream was invoked.
     const totalStreamCalls = streamCallsA.length + streamCallsB.length;
