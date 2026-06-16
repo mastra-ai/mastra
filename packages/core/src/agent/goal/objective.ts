@@ -39,6 +39,14 @@ export const DEFAULT_GOAL_MAX_RUNS = 50;
 export const GOAL_SCORE_WAITING = 0.5;
 
 /**
+ * Stable id of the built-in goal scorer (see `createGoalScorer`). The goal step
+ * uses this to attribute the `GOAL_SCORE_WAITING` sentinel to the default
+ * scorer only — a custom `goal.scorer` that happens to return `0.5` must not be
+ * misread as an explicit "waiting" checkpoint.
+ */
+export const GOAL_SCORER_ID = 'goal-scorer';
+
+/**
  * Default goal-judge system prompt. Ported from MastraCode's `JUDGE_SYSTEM_PROMPT`
  * so the native goal scorer behaves like the original `/goal` judge. A
  * user-supplied `goal.prompt` (or per-objective `prompt`) overrides this.

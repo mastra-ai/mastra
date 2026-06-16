@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { ToolsInput } from '../../agent/types';
 import { createScorer } from '../../evals';
 import type { MastraModelConfig } from '../../llm';
-import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
+import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING, GOAL_SCORER_ID } from './objective';
 
 // The goal scorer is an LLM-as-judge that grades the agent's latest output
 // against the objective and returns a tri-state decision mapped to a score:
@@ -92,7 +92,7 @@ export function createGoalScorer({
   const hasTools = !!tools && Object.keys(tools).length > 0;
   const instructions = (prompt ?? DEFAULT_GOAL_JUDGE_PROMPT) + (hasTools ? VERIFY_WITH_TOOLS_CLAUSE : '');
   return createScorer({
-    id: 'goal-scorer',
+    id: GOAL_SCORER_ID,
     name: 'Goal (LLM)',
     description:
       'Judges the agent\'s objective status, returning 1 when complete, 0 to keep working, and a waiting score for an explicit user checkpoint.',

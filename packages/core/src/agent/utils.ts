@@ -44,7 +44,7 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
     // object (empty/malformed JSON). Treat that the same as a thrown error so the
     // caller still gets the json-prompt-injection retry instead of a downstream
     // crash when it reads `result.object`. Mirrors tryStreamWithJsonFallback.
-    if (!result.object) {
+    if (result.object === undefined) {
       throw new MastraError({
         id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
         domain: ErrorDomain.AGENT,

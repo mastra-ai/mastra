@@ -29,10 +29,10 @@ function makeRecord(over?: Partial<GoalObjectiveRecord>): GoalObjectiveRecord {
     status: 'active',
     runsUsed: 0,
     maxRuns: 10,
-    createdAt: Date.now(),
+    startedAt: Date.now(),
     updatedAt: Date.now(),
     ...over,
-  } as GoalObjectiveRecord;
+  };
 }
 
 /**

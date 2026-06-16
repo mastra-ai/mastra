@@ -21,6 +21,7 @@ export {
   DEFAULT_GOAL_JUDGE_PROMPT,
   DEFAULT_GOAL_MAX_RUNS,
   GOAL_SCORE_WAITING,
+  GOAL_SCORER_ID,
   resolveGoalStore,
   resolveEffectiveGoalSettings,
   readObjective,

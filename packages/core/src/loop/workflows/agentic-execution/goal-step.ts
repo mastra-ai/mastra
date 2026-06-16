@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '../../../agent';
 import {
   createGoalScorer,
   GOAL_SCORE_WAITING,
+  GOAL_SCORER_ID,
   readObjective,
   resolveEffectiveGoalSettings,
   resolveGoalStore,
@@ -202,7 +203,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
               score: 0,
               passed: false,
               reason,
-              scorerId: 'goal-scorer',
+              scorerId: GOAL_SCORER_ID,
               scorerName: 'Goal (LLM)',
               duration: 0,
               errored: true,
@@ -230,8 +231,13 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       // validly decided the goal is complete.
       const erroredScorer = result.scorers.find(s => s.errored);
       const judgeFailed = !!erroredScorer;
+      // Only the built-in goal scorer uses `GOAL_SCORE_WAITING` as a sentinel;
+      // attribute it by scorer id so a custom `goal.scorer` that legitimately
+      // returns 0.5 is not misread as an explicit "waiting" checkpoint.
       const waiting =
-        !judgeFailed && !result.complete && result.scorers.some(s => s.score === GOAL_SCORE_WAITING);
+        !judgeFailed &&
+        !result.complete &&
+        result.scorers.some(s => s.scorerId === GOAL_SCORER_ID && s.score === GOAL_SCORE_WAITING);
 
       // Increment runs and update status. Precedence matters: a judge that
       // failed cannot have validly decided "done", and a legitimate "done" on
