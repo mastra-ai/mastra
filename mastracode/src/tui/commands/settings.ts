@@ -3,8 +3,8 @@ import { access } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { Box, Spacer, Text, matchesKey } from '@mariozechner/pi-tui';
-import type { TUI } from '@mariozechner/pi-tui';
+import { Box, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { SettingsComponent } from '../components/settings.js';
@@ -16,7 +16,8 @@ import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
 function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
-  return ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+  const color = ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+  return typeof color === 'string' ? color : undefined;
 }
 
 function commandExists(command: string): Promise<boolean> {

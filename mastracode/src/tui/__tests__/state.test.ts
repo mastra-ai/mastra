@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@mariozechner/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', () => {
   class MockContainer {
     children: unknown[] = [];
   }

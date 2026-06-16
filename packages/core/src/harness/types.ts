@@ -2,7 +2,8 @@ import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import type { PubSub } from '../events/pubsub';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
@@ -77,10 +78,11 @@ interface HarnessModeBase {
   transitionsTo?: string;
 
   /**
-   * Arbitrary user-defined metadata. Pass-through only — the harness
-   * never reads or validates it. Use for UI affordances like display
-   * color, icon, display name overrides, or any per-mode configuration
-   * that isn't part of the harness's own contract.
+   * Arbitrary user-defined metadata. `metadata.default === true` is a
+   * reserved harness hint for choosing the default mode when `defaultModeId`
+   * is unset; all other metadata is pass-through and unvalidated. Use for UI
+   * affordances like display color, icon, display name overrides, or any
+   * per-mode configuration that isn't part of the harness's own contract.
    *
    * Surfaced verbatim on `getCurrentMode()` and `listModes()`.
    */
@@ -296,10 +298,16 @@ export interface HarnessConfig<TState = {}> {
   subagents?: HarnessSubagent[];
 
   /**
-   * Converts a model ID string (e.g., "anthropic/claude-sonnet-4-20250514") to a
-   * language model instance. Used by subagents and OM model resolution.
+   * Model gateways registered on Harness' internal Mastra instance.
+   * Apps that need gateway-backed model resolution should provide `resolveModel`.
    */
-  resolveModel?: (modelId: string) => MastraLanguageModel;
+  gateways?: MastraModelGatewayInterface[];
+
+  /**
+   * Converts a model ID string (e.g., "anthropic/claude-sonnet-4-20250514") to a
+   * language model instance for Harness-managed observer, reflector, and subagent models.
+   */
+  resolveModel?: (modelId: string) => MastraModelConfig;
 
   /**
    * Observational Memory configuration defaults.
@@ -909,27 +917,6 @@ export type HarnessEvent =
  * Listener function for harness events.
  */
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
-
-/**
- * Listener function for coalesced harness display state snapshots.
- */
-export type HarnessDisplayStateListener = (displayState: HarnessDisplayState) => void | Promise<void>;
-
-export interface HarnessDisplayStateSubscriptionOptions {
-  /**
-   * Minimum quiet window before non-critical display state callbacks.
-   *
-   * @default 250
-   */
-  windowMs?: number;
-
-  /**
-   * Maximum time a pending display state snapshot may wait while updates continue.
-   *
-   * @default 500
-   */
-  maxWaitMs?: number;
-}
 
 // =============================================================================
 // Messages

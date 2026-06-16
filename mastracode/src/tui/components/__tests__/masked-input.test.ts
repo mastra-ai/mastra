@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   lastInput: undefined as { getValue(): string } | undefined,
 }));
 
-vi.mock('@mariozechner/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', () => {
   class MockInput {
     focused = false;
     onSubmit?: (value: string) => void;

@@ -1,4 +1,4 @@
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -22,8 +22,6 @@ export class StateSignalComponent extends Container {
       const preview = message.length > 180 ? `${message.slice(0, 177)}...` : message;
       this.addChild(new Text(theme.fg('dim', preview), BOX_INDENT + 2, 0));
     }
-
-    this.addChild(new Spacer(1));
   }
 
   getChatSpacingKind(): ChatSpacingKind {

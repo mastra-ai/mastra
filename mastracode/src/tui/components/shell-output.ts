@@ -3,9 +3,10 @@
  * Shows a bordered box with live stdout/stderr and a status footer.
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import { getTermWidth, theme } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 const MAX_LINES = 200;
 const COLLAPSED_LINES = 20;
@@ -66,7 +67,6 @@ export class ShellStreamComponent extends Container {
 
   private rebuild(): void {
     this.clear();
-    this.addChild(new Spacer(1));
 
     const border = (char: string) => theme.bold(theme.fg('accent', char));
     const termWidth = getTermWidth();
@@ -125,5 +125,9 @@ export class ShellStreamComponent extends Container {
     }
 
     this.invalidate();
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
   }
 }
