@@ -1387,13 +1387,15 @@ export class AgentThreadStreamRuntime {
           threadId,
           target.ifIdle?.streamOptions?.requestContext,
         );
+        const outcome = persisted.then(() => ({ action: 'persist' as const }));
         void persisted.catch(() => {});
+        void outcome.catch(() => {});
         return {
           accepted: true,
           runId: runId!,
           signal,
           persisted,
-          outcome: persisted.then(() => ({ action: 'persist' as const })),
+          outcome,
         };
       }
       return {
@@ -1480,13 +1482,15 @@ export class AgentThreadStreamRuntime {
         threadId,
         target.ifIdle?.streamOptions?.requestContext,
       );
+      const outcome = persisted.then(() => ({ action: 'persist' as const }));
       void persisted.catch(() => {});
+      void outcome.catch(() => {});
       return {
         accepted: true,
         runId,
         signal,
         persisted,
-        outcome: persisted.then(() => ({ action: 'persist' as const })),
+        outcome,
       };
     }
     if (idleBehavior !== 'wake') {
@@ -1588,18 +1592,23 @@ export class AgentThreadStreamRuntime {
         throw error;
       }
     })();
-    // Always attach a no-op catch to the promise we keep internally so an unawaited
-    // owned stream cannot surface as an unhandled rejection. Callers that opt in to
-    // `result` will see the rejection via their own await/catch.
+    const outcome = ownerStream.then(output =>
+      output ? { action: 'wake' as const, output } : { action: 'deliver' as const },
+    );
+    // Attach a detached no-op catch to BOTH the internal owned-stream promise and the
+    // derived `outcome` promise. If the model throws (or the run rejects) and the caller
+    // never awaits `result.outcome`, the rejection must not surface as an unhandled
+    // rejection. Callers that opt in to `outcome` still see the rejection via their own
+    // await/catch — `outcome` itself remains rejectable; only this detached branch is
+    // swallowed.
     void ownerStream.catch(() => {});
+    void outcome.catch(() => {});
 
     return {
       accepted: true,
       runId,
       signal,
-      outcome: ownerStream.then(output =>
-        output ? { action: 'wake' as const, output } : { action: 'deliver' as const },
-      ),
+      outcome,
     };
   }
 }
