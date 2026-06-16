@@ -80,10 +80,6 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     await goalManager.saveToThread(state);
     ctx.updateStatusLine();
 
-    ctx.showInfo(
-      `Goal resumed: "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used. Sending continuation...`,
-    );
-
     // Kick off the next turn using the same goal-reminder signal format used by
     // startGoal, so the model receives a structured system-reminder rather than
     // a plain user message.

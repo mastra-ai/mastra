@@ -447,6 +447,13 @@ export interface GoalEvaluationPayload {
   maxRunsReached: boolean;
   /** Whether the goal feedback message is suppressed from memory. */
   suppressFeedback: boolean;
+  /**
+   * True on the "pre-evaluation" chunk emitted before scoring starts. Display
+   * layers use this to show a loading/evaluating indicator while the scorer
+   * runs. A second chunk with `pending: false` (or absent) follows once the
+   * evaluation is complete.
+   */
+  pending?: boolean;
 }
 
 export interface BackgroundTaskStartedPayload {

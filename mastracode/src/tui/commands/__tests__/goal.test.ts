@@ -214,9 +214,8 @@ describe('handleGoalCommand', () => {
 
     expect(goalManager.resume).toHaveBeenCalledTimes(1);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
-    expect(showInfo).toHaveBeenCalledWith(
-      `Goal resumed: "finish the task" — 3/${DEFAULT_MAX_TURNS} turns used. Sending continuation...`,
-    );
+    // No showInfo — only the signal renders the goal box (avoids duplicate).
+    expect(showInfo).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledWith({
       type: 'system-reminder',
       contents: 'finish the task',

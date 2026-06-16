@@ -189,6 +189,27 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
           customContext: requestContext ? Object.fromEntries(requestContext.entries()) : undefined,
         };
 
+        // Emit a pending chunk so consumers (the TUI judge display) can show a
+        // loading indicator while the scorer runs.
+        controller.enqueue({
+          type: 'goal',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            objective: record.objective,
+            iteration: record.runsUsed + 1,
+            maxRuns: effective.maxRuns,
+            passed: false,
+            status: record.status,
+            results: [],
+            duration: 0,
+            timedOut: false,
+            maxRunsReached: false,
+            suppressFeedback: true,
+            pending: true,
+          },
+        } as ChunkType<OUTPUT>);
+
         result = await runStreamCompletionScorers([scorer], goalContext, { strategy: 'all' });
       } catch (error: any) {
         // Synthesize the same shape runStreamCompletionScorers returns for a
@@ -218,9 +239,10 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       // done, `GOAL_SCORE_WAITING` = the goal explicitly asked to stop and wait
       // for the user, 0 = keep working. `result.complete` already covers the
       // done case (score === 1). Detect the waiting score on the goal scorer so
-      // we can park the objective as `paused` (so `/goal resume` can revive it)
-      // instead of looping. Custom scorers that never emit this score simply
-      // never trigger the waiting path.
+      // we can stop the auto-loop (isContinued = false) without pausing the
+      // record — the goal stays active so the next turn is still judged.
+      // Custom scorers that never emit this score simply never trigger the
+      // waiting path.
       // A scorer that *threw* (e.g. the judge model errored) reports score 0,
       // which is otherwise indistinguishable from a legitimate "keep working"
       // result — so without this the loop would silently iterate against a

@@ -10,10 +10,10 @@ import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING, GOAL_SCORER_ID } from '.
 //   - "done"     -> score 1   (goal complete; loop stops)
 //   - "continue" -> score 0   (keep working; reason is the next instruction)
 //   - "waiting"  -> score GOAL_SCORE_WAITING (explicit user checkpoint; the goal
-//                   step parks the objective as `paused` with the reason)
+//                   step stops the auto-loop but keeps the record active)
 // The generic completion reducer only treats `score === 1` as complete, so both
 // "continue" and "waiting" read as "not complete" there; the goal step inspects
-// the exact `waiting` score to distinguish a parked goal from one that iterates.
+// the exact `waiting` score to distinguish a waiting goal from one that iterates.
 
 const analyzeOutputSchema = z.object({
   decision: z

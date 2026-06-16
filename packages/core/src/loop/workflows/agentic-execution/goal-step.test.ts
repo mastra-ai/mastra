@@ -104,8 +104,14 @@ async function runGoalStep(
 
   await (step as any).execute({ inputData });
 
+  // The goal step emits a pending chunk (loading indicator) followed by the
+  // final result chunk. Pick the result chunk (non-pending) for assertions.
+  const goalChunks = chunks.filter(c => c.type === 'goal');
+  const resultChunk = goalChunks.find(c => !c.payload.pending) ?? goalChunks[goalChunks.length - 1];
+
   return {
-    chunk: chunks.find(c => c.type === 'goal'),
+    chunk: resultChunk,
+    pendingChunk: goalChunks.find(c => c.payload.pending),
     record: store.states.get(`${THREAD_ID}:${GOAL_STATE_TYPE}`)!,
     stepResult,
     messages,
@@ -169,6 +175,16 @@ describe('goal step waiting semantics', () => {
 
     const done = await runGoalStep('done', makeRecord());
     expect(done.record.pausedReason).toBeUndefined();
+  });
+
+  it('emits a pending chunk before scoring so consumers can show a loading indicator', async () => {
+    const { pendingChunk, chunk } = await runGoalStep('continue', makeRecord());
+
+    expect(pendingChunk).toBeDefined();
+    expect(pendingChunk.payload.pending).toBe(true);
+    expect(pendingChunk.payload.results).toEqual([]);
+    // The final chunk should not be pending.
+    expect(chunk.payload.pending).toBeUndefined();
   });
 });
 

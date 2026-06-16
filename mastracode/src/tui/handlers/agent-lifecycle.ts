@@ -235,6 +235,15 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
     insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   }
 
+  // A pending chunk signals that scoring has started but isn't finished yet.
+  // Show the loading indicator (the component already renders "evaluating…"
+  // when result is null) and wait for the follow-up chunk with the result.
+  if (payload.pending) {
+    ctx.updateStatusLine();
+    state.ui.requestRender();
+    return;
+  }
+
   activeGoalJudge.component.setEvaluation(payload);
 
   // Mirror the loop's progress into the synchronous adapter view so the status
