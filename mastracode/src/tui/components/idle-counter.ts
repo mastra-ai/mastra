@@ -2,7 +2,7 @@
  * Live idle-time indicator shown above the user input after an agent run completes.
  */
 
-import { Container, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
 
 const MINUTE_MS = 60_000;

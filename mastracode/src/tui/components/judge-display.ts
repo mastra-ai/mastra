@@ -2,12 +2,13 @@
  * JudgeDisplayComponent — renders the goal judge's decision inline in the chat.
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 
 import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 /** Display-only decision derived from a goal evaluation. `waiting` is retained
  *  for rendering compatibility but is not produced by the in-loop goal step. */
@@ -80,7 +81,6 @@ export class JudgeDisplayComponent extends Container {
     const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
     const horizontal = '─'.repeat(innerWidth + 1);
 
-    this.addChild(new Spacer(1));
     this.addChild(new Text(`${border('╭')}${border(horizontal)}${border('╮')}`, BOX_INDENT, 0));
     this.addChild(new Text(this.renderRow(this.renderHeader(title), innerWidth, border), BOX_INDENT, 0));
 
@@ -155,6 +155,10 @@ export class JudgeDisplayComponent extends Container {
       return stripAnsi(text).slice(0, width);
     }
     return text + ' '.repeat(width - visibleLength);
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
   }
 }
 

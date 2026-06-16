@@ -43,6 +43,7 @@ import type { VectorFilter } from '@mastra/core/vector';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
+import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { recallTool } from './tools/om-tools';
@@ -212,6 +213,12 @@ const CHARS_PER_TOKEN = 4;
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
+
+// Max number of distinct contents whose embeddings are kept in the in-process
+// cache. Bounds memory so a long-running Memory instance can't accumulate every
+// message/query it has ever embedded (each entry holds chunk text + vectors).
+// Matches the default used by the core SemanticRecall embedding cache.
+const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -970,23 +977,27 @@ ${workingMemory}`;
 
   private hasher = xxhash();
 
-  // embedding is computationally expensive so cache content -> embeddings/chunks
-  private embeddingCache = new Map<
-    number,
+  // Embedding is computationally expensive, so cache content -> embeddings/chunks.
+  // Bounded by an LRU so a long-running instance can't retain every embedded
+  // message/query (and its vectors + chunk text) for the life of the process.
+  private embeddingCache = new LRUCache<
+    bigint,
     {
       chunks: string[];
       embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
       usage?: { tokens: number };
       dimension: number | undefined;
     }
-  >();
+  >({ max: DEFAULT_EMBEDDING_CACHE_MAX_SIZE });
   private firstEmbed: Promise<any> | undefined;
   protected async embedMessageContent(content: string) {
-    // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
-    const key = (await this.hasher).h32(content);
+    // Key by the content hash (not the content itself) to keep keys small. Use the
+    // 64-bit hash: h32 is only 32 bits, so distinct contents collide after ~tens of
+    // thousands of entries, which would return another message's cached embeddings.
+    const key = (await this.hasher).h64(content);
     const cached = this.embeddingCache.get(key);
     if (cached) {
-      this.logger.debug('Embedding cache hit', { contentHash: key, chunks: cached.chunks.length });
+      this.logger.debug('Embedding cache hit', { contentHash: key.toString(), chunks: cached.chunks.length });
       return cached;
     }
     const chunks = this.chunkText(content);

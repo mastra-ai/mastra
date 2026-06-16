@@ -3,8 +3,6 @@
  */
 import type { HarnessMode } from '@mastra/core/harness';
 
-import { MC_TOOLS } from '../../tool-names.js';
-
 export const planMode: HarnessMode = {
   id: 'plan',
   name: 'Plan',
@@ -41,8 +39,7 @@ Structure your plan as:
 
 Be specific about code locations (file paths, function names, line numbers). Keep the plan actionable and under 500 words.`,
 
-  allowedWorkspaceTools: [MC_TOOLS.VIEW, MC_TOOLS.SEARCH_CONTENT, MC_TOOLS.FIND_FILES],
   metadata: {
-    default: true,
+    default: false,
   },
 };

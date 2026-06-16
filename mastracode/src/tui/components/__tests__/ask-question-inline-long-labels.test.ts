@@ -1,10 +1,10 @@
-import { visibleWidth } from '@mariozechner/pi-tui';
+import { visibleWidth } from '@earendil-works/pi-tui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock pi-tui — the real components touch the terminal at construction time.
 // Width/wrap helpers (visibleWidth, wrapTextWithAnsi) come from `actual` so the
 // wrap path under test executes the real logic.
-vi.mock('@mariozechner/pi-tui', async importOriginal => {
+vi.mock('@earendil-works/pi-tui', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
   class StubInput {
     onSubmit?: (value: string) => void;

@@ -1023,7 +1023,7 @@ describe('createLLMMappingStep toModelOutput', () => {
     );
   });
 
-  it('should normalize media parts in toModelOutput to image-data/file-data', async () => {
+  it('should preserve media parts in toModelOutput', async () => {
     const toModelOutputMock = vi.fn(() => ({
       type: 'content',
       value: [
@@ -1069,8 +1069,8 @@ describe('createLLMMappingStep toModelOutput', () => {
             modelOutput: {
               type: 'content',
               value: [
-                { type: 'image-data', data: 'base64png', mediaType: 'image/png' },
-                { type: 'file-data', data: 'base64pdf', mediaType: 'application/pdf' },
+                { type: 'media', data: 'base64png', mediaType: 'image/png' },
+                { type: 'media', data: 'base64pdf', mediaType: 'application/pdf' },
                 { type: 'text', text: 'caption' },
               ],
             },
@@ -1121,7 +1121,7 @@ describe('createLLMMappingStep toModelOutput', () => {
           mastra: expect.objectContaining({
             modelOutput: {
               type: 'content',
-              value: [null, undefined, 'not-an-object', { type: 'image-data', data: 'abc', mediaType: 'image/png' }],
+              value: [null, undefined, 'not-an-object', { type: 'media', data: 'abc', mediaType: 'image/png' }],
             },
           }),
         }),

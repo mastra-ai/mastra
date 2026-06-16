@@ -1,5 +1,5 @@
-import { Container } from '@mariozechner/pi-tui';
-import type { Component } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 import { describe, expect, it } from 'vitest';
 import {
   insertChatComponentWithBoundarySpacing,

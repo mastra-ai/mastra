@@ -41,7 +41,7 @@ describe('mastracode package metadata', () => {
       },
       './package.json': './package.json',
     });
-    expect(pkg.engines?.node).toBe('>=22.13.0');
+    expect(pkg.engines?.node).toBe('>=22.19.0');
   });
 
   it('does not publish floating latest dependency ranges', async () => {

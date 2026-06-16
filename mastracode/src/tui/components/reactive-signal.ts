@@ -1,4 +1,4 @@
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -16,7 +16,6 @@ export class ReactiveSignalComponent extends Container {
     if (options.message?.trim()) {
       this.addChild(new Text(theme.fg('dim', options.message.trim()), BOX_INDENT + 2, 0));
     }
-    this.addChild(new Spacer(1));
   }
 
   getChatSpacingKind(): ChatSpacingKind {
