@@ -112,7 +112,8 @@ await harness.sendMessage({ content: 'Hello!' })
           {
             name: 'default',
             type: 'boolean',
-            description: 'Whether this is the default mode when the harness starts.',
+            description:
+              'Whether this is the default mode when the harness starts. Deprecated in favor of `metadata.default` or the top-level `defaultModeId`.',
             isOptional: true,
             defaultValue: 'false',
           },
@@ -124,20 +125,72 @@ await harness.sendMessage({ content: 'Hello!' })
             isOptional: true,
           },
           {
-            name: 'color',
+            name: 'description',
             type: 'string',
-            description: 'Hex color for the mode indicator (e.g., `"#7c3aed"`).',
+            description: 'Description surfaced in mode pickers and Studio UI.',
+            isOptional: true,
+          },
+          {
+            name: 'instructions',
+            type: 'string',
+            description: "Additional instructions layered above the backing agent's own instructions for this mode.",
+            isOptional: true,
+          },
+          {
+            name: 'transitionsTo',
+            type: 'string',
+            description: "Target mode ID to switch to on `submit_plan` approval. Must reference another mode's `id`.",
+            isOptional: true,
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            description:
+              'Arbitrary metadata. `metadata.default === true` marks the default mode when `defaultModeId` is unset.',
+            isOptional: true,
+          },
+          {
+            name: 'tools',
+            type: 'ToolsInput',
+            description: "Replaces the backing agent's tools for this mode. Mutually exclusive with `additionalTools`.",
+            isOptional: true,
+          },
+          {
+            name: 'additionalTools',
+            type: 'ToolsInput',
+            description: "Tools layered on top of the backing agent's tools. Mutually exclusive with `tools`.",
             isOptional: true,
           },
           {
             name: 'agent',
-            type: 'Agent | ((state) => Agent)',
+            type: 'Agent',
             description:
-              'The agent for this mode. It can be a static Agent instance or a function that receives harness state and returns an Agent.',
+              'The agent for this mode. Deprecated in favor of the top-level `agent` config with mode-level overrides.',
+            isOptional: true,
           },
         ],
       },
     ],
+  },
+  {
+    name: 'agent',
+    type: 'Agent',
+    description:
+      'Shared backing agent that each mode forks and decorates. When provided, modes layer instructions and tool overrides on top of this agent instead of providing their own.',
+    isOptional: true,
+  },
+  {
+    name: 'defaultModeId',
+    type: 'string',
+    description:
+      'Default mode to enter when a thread has no persisted mode. Takes precedence over `metadata.default` on individual modes.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: "Base instructions shared across all modes. Appended to the backing agent's instructions.",
+    isOptional: true,
   },
   {
     name: 'tools',
@@ -151,6 +204,13 @@ await harness.sendMessage({ content: 'Hello!' })
     type: 'Workspace | WorkspaceConfig | ((ctx) => Workspace)',
     description:
       'Workspace configuration. Accepts a pre-constructed Workspace, a WorkspaceConfig for the harness to construct internally, or a dynamic factory function.',
+    isOptional: true,
+  },
+  {
+    name: 'browser',
+    type: 'MastraBrowser | ((ctx) => MastraBrowser)',
+    description:
+      "Browser automation configuration. Propagated to mode agents that don't have their own browser configured.",
     isOptional: true,
   },
   {
@@ -281,6 +341,27 @@ await harness.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
+    name: 'modelUseCountTracker',
+    type: 'ModelUseCountTracker',
+    description:
+      'Callback invoked when a model is selected via `switchModel()`. Use to track and persist model usage for ranking.',
+    isOptional: true,
+  },
+  {
+    name: 'customModelCatalogProvider',
+    type: 'CustomModelCatalogProvider',
+    description:
+      'Catalog hook for additional models (e.g., user-defined custom providers). Returned entries are merged into `listAvailableModels()`.',
+    isOptional: true,
+  },
+  {
+    name: 'gateways',
+    type: 'MastraModelGatewayInterface[]',
+    description:
+      'Model gateways registered on the internal Mastra instance. Apps that need gateway-backed model resolution should also provide `resolveModel`.',
+    isOptional: true,
+  },
+  {
     name: 'toolCategoryResolver',
     type: '(toolName: string) => ToolCategory | null',
     description:
@@ -288,10 +369,23 @@ await harness.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
+    name: 'pubsub',
+    type: 'PubSub',
+    description: 'PubSub instance used by the internal Mastra instance and mode agents for event coordination.',
+    isOptional: true,
+  },
+  {
     name: 'threadLock',
     type: '{ acquire, release }',
     description:
       'Thread locking callbacks to prevent concurrent access from multiple processes. `acquire` should throw if the lock is held.',
+    isOptional: true,
+  },
+  {
+    name: 'observability',
+    type: 'ObservabilityEntrypoint',
+    description:
+      'Observability entrypoint for tracing, scoring, and feedback. When provided, the internal Mastra instance produces trace spans for agent runs.',
     isOptional: true,
   },
 ]}
