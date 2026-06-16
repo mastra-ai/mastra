@@ -19,7 +19,7 @@ vi.mock('node:fs', () => ({
   statSync: mocks.statSync,
 }));
 
-vi.mock('@mariozechner/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', () => {
   class MockEditor {
     constructor(_tui: unknown, _theme: unknown) {}
 

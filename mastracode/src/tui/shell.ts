@@ -3,6 +3,7 @@
  * Streams stdout/stderr in real-time using a bordered box that rebuilds on each chunk.
  */
 import { loadSettings } from '../onboarding/settings.js';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { ShellStreamComponent } from './components/shell-output.js';
 import { showError, showInfo } from './display.js';
 import { resolveShellPassthroughCompletion } from './shell-result.js';
@@ -20,7 +21,7 @@ export async function handleShellPassthrough(state: TUIState, command: string): 
     component.setExpanded(true);
   }
   state.allShellComponents.push(component);
-  state.chatContainer.addChild(component);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   state.ui.requestRender();
 
   try {

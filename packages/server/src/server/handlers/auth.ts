@@ -380,7 +380,7 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
       const stateId = crypto.randomUUID();
       const state = `${stateId}|${encodeURIComponent(postLoginRedirect)}`;
 
-      const loginUrl = auth.getLoginUrl(oauthCallbackUri, state);
+      const loginUrl = await Promise.resolve(auth.getLoginUrl(oauthCallbackUri, state));
 
       // Build response with optional PKCE cookies
       const headers = new Headers({ 'Content-Type': 'application/json' });

@@ -5,8 +5,8 @@
 import { readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Editor, matchesKey } from '@mariozechner/pi-tui';
-import type { EditorTheme, SelectItem, TUI } from '@mariozechner/pi-tui';
+import { Editor, matchesKey } from '@earendil-works/pi-tui';
+import type { EditorTheme, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';

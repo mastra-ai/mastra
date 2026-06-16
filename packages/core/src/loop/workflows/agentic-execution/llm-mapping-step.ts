@@ -144,11 +144,16 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
        */
       /**
-       * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts
-       * are converted to `type: 'image-data'` or `type: 'file-data'` as AI SDK
-       * providers expect. AI SDK does this internally in `mapToolResultOutput`,
-       * but Mastra calls toModelOutput directly and stores the result, bypassing
-       * that normalization.
+       * Normalize modelOutput from toModelOutput() into the AI SDK's
+       * LanguageModelV2ToolResultOutput shape.
+       *
+       * The AI SDK's content array only accepts type 'text' or 'media'.
+       * Mastra's createTool docs show type 'image-url' as a convenience shorthand,
+       * so we normalize that here into type 'media' with the correct structure.
+       *
+       * Previously this converted 'media' -> 'image-data'/'file-data' which was wrong
+       * (those types are not valid in LanguageModelV2ToolResultOutput).
+       * See: https://github.com/mastra-ai/mastra/issues/17876
        */
       function normalizeModelOutput(output: unknown): unknown {
         if (output == null || typeof output !== 'object') return output;
@@ -161,11 +166,25 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           value: (obj.value as unknown[]).map(item => {
             if (item == null || typeof item !== 'object') return item;
             const part = item as Record<string, unknown>;
-            if (part.type !== 'media') return part;
-            if (typeof part.mediaType === 'string' && part.mediaType.startsWith('image/')) {
-              return { type: 'image-data', data: part.data, mediaType: part.mediaType };
+            // Normalize 'image-url' convenience type -> 'media' as AI SDK expects
+            if (part.type === 'image-url' && typeof part.url === 'string') {
+              // Prefer caller-supplied mediaType; fall back to parsing data: URI or defaulting to image/jpeg
+              const mediaType =
+                typeof part.mediaType === 'string' && part.mediaType
+                  ? part.mediaType
+                  : part.url.startsWith('data:')
+                    ? part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg'
+                    : 'image/jpeg';
+              return { type: 'media', data: part.url, mediaType };
             }
-            return { type: 'file-data', data: part.data, mediaType: part.mediaType };
+            // 'image-data'/'file-data' from old normalizeModelOutput — convert back to 'media'
+            if (part.type === 'image-data' && typeof part.data === 'string') {
+              return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'image/jpeg' };
+            }
+            if (part.type === 'file-data' && typeof part.data === 'string') {
+              return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'application/octet-stream' };
+            }
+            return part;
           }),
         };
       }

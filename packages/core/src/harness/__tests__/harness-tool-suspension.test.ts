@@ -348,4 +348,72 @@ describe('Harness: tool suspension and resumption', () => {
     // Yolo mode should disable tool approval gating on resume, matching sendMessage's behavior
     expect(resumeOptions.requireToolApproval).toBe(false);
   });
+
+  it('should forward the full run budget (maxSteps) to resumeStream so the resumed run does not stop mid-task', async () => {
+    // Regression: resumeStream previously omitted maxSteps, so the resumed run
+    // merged over the agent's small default budget and ended with reason
+    // "complete" after a few steps — the agent stopped mid-task after ask_user.
+    const confirmTool = createTool({
+      id: 'confirm-action',
+      description: 'Confirms an action with the user',
+      inputSchema: z.object({ action: z.string() }),
+      execute: async (input: { action: string }, context?: any) => {
+        // Resume-aware: continue instead of re-suspending once resumeData arrives,
+        // so the resumed run can actually complete.
+        const resumeData = context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+        if (resumeData) {
+          return { result: `Action "${input.action}" confirmed`, resumed: resumeData };
+        }
+        const suspend = context?.suspend ?? context?.agent?.suspend;
+        if (!suspend) throw new Error('suspend not available in context');
+        await suspend({ action: input.action });
+        return { result: `Action "${input.action}" confirmed` };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent-budget-resume',
+      name: 'Test Agent Budget Resume',
+      instructions: 'You confirm actions.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: (() => {
+          let callCount = 0;
+          return async () => {
+            callCount++;
+            return { stream: callCount === 1 ? createToolCallStream() : createTextStream() };
+          };
+        })(),
+      }),
+      tools: { confirmAction: confirmTool },
+    });
+
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({
+      agents: { 'test-agent-budget-resume': agent },
+      logger: false,
+      storage,
+    });
+
+    const registeredAgent = mastra.getAgent('test-agent-budget-resume');
+    const resumeStreamSpy = vi.spyOn(registeredAgent, 'resumeStream');
+
+    const harness = new Harness({
+      id: 'test-harness-budget-resume',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+      initialState: { yolo: true } as any,
+    });
+
+    await harness.init();
+    await harness.createThread();
+
+    await harness.sendMessage({ content: 'Deploy to production' });
+    await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(resumeStreamSpy).toHaveBeenCalled();
+    const [, resumeOptions] = resumeStreamSpy.mock.calls[0] as [any, any];
+    // Must match the budget used for the initial stream, not the agent default.
+    expect(resumeOptions.maxSteps).toBe(1000);
+    expect(resumeOptions.savePerStep).toBe(false);
+  });
 });
