@@ -7,7 +7,6 @@ import {
   type ChannelConnectResult,
   type ChannelAdapterConfig,
   AgentChannels,
-  describeWaitUntilContext,
   resolveWaitUntil,
 } from '@mastra/core/channels';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
@@ -1439,13 +1438,6 @@ export class SlackProvider implements ChannelProvider {
     // invocation freezes after returning 200 and kills the agent run mid-flight.
     const waitUntilFn =
       this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
-    // TEMP: log context shape so we can diagnose runtime-specific resolution.
-    // Strip before release.
-    try {
-      console.info(
-        `[wait-until] slack resolved=${Boolean(waitUntilFn)} ${JSON.stringify(describeWaitUntilContext(c))}`,
-      );
-    } catch {}
 
     try {
       return await agentChannels.handleWebhookEvent(
