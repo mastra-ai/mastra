@@ -368,7 +368,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           'harness.state.reflectionThreshold',
         ],
         exporters: [
-          new MastraStorageExporter({ strategy: 'event-sourced' }),
+          // Only persist traces/scores/metrics locally when DuckDB observability
+          // is available (via `/observability local on`). Without this guard the
+          // storage exporter falls through to the default libsql backend and
+          // silently fills the main database with gigabytes of span data.
+          ...(observabilityDomain ? [new MastraStorageExporter({ strategy: 'event-sourced' })] : []),
           new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
