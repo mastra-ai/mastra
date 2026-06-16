@@ -1,37 +1,18 @@
-import { useCallback, useSyncExternalStore } from 'react';
-
-const noopSubscribe = () => () => {};
-const getServerSnapshot = () => false;
+import { useLayoutEffect, useMemo, useState } from 'react';
 
 // Default breakpoint 1024 matches MainSidebar's mobile breakpoint.
 export const useIsMobile = (breakpoint: number = 1024) => {
-  const query = `(max-width: ${breakpoint - 1}px)`;
+  const query = useMemo(() => `(max-width: ${breakpoint - 1}px)`, [breakpoint]);
+  const [isMobile, setIsMobile] = useState(false);
 
-  const getSnapshot = useCallback(
-    () =>
-      typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-        ? window.matchMedia(query).matches
-        : false,
-    [query],
-  );
+  useLayoutEffect(() => {
+    const mq = window.matchMedia(query);
+    const update = () => setIsMobile(mq.matches);
 
-  const subscribe = useCallback(
-    (callback: () => void) => {
-      if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-        return noopSubscribe();
-      }
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, [query]);
 
-      const mq = window.matchMedia(query);
-      if (typeof mq.addEventListener === 'function') {
-        mq.addEventListener('change', callback);
-        return () => mq.removeEventListener('change', callback);
-      }
-
-      mq.addListener(callback);
-      return () => mq.removeListener(callback);
-    },
-    [query],
-  );
-
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return isMobile;
 };
