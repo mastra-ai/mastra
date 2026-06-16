@@ -31,7 +31,7 @@ const makeWrapper = () => {
 const dataSource: AgentDataSource = {
   name: 'Code Override Editable',
   instructions: 'Original code instructions for editable override agent.',
-  model: { provider: 'openai', name: 'gpt-4o-mini' },
+  model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
 };
 
 /** Capture the body of the create-stored-agent request the save flow sends. */

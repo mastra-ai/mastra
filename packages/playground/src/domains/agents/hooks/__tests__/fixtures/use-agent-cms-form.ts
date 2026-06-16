@@ -13,5 +13,5 @@ export const createdCodeAgent: StoredAgentResponse = {
   updatedAt: '2026-06-16T00:00:00.000Z',
   name: 'Code Override Editable',
   instructions: 'Original code instructions for editable override agent.',
-  model: { provider: 'openai', name: 'gpt-4o-mini' },
+  model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
 };
