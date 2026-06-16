@@ -3860,7 +3860,10 @@ describe('Agent signals', () => {
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
 
-    const runIdSignalResult = agent.sendSignal({ type: 'user-message', contents: 'Hello by run id' }, { runId: stream.runId });
+    const runIdSignalResult = agent.sendSignal(
+      { type: 'user-message', contents: 'Hello by run id' },
+      { runId: stream.runId },
+    );
     await expect(runIdSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
     releaseFirst();
