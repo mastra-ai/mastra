@@ -28,6 +28,19 @@ describe('buildAgentDefaultSettings', () => {
     expect(result.modelSettings).toEqual({ temperature: 0.7, topP: 0.9 });
   });
 
+  it('ignores defaultOptions with a mismatched shape', () => {
+    expect(buildAgentDefaultSettings({ defaultOptions: 'nope' })).toEqual({ modelSettings: {} });
+    expect(buildAgentDefaultSettings({ defaultOptions: 42 })).toEqual({ modelSettings: {} });
+    expect(buildAgentDefaultSettings({ defaultOptions: null })).toEqual({ modelSettings: {} });
+  });
+
+  it('drops fields whose runtime type is wrong', () => {
+    const result = buildAgentDefaultSettings({
+      defaultOptions: { maxSteps: 'ten', modelSettings: 'bad', providerOptions: 'bad' },
+    });
+    expect(result).toEqual({ modelSettings: {} });
+  });
+
   it('only includes maxSteps and providerOptions when defined', () => {
     const withValues = buildAgentDefaultSettings({
       defaultOptions: { maxSteps: 10, providerOptions: { openai: { reasoningEffort: 'low' } } },
