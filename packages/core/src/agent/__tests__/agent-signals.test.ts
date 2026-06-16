@@ -1006,7 +1006,7 @@ describe('Agent signals', () => {
     );
 
     const subscribedRun = await nextRun;
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
     expect(signalResult.signal.id).toBeDefined();
     expect(signalResult.signal.acceptedAt).toBeInstanceOf(Date);
     expect(subscribedRun.value.text).toBe('signal response');
@@ -1046,7 +1046,7 @@ describe('Agent signals', () => {
     );
 
     const subscribedRun = await nextRun;
-    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
     expect(result.signal).toMatchObject({ type: 'user', tagName: 'user', contents: 'Hello from sendMessage' });
     const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-user-message');
     expect(signalPart?.data).toMatchObject({
@@ -1082,8 +1082,8 @@ describe('Agent signals', () => {
       },
       { resourceId: 'state-user', threadId: 'state-thread', ifIdle: { behavior: 'persist' } },
     );
-    expect(result.accepted).toBe(true);
-    expect(result.skipped).not.toBe(true);
+    if (result.skipped) throw new Error('expected state signal to be persisted, not skipped');
+    await expect(result.accepted).resolves.toMatchObject({ action: 'persist' });
     expect(result.signal).toBeDefined();
 
     expect(result.signal).toMatchObject({
@@ -1099,7 +1099,7 @@ describe('Agent signals', () => {
         { id: 'browser', cacheKey: 'browser:v1', contents: 'unchanged' },
         { resourceId: 'state-user', threadId: 'state-thread', ifIdle: { behavior: 'persist' } },
       ),
-    ).resolves.toEqual({ accepted: true, skipped: true, reason: 'unchanged' });
+    ).resolves.toEqual({ skipped: true, reason: 'unchanged' });
     const thread = await memory.getThreadById({ threadId: 'state-thread' });
     expect(thread?.metadata?.mastra).toEqual(
       expect.objectContaining({
@@ -1269,9 +1269,12 @@ describe('Agent signals', () => {
       model: createTextStreamModel('unused'),
     });
     new Mastra({ agents: { rejectedNotificationAgent: agent }, storage, logger: false });
+    const rejectedAccepted = Promise.reject(new Error('signal rejected'));
+    // Attach a no-op catch so the rejection is considered handled and never surfaces as an
+    // unhandled rejection; the dispatcher attaches its own awaiting handler in try/catch.
+    rejectedAccepted.catch(() => {});
     const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockReturnValue({
-      accepted: false,
-      runId: 'run-1',
+      accepted: rejectedAccepted,
       signal: createSignal({ type: 'notification', tagName: 'notification', contents: 'Rejected' }),
     } as any);
 
@@ -2091,7 +2094,7 @@ describe('Agent signals', () => {
       threadId: 'active-message-thread',
     });
 
-    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     releaseFirst();
     await expect(stream.text).resolves.toBe('first responsemessage response');
     expect(streamCount).toBe(2);
@@ -2143,7 +2146,7 @@ describe('Agent signals', () => {
 
       const result = runtime.sendMessage(agent, 'Queued behind approval', { resourceId, threadId });
 
-      expect(result).toEqual(expect.objectContaining({ accepted: true, runId }));
+      await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
       expect((agent as any).stream).not.toHaveBeenCalled();
       const [signal] = runtime.drainPendingSignals(runId);
       expect(signal).toMatchObject({ type: 'user', contents: 'Queued behind approval' });
@@ -2211,8 +2214,10 @@ describe('Agent signals', () => {
       threadId: 'queue-message-thread',
     });
 
-    expect(result.accepted).toBe(true);
-    expect(result.runId).not.toBe(stream.runId);
+    const settled = await result.accepted;
+    const queuedRunId = 'runId' in settled ? settled.runId : undefined;
+    expect(settled.action).toBe('deliver');
+    expect(queuedRunId).not.toBe(stream.runId);
     await nextTick();
     expect(streamCount).toBe(1);
 
@@ -2220,7 +2225,7 @@ describe('Agent signals', () => {
     await expect(stream.text).resolves.toBe('first response');
     await firstRun;
     const secondRun = await readNextRunWithParts(iterator);
-    expect(secondRun.value.runId).toBe(result.runId);
+    expect(secondRun.value.runId).toBe(queuedRunId);
     expect(secondRun.value.text).toBe('queued response');
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[1])).toContain('Queued follow-up');
@@ -2297,7 +2302,7 @@ describe('Agent signals', () => {
         );
         const [firstRun] = runs;
 
-        expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: firstRun.value.runId }));
+        await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: firstRun.value.runId });
         expect(firstRun.value.text).toBe(`signal response ${runIndex}`);
 
         for (const run of runs) {
@@ -2335,7 +2340,7 @@ describe('Agent signals', () => {
       { resourceId: 'idle-user', threadId: 'idle-thread' },
     );
 
-    expect(result).toEqual(expect.objectContaining({ accepted: true }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake' });
   });
 
   it('reports the reserved runId as active before registerRun populates the stream record', async () => {
@@ -2360,8 +2365,10 @@ describe('Agent signals', () => {
       ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } as any },
     });
 
-    expect(result.accepted).toBe(true);
-    expect(subscription.activeRunId()).toBe(result.runId);
+    // accepted never settles here because agent.stream is pinned; the reserved runId is
+    // observable via the subscription's active run id before registerRun populates the stream.
+    expect(result.accepted).toBeInstanceOf(Promise);
+    expect(subscription.activeRunId()).not.toBeNull();
 
     subscription.unsubscribe();
   });
@@ -2558,7 +2565,7 @@ describe('Agent signals', () => {
       pubsub,
     );
 
-    expect(result.accepted).toBe(true);
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver' });
     await waitForCondition(() => ownerRuntime.drainPendingSignals('remote-run-1', pubsub).length === 1);
 
     finishRun();
@@ -2610,12 +2617,10 @@ describe('Agent signals', () => {
     const resultA = runtimeA.sendSignal(agentA, { type: 'user-message', contents: 'from A' }, target, pubsub);
     const resultB = runtimeB.sendSignal(agentB, { type: 'user-message', contents: 'from B' }, target, pubsub);
 
-    expect(resultA.accepted).toBe(true);
-    expect(resultB.accepted).toBe(true);
-    expect(resultA.outcome).toBeDefined();
-    expect(resultB.outcome).toBeDefined();
+    expect(resultA.accepted).toBeInstanceOf(Promise);
+    expect(resultB.accepted).toBeInstanceOf(Promise);
 
-    const [settledA, settledB] = await Promise.all([resultA.outcome!, resultB.outcome!]);
+    const [settledA, settledB] = await Promise.all([resultA.accepted, resultB.accepted]);
 
     // Exactly one runtime won the lease and ran the stream (`wake` + owned output); the
     // loser forwarded its signal to the winner and resolves to `deliver`.
@@ -2851,7 +2856,7 @@ describe('Agent signals', () => {
       },
     );
     const signalRun = await secondRunPromise;
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: signalRun.value.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: signalRun.value.runId });
     expect(signalResult.signal.id).toBeDefined();
     expect(signalRun.value.text).toBe('standalone shared response');
 
@@ -2977,7 +2982,7 @@ describe('Agent signals', () => {
       },
     );
     const signalRun = await secondRunPromise;
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: signalRun.value.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: signalRun.value.runId });
     expect(signalResult.signal.id).toBeDefined();
     expect(signalRun.value.text).toBe('shared response');
 
@@ -3062,7 +3067,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'First signal while running' },
       { resourceId: 'active-user', threadId: 'active-thread' },
     );
-    expect(firstSignalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(firstSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     expect(firstSignalResult.signal.id).toBeDefined();
 
     releaseFirst();
@@ -3072,7 +3077,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'Second signal while running' },
       { resourceId: 'active-user', threadId: 'active-thread' },
     );
-    expect(secondSignalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(secondSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     expect(secondSignalResult.signal.id).toBeDefined();
     expect(secondSignalResult.signal.id).not.toBe(firstSignalResult.signal.id);
 
@@ -3247,7 +3252,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'Actually stop and answer this instead' },
       { resourceId: 'tool-interjection-user', threadId: 'tool-interjection-thread' },
     );
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
     continueToToolCall();
     await waitForCondition(() => callCount === 2);
@@ -3345,7 +3350,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'Stop reasoning and answer this' },
       { resourceId: 'interleaved-reasoning-user', threadId: 'interleaved-reasoning-thread' },
     );
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
     releaseReasoningChunk?.();
     await waitForCondition(() => !!finishFirstCall);
@@ -3417,10 +3422,15 @@ describe('Agent signals', () => {
       },
     );
 
-    expect(followUp.runId).toBe(firstSignal.runId);
+    const firstAccepted = await firstSignal.accepted;
+    const followUpAccepted = await followUp.accepted;
+    const firstRunId = 'runId' in firstAccepted ? firstAccepted.runId : undefined;
+    const followUpRunId = 'runId' in followUpAccepted ? followUpAccepted.runId : undefined;
+    expect(firstAccepted.action).toBe('wake');
+    expect(followUpRunId).toBe(firstRunId);
 
     const run = await runPromise;
-    expect(run.value.runId).toBe(firstSignal.runId);
+    expect(run.value.runId).toBe(firstRunId);
     expect(run.value.text).toBe('response');
     expect(prompts).toHaveLength(1);
     expect(JSON.stringify(prompts[0])).toContain('thread targeted follow up');
@@ -3623,8 +3633,10 @@ describe('Agent signals', () => {
     await expect(firstText).resolves.toBe('first response');
     await expect(firstRunPromise).resolves.toMatchObject({ value: { runId: firstStream.runId }, done: false });
 
+    const signalAccepted = await signalResult.accepted;
+    const signalRunId = 'runId' in signalAccepted ? signalAccepted.runId : undefined;
     const secondRun = await readNextRun(iterator);
-    expect(secondRun.value.runId).toBe(signalResult.runId);
+    expect(secondRun.value.runId).toBe(signalRunId);
     expect(secondRun.value.text).toBe('second response');
     expect(secondStarted).toBe(true);
 
@@ -3848,12 +3860,11 @@ describe('Agent signals', () => {
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
 
-    expect(agent.sendSignal({ type: 'user-message', contents: 'Hello by run id' }, { runId: stream.runId })).toEqual(
-      expect.objectContaining({
-        accepted: true,
-        runId: stream.runId,
-      }),
+    const runIdSignalResult = agent.sendSignal(
+      { type: 'user-message', contents: 'Hello by run id' },
+      { runId: stream.runId },
     );
+    await expect(runIdSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
     releaseFirst();
     await firstRunPromise;
@@ -3917,7 +3928,7 @@ describe('Agent signals', () => {
       },
     );
 
-    expect(stream.accepted).toBe(true);
+    await expect(stream.accepted).resolves.toMatchObject({ action: 'wake' });
     for (let i = 0; i < 10 && !capturedPrompt; i++) {
       await nextTick();
     }

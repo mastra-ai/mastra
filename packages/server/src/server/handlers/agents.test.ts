@@ -1511,7 +1511,9 @@ describe('Agent Routes Authorization', () => {
       (mockAgent as any).sendSignal = vi.fn((signal, target) => {
         capturedSignal = signal;
         capturedTarget = target;
-        return { accepted: true, runId: 'signal-run-id' };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'signal-run-id' }),
+        };
       });
 
       const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
@@ -1551,7 +1553,10 @@ describe('Agent Routes Authorization', () => {
       (mockAgent as any).sendMessage = vi.fn((message, target) => {
         capturedMessage = message;
         capturedTarget = target;
-        return { accepted: true, runId: 'message-run-id', signal: { id: 'signal-id' } };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'message-run-id' }),
+          signal: { id: 'signal-id' },
+        };
       });
 
       const result = await SEND_AGENT_MESSAGE_ROUTE.handler({
@@ -1586,7 +1591,9 @@ describe('Agent Routes Authorization', () => {
 
       (mockAgent as any).queueMessage = vi.fn((_message, target) => {
         capturedTarget = target;
-        return { accepted: true, runId: 'queued-message-run-id' };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'queued-message-run-id' }),
+        };
       });
 
       const result = await QUEUE_AGENT_MESSAGE_ROUTE.handler({
@@ -1638,7 +1645,9 @@ describe('Agent Routes Authorization', () => {
 
       (mockAgent as any).sendSignal = vi.fn((_signal, target) => {
         capturedTarget = target;
-        return { accepted: true, runId: 'signal-run-with-context' };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'signal-run-with-context' }),
+        };
       });
 
       const result = await SEND_AGENT_SIGNAL_ROUTE.handler({

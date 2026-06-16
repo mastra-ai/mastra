@@ -306,7 +306,7 @@ agent.sendMessage('Continue with the next step.', {
 })
 ```
 
-Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, outcome: Promise<SendAgentSignalOutcome> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory. `outcome` resolves once Mastra decides what to do with the message: `{ action: 'wake', output }` when this process runs the agent (it started or won the lease to start the run), or `{ action: 'deliver' | 'persist' | 'discard' }` otherwise — a lost lease race resolves to `deliver` since the signal is forwarded to the winning run. On the `wake` action, `output` is the agent stream for in-process consumption.
+Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the message: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the message is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` is the authoritative id of the run that handled the message and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored message. `accepted` resolves for routing — a generation error on a `wake` run surfaces through `output.consumeStream()` — and rejects only when the message could not be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
 
 ### `queueMessage(message, options)`
 
@@ -319,7 +319,7 @@ agent.queueMessage('Also check whether the tests need updates.', {
 })
 ```
 
-`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, outcome: Promise<SendAgentSignalOutcome> }`.
+`queueMessage()` accepts the same `message` and `options` shape as `sendMessage()` and returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`, with the same `accepted` semantics as `sendMessage()`.
 
 ### `sendSignal(signal, options)`
 
@@ -426,16 +426,16 @@ Sends a signal to an active run or memory thread.
 ]}
 />
 
-Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, outcome: Promise<SendAgentSignalOutcome> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory. `outcome` resolves once Mastra decides what to do with the signal: `{ action: 'wake', output }` when this process runs the agent (it started or won the lease to start the run), or `{ action: 'deliver' | 'persist' | 'discard' }` otherwise — a lost lease race resolves to `deliver` since the signal is forwarded to the winning run. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`. On the `wake` action, `output` is the agent stream for in-process consumption.
+Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the signal: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`. `runId` is the authoritative id of the run that handled the signal and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored signal. `accepted` resolves for routing — a generation error on a `wake` run surfaces through `output.consumeStream()` — and rejects only when the signal could not be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
 
-In serverless handlers, await `outcome` and pass the `wake` output to your platform's `waitUntil` equivalent so the winning process can drain the stream after the HTTP response returns.
+In serverless handlers, await `accepted` and pass the `wake` output to your platform's `waitUntil` equivalent so the winning process can drain the stream after the HTTP response returns.
 
 ```typescript
 const result = agent.sendSignal(signal, { resourceId, threadId })
 ctx.waitUntil(
-  result.outcome.then(async ({ action, output }) => {
-    if (action === 'wake' && output) {
-      await output.consumeStream()
+  result.accepted.then(async accepted => {
+    if (accepted.action === 'wake') {
+      await accepted.output.consumeStream()
     }
   }),
 )
@@ -534,7 +534,7 @@ const result = await agent.sendStateSignal(
 ]}
 />
 
-Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, outcome: Promise<SendAgentSignalOutcome>, skipped?: false }` when Mastra accepts new state. Returns `{ accepted: true, skipped: true, reason: 'unchanged' }` when the same `cacheKey` and mode are already current for the state lane. `outcome` resolves once Mastra decides what to do with the signal: `{ action: 'wake', output }` when this process runs the agent (it started or won the lease to start the run), or `{ action: 'deliver' | 'persist' | 'discard' }` otherwise — a lost lease race resolves to `deliver` since the signal is forwarded to the winning run. On the `wake` action, `output` is the agent stream for in-process consumption.
+Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void>, skipped?: false }` when Mastra accepts new state. Returns `{ skipped: true, reason: 'unchanged' }` when the same `cacheKey` and mode are already current for the state lane. `accepted` resolves at decision-time, once Mastra decides what to do with the signal: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` is the authoritative id of the run that handled the signal and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored signal. On the `wake` action, `output` is the agent stream for in-process consumption.
 
 ### `sendNotificationSignal(notification, options)`
 
@@ -666,7 +666,7 @@ const result = await agent.sendNotificationSignal(
 ]}
 />
 
-Returns `{ accepted: true, record: NotificationRecord, decision: NotificationDeliveryDecision, runId?: string, signal?: CreatedAgentSignal, persisted?: Promise<void>, outcome?: Promise<SendAgentSignalOutcome> }`. `record` is the stored inbox record. `decision` is the delivery-policy result. `signal` and `runId` are present when ingress emits a signal immediately, including the immediate summary emitted for active high-priority notifications. `persisted` is present when the emitted signal is persisted without waking an idle thread. `outcome` is present when a signal is emitted and resolves once Mastra decides what to do with it: `{ action: 'wake', output }` when this process runs the agent (it started or won the lease to start the run), or `{ action: 'deliver' | 'persist' | 'discard' }` otherwise — a lost lease race resolves to `deliver` since the signal is forwarded to the winning run. On the `wake` action, `output` is the agent stream for in-process consumption.
+Returns `{ accepted: boolean, record: NotificationRecord, decision: NotificationDeliveryDecision, runId?: string, signal?: CreatedAgentSignal, persisted?: Promise<void>, outcome?: Promise<SendAgentSignalAccepted> }`. Here `accepted` is a boolean reporting whether the notification was accepted for delivery (distinct from the signal-routing `accepted` promise on `sendSignal`). `record` is the stored inbox record. `decision` is the delivery-policy result. `signal` and `runId` are present when ingress emits a signal immediately, including the immediate summary emitted for active high-priority notifications. `persisted` is present when the emitted signal is persisted without waking an idle thread. `outcome` is present when a signal is emitted and resolves at decision-time, once Mastra decides what to do with it: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run, or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` on the outcome is present only on `wake` and `deliver`. On the `wake` action, `output` is the agent stream for in-process consumption.
 
 Default delivery is priority-aware. `urgent` notifications deliver immediately. `high` notifications deliver immediately when the thread is idle; when the thread is active, Mastra emits a summary immediately and keeps `deliverAt` for later full delivery when the thread is idle. `medium` notifications deliver immediately when idle and batch into summaries when active. `low` notifications batch into summaries in both active and idle threads; idle low-priority summaries reach subscribers without waking the model loop. For the full flow, visit [Signals](/docs/agents/signals#notification-signals).
 

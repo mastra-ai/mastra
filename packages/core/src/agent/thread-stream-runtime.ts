@@ -22,6 +22,7 @@ import type {
   SendAgentMessageOptions,
   SendAgentMessageResult,
   SendAgentSignalOptions,
+  SendAgentSignalAccepted,
   SendAgentSignalResult,
   SendAgentStateSignalOptions,
   SendAgentStateSignalResult,
@@ -1252,10 +1253,8 @@ export class AgentThreadStreamRuntime {
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
       return {
-        accepted: true,
-        runId: queuedRunId,
         signal,
-        outcome: Promise.resolve({ action: 'deliver' as const }),
+        accepted: Promise.resolve({ action: 'deliver' as const, runId: queuedRunId }),
       };
     }
 
@@ -1311,7 +1310,7 @@ export class AgentThreadStreamRuntime {
     });
 
     if (applied.skipped) {
-      return { accepted: true, skipped: true, reason: 'unchanged' };
+      return { skipped: true, reason: 'unchanged' };
     }
 
     return this.sendSignal<OUTPUT>(agent, applied.signal, target, pubsub);
@@ -1389,18 +1388,14 @@ export class AgentThreadStreamRuntime {
         );
         void persisted.catch(() => {});
         return {
-          accepted: true,
-          runId: runId!,
           signal,
           persisted,
-          outcome: persisted.then(() => ({ action: 'persist' as const })),
+          accepted: Promise.resolve({ action: 'persist' as const }),
         };
       }
       return {
-        accepted: true,
-        runId: runId!,
         signal,
-        outcome: Promise.resolve({ action: 'discard' as const }),
+        accepted: Promise.resolve({ action: 'discard' as const }),
       };
     }
 
@@ -1426,10 +1421,8 @@ export class AgentThreadStreamRuntime {
           });
           this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
           return {
-            accepted: true,
-            runId,
             signal,
-            outcome: Promise.resolve({ action: 'deliver' as const }),
+            accepted: Promise.resolve({ action: 'deliver' as const, runId }),
           };
         }
       }
@@ -1454,10 +1447,8 @@ export class AgentThreadStreamRuntime {
           preRun: isLocalReservedRun,
         });
         return {
-          accepted: true,
-          runId,
           signal,
-          outcome: Promise.resolve({ action: 'deliver' as const }),
+          accepted: Promise.resolve({ action: 'deliver' as const, runId }),
         };
       }
     }
@@ -1482,19 +1473,15 @@ export class AgentThreadStreamRuntime {
       );
       void persisted.catch(() => {});
       return {
-        accepted: true,
-        runId,
         signal,
         persisted,
-        outcome: persisted.then(() => ({ action: 'persist' as const })),
+        accepted: Promise.resolve({ action: 'persist' as const }),
       };
     }
     if (idleBehavior !== 'wake') {
       return {
-        accepted: true,
-        runId,
         signal,
-        outcome: Promise.resolve({ action: 'discard' as const }),
+        accepted: Promise.resolve({ action: 'discard' as const }),
       };
     }
 
@@ -1508,10 +1495,8 @@ export class AgentThreadStreamRuntime {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
       }
       return {
-        accepted: true,
-        runId,
         signal,
-        outcome: Promise.resolve({ action: 'deliver' as const }),
+        accepted: Promise.resolve({ action: 'deliver' as const, runId }),
       };
     }
 
@@ -1523,10 +1508,10 @@ export class AgentThreadStreamRuntime {
     const reservedRunId = runId;
     const resolvedPubSub = this.#getPubSub(pubsub);
     // First acquire the cross-process lease via pubsub; on win, kick off the stream and
-    // resolve the owned stream. On loss, hand the user signal off to the winning process
-    // via signal-enqueued and resolve to undefined; the caller maps that to a `deliver`
-    // outcome (the signal was queued onto the winning run, not run locally).
-    const ownerStream: Promise<MastraModelOutput<OUTPUT> | undefined> = (async () => {
+    // resolve a `wake` accepted result carrying the owned stream. On loss, hand the user
+    // signal off to the winning process via signal-enqueued and resolve a `deliver` result
+    // (the signal was queued onto the winning run, not run locally).
+    const accepted: Promise<SendAgentSignalAccepted<OUTPUT>> = (async () => {
       // Fail-open on pubsub errors: if the lease backend is unreachable we treat the
       // call as "acquired" so the caller still gets a response. The tradeoff is that
       // if multiple processes hit the same pubsub failure simultaneously they can each
@@ -1547,7 +1532,7 @@ export class AgentThreadStreamRuntime {
         state.threadKeysByRunId.delete(reservedRunId);
 
         // Forward the user signal to the winning runId so the message is not dropped.
-        // Await the publish so that callers using `outcome` resolution as their
+        // Await the publish so that callers using `accepted` resolution as their
         // "safe to exit" boundary (e.g. a serverless Lambda holding the request open
         // via waitUntil) don't tear down before the enqueue lands on the broker.
         const winnerRunId = lease.owner;
@@ -1559,19 +1544,19 @@ export class AgentThreadStreamRuntime {
             sourceId: this.#getSourceId(),
           }).catch(() => {});
         }
-        return undefined;
+        return { action: 'deliver' as const, runId: winnerRunId ?? reservedRunId };
       }
 
       // We own the lease. Start the renewal timer so it survives runs
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
       try {
-        const stream = await agent.stream(signal, {
+        const output = await agent.stream(signal, {
           ...(target.ifIdle?.streamOptions as any),
           runId: reservedRunId,
           memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
         });
-        return stream;
+        return { action: 'wake' as const, runId: reservedRunId, output };
       } catch (error) {
         state.threadKeysByRunId.delete(reservedRunId);
         this.#cleanupPreparedRun(state, reservedRunId);
@@ -1588,18 +1573,17 @@ export class AgentThreadStreamRuntime {
         throw error;
       }
     })();
-    // Always attach a no-op catch to the promise we keep internally so an unawaited
-    // owned stream cannot surface as an unhandled rejection. Callers that opt in to
-    // `result` will see the rejection via their own await/catch.
-    void ownerStream.catch(() => {});
+    // Attach a detached no-op catch so that if stream setup throws (a misconfigured
+    // agent: no/unsupported model, FGA denial) and the caller never awaits
+    // `result.accepted`, the rejection does not surface as an unhandled rejection.
+    // Callers that opt in to `accepted` still see the rejection via their own
+    // await/catch — `accepted` itself remains rejectable; only this detached branch is
+    // swallowed.
+    void accepted.catch(() => {});
 
     return {
-      accepted: true,
-      runId,
       signal,
-      outcome: ownerStream.then(output =>
-        output ? { action: 'wake' as const, output } : { action: 'deliver' as const },
-      ),
+      accepted,
     };
   }
 }
