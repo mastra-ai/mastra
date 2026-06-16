@@ -1,5 +1,5 @@
 ---
-'@mastra/core': major
+'@mastra/core': minor
 ---
 
 Removed the coalesced Harness display state subscription API.
