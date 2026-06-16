@@ -38,6 +38,19 @@ export interface AgentBrowserConfigExtensions {
    * ```
    */
   excludeTools?: BrowserToolName[];
+
+  /**
+   * Best-effort install of Playwright's Linux system dependencies before launching a local Chromium browser.
+   * Enabled by default for root Linux runtimes and skipped for remote CDP browsers.
+   * Set to `false` if your runtime image already includes the required libraries or blocks package installs.
+   */
+  installLinuxDependencies?: boolean;
+
+  /**
+   * Timeout in milliseconds for the best-effort Linux dependency install.
+   * Defaults to 120000ms.
+   */
+  installLinuxDependenciesTimeoutMs?: number;
 }
 
 /**

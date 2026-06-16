@@ -112,8 +112,18 @@ const { mockPage, mockLocator, mockContext, mockManager, mockInstallPlaywrightLi
     getPages: vi.fn().mockReturnValue([mockPage]),
   };
 
-  return { mockPage, mockLocator, mockContext, mockManager };
+  return {
+    mockPage,
+    mockLocator,
+    mockContext,
+    mockManager,
+    mockInstallPlaywrightLinuxDeps: vi.fn().mockResolvedValue(undefined),
+  };
 });
+
+vi.mock('../playwright-deps', () => ({
+  installPlaywrightLinuxDeps: mockInstallPlaywrightLinuxDeps,
+}));
 
 vi.mock('agent-browser', () => ({
   BrowserManager: class {
@@ -275,6 +285,31 @@ describe('AgentBrowser', () => {
       await browser.ensureReady();
       expect(browser.status).toBe('ready');
       expect(mockManager.launch).toHaveBeenCalledOnce();
+    });
+
+    it('installs Playwright Linux dependencies before shared browser launch', async () => {
+      await browser.ensureReady();
+
+      expect(mockInstallPlaywrightLinuxDeps).toHaveBeenCalledWith({
+        cdpUrl: undefined,
+        enabled: true,
+        timeoutMs: undefined,
+      });
+      expect(mockInstallPlaywrightLinuxDeps.mock.invocationCallOrder[0]).toBeLessThan(
+        mockManager.launch.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('allows disabling Playwright Linux dependency install', async () => {
+      const browserWithoutInstall = new AgentBrowser({ scope: 'shared', installLinuxDependencies: false });
+
+      await browserWithoutInstall.ensureReady();
+
+      expect(mockInstallPlaywrightLinuxDeps).toHaveBeenCalledWith({
+        cdpUrl: undefined,
+        enabled: false,
+        timeoutMs: undefined,
+      });
     });
 
     it('does not relaunch if already ready', async () => {

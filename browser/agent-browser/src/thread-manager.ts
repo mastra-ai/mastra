@@ -10,6 +10,7 @@ import type { BrowserState, ThreadSession, ThreadManagerConfig } from '@mastra/c
 import { BrowserManager } from 'agent-browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page } from 'playwright-core';
+import { installPlaywrightLinuxDeps } from './playwright-deps';
 import type { BrowserConfig } from './types';
 
 /**
@@ -95,6 +96,11 @@ export class AgentBrowserThreadManager extends ThreadManager<BrowserManager> {
       }
 
       try {
+        await installPlaywrightLinuxDeps({
+          cdpUrl: launchOptions.cdpUrl,
+          enabled: this.browserConfig.installLinuxDependencies !== false,
+          timeoutMs: this.browserConfig.installLinuxDependenciesTimeoutMs,
+        });
         await manager.launch(launchOptions);
       } catch (error) {
         // Clean up manager on launch failure

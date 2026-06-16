@@ -2,4 +2,4 @@
 '@mastra/agent-browser': patch
 ---
 
-Install Playwright Chromium during package installation so local Agent Browser launches have a bundled browser executable available without runtime package-manager calls.
+Install Playwright Chromium during package installation and perform a best-effort, timeout-bound Linux system dependency install before launching local Chromium browsers.
