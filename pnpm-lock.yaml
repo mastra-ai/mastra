@@ -1716,6 +1716,28 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
 
+  examples/dual-auth:
+    dependencies:
+      '@mastra/auth-workos':
+        specifier: workspace:*
+        version: link:../../auth/workos
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   explorations/longmemeval:
     dependencies:
       '@ai-sdk/google':

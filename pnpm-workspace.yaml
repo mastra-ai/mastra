@@ -10,6 +10,7 @@ packages:
   - stores/*
   - browser/*
   - voice/*
+  - examples/dual-auth
   - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
