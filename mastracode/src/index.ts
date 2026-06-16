@@ -287,8 +287,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storageWarning = storageResult.warning;
 
   // Observability storage (DuckDB — separate file for OLAP-style trace/score/feedback queries).
-  // Local tracing is opt-in to avoid writing gigabytes of trace data to disk without the
-  // user's knowledge. Enable via `/observability local on`.
+  // Local tracing is opt-in via `/observability local on`. When disabled, the
+  // MastraStorageExporter is omitted entirely so traces never fall through to
+  // the default libsql backend.
   let observabilityDomain: DuckDBStore['observability'] | undefined;
   let observabilityWarning: string | undefined;
   if (globalSettings.observability.localTracing) {
@@ -314,7 +315,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   const harnessStorage = new InMemoryHarness();
 
-  // Compose the main storage with the DuckDB observability domain (if available)
   const storage = new MastraCompositeStore({
     id: 'mastra-code-storage',
     default: storageResult.storage,
@@ -368,7 +368,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           'harness.state.reflectionThreshold',
         ],
         exporters: [
-          new MastraStorageExporter({ strategy: 'event-sourced' }),
+          // Only persist traces locally when DuckDB observability is available
+          // (via `/observability local on`). Without this guard the storage
+          // exporter falls through to the default libsql backend and silently
+          // fills the main database with gigabytes of span data.
+          ...(observabilityDomain ? [new MastraStorageExporter({ strategy: 'event-sourced' })] : []),
           new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
