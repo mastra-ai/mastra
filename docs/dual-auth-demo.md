@@ -5,10 +5,12 @@ This demo shows how to configure separate authentication for your API (external 
 ## Why Dual Auth?
 
 **The Problem:** Your Mastra server serves two different audiences:
+
 - **External customers** who call your API with API keys or JWT tokens
 - **Internal team members** who use Studio with corporate SSO
 
 Before dual auth, you had to choose one auth provider for both, which meant either:
+
 - Giving customers SSO access (security risk)
 - Making team members use API keys (poor UX)
 - Running two separate servers (operational complexity)
@@ -45,7 +47,7 @@ const testAgent = {
 
 export const mastra = new Mastra({
   agents: { testAgent },
-  
+
   server: {
     // API authentication - for external customers
     auth: new SimpleAuth({
@@ -56,7 +58,7 @@ export const mastra = new Mastra({
           email: 'api@acme.com',
         },
         'sk-customer-globex': {
-          id: 'customer-2', 
+          id: 'customer-2',
           name: 'Globex Inc',
           email: 'api@globex.com',
         },
@@ -156,12 +158,13 @@ curl http://localhost:4111/api/agents
 **Show:** Customers have limited permissions, team members have full access.
 
 **Customer (API key):**
+
 ```bash
 # ✅ Can read agents
 curl http://localhost:4111/api/agents \
   -H "Authorization: Bearer sk-customer-acme"
 
-# ✅ Can execute agents  
+# ✅ Can execute agents
 curl -X POST http://localhost:4111/api/agents/test-agent/generate \
   -H "Authorization: Bearer sk-customer-acme" \
   -H "Content-Type: application/json" \
@@ -175,6 +178,7 @@ curl -X DELETE http://localhost:4111/api/agents/test-agent \
 ```
 
 **Team member (Studio):**
+
 - Can read, write, execute, AND delete agents
 - Has access to workflows, memory, observability, etc.
 - UI shows all actions (no hidden buttons)
@@ -198,12 +202,12 @@ The header only routes to the correct auth provider. You still need valid creden
 
 ## Benefits Summary
 
-| Scenario | Before Dual Auth | After Dual Auth |
-|----------|------------------|-----------------|
-| Customer API access | Share SSO or run separate server | API keys via `server.auth` |
-| Team Studio access | Use API keys or share customer auth | Corporate SSO via `studio.auth` |
-| Permission separation | Complex role mapping | Separate RBAC per context |
-| Security | Risk of cross-contamination | Clean isolation |
+| Scenario              | Before Dual Auth                    | After Dual Auth                 |
+| --------------------- | ----------------------------------- | ------------------------------- |
+| Customer API access   | Share SSO or run separate server    | API keys via `server.auth`      |
+| Team Studio access    | Use API keys or share customer auth | Corporate SSO via `studio.auth` |
+| Permission separation | Complex role mapping                | Separate RBAC per context       |
+| Security              | Risk of cross-contamination         | Clean isolation                 |
 
 ---
 
