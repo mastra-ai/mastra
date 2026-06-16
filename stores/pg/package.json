@@ -52,7 +52,7 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@types/pg": "^8.18.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -63,7 +63,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.34.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.42.1-0 <2.0.0-0"
   },
   "files": [
     "dist",

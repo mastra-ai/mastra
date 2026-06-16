@@ -4,8 +4,8 @@
  */
 
 import * as os from 'node:os';
-import { Box, Container, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
-import type { TUI } from '@mariozechner/pi-tui';
+import { Box, Container, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';

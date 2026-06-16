@@ -3,8 +3,8 @@
  * Provides clear, actionable feedback when tool inputs are invalid.
  */
 
-import { Container, Text } from '@mariozechner/pi-tui';
-import type { TUI } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import { MC_TOOLS } from '../../tool-names.js';
 import { theme } from '../theme.js';
