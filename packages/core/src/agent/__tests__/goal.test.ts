@@ -178,12 +178,15 @@ describe('in-loop goal scoring', () => {
       if (chunk.type === 'goal') goalChunks.push(chunk);
     }
 
+    // Filter out pending (loading-indicator) chunks for payload assertions.
+    const resultChunks = goalChunks.filter(c => !c.payload.pending);
+
     expect(scorer.run).toHaveBeenCalled();
-    expect(goalChunks.length).toBeGreaterThan(0);
+    expect(resultChunks.length).toBeGreaterThan(0);
 
     // Lock the public `goal` chunk payload shape (consumed by the TUI + client-js).
-    expect(goalChunks[0].type).toBe('goal');
-    expect(goalChunks[0].payload).toMatchObject({
+    expect(resultChunks[0].type).toBe('goal');
+    expect(resultChunks[0].payload).toMatchObject({
       objective: 'Reach the goal',
       iteration: 1,
       maxRuns: DEFAULT_GOAL_MAX_RUNS,
@@ -193,8 +196,8 @@ describe('in-loop goal scoring', () => {
       timedOut: false,
       suppressFeedback: false,
     });
-    expect(Array.isArray(goalChunks[0].payload.results)).toBe(true);
-    expect(typeof goalChunks[0].payload.duration).toBe('number');
+    expect(Array.isArray(resultChunks[0].payload.results)).toBe(true);
+    expect(typeof resultChunks[0].payload.duration).toBe('number');
 
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record?.status).toBe('done');
@@ -222,12 +225,15 @@ describe('in-loop goal scoring', () => {
       if (chunk.type === 'goal') goalChunks.push(chunk);
     }
 
+    // Filter out pending (loading-indicator) chunks.
+    const resultChunks = goalChunks.filter(c => !c.payload.pending);
+
     // isTaskComplete reported complete...
     expect(taskChunks.some(c => c.payload.passed === true)).toBe(true);
     // ...but the goal gate overrode it and drove the loop to the run budget.
     expect(goalScorer.run).toHaveBeenCalledTimes(2);
-    expect(goalChunks).toHaveLength(2);
-    expect(goalChunks[goalChunks.length - 1].payload.maxRunsReached).toBe(true);
+    expect(resultChunks).toHaveLength(2);
+    expect(resultChunks[resultChunks.length - 1].payload.maxRunsReached).toBe(true);
 
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record?.runsUsed).toBe(2);
@@ -263,10 +269,12 @@ describe('in-loop goal scoring', () => {
       if (chunk.type === 'goal') goalChunks.push(chunk);
     }
 
-    expect(goalChunks.length).toBe(2);
-    const last = goalChunks[goalChunks.length - 1].payload;
+    // Filter out pending (loading-indicator) chunks.
+    const resultChunks = goalChunks.filter(c => !c.payload.pending);
+    expect(resultChunks.length).toBe(2);
+    const last = resultChunks[resultChunks.length - 1].payload;
     expect(last.maxRunsReached).toBe(true);
-    expect(goalChunks.every(c => c.payload.passed === false)).toBe(true);
+    expect(resultChunks.every(c => c.payload.passed === false)).toBe(true);
     // Budget exhaustion parks the goal visibly as `paused` (with a reason)
     // rather than leaving it silently `active`.
     expect(last.status).toBe('paused');
@@ -371,10 +379,13 @@ describe('in-loop goal scoring', () => {
       if (chunk.type === 'goal') goalChunks.push(chunk);
     }
 
+    // Filter out pending (loading-indicator) chunks.
+    const resultChunks = goalChunks.filter(c => !c.payload.pending);
+
     expect(judge).toHaveBeenCalled();
     expect(scorer.run).toHaveBeenCalled();
-    expect(goalChunks.length).toBeGreaterThan(0);
-    expect(goalChunks[0].payload.passed).toBe(true);
+    expect(resultChunks.length).toBeGreaterThan(0);
+    expect(resultChunks[0].payload.passed).toBe(true);
   });
 
   it('is a no-op when the goal.judge resolver returns undefined', async () => {
