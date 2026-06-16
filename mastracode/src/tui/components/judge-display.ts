@@ -20,7 +20,7 @@ export interface GoalJudgeResult {
 export function evaluationToJudgeResult(payload: GoalEvaluationPayload): GoalJudgeResult {
   const decision: GoalJudgeResult['decision'] = payload.passed
     ? 'done'
-    : payload.status === 'waiting'
+    : payload.waitingForUser
       ? 'waiting'
       : payload.status === 'paused'
         ? 'paused'

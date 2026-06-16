@@ -239,13 +239,11 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         !result.complete &&
         result.scorers.some(s => s.scorerId === GOAL_SCORER_ID && s.score === GOAL_SCORE_WAITING);
 
-      // Increment runs and update status. Precedence matters: a judge that
-      // failed cannot have validly decided "done", and a legitimate "done" on
-      // the final allowed run should complete rather than read as a budget
-      // stall. Judge error → paused (with reason). Complete → done. Waiting →
-      // paused (resumable by the user). Budget exhausted (no done/waiting/error)
-      // → paused (resumable by raising maxRuns and flipping status back to
-      // active via updateObjectiveOptions). Otherwise keep going.
+      // Increment runs and update status. Precedence: judge failure → paused;
+      // complete → done; budget exhausted → paused. A "waiting" decision does
+      // NOT change the persisted status — the record stays `active` so the next
+      // agent turn is still judged; only `isContinued` is set to false (below)
+      // to stop the auto-loop and give the user a chance to provide input.
       const runsUsed = record.runsUsed + 1;
       const maxRunsReached = runsUsed >= effective.maxRuns;
       let status: GoalObjectiveRecord['status'] = record.status;
@@ -255,10 +253,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         pausedReason = erroredScorer?.reason ?? 'The goal judge failed to evaluate the objective.';
       } else if (result.complete) {
         status = 'done';
-      } else if (waiting) {
-        status = 'waiting';
-        pausedReason = result.completionReason ?? 'The goal asked to stop and wait for your input.';
-      } else if (maxRunsReached) {
+      } else if (maxRunsReached && !waiting) {
         // Budget exhausted without reaching the goal: park it (visibly) instead
         // of leaving it `active` but stuck. Raising maxRuns + setting status
         // back to `active` (updateObjectiveOptions) resumes evaluation.
@@ -270,16 +265,16 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         ...record,
         runsUsed,
         status,
-        // Only persist a pause/waiting reason while parked; clear it otherwise so a
+        // Only persist a pause reason while parked; clear it otherwise so a
         // resumed/continuing objective does not carry a stale reason.
-        pausedReason: status === 'paused' || status === 'waiting' ? pausedReason : undefined,
+        pausedReason: status === 'paused' ? pausedReason : undefined,
         updatedAt: Date.now(),
       };
       await writeObjective(store, threadId, updated, requestContext);
 
-      // The goal gate makes the final continuation decision: complete, parked
-      // (waiting for the user or a judge failure), or budget reached → stop;
-      // otherwise force another iteration toward the goal.
+      // The goal gate makes the final continuation decision: complete, parked,
+      // waiting for user input, or budget reached → stop; otherwise force
+      // another iteration toward the goal.
       if (inputData.stepResult) {
         inputData.stepResult.isContinued = !result.complete && !waiting && !judgeFailed && !maxRunsReached;
       }
@@ -293,7 +288,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       if (judgeFailed) {
         feedback += `\n\n⏸️ Goal paused — the judge failed to evaluate: ${pausedReason}`;
       } else if (waiting) {
-        feedback += `\n\n⏸️ Waiting for the user: ${pausedReason}`;
+        feedback += `\n\n◌ Waiting for the user: ${result.completionReason ?? 'The goal asked to stop and wait for your input.'}`;
       } else if (status === 'paused' && maxRunsReached) {
         feedback += `\n\n⏸️ Goal paused — ${pausedReason}`;
       }
@@ -327,11 +322,11 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
           status,
           pausedReason,
           judgeFailed,
+          waitingForUser: waiting,
           results: result.scorers,
           // Prefer the completion reason, but fall back to the pause reason so a
-          // parked goal (judge failure, waiting, or budget) always surfaces a
-          // cause to consumers that render `reason` (e.g. the TUI judge display),
-          // rather than showing "paused" with no explanation.
+          // parked goal (judge failure or budget) always surfaces a cause to
+          // consumers that render `reason` (e.g. the TUI judge display).
           reason: result.completionReason ?? pausedReason,
           duration: result.totalDuration,
           timedOut: result.timedOut,

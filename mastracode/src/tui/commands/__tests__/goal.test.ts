@@ -229,29 +229,25 @@ describe('handleGoalCommand', () => {
     });
   });
 
-  it('resumes a waiting goal via a goal-reminder signal', async () => {
+  it('reports already active when trying to resume an active (waiting-for-user) goal', async () => {
     const goal = {
       id: 'goal-2',
       objective: 'implement feature then wait for review',
-      status: 'waiting' as string,
+      status: 'active' as string,
       turnsUsed: 5,
       maxTurns: DEFAULT_MAX_TURNS,
       judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     };
     const goalManager = {
       getGoal: vi.fn(() => goal),
-      resume: vi.fn(() => {
-        goal.status = 'active';
-        return goal;
-      }),
+      resume: vi.fn(),
       saveToThread: vi.fn().mockResolvedValue(undefined),
     };
-    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-2' }) }));
     const showInfo = vi.fn();
     const ctx = {
       state: {
         goalManager,
-        harness: { sendSignal },
+        harness: { sendSignal: vi.fn() },
       },
       showInfo,
       showError: vi.fn(),
@@ -260,14 +256,10 @@ describe('handleGoalCommand', () => {
 
     await handleGoalCommand(ctx, ['resume']);
 
-    expect(goalManager.resume).toHaveBeenCalledTimes(1);
-    expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'system-reminder',
-        contents: 'implement feature then wait for review',
-        attributes: { type: 'goal' },
-      }),
-    );
+    // The goal is active (waiting for user input is still active), so resume
+    // should report "already active" and NOT call resume() or sendSignal.
+    expect(goalManager.resume).not.toHaveBeenCalled();
+    expect(showInfo).toHaveBeenCalledWith('Goal is already active.');
   });
 
   it('creates the pending new thread before saving a new goal', async () => {

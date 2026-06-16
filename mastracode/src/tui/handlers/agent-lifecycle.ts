@@ -244,9 +244,10 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
   ctx.updateStatusLine();
   state.ui.requestRender();
 
-  if (payload.status !== 'active') {
-    // The goal reached a terminal/parked state this turn. Drop the live judge
-    // reference so the next turn starts a fresh display.
+  if (payload.status !== 'active' || payload.waitingForUser) {
+    // The goal reached a terminal/parked state, or the judge signalled
+    // "waiting for user input". Drop the live judge reference so the next
+    // turn starts a fresh display.
     state.activeGoalJudge = undefined;
   }
 

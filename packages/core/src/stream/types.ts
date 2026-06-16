@@ -420,17 +420,23 @@ export interface GoalEvaluationPayload {
   /** Whether the goal is judged complete. */
   passed: boolean;
   /** The objective status after this evaluation. */
-  status: 'active' | 'paused' | 'waiting' | 'done';
+  status: 'active' | 'paused' | 'done';
   /** Individual scorer results. */
   results: ScorerResult[];
   /** Judge feedback / stop reason. Falls back to the pause reason when parked. */
   reason?: string;
   /**
-   * Why the objective is parked (`status === 'paused'` for judge failure or
-   * budget exhaustion, `status === 'waiting'` for an explicit user checkpoint).
-   * Cleared when `status` is `'active'` or `'done'`.
+   * Why the objective is parked (`status === 'paused'`). Set for judge failure
+   * or budget exhaustion. Cleared when `status` is `'active'` or `'done'`.
    */
   pausedReason?: string;
+  /**
+   * True when the judge decided the goal is not finished but explicitly wants
+   * the user to provide input before continuing. The record stays `active` (so
+   * the next agent turn is still judged), but `isContinued` is `false` (the
+   * auto-loop stops). Display layers use this to show a "waiting" indicator.
+   */
+  waitingForUser?: boolean;
   /** True when the scorer/judge itself errored (as opposed to scoring 0). */
   judgeFailed?: boolean;
   /** Total duration of the goal scoring check. */

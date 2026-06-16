@@ -126,12 +126,12 @@ describe('evaluationToJudgeResult', () => {
     expect(result.reason).toContain('Bad Request');
   });
 
-  it('maps a waiting-status evaluation to the waiting decision', () => {
+  it('maps a waitingForUser evaluation to the waiting decision', () => {
     const result = evaluationToJudgeResult({
       ...basePayload,
       passed: false,
-      status: 'waiting',
-      pausedReason: 'Waiting for user to review the implementation.',
+      status: 'active',
+      waitingForUser: true,
       reason: 'Waiting for user to review the implementation.',
     } as any);
 

@@ -71,7 +71,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       ctx.showInfo('Goal is already active.');
       return;
     }
-    if (goal.status !== 'paused' && goal.status !== 'waiting') {
+    if (goal.status !== 'paused') {
       ctx.showInfo('Goal is already done. Use /goal <text> to set a new goal.');
       return;
     }
@@ -162,7 +162,7 @@ async function showGoalActionModal(ctx: SlashCommandContext): Promise<void> {
 
   if (goal?.status === 'active') {
     items.push({ value: 'pause', label: `  Pause  ${theme.fg('dim', 'Pause the continuation loop')}` });
-  } else if (goal?.status === 'paused' || goal?.status === 'waiting') {
+  } else if (goal?.status === 'paused') {
     items.push({ value: 'resume', label: `  Resume  ${theme.fg('dim', 'Resume and send a continuation')}` });
   }
 
