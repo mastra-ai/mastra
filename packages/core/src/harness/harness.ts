@@ -562,14 +562,20 @@ export class Harness<TState = {}> {
     this.browser = browser;
     this.browserFn = undefined;
 
+    // Collect unique agents: shared backing agent + any deprecated mode.agent
+    // instances so all receive the browser (signal providers may be attached to
+    // any of them).
+    const agents = new Set<Agent<any, any, any, any>>();
     if (this.config.agent) {
-      // Shared backing agent — set once.
-      this.config.agent.setBrowser(browser);
-    } else {
-      for (const mode of this.config.modes) {
-        const agent = this.getAgentForMode(mode);
-        agent.setBrowser(browser);
+      agents.add(this.config.agent);
+    }
+    for (const mode of this.config.modes) {
+      if (mode.agent || !this.config.agent) {
+        agents.add(this.getAgentForMode(mode));
       }
+    }
+    for (const agent of agents) {
+      agent.setBrowser(browser);
     }
   }
 
@@ -631,18 +637,19 @@ export class Harness<TState = {}> {
 
     // Propagate harness-level Mastra, memory, workspace, browser, and pubsub
     // to the agent(s) that back each mode (after workspace init).
+    // Collect unique agents: shared backing agent + any deprecated mode.agent
+    // instances so all receive runtime services.
+    const agents = new Set<Agent<any, any, any, any>>();
     if (this.config.agent) {
-      // Shared backing agent: propagate once. All modes share this instance,
-      // so signal providers connected during construction automatically get
-      // memory/storage/pubsub access.
-      this.propagateRuntimeServicesToAgent(this.config.agent);
-    } else {
-      // Per-mode agents (deprecated mode.agent or constructed-on-demand):
-      // propagate to each independently.
-      for (const mode of this.config.modes) {
-        const agent = this.getAgentForMode(mode);
-        this.propagateRuntimeServicesToAgent(agent);
+      agents.add(this.config.agent);
+    }
+    for (const mode of this.config.modes) {
+      if (mode.agent || !this.config.agent) {
+        agents.add(this.getAgentForMode(mode));
       }
+    }
+    for (const agent of agents) {
+      this.propagateRuntimeServicesToAgent(agent);
     }
 
     this.startHeartbeats();
@@ -4279,6 +4286,12 @@ export class Harness<TState = {}> {
     // When using a shared backing agent, mode-specific tool overrides are
     // delivered through toolsets (not baked into the agent) so the agent's
     // own tools (including signal-provider tools) are never lost.
+    //
+    // Note: both `mode.tools` and `mode.additionalTools` are added as a
+    // toolset (augment).  True "replace" semantics (masking the agent's own
+    // tools) would require per-run tool filtering in the Agent, which isn't
+    // supported yet.  validateModes() already prevents setting both on the
+    // same mode.
     if (this.config.agent) {
       const currentMode = this.getCurrentMode();
       const modeTools = currentMode.tools ?? currentMode.additionalTools;
