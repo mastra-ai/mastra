@@ -461,6 +461,49 @@ interface DurableAgentStreamResult<OUTPUT = undefined> {
 ]}
 />
 
+## Behavior differences from Agent
+
+`DurableAgent` wraps a regular `Agent` but does not inherit all of its settings. The differences below apply regardless of what the wrapped agent has configured.
+
+### `maxSteps` defaults to 5
+
+The wrapped agent's `maxSteps` setting is **not** inherited. `DurableAgent` runs the agentic loop through a durable workflow, and that workflow defaults `maxSteps` to `5` when no value is provided explicitly.
+
+To use a different limit, pass `maxSteps` to the `DurableAgent` constructor (or `createDurableAgent`) rather than on the inner agent:
+
+```typescript
+const durableAgent = createDurableAgent({
+  agent,
+  maxSteps: 20, // set here, not on the inner agent
+})
+```
+
+You can also pass `maxSteps` per call in the `stream()` options:
+
+```typescript
+const { output, cleanup } = await durableAgent.stream('Hello!', {
+  maxSteps: 20,
+})
+```
+
+### `providerOptions` and `defaultOptions` are not inherited
+
+The wrapped agent's `providerOptions` (model-level provider settings such as Anthropic extended thinking or OpenAI reasoning effort) and `defaultOptions` (default generation options) are not forwarded to the durable workflow. These values are serialized as part of the per-call workflow input, so they must be passed on each `stream()` call rather than configured once on the inner agent:
+
+```typescript
+const { output, cleanup } = await durableAgent.stream('Hello!', {
+  providerOptions: {
+    anthropic: { thinking: { type: 'enabled', budgetTokens: 5000 } },
+  },
+})
+```
+
+:::note
+
+These differences exist because `DurableAgent` serializes its execution input into a durable workflow. Settings that exist only on the `Agent` instance are not automatically included in that serialized input. Passing the options directly to the `DurableAgent` constructor or `stream()` call is the correct workaround.
+
+:::
+
 ## Related
 
 - [Agent class](/reference/agents/agent)
