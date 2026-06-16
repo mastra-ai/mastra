@@ -251,6 +251,9 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       // (new snapshot, no createdAt passed) the way a later step does.
       await new Promise(resolve => setTimeout(resolve, 50));
       const rePersist = createSampleWorkflowSnapshot('success');
+      // Re-persist under the original runId, so the snapshot's internal runId matches the
+      // storage key the way the engine does on later steps.
+      rePersist.snapshot.runId = runId;
       await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
         runId,
