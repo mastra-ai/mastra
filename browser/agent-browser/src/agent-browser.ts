@@ -21,7 +21,6 @@ import type { Tool } from '@mastra/core/tools';
 import { BrowserManager } from 'agent-browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page, Locator } from 'playwright-core';
-import { installPlaywrightLinuxDeps } from './playwright-deps';
 import type {
   GotoInput,
   SnapshotInput,
@@ -197,10 +196,6 @@ export class AgentBrowser extends MastraBrowser {
       launchOptions.cdpUrl = await this.resolveCdpUrl(localConfig.cdpUrl);
     }
 
-    installPlaywrightLinuxDeps({
-      cdpUrl: launchOptions.cdpUrl,
-      enabled: localConfig.installLinuxDependencies !== false,
-    });
     await this.sharedManager.launch(launchOptions);
 
     // Register the shared manager with ThreadManager

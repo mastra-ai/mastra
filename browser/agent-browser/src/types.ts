@@ -38,13 +38,6 @@ export interface AgentBrowserConfigExtensions {
    * ```
    */
   excludeTools?: BrowserToolName[];
-
-  /**
-   * Install Playwright's Linux system dependencies before launching a local Chromium browser.
-   * Enabled by default for root Linux runtimes. Set to `false` when your image already includes
-   * the required libraries or when package installation is not available.
-   */
-  installLinuxDependencies?: boolean;
 }
 
 /**
