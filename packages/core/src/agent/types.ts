@@ -165,7 +165,9 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
  *               run and the loser of a cross-process wake race (whose signal is
  *               forwarded to the winning run). No new run was started locally and
  *               no stream is owned.
- * - `persist` — the signal was written to memory by a `persist` behavior.
+ * - `persist` — the signal was written to memory by a `persist` behavior. The
+ *               outcome promise for this action only settles once that write
+ *               completes (it resolves with the same timing as `persisted`).
  * - `discard` — policy dropped the signal; nothing ran and nothing was stored.
  *
  * @experimental Agent signals are experimental and may change in a future release.
@@ -186,7 +188,10 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
   /**
-   * Resolves once the runtime has settled what it did with the signal.
+   * Resolves once the runtime has settled what it did with the signal. For
+   * `wake`/`deliver`/`discard` this is the moment the behavior is decided, before
+   * any woken run finishes; for `persist` it resolves after the memory write
+   * completes (same timing as `persisted`).
    *
    * `wake` means this process ran the agent and `output` is its
    * `MastraModelOutput`. A signal queued onto an existing run, or one whose
