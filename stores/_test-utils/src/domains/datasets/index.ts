@@ -1,9 +1,17 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import type { MastraStorage, DatasetsStorage, DatasetRecord, DatasetItem } from '@mastra/core/storage';
+import type { TestCapabilities } from '../../factory';
 
-export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
+export function createDatasetsTests({
+  storage,
+  capabilities = {},
+}: {
+  storage: MastraStorage;
+  capabilities?: TestCapabilities;
+}) {
   // Skip tests if storage doesn't have datasets domain
   const describeDatasets = storage.stores?.datasets ? describe : describe.skip;
+  const supportsToolMocks = capabilities.toolMocks !== false;
 
   let datasetsStorage: DatasetsStorage;
 
@@ -116,6 +124,51 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
 
         const notFound = await datasetsStorage.getItemById({ id: 'nonexistent' });
         expect(notFound).toBeNull();
+      });
+
+      const toolMocksFixture = [
+        { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } },
+        { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 48 } },
+        {
+          toolName: 'agent-balanceAgent',
+          args: { prompt: 'lookup YJ' },
+          output: { text: 'YJ: $100' },
+          matchArgs: 'ignore' as const,
+        },
+      ];
+
+      (supportsToolMocks ? it : it.skip)(
+        'toolMocks round-trip through add, get, and SCD-2 update',
+        async () => {
+          const ds = await datasetsStorage.createDataset({ name: 'item-tool-mocks' });
+          const toolMocks = toolMocksFixture;
+
+          const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' }, toolMocks });
+          expect(item.toolMocks).toEqual(toolMocks);
+
+          const fetched = await datasetsStorage.getItemById({ id: item.id });
+          expect(fetched!.toolMocks).toEqual(toolMocks);
+
+          // Updating an unrelated field must preserve toolMocks through versioning.
+          const updated = await datasetsStorage.updateItem({ id: item.id, datasetId: ds.id, input: { q: 'hi2' } });
+          expect(updated.datasetVersion).toBe(2);
+          expect(updated.toolMocks).toEqual(toolMocks);
+
+          // Explicitly replacing toolMocks updates them.
+          const replaced = await datasetsStorage.updateItem({
+            id: item.id,
+            datasetId: ds.id,
+            toolMocks: [{ toolName: 'other', args: {}, output: 1 }],
+          });
+          expect(replaced.toolMocks).toEqual([{ toolName: 'other', args: {}, output: 1 }]);
+        },
+      );
+
+      (supportsToolMocks ? it.skip : it)('rejects toolMocks when the adapter does not support them', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-tool-mocks-reject' });
+        await expect(
+          datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' }, toolMocks: toolMocksFixture }),
+        ).rejects.toThrow();
       });
 
       it('updateItem creates new version row', async () => {
