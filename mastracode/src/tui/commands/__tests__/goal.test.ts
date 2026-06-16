@@ -181,11 +181,11 @@ describe('handleGoalCommand', () => {
     void result;
   });
 
-  it('resumes a paused goal without resetting the turn counter', async () => {
+  it('resumes a paused goal via a goal-reminder signal without resetting the turn counter', async () => {
     const goal = {
       id: 'goal-1',
       objective: 'finish the task',
-      status: 'paused',
+      status: 'paused' as string,
       turnsUsed: 3,
       maxTurns: DEFAULT_MAX_TURNS,
       judgeModelId: '__GATEWAY_OPENAI_MODEL__',
@@ -198,12 +198,12 @@ describe('handleGoalCommand', () => {
       }),
       saveToThread: vi.fn().mockResolvedValue(undefined),
     };
-    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
     const showInfo = vi.fn();
     const ctx = {
       state: {
         goalManager,
-        harness: { sendMessage },
+        harness: { sendSignal },
       },
       showInfo,
       showError: vi.fn(),
@@ -217,7 +217,57 @@ describe('handleGoalCommand', () => {
     expect(showInfo).toHaveBeenCalledWith(
       `Goal resumed: "finish the task" — 3/${DEFAULT_MAX_TURNS} turns used. Sending continuation...`,
     );
-    expect(sendMessage).toHaveBeenCalledWith({ content: 'Continue working toward the goal: finish the task' });
+    expect(sendSignal).toHaveBeenCalledWith({
+      type: 'system-reminder',
+      contents: 'finish the task',
+      attributes: { type: 'goal' },
+      metadata: {
+        goalId: 'goal-1',
+        maxTurns: DEFAULT_MAX_TURNS,
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+      },
+    });
+  });
+
+  it('resumes a waiting goal via a goal-reminder signal', async () => {
+    const goal = {
+      id: 'goal-2',
+      objective: 'implement feature then wait for review',
+      status: 'waiting' as string,
+      turnsUsed: 5,
+      maxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+    };
+    const goalManager = {
+      getGoal: vi.fn(() => goal),
+      resume: vi.fn(() => {
+        goal.status = 'active';
+        return goal;
+      }),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+    };
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-2' }) }));
+    const showInfo = vi.fn();
+    const ctx = {
+      state: {
+        goalManager,
+        harness: { sendSignal },
+      },
+      showInfo,
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['resume']);
+
+    expect(goalManager.resume).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'system-reminder',
+        contents: 'implement feature then wait for review',
+        attributes: { type: 'goal' },
+      }),
+    );
   });
 
   it('creates the pending new thread before saving a new goal', async () => {
@@ -517,12 +567,12 @@ describe('handleGoalCommand', () => {
       resume: vi.fn(),
       saveToThread: vi.fn(),
     };
-    const sendMessage = vi.fn();
+    const sendSignal = vi.fn();
     const showInfo = vi.fn();
     const ctx = {
       state: {
         goalManager,
-        harness: { sendMessage },
+        harness: { sendSignal },
       },
       showInfo,
       updateStatusLine: vi.fn(),
@@ -533,7 +583,7 @@ describe('handleGoalCommand', () => {
     expect(showInfo).toHaveBeenCalledWith('Goal is already done. Use /goal <text> to set a new goal.');
     expect(goalManager.resume).not.toHaveBeenCalled();
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(sendSignal).not.toHaveBeenCalled();
   });
 
   it('clears planStartedGoalId when /goal clear is called', async () => {

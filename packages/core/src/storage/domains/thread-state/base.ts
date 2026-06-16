@@ -29,7 +29,7 @@ export interface TaskRecord {
 export interface GoalObjectiveRecord {
   /** The prose objective the agent is working toward. */
   objective: string;
-  status: 'active' | 'paused' | 'done';
+  status: 'active' | 'paused' | 'waiting' | 'done';
   /** Number of goal evaluations consumed so far. */
   runsUsed: number;
   /** Max evaluations before the goal stops. Falls back to agent `goal.maxRuns` (default 50). */
@@ -39,9 +39,10 @@ export interface GoalObjectiveRecord {
   /** Extra judge guidance. Falls back to agent `goal.prompt` (default = built-in goal judge prompt). */
   prompt?: string;
   /**
-   * Why the objective is `paused`, when applicable. Distinguishes the pause
-   * causes for the UI / resume flow: an explicit user checkpoint requested by
-   * the goal ("waiting"), or a judge/scorer failure. Unset for `active`/`done`.
+   * Why the objective is parked, when applicable. Distinguishes the causes for
+   * the UI / resume flow: `waiting` = the goal explicitly asked to stop for
+   * user input; `paused` = judge/scorer failure or budget exhaustion. Unset
+   * for `active`/`done`.
    */
   pausedReason?: string;
   startedAt: number;

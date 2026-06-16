@@ -113,15 +113,15 @@ async function runGoalStep(
 }
 
 describe('goal step waiting semantics', () => {
-  it('parks the objective as paused and stops the loop on a waiting decision', async () => {
+  it('parks the objective as waiting and stops the loop on a waiting decision', async () => {
     const { chunk, record, stepResult } = await runGoalStep('waiting', makeRecord());
 
-    expect(record.status).toBe('paused');
+    expect(record.status).toBe('waiting');
     expect(record.runsUsed).toBe(1);
     // Waiting must stop the loop, not iterate.
     expect(stepResult.isContinued).toBe(false);
-    // The chunk reflects the parked status and is not "passed" (goal not done).
-    expect(chunk.payload.status).toBe('paused');
+    // The chunk reflects the waiting status and is not "passed" (goal not done).
+    expect(chunk.payload.status).toBe('waiting');
     expect(chunk.payload.passed).toBe(false);
     // The waiting reason from the judge flows through to the chunk.
     expect(chunk.payload.reason).toBe('r:waiting');
@@ -156,9 +156,9 @@ describe('goal step waiting semantics', () => {
     expect(text).toContain('r:waiting');
   });
 
-  it('persists pausedReason only while paused', async () => {
-    const paused = await runGoalStep('waiting', makeRecord());
-    expect(paused.record.pausedReason).toBeTruthy();
+  it('persists pausedReason only while parked (paused or waiting)', async () => {
+    const waitingResult = await runGoalStep('waiting', makeRecord());
+    expect(waitingResult.record.pausedReason).toBeTruthy();
 
     const active = await runGoalStep('continue', makeRecord());
     expect(active.record.pausedReason).toBeUndefined();

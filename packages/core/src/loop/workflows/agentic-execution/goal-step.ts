@@ -256,7 +256,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       } else if (result.complete) {
         status = 'done';
       } else if (waiting) {
-        status = 'paused';
+        status = 'waiting';
         pausedReason = result.completionReason ?? 'The goal asked to stop and wait for your input.';
       } else if (maxRunsReached) {
         // Budget exhausted without reaching the goal: park it (visibly) instead
@@ -270,9 +270,9 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         ...record,
         runsUsed,
         status,
-        // Only persist a pause reason while paused; clear it otherwise so a
+        // Only persist a pause/waiting reason while parked; clear it otherwise so a
         // resumed/continuing objective does not carry a stale reason.
-        pausedReason: status === 'paused' ? pausedReason : undefined,
+        pausedReason: status === 'paused' || status === 'waiting' ? pausedReason : undefined,
         updatedAt: Date.now(),
       };
       await writeObjective(store, threadId, updated, requestContext);

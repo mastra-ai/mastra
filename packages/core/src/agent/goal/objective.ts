@@ -33,7 +33,7 @@ export const DEFAULT_GOAL_MAX_RUNS = 50;
  * user" checkpoint (tri-state decision `waiting`). It is deliberately neither 1
  * (complete) nor 0 (continue): the generic completion reducer treats it as "not
  * passed" (so the loop does not declare the goal done), while the goal step
- * detects this exact value and parks the objective as `paused` with the judge's
+ * detects this exact value and parks the objective as `waiting` with the judge's
  * reason. Shared between `scorer.ts` (producer) and `goal-step.ts` (consumer).
  */
 export const GOAL_SCORE_WAITING = 0.5;

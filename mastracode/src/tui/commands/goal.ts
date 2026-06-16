@@ -71,7 +71,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       ctx.showInfo('Goal is already active.');
       return;
     }
-    if (goal.status !== 'paused') {
+    if (goal.status !== 'paused' && goal.status !== 'waiting') {
       ctx.showInfo('Goal is already done. Use /goal <text> to set a new goal.');
       return;
     }
@@ -84,10 +84,12 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       `Goal resumed: "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used. Sending continuation...`,
     );
 
-    // Kick off the next turn. The in-loop goal step re-evaluates the objective
-    // once the agent produces a candidate answer.
+    // Kick off the next turn using the same goal-reminder signal format used by
+    // startGoal, so the model receives a structured system-reminder rather than
+    // a plain user message.
+    const resumedGoal = goalManager.getGoal();
     try {
-      await state.harness.sendMessage({ content: `Continue working toward the goal: ${goal.objective}` });
+      await state.harness.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
     } catch (err) {
       goalManager.pause();
       await goalManager.saveToThread(state);
@@ -160,7 +162,7 @@ async function showGoalActionModal(ctx: SlashCommandContext): Promise<void> {
 
   if (goal?.status === 'active') {
     items.push({ value: 'pause', label: `  Pause  ${theme.fg('dim', 'Pause the continuation loop')}` });
-  } else if (goal?.status === 'paused') {
+  } else if (goal?.status === 'paused' || goal?.status === 'waiting') {
     items.push({ value: 'resume', label: `  Resume  ${theme.fg('dim', 'Resume and send a continuation')}` });
   }
 

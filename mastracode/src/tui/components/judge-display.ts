@@ -10,8 +10,7 @@ import stripAnsi from 'strip-ansi';
 import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
-/** Display-only decision derived from a goal evaluation. `waiting` is retained
- *  for rendering compatibility but is not produced by the in-loop goal step. */
+/** Display-only decision derived from a goal evaluation. */
 export interface GoalJudgeResult {
   decision: 'done' | 'continue' | 'waiting' | 'paused';
   reason: string;
@@ -21,9 +20,11 @@ export interface GoalJudgeResult {
 export function evaluationToJudgeResult(payload: GoalEvaluationPayload): GoalJudgeResult {
   const decision: GoalJudgeResult['decision'] = payload.passed
     ? 'done'
-    : payload.status === 'paused'
-      ? 'paused'
-      : 'continue';
+    : payload.status === 'waiting'
+      ? 'waiting'
+      : payload.status === 'paused'
+        ? 'paused'
+        : 'continue';
   return { decision, reason: payload.reason ?? '' };
 }
 

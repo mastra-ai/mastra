@@ -23,7 +23,7 @@ import type { TUIState } from './state.js';
 // Types
 // =============================================================================
 
-export type GoalStatus = 'active' | 'paused' | 'done';
+export type GoalStatus = 'active' | 'paused' | 'waiting' | 'done';
 
 /**
  * TUI-facing view of a goal. Derived from the durable {@link GoalObjectiveRecord}
@@ -188,8 +188,8 @@ export class GoalManager {
   }
 
   resume(): GoalState | null {
-    if (this.record && this.record.status === 'paused') {
-      this.record = { ...this.record, status: 'active', updatedAt: Date.now() };
+    if (this.record && (this.record.status === 'paused' || this.record.status === 'waiting')) {
+      this.record = { ...this.record, status: 'active', pausedReason: undefined, updatedAt: Date.now() };
       this.startActiveTimer();
     }
     return this.getGoal();
