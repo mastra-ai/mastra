@@ -1522,9 +1522,10 @@ export class AgentThreadStreamRuntime {
     const reservedKey = key;
     const reservedRunId = runId;
     const resolvedPubSub = this.#getPubSub(pubsub);
-    // First acquire the cross-process lease via pubsub; on win, kick off the stream. On
-    // loss, hand the user signal off to the winning process via signal-enqueued and
-    // resolve the owned stream to undefined so the caller skips local consumption.
+    // First acquire the cross-process lease via pubsub; on win, kick off the stream and
+    // resolve the owned stream. On loss, hand the user signal off to the winning process
+    // via signal-enqueued and resolve to undefined; the caller maps that to a `deliver`
+    // outcome (the signal was queued onto the winning run, not run locally).
     const ownerStream: Promise<MastraModelOutput<OUTPUT> | undefined> = (async () => {
       // Fail-open on pubsub errors: if the lease backend is unreachable we treat the
       // call as "acquired" so the caller still gets a response. The tradeoff is that
@@ -1596,7 +1597,9 @@ export class AgentThreadStreamRuntime {
       accepted: true,
       runId,
       signal,
-      outcome: ownerStream.then(output => ({ action: 'wake' as const, output })),
+      outcome: ownerStream.then(output =>
+        output ? { action: 'wake' as const, output } : { action: 'deliver' as const },
+      ),
     };
   }
 }

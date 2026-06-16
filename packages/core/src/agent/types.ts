@@ -157,19 +157,21 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
  * is whichever behavior the runtime actually applied, not the request.
  *
  * - `wake`    — started (or attempted to start) a new run for an idle thread.
- *               `output` is the run's `MastraModelOutput` only on the runtime
- *               that won the wake race; it is `undefined` on runtimes that
- *               lost the race (the winner owns the stream and delivers chunks
- *               via PubSub).
- * - `deliver` — the thread was already active; the signal was queued onto the
- *               in-flight run. No new run was started and no stream is owned.
+ *               `output` is the run's `MastraModelOutput` for in-process
+ *               consumption. Only the runtime that actually runs the agent
+ *               resolves to `wake`.
+ * - `deliver` — the signal was queued onto an in-flight run rather than starting
+ *               one here. This covers a follow-up signal joining an already-active
+ *               run and the loser of a cross-process wake race (whose signal is
+ *               forwarded to the winning run). No new run was started locally and
+ *               no stream is owned.
  * - `persist` — the signal was written to memory by a `persist` behavior.
  * - `discard` — policy dropped the signal; nothing ran and nothing was stored.
  *
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SendAgentSignalOutcome<OUTPUT = unknown> =
-  | { action: 'wake'; output: MastraModelOutput<OUTPUT> | undefined }
+  | { action: 'wake'; output: MastraModelOutput<OUTPUT> }
   | { action: 'deliver' }
   | { action: 'persist' }
   | { action: 'discard' };
@@ -186,10 +188,10 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
   /**
    * Resolves once the runtime has settled what it did with the signal.
    *
-   * On the `wake` action, `output` is the run's `MastraModelOutput` on the
-   * runtime that won the wake race for this thread, and `undefined` on runtimes
-   * that lost the race or on follow-up signals merely queued onto an existing
-   * active run.
+   * `wake` means this process ran the agent and `output` is its
+   * `MastraModelOutput`. A signal queued onto an existing run, or one whose
+   * cross-process wake race was lost (and forwarded to the winning run),
+   * resolves to `deliver`.
    */
   outcome: Promise<SendAgentSignalOutcome<OUTPUT>>;
 }

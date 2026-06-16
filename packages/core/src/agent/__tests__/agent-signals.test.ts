@@ -2617,15 +2617,15 @@ describe('Agent signals', () => {
 
     const [settledA, settledB] = await Promise.all([resultA.outcome!, resultB.outcome!]);
 
-    // Both took the wake path; exactly one carries the owned stream (the winner).
-    expect(settledA.action).toBe('wake');
-    expect(settledB.action).toBe('wake');
+    // Exactly one runtime won the lease and ran the stream (`wake` + owned output); the
+    // loser forwarded its signal to the winner and resolves to `deliver`.
     const ownerA = settledA.action === 'wake' ? settledA.output : undefined;
     const ownerB = settledB.action === 'wake' ? settledB.output : undefined;
     const winners = [ownerA, ownerB].filter(s => s !== undefined);
-    const losers = [ownerA, ownerB].filter(s => s === undefined);
     expect(winners).toHaveLength(1);
-    expect(losers).toHaveLength(1);
+
+    const actions = [settledA.action, settledB.action].sort();
+    expect(actions).toEqual(['deliver', 'wake']);
 
     // Only the winner's agent.stream was invoked.
     const totalStreamCalls = streamCallsA.length + streamCallsB.length;
