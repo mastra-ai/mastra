@@ -1,11 +1,11 @@
 {
   "meta": {
     "name": "test-8c4e85e3",
-    "testFile": "packages/core/src/agent/__tests__/tool-approval.e2e.test.ts",
+    "testFile": "src/agent/__tests__/tool-approval.e2e.test.ts",
     "testName": "tool approval and suspension > requireToolApproval > should call findUserTool with requireToolApproval and decline via generate",
     "model": "gpt-4o-mini",
     "createdAt": "2026-05-18T10:51:26.105Z",
-    "updatedAt": "2026-05-18T11:57:13.311Z"
+    "updatedAt": "2026-06-16T21:40:41.701Z"
   },
   "recordings": [
     {
@@ -43,7 +43,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["name"],
+                "required": [
+                  "name"
+                ],
                 "additionalProperties": false
               },
               "strict": false
@@ -51,7 +53,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1779105429184
+        "timestamp": 1781646036792
       },
       "response": {
         "status": 200,
@@ -60,35 +62,35 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9fdaaec4892ab753-BRU",
+          "cf-ray": "a0ccf952e95bee17-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Mon, 18 May 2026 11:57:10 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1063",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Tue, 16 Jun 2026 21:40:37 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "914",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9987",
-          "x-ratelimit-remaining-tokens": "199711",
-          "x-ratelimit-reset-requests": "1m45.097s",
-          "x-ratelimit-reset-tokens": "86ms",
-          "x-request-id": "req_6a39bb87b52940f1878001475305a7b8"
+          "x-ratelimit-limit-requests": "5000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-requests": "4999",
+          "x-ratelimit-remaining-tokens": "1999711",
+          "x-ratelimit-reset-requests": "12ms",
+          "x-ratelimit-reset-tokens": "8ms",
+          "x-request-id": "req_6739fb08e5044f159d7e96433f5478e1"
         },
         "body": {
-          "id": "resp_066a972e46dd2eeb006a0afe954e5c8190b186f7a080a10be6",
+          "id": "resp_0e33e62928f7ff63006a31c2d4fd288198a281a7f26a219286",
           "object": "response",
-          "created_at": 1779105429,
+          "created_at": 1781646037,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1779105430,
+          "completed_at": 1781646037,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -99,11 +101,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_066a972e46dd2eeb006a0afe95f91081908a3d7b34fad910a5",
+              "id": "fc_0e33e62928f7ff63006a31c2d5b4048198bb739369bc3141e0",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"name\":\"Dero Israel\"}",
-              "call_id": "call_QDfGhHX9O9UiKZIcrhScvP5e",
+              "call_id": "call_ucUYkEChQehM5WrNw8X8Qtpc",
               "name": "findUserTool"
             }
           ],
@@ -113,6 +115,7 @@
           "prompt_cache_key": null,
           "prompt_cache_retention": "in_memory",
           "reasoning": {
+            "context": null,
             "effort": null,
             "summary": null
           },
@@ -133,13 +136,16 @@
               "description": "This is a test tool that returns the name and email",
               "name": "findUserTool",
               "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
                 "type": "object",
                 "properties": {
                   "name": {
                     "type": "string"
                   }
                 },
-                "required": ["name"],
+                "required": [
+                  "name"
+                ],
                 "additionalProperties": false
               },
               "strict": false
@@ -166,7 +172,7 @@
       }
     },
     {
-      "hash": "7b01642912ff6a64",
+      "hash": "5c8327cf097907f6",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -188,11 +194,11 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_066a972e46dd2eeb006a0afe95f91081908a3d7b34fad910a5"
+              "id": "fc_0e33e62928f7ff63006a31c2d5b4048198bb739369bc3141e0"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_QDfGhHX9O9UiKZIcrhScvP5e",
+              "call_id": "call_ucUYkEChQehM5WrNw8X8Qtpc",
               "output": "Tool call was not approved by the user"
             }
           ],
@@ -209,7 +215,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["name"],
+                "required": [
+                  "name"
+                ],
                 "additionalProperties": false
               },
               "strict": false
@@ -217,7 +225,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1779105431452
+        "timestamp": 1781646038838
       },
       "response": {
         "status": 200,
@@ -226,35 +234,35 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9fdaaed2a94db753-BRU",
+          "cf-ray": "a0ccf95fba80ee17-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Mon, 18 May 2026 11:57:13 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1662",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Tue, 16 Jun 2026 21:40:41 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "1818",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "10000",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "9987",
-          "x-ratelimit-remaining-tokens": "199676",
-          "x-ratelimit-reset-requests": "1m51.212s",
-          "x-ratelimit-reset-tokens": "97ms",
-          "x-request-id": "req_b1aff7d54e624e1aac9262afa5d02cfc"
+          "x-ratelimit-limit-requests": "5000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-requests": "4999",
+          "x-ratelimit-remaining-tokens": "1999676",
+          "x-ratelimit-reset-requests": "12ms",
+          "x-ratelimit-reset-tokens": "9ms",
+          "x-request-id": "req_8c3033538a1946cda45de8ae959d6c50"
         },
         "body": {
-          "id": "resp_066a972e46dd2eeb006a0afe9796988190954442f0acb8d0b0",
+          "id": "resp_0e33e62928f7ff63006a31c2d82f6c8198b2af4eb1eda63a58",
           "object": "response",
-          "created_at": 1779105431,
+          "created_at": 1781646040,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1779105433,
+          "completed_at": 1781646041,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -265,7 +273,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_066a972e46dd2eeb006a0afe989ea08190a44516ae3cddd4e5",
+              "id": "msg_0e33e62928f7ff63006a31c2d958cc8198b9e6f2f8bde8aac3",
               "type": "message",
               "status": "completed",
               "content": [
@@ -273,7 +281,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "It seems I need your approval to proceed with the search for the user \"Dero Israel.\" Would you like to continue?"
+                  "text": "I can't access user information without your approval. Would you like to proceed?"
                 }
               ],
               "role": "assistant"
@@ -285,6 +293,7 @@
           "prompt_cache_key": null,
           "prompt_cache_retention": "in_memory",
           "reasoning": {
+            "context": null,
             "effort": null,
             "summary": null
           },
@@ -305,13 +314,16 @@
               "description": "This is a test tool that returns the name and email",
               "name": "findUserTool",
               "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
                 "type": "object",
                 "properties": {
                   "name": {
                     "type": "string"
                   }
                 },
-                "required": ["name"],
+                "required": [
+                  "name"
+                ],
                 "additionalProperties": false
               },
               "strict": false
@@ -325,11 +337,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 27,
+            "output_tokens": 17,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 134
+            "total_tokens": 124
           },
           "user": null,
           "metadata": {}
