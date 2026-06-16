@@ -551,18 +551,19 @@ export class MastraAuthWorkos
       impersonator: authResponse.impersonator,
     };
 
-    const cookiePassword = process.env['WORKOS_COOKIE_PASSWORD'];
+    // Use this.config for cookie settings to ensure consistency with read/clear paths
+    const cookiePassword = this.config.cookiePassword;
+    const cookieName = this.config.cookieName ?? 'wos_session';
     let cookies: string[] | undefined;
 
     if (cookiePassword) {
       const encryptedSession = await sessionEncryption.sealData(sessionData, { password: cookiePassword });
-      const cookieName = process.env['WORKOS_COOKIE_NAME'] || 'wos-session';
-      // Set cookie with secure defaults
+      // Set cookie with secure defaults matching AuthKit config
       const cookieOptions = [
         `${cookieName}=${encryptedSession}`,
         'Path=/',
         'HttpOnly',
-        'SameSite=Lax',
+        `SameSite=${this.config.cookieSameSite ?? 'Lax'}`,
         process.env['NODE_ENV'] === 'production' ? 'Secure' : '',
       ]
         .filter(Boolean)

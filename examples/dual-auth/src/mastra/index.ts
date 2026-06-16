@@ -43,7 +43,7 @@ const assistantAgent = new Agent({
   id: 'assistant',
   name: 'Assistant',
   instructions: 'You are a helpful assistant. Use the greet tool when asked to greet someone.',
-  model: 'openai/gpt-4o-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: { greet: greetTool },
 });
 
@@ -62,11 +62,9 @@ const studioAuth = new MastraAuthWorkos({
     : undefined,
 });
 
-// Server Auth: Simple JWT verification for API consumers
-// In production, you'd use a proper JWT library with JWKS validation
+// Server Auth: JWT verification for API consumers using HMAC-SHA256
 const serverAuth = {
   authenticateToken: async (token: string) => {
-    // Simple JWT validation (replace with proper JWT library in production)
     const secret = process.env.JWT_SECRET;
     if (!secret) {
       throw new Error('JWT_SECRET not configured');
@@ -79,8 +77,36 @@ const serverAuth = {
         return null;
       }
 
-      // Decode payload (in production, verify signature!)
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+      const [headerB64, payloadB64, signatureB64] = parts;
+
+      // Verify HMAC-SHA256 signature
+      const encoder = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        'raw',
+        encoder.encode(secret),
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign'],
+      );
+
+      const signatureInput = `${headerB64}.${payloadB64}`;
+      const expectedSignature = await crypto.subtle.sign('HMAC', key, encoder.encode(signatureInput));
+      const expectedSignatureB64 = Buffer.from(expectedSignature).toString('base64url');
+
+      // Constant-time comparison to prevent timing attacks
+      if (signatureB64.length !== expectedSignatureB64.length) {
+        return null;
+      }
+      let mismatch = 0;
+      for (let i = 0; i < signatureB64.length; i++) {
+        mismatch |= signatureB64.charCodeAt(i) ^ expectedSignatureB64.charCodeAt(i);
+      }
+      if (mismatch !== 0) {
+        return null;
+      }
+
+      // Decode and validate payload
+      const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
 
       // Check expiration
       if (payload.exp && payload.exp < Date.now() / 1000) {

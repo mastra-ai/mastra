@@ -209,7 +209,7 @@ The header only routes to the correct auth provider. You still need valid creden
 
 ## Try It Yourself
 
-1. Clone the example: `git clone https://github.com/mastra-ai/mastra && cd examples/agent`
+1. Clone the example: `git clone https://github.com/mastra-ai/mastra && cd examples/dual-auth`
 2. Copy `.env.example` to `.env` and fill in credentials
 3. Run `pnpm dev`
 4. Test API with curl commands above
