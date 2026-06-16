@@ -490,8 +490,6 @@ export class Harness<TState = {}> {
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
-  /** Whether the dynamic mode-aware instructions have been installed on config.agent. */
-  #dynamicInstructionsInstalled = false;
 
   constructor(config: HarnessConfig<TState>) {
     validateModes(config.modes);
@@ -889,11 +887,10 @@ export class Harness<TState = {}> {
     }
 
     // Shared backing agent — reuse the single instance.
-    // Mode instructions are resolved dynamically via the function installed
-    // in installDynamicModeInstructions(); mode tools are resolved at
-    // execution time via buildToolsets.
+    // The harness never mutates the agent's own instructions or tools.
+    // Mode instructions are passed at call time via buildAgentMessageStreamOptions;
+    // mode tools are resolved at execution time via buildToolsets.
     if (this.config.agent) {
-      this.installDynamicModeInstructions();
       return this.config.agent;
     }
 
@@ -922,25 +919,15 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Install a dynamic instructions function on the shared `config.agent` that
-   * resolves the current mode's instructions at execution time. This avoids
-   * mutating the agent on every mode switch and ensures instructions are always
-   * fresh for the active mode.
+   * Resolve the combined instructions for the current mode: harness-level
+   * instructions + mode-specific instructions. Passed at call time via
+   * `buildAgentMessageStreamOptions` so the agent's own instructions are
+   * never mutated.
    */
-  private installDynamicModeInstructions(): void {
-    if (this.#dynamicInstructionsInstalled) return;
-    this.#dynamicInstructionsInstalled = true;
-
-    const harnessInstructions = this.#instructions ?? '';
-    const modes = this.config.modes;
-    // Capture a reference to the harness so the closure can read currentModeId.
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const harness = this;
-
-    this.config.agent!.__updateInstructions(() => {
-      const mode = modes.find(m => m.id === harness.currentModeId);
-      return [harnessInstructions, mode?.instructions ?? ''].filter(Boolean).join('\n');
-    });
+  private resolveCurrentModeInstructions(): string | undefined {
+    const mode = this.getCurrentMode();
+    const combined = [this.#instructions ?? '', mode?.instructions ?? ''].filter(Boolean).join('\n');
+    return combined || undefined;
   }
 
   /**
@@ -1925,6 +1912,10 @@ export class Harness<TState = {}> {
     this.abortRequested = false;
     this.abortController ??= new AbortController();
     const requestContext = await this.buildRequestContext(requestContextInput);
+    // Resolve mode-aware instructions at call time so the agent's own
+    // instructions are never mutated by the harness.
+    const modeInstructions = this.config.agent ? this.resolveCurrentModeInstructions() : undefined;
+
     const streamOptions: Record<string, unknown> = {
       ...this.buildSharedRunOptions(),
       memory: { thread: this.currentThreadId, resource: this.resourceId },
@@ -1932,6 +1923,7 @@ export class Harness<TState = {}> {
       requestContext,
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
+      ...(modeInstructions && { instructions: modeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(requestContext);
 
