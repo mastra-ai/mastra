@@ -95,7 +95,7 @@ export function createGoalScorer({
     id: GOAL_SCORER_ID,
     name: 'Goal (LLM)',
     description:
-      'Judges the agent\'s objective status, returning 1 when complete, 0 to keep working, and a waiting score for an explicit user checkpoint.',
+      "Judges the agent's objective status, returning 1 when complete, 0 to keep working, and a waiting score for an explicit user checkpoint.",
     judge: {
       model: judgeModel,
       instructions,
