@@ -47,7 +47,7 @@ overrides:
   better-auth: ^1.4.18
   js-yaml: ^3.14.2
   glob@<=10.5.0: 10.5.0
-  image-size@>=2.0.0: 1.2.1
+  '@mastra/memory>image-size': 1.2.1
   body-parser@<=2.2.1: 2.2.2
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.7.1
@@ -21925,6 +21925,11 @@ packages:
     engines: {node: '>=16.x'}
     hasBin: true
 
+  image-size@2.0.2:
+    resolution: {integrity: sha512-IRqXKlaXwgSMAMtpNzZa1ZAe8m+Sa1770Dhk8VkSsP9LS+iHD62Zd8FQKs8fbPiagBE7BzoFX23cxFnwshpV6w==}
+    engines: {node: '>=16.x'}
+    hasBin: true
+
   immediate@3.0.6:
     resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
 
@@ -32488,7 +32493,7 @@ snapshots:
       estree-util-value-to-estree: 3.5.0
       file-loader: 6.2.0(webpack@5.104.1(@swc/core@1.15.7(@swc/helpers@0.5.17)))
       fs-extra: 11.3.5
-      image-size: 1.2.1
+      image-size: 2.0.2
       mdast-util-mdx: 3.0.0
       mdast-util-to-string: 4.0.0
       react: 18.3.1
@@ -45311,6 +45316,8 @@ snapshots:
   image-size@1.2.1:
     dependencies:
       queue: 6.0.2
+
+  image-size@2.0.2: {}
 
   immediate@3.0.6: {}
 

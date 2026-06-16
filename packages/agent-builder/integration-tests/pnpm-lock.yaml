@@ -5,7 +5,6 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  image-size@>=2.0.0: 1.2.1
   '@mastra/core': link:../../core
   '@mastra/agent-builder': link:../../agent-builder
   '@mastra/agent': link:../../agent
