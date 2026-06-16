@@ -1,6 +1,6 @@
 ---
 title: "Hosted databases | Mastra platform"
-description: Provision managed Turso (LibSQL) and Postgres databases from Studio and connect them to your Mastra project with no manual configuration.
+description: Provision managed Turso (LibSQL) and Postgres databases from your platform project settings and connect them to your Mastra project with no manual configuration.
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -8,17 +8,17 @@ import StepItem from "@site/src/components/StepItem";
 
 # Hosted databases
 
-From [Studio](/docs/mastra-platform/studio), provision a fully managed database and attach it to your project. Mastra creates it with your provider, stores credentials securely, and injects connection details as runtime environment variables when the database is ready, so there are no connection strings to copy or configure.
+From your [platform](/docs/mastra-platform/overview) project settings, provision a fully managed database and attach it to your project. Mastra creates it with your provider, stores credentials securely, and injects connection details as runtime environment variables when the database is ready, so there are no connection strings to copy or configure.
 
 Use a hosted database to persist application data, including anything your project needs to store and retrieve at runtime.
 
 ## Providers
 
-| Provider | Engine | Best for | Pricing |
-| - | - | - | - |
-| **Turso** | LibSQL, SQLite-compatible | Agent memory, per-tenant isolation | Free up to 9 GB, then $0.0001/read |
-| **Postgres** | Serverless Postgres | Relational workloads, structured data | Free up to 0.5 GB, then $0.10/GB-month |
-| **MongoDB** | Document and vector search | Document storage, vector search | _Coming soon_ |
+| Provider | Engine | Best for |
+| - | - | - |
+| **Turso** | LibSQL, SQLite-compatible | Agent memory, per-tenant isolation |
+| **Postgres** | Serverless Postgres | Relational workloads, structured data |
+| **MongoDB** | Document and vector search | Document storage, vector search (_coming soon_) |
 
 :::note
 You can attach one database per provider to a project. This keeps the injected environment variable names unambiguous. For example, a project has a single `DATABASE_URL` for its Postgres database.
@@ -28,7 +28,7 @@ You can attach one database per provider to a project. This keeps the injected e
 
 <Steps>
   <StepItem>
-    Open your project in Studio and go to **Project Settings**.
+    Open your project in the [platform](/docs/mastra-platform/overview) and go to **Project Settings**.
   </StepItem>
 
   <StepItem>
@@ -52,12 +52,12 @@ You can attach one database per provider to a project. This keeps the injected e
 </Steps>
 
 :::note
-Hosted databases are created from Studio. There is currently no CLI or public API for provisioning them.
+Hosted databases are created from your platform project settings. There is currently no CLI or public API for provisioning them.
 :::
 
 ## Connect from your code
 
-Once a database is `ready`, Studio injects its connection details as managed environment variables. Wire them into a Mastra storage adapter, with no manual configuration required.
+Once a database is `ready`, the platform injects its connection details into your project as managed environment variables. Wire them into a Mastra storage adapter, with no manual configuration required.
 
 ### Turso (LibSQL)
 
@@ -117,10 +117,10 @@ Each provider injects a fixed set of managed environment variables. These are av
 | Postgres | `DATABASE_URL` |
 
 :::caution
-Treat connection credentials as secrets. The auth token (`TURSO_AUTH_TOKEN`) and the Postgres connection string (`DATABASE_URL`) grant full access to your data. Studio masks them by default and only reveals them on request.
+Treat connection credentials as secrets. The auth token (`TURSO_AUTH_TOKEN`) and the Postgres connection string (`DATABASE_URL`) grant full access to your data. The platform masks them by default and only reveals them on request.
 :::
 
 ## Manage a database
 
-- **View connection details**: Open a `ready` database in Studio to see its environment variables and a copy-pasteable code snippet.
+- **View connection details**: Open a `ready` database in your project settings to see its environment variables and a copy-pasteable code snippet.
 - **Detach**: Removing a database from a project deletes it with the provider and clears its injected environment variables. This is irreversible, so ensure you no longer need the data.
