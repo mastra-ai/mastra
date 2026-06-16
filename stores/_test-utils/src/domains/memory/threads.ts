@@ -4,6 +4,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { randomUUID } from 'node:crypto';
 
+// Normalize a timestamp (Date or ISO string) to epoch millis for comparison across adapters.
+const getTimestamp = (date: Date | string): number =>
+  date instanceof Date ? date.getTime() : new Date(date).getTime();
+
 export function createThreadsTest({ storage }: { storage: MastraStorage }) {
   let memoryStorage: MemoryStorage;
 
@@ -143,6 +147,13 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       const thread = createSampleThread();
       await memoryStorage.saveThread({ thread });
 
+      const createdAt = getTimestamp(thread.createdAt);
+      const beforeUpdate = getTimestamp(thread.updatedAt);
+
+      // Sleep so the new updatedAt is strictly after createdAt even on stores that
+      // store timestamps at coarser-than-microsecond resolution.
+      await new Promise(resolve => setTimeout(resolve, 50));
+
       const newMetadata = { newKey: 'newValue' };
       const updatedThread = await memoryStorage.updateThread({
         id: thread.id,
@@ -156,10 +167,17 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         ...newMetadata,
       });
 
-      // Verify persistence
+      // updateThread must advance updatedAt past both the original createdAt and the
+      // pre-update updatedAt. (Regression guard: several adapters previously returned
+      // and persisted a stale updatedAt.)
+      expect(getTimestamp(updatedThread.updatedAt)).toBeGreaterThan(createdAt);
+      expect(getTimestamp(updatedThread.updatedAt)).toBeGreaterThan(beforeUpdate);
+
+      // Verify persistence — the read-back must equal what updateThread returned,
+      // including the advanced updatedAt.
       const retrievedThread = await memoryStorage.getThreadById({ threadId: thread.id });
-      console.log('retrievedThread', retrievedThread);
       expect(retrievedThread).toEqual(updatedThread);
+      expect(getTimestamp(retrievedThread!.updatedAt)).toBe(getTimestamp(updatedThread.updatedAt));
     });
 
     it('should return consistent timestamps from getThreadById and listThreads (issue #11496)', async () => {
@@ -192,15 +210,16 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(threadById).toBeDefined();
       expect(threadFromList).toBeDefined();
 
-      // Normalize to timestamps for comparison (handles both Date objects and ISO strings)
-      const getTimestamp = (date: Date | string) => (date instanceof Date ? date.getTime() : new Date(date).getTime());
-
       // The timestamps should be identical between the two retrieval methods
       expect(getTimestamp(threadFromList!.createdAt)).toBe(getTimestamp(threadById!.createdAt));
       expect(getTimestamp(threadFromList!.updatedAt)).toBe(getTimestamp(threadById!.updatedAt));
 
       // Also verify updatedAt from updateThread matches
       expect(getTimestamp(threadFromList!.updatedAt)).toBe(getTimestamp(updatedThread.updatedAt));
+
+      // The update must have actually advanced updatedAt past createdAt (we slept above),
+      // otherwise the "consistency" above could be agreement on a stale value.
+      expect(getTimestamp(threadById!.updatedAt)).toBeGreaterThan(getTimestamp(threadById!.createdAt));
     });
 
     it('should delete thread', async () => {
@@ -1122,8 +1141,6 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
       expect(threadById).toBeDefined();
       expect(threadFromList).toBeDefined();
-
-      const getTimestamp = (date: Date | string) => (date instanceof Date ? date.getTime() : new Date(date).getTime());
 
       // Timestamps should be identical
       expect(getTimestamp(threadFromList!.createdAt)).toBe(getTimestamp(threadById!.createdAt));

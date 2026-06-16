@@ -1084,6 +1084,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
+      updatedAt: new Date(),
     };
 
     try {
@@ -1094,6 +1095,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           $set: {
             title,
             metadata: updatedThread.metadata,
+            updatedAt: updatedThread.updatedAt,
           },
         },
       );

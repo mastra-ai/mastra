@@ -276,6 +276,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
+      updatedAt: new Date(),
     };
 
     try {
