@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix raw base64 image strings being wrapped in data URI in to-prompt.ts, causing Gemini inline_data. data rejection when using with Mastra
+Fixed base64-encoded images failing when sent to Gemini through withMastra. Images now reach the provider in the correct format, matching the behavior of calling generateText without withMastra.
