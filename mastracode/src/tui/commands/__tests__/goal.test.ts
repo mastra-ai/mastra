@@ -169,6 +169,7 @@ describe('handleGoalCommand', () => {
         ui: { hideOverlay: vi.fn() },
       },
       showInfo: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     const result = handleGoalCommand(ctx, []);
@@ -206,6 +207,7 @@ describe('handleGoalCommand', () => {
       },
       showInfo,
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     await handleGoalCommand(ctx, ['resume']);
@@ -249,6 +251,7 @@ describe('handleGoalCommand', () => {
       },
       addUserMessage: vi.fn(),
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     await handleGoalCommand(ctx, ['finish', 'the', 'task']);
@@ -299,6 +302,7 @@ describe('handleGoalCommand', () => {
       },
       addUserMessage: vi.fn(),
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     await startGoalWithDefaults(ctx, objective, 'Goal cancelled.');
@@ -371,6 +375,7 @@ describe('handleGoalCommand', () => {
       },
       addUserMessage: vi.fn(),
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     await startGoalWithDefaults(ctx, objective, 'Goal cancelled.');
@@ -403,6 +408,7 @@ describe('handleGoalCommand', () => {
       },
       addUserMessage: vi.fn(),
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     await startGoalWithDefaults(ctx, '# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', { trigger: 'none' });
@@ -445,6 +451,7 @@ describe('handleGoalCommand', () => {
       authStorage: {},
       showInfo,
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     const promise = handleJudgeCommand(ctx);
@@ -484,6 +491,7 @@ describe('handleGoalCommand', () => {
       authStorage: {},
       showInfo,
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     const promise = handleGoalCommand(ctx, ['judge']);
@@ -517,6 +525,7 @@ describe('handleGoalCommand', () => {
         harness: { sendMessage },
       },
       showInfo,
+      updateStatusLine: vi.fn(),
     } as any;
 
     await handleGoalCommand(ctx, ['resume']);
@@ -532,14 +541,23 @@ describe('handleGoalCommand', () => {
       clear: vi.fn(),
       saveToThread: vi.fn(),
     };
+    const abort = vi.fn();
     const state = {
       goalManager,
       planStartedGoalId: 'plan-goal-123',
+      pendingInlineQuestions: [],
+      pendingAskUserComponents: new Map(),
+      harness: {
+        isRunning: vi.fn(() => false),
+        hasPendingSuspensions: vi.fn(() => false),
+        abort,
+      },
     };
     const showInfo = vi.fn();
     const ctx = {
       state,
       showInfo,
+      updateStatusLine: vi.fn(),
     } as any;
 
     await handleGoalCommand(ctx, ['clear']);
@@ -548,6 +566,42 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledWith(state);
     expect(state.planStartedGoalId).toBeUndefined();
     expect(showInfo).toHaveBeenCalledWith('Goal cleared.');
+    // Not running → must not abort.
+    expect(abort).not.toHaveBeenCalled();
+  });
+
+  it('aborts the in-flight turn when /goal clear is called while running', async () => {
+    const goalManager = {
+      clear: vi.fn(),
+      saveToThread: vi.fn(),
+    };
+    const abort = vi.fn();
+    const state = {
+      goalManager,
+      planStartedGoalId: undefined,
+      activeInlineQuestion: {},
+      pendingInlineQuestions: [() => {}],
+      pendingAskUserComponents: new Map([['t', {}]]),
+      harness: {
+        isRunning: vi.fn(() => true),
+        hasPendingSuspensions: vi.fn(() => false),
+        abort,
+      },
+    };
+    const ctx = {
+      state,
+      showInfo: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['clear']);
+
+    expect(goalManager.clear).toHaveBeenCalled();
+    expect(abort).toHaveBeenCalledTimes(1);
+    expect((state as any).userInitiatedAbort).toBe(true);
+    expect(state.activeInlineQuestion).toBeUndefined();
+    expect(state.pendingInlineQuestions).toHaveLength(0);
+    expect((state.pendingAskUserComponents as Map<string, unknown>).size).toBe(0);
   });
 
   it('clears planStartedGoalId when starting a new manual goal', async () => {
@@ -581,6 +635,7 @@ describe('handleGoalCommand', () => {
       state,
       showInfo,
       showError,
+      updateStatusLine: vi.fn(),
     } as any;
 
     await handleGoalCommand(ctx, ['new', 'manual', 'objective']);

@@ -53,6 +53,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       return;
     }
     await goalManager.saveToThread(state);
+    ctx.updateStatusLine();
     ctx.showInfo(
       `Goal paused: "${goal.objective}" (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
     );
@@ -77,6 +78,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
 
     goalManager.resume();
     await goalManager.saveToThread(state);
+    ctx.updateStatusLine();
 
     ctx.showInfo(
       `Goal resumed: "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used. Sending continuation...`,
@@ -101,6 +103,20 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     goalManager.clear();
     state.planStartedGoalId = undefined;
     await goalManager.saveToThread(state);
+    // Abort any in-flight turn. The cleared objective stops the core loop from
+    // driving *new* goal continuations, but a turn that was already running when
+    // the user cleared keeps going to completion — which reads as "it's still
+    // attempting the goal". Stop it immediately so clear means stop. Mirrors the
+    // Esc/abort cleanup so a turn parked in a tool suspension (e.g. ask_user) is
+    // also aborted cleanly.
+    if (state.harness.isRunning() || state.harness.hasPendingSuspensions()) {
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
+      state.userInitiatedAbort = true;
+      state.harness.abort();
+    }
+    ctx.updateStatusLine();
     ctx.showInfo('Goal cleared.');
     return;
   }
@@ -335,6 +351,7 @@ async function startGoal(
     goalManager.persistOnNextThreadCreate();
   }
   await goalManager.saveToThread(state);
+  ctx.updateStatusLine();
 
   if (options.trigger === 'none') {
     return;
