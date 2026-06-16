@@ -1104,17 +1104,16 @@ export class AgentChannels {
     // invocation as soon as the webhook handler returns and kill the run
     // mid-flight. `consumeStream()` is idempotent and safe to call alongside
     // the existing per-thread subscription consumer.
-    if (result.ownerStream) {
-      try {
-        const ownerStream = await result.ownerStream;
-        // Loser Lambda gets undefined: another invocation acquired the lease
-        // and will drive the run. Nothing to do here.
-        if (ownerStream) {
-          await ownerStream.consumeStream();
-        }
-      } catch (err) {
-        this.log('debug', 'ownerStream consume failed', err);
+    try {
+      const outcome = await result.outcome;
+      // Only the `wake` outcome means this process started and owns the run.
+      // Any other action (deliver/persist/discard) handed the signal off, so
+      // there is nothing to drive to completion here.
+      if (outcome.action === 'wake') {
+        await outcome.output.consumeStream();
       }
+    } catch (err) {
+      this.log('debug', 'outcome consume failed', err);
     }
   }
 

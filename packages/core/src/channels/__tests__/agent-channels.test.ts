@@ -40,7 +40,11 @@ function createMockAgent(name = 'test-agent') {
         },
       }),
     }),
-    sendMessage: vi.fn().mockResolvedValue({ accepted: true, runId: 'run-1' }),
+    sendMessage: vi.fn().mockReturnValue({
+      accepted: true,
+      runId: 'run-1',
+      outcome: Promise.resolve({ action: 'deliver' }),
+    }),
     subscribeToThread: vi.fn().mockResolvedValue({
       stream: (async function* () {})(),
       activeRunId: () => null,
@@ -378,6 +382,76 @@ describe('AgentChannels', () => {
           }),
         }),
       );
+    });
+
+    it('consumes the run stream when the signal outcome is `wake`', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      const consumeStream = vi.fn().mockResolvedValue(undefined);
+      mockAgent.sendMessage.mockReturnValueOnce({
+        accepted: true,
+        runId: 'run-1',
+        outcome: Promise.resolve({ action: 'wake', output: { consumeStream } }),
+      });
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(consumeStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not consume a stream when the signal outcome is not `wake`', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      // Default stub resolves the outcome to `deliver` (signal handed off).
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await expect((agentChannels as any).processChatMessage(chatThread, message, mockMastra)).resolves.not.toThrow();
     });
   });
 
