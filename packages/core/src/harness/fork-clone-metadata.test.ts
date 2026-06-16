@@ -373,8 +373,9 @@ describe('Harness fork clone metadata wiring', () => {
 
     await harness.init();
 
-    const buildToolsets = (harness as unknown as { buildToolsets(ctx: RequestContext): Promise<Record<string, unknown>> })
-      .buildToolsets;
+    const buildToolsets = (
+      harness as unknown as { buildToolsets(ctx: RequestContext): Promise<Record<string, unknown>> }
+    ).buildToolsets;
 
     // In 'build' mode, mode tools should appear in toolsets
     const buildResult = (await buildToolsets.call(harness, new RequestContext())) as {
