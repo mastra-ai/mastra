@@ -5215,8 +5215,8 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
       zod-to-ts:
-        specifier: ^2.0.0
-        version: 2.0.0(typescript@6.0.3)(zod@4.4.3)
+        specifier: ^2.1.0
+        version: 2.1.0(typescript@6.0.3)(zod@4.4.3)
 
   pubsub/google-cloud-pubsub:
     dependencies:
@@ -28251,8 +28251,8 @@ packages:
     peerDependencies:
       zod: ^3.25 || ^4
 
-  zod-to-ts@2.0.0:
-    resolution: {integrity: sha512-aHsUgIl+CQutKAxtRNeZslLCLXoeuSq+j5HU7q3kvi/c2KIAo6q4YjT7/lwFfACxLB923ELHYMkHmlxiqFy4lw==}
+  zod-to-ts@2.1.0:
+    resolution: {integrity: sha512-jZP1GokTqR99FLmtGU+B9acjD9u/R++b++Vxe1sWpBQDd82/9/j5LyLZZ7/Oy3h2nxcz5NihikgX4D0hhdu3+g==}
     peerDependencies:
       typescript: ^6.0.3
       zod: ^3.25.0 || ^4.0.0
@@ -53388,7 +53388,7 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  zod-to-ts@2.0.0(typescript@6.0.3)(zod@4.4.3):
+  zod-to-ts@2.1.0(typescript@6.0.3)(zod@4.4.3):
     dependencies:
       typescript: 6.0.3
       zod: 4.4.3
