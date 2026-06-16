@@ -630,6 +630,15 @@ export class Harness<TState = {}> {
       this.propagateRuntimeServicesToAgent(agent);
     }
 
+    // Also propagate runtime services to the base config agent so that signal
+    // providers connected to it during construction have access to memory and
+    // storage. Without this, signal providers (e.g. GitHubSignals) that were
+    // `connect()`-ed to the base agent before forking remain pointed at a
+    // memoryless instance and fail when attempting notification delivery.
+    if (this.config.agent) {
+      this.propagateRuntimeServicesToAgent(this.config.agent);
+    }
+
     this.startHeartbeats();
   }
 

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../agent';
 import { RequestContext } from '../request-context';
+import { SignalProvider } from '../signals/signal-provider';
 
 import { Harness } from './harness';
 import type * as Tools from './tools';
@@ -198,5 +199,60 @@ describe('Harness fork clone metadata wiring', () => {
     const builtIn = toolsets.harnessBuiltIn as Record<string, unknown>;
     expect(builtIn.subagent).toBeDefined();
     expect(builtIn.ask_user).toBeDefined();
+  });
+
+  it('propagates memory to the base config.agent so signal providers have access', async () => {
+    class TestSignalProvider extends SignalProvider<'test-signals'> {
+      readonly id = 'test-signals' as const;
+      getConnectedAgent() {
+        return this.agent;
+      }
+    }
+
+    const signalProvider = new TestSignalProvider();
+    const memoryFactory = vi.fn().mockResolvedValue({});
+
+    const baseAgent = new Agent({
+      name: 'base',
+      instructions: 'base agent',
+      model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+      signals: [signalProvider],
+    });
+
+    // Signal provider is connected to the base agent
+    expect(signalProvider.isConnected).toBe(true);
+    expect(signalProvider.getConnectedAgent()).toBe(baseAgent);
+
+    // Before harness init, base agent has no memory
+    expect(baseAgent.hasOwnMemory()).toBe(false);
+
+    const harness = new Harness({
+      id: 'test',
+      resourceId: 'test-resource',
+      memory: memoryFactory as unknown as never,
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          defaultModelId: 'openai/gpt-4o',
+          instructions: 'Build things.',
+        },
+        {
+          id: 'plan',
+          name: 'Plan',
+          defaultModelId: 'openai/gpt-4o',
+          instructions: 'Plan things.',
+        },
+      ],
+      agent: baseAgent,
+    });
+
+    await harness.init();
+
+    // After init, signal provider's connected agent (the base agent) should have memory
+    const connectedAgent = signalProvider.getConnectedAgent()!;
+    expect(connectedAgent).toBe(baseAgent);
+    expect(connectedAgent.hasOwnMemory()).toBe(true);
   });
 });
