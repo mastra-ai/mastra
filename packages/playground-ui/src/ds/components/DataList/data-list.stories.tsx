@@ -449,10 +449,11 @@ export const Loading: Story = {
   render: () => <DataListSkeleton columns={COMPACT_COLUMNS} numberOfRows={5} />,
 };
 
-/** Page-based pagination footer — `Previous` shows when `currentPage > 0`, `Next` shows when `hasMore`. */
+/** Page-based pagination footer — `Previous` shows when `currentPage > 0`, `Next` shows when `hasMore`.
+ *  `currentPage` is zero-based: the footer renders it as `currentPage + 1`, so page `0` reads as "Page 1". */
 export const WithPagination: Story = {
   render: function WithPaginationStory() {
-    const [page, setPage] = useState(1);
+    const [page, setPage] = useState(0);
     return (
       <DataList columns={COMPACT_COLUMNS}>
         <DataList.Top>

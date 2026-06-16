@@ -13,7 +13,19 @@ export type DataListRowButtonProps = ComponentPropsWithoutRef<'button'> & DataLi
  */
 export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButtonProps>(
   (
-    { children, className, type = 'button', flushLeft, flushRight, colStart, colEnd, featured, variant, style, ...rest },
+    {
+      children,
+      className,
+      type = 'button',
+      flushLeft,
+      flushRight,
+      colStart,
+      colEnd,
+      featured,
+      variant,
+      style,
+      ...rest
+    },
     ref,
   ) => {
     const isWrapped = useDataListRowWrapperContext();
