@@ -55,32 +55,3 @@ export function resolveWaitUntil(c: Context): WaitUntilFn | undefined {
 
   return undefined;
 }
-
-/**
- * Temporary debug helper: shapes the Hono context for logging so we can diagnose
- * waitUntil resolution on different runtimes. Strip before release.
- *
- * @internal
- */
-export function describeWaitUntilContext(c: Context): Record<string, unknown> {
-  const out: Record<string, unknown> = {
-    envType: typeof c.env,
-    envKeys: c.env && typeof c.env === 'object' ? Object.keys(c.env as object) : undefined,
-    hasContextOnEnv: Boolean((c.env as { context?: unknown } | undefined)?.context),
-    contextKeysOnEnv:
-      (c.env as { context?: object } | undefined)?.context && typeof (c.env as any).context === 'object'
-        ? Object.keys((c.env as any).context)
-        : undefined,
-    envVarVercel: process.env.VERCEL,
-    envVarNetlify: process.env.NETLIFY,
-    envVarCfPages: process.env.CF_PAGES,
-  };
-  try {
-    const execCtx = c.executionCtx as unknown;
-    out.executionCtxType = typeof execCtx;
-    out.executionCtxKeys = execCtx && typeof execCtx === 'object' ? Object.keys(execCtx as object) : undefined;
-  } catch (err) {
-    out.executionCtxAccessError = (err as Error)?.message;
-  }
-  return out;
-}
