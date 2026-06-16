@@ -1,0 +1,102 @@
+---
+title: "Harness overview"
+description: "Learn how the Harness class orchestrates multi-mode agents with shared state, memory, threads, and tool approvals."
+packages:
+  - "@mastra/core"
+---
+
+# Harness overview
+
+:::experimental
+
+The `Harness` class is in alpha and subject to breaking changes in minor versions until it graduates from experimental status.
+
+:::
+
+The Harness orchestrates multiple agent modes behind a single control surface. It manages threads, shared state, model switching, tool approvals, subagents, and observational memory so a TUI, web UI, or API layer can drive an agent without re-implementing session logic.
+
+[Mastra Code](https://code.mastra.ai/) is the flagship implementation of the Harness, showcasing how to build a terminal-based coding agent with multi-model support, persistent conversations, and built-in tools.
+
+- [Modes](/docs/harness/modes): Switch between agent personalities without losing conversation context
+- [Threads and state](/docs/harness/threads-and-state): Persistent conversations and shared state across modes
+- [Subagents](/docs/harness/subagents): Spawn focused child agents from a parent conversation
+- [Tool approvals and permissions](/docs/harness/tool-approvals): Gate tool execution with user approval flows
+
+## When to use the Harness
+
+Use the Harness when you need:
+
+- Multiple agent modes (e.g., plan and build) that share one conversation thread
+- A control layer between your UI and the agent loop (model switching, state persistence, thread management)
+- Built-in tool approval flows and permission policies
+- Subagent orchestration with forked or isolated threads
+- Observational memory management across modes
+
+For single-agent use cases without modes or shared state, use the [Agent class](/docs/agents/overview) directly.
+
+## Quickstart
+
+```typescript title="src/harness.ts"
+import { Harness } from '@mastra/core/harness'
+import { LibSQLStore } from '@mastra/libsql'
+
+const harness = new Harness({
+  id: 'my-agent',
+  storage: new LibSQLStore({ url: 'file:./data.db' }),
+  modes: [
+    { id: 'plan', name: 'Plan', metadata: { default: true }, agent: planAgent },
+    { id: 'build', name: 'Build', agent: buildAgent },
+  ],
+})
+
+harness.subscribe(event => {
+  if (event.type === 'message_update') {
+    renderMessage(event.message)
+  }
+})
+
+await harness.init()
+await harness.selectOrCreateThread()
+await harness.sendMessage({ content: 'Hello!' })
+```
+
+:::note
+
+Visit the [Harness reference](/reference/harness/harness-class) for the full constructor parameters and method signatures.
+
+:::
+
+## Architecture
+
+The Harness sits between your application layer (TUI, web frontend, API) and the underlying Mastra agent loop:
+
+```
+┌─────────────────────┐
+│   UI / TUI / API    │
+└─────────┬───────────┘
+          │ events + commands
+┌─────────▼───────────┐
+│      Harness        │
+│  ┌───────────────┐  │
+│  │ Modes         │  │
+│  │ State         │  │
+│  │ Threads       │  │
+│  │ Permissions   │  │
+│  │ Subagents     │  │
+│  └───────────────┘  │
+└─────────┬───────────┘
+          │
+┌─────────▼───────────┐
+│   Agent + Memory    │
+└─────────────────────┘
+```
+
+The Harness emits events (message updates, tool approvals, state changes) that your UI subscribes to, and exposes commands (send message, switch mode, approve tool) that your UI calls.
+
+## Next steps
+
+- [Modes](/docs/harness/modes)
+- [Threads and state](/docs/harness/threads-and-state)
+- [Subagents](/docs/harness/subagents)
+- [Tool approvals and permissions](/docs/harness/tool-approvals)
+- [API reference](/reference/harness/harness-class)
