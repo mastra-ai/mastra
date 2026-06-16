@@ -52,11 +52,15 @@ export const AttachFilePopover = () => {
     e.stopPropagation();
 
     const formData = new FormData(e.target as HTMLFormElement);
-    const url = formData.get('url-attachment')?.toString();
+    const url = formData.get('url-attachment')?.toString().trim();
 
-    if (url) {
+    if (!url) return;
+
+    try {
       await addUrl(url);
       setOpen(false);
+    } catch {
+      // Keep the popover open so the user can correct the URL and retry.
     }
   };
 

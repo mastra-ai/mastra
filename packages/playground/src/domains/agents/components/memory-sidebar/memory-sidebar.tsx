@@ -98,9 +98,11 @@ export function MemorySidebar({
     typeof config?.workingMemory === 'object'
       ? Boolean(config?.workingMemory?.enabled)
       : Boolean(config?.workingMemory);
-  const observationalOn = Boolean(
-    config && 'observationalMemory' in config && (config as { observationalMemory?: unknown }).observationalMemory,
-  );
+  const observationalMemory = (config as { observationalMemory?: unknown } | undefined)?.observationalMemory;
+  const observationalOn =
+    typeof observationalMemory === 'object'
+      ? Boolean((observationalMemory as { enabled?: boolean })?.enabled)
+      : Boolean(observationalMemory);
 
   // streamProgress is intentionally retained across thread switches (for reload
   // display), so only trust it for the thread this card belongs to — otherwise the

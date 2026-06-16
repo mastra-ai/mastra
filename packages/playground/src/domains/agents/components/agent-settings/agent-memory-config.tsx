@@ -44,7 +44,7 @@ type DisplayMemoryConfig = {
 };
 
 const formatThreshold = (threshold: number | { min: number; max: number } | undefined) => {
-  if (!threshold) return 'Default';
+  if (threshold === undefined) return 'Default';
   if (typeof threshold === 'number') return `${threshold.toLocaleString()} tokens`;
   return `${threshold.min.toLocaleString()}-${threshold.max.toLocaleString()} tokens`;
 };

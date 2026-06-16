@@ -15,3 +15,23 @@ Added reusable UI support for redesigned Studio panels and code surfaces.
 **Popover alignment.** `PopoverContent` now exposes collision avoidance controls so consumers can keep start-aligned popovers while still avoiding viewport overflow.
 
 The resize wrapper also preserves the original resize callback arguments from `react-resizable-panels`, `useIsMobile` handles environments where media query APIs are unavailable, and the `SearchWithDropdown` ButtonsGroup story now keeps the segmented control heights aligned.
+
+**Example**
+
+```tsx
+import { PanelDrawer, useIsMobile, CodeBlock } from '@mastra/playground-ui';
+
+function Panel({ code }: { code: string }) {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <PanelDrawer direction="left" label="Open panel">
+        <CodeBlock code={code} actions={<button type="button">Toggle view</button>} />
+      </PanelDrawer>
+    );
+  }
+
+  return <CodeBlock code={code} actions={<button type="button">Toggle view</button>} />;
+}
+```

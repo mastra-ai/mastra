@@ -19,7 +19,8 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
 
-  const sessionUrl = `${window.location.origin}/agents/${agentId}/session`;
+  const basePath = (window.MASTRA_STUDIO_BASE_PATH ?? '').replace(/\/$/, '');
+  const sessionUrl = `${window.location.origin}${basePath}/agents/${encodeURIComponent(agentId)}/session`;
   const { handleCopy: handleShareLink, isCopied: isShareCopied } = useCopyToClipboard({
     text: sessionUrl,
     copyMessage: 'Session URL copied to clipboard!',
