@@ -299,6 +299,32 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (payload.finishReason === 'aborted') {
+            if (options.persistPartialOnAbort && payload.text) {
+              try {
+                await capabilities.executeOnFinish({
+                  result: payload,
+                  outputText: payload.text,
+                  thread: result.thread,
+                  threadId: result.threadId,
+                  readOnlyMemory: memoryConfig?.readOnly,
+                  resourceId,
+                  memoryConfig,
+                  requestContext,
+                  agentSpan: agentSpan,
+                  runId,
+                  messageList,
+                  threadExists: memoryData.threadExists,
+                  structuredOutput: false,
+                  overrideScorers: options.scorers,
+                });
+              } catch (e) {
+                capabilities.logger.error('Error saving partial memory on abort', {
+                  error: e,
+                  runId,
+                });
+              }
+            }
+
             agentSpan?.end({
               output: {
                 status: 'aborted',
@@ -356,6 +382,32 @@ export function createMapResultsStep<OUTPUT = undefined>({
                     );
 
               agentSpan?.error({ error: spanError, endSpan: true });
+            }
+          } else if (options.persistPartialOnAbort && payload.text) {
+            try {
+              await capabilities.executeOnFinish({
+                result: payload,
+                outputText: payload.text,
+                thread: result.thread,
+                threadId: result.threadId,
+                readOnlyMemory: memoryConfig?.readOnly,
+                resourceId,
+                memoryConfig,
+                requestContext,
+                agentSpan: agentSpan,
+                runId,
+                messageList,
+                threadExists: memoryData.threadExists,
+                structuredOutput: false,
+                overrideScorers: options.scorers,
+              });
+            } catch (e) {
+              capabilities.logger.error('Error saving partial memory on abort', {
+                error: e,
+                runId,
+              });
+
+              agentSpan?.end();
             }
           } else {
             agentSpan?.end();

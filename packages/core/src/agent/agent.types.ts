@@ -680,6 +680,22 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
+
+  /**
+   * When true, any text already streamed to the client is persisted to thread
+   * history even if the stream is aborted before the model finishes. Defaults
+   * to false (partial output is discarded on abort).
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.stream("Hello", {
+   *   threadId: "my-thread",
+   *   resourceId: "user-123",
+   *   persistPartialOnAbort: true,
+   * });
+   * ```
+   */
+  persistPartialOnAbort?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**
