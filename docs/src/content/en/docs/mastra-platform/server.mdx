@@ -65,6 +65,72 @@ Server deploy provisions hosted storage automatically. If you override storage w
 
 A deploy transitions through **queued → uploading → building → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). Only one build runs per project at a time. If multiple deploys queue up, only the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions Railway infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
 
+## Idle behavior
+
+Server on Mastra platform runs on Railway, which can sleep a service after a period of inactivity to save resources. Railway measures inactivity by outbound network traffic. A service is considered idle only after roughly 10 minutes with no outbound packets. Any recurring outbound traffic resets this timer and keeps the service awake.
+
+A server that never sleeps usually has a background task or a long-lived connection sending traffic on a timer. Check for the following common causes.
+
+### Persistent database connections
+
+A database client that stays open keeps the connection alive even when the server is idle. Many drivers also run a background health check that pings the database on an interval, which counts as outbound traffic. For example, a MongoDB client that's never closed keeps a monitoring socket open and sends a heartbeat about every 10 seconds.
+
+Connection pool settings that drain idle connections aren't enough on their own, because the driver's monitoring connection stays open and keeps pinging. To let the server sleep, close the client after a period of inactivity and reconnect on the next request.
+
+:::note
+Closing the client adds a short reconnect delay to the first request after the server wakes. If your workload can't tolerate that delay, keep the connection open and don't rely on idle sleep.
+:::
+
+### Scheduled tasks and timers
+
+A `setInterval`, cron job, or polling loop that makes network calls keeps the server awake. If you need scheduled work, run it as a separate service or use an external scheduler that wakes the server with a request.
+
+### External pings and keep-alive checks
+
+An uptime monitor, health check, or keep-alive ping that hits the server on an interval resets the idle timer. Remove these checks or increase their interval beyond the idle window if you want the server to sleep.
+
+### Observability exporters
+
+An exporter that streams traces, logs, or metrics to a remote endpoint sends outbound traffic. Confirm the exporter batches and stops sending when the server is idle, rather than flushing on a fixed interval.
+
+### Long-lived streams
+
+An open server-sent events (SSE) stream, WebSocket, or other long-lived connection holds traffic open until it closes. A streaming response that stays subscribed in the background keeps the connection active. Confirm streams close when the client disconnects and that no stream stays open while the server is otherwise idle.
+
+### Inspect active connections
+
+To find what keeps the server awake, inspect the process's active handles during idle periods. A handle that remains after all requests finish is the cause to investigate. Open sockets point to a persistent connection that needs to close, and active timers point to a `setInterval` or self-rescheduling `setTimeout`.
+
+Drop the following helper into your app, then watch the log after traffic stops. Anything still listed once the server is idle is keeping it awake:
+
+```typescript title="src/mastra/diagnose-idle.ts"
+export function logActiveHandles() {
+  // process._getActiveHandles is undocumented but useful for diagnosis.
+  const handles = (process as any)._getActiveHandles() as Array<any>
+
+  const summary = handles.map(handle => {
+    const type = handle?.constructor?.name ?? typeof handle
+    if (type === 'Socket') {
+      return `Socket -> ${handle.remoteAddress}:${handle.remotePort}`
+    }
+    return type
+  })
+
+  console.log(`[idle] ${handles.length} active handles:`, summary)
+}
+
+// Log every 30 seconds so you can see what persists while the server is idle.
+setInterval(logActiveHandles, 30_000).unref()
+```
+
+Call `unref()` on the diagnostic interval so the helper itself doesn't keep the server awake.
+
+### Keep a service running
+
+Some applications genuinely need the connections or tasks described above, such as a persistent database connection for low first-request latency, a background scheduler, or a long-lived stream. If your app requires any of these, don't force the service to sleep. Use the **Persistent Server add-on** to keep the service running continuously instead.
+
+With the **Persistent Server add-on** enabled, the service stays awake even with no traffic, so persistent connections, scheduled tasks, and open streams keep working without being interrupted by idle sleep.
+
 ## CI/CD
 
 Automate deployments from GitHub Actions, GitLab CI, or any CI provider. After your first interactive deploy, CI/CD needs two things: an API token and the `.mastra-project.json` file committed to your repository.
