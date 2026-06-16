@@ -19,6 +19,7 @@ import * as p from '@clack/prompts';
 import archiver from 'archiver';
 import pc from 'picocolors';
 
+import { writeBarLine } from '../../utils/clack-bar.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
@@ -386,6 +387,64 @@ interface UnifiedDeployStatus {
  * terminal state. Kept inside the deploy command so the unified runtime
  * never reaches into ../studio/ for transport.
  */
+async function streamEnvironmentDeployLogs(
+  token: string,
+  orgId: string,
+  projectId: string,
+  environmentId: string,
+  deployId: string,
+  signal: AbortSignal,
+): Promise<void> {
+  // Small delay to let the deploy pipeline start before requesting logs
+  await new Promise(r => setTimeout(r, 2000));
+  if (signal.aborted) return;
+
+  const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
+  const url = `${apiUrl}/v1/projects/${projectId}/environments/${environmentId}/deploys/${deployId}/logs/stream`;
+
+  const resp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'x-organization-id': orgId,
+      Accept: 'text/event-stream',
+    },
+    signal,
+  });
+
+  if (!resp.ok || !resp.body) return;
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let skipNextUrlMeta = false;
+
+  while (!signal.aborted) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (!data) continue;
+      // Filter internal server startup logs — public URL is shown by CLI after deploy
+      if (data.includes('Mastra API running') || data.includes('Studio available')) {
+        skipNextUrlMeta = true;
+        continue;
+      }
+      if (skipNextUrlMeta) {
+        skipNextUrlMeta = false;
+        if (/^(\x1b\[\d+m)*url(\x1b\[\d+m)*:/.test(data)) continue;
+      }
+      await writeBarLine(data);
+    }
+  }
+}
+
 async function pollEnvironmentDeploy(
   token: string,
   orgId: string,
@@ -399,34 +458,42 @@ async function pollEnvironmentDeploy(
   const start = Date.now();
   let currentToken = token;
 
-  while (Date.now() - start < maxWaitMs) {
-    const resp = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${currentToken}`,
-        'x-organization-id': orgId,
-      },
-    });
+  // Stream logs in parallel with status polling
+  const logAbort = new AbortController();
+  streamEnvironmentDeployLogs(currentToken, orgId, projectId, environmentId, deployId, logAbort.signal).catch(() => {});
 
-    if (resp.status === 401) {
-      currentToken = await getToken();
-      continue;
+  try {
+    while (Date.now() - start < maxWaitMs) {
+      const resp = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${currentToken}`,
+          'x-organization-id': orgId,
+        },
+      });
+
+      if (resp.status === 401) {
+        currentToken = await getToken();
+        continue;
+      }
+
+      if (!resp.ok) {
+        const err = (await resp.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(`Poll failed: ${err.detail || resp.statusText}`);
+      }
+
+      const { deploy } = (await resp.json()) as { deploy: UnifiedDeployStatus };
+
+      if (deploy.status === 'running' || deploy.status === 'failed' || deploy.status === 'stopped') {
+        return deploy;
+      }
+
+      await new Promise(r => setTimeout(r, 2000));
     }
 
-    if (!resp.ok) {
-      const err = (await resp.json().catch(() => ({}))) as { detail?: string };
-      throw new Error(`Poll failed: ${err.detail || resp.statusText}`);
-    }
-
-    const { deploy } = (await resp.json()) as { deploy: UnifiedDeployStatus };
-
-    if (deploy.status === 'running' || deploy.status === 'failed' || deploy.status === 'stopped') {
-      return deploy;
-    }
-
-    await new Promise(r => setTimeout(r, 2000));
+    throw new Error('Deploy timed out');
+  } finally {
+    logAbort.abort();
   }
-
-  throw new Error('Deploy timed out');
 }
 
 /* ------------------------------------------------------------------ */
