@@ -3,7 +3,7 @@ import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
-import type { DatasetItemSource, TargetType } from '@mastra/core/storage';
+import type { DatasetItemSource, DatasetItemToolMock, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
@@ -359,16 +359,17 @@ export const ADD_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata, source, expectedTrajectory } = params as {
+      const { input, groundTruth, requestContext, metadata, source, expectedTrajectory, toolMocks } = params as {
         input: unknown;
         groundTruth?: unknown;
         requestContext?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
         source?: DatasetItemSource;
         expectedTrajectory?: unknown;
+        toolMocks?: DatasetItemToolMock[];
       };
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.addItem({ input, groundTruth, requestContext, metadata, source, expectedTrajectory });
+      return await ds.addItem({ input, groundTruth, requestContext, metadata, source, expectedTrajectory, toolMocks });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -426,12 +427,13 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata, expectedTrajectory } = params as {
+      const { input, groundTruth, requestContext, metadata, expectedTrajectory, toolMocks } = params as {
         input?: unknown;
         groundTruth?: unknown;
         requestContext?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
         expectedTrajectory?: unknown;
+        toolMocks?: DatasetItemToolMock[];
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       // Check if item exists and belongs to dataset
@@ -439,7 +441,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       if (!existing || (existing as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata, expectedTrajectory });
+      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata, expectedTrajectory, toolMocks });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -904,6 +906,7 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
           input: unknown;
           groundTruth?: unknown;
           expectedTrajectory?: unknown;
+          toolMocks?: DatasetItemToolMock[];
           metadata?: Record<string, unknown>;
           source?: DatasetItemSource;
         }>;
