@@ -157,6 +157,7 @@ import type {
   SendAgentMessageResult,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
+  SendAgentSignalAccepted,
   SendAgentSignalOptions,
   SendAgentSignalResult,
   SendAgentStateSignalOptions,
@@ -7218,7 +7219,10 @@ export class Agent<
             { ...target, ifIdle: { ...target.ifIdle, behavior: record.priority === 'high' ? 'persist' : 'wake' } },
             this.getPubSub(),
           );
-          if (!result.accepted) {
+          let summaryAccepted: SendAgentSignalAccepted<OUTPUT>;
+          try {
+            summaryAccepted = await result.accepted;
+          } catch {
             const failed = await notifications.updateNotification({
               id: updated.id,
               threadId: updated.threadId,
@@ -7226,7 +7230,7 @@ export class Agent<
               lastDeliveryAttemptAt: new Date(),
               lastDeliveryError: 'Notification summary signal was rejected',
             });
-            results.push({ ...result, record: failed, decision });
+            results.push({ accepted: false, record: failed, decision });
             continue;
           }
           const summarized = await notifications.updateNotification({
@@ -7234,7 +7238,15 @@ export class Agent<
             threadId: updated.threadId,
             summarySignalId: result.signal.id,
           });
-          results.push({ ...result, record: summarized, decision });
+          results.push({
+            accepted: true,
+            record: summarized,
+            decision,
+            runId: 'runId' in summaryAccepted ? summaryAccepted.runId : undefined,
+            signal: result.signal,
+            persisted: result.persisted,
+            outcome: result.accepted,
+          });
           continue;
         }
 
@@ -7249,7 +7261,10 @@ export class Agent<
         target,
         this.getPubSub(),
       );
-      if (!result.accepted) {
+      let delivered: SendAgentSignalAccepted<OUTPUT>;
+      try {
+        delivered = await result.accepted;
+      } catch {
         const failed = await notifications.updateNotification({
           id: record.id,
           threadId: record.threadId,
@@ -7258,7 +7273,7 @@ export class Agent<
           lastDeliveryError: 'Notification signal was rejected',
           deliveryReason: decision.reason,
         });
-        results.push({ ...result, record: failed, decision });
+        results.push({ accepted: false, record: failed, decision });
         continue;
       }
 
@@ -7270,7 +7285,15 @@ export class Agent<
         deliveryReason: decision.reason,
       });
 
-      results.push({ ...result, record: updated, decision });
+      results.push({
+        accepted: true,
+        record: updated,
+        decision,
+        runId: 'runId' in delivered ? delivered.runId : undefined,
+        signal: result.signal,
+        persisted: result.persisted,
+        outcome: result.accepted,
+      });
     }
 
     return results;

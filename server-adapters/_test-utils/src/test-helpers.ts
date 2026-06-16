@@ -242,10 +242,8 @@ export function mockAgentMethods(agent: Agent) {
     const createdSignal = createSignal(signal);
     const runId = target?.runId ?? 'test-run';
     return {
-      accepted: true,
-      runId,
+      accepted: Promise.resolve({ action: 'deliver', runId }),
       signal: createdSignal,
-      outcome: Promise.resolve({ action: 'deliver', runId }),
     } as any;
   });
 
@@ -253,10 +251,8 @@ export function mockAgentMethods(agent: Agent) {
     const createdSignal = createMessageSignal(message);
     const runId = target?.runId ?? 'test-run';
     return {
-      accepted: true,
-      runId,
+      accepted: Promise.resolve({ action: 'deliver', runId }),
       signal: createdSignal,
-      outcome: Promise.resolve({ action: 'deliver', runId }),
     } as any;
   });
 
@@ -264,10 +260,8 @@ export function mockAgentMethods(agent: Agent) {
     const createdSignal = createMessageSignal(message);
     const runId = target?.runId ?? 'test-run';
     return {
-      accepted: true,
-      runId,
+      accepted: Promise.resolve({ action: 'deliver', runId }),
       signal: createdSignal,
-      outcome: Promise.resolve({ action: 'deliver', runId }),
     } as any;
   });
 

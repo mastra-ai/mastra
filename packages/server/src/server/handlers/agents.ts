@@ -1691,6 +1691,28 @@ const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; 
   signal: z.any().optional(),
 });
 
+/**
+ * Maps a rejected `result.accepted` (signal/message routing) to an HTTP error.
+ *
+ * `accepted` only rejects on a setup/misconfig failure surfaced before the run
+ * starts (e.g. no model selected, request-context validation, FGA denied) — these
+ * are tagged `ErrorCategory.USER` and are the caller's fault, so they map to 400.
+ * Anything else falls through to `handleError` (500 by default, or the error's own
+ * status). Run/generation errors never reject `accepted`; they surface on the
+ * `wake` output stream instead.
+ */
+function handleSignalRoutingError(error: unknown, defaultMessage: string): never {
+  if (
+    error instanceof MastraError &&
+    error.category === ErrorCategory.USER &&
+    !(error as { status?: unknown }).status &&
+    !(error as { details?: { status?: unknown } }).details?.status
+  ) {
+    throw new HTTPException(400, { message: error.message, cause: error });
+  }
+  return handleError(error, defaultMessage);
+}
+
 const sendAgentMessageResponseSchema = sendAgentSignalResponseSchema;
 
 export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
@@ -1774,10 +1796,16 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
           ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
           ...(ifActive ? { ifActive } : {}),
         });
-        const settledRunId = await result.outcome.then(o => o.runId).catch(() => result.runId ?? runId);
+        // `accepted` resolves once the runtime decides how to route the signal; it only
+        // rejects on a setup/misconfig failure (e.g. no model), which `handleError` maps
+        // below. `runId` is present on `wake`/`deliver` (a run exists); `persist`/`discard`
+        // never start a run, so we fall back to the caller's `runId` to keep the wire
+        // contract (`runId: string`) stable.
+        const settled = await result.accepted;
+        const settledRunId = 'runId' in settled ? settled.runId : runId;
         return result.signal === undefined
-          ? { accepted: result.accepted, runId: settledRunId }
-          : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
+          ? { accepted: true as const, runId: settledRunId }
+          : { accepted: true as const, runId: settledRunId, signal: result.signal };
       }
 
       if (!effectiveResourceId || !effectiveThreadId) {
@@ -1790,16 +1818,16 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         ...(ifActive ? { ifActive } : {}),
         ...ifIdleWithContext,
       });
-      // `outcome.runId` is the authoritative settled id (non-optional on every action).
-      // The `.catch` only fires on a rejectable `wake` startup, where the synchronous
-      // best-effort `result.runId` is the locally-reserved id (always present on the
-      // local idle-start path). The wire contract is `runId: string`.
-      const settledRunId = (await result.outcome.then(o => o.runId).catch(() => result.runId)) as string;
+      // `accepted` carries the authoritative `runId` for `wake`/`deliver` (a run exists).
+      // `persist`/`discard` never start a run; the stored-message id (`result.signal.id`)
+      // is the correlatable id for those, keeping the wire contract (`runId: string`) stable.
+      const settled = await result.accepted;
+      const settledRunId = 'runId' in settled ? settled.runId : result.signal.id;
       return result.signal === undefined
-        ? { accepted: result.accepted, runId: settledRunId }
-        : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
+        ? { accepted: true as const, runId: settledRunId }
+        : { accepted: true as const, runId: settledRunId, signal: result.signal };
     } catch (error) {
-      return handleError(error, 'error sending agent signal');
+      return handleSignalRoutingError(error, 'error sending agent signal');
     }
   },
 });
@@ -1870,12 +1898,11 @@ async function handleAgentMessageRoute({
       ...(effectiveThreadId ? { threadId: effectiveThreadId } : {}),
       ...(ifActive ? { ifActive } : {}),
     } as any);
-    const settledRunId = (await Promise.resolve(result.outcome)
-      .then(o => o?.runId ?? result.runId)
-      .catch(() => result.runId)) as string;
+    const settled = await result.accepted;
+    const settledRunId: string = settled && 'runId' in settled ? settled.runId : runId;
     return result.signal === undefined
-      ? { accepted: result.accepted, runId: settledRunId }
-      : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
+      ? { accepted: true as const, runId: settledRunId }
+      : { accepted: true as const, runId: settledRunId, signal: result.signal };
   }
 
   if (!effectiveResourceId || !effectiveThreadId) {
@@ -1888,12 +1915,11 @@ async function handleAgentMessageRoute({
     ...(ifActive ? { ifActive } : {}),
     ...ifIdleWithContext,
   } as any);
-  const settledRunId = (await Promise.resolve(result.outcome)
-    .then(o => o?.runId ?? result.runId)
-    .catch(() => result.runId)) as string;
+  const settled = await result.accepted;
+  const settledRunId: string = settled && 'runId' in settled ? settled.runId : result.signal?.id;
   return result.signal === undefined
-    ? { accepted: result.accepted, runId: settledRunId }
-    : { accepted: result.accepted, runId: settledRunId, signal: result.signal };
+    ? { accepted: true as const, runId: settledRunId }
+    : { accepted: true as const, runId: settledRunId, signal: result.signal };
 }
 
 export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
@@ -1912,7 +1938,7 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
     try {
       return await handleAgentMessageRoute({ ...params, methodName: 'sendMessage' });
     } catch (error) {
-      return handleError(error, 'error sending agent message');
+      return handleSignalRoutingError(error, 'error sending agent message');
     }
   },
 });
@@ -1934,7 +1960,7 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
     try {
       return await handleAgentMessageRoute({ ...params, methodName: 'queueMessage' });
     } catch (error) {
-      return handleError(error, 'error queueing agent message');
+      return handleSignalRoutingError(error, 'error queueing agent message');
     }
   },
 });

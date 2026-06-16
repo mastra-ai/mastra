@@ -3,18 +3,22 @@
 '@mastra/redis-streams': minor
 ---
 
-Added a lease API to `PubSub` (`acquireLease` / `releaseLease` / `renewLease` / `getLeaseOwner`) and returned an `outcome` promise from `agent.sendSignal` / `sendMessage` / `queueMessage` / `sendStateSignal` / `sendNotificationSignal` that resolves at decision-time, once Mastra has settled what it will do with the signal.
+Added a lease API to `PubSub` (`acquireLease` / `releaseLease` / `renewLease` / `getLeaseOwner`) and collapsed the result of `agent.sendSignal` / `sendMessage` / `queueMessage` / `sendStateSignal` / `sendNotificationSignal` into a single `accepted` promise that resolves at decision-time, once Mastra has settled what it will do with the signal.
 
-`outcome` resolves to a discriminated union describing what the runtime did: `{ action: 'wake'; runId; output }` when the signal started the agent run in this process, or `{ action: 'deliver' | 'persist' | 'discard'; runId }` otherwise. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`, and `runId` is the authoritative id of the run that handled the signal. When multiple processes (e.g. serverless Lambdas) race to wake the same agent thread, they first try to acquire a lease in the shared pubsub. The winner runs the agent stream and resolves `outcome` to `{ action: 'wake', output }` so the caller can `consumeStream()` it in-process. Losers publish a `signal-enqueued` event so the winner picks up their message, and resolve to `{ action: 'deliver' }` since the signal was queued onto the winning run rather than run locally.
+`result.accepted` resolves to a discriminated union describing what the runtime did: `{ action: 'wake'; runId; output }` when the signal started the agent run in this process, `{ action: 'deliver'; runId }` when the signal was forwarded onto an existing run, or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`. `runId` is the authoritative id of the run that handled the signal and is present only on `wake` and `deliver` (the actions where a run exists); for `persist`/`discard` use `result.signal.id` to correlate the stored message.
 
-The top-level `runId` on the result is now optional (`runId?: string`): it is best-effort and may be `undefined` when this process loses the cross-process wake race. Use `(await result.outcome).runId` for the authoritative settled id. `result.persisted` stays top-level — await it when you need to know the signal has been durably written to memory (`outcome` no longer waits on the write for `persist`).
+`accepted` resolves (it does not reject) for routing decisions — a generation error on a `wake` run surfaces through `output.consumeStream()`, not by rejecting `accepted`. It rejects only when the signal could not be routed or started at all (e.g. a misconfigured agent with no model, or a denied request). Callers that need to react to a failed send can `await result.accepted` inside a `try/catch`.
+
+This replaces the previous `accepted: true` boolean, the separate `outcome` promise, and the best-effort top-level `runId?: string` — there is no longer a phantom `runId` on the lost cross-process wake race. `result.persisted` stays top-level: await it when you need to know the signal has been durably written to memory (`accepted` does not wait on the write for `persist`).
+
+When multiple processes (e.g. serverless Lambdas) race to wake the same agent thread, they first try to acquire a lease in the shared pubsub. The winner runs the agent stream and resolves `accepted` to `{ action: 'wake', runId, output }` so the caller can `consumeStream()` it in-process. Losers publish a `signal-enqueued` event so the winner picks up their message, and resolve to `{ action: 'deliver', runId }` since the signal was queued onto the winning run rather than run locally.
 
 ```ts
 const result = agent.sendSignal(signal, { resourceId, threadId });
 ctx.waitUntil(
-  result.outcome.then(async ({ action, output }) => {
-    if (action === 'wake' && output) {
-      await output.consumeStream();
+  result.accepted.then(async accepted => {
+    if (accepted.action === 'wake') {
+      await accepted.output.consumeStream();
     }
   }),
 );
