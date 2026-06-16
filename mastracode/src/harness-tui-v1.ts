@@ -62,6 +62,7 @@ const resourceId = `resource-${hash(cwd)}`;
 
 // ─── Create HarnessV1 ───────────────────────────────────────────────────────
 const harness = new HarnessV1({
+  id: 'mastra-code-tui-v1',
   ownerId,
   agent: codeAgent,
   memory,

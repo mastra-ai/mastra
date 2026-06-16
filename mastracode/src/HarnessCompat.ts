@@ -41,6 +41,22 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     this.#harnessV1 = harnessV1;
   }
 
+  async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
+    const thread = await super.createThread({ title });
+    const session = await this.#harnessV1.session({
+      threadId: thread.id,
+      resourceId: thread.resourceId ?? this.getResourceId(),
+    });
+    this.#session = session;
+
+    const currentModelId = (super.getState() as SessionStateFields).currentModelId;
+    if (typeof currentModelId === 'string' && currentModelId.length > 0) {
+      session.setModelId(currentModelId);
+    }
+
+    return thread;
+  }
+
   getState(): Readonly<TState> {
     const state = super.getState() as Readonly<TState> & SessionStateFields;
     let session: Session<TState> | undefined;
@@ -196,6 +212,8 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     if (!thread) {
       throw new Error('Failed to load cloned thread');
     }
+
+    await super.switchThread({ threadId: thread.id });
 
     return {
       id: thread.id,

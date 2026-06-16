@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { SessionRecord } from '../../storage/domains/harness';
+import type { HarnessQuestionOption, HarnessQuestionSelectionMode } from '../types';
 
 export interface HarnessEventBase {
   id: string;
@@ -47,6 +48,21 @@ export interface StateChangedEvent extends HarnessEventBase {
   changedKeys: string[];
 }
 
+export interface AskQuestionEvent extends HarnessEventBase {
+  type: 'ask_question';
+  questionId: string;
+  question: string;
+  options?: HarnessQuestionOption[];
+  selectionMode?: HarnessQuestionSelectionMode;
+}
+
+export interface PlanApprovalRequiredEvent extends HarnessEventBase {
+  type: 'plan_approval_required';
+  planId: string;
+  title: string;
+  plan: string;
+}
+
 export interface SubagentStartEvent extends HarnessEventBase {
   type: 'subagent_start';
   subagentSessionId: string;
@@ -68,6 +84,8 @@ export type HarnessEvent =
   | ModelChangedEvent
   | ThreadClonedEvent
   | StateChangedEvent
+  | AskQuestionEvent
+  | PlanApprovalRequiredEvent
   | SubagentStartEvent
   | CustomEvent;
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
@@ -280,6 +298,16 @@ const RESERVED_EVENT_TYPES = new Set([
   'thread_cloned',
   'state_changed',
   'subagent_start',
+  // Harness UI events emitted by built-in tools via HarnessRequestContext.emitEvent.
+  // These are typed harness events (not dot-namespaced custom events), so they must
+  // bypass the custom-event validation that requires a "." in the type.
+  'task_updated',
+  'ask_question',
+  'plan_approval_required',
+  'subagent_text_delta',
+  'subagent_tool_start',
+  'subagent_tool_end',
+  'subagent_end',
 ]);
 
 const RESERVED_EVENT_PREFIXES = ['session_', 'thread_'];

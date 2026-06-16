@@ -562,6 +562,18 @@ export interface OMProgressState {
   preReflectionTokens: number;
 }
 
+/** Controls whether an `ask_user` prompt accepts one choice or multiple choices. */
+export type HarnessQuestionSelectionMode = 'single_select' | 'multi_select';
+
+/** A structured choice rendered by the UI for an `ask_user` prompt. */
+export interface HarnessQuestionOption {
+  label: string;
+  description?: string;
+}
+
+/** Answer shape accepted for pending `ask_user` prompts. */
+export type HarnessQuestionAnswer = string | string[];
+
 // =============================================================================
 // Display State
 // =============================================================================
