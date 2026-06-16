@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { Agent } from '../../../agent';
 import { GOAL_STATE_TYPE, GOAL_SCORE_WAITING } from '../../../agent/goal';
 import { RequestContext } from '../../../request-context';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
@@ -42,7 +43,13 @@ function makeRecord(over?: Partial<GoalObjectiveRecord>): GoalObjectiveRecord {
 async function runGoalStep(
   decision: 'done' | 'continue' | 'waiting',
   record: GoalObjectiveRecord,
-  opts?: { throwingScorer?: boolean; throwMessage?: string; throwingToolsResolver?: string },
+  opts?: {
+    throwingScorer?: boolean;
+    throwMessage?: string;
+    throwingToolsResolver?: string;
+    dbMessages?: any[];
+    useMemory?: boolean;
+  },
 ) {
   const store = createStore(record);
   const chunks: any[] = [];
@@ -55,7 +62,7 @@ async function runGoalStep(
 
   const messageList: any = {
     add: (m: any) => messages.push(m),
-    get: { all: { db: () => [] } },
+    get: { all: { db: () => opts?.dbMessages ?? [] } },
   };
 
   // isContinued must start false: a truthy value trips the "mid-tool-loop
@@ -97,7 +104,11 @@ async function runGoalStep(
     mastra,
     controller: { enqueue: (c: any) => chunks.push(c) },
     runId: 'run-1',
-    _internal: { threadId: THREAD_ID },
+    _internal: {
+      threadId: THREAD_ID,
+      resourceId: 'resource-1',
+      ...(opts?.useMemory ? { memory: { id: 'memory' } } : {}),
+    },
     agentId: 'agent',
     agentName: 'Agent',
   } as any);
@@ -119,6 +130,39 @@ async function runGoalStep(
 }
 
 describe('goal step waiting semantics', () => {
+  it('uses the original MastraCode judge prompt shape and memory thread id', async () => {
+    const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockResolvedValue({
+      object: Promise.resolve({ decision: 'continue', reason: 'need another fact' }),
+    } as any);
+    try {
+      await runGoalStep('continue', makeRecord({ id: 'goal-1' }), {
+        useMemory: true,
+        dbMessages: [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'Please continue after answering this.' }],
+          },
+          {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Answered the user and kept working.' }],
+          },
+        ],
+      });
+
+      const [prompt, options] = (streamSpy.mock.calls[0] ?? []) as any[];
+      expect(prompt).toBe(
+        'Goal: implement X, then stop and wait for my review\n\nLatest user message:\nPlease continue after answering this.\n\nAssistant steps since that user message: 1\n\nLatest assistant message:\nI did X',
+      );
+      expect(options?.memory?.thread).toEqual({
+        id: 'thread-1-goal-1',
+        title: 'Goal judge: implement X, then stop and wait for my review',
+        metadata: { forkedSubagent: true, goalJudge: true, parentThreadId: THREAD_ID, goalId: 'goal-1' },
+      });
+    } finally {
+      streamSpy.mockRestore();
+    }
+  });
+
   it('keeps the objective active but stops the loop on a waiting decision', async () => {
     const { chunk, record, stepResult } = await runGoalStep('waiting', makeRecord());
 

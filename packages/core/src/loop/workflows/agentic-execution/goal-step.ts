@@ -163,10 +163,29 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
             typeof goal.tools === 'function'
               ? ((await (goal.tools as (args: any) => unknown)({ requestContext, mastra })) as ToolsInput | undefined)
               : goal.tools;
+          const goalId = record.id ?? `${threadId}:${record.startedAt}`;
           scorer = createGoalScorer({
             judgeModel,
             prompt: effective.prompt,
             tools: goalTools,
+            ...(_internal?.memory
+              ? {
+                  memory: _internal.memory,
+                  defaultMemoryOptions: {
+                    thread: {
+                      id: `${threadId ?? 'no-thread'}-${goalId}`,
+                      title: `Goal judge: ${record.objective.slice(0, 80)}`,
+                      metadata: {
+                        forkedSubagent: true,
+                        goalJudge: true,
+                        parentThreadId: threadId,
+                        goalId,
+                      },
+                    },
+                    ...(_internal.resourceId ? { resource: _internal.resourceId } : {}),
+                  },
+                }
+              : {}),
           });
         }
 

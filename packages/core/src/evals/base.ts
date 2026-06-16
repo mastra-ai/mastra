@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
-import type { ToolsInput } from '../agent/types';
+import type { AgentMemoryOption, ToolsInput } from '../agent/types';
 import { tryStreamWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import {
   createObservabilityContext,
   EntityType,
@@ -73,7 +74,16 @@ export interface ScorerJudgeConfig {
   jsonPromptInjection?: boolean;
   /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
   tools?: ToolsInput;
+  /** Optional memory instance for the internal judge agent. */
+  memory?: MastraMemory;
+  /** Default memory options passed to the internal judge agent run. */
+  defaultMemoryOptions?: AgentMemoryOption;
 }
+
+export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
+  /** Per-step memory options merged onto scorer-level `judge.defaultMemoryOptions`. */
+  memory?: AgentMemoryOption;
+};
 
 // Pipeline scorer
 // TInput and TRunOutput establish the type contract for the entire scorer pipeline,
@@ -168,7 +178,7 @@ interface PromptObject<
    * The TOutput generic is inferred from this schema's output type.
    */
   outputSchema: PublicSchema<TOutput>;
-  judge?: ScorerJudgeConfig;
+  judge?: ScorerStepJudgeConfig;
 
   // Support both sync and async createPrompt
   createPrompt: (context: PromptObjectContext<TAccumulated, TStepName, TInput, TRunOutput>) => string | Promise<string>;
@@ -244,7 +254,7 @@ type GenerateScoreFunctionStep<TAccumulated extends Record<string, any>, TInput,
 // Special prompt object type for generateScore that always returns a number
 interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
   description: string;
-  judge?: ScorerJudgeConfig;
+  judge?: ScorerStepJudgeConfig;
   // Support both sync and async createPrompt
   createPrompt: (context: StepContext<TAccumulated, TInput, TRunOutput>) => string | Promise<string>;
 }
@@ -252,7 +262,7 @@ interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TI
 // Special prompt object type for generateReason that always returns a string
 interface GenerateReasonPromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
   description: string;
-  judge?: ScorerJudgeConfig;
+  judge?: ScorerStepJudgeConfig;
   // Support both sync and async createPrompt
   createPrompt: (context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => string | Promise<string>;
 }
@@ -860,6 +870,19 @@ class MastraScorer<
     // Step-level tools override scorer-level tools. When present, the judge agent
     // can call them (in its own tool-call loop) before producing the step output.
     const tools = originalStep.judge?.tools ?? this.config.judge?.tools;
+    const memory = this.config.judge?.memory;
+    const defaultMemoryOptions = this.config.judge?.defaultMemoryOptions;
+    const stepMemoryOptions = originalStep.judge?.memory;
+    const memoryOptions = stepMemoryOptions
+      ? {
+          ...defaultMemoryOptions,
+          ...stepMemoryOptions,
+          options:
+            defaultMemoryOptions?.options || stepMemoryOptions.options
+              ? { ...defaultMemoryOptions?.options, ...stepMemoryOptions.options }
+              : undefined,
+        }
+      : defaultMemoryOptions;
 
     if (!modelConfig || !instructions) {
       throw new MastraError({
@@ -885,7 +908,12 @@ class MastraScorer<
       model: resolvedModel,
       instructions,
       ...(tools ? { tools } : {}),
+      ...(memory ? { memory } : {}),
     });
+    const judgeRunOptions = {
+      ...observabilityContext,
+      ...(memoryOptions ? { memory: memoryOptions } : {}),
+    };
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
@@ -896,7 +924,7 @@ class MastraScorer<
             schema: z.object({ score: z.number() }),
             jsonPromptInjection,
           },
-          ...observabilityContext,
+          ...judgeRunOptions,
         });
         const object = await result.object;
         return { result: (object as { score: number }).score, prompt, judgeModel };
@@ -907,7 +935,7 @@ class MastraScorer<
         const standardSchema = toStandardSchema(schema as PublicSchema);
         result = await judge.generateLegacy(prompt, {
           output: standardSchemaToJSONSchema(standardSchema),
-          ...observabilityContext,
+          ...judgeRunOptions,
         });
         return { result: (result.object as { score: number }).score, prompt, judgeModel };
       }
@@ -916,9 +944,9 @@ class MastraScorer<
     } else if (scorerStep.name === 'generateReason') {
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await judge.stream(prompt, { ...observabilityContext });
+        result = await judge.stream(prompt, judgeRunOptions);
       } else {
-        result = await judge.generateLegacy(prompt, { ...observabilityContext });
+        result = await judge.generateLegacy(prompt, judgeRunOptions);
       }
       return { result: await result.text, prompt, judgeModel };
     } else {
@@ -934,14 +962,14 @@ class MastraScorer<
             schema: standardSchema as any,
             jsonPromptInjection,
           },
-          ...observabilityContext,
+          ...judgeRunOptions,
         });
         const object = await result.object;
         return { result: object, prompt, judgeModel };
       } else {
         result = await judge.generateLegacy(prompt, {
           output: standardSchemaToJSONSchema(standardSchema),
-          ...observabilityContext,
+          ...judgeRunOptions,
         });
         return { result: result.object, prompt, judgeModel };
       }

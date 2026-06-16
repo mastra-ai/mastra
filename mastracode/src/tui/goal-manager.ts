@@ -138,12 +138,13 @@ export class GoalManager {
 
     if (agent && threadId) {
       const persisted = await agent.setObjective(objective, {
+        id,
         threadId,
         resourceId: state.harness.getResourceId(),
         ...(judgeModelId ? { judgeModelId } : {}),
         maxRuns: maxTurns,
       });
-      this.record = persisted ? { ...persisted, id } : this.localRecord(objective, judgeModelId, maxTurns, now, id);
+      this.record = persisted ? { ...persisted, id: persisted.id ?? id } : this.localRecord(objective, judgeModelId, maxTurns, now, id);
     } else {
       this.record = this.localRecord(objective, judgeModelId, maxTurns, now, id);
     }
@@ -250,6 +251,7 @@ export class GoalManager {
             // thread state would no longer match the in-memory state.
             const desiredStatus = this.record.status;
             await agent.setObjective(this.record.objective, {
+              id: this.record.id,
               threadId,
               resourceId: state.harness.getResourceId(),
               ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
@@ -285,7 +287,7 @@ export class GoalManager {
       try {
         const record = await agent.getObjective({ threadId });
         if (record) {
-          this.record = { ...record, id: randomUUID() };
+          this.record = { ...record, id: record.id ?? randomUUID() };
           return;
         }
       } catch {

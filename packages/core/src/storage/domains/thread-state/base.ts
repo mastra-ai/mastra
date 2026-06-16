@@ -27,6 +27,8 @@ export interface TaskRecord {
  * resolves a judge model, the goal step is a no-op.
  */
 export interface GoalObjectiveRecord {
+  /** Stable objective id, used for per-goal judge memory and UI correlation. */
+  id?: string;
   /** The prose objective the agent is working toward. */
   objective: string;
   status: 'active' | 'paused' | 'done';

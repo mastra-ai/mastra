@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
-import type { ToolsInput } from '../../agent/types';
+import type { AgentMemoryOption, ToolsInput } from '../../agent/types';
 import { createScorer } from '../../evals';
 import type { MastraModelConfig } from '../../llm';
+import type { MastraMemory } from '../../memory';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING, GOAL_SCORER_ID } from './objective';
 
 // The goal scorer is an LLM-as-judge that grades the agent's latest output
@@ -19,13 +20,9 @@ const analyzeOutputSchema = z.object({
   decision: z
     .enum(['done', 'continue', 'waiting'])
     .describe(
-      'done = goal fully achieved; continue = keep working autonomously; waiting = the goal explicitly asks to stop and wait for the user.',
+      'Whether the goal is done, should continue autonomously, or is at an explicit user checkpoint required by the goal',
     ),
-  reason: z
-    .string()
-    .describe(
-      'Brief explanation. For "continue", an instruction for what the assistant should do next. For "waiting", a note on what is being waited on from the user.',
-    ),
+  reason: z.string().describe('Brief explanation of what was accomplished or what remains to be done'),
 });
 
 type GoalAnalysis = z.infer<typeof analyzeOutputSchema>;
@@ -44,29 +41,45 @@ function getObjectiveText(run: { input?: unknown }): string {
   return '';
 }
 
-/**
- * Summarize the tool calls/results from the latest turn (passed by the goal step
- * on the scorer run input) so the judge sees what the agent actually did, not
- * just the prose. Truncated to keep the judge prompt bounded.
- */
-function getToolActivityText(run: { input?: unknown }): string {
-  const input = run.input as Record<string, unknown> | undefined;
-  const toolCalls = Array.isArray(input?.toolCalls) ? (input!.toolCalls as Array<{ name?: unknown }>) : [];
-  if (toolCalls.length === 0) return '';
-  const names = toolCalls
-    .map(tc => (typeof tc?.name === 'string' ? tc.name : undefined))
-    .filter((n): n is string => !!n);
-  if (names.length === 0) return '';
-  return names.join(', ');
+function truncateForJudge(value: string): string {
+  return value.length > 4000 ? `${value.slice(0, 4000)}\n...[truncated]` : value;
 }
 
-/**
- * Appended to the judge instructions only when the judge has verification tools.
- * Without this, a tool-less judge would be told to use tools it does not have.
- */
-const VERIFY_WITH_TOOLS_CLAUSE = `
+function extractTextContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part: any) => {
+        if (typeof part === 'string') return part;
+        if (typeof part?.text === 'string') return part.text;
+        if (typeof part?.content === 'string') return part.content;
+        return null;
+      })
+      .filter((text: string | null): text is string => Boolean(text))
+      .join('\n');
+  }
+  return String(content ?? '');
+}
 
-You have read-only verification tools available. Before deciding, use them to independently confirm the assistant's claims against the actual workspace state (e.g. read files, search content) rather than trusting the assistant's prose alone. Do not modify anything. Once you have verified, return your decision.`;
+function getLatestUserContext(run: { input?: unknown }): { lastUserContent: string | null; assistantStepsSinceLastUser: number } {
+  const input = run.input as Record<string, unknown> | undefined;
+  const messages = Array.isArray(input?.messages) ? input.messages : [];
+  let lastUserIndex = -1;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i] as any;
+    if (msg?.role === 'user') {
+      lastUserIndex = i;
+      break;
+    }
+  }
+
+  const lastUserContent = lastUserIndex >= 0 ? extractTextContent((messages[lastUserIndex] as any)?.content) : null;
+  const assistantStepsSinceLastUser =
+    lastUserIndex >= 0 ? messages.slice(lastUserIndex + 1).filter((msg: any) => msg?.role === 'assistant').length : 0;
+
+  return { lastUserContent, assistantStepsSinceLastUser };
+}
 
 /**
  * Build the default goal scorer: an LLM judge using `judgeModel` and the
@@ -75,22 +88,23 @@ You have read-only verification tools available. Before deciding, use them to in
  * scorer run input (`originalTask`/`currentText`).
  *
  * When `tools` is provided, the judge agent can call them (read-only verification
- * tools) before deciding, restoring the original MastraCode judge's ability to
- * inspect the workspace and verify the work was actually done — not just grade
- * the assistant's text. The judge prompt is augmented to instruct tool use only
- * in that case.
+ * tools) before deciding, matching the original MastraCode judge's tool surface.
  */
 export function createGoalScorer({
   judgeModel,
   prompt,
   tools,
+  memory,
+  defaultMemoryOptions,
 }: {
   judgeModel: MastraModelConfig;
   prompt?: string;
   tools?: ToolsInput;
+  memory?: MastraMemory;
+  defaultMemoryOptions?: AgentMemoryOption;
 }) {
   const hasTools = !!tools && Object.keys(tools).length > 0;
-  const instructions = (prompt ?? DEFAULT_GOAL_JUDGE_PROMPT) + (hasTools ? VERIFY_WITH_TOOLS_CLAUSE : '');
+  const instructions = prompt ?? DEFAULT_GOAL_JUDGE_PROMPT;
   return createScorer({
     id: GOAL_SCORER_ID,
     name: 'Goal (LLM)',
@@ -100,6 +114,8 @@ export function createGoalScorer({
       model: judgeModel,
       instructions,
       ...(hasTools ? { tools } : {}),
+      ...(memory ? { memory } : {}),
+      ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),
     },
   })
     .analyze({
@@ -108,9 +124,11 @@ export function createGoalScorer({
       createPrompt: ({ run }) => {
         const objective = getObjectiveText(run);
         const output = getOutputText(run);
-        const toolActivity = getToolActivityText(run);
-        const toolActivityLine = toolActivity ? `\n\nTOOLS THE ASSISTANT USED THIS TURN: ${toolActivity}` : '';
-        return `GOAL:\n${objective}\n\nASSISTANT'S LATEST OUTPUT:\n${output || '(no assistant output yet)'}${toolActivityLine}\n\nDecide the goal's status. Respond with "decision" (one of "done", "continue", "waiting") and "reason" (a brief explanation; for "continue" phrase it as an instruction for what the assistant should do next, for "waiting" note what you are waiting on the user for).`;
+        const { lastUserContent, assistantStepsSinceLastUser } = getLatestUserContext(run);
+        const recentUser = lastUserContent
+          ? `\n\nLatest user message:\n${truncateForJudge(lastUserContent)}\n\nAssistant steps since that user message: ${assistantStepsSinceLastUser}`
+          : '';
+        return `Goal: ${objective}${recentUser}\n\nLatest assistant message:\n${output}`;
       },
     })
     .generateScore(({ results }) => {

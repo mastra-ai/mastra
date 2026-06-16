@@ -95,6 +95,7 @@ describe('Agent objective methods', () => {
     expect(await agent.getObjective({ threadId: THREAD })).toBeUndefined();
 
     await agent.setObjective('Ship the feature', {
+      id: 'goal-1',
       threadId: THREAD,
       resourceId: RESOURCE,
       judgeModelId: 'judge-1',
@@ -102,6 +103,7 @@ describe('Agent objective methods', () => {
     });
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record).toMatchObject({
+      id: 'goal-1',
       objective: 'Ship the feature',
       status: 'active',
       runsUsed: 0,

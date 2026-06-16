@@ -56,14 +56,14 @@ export const DEFAULT_GOAL_JUDGE_PROMPT = `You are the goal judge. Your decision 
 
 Given a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied. Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.
 
-Choose exactly one decision:
-- "done": the goal's requirements have been fully achieved.
-- "continue": the assistant should keep working autonomously toward the objective. Use this even when the assistant asked for input that the goal did not explicitly require — do not let the assistant stall the goal by asking for confirmation the goal never requested.
-- "waiting": ONLY when the goal text itself explicitly instructs the assistant to stop and wait for the user (a human) to review, approve, confirm, or provide input before continuing — e.g. "implement X, then stop and wait for my review". This parks the goal until the user resumes it.
+Use "done" when the goal is fully achieved.
+Use "waiting" when the goal explicitly requires a user checkpoint, user feedback, human verification, human confirmation, or another external event outside the goal-judge loop before the assistant should continue, and the assistant has correctly stopped at that checkpoint.
+Use "waiting" when the latest user message asks a question or requests clarification and the latest assistant message answers it; let the user acknowledge the answer, ask a follow-up, or otherwise return control before continuing goal work. Use common sense and do not wait if the user explicitly asked the assistant to continue autonomously after answering.
+Use "continue" when the goal is not done and the assistant should keep working autonomously, including when it asked for input that the goal did not explicitly require.
+If your previous decision was "waiting" for an explicit user checkpoint, keep choosing "waiting" when the user's latest response asks a question, requests clarification, or otherwise does not satisfy the checkpoint. Do not continue until the required user feedback/confirmation/verification has actually been provided.
+If the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, tell the assistant to continue, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification. Choose "continue" when the assistant should proceed to the next step. Do not choose "waiting" for judge-controlled checkpoints, because that would mean waiting for yourself.
 
-Important: if the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, or validate, treat your own decision as that signal and decide "done" or "continue" yourself — that is NOT a "waiting" case. Only an explicit request for the human/user to act is "waiting". When in doubt between "continue" and "waiting", choose "continue".
-
-When you choose "continue", be specific about what still needs to be accomplished and write your reason as an instruction for what the assistant should do next. When you choose "waiting", write your reason as a short note describing what you are waiting on the user for.`;
+Your "reason" field is sent back to the assistant as guidance when the goal is not yet done — be specific about what still needs to be accomplished. When choosing "continue", write the reason as an instruction for what the assistant should do next. When choosing "waiting", explain what specific user checkpoint is still outstanding.`;
 
 /**
  * Effective goal settings resolved per evaluation. `judgeModelId` is `undefined`
