@@ -258,6 +258,42 @@ describe('createScorer', () => {
         generateSpy.mockRestore();
       }
     });
+
+    it('retries the judge with jsonPromptInjection when the first attempt yields no structured object', async () => {
+      // Regression guard: a judge model can resolve *without throwing* but
+      // produce no parseable structured object. The judge must recover via the
+      // jsonPromptInjection retry instead of crashing when it reads result.object.
+      const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+      const generateSpy = vi
+        .spyOn(Agent.prototype, 'generate')
+        .mockResolvedValueOnce({ object: undefined } as any)
+        .mockResolvedValueOnce({ object: { score: 1 } } as any);
+      try {
+        const scorer = createScorer({
+          id: 'json-fallback-recovery-scorer',
+          name: 'json-fallback-recovery-scorer',
+          description: 'Recovers from an undefined structured object via jsonPromptInjection',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        const result = await scorer.run(testData.scoringInput);
+
+        // Two generate calls: the failed first attempt + the jsonPromptInjection retry.
+        expect(generateSpy).toHaveBeenCalledTimes(2);
+        expect((generateSpy.mock.calls[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
+        expect((generateSpy.mock.calls[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
+        // The scorer recovered and produced the retried score.
+        expect(result.score).toBe(1);
+      } finally {
+        generateSpy.mockRestore();
+      }
+    });
   });
 
   describe('Mixed scorer', () => {

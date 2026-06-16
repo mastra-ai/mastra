@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
+import type { ToolsInput } from '../agent/types';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
@@ -57,6 +58,23 @@ type ScorerTypeShortcuts = {
   };
 };
 
+/**
+ * LLM-as-judge configuration for a scorer (or an individual scorer step).
+ *
+ * When `tools` is provided, the internal judge agent can call them before
+ * producing its score/output — e.g. a goal judge that inspects the workspace
+ * with readonly tools to independently verify the agent's claims, rather than
+ * grading text alone. Tools run in the judge agent's own tool-call loop and the
+ * judge still returns the step's structured output at the end.
+ */
+export interface ScorerJudgeConfig {
+  model: MastraModelConfig;
+  instructions: string;
+  jsonPromptInjection?: boolean;
+  /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
+  tools?: ToolsInput;
+}
+
 // Pipeline scorer
 // TInput and TRunOutput establish the type contract for the entire scorer pipeline,
 // ensuring type safety flows through all steps and contexts
@@ -64,11 +82,7 @@ interface ScorerConfig<TID extends string, TInput = any, TRunOutput = any> {
   id: TID;
   name?: string;
   description: string;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-    jsonPromptInjection?: boolean;
-  };
+  judge?: ScorerJudgeConfig;
   // Optional type specification - can be enum shortcut or explicit schemas
   type?:
     | keyof ScorerTypeShortcuts
@@ -154,11 +168,7 @@ interface PromptObject<
    * The TOutput generic is inferred from this schema's output type.
    */
   outputSchema: PublicSchema<TOutput>;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-    jsonPromptInjection?: boolean;
-  };
+  judge?: ScorerJudgeConfig;
 
   // Support both sync and async createPrompt
   createPrompt: (context: PromptObjectContext<TAccumulated, TStepName, TInput, TRunOutput>) => string | Promise<string>;
@@ -234,11 +244,7 @@ type GenerateScoreFunctionStep<TAccumulated extends Record<string, any>, TInput,
 // Special prompt object type for generateScore that always returns a number
 interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
   description: string;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-    jsonPromptInjection?: boolean;
-  };
+  judge?: ScorerJudgeConfig;
   // Support both sync and async createPrompt
   createPrompt: (context: StepContext<TAccumulated, TInput, TRunOutput>) => string | Promise<string>;
 }
@@ -246,11 +252,7 @@ interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TI
 // Special prompt object type for generateReason that always returns a string
 interface GenerateReasonPromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
   description: string;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-    jsonPromptInjection?: boolean;
-  };
+  judge?: ScorerJudgeConfig;
   // Support both sync and async createPrompt
   createPrompt: (context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => string | Promise<string>;
 }
@@ -855,6 +857,9 @@ class MastraScorer<
     const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
     const jsonPromptInjection = originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection;
+    // Step-level tools override scorer-level tools. When present, the judge agent
+    // can call them (in its own tool-call loop) before producing the step output.
+    const tools = originalStep.judge?.tools ?? this.config.judge?.tools;
 
     if (!modelConfig || !instructions) {
       throw new MastraError({
@@ -879,6 +884,7 @@ class MastraScorer<
       name: 'judge',
       model: resolvedModel,
       instructions,
+      ...(tools ? { tools } : {}),
     });
 
     // GenerateScore output must be a number
