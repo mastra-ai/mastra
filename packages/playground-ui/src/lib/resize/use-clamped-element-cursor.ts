@@ -21,12 +21,7 @@ const readAxis = (point: ClientPoint, rect: DOMRect, axis: 'x' | 'y') => {
   return { client: point.clientY, start: rect.top, size: rect.height };
 };
 
-export const getClampedElementCursorOffset = (
-  point: ClientPoint,
-  rect: DOMRect,
-  axis: 'x' | 'y',
-  margin = 0,
-) => {
+export const getClampedElementCursorOffset = (point: ClientPoint, rect: DOMRect, axis: 'x' | 'y', margin = 0) => {
   const { client, start, size } = readAxis(point, rect, axis);
   return clamp(client - start, margin, Math.max(margin, size - margin));
 };

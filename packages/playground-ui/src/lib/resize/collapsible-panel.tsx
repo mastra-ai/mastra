@@ -106,15 +106,18 @@ const useCollapsedEdgePill = ({
     if (pill) pill.dataset.edgeHovered = hovered ? 'true' : 'false';
   }, []);
 
-  const spawnPill = useCallback((point: { clientX: number; clientY: number }) => {
-    const pill = pillRef.current;
-    if (!pill) return;
-    beginPillTracking(point);
-    pill.style.transitionProperty = 'opacity, translate';
-    requestAnimationFrame(() => {
-      pill.style.transitionProperty = '';
-    });
-  }, [beginPillTracking]);
+  const spawnPill = useCallback(
+    (point: { clientX: number; clientY: number }) => {
+      const pill = pillRef.current;
+      if (!pill) return;
+      beginPillTracking(point);
+      pill.style.transitionProperty = 'opacity, translate';
+      requestAnimationFrame(() => {
+        pill.style.transitionProperty = '';
+      });
+    },
+    [beginPillTracking],
+  );
 
   const trackPillPosition = useCallback(
     (point: { clientX: number; clientY: number }) => {
