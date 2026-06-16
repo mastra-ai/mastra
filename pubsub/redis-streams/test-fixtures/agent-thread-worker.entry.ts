@@ -9,7 +9,7 @@
  *
  * Events:
  *   {"type":"ready"}
- *   {"type":"signal-result","sigId":"s1","accepted":true,"hasOwnerStream":true}
+ *   {"type":"signal-result","sigId":"s1","accepted":true}
  *   {"type":"run-started","sigId":"s1","runId":"..."}
  *   {"type":"run-finished","sigId":"s1","runId":"..."}
  *   {"type":"run-error","sigId":"s1","error":"..."}
@@ -154,21 +154,18 @@ async function main() {
           type: 'signal-result',
           sigId,
           accepted: result.accepted,
-          hasOwnerStream: Boolean(result.outcome),
         });
         const ownerSettled = result.outcome
-          ? result.outcome
-              .then(settled => {
-                emit({
-                  type: 'owner-stream-resolved',
-                  sigId,
-                  defined: settled.action === 'wake' && Boolean(settled.output),
-                });
-              })
-              .catch(err => {
-                emit({ type: 'owner-stream-error', sigId, error: String(err) });
-              })
-          : Promise.resolve();
+          .then(settled => {
+            emit({
+              type: 'owner-stream-resolved',
+              sigId,
+              defined: settled.action === 'wake' && Boolean(settled.output),
+            });
+          })
+          .catch(err => {
+            emit({ type: 'owner-stream-error', sigId, error: String(err) });
+          });
 
         if (cmd.cmd === 'send-and-exit') {
           // Models a Vercel Lambda that waitUntil-defers the publish, then dies.
