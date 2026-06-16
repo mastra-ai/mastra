@@ -101,7 +101,7 @@ vi.mock('@clack/prompts', () => ({
 }));
 
 vi.mock('archiver', () => ({
-  ZipArchive: vi.fn(() => ({
+  default: vi.fn(() => ({
     on: vi.fn(),
     pipe: vi.fn(),
     glob: vi.fn(),
