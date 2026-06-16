@@ -1,0 +1,126 @@
+---
+title: "Hosted databases | Mastra platform"
+description: Provision managed Turso (LibSQL) and Postgres databases from Studio and connect them to your Mastra project with no manual configuration.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Hosted databases
+
+From [Studio](/docs/mastra-platform/studio), provision a fully managed database and attach it to your project. Mastra creates it with your provider, stores credentials securely, and injects connection details as runtime environment variables when the database is ready, so there are no connection strings to copy or configure.
+
+Use a hosted database to persist application data, including anything your project needs to store and retrieve at runtime.
+
+## Providers
+
+| Provider | Engine | Best for | Pricing |
+| - | - | - | - |
+| **Turso** | LibSQL, SQLite-compatible | Agent memory, per-tenant isolation | Free up to 9 GB, then $0.0001/read |
+| **Postgres** | Serverless Postgres | Relational workloads, structured data | Free up to 0.5 GB, then $0.10/GB-month |
+| **MongoDB** | Document and vector search | Document storage, vector search | _Coming soon_ |
+
+:::note
+You can attach one database per provider to a project. This keeps the injected environment variable names unambiguous. For example, a project has a single `DATABASE_URL` for its Postgres database.
+:::
+
+## Attach a database
+
+<Steps>
+  <StepItem>
+    Open your project in Studio and go to **Project Settings**.
+  </StepItem>
+
+  <StepItem>
+    Open the **Database** section, then select **Add database**.
+  </StepItem>
+
+  <StepItem>
+    Select a **provider** (Turso or Postgres). You can switch providers before attaching.
+  </StepItem>
+
+  <StepItem>
+    Configure the database:
+
+    - **Name**: A label for the database within your project.
+    - **Region**: Where the database is hosted. Select the region closest to your users. Turso defaults to `sjc` (San Jose) and is available in 20+ locations worldwide. Postgres defaults to `aws-us-west-2` and is available across AWS and Azure regions in the US, EU, and APAC.
+  </StepItem>
+
+  <StepItem>
+    Select **Attach database**. Provisioning runs in the background. The database starts in a `provisioning` state and moves to `ready` once the provider finishes setup. Connection details are injected into your project as server runtime environment variables automatically.
+  </StepItem>
+</Steps>
+
+:::note
+Hosted databases are created from Studio. There is currently no CLI or public API for provisioning them.
+:::
+
+## Connect from your code
+
+Once a database is `ready`, Studio injects its connection details as managed environment variables. Wire them into a Mastra storage adapter, with no manual configuration required.
+
+### Turso (LibSQL)
+
+Turso exposes two environment variables: `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. The following example connects a [LibSQLStore](/reference/storage/libsql) using those variables.
+
+```ts title="src/mastra/storage.ts" caption="Connect a Turso (LibSQL) database"
+import { LibSQLStore } from '@mastra/libsql'
+
+export const storage = new LibSQLStore({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN!,
+})
+```
+
+Install the adapter:
+
+```bash npm2yarn
+npm install @mastra/libsql@latest
+```
+
+### Postgres
+
+Postgres exposes a single `DATABASE_URL` connection string. The following example connects a [PostgresStore](/reference/storage/postgresql) using that variable.
+
+```ts title="src/mastra/storage.ts" caption="Connect a Postgres database"
+import { PostgresStore } from '@mastra/pg'
+
+export const storage = new PostgresStore({
+  connectionString: process.env.DATABASE_URL!,
+})
+```
+
+Install the adapter:
+
+```bash npm2yarn
+npm install @mastra/pg@latest
+```
+
+Pass the `storage` instance to your `Mastra` configuration so agents, memory, and workflows can use it:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { storage } from './storage'
+
+export const mastra = new Mastra({
+  storage,
+})
+```
+
+## Environment variables
+
+Each provider injects a fixed set of managed environment variables. These are available to your project at runtime when the database is `ready`. You don't define them yourself.
+
+| Provider | Variables |
+| - | - |
+| Turso | `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` |
+| Postgres | `DATABASE_URL` |
+
+:::caution
+Treat connection credentials as secrets. The auth token (`TURSO_AUTH_TOKEN`) and the Postgres connection string (`DATABASE_URL`) grant full access to your data. Studio masks them by default and only reveals them on request.
+:::
+
+## Manage a database
+
+- **View connection details**: Open a `ready` database in Studio to see its environment variables and a copy-pasteable code snippet.
+- **Detach**: Removing a database from a project deletes it with the provider and clears its injected environment variables. This is irreversible, so ensure you no longer need the data.
