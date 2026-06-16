@@ -2,6 +2,9 @@ packages:
   - '.'
 
 overrides:
+  # image-size 2.x has unpatched DoS infinite-loop flaws (CVE-2025-71330).
+  # Pin to maintained legacy 1.2.1. See issue #17975.
+  image-size@>=2.0.0: 1.2.1
   '@mastra/core': link:../../core
   '@mastra/agent-builder': link:../../agent-builder
   '@mastra/agent': link:../../agent
