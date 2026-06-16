@@ -41,9 +41,7 @@ function createMockAgent(name = 'test-agent') {
       }),
     }),
     sendMessage: vi.fn().mockReturnValue({
-      accepted: true,
-      runId: 'run-1',
-      outcome: Promise.resolve({ action: 'deliver' }),
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
     }),
     subscribeToThread: vi.fn().mockResolvedValue({
       stream: (async function* () {})(),
@@ -396,9 +394,7 @@ describe('AgentChannels', () => {
 
       const consumeStream = vi.fn().mockResolvedValue(undefined);
       mockAgent.sendMessage.mockReturnValueOnce({
-        accepted: true,
-        runId: 'run-1',
-        outcome: Promise.resolve({ action: 'wake', output: { consumeStream } }),
+        accepted: Promise.resolve({ action: 'wake', runId: 'run-1', output: { consumeStream } }),
       });
 
       const chatThread = {

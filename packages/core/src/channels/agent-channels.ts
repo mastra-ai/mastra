@@ -1105,15 +1105,15 @@ export class AgentChannels {
     // mid-flight. `consumeStream()` is idempotent and safe to call alongside
     // the existing per-thread subscription consumer.
     try {
-      const outcome = await result.outcome;
-      // Only the `wake` outcome means this process started and owns the run.
+      const accepted = await result.accepted;
+      // Only the `wake` action means this process started and owns the run.
       // Any other action (deliver/persist/discard) handed the signal off, so
       // there is nothing to drive to completion here.
-      if (outcome.action === 'wake') {
-        await outcome.output.consumeStream();
+      if (accepted.action === 'wake') {
+        await accepted.output.consumeStream();
       }
     } catch (err) {
-      this.log('debug', 'outcome consume failed', err);
+      this.log('debug', 'accepted consume failed', err);
     }
   }
 
