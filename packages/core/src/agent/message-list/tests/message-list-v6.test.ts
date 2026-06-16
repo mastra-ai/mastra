@@ -441,6 +441,179 @@ describe('MessageList AI SDK v6 support', () => {
     });
   });
 
+  it('rehydrates persisted pending tool approvals into v6 approval-requested tool parts on reload', () => {
+    const messages: MastraDBMessage[] = [
+      {
+        id: 'msg-pending-approval',
+        role: 'assistant',
+        createdAt: new Date('2024-01-01'),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              providerMetadata: {
+                mastra: {
+                  display: {
+                    input: { approvedPath: '/tmp/test.txt' },
+                  },
+                },
+              },
+              providerExecuted: true,
+              title: 'Delete file',
+              toolInvocation: {
+                toolCallId: 'tc-2',
+                toolName: 'delete-file',
+                args: { path: '/tmp/test.txt' },
+                state: 'call',
+              },
+            },
+            {
+              type: 'data-tool-call-approval',
+              data: {
+                toolCallId: 'tc-2',
+                toolName: 'delete-file',
+                type: 'approval',
+                runId: 'run-2',
+              },
+            } as any,
+            { type: 'text', text: 'Waiting for approval.' },
+          ],
+          metadata: {
+            pendingToolApprovals: {
+              'delete-file': {
+                toolCallId: 'tc-2',
+                toolName: 'delete-file',
+                args: { path: '/tmp/test.txt' },
+                type: 'approval',
+                runId: 'run-2',
+              },
+            },
+          },
+        },
+      },
+    ];
+
+    const result = new MessageList().add(messages, 'memory').get.all.aiV6.ui();
+    const toolParts = result[0]?.parts.filter(part => AIV6.isToolUIPart(part)) ?? [];
+
+    expect(toolParts).toHaveLength(1);
+    expect(toolParts[0]).toMatchObject({
+      type: 'tool-delete-file',
+      toolCallId: 'tc-2',
+      state: 'approval-requested',
+      input: { path: '/tmp/test.txt' },
+      approval: { id: 'run-2::tc-2' },
+      callProviderMetadata: {
+        mastra: {
+          display: {
+            input: { approvedPath: '/tmp/test.txt' },
+          },
+        },
+      },
+      providerExecuted: true,
+      title: 'Delete file',
+    });
+
+    expect(result[0]?.parts.filter(part => part.type === 'data-tool-call-approval')).toHaveLength(1);
+  });
+
+  it('adds v6 tool approval responses after reloading a metadata-backed pending approval', () => {
+    const list = new MessageList().add(
+      [
+        {
+          id: 'msg-pending-approval',
+          role: 'assistant',
+          createdAt: new Date('2024-01-01'),
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                providerMetadata: {
+                  mastra: {
+                    display: {
+                      input: { approvedPath: '/tmp/test.txt' },
+                    },
+                  },
+                },
+                providerExecuted: true,
+                title: 'Delete file',
+                toolInvocation: {
+                  toolCallId: 'tc-2',
+                  toolName: 'delete-file',
+                  args: { path: '/tmp/test.txt' },
+                  state: 'call',
+                },
+              },
+              {
+                type: 'data-tool-call-approval',
+                data: {
+                  toolCallId: 'tc-2',
+                  toolName: 'delete-file',
+                  type: 'approval',
+                  runId: 'run-2',
+                },
+              } as any,
+              { type: 'text', text: 'Waiting for approval.' },
+            ],
+            metadata: {
+              pendingToolApprovals: {
+                'delete-file': {
+                  toolCallId: 'tc-2',
+                  toolName: 'delete-file',
+                  args: { path: '/tmp/test.txt' },
+                  type: 'approval',
+                  runId: 'run-2',
+                },
+              },
+            },
+          },
+        },
+      ] satisfies MastraDBMessage[],
+      'memory',
+    );
+
+    list.add(
+      [
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-approval-response',
+              approvalId: 'run-2::tc-2',
+              approved: false,
+              reason: 'needs human review',
+            },
+          ],
+        },
+      ] satisfies ModelMessageV6[],
+      'response',
+    );
+
+    const approvalResponsePart = list
+      .get.all.aiV6.ui()
+      .flatMap(message => message.parts)
+      .find(part => AIV6.isToolUIPart(part) && part.state === 'approval-responded');
+
+    expect(approvalResponsePart).toMatchObject({
+      type: 'tool-delete-file',
+      toolCallId: 'tc-2',
+      state: 'approval-responded',
+      input: { path: '/tmp/test.txt' },
+      approval: { id: 'run-2::tc-2', approved: false, reason: 'needs human review' },
+      callProviderMetadata: {
+        mastra: {
+          display: {
+            input: { approvedPath: '/tmp/test.txt' },
+          },
+        },
+      },
+      providerExecuted: true,
+      title: 'Delete file',
+    });
+  });
+
   it('does not duplicate source or data parts when v5 fallback adds missing text', () => {
     const messages: MastraDBMessage[] = [
       {
