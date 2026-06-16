@@ -428,6 +428,13 @@ Sends a signal to an active run or memory thread.
 
 Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, ownerStream?: Promise<MastraModelOutput | undefined> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory. `ownerStream` resolves to the agent stream when this process wins the thread lease and is running the agent, or `undefined` when another process owns the run.
 
+In serverless handlers, pass `ownerStream` to your platform's `waitUntil` equivalent so the winning process can drain the stream after the HTTP response returns.
+
+```typescript
+const { ownerStream } = await agent.sendSignal(signal);
+ctx.waitUntil(ownerStream?.then(stream => stream?.consumeStream()) ?? Promise.resolve());
+```
+
 ### `sendStateSignal(state, options)`
 
 Sends named, thread-scoped state context to an active run or memory thread. Use this when an external producer owns durable context that changes over time, such as browser state, editor state, or watcher output.
