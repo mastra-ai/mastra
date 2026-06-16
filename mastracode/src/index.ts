@@ -24,10 +24,12 @@ import type { PublicSchema } from '@mastra/core/schema';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
+import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
 import {
   Observability,
+  MastraStorageExporter,
   MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability';
@@ -80,6 +82,7 @@ import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import {
   detectProject,
+  getObservabilityDatabasePath,
   getStorageConfig,
   getResourceIdOverride,
 } from './utils/project.js';
@@ -283,12 +286,40 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const storageResult = await createStorage(storageConfig);
   const storageWarning = storageResult.warning;
 
+  // Observability storage (DuckDB — separate file for OLAP-style trace/score/feedback queries).
+  // Local tracing is opt-in via `/observability local on`. When disabled, the
+  // MastraStorageExporter is omitted entirely so traces never fall through to
+  // the default libsql backend.
+  let observabilityDomain: DuckDBStore['observability'] | undefined;
+  let observabilityWarning: string | undefined;
+  if (globalSettings.observability.localTracing) {
+    try {
+      const observabilityDuckDB = new DuckDBStore({
+        id: 'mastra-code-observability',
+        path: getObservabilityDatabasePath(),
+      });
+      // Force an early connection attempt so the lock error surfaces now, not mid-session.
+      await observabilityDuckDB.db.getConnection();
+      observabilityDomain = observabilityDuckDB.observability;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isLockError = /lock|locked|busy/i.test(message);
+      if (isLockError) {
+        observabilityWarning =
+          'Observability unavailable — another MastraCode instance holds the database lock. Traces, scores, and feedback will not be recorded in this session.';
+      } else {
+        observabilityWarning = `Observability unavailable — DuckDB initialization failed: ${message}`;
+      }
+    }
+  }
+
   const harnessStorage = new InMemoryHarness();
 
   const storage = new MastraCompositeStore({
     id: 'mastra-code-storage',
     default: storageResult.storage,
     domains: {
+      ...(observabilityDomain ? { observability: observabilityDomain } : {}),
       harness: harnessStorage,
     },
   });
@@ -337,9 +368,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           'harness.state.reflectionThreshold',
         ],
         exporters: [
-          // No local storage exporter — MastraStorageExporter previously fell
-          // through to the default libsql backend and silently filled the main
-          // database with gigabytes of span data. Cloud-only via platform exporter.
+          // Only persist traces locally when DuckDB observability is available
+          // (via `/observability local on`). Without this guard the storage
+          // exporter falls through to the default libsql backend and silently
+          // fills the main database with gigabytes of span data.
+          ...(observabilityDomain ? [new MastraStorageExporter({ strategy: 'event-sourced' })] : []),
           new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
         ],
         spanOutputProcessors: [new SensitiveDataFilter()],
@@ -735,7 +768,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     authStorage,
     resolveModel,
     storageWarning,
-    observabilityWarning: undefined as string | undefined,
+    observabilityWarning,
     builtinPacks,
     builtinOmPacks,
     effectiveDefaults,
