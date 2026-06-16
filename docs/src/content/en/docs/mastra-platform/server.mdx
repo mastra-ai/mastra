@@ -97,6 +97,12 @@ An exporter that streams traces, logs, or metrics to a remote endpoint sends out
 
 An open server-sent events (SSE) stream, WebSocket, or other long-lived connection holds traffic open until it closes. A streaming response that stays subscribed in the background keeps the connection active. Confirm streams close when the client disconnects and that no stream stays open while the server is otherwise idle.
 
+### Chat integrations
+
+Some chat integrations hold a persistent connection and send a regular heartbeat, which keeps the server awake. For example, a Slack app in Socket Mode opens a WebSocket and pings about every 30 seconds, and a Discord bot keeps its gateway WebSocket open with a heartbeat on a timer. Both the open socket and the heartbeat prevent idle.
+
+If you want the server to sleep, receive events over HTTP webhooks instead of a persistent connection where the integration supports it. Slack apps, for example, can use the Events API with a request URL instead of Socket Mode. If your app needs a persistent connection, keep the service running with the **Persistent Server add-on** described below.
+
 ### Inspect active connections
 
 To find what keeps the server awake, inspect the process's active handles during idle periods. A handle that remains after all requests finish is the cause to investigate. Open sockets point to a persistent connection that needs to close, and active timers point to a `setInterval` or self-rescheduling `setTimeout`.
