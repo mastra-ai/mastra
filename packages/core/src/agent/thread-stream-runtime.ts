@@ -22,6 +22,7 @@ import type {
   SendAgentMessageOptions,
   SendAgentMessageResult,
   SendAgentSignalOptions,
+  SendAgentSignalOutcome,
   SendAgentSignalResult,
   SendAgentStateSignalOptions,
   SendAgentStateSignalResult,
@@ -1527,10 +1528,10 @@ export class AgentThreadStreamRuntime {
     const reservedRunId = runId;
     const resolvedPubSub = this.#getPubSub(pubsub);
     // First acquire the cross-process lease via pubsub; on win, kick off the stream and
-    // resolve the owned stream. On loss, hand the user signal off to the winning process
-    // via signal-enqueued and resolve to undefined; the caller maps that to a `deliver`
-    // outcome (the signal was queued onto the winning run, not run locally).
-    const ownerStream: Promise<MastraModelOutput<OUTPUT> | undefined> = (async () => {
+    // resolve a `wake` outcome carrying the owned stream. On loss, hand the user signal
+    // off to the winning process via signal-enqueued and resolve a `deliver` outcome
+    // (the signal was queued onto the winning run, not run locally).
+    const outcome: Promise<SendAgentSignalOutcome<OUTPUT>> = (async () => {
       // Fail-open on pubsub errors: if the lease backend is unreachable we treat the
       // call as "acquired" so the caller still gets a response. The tradeoff is that
       // if multiple processes hit the same pubsub failure simultaneously they can each
@@ -1563,19 +1564,19 @@ export class AgentThreadStreamRuntime {
             sourceId: this.#getSourceId(),
           }).catch(() => {});
         }
-        return undefined;
+        return { action: 'deliver' as const };
       }
 
       // We own the lease. Start the renewal timer so it survives runs
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
       try {
-        const stream = await agent.stream(signal, {
+        const output = await agent.stream(signal, {
           ...(target.ifIdle?.streamOptions as any),
           runId: reservedRunId,
           memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
         });
-        return stream;
+        return { action: 'wake' as const, output };
       } catch (error) {
         state.threadKeysByRunId.delete(reservedRunId);
         this.#cleanupPreparedRun(state, reservedRunId);
@@ -1592,16 +1593,11 @@ export class AgentThreadStreamRuntime {
         throw error;
       }
     })();
-    const outcome = ownerStream.then(output =>
-      output ? { action: 'wake' as const, output } : { action: 'deliver' as const },
-    );
-    // Attach a detached no-op catch to BOTH the internal owned-stream promise and the
-    // derived `outcome` promise. If the model throws (or the run rejects) and the caller
-    // never awaits `result.outcome`, the rejection must not surface as an unhandled
-    // rejection. Callers that opt in to `outcome` still see the rejection via their own
-    // await/catch — `outcome` itself remains rejectable; only this detached branch is
-    // swallowed.
-    void ownerStream.catch(() => {});
+    // Attach a detached no-op catch so that if the model throws (or the run rejects) and
+    // the caller never awaits `result.outcome`, the rejection does not surface as an
+    // unhandled rejection. Callers that opt in to `outcome` still see the rejection via
+    // their own await/catch — `outcome` itself remains rejectable; only this detached
+    // branch is swallowed.
     void outcome.catch(() => {});
 
     return {
