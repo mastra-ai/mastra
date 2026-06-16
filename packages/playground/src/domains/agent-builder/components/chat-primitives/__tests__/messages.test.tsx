@@ -153,7 +153,9 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.querySelector('.justify-end')).not.toBeNull();
   });
 
-  it('does not render non-user signal text messages', () => {
+  // An unrecognized signal type (not state/notification/reactive) produces no
+  // SignalBadge, so its raw text is never shown.
+  it('does not render unrecognized signal text messages', () => {
     const { container } = renderMessage({
       id: 'signal-1',
       role: 'signal',
@@ -166,6 +168,28 @@ describe('MessageRow dynamic-tool rendering', () => {
     });
 
     expect(container.textContent).not.toContain('Internal signal');
+    // The row is dropped entirely rather than left as an empty assistant bubble.
+    expect(container.textContent).toBe('');
+  });
+
+  // Regression: a persisted reactive signal must render as a SignalBadge on
+  // read-back. This conversion existed at 1.41.0 and was lost when the renderer
+  // was rewritten (PR #17774), which dropped the row entirely.
+  it('renders a persisted reactive signal row as a signal badge on read-back', () => {
+    const { container } = renderMessage({
+      id: 'signal-reactive-1',
+      role: 'signal',
+      type: 'reactive',
+      createdAt: new Date('2026-06-02T16:18:41.310Z'),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'reactive signal body' }],
+        metadata: { signal: { type: 'reactive', tagName: 'system-reminder' } },
+      },
+    });
+
+    expect(container.textContent).toContain('system-reminder');
+    expect(container.textContent).toContain('reactive signal body');
   });
 
   it('renders user text through the shared MarkdownRenderer in a right-aligned bubble', () => {
