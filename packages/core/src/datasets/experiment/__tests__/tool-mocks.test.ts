@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { ToolMockMatcher, TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, type ItemToolMock } from '../tool-mocks';
+import { ToolMockMatcher, TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED } from '../tool-mocks';
+import type { ItemToolMock } from '../tool-mocks';
 
 describe('ToolMockMatcher', () => {
   it('hasMocks reflects whether the item declares any mock', () => {

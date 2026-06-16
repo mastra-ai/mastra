@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Agent } from '../../../agent';
 import { executeTarget } from '../executor';
-import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, type ItemToolMock } from '../tool-mocks';
+import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED } from '../tool-mocks';
+import type { ItemToolMock } from '../tool-mocks';
 
 vi.mock('../../../agent', async importOriginal => {
   const actual = (await importOriginal()) as Record<string, unknown>;
