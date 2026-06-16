@@ -24,7 +24,8 @@ import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
-import { fetchProjects, createProject, pollDeploy } from '../studio/platform-api.js';
+import { createProject } from '../studio/platform-api.js';
+import { fetchProjects } from '../env/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
 import {
   loadDeployEnvFromDotenv,
@@ -303,22 +304,33 @@ async function uploadToEnvironment(
   },
 ): Promise<{ id: string; uploadUrl: string }> {
   const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
-  
-  // Create deploy via environment endpoint
+
+  // Create deploy via environment endpoint.
+  //
+  // The server reads gitBranch / mastraVersion / projectName from the
+  // `x-*` headers (see servers/api/src/routes/environments.ts and
+  // servers/api/src/routes/studio/deploys.ts) — passing them in the body
+  // would silently no-op, which is what broke `mastraVersion` flowing
+  // through to the route entry and the studio asset build.
+  const createHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+    'x-organization-id': orgId,
+    'x-project-name': opts.projectName,
+  };
+  if (opts.gitBranch) createHeaders['x-git-branch'] = opts.gitBranch;
+  if (opts.mastraVersion) createHeaders['x-mastra-version'] = opts.mastraVersion;
+
+  const createBody: Record<string, unknown> = {};
+  if (opts.envVars) createBody.envVars = opts.envVars;
+  if (opts.disablePlatformObservability !== undefined) {
+    createBody.disablePlatformObservability = opts.disablePlatformObservability;
+  }
+
   const createResp = await fetch(`${apiUrl}/v1/projects/${projectId}/environments/${environmentId}/deploy`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      'x-organization-id': orgId,
-    },
-    body: JSON.stringify({
-      projectName: opts.projectName,
-      gitBranch: opts.gitBranch,
-      envVars: opts.envVars,
-      mastraVersion: opts.mastraVersion,
-      disablePlatformObservability: opts.disablePlatformObservability,
-    }),
+    headers: createHeaders,
+    body: JSON.stringify(createBody),
   });
 
   if (!createResp.ok) {
@@ -341,14 +353,18 @@ async function uploadToEnvironment(
     throw new Error(`Failed to upload artifact: ${uploadResp.statusText}`);
   }
 
-  // Signal upload complete
-  const completeResp = await fetch(`${apiUrl}/v1/studio/deploys/${deploy.id}/upload-complete`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'x-organization-id': orgId,
+  // Signal upload complete — uses net-new env-scoped endpoint so the
+  // unified-runtime CLI never touches /v1/studio/*.
+  const completeResp = await fetch(
+    `${apiUrl}/v1/projects/${projectId}/environments/${environmentId}/deploys/${deploy.id}/upload-complete`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-organization-id': orgId,
+      },
     },
-  });
+  );
 
   if (!completeResp.ok) {
     const err = await completeResp.json().catch(() => ({}));
@@ -356,6 +372,61 @@ async function uploadToEnvironment(
   }
 
   return deploy;
+}
+
+interface UnifiedDeployStatus {
+  id: string;
+  status: string;
+  instanceUrl: string | null;
+  error: string | null;
+}
+
+/**
+ * Poll the net-new env-scoped status endpoint until the deploy reaches a
+ * terminal state. Kept inside the deploy command so the unified runtime
+ * never reaches into ../studio/ for transport.
+ */
+async function pollEnvironmentDeploy(
+  token: string,
+  orgId: string,
+  projectId: string,
+  environmentId: string,
+  deployId: string,
+  maxWaitMs = 600_000,
+): Promise<UnifiedDeployStatus> {
+  const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
+  const url = `${apiUrl}/v1/projects/${projectId}/environments/${environmentId}/deploys/${deployId}`;
+  const start = Date.now();
+  let currentToken = token;
+
+  while (Date.now() - start < maxWaitMs) {
+    const resp = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${currentToken}`,
+        'x-organization-id': orgId,
+      },
+    });
+
+    if (resp.status === 401) {
+      currentToken = await getToken();
+      continue;
+    }
+
+    if (!resp.ok) {
+      const err = (await resp.json().catch(() => ({}))) as { detail?: string };
+      throw new Error(`Poll failed: ${err.detail || resp.statusText}`);
+    }
+
+    const { deploy } = (await resp.json()) as { deploy: UnifiedDeployStatus };
+
+    if (deploy.status === 'running' || deploy.status === 'failed' || deploy.status === 'stopped') {
+      return deploy;
+    }
+
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  throw new Error('Deploy timed out');
 }
 
 /* ------------------------------------------------------------------ */
@@ -591,8 +662,8 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
 
   await rm(zipPath, { force: true });
 
-  p.log.step('Streaming deploy logs...');
-  const finalStatus = await pollDeploy(deployResult.id, token, orgId);
+  p.log.step('Waiting for deploy to finish...');
+  const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id);
 
   if (finalStatus.status === 'running') {
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}! ${finalStatus.instanceUrl}`);

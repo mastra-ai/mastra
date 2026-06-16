@@ -1,16 +1,10 @@
-import { createApiClient, throwApiError } from '../auth/client.js';
+import { throwApiError } from '../auth/client.js';
 
 export interface Project {
   id: string;
   name: string;
   slug: string | null;
   organizationId: string;
-  latestDeployId: string | null;
-  latestDeployStatus: string | null;
-  latestDeployCreatedAt?: string | null;
-  instanceUrl: string | null;
-  createdAt: string | null;
-  updatedAt: string | null;
 }
 
 export interface Environment {
@@ -29,23 +23,27 @@ export interface Environment {
 }
 
 export async function fetchProjects(token: string, orgId: string): Promise<Project[]> {
-  const client = createApiClient(token, orgId);
-  const { data, error, response } = await client.GET('/v1/studio/projects');
+  const resp = await fetch(`${getApiUrl()}/v1/projects`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'x-organization-id': orgId,
+    },
+  });
 
-  if (error) {
-    throwApiError('Failed to fetch projects', response.status, error.detail);
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to fetch projects', resp.status, (err as { detail?: string }).detail);
   }
 
+  const data = (await resp.json()) as { projects: Project[] };
   return data.projects;
 }
 
 export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
-  const client = createApiClient(token, orgId);
-  // Use raw fetch since this endpoint isn't in the generated types yet
   const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments`, {
     headers: {
       Authorization: `Bearer ${token}`,
-      'x-mastra-org-id': orgId,
+      'x-organization-id': orgId,
     },
   });
 
@@ -69,7 +67,7 @@ export async function createEnvironment(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
-      'x-mastra-org-id': orgId,
+      'x-organization-id': orgId,
     },
     body: JSON.stringify(env),
   });
@@ -93,7 +91,7 @@ export async function deleteEnvironment(
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${token}`,
-      'x-mastra-org-id': orgId,
+      'x-organization-id': orgId,
     },
   });
 
