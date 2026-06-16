@@ -434,7 +434,7 @@ In serverless handlers, await `outcome` and pass the `wake` output to your platf
 const result = agent.sendSignal(signal, { resourceId, threadId })
 ctx.waitUntil(
   result.outcome.then(async ({ action, output }) => {
-    if (action === "wake" && output) {
+    if (action === 'wake' && output) {
       await output.consumeStream()
     }
   }),
