@@ -15,6 +15,7 @@ type ToolCallOutput = {
   args: Record<string, any>;
   result?: any;
   error?: Error;
+  aborted?: boolean;
   providerMetadata?: Record<string, any>;
   providerExecuted?: boolean;
 };
@@ -244,6 +245,99 @@ describe('createLLMMappingStep HITL behavior', () => {
     // Should NOT bail — the agentic loop should continue so the model can see the error and retry
     expect(bail).not.toHaveBeenCalled();
     expect(result.stepResult.isContinued).toBe(true);
+  });
+
+  it('should NOT record a result and should bail when a tool was aborted (no fabricated success)', async () => {
+    // An `aborted` tool (cancelled by request abort) has no result/error. It must not be
+    // recorded as a result, emit a tool-error, or be mistaken for a pending HITL tool —
+    // the loop bails, leaving the call incomplete.
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'slowServerTool',
+        args: { q: 'important' },
+        result: undefined,
+        aborted: true,
+      },
+    ];
+
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // No fabricated success: the message history is never updated with a result for the
+    // aborted call (this is what gets persisted, so it is the meaningful assertion).
+    expect(messageList.updateToolInvocation).not.toHaveBeenCalled();
+    // No result/error chunks emitted for the aborted call.
+    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-result' }));
+    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-error' }));
+    // The loop ends rather than continuing or suspending for input that will never arrive.
+    expect(bail).toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(false);
+  });
+
+  it('should not let an aborted tool force a suspend when a real error needs the loop to continue', async () => {
+    // An aborted tool is neither a retryable error nor a pending HITL call. Sharing a turn
+    // with a genuinely errored tool, it must not be misclassified as pending HITL and
+    // suppress the loop continuation that lets the model recover from the real error.
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'aborted-1',
+        toolName: 'slowServerTool',
+        args: { q: 'important' },
+        result: undefined,
+        aborted: true,
+      },
+      {
+        toolCallId: 'err-1',
+        toolName: 'brokenTool',
+        args: { param: 'test' },
+        result: undefined,
+        error: new Error('Tool execution failed'),
+      },
+    ];
+
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // The real error is surfaced and the loop continues (self-recovery), rather than bailing.
+    expect(bail).not.toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(true);
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'tool-error', payload: expect.objectContaining({ toolCallId: 'err-1' }) }),
+    );
+    // The aborted tool itself is never recorded as a result.
+    expect(messageList.updateToolInvocation).not.toHaveBeenCalledWith(
+      expect.objectContaining({ toolInvocation: expect.objectContaining({ toolCallId: 'aborted-1' }) }),
+    );
+  });
+
+  it('should keep a pending client tool suspendable while NOT recording an aborted server tool', async () => {
+    // The reporter's scenario: a server tool aborted in the same turn as a pending client
+    // (HITL) tool. The client tool must still drive the bail/suspend (so it can resume via
+    // addToolOutput), but the aborted server tool must not be recorded as a result.
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'srv-1',
+        toolName: 'slowServerTool',
+        args: { q: 'important' },
+        result: undefined,
+        aborted: true,
+      },
+      {
+        toolCallId: 'cli-1',
+        toolName: 'clientTool',
+        args: { topic: 'x' },
+        result: undefined, // pending HITL, resolved later from the browser
+      },
+    ];
+
+    const result = await llmMappingStep.execute(createExecuteParams(inputData));
+
+    // Bail (suspend) so the pending client tool can be resumed.
+    expect(bail).toHaveBeenCalled();
+    expect(result.stepResult.isContinued).toBe(false);
+    // The aborted server tool is never recorded as a result, and no error/result chunk is emitted.
+    expect(messageList.updateToolInvocation).not.toHaveBeenCalled();
+    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-result' }));
+    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-error' }));
   });
 
   it('should continue the agentic loop (not bail) when all errors are tool-not-found', async () => {

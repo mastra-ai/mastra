@@ -175,4 +175,7 @@ export const toolCallInputSchema = z.object({
 export const toolCallOutputSchema = toolCallInputSchema.extend({
   result: z.any().optional(),
   error: z.any().optional(),
+  // Set when execution was interrupted by request abort (not a tool error); no result/error
+  // so downstream leaves the call incomplete. Must be declared or Zod strips it. See tool-call-step.ts.
+  aborted: z.boolean().optional(),
 });
