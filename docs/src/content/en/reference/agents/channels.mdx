@@ -115,7 +115,7 @@ export const supportAgent = new Agent({
     type: '(promise: Promise<unknown>) => void',
     isOptional: true,
     description:
-      "Platform `waitUntil` function. Required on Vercel and AWS Lambda so background agent runs survive after the webhook returns 200. On Vercel pass `waitUntil` from `@vercel/functions`. Cloudflare Workers and Netlify Functions are detected automatically from the request context.",
+      'Platform `waitUntil` function. Required on Vercel and AWS Lambda so background agent runs survive after the webhook returns 200. On Vercel pass `waitUntil` from `@vercel/functions`. Cloudflare Workers and Netlify Functions are detected automatically from the request context.',
   },
   {
     name: 'resolveWaitUntil',
