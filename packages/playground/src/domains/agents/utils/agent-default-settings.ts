@@ -1,9 +1,11 @@
-import type { AgentSettingsType } from '@/types';
+import type { AgentSettingsType, ModelSettings } from '@/types';
 
 type AgentDefaultOptions = {
   maxSteps?: number;
-  modelSettings?: Record<string, unknown>;
-  providerOptions?: AgentSettingsType['modelSettings']['providerOptions'];
+  // Code-defined defaults share the UI `ModelSettings` shape, except the model
+  // size is the AI SDK v5 `maxOutputTokens` (mapped to `maxTokens` below).
+  modelSettings?: Partial<ModelSettings> & { maxOutputTokens?: number };
+  providerOptions?: ModelSettings['providerOptions'];
 };
 
 /**
@@ -19,14 +21,11 @@ export function buildAgentDefaultSettings(agent: { defaultOptions?: unknown } | 
   const agentDefaultOptions = agent.defaultOptions as AgentDefaultOptions | undefined;
 
   // Map AI SDK v5 names back to UI names (maxOutputTokens -> maxTokens)
-  const { maxOutputTokens, ...restModelSettings } = (agentDefaultOptions?.modelSettings ?? {}) as {
-    maxOutputTokens?: number;
-    [key: string]: unknown;
-  };
+  const { maxOutputTokens, ...restModelSettings } = agentDefaultOptions?.modelSettings ?? {};
 
   return {
     modelSettings: {
-      ...(restModelSettings as AgentSettingsType['modelSettings']),
+      ...restModelSettings,
       // Only include properties if they have actual values (to not override fallback defaults)
       ...(maxOutputTokens !== undefined && { maxTokens: maxOutputTokens }),
       ...(agentDefaultOptions?.maxSteps !== undefined && { maxSteps: agentDefaultOptions.maxSteps }),

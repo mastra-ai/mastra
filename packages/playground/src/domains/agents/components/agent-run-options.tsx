@@ -7,13 +7,12 @@ interface AgentRunOptionsContentProps {
   requestContextSchema?: string;
 }
 
-const RUN_OPTIONS_MAX_HEIGHT = 'min(600px, calc(100dvh - 8rem))';
+// Shared between both editor columns so they stay the same height.
 const RUN_OPTIONS_EDITOR_HEIGHT = 'h-[260px] md:h-[360px]';
-const REQUEST_CONTEXT_TOOLTIP = 'Request context values are passed into experiments and test chats.';
 
 export function AgentRunOptionsContent({ requestContextSchema }: AgentRunOptionsContentProps) {
   return (
-    <ScrollArea className="w-full" maxHeight={RUN_OPTIONS_MAX_HEIGHT}>
+    <ScrollArea className="w-full" maxHeight="min(600px, calc(100dvh - 8rem))">
       <div className="p-4 space-y-4">
         <Txt as="h3" variant="ui-md" className="text-neutral3">
           Run options
@@ -23,7 +22,7 @@ export function AgentRunOptionsContent({ requestContextSchema }: AgentRunOptions
           <section className="min-w-0">
             <AgentRequestContextRunOptionsBody
               requestContextSchema={requestContextSchema}
-              requestContextTooltip={REQUEST_CONTEXT_TOOLTIP}
+              requestContextTooltip="Request context values are passed into experiments and test chats."
               freeformEditorClassName={RUN_OPTIONS_EDITOR_HEIGHT}
             />
           </section>

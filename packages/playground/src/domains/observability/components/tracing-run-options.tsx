@@ -4,11 +4,6 @@ import CodeMirror from '@uiw/react-codemirror';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { WorkflowRunOptions } from '@/domains/workflows/workflow/workflow-run-options';
 
-const TRACING_EDITOR_CLASSES = cn(
-  'overflow-y-scroll rounded-lg border border-border1 bg-surface2 overflow-hidden p-3',
-  '[&_.cm-editor]:!bg-surface2 [&_.cm-gutters]:!bg-surface2',
-);
-
 interface TracingRunOptionsProps {
   className?: string;
   editorClassName?: string;
@@ -69,7 +64,11 @@ export const TracingRunOptions = ({
         onChange={handleChange}
         theme={theme}
         extensions={[jsonLanguage]}
-        className={cn(editorClassName, TRACING_EDITOR_CLASSES)}
+        className={cn(
+          editorClassName,
+          'overflow-y-scroll rounded-lg border border-border1 bg-surface2 overflow-hidden p-3',
+          '[&_.cm-editor]:!bg-surface2 [&_.cm-gutters]:!bg-surface2',
+        )}
       />
 
       {entityType === 'workflow' && <WorkflowRunOptions />}

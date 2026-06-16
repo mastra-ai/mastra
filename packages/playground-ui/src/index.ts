@@ -135,7 +135,9 @@ export * from './lib/toast';
 // Pure lib modules
 export * from './lib/rule-engine';
 export * from './lib/json-schema';
-export * from './lib/resize';
+export * from './lib/resize/collapsible-panel';
+export * from './lib/resize/separator';
+export * from './lib/resize/panel-drawer';
 export * from './lib/file';
 export * from './lib/template';
 

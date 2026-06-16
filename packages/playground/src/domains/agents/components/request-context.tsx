@@ -35,11 +35,6 @@ interface RequestContextProps {
   labelTooltip?: string;
 }
 
-const REQUEST_CONTEXT_EDITOR_CLASSES = cn(
-  'overflow-y-scroll rounded-lg border border-border1 bg-surface2 overflow-hidden p-3',
-  '[&_.cm-editor]:!bg-surface2 [&_.cm-gutters]:!bg-surface2',
-);
-
 function getMatchingPresetKey(presets: RequestContextPresets | null, requestContextStr: string) {
   if (!presets) return '__custom__';
 
@@ -202,7 +197,11 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
           onChange={handleEditorChange}
           theme={theme}
           extensions={[jsonLanguage]}
-          className={cn(editorClassName, REQUEST_CONTEXT_EDITOR_CLASSES)}
+          className={cn(
+            editorClassName,
+            'overflow-y-scroll rounded-lg border border-border1 bg-surface2 overflow-hidden p-3',
+            '[&_.cm-editor]:!bg-surface2 [&_.cm-gutters]:!bg-surface2',
+          )}
         />
 
         <div className="flex justify-end gap-2 pt-2">

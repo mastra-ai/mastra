@@ -7,10 +7,11 @@ interface ComposerRunOptionsProps {
   requestContextSchema?: string;
 }
 
+// Only `align` deviates from base-ui's defaults (side: 'flip', fallbackAxisSide: 'end').
+// 'shift' keeps the wide popup anchored to `start` and slides it into view instead of
+// flipping start↔end, which would make it jump sides.
 const RUN_OPTIONS_COLLISION_AVOIDANCE = {
-  side: 'flip',
   align: 'shift',
-  fallbackAxisSide: 'end',
 } as const;
 
 /**

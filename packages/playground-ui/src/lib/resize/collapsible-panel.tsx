@@ -12,9 +12,6 @@ export interface CollapsiblePanelProps extends PanelProps {
   direction: 'left' | 'right';
 }
 
-const PANEL_SIZE_TRANSITION =
-  'flex-grow 300ms var(--ease-out-custom, ease), flex-basis 300ms var(--ease-out-custom, ease)';
-
 // The expand pill follows the pointer vertically along the edge, clamped so
 // it never bleeds past the strip's ends.
 const PILL_EDGE_MARGIN = 22;
@@ -80,7 +77,11 @@ export const CollapsiblePanel = ({
 
     const enable = () => {
       if (!bootedRef.current) return;
-      panels.forEach(panel => (panel.style.transition = PANEL_SIZE_TRANSITION));
+      panels.forEach(
+        panel =>
+          (panel.style.transition =
+            'flex-grow 300ms var(--ease-out-custom, ease), flex-basis 300ms var(--ease-out-custom, ease)'),
+      );
     };
     const disable = () => panels.forEach(panel => (panel.style.transition = 'none'));
 

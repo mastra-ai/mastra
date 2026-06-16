@@ -3,11 +3,13 @@ import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, Git
 
 import { useLinkComponent } from '@/lib/framework';
 
-export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces' | 'settings';
+/** Tabs that render a pill in the bar. Routes without a pill (e.g. settings) pass `'none'`. */
+export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
-  activeTab: AgentPageTab;
+  /** `'none'` (or any non-tab value) leaves the bar unhighlighted. */
+  activeTab: AgentPageTab | 'none';
   showPlayground?: boolean;
   showObservability?: boolean;
   reviewBadge?: number;
@@ -108,12 +110,10 @@ export function AgentPageTabs({
     evaluate: `/agents/${agentId}/evaluate`,
     review: `/agents/${agentId}/review`,
     traces: `/agents/${agentId}/traces`,
-    // Settings is reachable from the agent view header, not from a tab; the
-    // entry only exists so the tab bar can stay unhighlighted on that route.
-    settings: `/agents/${agentId}/settings`,
   };
 
-  const handleTabChange = (value: AgentPageTab) => {
+  const handleTabChange = (value: AgentPageTab | 'none') => {
+    if (value === 'none') return;
     navigate(hrefMap[value]);
   };
 

@@ -30,7 +30,8 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const defaultModel = agent?.modelId ?? '';
   const requestContextSchema = agent?.requestContextSchema;
 
-  const activeTab: AgentPageTab = location.pathname.includes('/editor')
+  // Settings has no tab pill, so it maps to 'none' and the bar stays unhighlighted.
+  const activeTab: AgentPageTab | 'none' = location.pathname.includes('/editor')
     ? 'versions'
     : location.pathname.includes('/evaluate')
       ? 'evaluate'
@@ -39,7 +40,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         : location.pathname.includes('/traces')
           ? 'traces'
           : location.pathname.includes('/settings')
-            ? 'settings'
+            ? 'none'
             : 'chat';
 
   const showTopBarRunOptions =
