@@ -3229,18 +3229,19 @@ describe('ProcessorRunner', () => {
         contents: 'stored delta',
         createdAt: new Date('2026-01-01T00:00:01.000Z'),
       });
-      const localDelta = createStateSignal({
-        id: 'local-delta',
-        mode: 'delta',
-        cacheKey: 'delta:local',
-        version: 3,
-        contents: 'local delta',
-        createdAt: new Date('2026-01-01T00:00:02.000Z'),
-      });
-      messageList.addSignal(localDelta);
       const storedMessages = new MessageList({ threadId: 'thread-1' });
       storedMessages.addSignal(snapshot);
       storedMessages.addSignal(delta);
+      const localDelta = messageList.addSignal(
+        createStateSignal({
+          id: 'local-delta',
+          mode: 'delta',
+          cacheKey: 'delta:local',
+          version: 3,
+          contents: 'local delta',
+          createdAt: new Date('2026-01-01T00:00:02.000Z'),
+        }),
+      );
 
       const requestContext = new RequestContext();
       const thread = {

@@ -118,7 +118,7 @@ describe('AgentBuilderRootLayout', () => {
     });
 
     expect(router.state.location.search).toBe('?redirect=%2Fagent-builder%2Fagents%2Fcreate%3Fdraft%3D1%23details');
-    expect(screen.getByText('Login page')).toBeTruthy();
+    expect(await screen.findByText('Login page')).toBeTruthy();
   });
 
   it('renders agent-builder children for authenticated users with access', async () => {
