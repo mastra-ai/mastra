@@ -48,7 +48,7 @@ async function getZoomAccessToken(): Promise<string> {
   });
 
   if (!res.ok) {
-    throw new Error(`Zoom token request failed: ${res.status} ${await res.text()}`);
+    throw new Error(`Zoom token request failed: ${res.status} ${res.statusText}`.trim());
   }
 
   const data = (await res.json()) as ZoomTokenResponse;
@@ -65,7 +65,7 @@ async function zoomFetch<T>(path: string): Promise<T> {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
-    throw new Error(`Zoom API ${path} failed: ${res.status} ${await res.text()}`);
+    throw new Error(`Zoom API ${path} failed: ${res.status} ${res.statusText}`.trim());
   }
   return res.json() as Promise<T>;
 }
@@ -167,9 +167,9 @@ export const fetchZoomTranscript = createTool({
       );
     }
     const token = await getZoomAccessToken();
-    const downloadUrl = new URL(transcriptFile.download_url);
-    downloadUrl.searchParams.set('access_token', token);
-    const res = await fetch(downloadUrl);
+    const res = await fetch(transcriptFile.download_url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (!res.ok) {
       throw new Error(`Failed to download transcript: ${res.status}`);
     }

@@ -115,8 +115,7 @@ export const webSearchTool = createTool({
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Gateway web search failed: ${response.status} ${errorText}`);
+      throw new Error(`Gateway web search failed: ${response.status} ${response.statusText}`.trim());
     }
 
     const data = (await response.json()) as GatewayResponse;
