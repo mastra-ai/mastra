@@ -201,6 +201,51 @@ describe('Harness fork clone metadata wiring', () => {
     expect(builtIn.ask_user).toBeDefined();
   });
 
+  it('shared config.agent is reused across modes without forking', async () => {
+    const memoryFactory = vi.fn().mockResolvedValue({});
+
+    const baseAgent = new Agent({
+      name: 'shared',
+      instructions: 'shared agent',
+      model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+    });
+
+    const harness = new Harness({
+      id: 'test',
+      resourceId: 'test-resource',
+      memory: memoryFactory as unknown as never,
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          defaultModelId: 'openai/gpt-4o',
+          instructions: 'Build things.',
+        },
+        {
+          id: 'plan',
+          name: 'Plan',
+          defaultModelId: 'openai/gpt-4o',
+          instructions: 'Plan things.',
+        },
+      ],
+      agent: baseAgent,
+    });
+
+    await harness.init();
+
+    // All modes should return the same agent instance — no forking
+    const buildAgent = harness.getCurrentAgent();
+    await harness.switchMode({ modeId: 'plan' });
+    const planAgent = harness.getCurrentAgent();
+    await harness.switchMode({ modeId: 'build' });
+    const buildAgentAgain = harness.getCurrentAgent();
+
+    expect(buildAgent).toBe(baseAgent);
+    expect(planAgent).toBe(baseAgent);
+    expect(buildAgentAgain).toBe(baseAgent);
+  });
+
   it('propagates memory to the base config.agent so signal providers have access', async () => {
     class TestSignalProvider extends SignalProvider<'test-signals'> {
       readonly id = 'test-signals' as const;

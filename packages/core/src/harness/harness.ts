@@ -490,6 +490,11 @@ export class Harness<TState = {}> {
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
+  /**
+   * Tracks which mode's instructions are currently applied to the shared
+   * `config.agent`. Avoids redundant `__updateInstructions` calls.
+   */
+  #appliedModeId: string | null = null;
 
   constructor(config: HarnessConfig<TState>) {
     validateModes(config.modes);
@@ -556,15 +561,20 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Sets or updates the harness-level browser and propagates it to static mode agents.
+   * Sets or updates the harness-level browser and propagates it to mode agents.
    */
   setBrowser(browser: MastraBrowser | undefined): void {
     this.browser = browser;
     this.browserFn = undefined;
 
-    for (const mode of this.config.modes) {
-      const agent = this.getAgentForMode(mode);
-      agent.setBrowser(browser);
+    if (this.config.agent) {
+      // Shared backing agent — set once.
+      this.config.agent.setBrowser(browser);
+    } else {
+      for (const mode of this.config.modes) {
+        const agent = this.getAgentForMode(mode);
+        agent.setBrowser(browser);
+      }
     }
   }
 
@@ -624,19 +634,20 @@ export class Harness<TState = {}> {
       }
     }
 
-    // Propagate harness-level Mastra, memory, workspace, browser, and pubsub to mode agents (after workspace init)
-    for (const mode of this.config.modes) {
-      const agent = this.getAgentForMode(mode);
-      this.propagateRuntimeServicesToAgent(agent);
-    }
-
-    // Also propagate runtime services to the base config agent so that signal
-    // providers connected to it during construction have access to memory and
-    // storage. Without this, signal providers (e.g. GitHubSignals) that were
-    // `connect()`-ed to the base agent before forking remain pointed at a
-    // memoryless instance and fail when attempting notification delivery.
+    // Propagate harness-level Mastra, memory, workspace, browser, and pubsub
+    // to the agent(s) that back each mode (after workspace init).
     if (this.config.agent) {
+      // Shared backing agent: propagate once. All modes share this instance,
+      // so signal providers connected during construction automatically get
+      // memory/storage/pubsub access.
       this.propagateRuntimeServicesToAgent(this.config.agent);
+    } else {
+      // Per-mode agents (deprecated mode.agent or constructed-on-demand):
+      // propagate to each independently.
+      for (const mode of this.config.modes) {
+        const agent = this.getAgentForMode(mode);
+        this.propagateRuntimeServicesToAgent(agent);
+      }
     }
 
     this.startHeartbeats();
@@ -872,44 +883,57 @@ export class Harness<TState = {}> {
   }
 
   private getAgentForMode(mode: HarnessMode): Agent<any, any, any, any> {
+    // Deprecated per-mode agent — use directly, no forking.
+    if (mode.agent) {
+      if (!this.#legacyAgentMode[mode.id]) {
+        this.#legacyAgentMode[mode.id] = mode.agent;
+      }
+      return this.#legacyAgentMode[mode.id]!;
+    }
+
+    // Shared backing agent — reuse the single instance.
+    // Mode instructions are applied in-place; mode tools are resolved
+    // at execution time via buildToolsets.
+    if (this.config.agent) {
+      this.applyModeInstructions(mode);
+      return this.config.agent;
+    }
+
+    // No backing agent — construct one per mode (cached).
     if (!this.#legacyAgentMode[mode.id]) {
+      if (!mode.defaultModelId) {
+        throw new Error(`Mode ${mode.id} requires a defaultModelId when no backing agent is configured`);
+      }
+
       const instructions = [this.#instructions ?? '', mode.instructions].filter(Boolean).join('\n');
       const modeTools = {
         ...mode.tools,
         ...mode.additionalTools,
       };
 
-      if (mode.agent) {
-        this.#legacyAgentMode[mode.id] = mode.agent;
-      } else if (this.config.agent) {
-        const forkedAgent = this.config.agent.__fork();
-        if (instructions) {
-          forkedAgent.__updateInstructions(instructions);
-        }
-        if (mode.tools || mode.additionalTools) {
-          forkedAgent.__setTools(modeTools as any);
-        }
-        this.#legacyAgentMode[mode.id] = forkedAgent;
-      } else {
-        if (!mode.defaultModelId) {
-          throw new Error(`Mode ${mode.id} requires a defaultModelId when no backing agent is configured`);
-        }
-
-        const model = this.config.resolveModel ? this.config.resolveModel(mode.defaultModelId) : mode.defaultModelId;
-        const forkedAgent = new Agent({
-          id: `${this.id}-agent`,
-          name: `Harness ${this.id} agent`,
-          model,
-          instructions,
-          // TODO move to permissions and global tools
-          tools: modeTools,
-        });
-
-        this.#legacyAgentMode[mode.id] = forkedAgent;
-      }
+      const model = this.config.resolveModel ? this.config.resolveModel(mode.defaultModelId) : mode.defaultModelId;
+      this.#legacyAgentMode[mode.id] = new Agent({
+        id: `${this.id}-agent`,
+        name: `Harness ${this.id} agent`,
+        model,
+        instructions,
+        tools: modeTools,
+      });
     }
-
     return this.#legacyAgentMode[mode.id]!;
+  }
+
+  /**
+   * Apply the given mode's instructions to the shared `config.agent`.
+   * No-ops if the mode is already applied.
+   */
+  private applyModeInstructions(mode: HarnessMode): void {
+    if (this.#appliedModeId === mode.id) return;
+    const instructions = [this.#instructions ?? '', mode.instructions].filter(Boolean).join('\n');
+    if (instructions) {
+      this.config.agent!.__updateInstructions(instructions);
+    }
+    this.#appliedModeId = mode.id;
   }
 
   /**
@@ -4248,10 +4272,23 @@ export class Harness<TState = {}> {
       }
     }
 
+    const result: ToolsetsInput = { harnessBuiltIn: builtInTools };
     if (resolvedHarnessTools) {
-      return { harnessBuiltIn: builtInTools, harness: resolvedHarnessTools };
+      result.harness = resolvedHarnessTools;
     }
-    return { harnessBuiltIn: builtInTools };
+
+    // When using a shared backing agent, mode-specific tool overrides are
+    // delivered through toolsets (not baked into the agent) so the agent's
+    // own tools (including signal-provider tools) are never lost.
+    if (this.config.agent) {
+      const currentMode = this.getCurrentMode();
+      const modeTools = currentMode.tools ?? currentMode.additionalTools;
+      if (modeTools) {
+        result.modeTools = modeTools;
+      }
+    }
+
+    return result;
   }
 
   /**
