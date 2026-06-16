@@ -3,6 +3,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { Children, isValidElement } from 'react';
 import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -30,10 +31,21 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
     disabled?: boolean;
   }>;
 
+  const SelectItem = ({ value, children }: PropsWithChildren<{ value: string }>) => (
+    <option value={value}>{children}</option>
+  );
+  const SelectContent = ({ children }: PropsWithChildren) => (
+    <>
+      {Children.toArray(children).filter(child => isValidElement(child) && child.type === SelectItem)}
+    </>
+  );
+
   return {
     ...actual,
-    CodeEditor: ({ value }: { value?: string }) => <pre data-testid="code-editor">{value ?? ''}</pre>,
-    // Render a native <select> seeded from the option SelectItems so tests can choose by value.
+    CodeEditor: ({ value, onChange }: { value?: string; onChange?: (v: string) => void }) => (
+      <textarea data-testid="code-editor" value={value ?? ''} onChange={e => onChange?.(e.target.value)} />
+    ),
+    // Render a native <select> seeded from SelectItem options so tests can choose by value.
     Select: ({ value, onValueChange, disabled, children }: SelectStubProps) => (
       <select
         data-testid="select"
@@ -47,10 +59,8 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
     ),
     SelectTrigger: () => null,
     SelectValue: () => null,
-    SelectContent: ({ children }: PropsWithChildren) => <>{children}</>,
-    SelectItem: ({ value, children }: PropsWithChildren<{ value: string }>) => (
-      <option value={value}>{children}</option>
-    ),
+    SelectContent,
+    SelectItem,
   };
 });
 
@@ -85,6 +95,10 @@ function getSelects() {
   return screen.getAllByTestId('select') as HTMLSelectElement[];
 }
 
+function editorValue() {
+  return (screen.getByTestId('code-editor') as HTMLTextAreaElement).value;
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -102,9 +116,9 @@ describe('AddTraceMocksToItemDialog', () => {
     renderDialog();
 
     await waitFor(() => {
-      expect(screen.getByTestId('code-editor').textContent).toContain('getWeather');
+      expect(editorValue()).toContain('getWeather');
     });
-    expect(screen.getByTestId('code-editor').textContent).toContain('"city": "Seattle"');
+    expect(editorValue()).toContain('"city": "Seattle"');
   });
 
   it('appends derived mocks to the existing item on submit (existing ++ derived)', async () => {
@@ -125,7 +139,7 @@ describe('AddTraceMocksToItemDialog', () => {
     renderDialog();
 
     // Wait for the derived preview so the trajectory query has resolved.
-    await waitFor(() => expect(screen.getByTestId('code-editor').textContent).toContain('getWeather'));
+    await waitFor(() => expect(editorValue()).toContain('getWeather'));
 
     const [datasetSelect] = getSelects();
     fireEvent.change(datasetSelect, { target: { value: 'dataset-1' } });
@@ -150,7 +164,7 @@ describe('AddTraceMocksToItemDialog', () => {
     });
   });
 
-  it('shows an empty state and disables submit when the trace has no tool calls', async () => {
+  it('disables submit when the trace has no tool calls (empty editor)', async () => {
     server.use(
       http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(datasetsList)),
       http.get(`${BASE_URL}/api/observability/traces/${TRACE_ID}/trajectory`, () =>
@@ -160,9 +174,56 @@ describe('AddTraceMocksToItemDialog', () => {
 
     renderDialog();
 
+    // Editor is rendered but empty (nothing derived), so submit stays disabled.
     await waitFor(() => {
-      expect(screen.getByText(/no tool calls to add as mocks/i)).not.toBeNull();
+      expect(editorValue()).toBe('');
     });
     expect(screen.getByRole('button', { name: /append tool mocks/i }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('appends the edited mocks JSON (user edits override the derived seed)', async () => {
+    const capture = vi.fn();
+    server.use(
+      http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(datasetsList)),
+      http.get(`${BASE_URL}/api/datasets/dataset-1/items`, () => HttpResponse.json(datasetItemsList)),
+      http.get(`${BASE_URL}/api/datasets/dataset-1/items/item-1`, () => HttpResponse.json(datasetItem)),
+      http.get(`${BASE_URL}/api/observability/traces/${TRACE_ID}/trajectory`, () =>
+        HttpResponse.json(trajectoryWithToolCalls),
+      ),
+      http.patch(`${BASE_URL}/api/datasets/dataset-1/items/item-1`, async ({ request }) => {
+        capture(await request.json());
+        return HttpResponse.json(datasetItem);
+      }),
+    );
+
+    renderDialog();
+
+    await waitFor(() => expect(editorValue()).toContain('getWeather'));
+
+    // Edit the mocks JSON in the editor.
+    const editor = screen.getByTestId('code-editor');
+    fireEvent.change(editor, {
+      target: { value: JSON.stringify([{ toolName: 'getWeather', args: { city: 'Paris' }, output: { temp: 70 } }]) },
+    });
+
+    const [datasetSelect] = getSelects();
+    fireEvent.change(datasetSelect, { target: { value: 'dataset-1' } });
+    await waitFor(() => {
+      const itemSelect = getSelects()[1];
+      expect(Array.from(itemSelect.options).some(o => o.value === 'item-1')).toBe(true);
+    });
+    fireEvent.change(getSelects()[1], { target: { value: 'item-1' } });
+
+    const submit = screen.getByRole('button', { name: /append tool mocks/i });
+    await waitFor(() => expect(submit.hasAttribute('disabled')).toBe(false));
+    fireEvent.click(submit);
+
+    await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    expect(capture.mock.calls[0][0]).toMatchObject({
+      toolMocks: [
+        { toolName: 'existing', args: { a: 1 }, output: { ok: true } },
+        { toolName: 'getWeather', args: { city: 'Paris' }, output: { temp: 70 } },
+      ],
+    });
   });
 });

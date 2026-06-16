@@ -17,7 +17,7 @@ import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import type { DatasetItemToolMock } from '@mastra/client-js';
 import { EyeIcon, WrenchIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
@@ -52,6 +52,10 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
   const client = useMastraClient();
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [selectedItemId, setSelectedItemId] = useState<string>('');
+  // Editable JSON of the mocks to append. Seeded from the trace-derived mocks,
+  // but the user can edit/remove entries before saving.
+  const [mocksJson, setMocksJson] = useState<string>('');
+  const [mocksTouched, setMocksTouched] = useState(false);
 
   const { data: datasetsData, isLoading: isDatasetsLoading } = useDatasets();
   const datasets = datasetsData?.datasets ?? [];
@@ -72,12 +76,37 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
   const derivedMocks: DatasetItemToolMock[] = trajectory?.steps
     ? (collectToolMocks(trajectory.steps as ToolCallTrajectoryStep[]) as DatasetItemToolMock[])
     : [];
-  const hasMocks = derivedMocks.length > 0;
-  const previewJson = hasMocks ? JSON.stringify(derivedMocks, null, 2) : '';
+  const hasDerivedMocks = derivedMocks.length > 0;
+
+  // Seed the editor with the derived mocks once they load, unless the user has
+  // already edited the value (don't clobber their changes).
+  useEffect(() => {
+    if (!isOpen || mocksTouched) return;
+    setMocksJson(hasDerivedMocks ? JSON.stringify(derivedMocks, null, 2) : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, mocksTouched, JSON.stringify(derivedMocks)]);
+
+  const handleMocksChange = (value: string) => {
+    setMocksTouched(true);
+    setMocksJson(value);
+  };
+
+  // Whether the current editor content is a non-empty JSON array (enables submit).
+  const hasMocks = (() => {
+    if (!mocksJson.trim()) return false;
+    try {
+      const parsed = JSON.parse(mocksJson);
+      return Array.isArray(parsed) && parsed.length > 0;
+    } catch {
+      return false;
+    }
+  })();
 
   const reset = () => {
     setSelectedDatasetId('');
     setSelectedItemId('');
+    setMocksJson('');
+    setMocksTouched(false);
   };
 
   const handleDatasetChange = (value: string) => {
@@ -92,8 +121,22 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
       toast.error('Please select a dataset and an item');
       return;
     }
-    if (!hasMocks) {
-      toast.error('This trace has no tool calls to add');
+
+    // Parse the (possibly edited) mocks JSON.
+    let parsedMocks: DatasetItemToolMock[];
+    try {
+      const parsed = mocksJson.trim() ? JSON.parse(mocksJson) : [];
+      if (!Array.isArray(parsed)) {
+        toast.error('Tool Mocks must be a JSON array');
+        return;
+      }
+      parsedMocks = parsed as DatasetItemToolMock[];
+    } catch {
+      toast.error('Tool Mocks must be valid JSON');
+      return;
+    }
+    if (parsedMocks.length === 0) {
+      toast.error('There are no tool mocks to add');
       return;
     }
     // Guard against appending to a stale/unloaded item — require the authoritative item first.
@@ -103,7 +146,7 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
     }
 
     const existing = selectedItem.toolMocks ?? [];
-    const merged = [...existing, ...derivedMocks];
+    const merged = [...existing, ...parsedMocks];
 
     try {
       await updateItem.mutateAsync({
@@ -111,7 +154,7 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
         itemId: selectedItemId,
         toolMocks: merged,
       });
-      toast.success(`Added ${derivedMocks.length} tool mock(s) to the item`);
+      toast.success(`Added ${parsedMocks.length} tool mock(s) to the item`);
       reset();
       onClose();
     } catch (error) {
@@ -203,13 +246,21 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="derived-mocks">Derived Tool Mocks (read-only)</Label>
+            <Label htmlFor="derived-mocks">Tool Mocks (JSON)</Label>
             {isTrajectoryLoading ? (
               <div className="px-2 py-4 text-sm text-neutral4">Loading tool calls from trace...</div>
-            ) : hasMocks ? (
-              <CodeEditor value={previewJson} editable={false} showCopyButton={false} className="min-h-[160px]" />
             ) : (
-              <div className="px-2 py-4 text-sm text-neutral4">This trace has no tool calls to add as mocks.</div>
+              <>
+                <CodeEditor
+                  value={mocksJson}
+                  onChange={handleMocksChange}
+                  showCopyButton={false}
+                  className="min-h-[160px]"
+                />
+                <p className="text-xs text-neutral4">
+                  Seeded from the trace&apos;s tool calls. Edit or remove entries before appending.
+                </p>
+              </>
             )}
           </div>
 
