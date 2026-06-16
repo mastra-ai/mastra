@@ -520,31 +520,61 @@ export class MastraAuthWorkos
   /**
    * Handle the OAuth callback from WorkOS.
    *
-   * Uses AuthKit's handleCallback for proper session creation.
+   * Uses WorkOS SDK's authenticateWithCode directly instead of AuthKit's handleCallback.
+   * AuthKit's handleCallback requires PKCE cookies that must be set during getLoginUrl()
+   * and read during handleCallback(), but our ISSOProvider interface separates these
+   * calls across different requests without cookie propagation.
+   *
+   * This approach was the original implementation before commit 6e4d4f5cf3 introduced
+   * a regression by switching to AuthKit's handleCallback with dummy Request/Response
+   * objects that couldn't provide the required PKCE cookies.
    */
   async handleCallback(code: string, _state: string): Promise<SSOCallbackResult<EEUser>> {
-    // Use AuthService's handleCallback for session creation
-    const result = await this.authService.handleCallback(
-      new Request('http://localhost'), // Dummy request, not used
-      new Response(), // Dummy response to get headers
-      { code, state: _state },
-    );
+    // Use WorkOS SDK directly to exchange code for tokens (server-side, no PKCE required)
+    const authResponse = await this.workos.userManagement.authenticateWithCode({
+      clientId: this.clientId,
+      code,
+    });
 
     const user: WorkOSUser = {
-      ...mapWorkOSUserToEEUser(result.authResponse.user),
-      workosId: result.authResponse.user.id,
-      organizationId: result.authResponse.organizationId,
+      ...mapWorkOSUserToEEUser(authResponse.user),
+      workosId: authResponse.user.id,
+      organizationId: authResponse.organizationId,
     };
 
-    // Extract session cookie from headers
-    const sessionCookie = result.headers?.['Set-Cookie'];
-    const cookies = sessionCookie ? (Array.isArray(sessionCookie) ? sessionCookie : [sessionCookie]) : undefined;
+    // Create encrypted session cookie using AuthKit's encryption
+    const sessionData = {
+      accessToken: authResponse.accessToken,
+      refreshToken: authResponse.refreshToken,
+      user: authResponse.user,
+      organizationId: authResponse.organizationId,
+      impersonator: authResponse.impersonator,
+    };
+
+    const cookiePassword = process.env['WORKOS_COOKIE_PASSWORD'];
+    let cookies: string[] | undefined;
+
+    if (cookiePassword) {
+      const encryptedSession = await sessionEncryption.sealData(sessionData, { password: cookiePassword });
+      const cookieName = process.env['WORKOS_COOKIE_NAME'] || 'wos-session';
+      // Set cookie with secure defaults
+      const cookieOptions = [
+        `${cookieName}=${encryptedSession}`,
+        'Path=/',
+        'HttpOnly',
+        'SameSite=Lax',
+        process.env['NODE_ENV'] === 'production' ? 'Secure' : '',
+      ]
+        .filter(Boolean)
+        .join('; ');
+      cookies = [cookieOptions];
+    }
 
     return {
       user,
       tokens: {
-        accessToken: result.authResponse.accessToken,
-        refreshToken: result.authResponse.refreshToken,
+        accessToken: authResponse.accessToken,
+        refreshToken: authResponse.refreshToken,
       },
       cookies,
     };
