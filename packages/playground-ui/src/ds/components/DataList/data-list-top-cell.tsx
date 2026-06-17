@@ -17,16 +17,19 @@ export type DataListTopCellProps = {
 export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>(
   ({ children, className, as, ...rest }, ref) => {
     const Component = as || 'span';
+    const isText = typeof children === 'string' || typeof children === 'number';
     return (
       <Component
         ref={ref}
         className={cn(
-          'h-8 min-w-0 max-w-full overflow-hidden py-1 flex items-center uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs',
+          'h-8 min-w-0 max-w-full overflow-hidden py-1 flex items-center whitespace-nowrap text-neutral2 font-semibold tracking-tight text-ui-sm',
           className,
         )}
         {...rest}
       >
-        {children}
+        {/* Plain string/number titles truncate with an ellipsis; element children
+            (icons, smart long/short labels, checkboxes) render as-is. */}
+        {isText ? <span className="min-w-0 truncate">{children}</span> : children}
       </Component>
     );
   },
