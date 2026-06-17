@@ -74,7 +74,12 @@ function buildSubAgent() {
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
           ]
         : [
-            { type: 'tool-call', toolCallId: `tc-${order}`, toolName: 'process-order', input: JSON.stringify({ orderId: order }) },
+            {
+              type: 'tool-call',
+              toolCallId: `tc-${order}`,
+              toolName: 'process-order',
+              input: JSON.stringify({ orderId: order }),
+            },
             { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
           ];
 
@@ -109,9 +114,23 @@ function buildSupervisor(subAgent: Agent) {
       const chunks =
         step === 1
           ? [
-              { type: 'tool-call', toolCallId: 'sup-tc-A', toolName: 'agent-subAgent', input: JSON.stringify({ prompt: `Process order ${ORDER_A}.`, maxSteps: 3 }) },
-              { type: 'tool-call', toolCallId: 'sup-tc-B', toolName: 'agent-subAgent', input: JSON.stringify({ prompt: `Process order ${ORDER_B}.`, maxSteps: 3 }) },
-              { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              {
+                type: 'tool-call',
+                toolCallId: 'sup-tc-A',
+                toolName: 'agent-subAgent',
+                input: JSON.stringify({ prompt: `Process order ${ORDER_A}.`, maxSteps: 3 }),
+              },
+              {
+                type: 'tool-call',
+                toolCallId: 'sup-tc-B',
+                toolName: 'agent-subAgent',
+                input: JSON.stringify({ prompt: `Process order ${ORDER_B}.`, maxSteps: 3 }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
             ]
           : [
               { type: 'text-start', id: 'sup-final-t' },

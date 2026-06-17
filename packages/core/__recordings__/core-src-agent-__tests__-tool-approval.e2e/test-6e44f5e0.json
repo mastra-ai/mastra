@@ -5,7 +5,7 @@
     "testName": "tool approval and suspension > suspension > should call findUserWorkflow with suspend and resume via generate when autoResumeSuspendedTools is true",
     "model": "gpt-4o-mini",
     "createdAt": "2026-05-18T10:52:28.714Z",
-    "updatedAt": "2026-06-16T21:41:36.437Z"
+    "updatedAt": "2026-06-17T13:36:02.750Z"
   },
   "recordings": [
     {
@@ -91,7 +91,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1781646092055
+        "timestamp": 1781703357689
       },
       "response": {
         "status": 200,
@@ -100,12 +100,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a0ccfaac4d06ee17-SJC",
+          "cf-ray": "a0d270c36e272953-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 16 Jun 2026 21:41:33 GMT",
+          "date": "Wed, 17 Jun 2026 13:35:59 GMT",
           "openai-organization": "work-kxidzh",
-          "openai-processing-ms": "1126",
+          "openai-processing-ms": "1205",
           "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -117,18 +117,18 @@
           "x-ratelimit-remaining-tokens": "1999649",
           "x-ratelimit-reset-requests": "12ms",
           "x-ratelimit-reset-tokens": "10ms",
-          "x-request-id": "req_c5692f74e2194b9ebaadcc046eac1c22"
+          "x-request-id": "req_bf8caaea658e46d4a56894a55f002eb3"
         },
         "body": {
-          "id": "resp_07c4f2f9b7a473cb006a31c30c3ff0819bbf5ea0df91b02eb5",
+          "id": "resp_0469e47e338c0a5e006a32a2be07b481988fbe84d6b937ea50",
           "object": "response",
-          "created_at": 1781646092,
+          "created_at": 1781703358,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1781646093,
+          "completed_at": 1781703359,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -139,11 +139,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_07c4f2f9b7a473cb006a31c30d090c819b87af7339c9a64ef6",
+              "id": "fc_0469e47e338c0a5e006a32a2beb3008198b54927cc4a561f81",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":null,\"resumeData\":null}",
-              "call_id": "call_oY9zxn2eTw5XK8pJLjVDegHW",
+              "call_id": "call_LvFqMf0OBqXE9RNfUvk8Sq2K",
               "name": "workflow-findUserWorkflow"
             }
           ],
@@ -248,7 +248,7 @@
       }
     },
     {
-      "hash": "ad6f51bd1ae05907",
+      "hash": "866300423d0aac29",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -257,7 +257,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_oY9zxn2eTw5XK8pJLjVDegHW\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000058\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+              "content": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_LvFqMf0OBqXE9RNfUvk8Sq2K\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000058\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
             },
             {
               "role": "user",
@@ -339,7 +339,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1781646093421
+        "timestamp": 1781703359054
       },
       "response": {
         "status": 200,
@@ -348,12 +348,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a0ccfab4e8e7ee17-SJC",
+          "cf-ray": "a0d270cbe8792953-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 16 Jun 2026 21:41:35 GMT",
+          "date": "Wed, 17 Jun 2026 13:36:01 GMT",
           "openai-organization": "work-kxidzh",
-          "openai-processing-ms": "1380",
+          "openai-processing-ms": "1946",
           "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -365,18 +365,18 @@
           "x-ratelimit-remaining-tokens": "1999288",
           "x-ratelimit-reset-requests": "12ms",
           "x-ratelimit-reset-tokens": "21ms",
-          "x-request-id": "req_07fd85e0d5a54a88af3e262bcb97ca96"
+          "x-request-id": "req_95c5675a808043ee834b2f639bee34bf"
         },
         "body": {
-          "id": "resp_0733ca9ee2a9f42f006a31c30d9f98819aa533acda738cc3cc",
+          "id": "resp_0a61f8a54a8465f5006a32a2bf6580819babe21bcc04b70907",
           "object": "response",
-          "created_at": 1781646093,
+          "created_at": 1781703359,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1781646094,
+          "completed_at": 1781703361,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -387,11 +387,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_0733ca9ee2a9f42f006a31c30e530c819a96f34c00e1db3335",
+              "id": "fc_0a61f8a54a8465f5006a32a2c08bcc819bba830f5fccf72a41",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":\"00000000-0000-4000-8000-000000000058\",\"resumeData\":{\"age\":25}}",
-              "call_id": "call_qpJoUexu4jegSdAMFoo8D75f",
+              "call_id": "call_z1QECuVkUauGUgbA77FBYr49",
               "name": "workflow-findUserWorkflow"
             }
           ],
@@ -496,7 +496,7 @@
       }
     },
     {
-      "hash": "c58be3ca3d4a0a21",
+      "hash": "89f272b9abe085e4",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -505,7 +505,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_oY9zxn2eTw5XK8pJLjVDegHW\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000058\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+              "content": "You are an agent that can get list of users using findUserWorkflow."
             },
             {
               "role": "user",
@@ -527,11 +527,11 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0733ca9ee2a9f42f006a31c30e530c819a96f34c00e1db3335"
+              "id": "fc_0a61f8a54a8465f5006a32a2c08bcc819bba830f5fccf72a41"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_qpJoUexu4jegSdAMFoo8D75f",
+              "call_id": "call_z1QECuVkUauGUgbA77FBYr49",
               "output": "{\"result\":{\"name\":\"Dero Israel\",\"email\":\"test@test.com\",\"age\":25},\"runId\":\"00000000-0000-4000-8000-000000000058\"}"
             }
           ],
@@ -596,7 +596,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1781646094951
+        "timestamp": 1781703361156
       },
       "response": {
         "status": 200,
@@ -605,12 +605,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a0ccfabe6ca9ee17-SJC",
+          "cf-ray": "a0d270d91b0f2953-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 16 Jun 2026 21:41:36 GMT",
+          "date": "Wed, 17 Jun 2026 13:36:02 GMT",
           "openai-organization": "work-kxidzh",
-          "openai-processing-ms": "1327",
+          "openai-processing-ms": "1332",
           "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -619,21 +619,21 @@
           "x-ratelimit-limit-requests": "5000",
           "x-ratelimit-limit-tokens": "2000000",
           "x-ratelimit-remaining-requests": "4999",
-          "x-ratelimit-remaining-tokens": "1999184",
+          "x-ratelimit-remaining-tokens": "1999535",
           "x-ratelimit-reset-requests": "12ms",
-          "x-ratelimit-reset-tokens": "24ms",
-          "x-request-id": "req_8d1aef6200e24ff98816d25afd6c62a0"
+          "x-ratelimit-reset-tokens": "13ms",
+          "x-request-id": "req_ea703e1d0fc843189b9a8c8a12b0e563"
         },
         "body": {
-          "id": "resp_0733ca9ee2a9f42f006a31c30f2bbc819a9a4abf6d112433d7",
+          "id": "resp_0a61f8a54a8465f5006a32a2c17f2c819bbbba2a227436c4e8",
           "object": "response",
-          "created_at": 1781646095,
+          "created_at": 1781703361,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1781646096,
+          "completed_at": 1781703362,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -644,7 +644,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0733ca9ee2a9f42f006a31c30fe8cc819aaa952258da55693f",
+              "id": "msg_0a61f8a54a8465f5006a32a2c23b64819bbe64fd606f5ee9e1",
               "type": "message",
               "status": "completed",
               "content": [
@@ -652,7 +652,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "The user found is:\n\n- **Name:** Dero Israel\n- **Email:** test@test.com\n- **Age:** 25"
+                  "text": "The user **Dero Israel** is 25 years old and can be contacted at the email **test@test.com**."
                 }
               ],
               "role": "assistant"
@@ -742,15 +742,15 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 599,
+            "input_tokens": 248,
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 29,
+            "output_tokens": 27,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 628
+            "total_tokens": 275
           },
           "user": null,
           "metadata": {}

@@ -5,7 +5,7 @@
     "testName": "tool approval and suspension > requireToolApproval > should call findUserTool with requireToolApproval and decline via generate",
     "model": "gpt-4o-mini",
     "createdAt": "2026-05-18T10:51:26.105Z",
-    "updatedAt": "2026-06-16T21:40:41.701Z"
+    "updatedAt": "2026-06-17T13:35:13.728Z"
   },
   "recordings": [
     {
@@ -53,7 +53,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1781646036792
+        "timestamp": 1781703310276
       },
       "response": {
         "status": 200,
@@ -62,12 +62,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a0ccf952e95bee17-SJC",
+          "cf-ray": "a0d26f9b085f2953-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 16 Jun 2026 21:40:37 GMT",
+          "date": "Wed, 17 Jun 2026 13:35:11 GMT",
           "openai-organization": "work-kxidzh",
-          "openai-processing-ms": "914",
+          "openai-processing-ms": "862",
           "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -79,18 +79,18 @@
           "x-ratelimit-remaining-tokens": "1999711",
           "x-ratelimit-reset-requests": "12ms",
           "x-ratelimit-reset-tokens": "8ms",
-          "x-request-id": "req_6739fb08e5044f159d7e96433f5478e1"
+          "x-request-id": "req_b1fb61b56edd4614b74ccba9e5ae0f14"
         },
         "body": {
-          "id": "resp_0e33e62928f7ff63006a31c2d4fd288198a281a7f26a219286",
+          "id": "resp_02efda8af17e0305006a32a28e9aa48199af544625a4c7a36e",
           "object": "response",
-          "created_at": 1781646037,
+          "created_at": 1781703310,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1781646037,
+          "completed_at": 1781703311,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -101,11 +101,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_0e33e62928f7ff63006a31c2d5b4048198bb739369bc3141e0",
+              "id": "fc_02efda8af17e0305006a32a28f43ac81999c7d8d4affe2e70e",
               "type": "function_call",
               "status": "completed",
               "arguments": "{\"name\":\"Dero Israel\"}",
-              "call_id": "call_ucUYkEChQehM5WrNw8X8Qtpc",
+              "call_id": "call_aCDWXHIKXRglUg0IWQAXDV6Z",
               "name": "findUserTool"
             }
           ],
@@ -172,7 +172,7 @@
       }
     },
     {
-      "hash": "5c8327cf097907f6",
+      "hash": "272af6289cec4db1",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -194,11 +194,11 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0e33e62928f7ff63006a31c2d5b4048198bb739369bc3141e0"
+              "id": "fc_02efda8af17e0305006a32a28f43ac81999c7d8d4affe2e70e"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_ucUYkEChQehM5WrNw8X8Qtpc",
+              "call_id": "call_aCDWXHIKXRglUg0IWQAXDV6Z",
               "output": "Tool call was not approved by the user"
             }
           ],
@@ -225,7 +225,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1781646038838
+        "timestamp": 1781703312326
       },
       "response": {
         "status": 200,
@@ -234,12 +234,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a0ccf95fba80ee17-SJC",
+          "cf-ray": "a0d26fa7dbc82953-SJC",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 16 Jun 2026 21:40:41 GMT",
+          "date": "Wed, 17 Jun 2026 13:35:13 GMT",
           "openai-organization": "work-kxidzh",
-          "openai-processing-ms": "1818",
+          "openai-processing-ms": "1257",
           "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -251,18 +251,18 @@
           "x-ratelimit-remaining-tokens": "1999676",
           "x-ratelimit-reset-requests": "12ms",
           "x-ratelimit-reset-tokens": "9ms",
-          "x-request-id": "req_8c3033538a1946cda45de8ae959d6c50"
+          "x-request-id": "req_2aff6016e617413584a06f37a69853fa"
         },
         "body": {
-          "id": "resp_0e33e62928f7ff63006a31c2d82f6c8198b2af4eb1eda63a58",
+          "id": "resp_02efda8af17e0305006a32a290a9bc81998d335798efea0e05",
           "object": "response",
-          "created_at": 1781646040,
+          "created_at": 1781703312,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1781646041,
+          "completed_at": 1781703313,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -273,7 +273,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0e33e62928f7ff63006a31c2d958cc8198b9e6f2f8bde8aac3",
+              "id": "msg_02efda8af17e0305006a32a291392481999716f3366e55ebd0",
               "type": "message",
               "status": "completed",
               "content": [
@@ -281,7 +281,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "I can't access user information without your approval. Would you like to proceed?"
+                  "text": "I can't access that information directly. If you need to find a user named Dero Israel, you might want to check your user management system or database. Let me know if there's anything else I can assist you with!"
                 }
               ],
               "role": "assistant"
@@ -337,11 +337,11 @@
             "input_tokens_details": {
               "cached_tokens": 0
             },
-            "output_tokens": 17,
+            "output_tokens": 46,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 124
+            "total_tokens": 153
           },
           "user": null,
           "metadata": {}

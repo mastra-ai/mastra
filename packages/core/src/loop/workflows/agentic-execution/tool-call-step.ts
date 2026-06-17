@@ -215,19 +215,23 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const { toolCallId, toolName } = target;
 
-        // Maps are keyed by toolCallId; find this call's key. Fall back to matching on the
-        // entry's toolCallId value, then to the legacy toolName key for pre-upgrade metadata.
+        // Maps are keyed by toolCallId. Resolve this call's key in order: exact toolCallId (key,
+        // then entry value), then toolName (entry value, then legacy toolName key). The toolName
+        // match covers autoResumeSuspendedTools, where resume runs in a fresh turn so the resumed
+        // toolCallId differs from the suspended one, plus pre-upgrade metadata keyed by toolName.
         const resolveEntryKey = (entries: Record<string, any> | undefined): string | undefined => {
           if (!entries) return undefined;
           if (entries[toolCallId]) return toolCallId;
-          const byValue = Object.keys(entries).find(key => entries[key]?.toolCallId === toolCallId);
-          if (byValue) return byValue;
+          const byCallId = Object.keys(entries).find(key => entries[key]?.toolCallId === toolCallId);
+          if (byCallId) return byCallId;
+          const byName = Object.keys(entries).find(key => entries[key]?.toolName === toolName);
+          if (byName) return byName;
           return entries[toolName] ? toolName : undefined;
         };
 
-        // Parts may not carry a toolCallId on older messages; prefer it, fall back to toolName.
-        const partMatches = (data: any): boolean =>
-          data?.toolCallId ? data.toolCallId === toolCallId : data?.toolName === toolName;
+        // Match this call's data part. Prefer toolCallId; otherwise fall back to toolName so the
+        // autoResume (fresh-turn) and legacy paths still resolve.
+        const partMatches = (data: any): boolean => data?.toolCallId === toolCallId || data?.toolName === toolName;
 
         const getMetadata = (message: MastraDBMessage) => {
           const content = message.content;
@@ -719,13 +723,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
               message.content.metadata?.pendingToolApprovals) as Record<string, any>;
             if (pendingOrSuspendedTools) {
-              // Entries are keyed by toolCallId; match this exact call so parallel calls to the
-              // same tool resume their own suspended run. Fall back to matching on the entry's
-              // toolCallId value, then to the legacy toolName key for pre-upgrade metadata.
+              // Entries are now keyed by toolCallId so parallel calls to the SAME tool each keep
+              // their own suspension. Resolution order:
+              //   1. Exact toolCallId match (key, then entry value) — used by approveToolCall-style
+              //      resume where the resumed call id equals the suspended one.
+              //   2. toolName match — used by autoResumeSuspendedTools, where resume happens via a
+              //      fresh stream() turn so inputData.toolCallId differs from the suspended call.
+              //      Also covers legacy metadata that was keyed by toolName.
               const entry =
                 pendingOrSuspendedTools[inputData.toolCallId] ??
                 Object.values(pendingOrSuspendedTools).find((e: any) => e?.toolCallId === inputData.toolCallId) ??
-                pendingOrSuspendedTools[inputData.toolName];
+                pendingOrSuspendedTools[inputData.toolName] ??
+                Object.values(pendingOrSuspendedTools).find((e: any) => e?.toolName === inputData.toolName);
               if (entry) {
                 suspendedToolRunId = entry.runId;
                 break;
