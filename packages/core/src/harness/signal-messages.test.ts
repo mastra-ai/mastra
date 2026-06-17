@@ -988,6 +988,62 @@ describe('Harness signal messages', () => {
     ]);
   });
 
+  it('closes the current assistant message when a goal chunk arrives before continuation text', async () => {
+    const storage = new InMemoryStore();
+    const harness = createHarness(storage);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const state = (harness as any).createStreamState();
+    const requestContext = new RequestContext();
+
+    await (harness as any).processStreamChunk(state, { type: 'text-start', payload: { id: 'text-1' } }, requestContext);
+    await (harness as any).processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: 'Fact 1' } },
+      requestContext,
+    );
+    await (harness as any).processStreamChunk(
+      state,
+      {
+        type: 'goal',
+        payload: {
+          objective: 'three whale facts',
+          iteration: 1,
+          maxRuns: 500,
+          passed: false,
+          status: 'active',
+          results: [],
+          reason: 'continue',
+          duration: 0,
+          timedOut: false,
+          maxRunsReached: false,
+          suppressFeedback: false,
+        },
+      },
+      requestContext,
+    );
+    await (harness as any).processStreamChunk(state, { type: 'text-start', payload: { id: 'text-2' } }, requestContext);
+    await (harness as any).processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-2', text: 'Fact 2' } },
+      requestContext,
+    );
+
+    const messageEndEvents = events.filter(
+      (event): event is Extract<HarnessEvent, { type: 'message_end' }> => event.type === 'message_end',
+    );
+    const messageUpdateEvents = events.filter(
+      (event): event is Extract<HarnessEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+
+    expect(messageEndEvents).toHaveLength(1);
+    expect(messageEndEvents[0].message.content).toEqual([{ type: 'text', text: 'Fact 1' }]);
+    expect(messageUpdateEvents.at(-1)?.message.content).toEqual([{ type: 'text', text: 'Fact 2' }]);
+    expect(messageUpdateEvents.at(-1)?.message.id).not.toBe(messageEndEvents[0].message.id);
+  });
+
   it('emits generic reactive signal data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);

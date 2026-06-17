@@ -187,6 +187,7 @@ vi.mock('../agents/tools.js', () => ({
 
 vi.mock('../agents/workspace.js', () => ({
   getDynamicWorkspace: getDynamicWorkspaceMock,
+  getGoalJudgeTools: vi.fn(),
 }));
 
 vi.mock('../auth/storage.js', () => ({

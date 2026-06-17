@@ -1,5 +1,17 @@
 # @mastra/schema-compat
 
+## 1.2.14-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.2.12
+
+### Patch Changes
+
+- Fixed schema compatibility type declarations so JSON Schema types are bundled correctly. ([#17877](https://github.com/mastra-ai/mastra/pull/17877))
+
 ## 1.2.11
 
 ### Patch Changes
