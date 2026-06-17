@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Check for spam and notify via Slack DM
-        uses: actions/github-script@v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_USER_ID: 'U086EV0DN8H'

@@ -26,7 +26,7 @@ jobs:
     steps:
       - name: Check for major changesets
         id: check_major
-        uses: actions/github-script@v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           script: |
             const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
@@ -112,7 +112,7 @@ jobs:
       - name: Check if major version bump is allowed
         if: steps.check_major.outputs.has_major_changeset == 'true'
         id: check_approval
-        uses: actions/github-script@v8
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           github-token: ${{ steps.app_token.outputs.token }}
           script: |
