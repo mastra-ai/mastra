@@ -52,6 +52,7 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
+import { processSignalInput } from './process-signal-input';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
@@ -928,10 +929,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // use the default scope and are drained later by `signalDrainStep`
             // so each becomes its own turn.
             const preRunSignals = _internal?.drainPendingSignals?.(runId, 'pre-run') ?? [];
-            if (preRunSignals.length > 0) {
+            // Run input processors on pre-run signals so security guardrails
+            // (moderation, injection detection, etc.) apply before the first LLM call.
+            const approvedPreRunSignals = await processSignalInput({
+              signals: preRunSignals,
+              inputProcessors,
+              logger,
+              agentId,
+              processorStates,
+              requestContext,
+            });
+            if (approvedPreRunSignals.length > 0) {
               currentMessageId = _internal?.generateId?.() ?? generateId();
             }
-            for (const preRunSignal of preRunSignals) {
+            for (const preRunSignal of approvedPreRunSignals) {
               const signalForTranscript = messageList.addSignal(preRunSignal);
               safeEnqueue(controller, signalForTranscript.toDataPart());
             }
