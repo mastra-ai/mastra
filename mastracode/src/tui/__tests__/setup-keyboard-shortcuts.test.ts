@@ -90,7 +90,7 @@ function createState(isRunning: boolean) {
   const state = {
     editor,
     harness: {
-      isRunning: vi.fn(() => isRunning),
+      session: { run: { isRunning: vi.fn(() => isRunning) } },
       hasPendingSuspensions: vi.fn(() => false),
       getState: vi.fn(() => ({})),
       listModes: vi.fn(() => []),

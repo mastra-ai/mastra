@@ -125,7 +125,7 @@ describe('MastraTUI queueing', () => {
     };
     const state = {
       editor,
-      harness: { isRunning: vi.fn(() => true) },
+      harness: { session: { run: { isRunning: vi.fn(() => true) } } },
       pendingSlashCommands: [],
       pendingQueuedActions: [],
       pendingFollowUpMessages: [],
@@ -168,7 +168,7 @@ describe('MastraTUI queueing', () => {
     };
     const state = {
       editor,
-      harness: { isRunning: vi.fn(() => true) },
+      harness: { session: { run: { isRunning: vi.fn(() => true) } } },
       pendingSlashCommands: [],
       pendingQueuedActions: [],
       pendingFollowUpMessages: [],
@@ -209,7 +209,7 @@ describe('MastraTUI queueing', () => {
     const state = {
       editor,
       activeGoalJudge: { modelId: '__GATEWAY_OPENAI_MODEL__' },
-      harness: { isRunning: vi.fn(() => false) },
+      harness: { session: { run: { isRunning: vi.fn(() => false) } } },
       pendingSlashCommands: [],
       pendingQueuedActions: [],
       pendingFollowUpMessages: [],

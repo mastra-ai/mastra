@@ -134,8 +134,7 @@ describe('Harness mode-model persistence across restarts', () => {
     await session.createThread();
     await session.switchMode({ modeId: 'plan' });
 
-    const controller = new AbortController();
-    (session as unknown as { abortController: AbortController | null }).abortController = controller;
+    const controller = session.session.run.ensureAbortController();
 
     // Simulate a submit_plan tool that suspended during a plan-mode run.
     const pendingSuspensions = (

@@ -107,7 +107,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     // attempting the goal". Stop it immediately so clear means stop. Mirrors the
     // Esc/abort cleanup so a turn parked in a tool suspension (e.g. ask_user) is
     // also aborted cleanly.
-    if (state.harness.isRunning() || state.harness.hasPendingSuspensions()) {
+    if (state.harness.session.run.isRunning() || state.harness.hasPendingSuspensions()) {
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
