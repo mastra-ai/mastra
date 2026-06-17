@@ -1,6 +1,6 @@
 {
   "name": "@mastra/laminar",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Laminar observability provider for Mastra - tracing + scoring export",
   "type": "module",
   "main": "dist/index.js",
