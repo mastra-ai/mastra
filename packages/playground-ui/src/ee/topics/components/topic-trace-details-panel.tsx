@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useRef } from 'react';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDetailsView } from '@/domains/traces/components/trace-details-view';
 import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
@@ -16,30 +15,11 @@ export interface TopicTraceDetailsPanelProps {
 export function TopicTraceDetailsPanel({ traceId, selectedSpanId, onSpanSelect, onClose }: TopicTraceDetailsPanelProps) {
   const traceSpans = useTraceLightSpans(traceId);
   const spanDetail = useSpanDetail(traceId, selectedSpanId);
-  const autoSelectedTraceIdRef = useRef<string | null>(null);
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(
     traceSpans.data?.spans,
     selectedSpanId,
     spanId => onSpanSelect?.(spanId),
   );
-
-  const defaultSpanId = useMemo(() => {
-    const spans = traceSpans.data?.spans;
-    if (!spans?.length) return undefined;
-
-    return spans.find(span => span.parentSpanId == null)?.spanId ?? spans[0]?.spanId;
-  }, [traceSpans.data?.spans]);
-
-  useEffect(() => {
-    autoSelectedTraceIdRef.current = null;
-  }, [traceId]);
-
-  useEffect(() => {
-    if (!traceId || !defaultSpanId || selectedSpanId || autoSelectedTraceIdRef.current === traceId) return;
-
-    autoSelectedTraceIdRef.current = traceId;
-    onSpanSelect?.(defaultSpanId);
-  }, [defaultSpanId, onSpanSelect, selectedSpanId, traceId]);
 
   if (!traceId) return null;
 

@@ -37,10 +37,22 @@ function TopicsCards({ topics, onSubtopicSelect }: TopicsCardsProps) {
                   className="cursor-pointer rounded-xl border border-border1 bg-surface2 p-4 text-left transition-colors hover:bg-surface3"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: stringToColor(subtopic.name) }} />
+                    <span
+                      className="mt-1 h-3 w-3 shrink-0 rounded-full"
+                      style={{
+                        backgroundColor: stringToColor(subtopic.name),
+                        viewTransitionName: `topics-${subtopic.id}-pill`,
+                      }}
+                    />
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-icon-lg font-semibold text-neutral5">{subtopic.name}</h3>
-                      {subtopic.description ? <p className="mt-2 line-clamp-2 text-ui-sm text-neutral3">{subtopic.description}</p> : null}
+                      <h3 className="truncate text-icon-lg font-semibold text-neutral5" style={{ viewTransitionName: `topics-${subtopic.id}-title` }}>
+                        {subtopic.name}
+                      </h3>
+                      {subtopic.description ? (
+                        <p className="mt-2 line-clamp-2 text-ui-sm text-neutral3" style={{ viewTransitionName: `topics-${subtopic.id}-description` }}>
+                          {subtopic.description}
+                        </p>
+                      ) : null}
                     </div>
                     <span className="shrink-0 font-mono text-ui-xs text-neutral2">{subtopic.traceCount} traces</span>
                   </div>
@@ -61,21 +73,19 @@ export default function TopicsPage() {
   const aggregatedTopics = useMemo(() => aggregateTopics(topics), []);
   const subtopics = useMemo(() => aggregatedTopics.flatMap(topic => topic.subtopics), [aggregatedTopics]);
   const { data: tracesData } = useTraces({});
-  const resolvedTrace = tracesData?.spans[0];
-  const resolvedTraceId = resolvedTrace?.traceId ?? null;
-  const resolvedSpanId = resolvedTrace?.spanId ?? null;
+  const resolvedTraceId = tracesData?.spans[0]?.traceId ?? null;
   const selectedSubtopic = topicId ? subtopics.find(subtopic => subtopic.id === topicId) : findSubtopicByTraceId(subtopics, traceId);
   const selectedTraceId = traceId ?? null;
 
   const handleSubtopicSelect = (subtopic: TopicSubtopicWithCounts) => {
     setSelectedSpanId(null);
-    navigate(`/topics/${subtopic.id}`);
+    navigate(`/topics/${subtopic.id}`, { viewTransition: true });
   };
 
   const handleTraceSelect = () => {
     if (!selectedSubtopic || !resolvedTraceId) return;
 
-    setSelectedSpanId(resolvedSpanId);
+    setSelectedSpanId(null);
     navigate(`/topics/${selectedSubtopic.id}/traces/${resolvedTraceId}`);
   };
 
@@ -101,10 +111,22 @@ export default function TopicsPage() {
       {selectedSubtopic ? (
         <section className="flex h-full min-w-0 flex-col gap-4">
           <header className="flex items-start gap-3">
-            <span className="mt-2 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: stringToColor(selectedSubtopic.name) }} />
+            <span
+              className="mt-2 h-3 w-3 shrink-0 rounded-full"
+              style={{
+                backgroundColor: stringToColor(selectedSubtopic.name),
+                viewTransitionName: `topics-${selectedSubtopic.id}-pill`,
+              }}
+            />
             <div className="min-w-0 space-y-1">
-              <h1 className="text-icon-xl font-semibold text-neutral6">{selectedSubtopic.name}</h1>
-              {selectedSubtopic.description ? <p className="text-ui-sm text-neutral3">{selectedSubtopic.description}</p> : null}
+              <h1 className="text-icon-xl font-semibold text-neutral6" style={{ viewTransitionName: `topics-${selectedSubtopic.id}-title` }}>
+                {selectedSubtopic.name}
+              </h1>
+              {selectedSubtopic.description ? (
+                <p className="text-ui-sm text-neutral3" style={{ viewTransitionName: `topics-${selectedSubtopic.id}-description` }}>
+                  {selectedSubtopic.description}
+                </p>
+              ) : null}
             </div>
           </header>
           <TopicTraceSummaryList
