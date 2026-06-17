@@ -1,34 +1,110 @@
-import {
-  Badge,
-  EntityHeader,
-  ScrollArea,
-  Tabs,
-  TabList,
-  Tab,
-  TabContent,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  WorkflowIcon,
-  useCopyToClipboard,
-  toast,
-} from '@mastra/playground-ui';
-import { CopyIcon, Cpu } from 'lucide-react';
-import { useState, useEffect, useContext, useMemo } from 'react';
+import type { GetWorkflowResponse } from '@mastra/client-js';
+import { Button, Icon, ScrollArea, toast } from '@mastra/playground-ui';
+import { Plus } from 'lucide-react';
+import type { ContextType, ReactNode } from 'react';
+import { useState, useEffect, useContext } from 'react';
 
+import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
+import { WorkflowRecentRuns } from '../runs/workflow-run-list';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
-import { WorkflowStepDetailContent } from './workflow-step-detail';
-import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
-import { RequestContextSchemaForm } from '@/domains/request-context';
 
 import { useWorkflow } from '@/hooks/use-workflows';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowInformationProps {
   workflowId: string;
   initialRunId?: string;
+}
+
+type WorkflowActionProps = Pick<
+  ContextType<typeof WorkflowRunContext>,
+  | 'createWorkflowRun'
+  | 'streamWorkflow'
+  | 'resumeWorkflow'
+  | 'streamResult'
+  | 'isStreamingWorkflow'
+  | 'isCancellingWorkflowRun'
+  | 'cancelWorkflowRun'
+>;
+
+type InitialWorkflowSidebarProps = WorkflowActionProps & {
+  workflowId: string;
+  workflow?: GetWorkflowResponse;
+  isLoading: boolean;
+  setRunId: (runId: string) => void;
+};
+
+type RunWorkflowSidebarProps = InitialWorkflowSidebarProps & {
+  runId: string;
+  observeWorkflowStream?: ({
+    workflowId,
+    runId,
+    storeRunResult,
+  }: {
+    workflowId: string;
+    runId: string;
+    storeRunResult: WorkflowRunStreamResult | null;
+  }) => void;
+};
+
+function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onClick: () => void }) {
+  const { Link, paths } = useLinkComponent();
+
+  return (
+    <div className="flex-none border-b border-border1/50 px-4 py-4">
+      <Button
+        as={Link}
+        href={`${paths.workflowLink(workflowId)}/graph`}
+        variant="primary"
+        className="w-full"
+        onClick={onClick}
+      >
+        <Icon>
+          <Plus />
+        </Icon>
+        New workflow run
+      </Button>
+    </div>
+  );
+}
+
+function WorkflowInformationTopSection({ children, newRunButton }: { children: ReactNode; newRunButton?: ReactNode }) {
+  return (
+    <section
+      data-testid="workflow-information-top-section"
+      className="flex max-h-[50%] min-w-0 flex-none flex-col overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3"
+    >
+      {newRunButton}
+      <ScrollArea
+        data-testid="workflow-information-top-scroll-area"
+        className="min-h-0 flex-1"
+        viewPortClassName="h-full"
+        mask={{ top: false }}
+      >
+        {children}
+      </ScrollArea>
+    </section>
+  );
+}
+
+function InitialWorkflowSidebar(props: InitialWorkflowSidebarProps) {
+  return <WorkflowTrigger {...props} />;
+}
+
+function RunWorkflowSidebar({ runId, observeWorkflowStream, ...props }: RunWorkflowSidebarProps) {
+  return <WorkflowRunDetail {...props} runId={runId} observeWorkflowStream={observeWorkflowStream} />;
+}
+
+function RecentWorkflowRunsSection({ workflowId, activeRunId }: { workflowId: string; activeRunId?: string }) {
+  return (
+    <section className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3">
+      <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
+        <WorkflowRecentRuns workflowId={workflowId} runId={activeRunId} />
+      </ScrollArea>
+    </section>
+  );
 }
 
 export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInformationProps) {
@@ -44,36 +120,36 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     resumeWorkflow,
     cancelWorkflowRun,
     isCancellingWorkflowRun,
+    clearData,
+    setRunId: setContextRunId,
+    runId: contextRunId,
   } = useContext(WorkflowRunContext);
 
-  const { stepDetail, closeStepDetail } = useWorkflowStepDetail();
-
-  const [tab, setTab] = useState<string>('current-run');
   const [runId, setRunId] = useState<string>('');
-  const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
-  const stepsCount = Object.keys(workflow?.steps ?? {}).length;
+  const isCurrentRunFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResult?.status ?? '');
+  const showNewRunButton =
+    Boolean(initialRunId || runId || contextRunId || isStreamingWorkflow) || isCurrentRunFinished;
 
-  // Generate dynamic tab name based on step detail type
-  const nodeDetailTabName = useMemo(() => {
-    if (!stepDetail) return null;
-    if (stepDetail.type === 'map-config') {
-      return 'Map Config';
-    }
-    if (stepDetail.type === 'nested-graph') {
-      return 'Nested Workflow';
-    }
-    return 'Node';
-  }, [stepDetail]);
+  const actionProps = {
+    workflowId,
+    setRunId,
+    workflow: workflow ?? undefined,
+    isLoading,
+    createWorkflowRun,
+    streamWorkflow,
+    resumeWorkflow,
+    streamResult,
+    isStreamingWorkflow,
+    isCancellingWorkflowRun,
+    cancelWorkflowRun,
+  };
 
   useEffect(() => {
     if (!runId && !initialRunId) {
       closeStreamsAndReset();
     }
-    // Only react to run identity changes. `closeStreamsAndReset` comes from context
-    // and is intentionally excluded to avoid refiring on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, initialRunId]);
+  }, [runId, initialRunId, closeStreamsAndReset]);
 
   useEffect(() => {
     if (error) {
@@ -82,136 +158,36 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     }
   }, [error]);
 
-  // Auto-switch tabs when step detail opens/closes.
-  // `tab` is read but intentionally excluded from deps — including it would refire
-  // on every manual tab change and fight user navigation. We only want to react
-  // to stepDetail transitions.
-  useEffect(() => {
-    if (stepDetail) {
-      setTab('node-details');
-    } else if (tab === 'node-details') {
-      setTab('current-run');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepDetail]);
-
-  // Handle tab change - close step detail when switching away from node-details
-  const handleTabChange = (newTab: string) => {
-    if (tab === 'node-details' && newTab !== 'node-details') {
-      closeStepDetail();
-    }
-    setTab(newTab);
-  };
-
   if (error) {
     return null;
   }
 
+  if (!workflowId) {
+    return <div data-testid="workflow-information-panel" className="flex h-full min-h-0 w-full flex-col gap-2 p-2" />;
+  }
+
+  const resetToNewRun = () => {
+    closeStreamsAndReset();
+    clearData();
+    setRunId('');
+    setContextRunId('');
+  };
+
   return (
-    <div className="h-full w-full py-2 pr-2">
-      <div className="h-full min-w-0 w-full bg-surface2 rounded-studio-panel border border-border2/40 overflow-hidden">
-        <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
-          <Tabs defaultTab="current-run" value={tab} onValueChange={handleTabChange} className="overflow-y-visible">
-            <div className="sticky top-0 z-10 bg-surface2">
-              <EntityHeader icon={<WorkflowIcon />} title={workflow?.name || ''} isLoading={isLoading}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button onClick={handleCopy} className="h-badge-default">
-                        <Badge icon={<CopyIcon />} variant="default">
-                          {workflowId}
-                        </Badge>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Copy Workflow ID for use in code</TooltipContent>
-                  </Tooltip>
+    <div data-testid="workflow-information-panel" className="flex h-full min-h-0 w-full flex-col gap-2 p-2">
+      <WorkflowInformationTopSection
+        newRunButton={
+          showNewRunButton ? <NewWorkflowRunButton workflowId={workflowId} onClick={resetToNewRun} /> : undefined
+        }
+      >
+        {initialRunId ? (
+          <RunWorkflowSidebar {...actionProps} runId={initialRunId} observeWorkflowStream={observeWorkflowStream} />
+        ) : (
+          <InitialWorkflowSidebar {...actionProps} />
+        )}
+      </WorkflowInformationTopSection>
 
-                  <Badge>
-                    {stepsCount} step{stepsCount > 1 ? 's' : ''}
-                  </Badge>
-
-                  {workflow?.isProcessorWorkflow && (
-                    <Badge icon={<Cpu className="h-3 w-3" />} className="bg-violet-500/20 text-violet-400">
-                      Processor
-                    </Badge>
-                  )}
-                </div>
-              </EntityHeader>
-              <TabList>
-                <Tab value="current-run">Current Run</Tab>
-                {workflow?.requestContextSchema && <Tab value="request-context">Request Context</Tab>}
-                <Tab value="run-options">Run Options</Tab>
-                {stepDetail && nodeDetailTabName && (
-                  <Tab
-                    value="node-details"
-                    onClose={() => {
-                      closeStepDetail();
-                      setTab('current-run');
-                    }}
-                  >
-                    {nodeDetailTabName} Details
-                  </Tab>
-                )}
-              </TabList>
-            </div>
-
-            <div className="relative">
-              <TabContent value="current-run">
-                {workflowId ? (
-                  initialRunId ? (
-                    <WorkflowRunDetail
-                      workflowId={workflowId}
-                      runId={initialRunId}
-                      setRunId={setRunId}
-                      workflow={workflow ?? undefined}
-                      isLoading={isLoading}
-                      createWorkflowRun={createWorkflowRun}
-                      streamWorkflow={streamWorkflow}
-                      resumeWorkflow={resumeWorkflow}
-                      streamResult={streamResult}
-                      isStreamingWorkflow={isStreamingWorkflow}
-                      isCancellingWorkflowRun={isCancellingWorkflowRun}
-                      cancelWorkflowRun={cancelWorkflowRun}
-                      observeWorkflowStream={observeWorkflowStream}
-                    />
-                  ) : (
-                    <WorkflowTrigger
-                      workflowId={workflowId}
-                      setRunId={setRunId}
-                      workflow={workflow ?? undefined}
-                      isLoading={isLoading}
-                      createWorkflowRun={createWorkflowRun}
-                      streamWorkflow={streamWorkflow}
-                      resumeWorkflow={resumeWorkflow}
-                      streamResult={streamResult}
-                      isStreamingWorkflow={isStreamingWorkflow}
-                      isCancellingWorkflowRun={isCancellingWorkflowRun}
-                      cancelWorkflowRun={cancelWorkflowRun}
-                    />
-                  )
-                ) : null}
-              </TabContent>
-
-              {workflow?.requestContextSchema && (
-                <TabContent value="request-context">
-                  <div className="p-5">
-                    <RequestContextSchemaForm requestContextSchema={workflow.requestContextSchema} />
-                  </div>
-                </TabContent>
-              )}
-
-              <TabContent value="run-options">
-                <TracingRunOptions />
-              </TabContent>
-              {stepDetail && (
-                <TabContent value="node-details">
-                  <WorkflowStepDetailContent />
-                </TabContent>
-              )}
-            </div>
-          </Tabs>
-        </ScrollArea>
-      </div>
+      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={initialRunId || runId} />
     </div>
   );
 }
