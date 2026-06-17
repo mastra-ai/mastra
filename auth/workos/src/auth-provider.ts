@@ -80,6 +80,7 @@ export class MastraAuthWorkos
   protected ssoConfig: MastraAuthWorkosOptions['sso'];
   protected authService: AuthService<Request, Response>;
   protected config: AuthKitConfig;
+  protected cookieSecure: boolean;
   protected fetchMemberships: boolean;
   protected trustJwtClaims: boolean;
   protected jwtClaimOptions?: MastraAuthWorkosOptions['jwtClaims'];
@@ -143,6 +144,11 @@ export class MastraAuthWorkos
       cookieDomain: undefined,
       apiHttps: true,
     };
+
+    // Secure cookies: default to true (secure), allow explicit opt-out for local development.
+    // This is safer than relying on NODE_ENV which may be misconfigured in production.
+    // Default to NODE_ENV check for backwards compatibility, but allow explicit override
+    this.cookieSecure = options?.session?.secure ?? process.env['NODE_ENV'] === 'production';
 
     // Create session storage and auth service
     const storage = new WebSessionStorage(this.config);
@@ -564,7 +570,7 @@ export class MastraAuthWorkos
         'Path=/',
         'HttpOnly',
         `SameSite=${this.config.cookieSameSite ?? 'Lax'}`,
-        process.env['NODE_ENV'] === 'production' ? 'Secure' : '',
+        this.cookieSecure ? 'Secure' : '',
       ]
         .filter(Boolean)
         .join('; ');

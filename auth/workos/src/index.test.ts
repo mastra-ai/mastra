@@ -6,6 +6,7 @@ import { MastraAuthWorkos } from './index';
 // Mock the WorkOS class
 const mockListOrganizationMemberships = vi.fn();
 const mockGetUser = vi.fn();
+const mockAuthenticateWithCode = vi.fn();
 const mockWorkOSConstructor = vi.fn();
 
 vi.mock('@workos-inc/node', () => {
@@ -19,6 +20,7 @@ vi.mock('@workos-inc/node', () => {
         getJwksUrl: vi.fn().mockReturnValue('https://mock-jwks-url'),
         listOrganizationMemberships: mockListOrganizationMemberships,
         getUser: mockGetUser,
+        authenticateWithCode: mockAuthenticateWithCode,
       };
     }
   }
@@ -47,7 +49,7 @@ vi.mock('@mastra/auth', () => ({
 
 // Mock @workos/authkit-session
 const mockWithAuth = vi.fn();
-vi.mock('@workos/authkit-session', () => {
+vi.mock('@workos/authkit-session', async importOriginal => {
   class MockAuthService {
     withAuth = mockWithAuth;
     constructor() {}
@@ -58,10 +60,10 @@ vi.mock('@workos/authkit-session', () => {
   return {
     AuthService: MockAuthService,
     CookieSessionStorage: MockCookieSessionStorage,
-    sessionEncryption: vi.fn().mockReturnValue({
-      encrypt: vi.fn(),
-      decrypt: vi.fn(),
-    }),
+    sessionEncryption: {
+      sealData: vi.fn().mockResolvedValue('encrypted-session-data'),
+      unsealData: vi.fn(),
+    },
   };
 });
 
@@ -76,6 +78,7 @@ describe('MastraAuthWorkos', () => {
     mockWithAuth.mockReset();
     mockListOrganizationMemberships.mockReset();
     mockGetUser.mockReset();
+    mockAuthenticateWithCode.mockReset();
     vi.mocked(verifyJwks).mockReset();
     // Reset environment variables
     delete process.env.WORKOS_API_KEY;
@@ -522,5 +525,94 @@ describe('MastraAuthWorkos', () => {
     // Test with user without permissions
     const noPermissionsUser = { id: 'user789', workosId: 'wos789' };
     expect(await workos.authorizeUser(noPermissionsUser)).toBe(false);
+  });
+
+  describe('handleCallback - secure cookie', () => {
+    const mockAuthResponse = {
+      user: {
+        id: 'user123',
+        email: 'test@example.com',
+        firstName: 'Test',
+        lastName: 'User',
+        profilePictureUrl: null,
+        emailVerified: true,
+        createdAt: new Date().toISOString(),
+      },
+      accessToken: 'mock-access-token',
+      refreshToken: 'mock-refresh-token',
+      organizationId: 'org-123',
+    };
+
+    beforeEach(() => {
+      mockAuthenticateWithCode.mockResolvedValue(mockAuthResponse);
+    });
+
+    it('should default to NODE_ENV check for backwards compatibility', async () => {
+      const originalNodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'production';
+
+      const auth = new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword },
+      });
+
+      const result = await auth.handleCallback('test-code', 'test-state');
+
+      expect(result.cookies).toBeDefined();
+      expect(result.cookies?.[0]).toContain('Secure');
+
+      process.env['NODE_ENV'] = originalNodeEnv;
+    });
+
+    it('should set Secure flag when session.secure is explicitly true', async () => {
+      const auth = new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword, secure: true },
+      });
+
+      const result = await auth.handleCallback('test-code', 'test-state');
+
+      expect(result.cookies).toBeDefined();
+      expect(result.cookies?.[0]).toContain('Secure');
+    });
+
+    it('should NOT set Secure flag when session.secure is false (local dev)', async () => {
+      const auth = new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword, secure: false },
+      });
+
+      const result = await auth.handleCallback('test-code', 'test-state');
+
+      expect(result.cookies).toBeDefined();
+      expect(result.cookies?.[0]).not.toContain('Secure');
+    });
+
+    it('should allow explicit secure override regardless of NODE_ENV', async () => {
+      // Even if NODE_ENV is 'development', explicit secure: true should set Secure flag
+      const originalNodeEnv = process.env['NODE_ENV'];
+      process.env['NODE_ENV'] = 'development';
+
+      const auth = new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword, secure: true },
+      });
+
+      const result = await auth.handleCallback('test-code', 'test-state');
+
+      expect(result.cookies).toBeDefined();
+      expect(result.cookies?.[0]).toContain('Secure');
+
+      // Restore
+      process.env['NODE_ENV'] = originalNodeEnv;
+    });
   });
 });
