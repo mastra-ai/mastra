@@ -267,6 +267,7 @@ async function executeAgent(
       : await agent.generateLegacy(input, {
           scorers: {},
           returnScorerData: true,
+          abortSignal: generateSignal,
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           ...(tracingOptions ? { tracingOptions } : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),
