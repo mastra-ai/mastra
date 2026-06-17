@@ -12,7 +12,12 @@ export interface TopicTraceDetailsPanelProps {
   onClose: () => void;
 }
 
-export function TopicTraceDetailsPanel({ traceId, selectedSpanId, onSpanSelect, onClose }: TopicTraceDetailsPanelProps) {
+export function TopicTraceDetailsPanel({
+  traceId,
+  selectedSpanId,
+  onSpanSelect,
+  onClose,
+}: TopicTraceDetailsPanelProps) {
   const traceSpans = useTraceLightSpans(traceId);
   const spanDetail = useSpanDetail(traceId, selectedSpanId);
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(

@@ -1,6 +1,6 @@
 import { Button, Txt } from '@mastra/playground-ui';
 import { X } from 'lucide-react';
-import type { ElementType, ReactNode } from 'react';
+import type { ElementType, MouseEvent, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface ThreadListProps {
@@ -63,6 +63,7 @@ export interface ThreadListItemProps {
   href?: string;
   to?: string;
   isActive?: boolean;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   onDelete?: () => void;
   deleteLabel?: string;
   children: ReactNode;
@@ -73,6 +74,7 @@ export const ThreadListItem = ({
   href,
   to,
   isActive,
+  onClick,
   onDelete,
   deleteLabel = 'delete',
   children,
@@ -83,9 +85,10 @@ export const ThreadListItem = ({
         as={as}
         href={href}
         to={to}
+        onClick={onClick}
         variant="ghost"
         className={cn(
-          'w-full min-w-0 justify-start rounded-xl text-left',
+          'min-h-form-md !h-auto w-full min-w-0 justify-start rounded-xl px-3 py-2 text-left',
           onDelete && 'pr-9',
           isActive && 'bg-surface4 text-neutral6',
         )}

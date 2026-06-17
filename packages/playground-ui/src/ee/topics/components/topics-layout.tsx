@@ -6,16 +6,17 @@ export interface TopicsLayoutProps {
   sidebar?: React.ReactNode;
   children?: React.ReactNode;
   tracePanel?: React.ReactNode;
+  contentPadding?: boolean;
 }
 
-export function TopicsLayout({ sidebar, children, tracePanel }: TopicsLayoutProps) {
+export function TopicsLayout({ sidebar, children, tracePanel, contentPadding = true }: TopicsLayoutProps) {
   const hasContent = Boolean(children || tracePanel);
 
   return (
     <div className="flex h-full min-h-0 bg-surface2 text-neutral4">
       {sidebar ? <aside className="min-h-0 w-[22rem] shrink-0 border-r border-border1">{sidebar}</aside> : null}
       {hasContent ? (
-        <main className="min-w-0 flex-1 p-4">
+        <main className={contentPadding ? 'min-w-0 flex-1 p-4' : 'min-w-0 flex-1'}>
           <Group className="h-full min-h-0 w-full min-w-0" direction="horizontal">
             {children ? (
               <Panel id="topic-main" className="min-w-0 pr-2" minSize={35}>
