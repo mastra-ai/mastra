@@ -114,11 +114,22 @@ function buildMastra(testExporter: TestExporter, agent: Agent, variant: 'durable
   return { mastra, wrapped: mastra.getAgent('wrapped') as any };
 }
 
-async function runToCompletion(wrapped: any, prompt: string) {
+/** Wait until span delivery to the exporter quiesces (count stable across two checks),
+ *  rather than a fixed sleep. Neutral signal — doesn't pre-judge the assertions. */
+async function settle(testExporter: TestExporter, maxMs = 2000) {
+  let prev = -1;
+  for (let waited = 0; waited < maxMs; waited += 20) {
+    const n = testExporter.getAllSpans().length;
+    if (n > 0 && n === prev) return;
+    prev = n;
+    await new Promise(r => setTimeout(r, 20));
+  }
+}
+
+async function runToCompletion(wrapped: any, prompt: string, testExporter: TestExporter) {
   const res = await wrapped.stream(prompt);
   await res.output.consumeStream();
-  // spans export on end; allow the realtime exporter's microtasks to settle
-  await new Promise(r => setTimeout(r, 50));
+  await settle(testExporter);
   res.cleanup?.();
 }
 
@@ -134,7 +145,7 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
   it('DurableAgent simple run: AGENT_RUN root → generation → step → inference → chunk, all closed', async () => {
     const agent = new Agent({ id: 'a', name: 'a', instructions: 'x', model: textModel('Hello') as any });
     const { wrapped } = buildMastra(testExporter, agent, 'durable');
-    await runToCompletion(wrapped, 'hi');
+    await runToCompletion(wrapped, 'hi', testExporter);
 
     expect(testExporter.getTraceIds()).toHaveLength(1);
     const agentRuns = testExporter.getSpansByType('agent_run' as any);
@@ -160,7 +171,7 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
       tools: { get_weather: weatherTool },
     });
     const { wrapped } = buildMastra(testExporter, agent, 'durable');
-    await runToCompletion(wrapped, 'weather in paris?');
+    await runToCompletion(wrapped, 'weather in paris?', testExporter);
 
     expect(testExporter.getTraceIds()).toHaveLength(1);
     expect(testExporter.getSpansByType('agent_run' as any)).toHaveLength(1);
@@ -182,7 +193,7 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     const { wrapped } = buildMastra(testExporter, agent, 'durable');
     // the run fails; consuming the stream may reject — we only care that spans closed.
     try {
-      await runToCompletion(wrapped, 'hi');
+      await runToCompletion(wrapped, 'hi', testExporter);
     } catch {
       await new Promise(r => setTimeout(r, 50));
     }
@@ -202,7 +213,7 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
       tools: { get_weather: weatherTool },
     });
     const { wrapped } = buildMastra(testExporter, agent, 'evented');
-    await runToCompletion(wrapped, 'weather in paris?');
+    await runToCompletion(wrapped, 'weather in paris?', testExporter);
 
     expect(testExporter.getTraceIds()).toHaveLength(1);
     expect(testExporter.getSpansByType('agent_run' as any)).toHaveLength(1);

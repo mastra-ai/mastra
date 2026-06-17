@@ -174,8 +174,9 @@ export function createDurableToolCallStep() {
           if (agentSpanData) {
             obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({ output });
           }
-        } catch {
+        } catch (error) {
           // Span bookkeeping must never break suspension.
+          logger?.warn?.(`[DurableAgent] Failed to end spans on suspend: ${error}`);
         }
       };
 

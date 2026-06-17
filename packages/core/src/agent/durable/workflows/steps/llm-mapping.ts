@@ -173,8 +173,11 @@ export function createDurableLLMMappingStep() {
               isContinued: pendingPayload?.stepResult?.isContinued,
             },
           });
-        } catch {
+        } catch (error) {
           // Span bookkeeping must never break the merge step.
+          (mastra as Mastra | undefined)
+            ?.getLogger?.()
+            ?.warn?.(`[DurableAgent] Failed to close model_step span: ${error}`);
         }
       }
 

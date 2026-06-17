@@ -644,8 +644,9 @@ export class DurableAgent<
           reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
           reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
         }
-      } catch {
+      } catch (error) {
         // Span bookkeeping must never block resume.
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
       }
     }
 
