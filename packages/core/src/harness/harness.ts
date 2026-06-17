@@ -1946,7 +1946,7 @@ export class Harness<TState = {}> {
   private buildSharedRunOptions(): Record<string, unknown> {
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
     const modelName = this.getCurrentModelId().split('/').pop() ?? '';
-    const isReasoningModel = /^(o1|o3|o4|o1-mini|o3-mini|o3-pro|o4-mini|gpt-5|sonar-reasoning|sonar-reasoning-pro|grok-4-fast-reasoning|grok-4-1-fast-reasoning)/.test(modelName);
+    const isReasoningModel = /^(o1|o3|o4|o1-mini|o3-mini|o3-pro|o4-mini|gpt-5|sonar-reasoning|sonar-reasoning-pro|grok-4-fast-reasoning|grok-4-1-fast-reasoning|grok-4-reasoning)/.test(modelName);
     const shared: Record<string, unknown> = {
       maxSteps: HARNESS_MAX_STEPS,
       savePerStep: false,
