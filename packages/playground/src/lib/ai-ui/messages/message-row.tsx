@@ -16,6 +16,7 @@ import { messageStatusRenderers } from './renderers/status-renderers';
 import { ToolInvocationPartRenderer } from './renderers/tool-invocation-part-renderer';
 import { UserFilePartRenderer } from './renderers/user-file-part-renderer';
 import { UserTextPartRenderer } from './renderers/user-text-part-renderer';
+import { getSignalType, isSignalData, isUserSignalType, toReactiveSignalData } from './signal-data';
 import { ProviderLogo } from '@/domains/llm/components/provider-logo';
 
 export interface MessageRowProps {
@@ -32,18 +33,42 @@ export interface MessageRowProps {
 type MessagePart = MastraDBMessage['content']['parts'][number];
 
 /**
- * Normalize the stored message role for display. `signal`+`type:'user'` renders
- * as a user message; messages without a displayable role are dropped.
+ * Normalize the stored message role for display. A `signal`+`type:'user'` row
+ * renders as a user message; a non-user (reactive) `signal` row is folded onto
+ * an assistant message as a `data-signal` badge (see `toReactiveSignalMessage`);
+ * messages without a displayable role are dropped.
  */
 const getMessageDisplayRole = (message: MastraDBMessage): MastraDBMessage['role'] | null => {
   if (message.role === 'assistant' || message.role === 'user' || message.role === 'system') return message.role;
-  if (message.role === 'signal' && message.type === 'user') return 'user';
+  if (message.role === 'signal') return isUserSignalType(getSignalType(message)) ? 'user' : 'assistant';
   return null;
+};
+
+/**
+ * Convert a persisted reactive (non-user) `signal` row into an assistant message
+ * carrying a single `data-signal` part, so the existing `SignalBadge` renderer
+ * shows it on read-back. Restores 1.41.0 behavior lost in the chat renderer
+ * rewrite (PR #17774). Returns `null` when the signal payload is not a shape the
+ * `SignalBadge` can render, so the row is dropped instead of leaving an empty
+ * assistant bubble.
+ */
+const toReactiveSignalMessage = (message: MastraDBMessage): MastraDBMessage | null => {
+  const data = toReactiveSignalData(message);
+  if (!isSignalData(data)) return null;
+  return {
+    ...message,
+    role: 'assistant',
+    content: {
+      ...message.content,
+      parts: [{ type: 'data-signal', data }],
+    },
+  } as MastraDBMessage;
 };
 
 const toDisplayMessage = (message: MastraDBMessage): MastraDBMessage | null => {
   const displayRole = getMessageDisplayRole(message);
   if (displayRole === null) return null;
+  if (message.role === 'signal' && displayRole === 'assistant') return toReactiveSignalMessage(message);
   if (displayRole === message.role) return message;
   return { ...message, role: displayRole };
 };

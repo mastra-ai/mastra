@@ -30,11 +30,6 @@ import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
 import {
-  CRITICAL_DISPLAY_STATE_EVENT_TYPES,
-  DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS,
-  DisplayStateScheduler,
-} from './display-state-scheduler';
-import {
   askUserTool,
   createSubagentTool,
   submitPlanTool,
@@ -50,8 +45,6 @@ import type {
   HeartbeatHandler,
   HarnessConfig,
   HarnessDisplayState,
-  HarnessDisplayStateListener,
-  HarnessDisplayStateSubscriptionOptions,
   HarnessEvent,
   HarnessEventListener,
   HarnessMessage,
@@ -454,7 +447,6 @@ export class Harness<TState = {}> {
   private resourceId: string;
   private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
-  private displayStateSchedulers = new Set<DisplayStateScheduler>();
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
   private currentRunId: string | null = null;
@@ -564,14 +556,25 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Sets or updates the harness-level browser and propagates it to static mode agents.
+   * Sets or updates the harness-level browser and propagates it to mode agents.
    */
   setBrowser(browser: MastraBrowser | undefined): void {
     this.browser = browser;
     this.browserFn = undefined;
 
+    // Collect unique agents: shared backing agent + any deprecated mode.agent
+    // instances so all receive the browser (signal providers may be attached to
+    // any of them).
+    const agents = new Set<Agent<any, any, any, any>>();
+    if (this.config.agent) {
+      agents.add(this.config.agent);
+    }
     for (const mode of this.config.modes) {
-      const agent = this.getAgentForMode(mode);
+      if (mode.agent || !this.config.agent) {
+        agents.add(this.getAgentForMode(mode));
+      }
+    }
+    for (const agent of agents) {
       agent.setBrowser(browser);
     }
   }
@@ -632,9 +635,20 @@ export class Harness<TState = {}> {
       }
     }
 
-    // Propagate harness-level Mastra, memory, workspace, browser, and pubsub to mode agents (after workspace init)
+    // Propagate harness-level Mastra, memory, workspace, browser, and pubsub
+    // to the agent(s) that back each mode (after workspace init).
+    // Collect unique agents: shared backing agent + any deprecated mode.agent
+    // instances so all receive runtime services.
+    const agents = new Set<Agent<any, any, any, any>>();
+    if (this.config.agent) {
+      agents.add(this.config.agent);
+    }
     for (const mode of this.config.modes) {
-      const agent = this.getAgentForMode(mode);
+      if (mode.agent || !this.config.agent) {
+        agents.add(this.getAgentForMode(mode));
+      }
+    }
+    for (const agent of agents) {
       this.propagateRuntimeServicesToAgent(agent);
     }
 
@@ -871,44 +885,56 @@ export class Harness<TState = {}> {
   }
 
   private getAgentForMode(mode: HarnessMode): Agent<any, any, any, any> {
+    // Deprecated per-mode agent — use directly, no forking.
+    if (mode.agent) {
+      if (!this.#legacyAgentMode[mode.id]) {
+        this.#legacyAgentMode[mode.id] = mode.agent;
+      }
+      return this.#legacyAgentMode[mode.id]!;
+    }
+
+    // Shared backing agent — reuse the single instance.
+    // The harness never mutates the agent's own instructions or tools.
+    // Mode instructions are passed at call time via buildAgentMessageStreamOptions;
+    // mode tools are resolved at execution time via buildToolsets.
+    if (this.config.agent) {
+      return this.config.agent;
+    }
+
+    // No backing agent — construct one per mode (cached).
     if (!this.#legacyAgentMode[mode.id]) {
+      if (!mode.defaultModelId) {
+        throw new Error(`Mode ${mode.id} requires a defaultModelId when no backing agent is configured`);
+      }
+
       const instructions = [this.#instructions ?? '', mode.instructions].filter(Boolean).join('\n');
       const modeTools = {
         ...mode.tools,
         ...mode.additionalTools,
       };
 
-      if (mode.agent) {
-        this.#legacyAgentMode[mode.id] = mode.agent;
-      } else if (this.config.agent) {
-        const forkedAgent = this.config.agent.__fork();
-        if (instructions) {
-          forkedAgent.__updateInstructions(instructions);
-        }
-        if (mode.tools || mode.additionalTools) {
-          forkedAgent.__setTools(modeTools as any);
-        }
-        this.#legacyAgentMode[mode.id] = forkedAgent;
-      } else {
-        if (!mode.defaultModelId) {
-          throw new Error(`Mode ${mode.id} requires a defaultModelId when no backing agent is configured`);
-        }
-
-        const model = this.config.resolveModel ? this.config.resolveModel(mode.defaultModelId) : mode.defaultModelId;
-        const forkedAgent = new Agent({
-          id: `${this.id}-agent`,
-          name: `Harness ${this.id} agent`,
-          model,
-          instructions,
-          // TODO move to permissions and global tools
-          tools: modeTools,
-        });
-
-        this.#legacyAgentMode[mode.id] = forkedAgent;
-      }
+      const model = this.config.resolveModel ? this.config.resolveModel(mode.defaultModelId) : mode.defaultModelId;
+      this.#legacyAgentMode[mode.id] = new Agent({
+        id: `${this.id}-agent`,
+        name: `Harness ${this.id} agent`,
+        model,
+        instructions,
+        tools: modeTools,
+      });
     }
-
     return this.#legacyAgentMode[mode.id]!;
+  }
+
+  /**
+   * Resolve the combined instructions for the current mode: harness-level
+   * instructions + mode-specific instructions. Passed at call time via
+   * `buildAgentMessageStreamOptions` so the agent's own instructions are
+   * never mutated.
+   */
+  private resolveCurrentModeInstructions(): string | undefined {
+    const mode = this.getCurrentMode();
+    const combined = [this.#instructions ?? '', mode?.instructions ?? ''].filter(Boolean).join('\n');
+    return combined || undefined;
   }
 
   /**
@@ -1893,6 +1919,10 @@ export class Harness<TState = {}> {
     this.abortRequested = false;
     this.abortController ??= new AbortController();
     const requestContext = await this.buildRequestContext(requestContextInput);
+    // Resolve mode-aware instructions at call time so the agent's own
+    // instructions are never mutated by the harness.
+    const modeInstructions = this.config.agent ? this.resolveCurrentModeInstructions() : undefined;
+
     const streamOptions: Record<string, unknown> = {
       ...this.buildSharedRunOptions(),
       memory: { thread: this.currentThreadId, resource: this.resourceId },
@@ -1900,6 +1930,7 @@ export class Harness<TState = {}> {
       requestContext,
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
+      ...(modeInstructions && { instructions: modeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(requestContext);
 
@@ -3440,7 +3471,7 @@ export class Harness<TState = {}> {
   restoreDisplayTasks(tasks: TaskItemSnapshot[]): void {
     this.displayState.previousTasks = [...this.displayState.tasks];
     this.displayState.tasks = [...tasks];
-    this.dispatchDisplayStateChanged(false);
+    this.dispatchDisplayStateChanged();
   }
 
   /**
@@ -3737,29 +3768,6 @@ export class Harness<TState = {}> {
     };
   }
 
-  /**
-   * Subscribe to coalesced display state snapshots.
-   *
-   * Use this for UI rendering paths that only need the latest display state.
-   * Raw event consumers should continue to use `subscribe()`.
-   */
-  subscribeDisplayState(
-    listener: HarnessDisplayStateListener,
-    options: HarnessDisplayStateSubscriptionOptions = {},
-  ): () => void {
-    const scheduler = new DisplayStateScheduler(
-      listener,
-      options.windowMs ?? DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS.windowMs,
-      options.maxWaitMs ?? DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS.maxWaitMs,
-    );
-    this.displayStateSchedulers.add(scheduler);
-
-    return () => {
-      this.displayStateSchedulers.delete(scheduler);
-      scheduler.dispose();
-    };
-  }
-
   private emit(event: HarnessEvent): void {
     // Update display state based on the event (before dispatching to listeners)
     this.applyDisplayStateUpdate(event);
@@ -3767,12 +3775,11 @@ export class Harness<TState = {}> {
     this.dispatchToListeners(event);
 
     if (event.type !== 'display_state_changed') {
-      const isCritical = CRITICAL_DISPLAY_STATE_EVENT_TYPES.has(event.type);
-      this.dispatchDisplayStateChanged(isCritical);
+      this.dispatchDisplayStateChanged();
     }
   }
 
-  private dispatchDisplayStateChanged(isCritical: boolean): void {
+  private dispatchDisplayStateChanged(): void {
     // After every event, emit display_state_changed so UIs that prefer a single
     // subscribe-and-render pattern can do so. We dispatch directly to listeners
     // (not through emit()) to avoid infinite recursion.
@@ -3780,12 +3787,6 @@ export class Harness<TState = {}> {
       type: 'display_state_changed',
       displayState: this.displayState,
     });
-
-    if (this.displayStateSchedulers.size > 0) {
-      for (const scheduler of Array.from(this.displayStateSchedulers)) {
-        scheduler.notify(this.displayState, isCritical);
-      }
-    }
   }
 
   private dispatchToListeners(event: HarnessEvent): void {
@@ -4277,10 +4278,29 @@ export class Harness<TState = {}> {
       }
     }
 
+    const result: ToolsetsInput = { harnessBuiltIn: builtInTools };
     if (resolvedHarnessTools) {
-      return { harnessBuiltIn: builtInTools, harness: resolvedHarnessTools };
+      result.harness = resolvedHarnessTools;
     }
-    return { harnessBuiltIn: builtInTools };
+
+    // When using a shared backing agent, mode-specific tool overrides are
+    // delivered through toolsets (not baked into the agent) so the agent's
+    // own tools (including signal-provider tools) are never lost.
+    //
+    // Note: both `mode.tools` and `mode.additionalTools` are added as a
+    // toolset (augment).  True "replace" semantics (masking the agent's own
+    // tools) would require per-run tool filtering in the Agent, which isn't
+    // supported yet.  validateModes() already prevents setting both on the
+    // same mode.
+    if (this.config.agent) {
+      const currentMode = this.getCurrentMode();
+      const modeTools = currentMode.tools ?? currentMode.additionalTools;
+      if (modeTools) {
+        result.modeTools = modeTools;
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -4502,10 +4522,6 @@ export class Harness<TState = {}> {
 
   async destroy(): Promise<void> {
     this.cleanupAgentThreadSubscription();
-    for (const scheduler of this.displayStateSchedulers) {
-      scheduler.dispose();
-    }
-    this.displayStateSchedulers.clear();
     await this.stopHeartbeats();
     await this.destroyWorkspace();
   }

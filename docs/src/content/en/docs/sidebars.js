@@ -857,6 +857,19 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/github',
+          label: 'GitHub integration',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/database',
+          label: 'Hosted databases',
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/configuration',
           label: 'Configuration',
         },

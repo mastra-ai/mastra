@@ -78,7 +78,7 @@ export function ExperimentsList({
   }
 
   return (
-    <EntityList columns={COLUMNS}>
+    <EntityList columns={COLUMNS} variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Experiment</EntityList.TopCell>
         <EntityList.TopCell>Dataset</EntityList.TopCell>
