@@ -4,7 +4,7 @@
  * All tested functions are pure (or near-pure) — no network I/O except
  * `headContentType` which is tested via a fetch mock.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
   buildInlineMediaCheck,
