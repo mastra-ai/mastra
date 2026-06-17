@@ -27,6 +27,8 @@ export interface TaskRecord {
  * resolves a judge model, the goal step is a no-op.
  */
 export interface GoalObjectiveRecord {
+  /** Stable objective id, used for per-goal judge memory and UI correlation. */
+  id?: string;
   /** The prose objective the agent is working toward. */
   objective: string;
   status: 'active' | 'paused' | 'done';
@@ -38,6 +40,11 @@ export interface GoalObjectiveRecord {
   judgeModelId?: string;
   /** Extra judge guidance. Falls back to agent `goal.prompt` (default = built-in goal judge prompt). */
   prompt?: string;
+  /**
+   * Why the objective is parked (`status === 'paused'`). Set for judge failure
+   * or budget exhaustion. Unset for `active`/`done`.
+   */
+  pausedReason?: string;
   startedAt: number;
   updatedAt: number;
 }
