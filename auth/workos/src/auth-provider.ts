@@ -520,31 +520,54 @@ export class MastraAuthWorkos
   /**
    * Handle the OAuth callback from WorkOS.
    *
-   * Uses AuthKit's handleCallback for proper session creation.
+   * Uses authenticateWithCode directly instead of AuthKit's handleCallback
+   * to avoid PKCE cookie requirements that don't work with ISSOProvider interface.
+   * Server-side code exchange doesn't require PKCE since we can securely store the client secret.
    */
   async handleCallback(code: string, _state: string): Promise<SSOCallbackResult<EEUser>> {
-    // Use AuthService's handleCallback for session creation
-    const result = await this.authService.handleCallback(
-      new Request('http://localhost'), // Dummy request, not used
-      new Response(), // Dummy response to get headers
-      { code, state: _state },
-    );
+    // Exchange code for tokens using WorkOS SDK directly
+    const authResponse = await this.workos.userManagement.authenticateWithCode({
+      clientId: this.config.clientId!,
+      code,
+    });
 
     const user: WorkOSUser = {
-      ...mapWorkOSUserToEEUser(result.authResponse.user),
-      workosId: result.authResponse.user.id,
-      organizationId: result.authResponse.organizationId,
+      ...mapWorkOSUserToEEUser(authResponse.user),
+      workosId: authResponse.user.id,
+      organizationId: authResponse.organizationId,
     };
 
-    // Extract session cookie from headers
-    const sessionCookie = result.headers?.['Set-Cookie'];
-    const cookies = sessionCookie ? (Array.isArray(sessionCookie) ? sessionCookie : [sessionCookie]) : undefined;
+    // Create encrypted session cookie manually using same encryption as AuthKit
+    const cookiePassword = this.config.cookiePassword;
+    const cookieName = this.config.cookieName || 'wos-session';
+
+    if (!cookiePassword) {
+      throw new Error('WORKOS_COOKIE_PASSWORD is required for session cookie encryption');
+    }
+
+    // Build session data matching AuthKit's format
+    const sessionData = {
+      accessToken: authResponse.accessToken,
+      refreshToken: authResponse.refreshToken,
+      user: authResponse.user,
+      organizationId: authResponse.organizationId,
+      impersonator: authResponse.impersonator,
+    };
+
+    // Encrypt session using AuthKit's encryption
+    const encryptedSession = await sessionEncryption.sealData(sessionData, {
+      password: cookiePassword,
+    });
+
+    // Build Set-Cookie header
+    const cookieValue = `${cookieName}=${encryptedSession}; Path=/; HttpOnly; SameSite=Lax`;
+    const cookies = [cookieValue];
 
     return {
       user,
       tokens: {
-        accessToken: result.authResponse.accessToken,
-        refreshToken: result.authResponse.refreshToken,
+        accessToken: authResponse.accessToken,
+        refreshToken: authResponse.refreshToken,
       },
       cookies,
     };

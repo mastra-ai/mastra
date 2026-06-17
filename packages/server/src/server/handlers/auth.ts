@@ -457,7 +457,15 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
     }
 
     try {
-      const auth = getAuthProvider(mastra, isStudio);
+      // For SSO callback, the redirect from the identity provider won't include
+      // the x-mastra-client-type header. Prefer studio auth for SSO (it's the
+      // typical SSO use case), fall back to server auth only if studio doesn't exist.
+      let auth = getAuthProvider(mastra, true); // Try studio first
+
+      // If studio doesn't have SSO, fall back to server
+      if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
+        auth = getAuthProvider(mastra, false);
+      }
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
         return Response.redirect(`${absoluteRedirect}?error=sso_not_configured`, 302);
