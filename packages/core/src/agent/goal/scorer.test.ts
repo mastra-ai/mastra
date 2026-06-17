@@ -42,12 +42,10 @@ describe('createGoalScorer tool support', () => {
     expect(Object.keys(scorer.config.judge!.tools!)).toContain('view');
   });
 
-  it('appends the verify-with-tools clause to the judge instructions when tools are present', () => {
+  it('does not modify the judge instructions when tools are present (tools are forwarded, instructions stay as-is)', () => {
     const scorer = createGoalScorer({ judgeModel, tools: { view: viewTool } });
     const instructions = scorer.config.judge?.instructions ?? '';
-    expect(instructions.startsWith(DEFAULT_GOAL_JUDGE_PROMPT)).toBe(true);
-    expect(instructions.length).toBeGreaterThan(DEFAULT_GOAL_JUDGE_PROMPT.length);
-    expect(instructions).toContain('read-only verification tools');
+    expect(instructions).toBe(DEFAULT_GOAL_JUDGE_PROMPT);
   });
 
   it('treats an empty tools object as no tools (no clause, no judge tools)', () => {
@@ -56,12 +54,11 @@ describe('createGoalScorer tool support', () => {
     expect(scorer.config.judge?.instructions).toBe(DEFAULT_GOAL_JUDGE_PROMPT);
   });
 
-  it('respects a custom prompt and still appends the clause when tools are present', () => {
+  it('respects a custom prompt without modifying it when tools are present', () => {
     const customPrompt = 'Custom judge prompt.';
     const scorer = createGoalScorer({ judgeModel, prompt: customPrompt, tools: { view: viewTool } });
     const instructions = scorer.config.judge?.instructions ?? '';
-    expect(instructions.startsWith(customPrompt)).toBe(true);
-    expect(instructions).toContain('read-only verification tools');
+    expect(instructions).toBe(customPrompt);
   });
 });
 
