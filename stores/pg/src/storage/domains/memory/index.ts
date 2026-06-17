@@ -544,7 +544,7 @@ export class MemoryPG extends MemoryStorage {
         ON CONFLICT (id) DO UPDATE SET
           "resourceId" = EXCLUDED."resourceId",
           title = EXCLUDED.title,
-          metadata = EXCLUDED.metadata,
+          metadata = COALESCE(${tableName}.metadata, '{}'::jsonb) || COALESCE(EXCLUDED.metadata, '{}'::jsonb),
           "createdAt" = EXCLUDED."createdAt",
           "createdAtZ" = EXCLUDED."createdAtZ",
           "updatedAt" = EXCLUDED."updatedAt",
