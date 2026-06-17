@@ -23,7 +23,7 @@ concurrency:
 jobs:
   issue-link-nudge:
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event_name == 'pull_request_target' && github.event.pull_request.draft == false }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     outputs:
       needs_issue: ${{ steps.issue_link.outputs.needs_issue }}
@@ -71,7 +71,7 @@ jobs:
   complexity:
     needs: issue-link-nudge
     if: ${{ needs['issue-link-nudge'].outputs.needs_issue == 'false' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     outputs:
       summary: ${{ steps.complexity.outputs.summary }}
@@ -119,7 +119,7 @@ jobs:
       - issue-link-nudge
       - complexity
     if: ${{ always() && github.repository == 'mastra-ai/mastra' && github.event_name == 'pull_request_target' && github.event.pull_request.draft == false }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout automation scripts
@@ -162,7 +162,7 @@ jobs:
 
   close-stale-unlinked:
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event_name == 'schedule' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout automation scripts

@@ -17,7 +17,7 @@ jobs:
   upload-studio:
     name: Build and Upload Studio
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

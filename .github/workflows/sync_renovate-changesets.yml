@@ -10,7 +10,7 @@ on:
 
 jobs:
   changeset:
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     if: startsWith(github.head_ref, 'renovate/') && github.repository == 'mastra-ai/mastra'
     permissions:
       pull-requests: write

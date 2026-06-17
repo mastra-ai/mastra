@@ -8,7 +8,7 @@ on:
 jobs:
   check-comment:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     permissions:
       issues: read
       pull-requests: read

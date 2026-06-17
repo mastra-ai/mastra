@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   check-major-bump:
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     # Only run on canonical repo (secrets unavailable for forks) and for PR events or PR comments
     if: |
       github.repository == 'mastra-ai/mastra' &&
