@@ -57,27 +57,62 @@ export const Default: Story = {
   ),
 };
 
-export const Right: Story = {
+const sideOptions = [
+  {
+    side: 'bottom',
+    label: 'Bottom',
+    title: 'Notifications',
+    description: 'A panel that slides up from the bottom edge.',
+    body: 'Swipe down or press the close button to dismiss this sheet.',
+  },
+  {
+    side: 'right',
+    label: 'Right',
+    title: 'Library',
+    description: 'A panel that slides in from the right edge.',
+    body: 'Swipe right to dismiss, or use the close button.',
+  },
+  {
+    side: 'left',
+    label: 'Left',
+    title: 'Navigation',
+    description: 'A panel that slides in from the left edge.',
+    body: 'Swipe left to dismiss, or use the close button.',
+  },
+  {
+    side: 'top',
+    label: 'Top',
+    title: 'Announcement',
+    description: 'A panel that slides in from the top edge.',
+    body: 'Swipe up to dismiss, or use the close button.',
+  },
+] as const;
+
+export const Sides: Story = {
   render: () => (
-    <Drawer side="right">
-      <DrawerTrigger asChild>
-        <Button>Open right drawer</Button>
-      </DrawerTrigger>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>Library</DrawerTitle>
-          <DrawerDescription>A panel that slides in from the right edge.</DrawerDescription>
-        </DrawerHeader>
-        <DrawerBody>
-          <p className="text-ui-sm text-neutral4">Swipe right to dismiss, or use the close button.</p>
-        </DrawerBody>
-        <DrawerFooter>
-          <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+    <div className="flex flex-wrap justify-center gap-2">
+      {sideOptions.map(({ side, label, title, description, body }) => (
+        <Drawer key={side} side={side}>
+          <DrawerTrigger asChild>
+            <Button variant={side === 'bottom' ? 'default' : 'outline'}>{label}</Button>
+          </DrawerTrigger>
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>{title}</DrawerTitle>
+              <DrawerDescription>{description}</DrawerDescription>
+            </DrawerHeader>
+            <DrawerBody>
+              <p className="text-ui-sm text-neutral4">{body}</p>
+            </DrawerBody>
+            <DrawerFooter>
+              <DrawerClose asChild>
+                <Button variant="outline">Close</Button>
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
+      ))}
+    </div>
   ),
 };
 
@@ -177,22 +212,6 @@ function WorkspaceSurface({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const FloatingRight: Story = {
-  render: () => (
-    <WorkspaceSurface>
-      <Drawer side="right" variant="floating">
-        <DrawerTrigger asChild>
-          <Button>Open floating drawer</Button>
-        </DrawerTrigger>
-        <RepositoryPanel idPrefix="floating-right" />
-      </Drawer>
-    </WorkspaceSurface>
-  ),
-  parameters: {
-    layout: 'fullscreen',
-  },
-};
-
 export const FloatingOverlayModes: Story = {
   render: () => (
     <WorkspaceSurface>
@@ -233,54 +252,6 @@ export const FloatingOverlayModes: Story = {
   parameters: {
     layout: 'fullscreen',
   },
-};
-
-export const Left: Story = {
-  render: () => (
-    <Drawer side="left">
-      <DrawerTrigger asChild>
-        <Button>Open left drawer</Button>
-      </DrawerTrigger>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>Navigation</DrawerTitle>
-          <DrawerDescription>A panel that slides in from the left edge.</DrawerDescription>
-        </DrawerHeader>
-        <DrawerBody>
-          <p className="text-ui-sm text-neutral4">Swipe left to dismiss, or use the close button.</p>
-        </DrawerBody>
-        <DrawerFooter>
-          <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
-  ),
-};
-
-export const Top: Story = {
-  render: () => (
-    <Drawer side="top">
-      <DrawerTrigger asChild>
-        <Button>Open top drawer</Button>
-      </DrawerTrigger>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>Announcement</DrawerTitle>
-          <DrawerDescription>A panel that slides in from the top edge.</DrawerDescription>
-        </DrawerHeader>
-        <DrawerBody>
-          <p className="text-ui-sm text-neutral4">Swipe up to dismiss, or use the close button.</p>
-        </DrawerBody>
-        <DrawerFooter>
-          <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
-  ),
 };
 
 function ControlledExample() {
