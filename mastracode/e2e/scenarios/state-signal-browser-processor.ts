@@ -70,7 +70,8 @@ function getRequestBody(request: unknown): unknown {
 
 export const stateSignalBrowserProcessorScenario = {
   name: 'state-signal-browser-processor',
-  description: 'Runs a deterministic browser context processor through the TUI and verifies live snapshot/delta state signals.',
+  description:
+    'Runs a deterministic browser context processor through the TUI and verifies live snapshot/delta state signals.',
   testName: 'renders browser processor state snapshots and deltas during live turns',
   useOpenAIModel: true,
   disableMemory: false,
@@ -116,7 +117,11 @@ export const stateSignalBrowserProcessorScenario = {
 
     terminal.submit('Capture browser processor delta.');
     await runtime.waitForScreenText(/State delta: browser/i, terminal, 10_000);
-    await runtime.waitForScreenText(/user changed active tab URL to https:\/\/example\.test\/browser-delta/i, terminal, 10_000);
+    await runtime.waitForScreenText(
+      /user changed active tab URL to https:\/\/example\.test\/browser-delta/i,
+      terminal,
+      10_000,
+    );
     await runtime.waitForScreenText(/Browser processor delta captured/i, terminal, 10_000);
 
     terminal.keyCtrlC();

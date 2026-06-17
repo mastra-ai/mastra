@@ -40,7 +40,9 @@ function sortedKeys(value: unknown): string[] {
 }
 
 function requiredKeys(schema: JsonObject): string[] {
-  return Array.isArray(schema.required) ? schema.required.filter((key): key is string => typeof key === 'string').sort() : [];
+  return Array.isArray(schema.required)
+    ? schema.required.filter((key): key is string => typeof key === 'string').sort()
+    : [];
 }
 
 const strictSchemaProbeTool = {
@@ -105,7 +107,10 @@ export const openaiStrictSchemaScenario = {
 
     const properties = isObject(schema.properties) ? schema.properties : undefined;
     const nested = isObject(properties?.nested) ? properties.nested : undefined;
-    check(nested && isObject(nested.properties), `Expected nested to keep object properties, received ${JSON.stringify(nested)}`);
+    check(
+      nested && isObject(nested.properties),
+      `Expected nested to keep object properties, received ${JSON.stringify(nested)}`,
+    );
     check(nested.additionalProperties === false, 'Expected nested additionalProperties false');
     check(
       JSON.stringify(requiredKeys(nested)) === JSON.stringify(sortedKeys(nested.properties)),

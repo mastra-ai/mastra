@@ -87,7 +87,9 @@ async function checkAndConfirmProviderMismatch(
  */
 function resolveModeAgent(mode: unknown, harnessState: unknown): BrowserAgent | undefined {
   const modeAgent = (mode as { agent?: unknown }).agent;
-  return typeof modeAgent === 'function' ? (modeAgent(harnessState) as BrowserAgent) : (modeAgent as BrowserAgent | undefined);
+  return typeof modeAgent === 'function'
+    ? (modeAgent(harnessState) as BrowserAgent)
+    : (modeAgent as BrowserAgent | undefined);
 }
 
 function applyBrowserToAgents(

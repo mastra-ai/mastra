@@ -16,7 +16,9 @@ function hasBrowserContextProcessor(processor: InputProcessor): boolean {
 
 function getRequestBodies(requests: unknown[]): string {
   return JSON.stringify(
-    requests.map(request => (typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined)),
+    requests.map(request =>
+      typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined,
+    ),
   );
 }
 
@@ -30,7 +32,9 @@ export const browserStartupRestoreScenario = {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
     settings.onboarding = {
-      ...((typeof settings.onboarding === 'object' && settings.onboarding !== null ? settings.onboarding : {}) as Record<string, unknown>),
+      ...((typeof settings.onboarding === 'object' && settings.onboarding !== null
+        ? settings.onboarding
+        : {}) as Record<string, unknown>),
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
@@ -48,29 +52,27 @@ export const browserStartupRestoreScenario = {
   },
   async inProcessApp({ startMastraCodeApp }) {
     const patches = createGlobalPatchScope();
-    patches.setProperty(
-      AgentBrowser.prototype,
-      'getInputProcessors',
-      function getInputProcessors(configuredProcessors: InputProcessor[] = []) {
-        if (configuredProcessors.some(hasBrowserContextProcessor)) return [];
-        return [
-          {
-            id: 'browser-context',
-            processInput(args: ProcessInputArgs) {
-              const ctx = args.requestContext?.get('browser') as { provider?: string } | undefined;
-              if (!ctx) return args.messageList;
-              return {
-                messages: args.messages,
-                systemMessages: [
-                  ...args.systemMessages,
-                  { role: 'system', content: `Browser startup restore E2E active with provider ${ctx.provider}.` },
-                ],
-              };
-            },
-          } satisfies InputProcessor,
-        ];
-      } satisfies AgentBrowserGetInputProcessors,
-    );
+    patches.setProperty(AgentBrowser.prototype, 'getInputProcessors', function getInputProcessors(
+      configuredProcessors: InputProcessor[] = [],
+    ) {
+      if (configuredProcessors.some(hasBrowserContextProcessor)) return [];
+      return [
+        {
+          id: 'browser-context',
+          processInput(args: ProcessInputArgs) {
+            const ctx = args.requestContext?.get('browser') as { provider?: string } | undefined;
+            if (!ctx) return args.messageList;
+            return {
+              messages: args.messages,
+              systemMessages: [
+                ...args.systemMessages,
+                { role: 'system', content: `Browser startup restore E2E active with provider ${ctx.provider}.` },
+              ],
+            };
+          },
+        } satisfies InputProcessor,
+      ];
+    } satisfies AgentBrowserGetInputProcessors);
 
     try {
       const app = await startMastraCodeApp();
@@ -88,7 +90,11 @@ export const browserStartupRestoreScenario = {
     await runtime.waitForScreenText(/Browser: enabled/i, terminal, 8_000);
     await runtime.waitForScreenText(/Provider: AgentBrowser \(deterministic\)/i, terminal, 8_000);
     await runtime.waitForScreenText(/Headless: no/i, terminal, 8_000);
-    await runtime.waitForScreenText(/CDP URL: ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-startup-restore-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /CDP URL: ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-startup-restore-e2e/i,
+      terminal,
+      8_000,
+    );
 
     terminal.submit('Confirm browser startup restore context.');
     await runtime.waitForScreenText(/Browser startup restore confirmed\./i, terminal, 10_000);

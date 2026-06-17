@@ -18,7 +18,10 @@ export const autocompleteWrappingNavigationScenario = {
   prepare({ projectDir }) {
     const commandsDir = join(projectDir, '.mastracode', 'commands');
     mkdirSync(commandsDir, { recursive: true });
-    writeFileSync(join(commandsDir, 'wrap-alpha.md'), `---\ndescription: ${ALPHA_DESCRIPTION}\n---\nAlpha should not run.\n`);
+    writeFileSync(
+      join(commandsDir, 'wrap-alpha.md'),
+      `---\ndescription: ${ALPHA_DESCRIPTION}\n---\nAlpha should not run.\n`,
+    );
     writeFileSync(
       join(commandsDir, 'wrap-bravo.md'),
       `---\ndescription: Bravo command selected after exactly one Down arrow from the wrapped alpha item\n---\n${BRAVO_TEMPLATE}\n`,
@@ -46,7 +49,9 @@ export const autocompleteWrappingNavigationScenario = {
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 1) {
-      throw new Error(`Expected one AIMock request for selected wrapped autocomplete command, received ${requests.length}`);
+      throw new Error(
+        `Expected one AIMock request for selected wrapped autocomplete command, received ${requests.length}`,
+      );
     }
 
     const body = JSON.stringify((requests[0] as any).body);
@@ -54,7 +59,9 @@ export const autocompleteWrappingNavigationScenario = {
       throw new Error(`Expected Bravo command template in AIMock request: ${body.slice(0, 2000)}`);
     }
     if (body.includes('Alpha should not run')) {
-      throw new Error(`Expected Down arrow to select Bravo, but Alpha command template was sent: ${body.slice(0, 2000)}`);
+      throw new Error(
+        `Expected Down arrow to select Bravo, but Alpha command template was sent: ${body.slice(0, 2000)}`,
+      );
     }
   },
 } satisfies McE2eScenario;

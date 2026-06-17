@@ -122,7 +122,6 @@ values
   ('msg-mc-e2e-provider-history-retry-assistant', ${quoteSql(threadId)}, ${quoteSql(assistantContent)}, 'assistant', 'v2', ${quoteSql(new Date(now.getTime() + 1000).toISOString())}, ${quoteSql(resourceId)});
 `;
     execFileSync('sqlite3', [dbPath], { input: sql });
-
   },
   async inProcessApp({ appDataDir, env, startMastraCodeApp }) {
     const observationsPath = env.MC_E2E_PROVIDER_HISTORY_RETRY_OBSERVATIONS;
@@ -223,7 +222,9 @@ values
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 1) {
-      throw new Error(`Expected exactly one successful AIMock request after provider-history retry, received ${requests.length}`);
+      throw new Error(
+        `Expected exactly one successful AIMock request after provider-history retry, received ${requests.length}`,
+      );
     }
     const body = stringifyRequests(requests);
     if (!body.includes(USER_PROMPT)) {

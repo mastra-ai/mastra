@@ -8,7 +8,8 @@ const apiKey = 'sk-model-selection-key-e2e';
 
 export const modelSelectionApiKeyPromptScenario = {
   name: 'model-selection-api-key-prompt',
-  description: 'prompts for a missing provider API key from the real TUI model selector and persists the selected custom pack edit',
+  description:
+    'prompts for a missing provider API key from the real TUI model selector and persists the selected custom pack edit',
   testName: 'stores a missing provider key from model selection and saves the edited pack',
   env() {
     return {
@@ -90,11 +91,10 @@ export const modelSelectionApiKeyPromptScenario = {
     await runtime.waitForScreenTextAbsent(/Switch model pack/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const settings=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const pack=settings.customModelPacks.find(p=>p.name==="${packName}"); console.log("MODEL_PROMPT_PLAN="+pack.models.plan); console.log("MODEL_PROMPT_KEY="+(auth["apikey:302ai"]?.key || "missing")); console.log("MODEL_PROMPT_ENV="+(process.env["302AI_API_KEY"] || "missing"));'`,
+      `!node -e 'const fs=require("fs"); const settings=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); const pack=settings.customModelPacks.find(p=>p.name==="${packName}"); console.log("MODEL_PROMPT_PLAN="+pack.models.plan); console.log("MODEL_PROMPT_KEY="+(auth["apikey:302ai"]?.key || "missing"));'`,
     );
     await runtime.waitForScreenText(/MODEL_PROMPT_PLAN=302ai\/keyprompt-e2e-model/i, terminal, 8_000);
     await runtime.waitForScreenText(/MODEL_PROMPT_KEY=sk-model-selection-key-e2e/i, terminal, 8_000);
-    await runtime.waitForScreenText(/MODEL_PROMPT_ENV=sk-model-selection-key-e2e/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

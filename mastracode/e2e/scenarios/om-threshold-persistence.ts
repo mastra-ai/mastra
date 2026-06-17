@@ -70,7 +70,9 @@ export const omThresholdPersistenceScenario: McE2eScenario = {
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 1) {
-      throw new Error(`Expected OM threshold persistence scenario to make 1 AIMock request, received ${requests.length}`);
+      throw new Error(
+        `Expected OM threshold persistence scenario to make 1 AIMock request, received ${requests.length}`,
+      );
     }
   },
 };

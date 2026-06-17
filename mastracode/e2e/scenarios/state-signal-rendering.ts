@@ -42,7 +42,7 @@ export const stateSignalRenderingScenario: McE2eScenario = {
               },
             );
           } catch (error) {
-            process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\n');
+            process.stderr.write(String(error instanceof Error ? (error.stack ?? error.message) : error) + '\n');
           }
         }, 100);
         timer.unref?.();

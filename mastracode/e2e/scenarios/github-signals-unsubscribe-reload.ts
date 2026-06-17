@@ -89,7 +89,10 @@ export const githubSignalsUnsubscribeReloadScenario = {
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
     const { dbPath, mockGitcrawlPath } = prepareGitcrawlFixture(context);
-    writeFileSync(join(context.projectDir, '.gitcrawl-unsubscribe-e2e-env.json'), JSON.stringify({ dbPath, mockGitcrawlPath }));
+    writeFileSync(
+      join(context.projectDir, '.gitcrawl-unsubscribe-e2e-env.json'),
+      JSON.stringify({ dbPath, mockGitcrawlPath }),
+    );
 
     const now = new Date('2026-06-12T02:01:00.000Z');
     const metadata = {
@@ -118,7 +121,10 @@ export const githubSignalsUnsubscribeReloadScenario = {
         },
       },
     };
-    const userContent = JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'Seeded GitHub unsubscribe thread.' }] });
+    const userContent = JSON.stringify({
+      format: 2,
+      parts: [{ type: 'text', text: 'Seeded GitHub unsubscribe thread.' }],
+    });
     const assistantContent = JSON.stringify({
       format: 2,
       parts: [{ type: 'text', text: 'Ready for GitHub unsubscribe fixture.' }],
@@ -134,7 +140,9 @@ values
     execFileSync('sqlite3', [context.dbPath], { input: sql });
   },
   env({ projectDir }) {
-    const { dbPath, mockGitcrawlPath } = JSON.parse(readFileSync(join(projectDir, '.gitcrawl-unsubscribe-e2e-env.json'), 'utf8')) as {
+    const { dbPath, mockGitcrawlPath } = JSON.parse(
+      readFileSync(join(projectDir, '.gitcrawl-unsubscribe-e2e-env.json'), 'utf8'),
+    ) as {
       dbPath: string;
       mockGitcrawlPath: string;
     };

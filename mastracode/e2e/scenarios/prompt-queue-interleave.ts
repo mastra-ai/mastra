@@ -23,7 +23,10 @@ export const promptQueueInterleaveScenario: McE2eScenario = {
 
     await runtime.waitForScreenText(/✓\s+first prompt answered/i, terminal);
     await runtime.waitForScreenText(/Grant sandbox access to "\/tmp\/mastracode-prompt-queue-e2e"\?/i, terminal);
-    await runtime.waitForScreenText(/Reason: Verify queued access prompts activate after ask_user is answered\./i, terminal);
+    await runtime.waitForScreenText(
+      /Reason: Verify queued access prompts activate after ask_user is answered\./i,
+      terminal,
+    );
     await runtime.waitForScreenText(/Yes.*Allow access to this directory/i, terminal);
     runtime.printScreen('queued access prompt active', terminal);
 

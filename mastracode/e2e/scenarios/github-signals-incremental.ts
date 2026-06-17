@@ -95,7 +95,10 @@ export const githubSignalsIncrementalScenario = {
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
     const { dbPath, mockGitcrawlPath } = prepareGitcrawlFixture(context);
-    writeFileSync(join(context.projectDir, '.gitcrawl-incremental-e2e-env.json'), JSON.stringify({ dbPath, mockGitcrawlPath }));
+    writeFileSync(
+      join(context.projectDir, '.gitcrawl-incremental-e2e-env.json'),
+      JSON.stringify({ dbPath, mockGitcrawlPath }),
+    );
 
     const now = new Date('2026-06-11T16:01:00.000Z');
     const metadata = {
@@ -124,7 +127,10 @@ export const githubSignalsIncrementalScenario = {
         },
       },
     };
-    const userContent = JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'Seeded GitHub incremental thread.' }] });
+    const userContent = JSON.stringify({
+      format: 2,
+      parts: [{ type: 'text', text: 'Seeded GitHub incremental thread.' }],
+    });
     const assistantContent = JSON.stringify({
       format: 2,
       parts: [{ type: 'text', text: 'Ready for GitHub incremental fixture.' }],

@@ -54,7 +54,9 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 1) {
-      throw new Error(`Expected OM pack startup restore scenario to make 1 AIMock request, received ${requests.length}`);
+      throw new Error(
+        `Expected OM pack startup restore scenario to make 1 AIMock request, received ${requests.length}`,
+      );
     }
   },
 };

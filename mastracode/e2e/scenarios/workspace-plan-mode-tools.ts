@@ -4,14 +4,19 @@ const BUILD_PROMPT = 'Record the build-mode workspace tool list.';
 const PLAN_PROMPT = 'Record the plan-mode workspace tool list.';
 
 function getUserMessage(request: unknown): string {
-  const messages = (request as { body?: { messages?: Array<{ role?: string; content?: unknown }> } }).body?.messages ?? [];
+  const messages =
+    (request as { body?: { messages?: Array<{ role?: string; content?: unknown }> } }).body?.messages ?? [];
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
     if (message.role !== 'user') continue;
     if (typeof message.content === 'string') return message.content;
     if (Array.isArray(message.content)) {
       const text = message.content
-        .map(part => ((part as { text?: unknown }).text && typeof (part as { text?: unknown }).text === 'string' ? (part as { text: string }).text : ''))
+        .map(part =>
+          (part as { text?: unknown }).text && typeof (part as { text?: unknown }).text === 'string'
+            ? (part as { text: string }).text
+            : '',
+        )
         .filter(Boolean)
         .join('\n');
       if (text) return text;
@@ -23,7 +28,8 @@ function getUserMessage(request: unknown): string {
 function getToolNames(request: unknown): string[] {
   const names = new Set<string>();
   for (const tool of (request as { body?: { tools?: unknown[] } }).body?.tools ?? []) {
-    const name = (tool as { function?: { name?: unknown }; name?: unknown }).function?.name ?? (tool as { name?: unknown }).name;
+    const name =
+      (tool as { function?: { name?: unknown }; name?: unknown }).function?.name ?? (tool as { name?: unknown }).name;
     if (typeof name === 'string') names.add(name);
   }
   return [...names].sort();

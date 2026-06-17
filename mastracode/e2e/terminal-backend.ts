@@ -188,7 +188,8 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
             await terminal.flushInput();
             const matches = countMatches(terminal.serialize().view, text);
             if (matches > 0) {
-              if (options?.strict !== false && matches > 1) throw new Error(`strict mode violation: ${matches} matches`);
+              if (options?.strict !== false && matches > 1)
+                throw new Error(`strict mode violation: ${matches} matches`);
               return { text };
             }
             await sleep(100);
@@ -318,7 +319,9 @@ async function startMastraCodeApp(
   const envInitialState = resolveInitialStateFromEnv();
   const configuredInitialState = options?.config?.initialState;
   const initialState: MastraCodeConfig['initialState'] =
-    envInitialState || configuredInitialState ? { ...(envInitialState ?? {}), ...(configuredInitialState ?? {}) } : undefined;
+    envInitialState || configuredInitialState
+      ? { ...(envInitialState ?? {}), ...(configuredInitialState ?? {}) }
+      : undefined;
   const result = await createMastraCode({
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),

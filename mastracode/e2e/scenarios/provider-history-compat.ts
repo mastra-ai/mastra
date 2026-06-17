@@ -89,7 +89,6 @@ values
   ('msg-mc-e2e-provider-history-assistant', ${quoteSql(threadId)}, ${quoteSql(assistantContent)}, 'assistant', 'v2', ${quoteSql(new Date(now.getTime() + 1000).toISOString())}, ${quoteSql(resourceId)});
 `;
     execFileSync('sqlite3', [dbPath], { input: sql });
-
   },
   inProcessApp({ appDataDir, env, startMastraCodeApp }) {
     const settingsPath = join(appDataDir, 'settings.json');

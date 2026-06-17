@@ -27,7 +27,10 @@ export const requestAccessModalScenario: McE2eScenario = {
     terminal.submit('Request access to the external e2e fixture and read it.');
     await runtime.waitForScreenText(/request_access.*\/tmp\/mastracode-request-access-e2e/i, terminal);
     await runtime.waitForScreenText(/Grant sandbox access to "\/tmp\/mastracode-request-access-e2e"\?/i, terminal);
-    await runtime.waitForScreenText(/Reason: Read deterministic request_access e2e fixture outside the project root\./i, terminal);
+    await runtime.waitForScreenText(
+      /Reason: Read deterministic request_access e2e fixture outside the project root\./i,
+      terminal,
+    );
     await runtime.waitForScreenText(/Yes.*Allow access to this directory/i, terminal);
     runtime.printScreen('request access prompt visible', terminal);
 

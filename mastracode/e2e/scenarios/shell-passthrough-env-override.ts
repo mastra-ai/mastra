@@ -18,12 +18,9 @@ export const shellPassthroughEnvOverrideScenario: McE2eScenario = {
     const envWrapperPath = join(appDataDir, 'env-shell-wrapper.sh');
     writeFileSync(
       envWrapperPath,
-      [
-        '#!/bin/sh',
-        'printf "MC_ENV_OVERRIDE_SHELL arg0=%s command=%s\\n" "$1" "$2"',
-        'exec /bin/sh "$@"',
-        '',
-      ].join('\n'),
+      ['#!/bin/sh', 'printf "MC_ENV_OVERRIDE_SHELL arg0=%s command=%s\\n" "$1" "$2"', 'exec /bin/sh "$@"', ''].join(
+        '\n',
+      ),
     );
     chmodSync(envWrapperPath, 0o755);
 

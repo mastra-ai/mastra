@@ -34,7 +34,6 @@ export const customConfigDirScenario: McE2eScenario = {
       join(projectDir, '.mastracode', 'skills', 'default-skill', 'SKILL.md'),
       `---\nname: default-skill\ndescription: Default configDir skill should not load\nuser-invocable: true\n---\nWrong configDir skill.\n`,
     );
-
   },
   inProcessApp({ startMastraCodeApp }) {
     return startMastraCodeApp({

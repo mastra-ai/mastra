@@ -17,7 +17,11 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const mastracodeDir = resolve(scriptDir, '../..');
 const fixturesDir = join(scriptDir, 'fixtures');
 const tmpRootDir = join(mastracodeDir, '.tmp-mc-e2e-vitest');
-const defaultScenarioNames = ['startup', 'automated-chat', 'modal-and-shell'] as const satisfies readonly ScenarioName[];
+const defaultScenarioNames = [
+  'startup',
+  'automated-chat',
+  'modal-and-shell',
+] as const satisfies readonly ScenarioName[];
 
 const includeSubprocessMarked = process.env.MC_E2E_VITEST_INCLUDE_SUBPROCESS_MARKED === '1';
 
@@ -31,7 +35,8 @@ function parseShardNumber(name: string, defaultValue: number): number {
 
 function applyShard(names: ScenarioName[], shardIndex: number, shardTotal: number): ScenarioName[] {
   if (shardTotal < 1) throw new Error('MC_E2E_VITEST_SHARD_TOTAL must be greater than zero');
-  if (shardIndex >= shardTotal) throw new Error('MC_E2E_VITEST_SHARD_INDEX must be less than MC_E2E_VITEST_SHARD_TOTAL');
+  if (shardIndex >= shardTotal)
+    throw new Error('MC_E2E_VITEST_SHARD_INDEX must be less than MC_E2E_VITEST_SHARD_TOTAL');
   if (shardTotal === 1) return names;
   return names.filter((_, index) => index % shardTotal === shardIndex);
 }
@@ -42,7 +47,9 @@ function selectScenarioNames(shardIndex: number, shardTotal: number): ScenarioNa
   if (raw === 'all') {
     return applyShard(
       listScenarios()
-        .filter(scenario => (!scenario.entrypoint || scenario.inProcessApp) && scenario.terminalBackend !== 'subprocess')
+        .filter(
+          scenario => (!scenario.entrypoint || scenario.inProcessApp) && scenario.terminalBackend !== 'subprocess',
+        )
         .map(scenario => scenario.name),
       shardIndex,
       shardTotal,
@@ -131,26 +138,35 @@ async function startAimock({ fixturePath }: { fixturePath?: string }): Promise<A
 function run(command: string, args: string[], cwd: string): void {
   const result = spawnSync(command, args, { cwd, stdio: 'pipe', encoding: 'utf8' });
   if (result.status !== 0) {
-    throw new Error(`Command failed: ${command} ${args.join(' ')}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+    throw new Error(
+      `Command failed: ${command} ${args.join(' ')}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+    );
   }
+}
+
+function createBasicProject(projectDir: string): void {
+  mkdirSync(projectDir, { recursive: true });
+  writeFileSync(join(projectDir, 'README.md'), '# mc e2e fixture\n');
 }
 
 function createLongBranchProject(projectDir: string): void {
   const branch = 'feature/super-long-branch-name-for-status-footer-e2e-regression-shield-extra-long';
-  mkdirSync(projectDir, { recursive: true });
+  createBasicProject(projectDir);
   run('git', ['init', '-b', 'main'], projectDir);
   run('git', ['config', 'user.email', 'mc-e2e@example.com'], projectDir);
   run('git', ['config', 'user.name', 'MC E2E'], projectDir);
-  writeFileSync(join(projectDir, 'README.md'), '# mc e2e fixture\n');
   run('git', ['add', 'README.md'], projectDir);
   run('git', ['commit', '-m', 'init'], projectDir);
   run('git', ['checkout', '-b', branch], projectDir);
 }
 
-async function prepareTerminalRun(scenario: McE2eScenario, runRoot: string): Promise<{ aimock?: AimockHandle; config: TerminalRunConfig }> {
+async function prepareTerminalRun(
+  scenario: McE2eScenario,
+  runRoot: string,
+): Promise<{ aimock?: AimockHandle; config: TerminalRunConfig }> {
   const isolatedHome = join(runRoot, 'home');
   const isolatedAppDataDir = getAppDataDirForHome(isolatedHome);
-  const projectDir = join(runRoot, 'project');
+  const projectDir = join(runRoot, scenario.projectFixture === 'long-branch' ? 'project' : 'mastra');
   const dbPath = join(runRoot, 'mastra.db');
   const observabilityDbPath = join(runRoot, 'observability.db');
   mkdirSync(isolatedHome, { recursive: true });
@@ -173,7 +189,8 @@ async function prepareTerminalRun(scenario: McE2eScenario, runRoot: string): Pro
   await scenario.prepare?.(scenarioContext);
 
   if (scenario.projectFixture === 'long-branch') createLongBranchProject(projectDir);
-  const launchCwd = scenario.projectFixture === 'long-branch' ? projectDir : mastracodeDir;
+  else createBasicProject(projectDir);
+  const launchCwd = projectDir;
 
   const env: Record<string, string | null> = {
     ...(aimockBaseUrl
@@ -220,7 +237,10 @@ async function prepareTerminalRun(scenario: McE2eScenario, runRoot: string): Pro
 }
 
 async function runScenarioInProcess(scenario: McE2eScenario): Promise<void> {
-  if ((scenario.entrypoint && !scenario.inProcessApp) || (scenario.terminalBackend === 'subprocess' && !includeSubprocessMarked)) {
+  if (
+    (scenario.entrypoint && !scenario.inProcessApp) ||
+    (scenario.terminalBackend === 'subprocess' && !includeSubprocessMarked)
+  ) {
     throw new Error(`${scenario.name} is not supported by the in-process terminal backend`);
   }
 

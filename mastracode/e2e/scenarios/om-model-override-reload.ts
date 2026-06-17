@@ -103,7 +103,9 @@ export const omModelOverrideReloadScenario: McE2eScenario = {
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 1) {
-      throw new Error(`Expected OM model override reload scenario to make 1 AIMock request, received ${requests.length}`);
+      throw new Error(
+        `Expected OM model override reload scenario to make 1 AIMock request, received ${requests.length}`,
+      );
     }
   },
 };

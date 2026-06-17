@@ -7,7 +7,8 @@ const FALLBACK_ATTRIBUTION = 'Co-Authored-By: Mastra Code <noreply@mastra.ai>';
 
 export const commitAttributionPromptScenario: McE2eScenario = {
   name: 'commit-attribution-prompt',
-  description: 'Verify real TUI prompts include model-specific commit attribution guidance and the model-authored commit records it.',
+  description:
+    'Verify real TUI prompts include model-specific commit attribution guidance and the model-authored commit records it.',
   testName: 'includes selected model ID in commit attribution prompt guidance and committed history',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
@@ -23,7 +24,11 @@ export const commitAttributionPromptScenario: McE2eScenario = {
 
     terminal.submit('!git log -1 --format=%B');
     await runtime.waitForScreenText(/test: commit attribution e2e/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Co-Authored-By: Mastra Code \(openai\/gpt-5\.4-mini\) <noreply@mastra\.ai>/i, terminal, 10_000);
+    await runtime.waitForScreenText(
+      /Co-Authored-By: Mastra Code \(openai\/gpt-5\.4-mini\) <noreply@mastra\.ai>/i,
+      terminal,
+      10_000,
+    );
 
     terminal.keyCtrlC();
   },

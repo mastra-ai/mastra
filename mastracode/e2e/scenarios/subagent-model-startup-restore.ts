@@ -13,7 +13,8 @@ export const subagentModelStartupRestoreScenario = {
   name: 'subagent-model-startup-restore',
   description: 'Restores persisted subagent model defaults during TUI startup and uses them for delegation.',
   testName: 'uses persisted subagent model defaults for delegated subagents',
-  skipReason: 'current main subagent delegation flow no longer renders expected progress/result path for restored model defaults',
+  skipReason:
+    'current main subagent delegation flow no longer renders expected progress/result path for restored model defaults',
   useOpenAIModel: true,
   aimockFixture: 'subagent-model-startup-restore.json',
   prepare({ appDataDir, projectDir }) {
@@ -68,7 +69,11 @@ export const subagentModelStartupRestoreScenario = {
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const p=s.customModelPacks.find(p=>p.name==="${packName}"); console.log("SUBAGENT_STARTUP_ACTIVE="+s.models.activeModelPackId); console.log("SUBAGENT_STARTUP_ONBOARDING="+s.onboarding.modePackId); console.log("SUBAGENT_STARTUP_FAST="+p?.models?.fast); console.log("SUBAGENT_STARTUP_OVERRIDES="+Object.keys(s.models.subagentModels||{}).length);'`,
     );
     await runtime.waitForScreenText(/SUBAGENT_STARTUP_ACTIVE=custom:Subagent Startup Restore E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SUBAGENT_STARTUP_ONBOARDING=custom:Subagent Startup Restore E2E/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /SUBAGENT_STARTUP_ONBOARDING=custom:Subagent Startup Restore E2E/i,
+      terminal,
+      8_000,
+    );
     await runtime.waitForScreenText(/SUBAGENT_STARTUP_FAST=openai\/gpt-5\.5/i, terminal, 8_000);
     await runtime.waitForScreenText(/SUBAGENT_STARTUP_OVERRIDES=0/i, terminal, 8_000);
 
@@ -76,7 +81,9 @@ export const subagentModelStartupRestoreScenario = {
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 3) {
-      throw new Error(`Expected subagent model startup restore scenario to make 3 AIMock requests, received ${requests.length}`);
+      throw new Error(
+        `Expected subagent model startup restore scenario to make 3 AIMock requests, received ${requests.length}`,
+      );
     }
     const serialized = JSON.stringify(requests);
     if (!serialized.includes('call_subagent_startup_restore') || !serialized.includes('agentType')) {

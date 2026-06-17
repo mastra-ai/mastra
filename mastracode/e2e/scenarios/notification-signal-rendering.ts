@@ -2,7 +2,9 @@ import { expect } from './expect.js';
 import type { McE2eInProcessApp, McE2eScenario } from './types.js';
 
 function getRequestBodies(requests: unknown[]): unknown[] {
-  return requests.map(request => (typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined));
+  return requests.map(request =>
+    typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined,
+  );
 }
 
 export const notificationSignalRenderingScenario = {
@@ -58,9 +60,11 @@ export const notificationSignalRenderingScenario = {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
 
-    await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as ReturnType<
-      typeof expect
-    >).toBeVisible();
+    await (
+      expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as ReturnType<
+        typeof expect
+      >
+    ).toBeVisible();
     terminal.keyCtrlC();
     await runtime.waitForScreenTextAbsent(/\[WorkspaceSkills\].*Expected string/i, terminal, 8_000);
     runtime.printScreen('after startup', terminal);

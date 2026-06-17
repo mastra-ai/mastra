@@ -25,7 +25,6 @@ export const harnessApiConfigScenario: McE2eScenario = {
       join(wrongConfigRoot, 'commands', 'wrong-harness-api.md'),
       `---\ndescription: Wrong initialState configDir command\n---\nThis command should not load\n`,
     );
-
   },
   inProcessApp({ startMastraCodeApp }) {
     return startMastraCodeApp({
@@ -49,7 +48,9 @@ export const harnessApiConfigScenario: McE2eScenario = {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
 
-    await expect(terminal.getByText(/Harness API Code|Project:|Resource ID:/gi, { full: true, strict: false })).toBeVisible();
+    await expect(
+      terminal.getByText(/Harness API Code|Project:|Resource ID:/gi, { full: true, strict: false }),
+    ).toBeVisible();
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('/help');

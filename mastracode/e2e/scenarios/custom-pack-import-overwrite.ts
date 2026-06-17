@@ -16,7 +16,8 @@ const importedPackString = `mastra-pack:${Buffer.from(JSON.stringify(importedPac
 
 export const customPackImportOverwriteScenario = {
   name: 'custom-pack-import-overwrite',
-  description: 'Imports a shared custom model pack through /models, overwrites a name collision, and verifies persistence.',
+  description:
+    'Imports a shared custom model pack through /models, overwrites a name collision, and verifies persistence.',
   testName: 'imports a shared custom pack over a name collision and persists the imported defaults',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');

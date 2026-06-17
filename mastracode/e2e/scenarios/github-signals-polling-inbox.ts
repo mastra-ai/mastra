@@ -79,7 +79,8 @@ process.exit(2);
 export const githubSignalsPollingInboxScenario = {
   name: 'github-signals-polling-inbox',
   projectFixture: 'long-branch',
-  description: 'delivers a GitHub polling notification, reads it with notification_inbox, and reloads the thread history',
+  description:
+    'delivers a GitHub polling notification, reads it with notification_inbox, and reloads the thread history',
   testName: 'renders a polling-delivered GitHub notification through inbox read and thread reload',
   useOpenAIModel: true,
   aimockFixture: 'github-signals-polling-inbox.json',
@@ -95,7 +96,10 @@ export const githubSignalsPollingInboxScenario = {
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
     const { dbPath, mockGitcrawlPath } = prepareGitcrawlFixture(context);
-    writeFileSync(join(context.projectDir, '.gitcrawl-polling-inbox-e2e-env.json'), JSON.stringify({ dbPath, mockGitcrawlPath }));
+    writeFileSync(
+      join(context.projectDir, '.gitcrawl-polling-inbox-e2e-env.json'),
+      JSON.stringify({ dbPath, mockGitcrawlPath }),
+    );
 
     const now = new Date('2026-06-12T09:01:00.000Z');
     const metadata = {
@@ -124,7 +128,10 @@ export const githubSignalsPollingInboxScenario = {
         },
       },
     };
-    const userContent = JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'Seeded GitHub polling inbox thread.' }] });
+    const userContent = JSON.stringify({
+      format: 2,
+      parts: [{ type: 'text', text: 'Seeded GitHub polling inbox thread.' }],
+    });
     const assistantContent = JSON.stringify({
       format: 2,
       parts: [{ type: 'text', text: 'Ready for GitHub polling inbox fixture.' }],
@@ -173,7 +180,10 @@ values
                   threadId: (target as { threadId?: string }).threadId,
                 }
               : target;
-          return (originalSendNotificationSignal as (notification: unknown, target: unknown) => unknown)(notification, scopedTarget);
+          return (originalSendNotificationSignal as (notification: unknown, target: unknown) => unknown)(
+            notification,
+            scopedTarget,
+          );
         }) as SendNotificationSignal;
         agent.sendNotificationSignal = sendScopedNotificationSignal;
         const pollTimer = setTimeout(() => {
@@ -189,7 +199,9 @@ values
   },
   verifyAimockRequests(requests) {
     const serialized = JSON.stringify(
-      requests.map(request => (typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined)),
+      requests.map(request =>
+        typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined,
+      ),
     );
     if (!serialized.includes('github-signals-polling-inbox')) {
       throw new Error('Expected the polling-delivered notification context to reach AIMock');
@@ -220,8 +232,14 @@ values
     terminal.submit('Read the GitHub polling notification from the inbox.');
     await runtime.waitForScreenText(/GitHub polling inbox notification read completed/i, terminal, 30_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17640 CI recovered/i, terminal, 30_000);
-    terminal.submit(`!sqlite3 "$MC_E2E_DB_PATH" "select 'GITHUB_POLLING_INBOX_STATUS=' || status || ':' || kind from mastra_notifications where source='github' order by createdAt desc limit 1;"`);
-    await runtime.waitForScreenText(/GITHUB_POLLING_INBOX_STATUS=(seen|pending):pull-request-ci-recovered/i, terminal, 8_000);
+    terminal.submit(
+      `!sqlite3 "$MC_E2E_DB_PATH" "select 'GITHUB_POLLING_INBOX_STATUS=' || status || ':' || kind from mastra_notifications where source='github' order by createdAt desc limit 1;"`,
+    );
+    await runtime.waitForScreenText(
+      /GITHUB_POLLING_INBOX_STATUS=(seen|pending):pull-request-ci-recovered/i,
+      terminal,
+      8_000,
+    );
 
     terminal.submit('/new');
     await runtime.waitForScreenText(/Ready for new conversation/i, terminal, 8_000);

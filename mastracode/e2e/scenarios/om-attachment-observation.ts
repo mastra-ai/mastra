@@ -25,14 +25,19 @@ export const omAttachmentObservationScenario = {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
     settings.onboarding = {
-      ...((typeof settings.onboarding === 'object' && settings.onboarding !== null ? settings.onboarding : {}) as Record<string, unknown>),
+      ...((typeof settings.onboarding === 'object' && settings.onboarding !== null
+        ? settings.onboarding
+        : {}) as Record<string, unknown>),
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
       quietModePreferenceSelected: true,
     };
     settings.models = {
-      ...((typeof settings.models === 'object' && settings.models !== null ? settings.models : {}) as Record<string, unknown>),
+      ...((typeof settings.models === 'object' && settings.models !== null ? settings.models : {}) as Record<
+        string,
+        unknown
+      >),
       observerModelOverride: 'openai/gpt-5.4-mini',
       reflectorModelOverride: 'openai/gpt-5.4-mini',
       omObservationThreshold: 2100,
@@ -42,7 +47,11 @@ export const omAttachmentObservationScenario = {
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   },
   async inProcessApp({ startMastraCodeApp }) {
-    const restoreFetch = installOpenAIFetchCapture({ capturePath: RAW_REQUEST_CAPTURE_PATH, append: true, inputTokens: 2600 });
+    const restoreFetch = installOpenAIFetchCapture({
+      capturePath: RAW_REQUEST_CAPTURE_PATH,
+      append: true,
+      inputTokens: 2600,
+    });
     const app = await startMastraCodeApp();
     return {
       stop: async () => {
@@ -85,12 +94,16 @@ export const omAttachmentObservationScenario = {
       .map(line => JSON.parse(line) as { body: string });
     const observerRequest = rawRequests.find(request => request.body.includes('## New Message History to Observe'));
     if (!observerRequest) {
-      throw new Error(`Expected an OM observer request in raw OpenAI traffic: ${rawRequests.map(r => r.body.slice(0, 300)).join('\n---\n')}`);
+      throw new Error(
+        `Expected an OM observer request in raw OpenAI traffic: ${rawRequests.map(r => r.body.slice(0, 300)).join('\n---\n')}`,
+      );
     }
 
     const body = observerRequest.body;
     if (!body.includes('[Image #1') || !body.includes('image/png') || !body.includes(TINY_PNG_BASE64)) {
-      throw new Error(`Expected observer request to include attachment placeholder and pasted PNG part: ${body.slice(0, 3000)}`);
+      throw new Error(
+        `Expected observer request to include attachment placeholder and pasted PNG part: ${body.slice(0, 3000)}`,
+      );
     }
     if (body.includes('[image]')) {
       throw new Error('Expected editor placeholder to be replaced before OM observation input');

@@ -1,4 +1,5 @@
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createGlobalPatchScope } from './global-patches.js';
 
 export type OpenAIFetchCaptureOptions = {
@@ -13,7 +14,9 @@ function getFetchUrl(input: Parameters<typeof fetch>[0]): string {
   return input.url;
 }
 
-async function getBodyText(body: BodyInit | null | undefined): Promise<{ bodyText?: string; nextBody?: BodyInit | null }> {
+async function getBodyText(
+  body: BodyInit | null | undefined,
+): Promise<{ bodyText?: string; nextBody?: BodyInit | null }> {
   if (!body) return {};
   if (typeof body === 'string') return { bodyText: body, nextBody: body };
   if (body instanceof Uint8Array) {
@@ -28,6 +31,7 @@ async function getBodyText(body: BodyInit | null | undefined): Promise<{ bodyTex
 }
 
 export function installOpenAIFetchCapture(options: OpenAIFetchCaptureOptions): () => void {
+  mkdirSync(dirname(options.capturePath), { recursive: true });
   const patches = createGlobalPatchScope();
   const originalFetch = globalThis.fetch.bind(globalThis);
 

@@ -6,7 +6,11 @@ import type { McE2eScenario } from './types.js';
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
-const RAW_REQUEST_CAPTURE_PATH = join(process.cwd(), '.tmp-mc-e2e', 'file-attachment-blocked-retry-openai-request.json');
+const RAW_REQUEST_CAPTURE_PATH = join(
+  process.cwd(),
+  '.tmp-mc-e2e',
+  'file-attachment-blocked-retry-openai-request.json',
+);
 const promptText = 'Please retry attachment after hook';
 
 function hookScript(): string {

@@ -392,7 +392,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);
 
   // Hooks
-  const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init', configDir, homeDir);
+  const hookManager = config?.disableHooks
+    ? undefined
+    : new HookManager(project.rootPath, 'session-init', configDir, homeDir);
 
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();

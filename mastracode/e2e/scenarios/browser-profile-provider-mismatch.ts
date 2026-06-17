@@ -79,7 +79,11 @@ export const browserProfileProviderMismatchScenario = {
     terminal.submit(
       `!node -e 'const fs=require("fs"); const path=require("path"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; const marker=fs.readFileSync(path.join(b.profile,".mastra-provider"),"utf8").trim(); console.log("BROWSER_MISMATCH_PROCEED="+[b.enabled,b.provider,b.headless,b.profile.endsWith("browser-profile-provider-mismatch"),marker].join(":"));'`,
     );
-    await runtime.waitForScreenText(/BROWSER_MISMATCH_PROCEED=true:agent-browser:false:true:agent-browser/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /BROWSER_MISMATCH_PROCEED=true:agent-browser:false:true:agent-browser/i,
+      terminal,
+      8_000,
+    );
 
     terminal.keyCtrlC();
   },

@@ -64,7 +64,11 @@ values
     await runtime.waitForScreenText(/Switched to: E2E loaded state signal fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/Open the persisted state signal fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/State delta: browser/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Browser state reload e2e delta: active tab changed to https:\/\/example\.test\/reload-state/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /Browser state reload e2e delta: active tab changed to https:\/\/example\.test\/reload-state/i,
+      terminal,
+      8_000,
+    );
 
     terminal.keyCtrlC();
   },

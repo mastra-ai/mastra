@@ -17,7 +17,9 @@ export const browserWizardExportScenario = {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>;
     settings.onboarding = {
-      ...((typeof settings.onboarding === 'object' && settings.onboarding !== null ? settings.onboarding : {}) as Record<string, unknown>),
+      ...((typeof settings.onboarding === 'object' && settings.onboarding !== null
+        ? settings.onboarding
+        : {}) as Record<string, unknown>),
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
@@ -73,15 +75,27 @@ export const browserWizardExportScenario = {
     await runtime.waitForScreenText(/Browser automation enabled:/i, terminal, 10_000);
     await runtime.waitForScreenText(/Provider:\s+AgentBrowser \(deterministic\)/i, terminal, 8_000);
     await runtime.waitForScreenText(/Headless:\s+no/i, terminal, 8_000);
-    await runtime.waitForScreenText(/CDP URL: ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-wizard-export-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /CDP URL: ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-wizard-export-e2e/i,
+      terminal,
+      8_000,
+    );
 
     terminal.submit('/browser status');
     await runtime.waitForScreenText(/Browser: enabled/i, terminal, 8_000);
     await runtime.waitForScreenText(/Provider:\s+AgentBrowser \(deterministic\)/i, terminal, 8_000);
-    await runtime.waitForScreenText(/CDP URL: ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-wizard-export-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /CDP URL: ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-wizard-export-e2e/i,
+      terminal,
+      8_000,
+    );
 
     terminal.submit(`/browser export storageState ${exportPath}`);
-    await runtime.waitForScreenText(/Storage state exported to: \/tmp\/mastracode-browser-wizard-export-storage-state\.json/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /Storage state exported to: \/tmp\/mastracode-browser-wizard-export-storage-state\.json/i,
+      terminal,
+      8_000,
+    );
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; const exported=JSON.parse(fs.readFileSync("${exportPath}","utf8")); console.log("BROWSER_WIZARD_PROVIDER="+b.provider); console.log("BROWSER_WIZARD_ENABLED="+b.enabled+":"+b.headless); console.log("BROWSER_WIZARD_CDP="+(b.cdpUrl||"missing").includes("browser-wizard-export-e2e")); console.log("BROWSER_WIZARD_LAUNCH_OPTS="+(b.profile||"missing")+":"+(b.executablePath||"missing")); console.log("BROWSER_WIZARD_EXPORT="+exported.source+":"+exported.provider);'`,

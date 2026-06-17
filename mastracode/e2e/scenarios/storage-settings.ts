@@ -63,7 +63,9 @@ export const storageSettingsScenario: McE2eScenario = {
       throw new Error(`Expected pg storage backend, got ${settings.storage?.backend ?? '<unset>'}`);
     }
     if (settings.storage?.pg?.connectionString !== connection) {
-      throw new Error(`Expected raw PostgreSQL connection string to persist, got ${settings.storage?.pg?.connectionString}`);
+      throw new Error(
+        `Expected raw PostgreSQL connection string to persist, got ${settings.storage?.pg?.connectionString}`,
+      );
     }
   },
 };

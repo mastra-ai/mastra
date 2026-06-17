@@ -47,7 +47,11 @@ export const browserWizardBrowserbaseScenario = {
     terminal.write('\x1b[B');
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Browserbase requires BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /Browserbase requires BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID/i,
+      terminal,
+      8_000,
+    );
     await runtime.waitForScreenText(/Browser automation enabled:/i, terminal, 10_000);
     await runtime.waitForScreenText(/Provider:\s+Stagehand \(AI-powered\)/i, terminal, 8_000);
     await runtime.waitForScreenText(/Environment:\s+BROWSERBASE/i, terminal, 8_000);

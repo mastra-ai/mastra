@@ -1,4 +1,3 @@
-
 import { z } from 'zod/v3';
 
 import { expect } from './expect.js';
@@ -38,9 +37,11 @@ export const webSearchRenderingScenario = {
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
 
-    await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as ReturnType<
-      typeof expect
-    >).toBeVisible();
+    await (
+      expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as ReturnType<
+        typeof expect
+      >
+    ).toBeVisible();
     terminal.submit('Run the deterministic web search rendering e2e.');
 
     await runtime.waitForScreenText(/Mastra E2E Web Search Result/i, terminal, 10_000);

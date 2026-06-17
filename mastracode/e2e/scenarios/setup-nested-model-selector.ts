@@ -57,7 +57,11 @@ export const setupNestedModelSelectorScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
     const afterSetup = terminal.serialize().view;
-    if (/Welcome to Mastra Code|Model Packs|Observational Memory|Tool Approval|Select model for plan mode/i.test(afterSetup)) {
+    if (
+      /Welcome to Mastra Code|Model Packs|Observational Memory|Tool Approval|Select model for plan mode/i.test(
+        afterSetup,
+      )
+    ) {
       throw new Error('Expected setup overlay to be dismissed after finishing defaults');
     }
 

@@ -6,7 +6,8 @@ const pendingCdpUrl = 'ws://127.0.0.1:65535/devtools/browser/browserbase-startup
 
 export const browserbaseStartupRestoreScenario = {
   name: 'browserbase-startup-restore',
-  description: 'Restores enabled Stagehand Browserbase settings at startup and tracks them as the active browser runtime.',
+  description:
+    'Restores enabled Stagehand Browserbase settings at startup and tracks them as the active browser runtime.',
   testName: 'restores Browserbase startup settings and separates pending saved drift',
   env: () => ({
     BROWSERBASE_API_KEY: 'mc-e2e-browserbase-startup-key',
@@ -41,7 +42,11 @@ export const browserbaseStartupRestoreScenario = {
     await runtime.waitForScreenText(/Environment:\s+BROWSERBASE/i, terminal, 8_000);
 
     terminal.submit(`/browser set cdpUrl ${pendingCdpUrl}`);
-    await runtime.waitForScreenText(/Set cdpUrl = ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browserbase-startup-pending/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /Set cdpUrl = ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browserbase-startup-pending/i,
+      terminal,
+      8_000,
+    );
     await runtime.waitForScreenText(/Run \/browser on to apply\./i, terminal, 8_000);
 
     terminal.submit('/browser status');

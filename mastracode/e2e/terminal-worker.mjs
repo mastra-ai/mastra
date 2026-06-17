@@ -7,7 +7,9 @@ async function main() {
     const { runTerminalBackend } = await tsImport('./terminal-backend.ts', import.meta.url);
     process.stderr.write(`[mc-e2e:terminal-worker] running ${workerData.config?.scenarioName ?? 'unknown'}\n`);
     const status = await runTerminalBackend(workerData.config);
-    process.stderr.write(`[mc-e2e:terminal-worker] done ${workerData.config?.scenarioName ?? 'unknown'} status=${status}\n`);
+    process.stderr.write(
+      `[mc-e2e:terminal-worker] done ${workerData.config?.scenarioName ?? 'unknown'} status=${status}\n`,
+    );
     parentPort?.postMessage({ status });
   } catch (error) {
     parentPort?.postMessage({

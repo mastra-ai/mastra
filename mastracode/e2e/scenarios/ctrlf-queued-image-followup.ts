@@ -9,7 +9,11 @@ const CTRL_F = '\x06';
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
 const START_PROMPT = 'Start a slow Ctrl F queue run.';
 const QUEUED_PROMPT = 'Queued Ctrl F image follow-up';
-const RAW_REQUEST_CAPTURE_PATH = join(process.cwd(), '.tmp-mc-e2e', 'ctrlf-queued-image-followup-openai-requests.jsonl');
+const RAW_REQUEST_CAPTURE_PATH = join(
+  process.cwd(),
+  '.tmp-mc-e2e',
+  'ctrlf-queued-image-followup-openai-requests.jsonl',
+);
 
 function getRequestBody(request: unknown): unknown {
   return typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined;
@@ -77,11 +81,15 @@ export const ctrlfQueuedImageFollowupScenario = {
       .map(line => JSON.parse(line) as { body: string });
     const queuedRequest = rawRequests.find(request => request.body.includes(QUEUED_PROMPT));
     if (!queuedRequest) {
-      throw new Error(`Expected raw queued OpenAI request: ${rawRequests.map(r => r.body.slice(0, 300)).join('\n---\n')}`);
+      throw new Error(
+        `Expected raw queued OpenAI request: ${rawRequests.map(r => r.body.slice(0, 300)).join('\n---\n')}`,
+      );
     }
 
     if (!queuedRequest.body.includes('image/png') || !queuedRequest.body.includes(TINY_PNG_BASE64)) {
-      throw new Error(`Expected queued request to include pasted PNG attachment data: ${queuedRequest.body.slice(0, 3000)}`);
+      throw new Error(
+        `Expected queued request to include pasted PNG attachment data: ${queuedRequest.body.slice(0, 3000)}`,
+      );
     }
     if (queuedRequest.body.includes('[image]')) {
       throw new Error('Expected editor image placeholder to be removed before queued provider request');

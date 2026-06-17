@@ -31,7 +31,9 @@ async function startHeadlessMcpFixtureServer() {
 }
 
 function getRequestBodies(requests: unknown[]): unknown[] {
-  return requests.map(request => (typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined));
+  return requests.map(request =>
+    typeof request === 'object' && request !== null && 'body' in request ? request.body : undefined,
+  );
 }
 
 async function runHeadlessInProcess(terminal: { write: (text: string) => void }): Promise<void> {
@@ -51,13 +53,21 @@ async function runHeadlessInProcess(terminal: { write: (text: string) => void })
     '30',
   ];
 
-  process.stdout.write = ((chunk: string | Uint8Array, encodingOrCallback?: BufferEncoding | ((error?: Error | null) => void), callback?: (error?: Error | null) => void) => {
+  process.stdout.write = ((
+    chunk: string | Uint8Array,
+    encodingOrCallback?: BufferEncoding | ((error?: Error | null) => void),
+    callback?: (error?: Error | null) => void,
+  ) => {
     terminal.write(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
     if (typeof encodingOrCallback === 'function') encodingOrCallback();
     else callback?.();
     return true;
   }) as typeof process.stdout.write;
-  process.stderr.write = ((chunk: string | Uint8Array, encodingOrCallback?: BufferEncoding | ((error?: Error | null) => void), callback?: (error?: Error | null) => void) => {
+  process.stderr.write = ((
+    chunk: string | Uint8Array,
+    encodingOrCallback?: BufferEncoding | ((error?: Error | null) => void),
+    callback?: (error?: Error | null) => void,
+  ) => {
     terminal.write(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
     if (typeof encodingOrCallback === 'function') encodingOrCallback();
     else callback?.();
@@ -113,7 +123,11 @@ export const headlessMcpToolAvailabilityScenario = {
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
 
-    await runtime.waitForScreenText(/Headless MCP lookup completed with payload MC_HEADLESS_MCP_RESULT:headless-e2e:ok/i, terminal, 35_000);
+    await runtime.waitForScreenText(
+      /Headless MCP lookup completed with payload MC_HEADLESS_MCP_RESULT:headless-e2e:ok/i,
+      terminal,
+      35_000,
+    );
     runtime.printScreen('headless mcp tool availability', terminal);
   },
   verifyAimockRequests(requests) {

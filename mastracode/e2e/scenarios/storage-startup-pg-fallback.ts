@@ -5,7 +5,8 @@ import type { McE2eScenario } from './types.js';
 
 export const storageStartupPgFallbackScenario: McE2eScenario = {
   name: 'storage-startup-pg-fallback',
-  description: 'Verify persisted PostgreSQL storage settings are read on startup and fall back visibly when incomplete.',
+  description:
+    'Verify persisted PostgreSQL storage settings are read on startup and fall back visibly when incomplete.',
   testName: 'loads persisted PostgreSQL storage settings at startup and shows fallback warning',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');

@@ -36,10 +36,18 @@ export const browserActivePendingStatusScenario = {
     terminal.submit('/browser status');
     await runtime.waitForScreenText(/Browser: enabled/i, terminal, 10_000);
     await runtime.waitForScreenText(/Provider: AgentBrowser \(deterministic\)/i, terminal, 8_000);
-    await runtime.waitForScreenText(/CDP URL: ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-active-status-active/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /CDP URL: ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-active-status-active/i,
+      terminal,
+      8_000,
+    );
 
     terminal.submit(`/browser set cdpUrl ${pendingCdpUrl}`);
-    await runtime.waitForScreenText(/Set cdpUrl = ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-active-status-pending/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /Set cdpUrl = ws:\/\/127\.0\.0\.1:65535\/devtools\/browser\/browser-active-status-pending/i,
+      terminal,
+      8_000,
+    );
     await runtime.waitForScreenText(/Run \/browser on to apply\./i, terminal, 8_000);
 
     terminal.submit('/browser status');

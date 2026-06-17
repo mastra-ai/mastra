@@ -105,7 +105,7 @@ export async function startMcpHttpFixtureServer(options: McpHttpFixtureOptions):
       await transport.handleRequest(req, res);
     })().catch(error => {
       res.writeHead(500, { 'content-type': 'text/plain' });
-      res.end(String(error instanceof Error ? error.stack ?? error.message : error));
+      res.end(String(error instanceof Error ? (error.stack ?? error.message) : error));
     });
   });
 

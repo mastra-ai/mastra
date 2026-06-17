@@ -56,7 +56,11 @@ export const mcpSkippedValidationScenario = {
     await runtime.waitForScreenText(/ambiguous_entry: Cannot specify both "command" and "url"/i, terminal, 8_000);
     await runtime.waitForScreenText(/malformed_url: Invalid URL: "not a valid url"/i, terminal, 8_000);
     await runtime.waitForScreenText(/bad_oauth_redirect: Invalid OAuth redirectUrl: must use HTTPS/i, terminal, 8_000);
-    await runtime.waitForScreenText(/missing_entry_fields: Missing required field: "command" \(stdio\) or "url" \(http\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /missing_entry_fields: Missing required field: "command" \(stdio\) or "url" \(http\)/i,
+      terminal,
+      8_000,
+    );
 
     terminal.submit('/mcp');
     await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);
@@ -65,7 +69,11 @@ export const mcpSkippedValidationScenario = {
     await runtime.waitForScreenText(/ambiguous_entry — Cannot specify both "command" and "url"/i, terminal, 8_000);
     await runtime.waitForScreenText(/malformed_url — Invalid URL: "not a valid url"/i, terminal, 8_000);
     await runtime.waitForScreenText(/bad_oauth_redirect — Invalid OAuth redirectUrl: must use HTTPS/i, terminal, 8_000);
-    await runtime.waitForScreenText(/missing_entry_fields — Missing required field: "command" \(stdio\) or "url" \(http\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /missing_entry_fields — Missing required field: "command" \(stdio\) or "url" \(http\)/i,
+      terminal,
+      8_000,
+    );
     runtime.printScreen('mcp skipped validation selector', terminal);
     terminal.keyCtrlC();
   },

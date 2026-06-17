@@ -14,7 +14,10 @@ const GOAL_ARGS = 'ship alias path';
 function writeSkill(projectDir: string, name: string, frontmatter: string, body: string) {
   const dir = join(projectDir, '.mastracode', 'skills', name);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'SKILL.md'), `---\nname: ${name}\ndescription: ${name} description\n${frontmatter}---\n${body}\n`);
+  writeFileSync(
+    join(dir, 'SKILL.md'),
+    `---\nname: ${name}\ndescription: ${name} description\n${frontmatter}---\n${body}\n`,
+  );
 }
 
 export const skillsCommandActivationScenario: McE2eScenario = {
@@ -27,12 +30,7 @@ export const skillsCommandActivationScenario: McE2eScenario = {
   aimockFixture: 'skills-command-activation.json',
   prepare({ appDataDir, projectDir }) {
     writeSkill(projectDir, SKILL_NAME, 'user-invocable: true\n', SKILL_INSTRUCTIONS);
-    writeSkill(
-      projectDir,
-      GOAL_SKILL_NAME,
-      'user-invocable: true\nmetadata:\n  goal: true\n',
-      GOAL_INSTRUCTIONS,
-    );
+    writeSkill(projectDir, GOAL_SKILL_NAME, 'user-invocable: true\nmetadata:\n  goal: true\n', GOAL_INSTRUCTIONS);
     writeSkill(projectDir, HIDDEN_SKILL_NAME, 'user-invocable: false\n', 'Hidden skill instructions must stay hidden.');
 
     const settingsPath = join(appDataDir, 'settings.json');

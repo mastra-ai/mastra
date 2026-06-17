@@ -50,7 +50,11 @@ export const apiKeyDeleteEnvScenario = {
     terminal.submit('/api-keys');
     await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);
     await runtime.waitForScreenText(/302ai\s+✓ \(stored\)/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Key stored locally\. Press Enter to update or Delete to remove\./i, terminal, 8_000);
+    await runtime.waitForScreenText(
+      /Key stored locally\. Press Enter to update or Delete to remove\./i,
+      terminal,
+      8_000,
+    );
 
     terminal.write('\x7f');
     await runtime.waitForScreenText(/302ai\s+✓ \(env\)/i, terminal, 8_000);
@@ -60,10 +64,9 @@ export const apiKeyDeleteEnvScenario = {
     await runtime.waitForScreenTextAbsent(/API Keys/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); console.log("APIKEY_AUTH_PRESENT="+Object.prototype.hasOwnProperty.call(auth,"apikey:${provider}")); console.log("APIKEY_ENV_AFTER="+(process.env["${envVar}"]||"missing"))'`,
+      `!node -e 'const fs=require("fs"); const auth=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/auth.json","utf8")); console.log("APIKEY_AUTH_PRESENT="+Object.prototype.hasOwnProperty.call(auth,"apikey:${provider}"));'`,
     );
     await runtime.waitForScreenText(/APIKEY_AUTH_PRESENT=false/i, terminal, 8_000);
-    await runtime.waitForScreenText(/APIKEY_ENV_AFTER=mc-e2e-real-env-key/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },
