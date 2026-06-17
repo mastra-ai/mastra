@@ -358,10 +358,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
           // Don't retry deterministic tool-mock failures — the matcher state cannot
           // change between attempts, so retrying would always fail identically.
-          if (
-            execResult.error.code === TOOL_MOCK_MISMATCH ||
-            execResult.error.code === TOOL_MOCK_EXHAUSTED
-          ) {
+          if (execResult.error.code === TOOL_MOCK_MISMATCH || execResult.error.code === TOOL_MOCK_EXHAUSTED) {
             break;
           }
 

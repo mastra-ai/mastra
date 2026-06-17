@@ -76,7 +76,9 @@ describe('executeTarget agent tool mocks', () => {
 
     expect(result.error).toBeNull();
     expect(liveExecutions).toEqual([]); // mock short-circuited the live tool
-    expect(result.toolMockReport?.served).toEqual([{ mockIndex: 0, toolName: 'getWeather', args: { city: 'Seattle' } }]);
+    expect(result.toolMockReport?.served).toEqual([
+      { mockIndex: 0, toolName: 'getWeather', args: { city: 'Seattle' } },
+    ]);
     expect(result.toolMockReport?.failure).toBeUndefined();
   });
 
@@ -148,7 +150,7 @@ describe('executeTarget agent tool mocks', () => {
     expect(result.toolMockReport?.unconsumed).toEqual([{ mockIndex: 1, toolName: 't', args: { a: 2 } }]);
   });
 
-  it("user beforeToolCall returning proceed:false short-circuits and leaves the mock unconsumed", async () => {
+  it('user beforeToolCall returning proceed:false short-circuits and leaves the mock unconsumed', async () => {
     const liveExecutions: ToolCall[] = [];
     const userBefore = vi.fn().mockReturnValue({ proceed: false, output: 'from-user-hook' });
     const agent = createHookDrivenAgent({

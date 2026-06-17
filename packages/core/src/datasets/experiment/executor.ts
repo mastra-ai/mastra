@@ -376,9 +376,7 @@ function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: A
         // the item fails deterministically via the catch path. Short-circuit the
         // tool here too so the mis-called tool never runs live even before the
         // abort propagates.
-        mockAbort.abort(
-          new Error(`Tool mock failure for "${context.toolName}" (${resolution.code})`),
-        );
+        mockAbort.abort(new Error(`Tool mock failure for "${context.toolName}" (${resolution.code})`));
         return { proceed: false, output: { error: resolution.code } };
       }
 
