@@ -918,27 +918,6 @@ export type HarnessEvent =
  */
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
 
-/**
- * Listener function for coalesced harness display state snapshots.
- */
-export type HarnessDisplayStateListener = (displayState: HarnessDisplayState) => void | Promise<void>;
-
-export interface HarnessDisplayStateSubscriptionOptions {
-  /**
-   * Minimum quiet window before non-critical display state callbacks.
-   *
-   * @default 250
-   */
-  windowMs?: number;
-
-  /**
-   * Maximum time a pending display state snapshot may wait while updates continue.
-   *
-   * @default 500
-   */
-  maxWaitMs?: number;
-}
-
 // =============================================================================
 // Messages
 // =============================================================================
