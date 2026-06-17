@@ -11,6 +11,7 @@ import {
   GITHUB_SIGNALS_METADATA_KEY,
   GITHUB_SYNC_STATUS_TAG,
   normalizeGithubChecksForSnapshot,
+  stripBotMachineState,
 } from './index.js';
 import type {
   GithubPullRequestSnapshot,
@@ -1489,7 +1490,8 @@ describe('GithubSignals', () => {
           metadata: expect.objectContaining({
             github: expect.objectContaining({
               latestCommentAuthor: 'devin-ai-integration',
-              latestCommentBody: 'Acknowledged! The authorized comment should still be delivered.',
+              // Full comment body is no longer persisted in notification metadata; only the excerpt.
+              latestCommentExcerpt: 'Acknowledged! The authorized comment should still be delivered.',
               latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-devin',
               latestCommentUpdatedAt: '2026-06-05T22:05:00.000Z',
             }),
@@ -1778,8 +1780,7 @@ describe('GithubSignals', () => {
           metadata: expect.objectContaining({
             github: expect.objectContaining({
               latestCommentAuthor: 'devin-ai-integration[bot]',
-              latestCommentBody:
-                'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
+              // Full comment body is no longer persisted in notification metadata; only the excerpt.
               latestCommentExcerpt:
                 'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
               latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
@@ -2641,6 +2642,52 @@ describe('GithubSignals', () => {
       ],
       expect.anything(),
     );
+  });
+
+  describe('stripBotMachineState', () => {
+    it('removes CodeRabbit internal-state blocks while keeping human-readable text', () => {
+      const body = [
+        'Nice work on the refactor!',
+        '',
+        '<!-- internal state start -->',
+        'eyJzdGF0ZSI6ImxhcmdlLWJhc2U2NC1ibG9iLXRoYXQtaXMtaHVnZSJ9',
+        'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        '<!-- internal state end -->',
+      ].join('\n');
+      const stripped = stripBotMachineState(body);
+      expect(stripped).toContain('Nice work on the refactor!');
+      expect(stripped).not.toContain('internal state');
+      expect(stripped).not.toContain('eyJzdGF0ZSI');
+    });
+
+    it('removes a standalone trailing internal-state blob with no closing marker', () => {
+      const body = ['Review summary text.', '', '<!-- internal state start -->', 'AAAAAAAAAAAAAAAAAAAA'].join('\n');
+      const stripped = stripBotMachineState(body);
+      expect(stripped).toContain('Review summary text.');
+      expect(stripped).not.toContain('internal state');
+      expect(stripped).not.toContain('AAAAAAAAAAAAAAAAAAAA');
+    });
+
+    it('removes collapsed <details> sections and leftover HTML comments', () => {
+      const body = [
+        'Top-level walkthrough.',
+        '<details>',
+        '<summary>Walkthrough</summary>',
+        'lots of collapsed detail content',
+        '</details>',
+        '<!-- a stray comment -->',
+      ].join('\n');
+      const stripped = stripBotMachineState(body);
+      expect(stripped).toContain('Top-level walkthrough.');
+      expect(stripped).not.toContain('collapsed detail content');
+      expect(stripped).not.toContain('<details>');
+      expect(stripped).not.toContain('stray comment');
+    });
+
+    it('leaves an ordinary comment untouched aside from whitespace normalization', () => {
+      const body = 'Thanks for the fix — looks good to me.';
+      expect(stripBotMachineState(body)).toBe(body);
+    });
   });
 
   it('starts polling after subscribe and stops after the last subscription is removed', async () => {

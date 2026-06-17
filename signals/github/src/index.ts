@@ -453,8 +453,38 @@ function getMergedNotificationSummary(label: string): string {
   return `${label} was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.`;
 }
 
+/**
+ * Strips machine-only state that review bots (e.g. CodeRabbit) embed in PR comment bodies.
+ *
+ * CodeRabbit appends a large base64-encoded `<!-- internal state start -->...<!-- internal state end -->`
+ * blob (often >100KB) plus collapsed `<details>` walkthrough sections to its review comments. None of
+ * that is useful to downstream consumers, and persisting it verbatim balloons notification payloads and
+ * can overflow agent context windows. This removes those blocks while leaving the human-readable text.
+ */
+export function stripBotMachineState(body: string): string {
+  return (
+    body
+      // CodeRabbit / similar machine-state block (may appear with or without a matching end marker).
+      .replace(/<!--\s*internal state start\s*-->[\s\S]*?<!--\s*internal state end\s*-->/gi, '')
+      .replace(/<!--\s*internal state start\s*-->[\s\S]*$/gi, '')
+      // Collapsed walkthrough/details sections used by review bots for verbose machine output.
+      .replace(/<details>[\s\S]*?<\/details>/gi, '')
+      // Generic auto-generated comment markers left behind after the blocks above are removed.
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  );
+}
+
+/** Applies {@link stripBotMachineState} to an optional comment body, preserving `undefined`. */
+function stripCommentBody(body: string | undefined): string | undefined {
+  if (body === undefined) return undefined;
+  const stripped = stripBotMachineState(body);
+  return stripped.length > 0 ? stripped : undefined;
+}
+
 function getCommentExcerpt(body: string): string {
-  const excerpt = body.replace(/\s+/g, ' ').trim();
+  const excerpt = stripBotMachineState(body).replace(/\s+/g, ' ').trim();
   return excerpt.length > 240 ? `${excerpt.slice(0, 237)}...` : excerpt;
 }
 
@@ -934,14 +964,14 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         latestCommentAuthor: readString(latestComment?.author_login),
         latestCommentAuthorType: readString(latestComment?.author_type),
         latestCommentIsBot: latestComment?.is_bot === 1,
-        latestCommentBody: readString(latestComment?.body),
+        latestCommentBody: stripCommentBody(readString(latestComment?.body)),
         latestCommentUrl: readString(latestComment?.html_url),
         latestCommentUpdatedAt: readString(latestComment?.updated_at),
         latestComments: latestComments.map(comment => ({
           author: readString(comment.author_login),
           authorType: readString(comment.author_type),
           isBot: comment.is_bot === 1,
-          body: readString(comment.body),
+          body: stripCommentBody(readString(comment.body)),
           url: readString(comment.html_url),
           updatedAt: readString(comment.updated_at),
         })),
@@ -1572,7 +1602,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           latestCommentAuthor: input.snapshot.latestCommentAuthor,
           latestCommentAuthorType: input.snapshot.latestCommentAuthorType,
           latestCommentIsBot: input.snapshot.latestCommentIsBot,
-          latestCommentBody: input.snapshot.latestCommentBody,
+          // Intentionally omit the full latestCommentBody here: persisting it verbatim bloats
+          // notification payloads (a single CodeRabbit comment can exceed 100KB) and can overflow
+          // agent context windows when listed. The 240-char latestCommentExcerpt is stored instead.
           latestCommentExcerpt,
           latestCommentUrl: input.snapshot.latestCommentUrl,
           latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt,
