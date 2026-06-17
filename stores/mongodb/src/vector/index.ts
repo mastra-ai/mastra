@@ -69,7 +69,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private readonly embeddingFieldName: string;
   private readonly metadataFieldName = 'metadata';
   private readonly documentFieldName = 'document';
-  private collectionForValidation: Collection<MongoDBDocument> | null = null;
   private mongoMetricMap: { [key: string]: string } = {
     cosine: 'cosine',
     euclidean: 'euclidean',
@@ -209,22 +208,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
     }
 
-    try {
-      // Store the dimension and metric in a special metadata document
-      await collection?.updateOne({ _id: '__index_metadata__' }, { $set: { dimension, metric } }, { upsert: true });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'STORE_METADATA_FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            indexName,
-          },
-        },
-        error,
-      );
-    }
   }
 
   /**
@@ -256,6 +239,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     throw new Error(`Index "${indexNameInternal}" did not become ready within timeout`);
   }
 
+  /**
+   * Inserts or updates vectors in the specified index.
+   *
+   * @param indexName - Name of the index (MongoDB collection) to write into.
+   * @param vectors - Array of embedding vectors. Each must have the same
+   *   dimension as declared when the index was created.
+   * @param metadata - Optional array of metadata objects, one per vector,
+   *   stored in a nested `metadata` field alongside the embedding.
+   * @param ids - Optional string IDs for each vector, used as the MongoDB
+   *   document `_id`. Auto-generated UUIDs are used when omitted.
+   * @param documents - Optional text strings associated with each vector,
+   *   stored in a `document` field.
+   * @returns The IDs of the upserted vectors in input order.
+   */
   async upsert({ indexName, vectors, metadata, ids, documents }: MongoDBUpsertVectorParams): Promise<string[]> {
     // Validate input parameters
     validateUpsertInput('MONGODB', vectors, metadata, ids);
@@ -263,8 +260,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     try {
       const collection = await this.getCollection(indexName);
-
-      this.collectionForValidation = collection;
 
       // Get index stats to check dimension
       const stats = await this.describeIndex({ indexName });
@@ -323,6 +318,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       );
     }
   }
+  /**
+   * Runs an approximate nearest-neighbor search against the specified index.
+   *
+   * @param indexName - Name of the index (MongoDB collection) to search.
+   * @param queryVector - The query embedding. Must match the index dimension.
+   * @param topK - Maximum number of results to return (default: 10).
+   * @param filter - Optional metadata filter. Fields are matched against the
+   *   nested `metadata` subdocument; no `metadata.` prefix is needed.
+   * @param includeVector - When true, each result includes the stored embedding
+   *   in a `vector` field (default: false).
+   * @param documentFilter - Optional filter applied to the `document` text
+   *   field, independent of `filter`.
+   * @returns Array of results ordered by descending similarity score.
+   */
   async query({
     indexName,
     queryVector,
@@ -371,26 +380,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       };
 
       if (Object.keys(combinedFilter).length > 0) {
-        // Exclude the special metadata document
-        const filterWithExclusion = {
-          $and: [{ _id: { $ne: '__index_metadata__' } }, combinedFilter],
-        };
-
         // pre-filter for candidate document IDs
         const candidateIds = await collection
-          .aggregate([{ $match: filterWithExclusion }, { $project: { _id: 1 } }])
+          .aggregate([{ $match: combinedFilter }, { $project: { _id: 1 } }])
           .map(doc => doc._id)
           .toArray();
 
         if (candidateIds.length > 0) {
           vectorSearch.filter = { _id: { $in: candidateIds } };
         } else {
-          // No documents match the filter, return empty results
           return [];
         }
-      } else {
-        // Even with no filter, exclude the metadata document
-        vectorSearch.filter = { _id: { $ne: '__index_metadata__' } };
       }
 
       // Build the aggregation pipeline
@@ -462,28 +462,40 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     try {
       const collection = await this.getCollection(indexName, true);
 
-      // Get the count of documents, excluding the metadata document
-      const count = await collection.countDocuments({ _id: { $ne: '__index_metadata__' } });
+      const count = await collection.countDocuments();
 
-      // Retrieve the dimension and metric from the metadata document
-      const metadataDoc = await collection.findOne({ _id: '__index_metadata__' });
-      const dimension = metadataDoc?.dimension || 0;
-      const metric = metadataDoc?.metric || 'cosine';
+      const indexNameInternal = `${indexName}_vector_index`;
+      const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
+      const indexData = indexInfo.find((idx: any) => idx.name === indexNameInternal);
 
-      return {
-        dimension,
-        count,
-        metric: metric as 'cosine' | 'euclidean' | 'dotproduct',
+      if (!indexData) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `Atlas Search index "${indexNameInternal}" does not exist on collection "${indexName}". The collection may predate Mastra or the index may have been dropped externally.`,
+        });
+      }
+
+      const vectorField = indexData.latestDefinition?.fields?.find((f: any) => f.type === 'vector');
+      const dimension = vectorField?.numDimensions ?? 0;
+      const reverseMetricMap: Record<string, 'cosine' | 'euclidean' | 'dotproduct'> = {
+        cosine: 'cosine',
+        euclidean: 'euclidean',
+        dotProduct: 'dotproduct',
       };
+      const metric = reverseMetricMap[vectorField?.similarity] ?? 'cosine';
+
+      return { dimension, count, metric };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: {
-            indexName,
-          },
+          details: { indexName },
         },
         error,
       );
@@ -731,12 +743,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           });
         }
 
-        // Exclude the special metadata document and combine with user filter
-        const finalFilter = {
-          $and: [{ _id: { $ne: '__index_metadata__' } }, transformedFilter],
-        };
-
-        await collection.deleteMany(finalFilter);
+        await collection.deleteMany(transformedFilter);
       }
     } catch (error) {
       // If it's already a MastraError, rethrow it
@@ -787,9 +794,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
 
     if (dimension === 0) {
-      // If dimension is not set, retrieve and set it from the vectors
       dimension = vectors[0] ? vectors[0].length : 0;
-      await this.setIndexDimension(dimension);
     }
 
     for (let i = 0; i < vectors.length; i++) {
@@ -798,12 +803,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         throw new Error(`Vector at index ${i} has invalid dimension ${v}. Expected ${dimension} dimensions.`);
       }
     }
-  }
-
-  private async setIndexDimension(dimension: number): Promise<void> {
-    // Store the dimension in a special metadata document
-    const collection = this.collectionForValidation!; // 'collectionForValidation' is set in 'upsert' method
-    await collection.updateOne({ _id: '__index_metadata__' }, { $set: { dimension } }, { upsert: true });
   }
 
   private transformFilter(filter?: MongoDBVectorFilter) {
