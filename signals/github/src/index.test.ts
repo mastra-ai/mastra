@@ -11,7 +11,7 @@ import {
   GITHUB_SIGNALS_METADATA_KEY,
   GITHUB_SYNC_STATUS_TAG,
   normalizeGithubChecksForSnapshot,
-  stripBotMachineState,
+  sanitizeCommentText,
 } from './index.js';
 import type {
   GithubPullRequestSnapshot,
@@ -2644,49 +2644,62 @@ describe('GithubSignals', () => {
     );
   });
 
-  describe('stripBotMachineState', () => {
-    it('removes CodeRabbit internal-state blocks while keeping human-readable text', () => {
+  describe('sanitizeCommentText', () => {
+    it('removes large HTML-comment state blobs while keeping human-readable text', () => {
       const body = [
         'Nice work on the refactor!',
         '',
-        '<!-- internal state start -->',
+        '<!-- internal state start',
         'eyJzdGF0ZSI6ImxhcmdlLWJhc2U2NC1ibG9iLXRoYXQtaXMtaHVnZSJ9',
         'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-        '<!-- internal state end -->',
+        'internal state end -->',
       ].join('\n');
-      const stripped = stripBotMachineState(body);
-      expect(stripped).toContain('Nice work on the refactor!');
-      expect(stripped).not.toContain('internal state');
-      expect(stripped).not.toContain('eyJzdGF0ZSI');
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('Nice work on the refactor!');
+      expect(sanitized).not.toContain('internal state');
+      expect(sanitized).not.toContain('eyJzdGF0ZSI');
     });
 
-    it('removes a standalone trailing internal-state blob with no closing marker', () => {
-      const body = ['Review summary text.', '', '<!-- internal state start -->', 'AAAAAAAAAAAAAAAAAAAA'].join('\n');
-      const stripped = stripBotMachineState(body);
-      expect(stripped).toContain('Review summary text.');
-      expect(stripped).not.toContain('internal state');
-      expect(stripped).not.toContain('AAAAAAAAAAAAAAAAAAAA');
-    });
-
-    it('removes collapsed <details> sections and leftover HTML comments', () => {
+    it('strips tags with attributes such as <details open> and any inner markup', () => {
       const body = [
         'Top-level walkthrough.',
-        '<details>',
+        '<details open>',
         '<summary>Walkthrough</summary>',
-        'lots of collapsed detail content',
+        'collapsed detail content',
         '</details>',
+        '<br/>',
         '<!-- a stray comment -->',
       ].join('\n');
-      const stripped = stripBotMachineState(body);
-      expect(stripped).toContain('Top-level walkthrough.');
-      expect(stripped).not.toContain('collapsed detail content');
-      expect(stripped).not.toContain('<details>');
-      expect(stripped).not.toContain('stray comment');
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('Top-level walkthrough.');
+      expect(sanitized).toContain('collapsed detail content');
+      expect(sanitized).not.toContain('<details');
+      expect(sanitized).not.toContain('<summary>');
+      expect(sanitized).not.toContain('<br');
+      expect(sanitized).not.toContain('stray comment');
+    });
+
+    it('leaves no partial markup behind, including stray < or unterminated <!--', () => {
+      const body = 'before <!-- unterminated and a lone < bracket after';
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).not.toContain('<!--');
+      expect(sanitized).not.toContain('<');
+      expect(sanitized).toContain('before');
+      expect(sanitized).toContain('bracket after');
+    });
+
+    it('handles adversarial repeated comment openers without catastrophic backtracking', () => {
+      const body = `${'<!-- internal state start -->'.repeat(5000)}tail`;
+      const start = Date.now();
+      const sanitized = sanitizeCommentText(body);
+      expect(Date.now() - start).toBeLessThan(1000);
+      expect(sanitized).toContain('tail');
+      expect(sanitized).not.toContain('<!--');
     });
 
     it('leaves an ordinary comment untouched aside from whitespace normalization', () => {
       const body = 'Thanks for the fix — looks good to me.';
-      expect(stripBotMachineState(body)).toBe(body);
+      expect(sanitizeCommentText(body)).toBe(body);
     });
   });
 

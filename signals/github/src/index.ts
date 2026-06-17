@@ -454,37 +454,43 @@ function getMergedNotificationSummary(label: string): string {
 }
 
 /**
- * Strips machine-only state that review bots (e.g. CodeRabbit) embed in PR comment bodies.
+ * Removes XML/HTML-like markup from a PR comment body, leaving only human-readable text.
  *
- * CodeRabbit appends a large base64-encoded `<!-- internal state start -->...<!-- internal state end -->`
- * blob (often >100KB) plus collapsed `<details>` walkthrough sections to its review comments. None of
- * that is useful to downstream consumers, and persisting it verbatim balloons notification payloads and
- * can overflow agent context windows. This removes those blocks while leaving the human-readable text.
+ * Review bots (e.g. CodeRabbit) embed large machine-only payloads in comments — base64 state blobs
+ * inside `<!-- ... -->` comments (often >100KB) and verbose collapsed `<details>` sections. Rather than
+ * targeting specific bot markers, we strip all HTML comments and tags generically, since none of that
+ * markup is useful to downstream consumers and persisting it balloons notification payloads and can
+ * overflow agent context windows.
+ *
+ * The patterns below are written to avoid catastrophic backtracking (ReDoS) on adversarial input:
+ * each uses a negated character class with a possessive-style boundary instead of a backtrackable
+ * `[\s\S]*?`, and any unterminated `<!--` / stray `<` is dropped so no partial markup survives.
  */
-export function stripBotMachineState(body: string): string {
+export function sanitizeCommentText(body: string): string {
   return (
     body
-      // CodeRabbit / similar machine-state block (may appear with or without a matching end marker).
-      .replace(/<!--\s*internal state start\s*-->[\s\S]*?<!--\s*internal state end\s*-->/gi, '')
-      .replace(/<!--\s*internal state start\s*-->[\s\S]*$/gi, '')
-      // Collapsed walkthrough/details sections used by review bots for verbose machine output.
-      .replace(/<details>[\s\S]*?<\/details>/gi, '')
-      // Generic auto-generated comment markers left behind after the blocks above are removed.
-      .replace(/<!--[\s\S]*?-->/g, '')
+      // HTML comments, including the large base64 state blobs bots hide inside them.
+      // `[^-]*-+(?:[^->][^-]*-+)*` consumes up to the first `-->` without nested backtracking.
+      .replace(/<!--[^-]*-+(?:[^->][^-]*-+)*>/g, '')
+      // Any remaining XML/HTML-like tags (e.g. <details open>, </summary>, <br/>).
+      .replace(/<\/?[a-zA-Z][^>]*>/g, '')
+      // Drop any leftover unterminated comment opener or stray `<` to avoid partial markup.
+      .replace(/<!--/g, '')
+      .replace(/</g, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim()
   );
 }
 
-/** Applies {@link stripBotMachineState} to an optional comment body, preserving `undefined`. */
-function stripCommentBody(body: string | undefined): string | undefined {
+/** Applies {@link sanitizeCommentText} to an optional comment body, preserving `undefined`. */
+function sanitizeCommentBody(body: string | undefined): string | undefined {
   if (body === undefined) return undefined;
-  const stripped = stripBotMachineState(body);
-  return stripped.length > 0 ? stripped : undefined;
+  const sanitized = sanitizeCommentText(body);
+  return sanitized.length > 0 ? sanitized : undefined;
 }
 
 function getCommentExcerpt(body: string): string {
-  const excerpt = stripBotMachineState(body).replace(/\s+/g, ' ').trim();
+  const excerpt = sanitizeCommentText(body).replace(/\s+/g, ' ').trim();
   return excerpt.length > 240 ? `${excerpt.slice(0, 237)}...` : excerpt;
 }
 
@@ -964,14 +970,14 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         latestCommentAuthor: readString(latestComment?.author_login),
         latestCommentAuthorType: readString(latestComment?.author_type),
         latestCommentIsBot: latestComment?.is_bot === 1,
-        latestCommentBody: stripCommentBody(readString(latestComment?.body)),
+        latestCommentBody: sanitizeCommentBody(readString(latestComment?.body)),
         latestCommentUrl: readString(latestComment?.html_url),
         latestCommentUpdatedAt: readString(latestComment?.updated_at),
         latestComments: latestComments.map(comment => ({
           author: readString(comment.author_login),
           authorType: readString(comment.author_type),
           isBot: comment.is_bot === 1,
-          body: stripCommentBody(readString(comment.body)),
+          body: sanitizeCommentBody(readString(comment.body)),
           url: readString(comment.html_url),
           updatedAt: readString(comment.updated_at),
         })),
