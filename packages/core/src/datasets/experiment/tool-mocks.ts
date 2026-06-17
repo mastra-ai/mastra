@@ -102,6 +102,13 @@ export class ToolMockMatcher {
    *   (`TOOL_MOCK_EXHAUSTED` if args matched but all consumed, else `TOOL_MOCK_MISMATCH`)
    */
   resolve(toolName: string, args: unknown): ToolMockResolution {
+    // Once any mock has failed, the item is already doomed and being aborted.
+    // Fail every subsequent resolution so no further tool runs live/serves
+    // during the abort-propagation race.
+    if (this.#failure) {
+      return { kind: 'fail', code: this.#failure.code };
+    }
+
     const candidates = this.#entries.filter(entry => entry.toolName === toolName);
 
     if (candidates.length === 0) {

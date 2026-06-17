@@ -165,7 +165,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       groundTruth: typeof row.groundTruth === 'string' ? safelyParseJSON(row.groundTruth) : row.groundTruth,
       expectedTrajectory:
         typeof row.expectedTrajectory === 'string' ? safelyParseJSON(row.expectedTrajectory) : row.expectedTrajectory,
-      toolMocks: typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks,
+      toolMocks: (typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks) ?? undefined,
       requestContext: typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext,
       metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata,
       source: typeof row.source === 'string' ? safelyParseJSON(row.source) : row.source,

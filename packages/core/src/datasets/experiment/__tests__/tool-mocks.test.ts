@@ -34,7 +34,9 @@ describe('ToolMockMatcher', () => {
   it('treats array order as significant', () => {
     const matcher = new ToolMockMatcher([{ toolName: 't', args: { xs: [1, 2] }, output: 'ok' }]);
     expect(matcher.resolve('t', { xs: [2, 1] })).toEqual({ kind: 'fail', code: TOOL_MOCK_MISMATCH });
-    expect(new ToolMockMatcher([{ toolName: 't', args: { xs: [1, 2] }, output: 'ok' }]).resolve('t', { xs: [1, 2] })).toEqual({
+    expect(
+      new ToolMockMatcher([{ toolName: 't', args: { xs: [1, 2] }, output: 'ok' }]).resolve('t', { xs: [1, 2] }),
+    ).toEqual({
       kind: 'serve',
       output: 'ok',
     });
@@ -109,9 +111,33 @@ describe('ToolMockMatcher', () => {
     expect(matcher.report().failure).toEqual({ code: TOOL_MOCK_MISMATCH, toolName: 't', args: { a: 99 } });
   });
 
+  it('fails every resolution after the first failure, even for other tools with available mocks', () => {
+    const matcher = new ToolMockMatcher([
+      { toolName: 'a', args: { x: 1 }, output: 'a-out' },
+      { toolName: 'b', args: { y: 1 }, output: 'b-out' },
+    ]);
+    // Tool A is called with wrong args → mismatch failure recorded.
+    expect(matcher.resolve('a', { x: 99 })).toEqual({ kind: 'fail', code: TOOL_MOCK_MISMATCH });
+    // Tool B has an unconsumed, matching mock, but the item is already doomed:
+    // resolve must fail (not serve) so no further tool runs during abort propagation.
+    expect(matcher.resolve('b', { y: 1 })).toEqual({ kind: 'fail', code: TOOL_MOCK_MISMATCH });
+    // An unmocked tool must also fail (not run live) after a failure.
+    expect(matcher.resolve('unmocked', { z: 1 })).toEqual({ kind: 'fail', code: TOOL_MOCK_MISMATCH });
+    const report = matcher.report();
+    // B's mock was never served; no live call was recorded.
+    expect(report.served).toEqual([]);
+    expect(report.liveCalls).toEqual([]);
+    expect(report.failure).toEqual({ code: TOOL_MOCK_MISMATCH, toolName: 'a', args: { x: 99 } });
+  });
+
   it("matchArgs 'ignore' serves regardless of the call args", () => {
     const matcher = new ToolMockMatcher([
-      { toolName: 'agent-balanceAgent', args: { prompt: 'authored at record time' }, output: { text: 'YJ: $100' }, matchArgs: 'ignore' },
+      {
+        toolName: 'agent-balanceAgent',
+        args: { prompt: 'authored at record time' },
+        output: { text: 'YJ: $100' },
+        matchArgs: 'ignore',
+      },
     ]);
     // Different prompt + runtime-injected fields → still serves.
     const res = matcher.resolve('agent-balanceAgent', { prompt: 'totally different', threadId: 'x', maxSteps: 5 });
