@@ -488,19 +488,11 @@ const { output, cleanup } = await durableAgent.stream('Hello!', {
 
 ### `providerOptions` and `defaultOptions` are not inherited
 
-The wrapped agent's `providerOptions` (model-level provider settings such as Anthropic extended thinking or OpenAI reasoning effort) and `defaultOptions` (default generation options) are not forwarded to the durable workflow. These values are serialized as part of the per-call workflow input, so they must be passed on each `stream()` call rather than configured once on the inner agent:
-
-```typescript
-const { output, cleanup } = await durableAgent.stream('Hello!', {
-  providerOptions: {
-    anthropic: { thinking: { type: 'enabled', budgetTokens: 5000 } },
-  },
-})
-```
+The wrapped agent's `providerOptions` (model-level provider settings such as Anthropic extended thinking or OpenAI reasoning effort) and `defaultOptions` (default generation options) are not forwarded to the durable workflow. `DurableAgentStreamOptions` does not expose a `providerOptions` field, so there is currently no supported way to set these for a `DurableAgent`, either per call on `stream()` or at construction time via the `DurableAgent` constructor or `createDurableAgent`. If your use case depends on `providerOptions` or `defaultOptions`, use a regular `Agent` instead until `DurableAgent` adds support for them.
 
 :::note
 
-These differences exist because `DurableAgent` serializes its execution input into a durable workflow. Settings that exist only on the `Agent` instance are not automatically included in that serialized input. Passing the options directly to the `DurableAgent` constructor or `stream()` call is the correct workaround.
+These differences exist because `DurableAgent` serializes its execution input into a durable workflow. Settings that exist only on the `Agent` instance are not automatically included in that serialized input.
 
 :::
 
