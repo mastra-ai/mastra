@@ -1,6 +1,6 @@
-import { RequestContext } from '@internal/core/request-context';
-import type { HarnessQuestionAnswer } from '../types';
-import type { EmitInput } from './events';
+import { RequestContext } from '../request-context';
+import type { HarnessQuestionAnswer } from './types';
+import type { EmitInput } from './session-events';
 
 export type HarnessRequestContextSource = {
   type: 'top-level' | 'subagent-tool' | 'direct-local' | 'remote-resolve';

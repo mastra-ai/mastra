@@ -6,10 +6,10 @@ import {
   HarnessValidationError,
   formatHarnessEventId,
   parseHarnessEventId,
-} from './events';
+} from './session-events';
 
 const expectEventShell = (event: { id: string; timestamp: number }) => {
-  expect(event.id).toMatch(/^harness-v1:[0-9a-f-]{36}:\d+$/);
+  expect(event.id).toMatch(/^harness-session:[0-9a-f-]{36}:\d+$/);
   expect(event.timestamp).toEqual(expect.any(Number));
 };
 
@@ -22,8 +22,8 @@ describe('EventEmitter', () => {
     const first = emitter.emit({ type: 'model_changed', modelId: 'model-2', previousModelId: 'model-1' });
     const second = emitter.emit({ type: 'mode_changed', modeId: 'plan', previousModeId: 'build' });
 
-    expect(first).toMatchObject({ id: 'harness-v1:epoch-1:0', sessionId: 'session-1' });
-    expect(second).toMatchObject({ id: 'harness-v1:epoch-1:1', sessionId: 'session-1' });
+    expect(first).toMatchObject({ id: 'harness-session:epoch-1:0', sessionId: 'session-1' });
+    expect(second).toMatchObject({ id: 'harness-session:epoch-1:1', sessionId: 'session-1' });
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
@@ -77,7 +77,7 @@ describe('EventEmitter', () => {
 
 describe('harness event ids', () => {
   it('formats and parses event ids', () => {
-    expect(formatHarnessEventId('epoch', 12)).toBe('harness-v1:epoch:12');
-    expect(parseHarnessEventId('harness-v1:epoch:12')).toEqual({ epoch: 'epoch', sequence: 12 });
+    expect(formatHarnessEventId('epoch', 12)).toBe('harness-session:epoch:12');
+    expect(parseHarnessEventId('harness-session:epoch:12')).toEqual({ epoch: 'epoch', sequence: 12 });
   });
 });

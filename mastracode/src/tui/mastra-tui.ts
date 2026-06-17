@@ -54,7 +54,6 @@ import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 import {
   addPendingUserMessage,
   addUserMessage,
-  removePendingUserMessage,
   renderClearedTasksInline,
   renderExistingMessages,
 } from './render-messages.js';
@@ -352,10 +351,13 @@ export class MastraTUI {
    */
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
     this.clearIdleCounter();
-    const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
-    this.state.harness.sendMessage({ content, files }).catch(error => {
-      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
-    });
+    const messages = this.createUserSignalContent(content, images);
+    this.state.harness
+      .getCurrentSession()
+      .then(session => session.queueMessage({ messages }))
+      .catch(error => {
+        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      });
   }
 
   private createUserSignalMessage(
@@ -421,7 +423,7 @@ export class MastraTUI {
     optimisticMessageId: string,
     pendingNewThread: boolean,
   ): void {
-    const send = () => {
+    const send = async () => {
       this.clearIdleCounter();
       this.state.analytics?.capture('mastracode_prompt_submitted', {
         threadId: this.state.harness.getCurrentThreadId(),
@@ -432,20 +434,20 @@ export class MastraTUI {
         pendingNewThread,
       });
 
-      const signal = this.state.harness.sendSignal({
-        content: this.createUserSignalContent(content, images),
+      const session = await this.state.harness.getCurrentSession();
+      const result = await session.sendMessage({
+        messages: this.createUserSignalContent(content, images),
         ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
-      this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
-      signal.accepted.catch((error: unknown) => {
-        this.removeOptimisticUserMessage(signal.id);
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
-      });
+      this.remapOptimisticUserMessage(optimisticMessageId, result.signal.id);
     };
 
     const pendingThread = this.createPendingNewThread();
     if (!pendingThread) {
-      send();
+      send().catch((error: unknown) => {
+        this.removeOptimisticUserMessage(optimisticMessageId);
+        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      });
       return;
     }
 
@@ -458,32 +460,27 @@ export class MastraTUI {
   private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
     const hasActiveRun = this.state.harness.isCurrentThreadStreamActive();
 
-    const send = () => {
+    const send = async () => {
       this.clearIdleCounter();
-      const signal = this.state.harness.sendSignal({
-        content: this.createUserSignalContent(content, images),
+      const session = await this.state.harness.getCurrentSession();
+      const result = await session.sendMessage({
+        messages: this.createUserSignalContent(content, images),
         ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
+      const signalId = result.signal.id;
 
       if (hasActiveRun) {
-        addPendingUserMessage(this.state, signal.id, content, images, { isInterjection: true });
+        addPendingUserMessage(this.state, signalId, content, images, { isInterjection: true });
       } else {
-        addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
+        addUserMessage(this.state, this.createUserSignalMessage(content, images, signalId));
       }
-
-      signal.accepted.catch((error: unknown) => {
-        if (hasActiveRun) {
-          removePendingUserMessage(this.state, signal.id);
-        } else {
-          this.removeOptimisticUserMessage(signal.id);
-        }
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
-      });
     };
 
     const pendingThread = this.createPendingNewThread();
     if (!pendingThread) {
-      send();
+      send().catch((error: unknown) => {
+        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      });
       return;
     }
 

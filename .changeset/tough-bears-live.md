@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Routes MastraCode conversations through v1 session records while preserving existing TUI and headless flows.
+Keeps MastraCode on the v0 harness surface while removing the experimental session compatibility adapter.

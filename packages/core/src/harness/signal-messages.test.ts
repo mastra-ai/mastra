@@ -395,7 +395,7 @@ describe('Harness signal messages', () => {
     });
 
     await harness.createThread();
-    await harness.sendMessage({ content: 'hello' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'hello' });
     await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
 
     const assistantStarts = events.filter(
@@ -433,18 +433,18 @@ describe('Harness signal messages', () => {
     (harness as any).currentRunId = 'active-run-id';
 
     const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
-    const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
+    const sendMessage = vi.spyOn(agent, 'sendMessage').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
-    const signal = harness.sendSignal({ content: 'active hello' });
-    await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: 'active-run-id' });
+    const signal = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'active hello' } });
+    expect(signal).toEqual(expect.objectContaining({ accepted: true, runId: 'active-run-id' }));
 
     expect(buildToolsets).not.toHaveBeenCalled();
-    expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ id: signal.id, type: 'user', tagName: 'user', contents: 'active hello' }),
+    expect(sendMessage).toHaveBeenCalledWith(
+      'active hello',
       expect.objectContaining({
         resourceId: thread.resourceId,
         threadId: thread.id,
@@ -524,16 +524,32 @@ describe('Harness signal messages', () => {
 
   it('sends idle follow-ups immediately without marking them queued', async () => {
     const storage = new InMemoryStore();
-    const harness = createHarness(storage);
+    const agent = new Agent({
+      id: 'idle-follow-up-agent',
+      name: 'idle-follow-up-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const harness = createHarness(storage, agent);
     const events: HarnessEvent[] = [];
     harness.subscribe(event => {
       events.push(event);
     });
-    const sendMessage = vi.spyOn(harness, 'sendMessage').mockResolvedValue(undefined);
+    const sendMessage = vi.spyOn(agent, 'sendMessage').mockReturnValue({
+      accepted: true,
+      runId: 'idle-follow-up-run',
+      signal: createSignal({ type: 'user-message', contents: 'idle follow-up' }),
+    });
 
     await harness.followUp({ content: 'idle follow-up' });
 
-    expect(sendMessage).toHaveBeenCalledWith({ content: 'idle follow-up', requestContext: undefined });
+    expect(sendMessage).toHaveBeenCalledWith(
+      'idle follow-up',
+      expect.objectContaining({
+        resourceId: 'test-harness',
+        threadId: expect.any(String),
+      }),
+    );
     expect(harness.getFollowUpCount()).toBe(0);
     expect(harness.getDisplayState().queuedFollowUps).toBe(0);
     expect(events.some(event => event.type === 'follow_up_queued')).toBe(false);
@@ -562,8 +578,8 @@ describe('Harness signal messages', () => {
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
-    const signal = harness.sendSignal({ content: 'active hello' });
-    await signal.accepted;
+    const signal = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'active hello' } });
+    expect(signal.accepted).toBe(true);
     harness.abort();
 
     expect(abort).toHaveBeenCalled();
@@ -601,8 +617,8 @@ describe('Harness signal messages', () => {
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
-    const signal = harness.sendSignal({ content: 'active hello' });
-    await signal.accepted;
+    const signal = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'active hello' } });
+    expect(signal.accepted).toBe(true);
     expect(harness.getCurrentRunId()).toBe('active-run-id');
 
     await harness.createThread();
@@ -687,8 +703,8 @@ describe('Harness signal messages', () => {
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
-    const signal = harness.sendSignal({ content: 'active hello' });
-    await signal.accepted;
+    const signal = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'active hello' } });
+    expect(signal.accepted).toBe(true);
     await waitFor(() => events.some(event => event.type === 'agent_start'));
     harness.abort();
     await waitFor(() => events.some(event => event.type === 'agent_end'));
@@ -707,15 +723,15 @@ describe('Harness signal messages', () => {
     });
 
     await harness.createThread();
-    await harness.sendMessage({ content: 'hi' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'hi' });
 
-    const signal = harness.sendSignal({ content: 'hows it going' });
-    await signal.accepted;
+    const signal = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'hows it going' } });
+    expect(signal.accepted).toBe(true);
     await waitFor(() =>
       events.some(
         event =>
           event.type === 'message_end' &&
-          event.message.id === signal.id &&
+          event.message.id === signal.signal.id &&
           event.message.content.some(part => part.type === 'text' && part.text === 'hows it going'),
       ),
     );
@@ -774,8 +790,8 @@ describe('Harness signal messages', () => {
     });
 
     await harness.createThread();
-    const signal = harness.sendSignal({ content: 'run tool' });
-    await signal.accepted;
+    const signal = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'run tool' } });
+    expect(signal.accepted).toBe(true);
     await waitFor(() =>
       events.some(
         event =>
@@ -804,13 +820,13 @@ describe('Harness signal messages', () => {
     });
 
     await harness.createThread();
-    const signal = harness.sendSignal({ content: 'hello from signal' });
-    await signal.accepted;
+    const signal = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'hello from signal' } });
+    expect(signal.accepted).toBe(true);
     await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
 
     const signalEnd = events.find(
       (event): event is Extract<HarnessEvent, { type: 'message_end' }> =>
-        event.type === 'message_end' && event.message.id === signal.id,
+        event.type === 'message_end' && event.message.id === signal.signal.id,
     );
     const assistantEnd = events.find(
       (event): event is Extract<HarnessEvent, { type: 'message_end' }> =>
@@ -831,8 +847,8 @@ describe('Harness signal messages', () => {
 
     await harness.createThread();
     harness.abort();
-    const signal = harness.sendSignal({ content: 'hello after stale abort' });
-    await signal.accepted;
+    const signal = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'hello after stale abort' } });
+    expect(signal.accepted).toBe(true);
     await waitFor(() => events.some(event => event.type === 'agent_end'));
 
     const agentEnd = events.find(
@@ -889,20 +905,20 @@ describe('Harness signal messages', () => {
     const harness = createHarness(storage, agent);
     await harness.createThread();
 
-    const firstIdle = harness.sendSignal({ content: 'start first idle stream' });
-    await firstIdle.accepted;
+    const firstIdle = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'start first idle stream' } });
+    expect(firstIdle.accepted).toBe(true);
     await waitFor(() => harness.getCurrentRunId() !== null && releaseInitialCalls.length === 1);
-    const firstInterjection = harness.sendSignal({ content: 'first active interjection' });
-    await firstInterjection.accepted;
+    const firstInterjection = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'first active interjection' } });
+    expect(firstInterjection.accepted).toBe(true);
     releaseInitialCalls.shift()?.();
     await waitFor(() => harness.getCurrentRunId() === null);
     expect(JSON.stringify(prompts[1])).toContain('first active interjection');
 
-    const secondIdle = harness.sendSignal({ content: 'start second idle stream' });
-    await secondIdle.accepted;
+    const secondIdle = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'start second idle stream' } });
+    expect(secondIdle.accepted).toBe(true);
     await waitFor(() => harness.getCurrentRunId() !== null && releaseInitialCalls.length === 1);
-    const secondInterjection = harness.sendSignal({ content: 'second active interjection' });
-    await secondInterjection.accepted;
+    const secondInterjection = await (await harness.getCurrentSession()).sendMessage({ messages: { content: 'second active interjection' } });
+    expect(secondInterjection.accepted).toBe(true);
     releaseInitialCalls.shift()?.();
     await waitFor(() => harness.getCurrentRunId() === null);
     expect(JSON.stringify(prompts[3])).toContain('second active interjection');

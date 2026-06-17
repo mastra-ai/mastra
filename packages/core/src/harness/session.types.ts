@@ -9,24 +9,25 @@ import type {
   SendAgentMessageOptions,
   SendAgentMessageResult,
   SendAgentSignalOptions,
-} from '../../agent';
-import type { MessageListInput } from '../../agent/message-list';
-import type { MastraModelGatewayInterface } from '../../llm';
-import type { MastraMemory } from '../../memory';
-import type { PublicSchema } from '../../schema';
-import type { HarnessPendingItemRecord, HarnessStorage, SessionRecord } from '../../storage/domains/harness';
-import type { DynamicArgument } from '../../types';
-import type { Workspace } from '../../workspace';
-import type { EventEmitter } from './events';
-import type { HarnessMode } from './mode';
+} from '../agent';
+import type { MessageListInput } from '../agent/message-list';
+import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import type { MastraModelGatewayInterface } from '../llm';
+import type { MastraMemory } from '../memory';
+import type { PublicSchema } from '../schema';
+import type { HarnessPendingItemRecord, HarnessStorage, SessionRecord } from '../storage/domains/harness';
+import type { DynamicArgument } from '../types';
+import type { Workspace } from '../workspace';
+import type { EventEmitter } from './session-events';
+import type { HarnessMode } from './session-mode';
 import type {
   PermissionPolicy,
   PermissionRule,
   PermissionRequestedCallback,
   PermissionGrant,
   ToolCategoryResolver,
-} from './permissions.types';
-import type { SubagentRegistryConfig } from './subagents.types';
+} from './session-permissions.types';
+import type { SubagentRegistryConfig } from './session-subagents.types';
 
 export type CloneSessionOptions = {
   sessionId?: string;
@@ -74,7 +75,11 @@ export type SessionQueueMessageOptions<OUTPUT = unknown> = Omit<
 > &
   Pick<SessionScopedMessageOptions<OUTPUT>, 'ifIdle'>;
 
-export type SessionMessageInput = AgentMessageInput | MessageListInput;
+export type SessionMessageInput =
+  | AgentMessageInput
+  | AgentSignalInput
+  | MessageListInput
+  | { content: AgentSignalContents };
 type SessionExecutionOptions<OUTPUT = unknown> = Omit<
   AgentExecutionOptionsBase<OUTPUT>,
   'requestContext' | 'toolsets' | 'model'

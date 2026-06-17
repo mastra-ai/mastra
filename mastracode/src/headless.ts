@@ -573,7 +573,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
     }
   }
 
-  await harness.sendMessage({ content: args.prompt });
+  await (await harness.getCurrentSession()).queueMessage({ messages: args.prompt });
 
   const exitCode = await done;
   if (timeoutId) clearTimeout(timeoutId);

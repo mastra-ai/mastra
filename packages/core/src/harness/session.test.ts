@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { Agent } from '../../agent';
-import type { MastraDBMessage } from '../../agent/message-list';
-import type { MastraMemory } from '../../memory';
-import { MastraCompositeStore } from '../../storage';
-import type { StorageCloneThreadInput } from '../../storage';
-import { HarnessStorage } from '../../storage/domains/harness';
-import type { SessionRecord } from '../../storage/domains/harness';
-import type { HarnessEvent } from './events';
-import { Harness } from './harness';
+import type { Agent } from '../agent';
+import type { MastraDBMessage } from '../agent/message-list';
+import type { MastraMemory } from '../memory';
+import { MastraCompositeStore } from '../storage';
+import type { StorageCloneThreadInput } from '../storage';
+import { HarnessStorage } from '../storage/domains/harness';
+import type { SessionRecord } from '../storage/domains/harness';
+import type { HarnessEvent } from './session-events';
+import { Harness } from './session-harness';
 
 class RecordingHarnessStorage extends HarnessStorage {
   readonly records = new Map<string, SessionRecord>();
@@ -95,6 +95,7 @@ const createHarness = (
   storage,
   memory,
   harness: new Harness({
+      id: 'test-harness',
     agent,
     ownerId,
     storage,
@@ -119,7 +120,7 @@ describe('Harness.session()', () => {
       modelId: 'test-model',
     });
 
-    expect(session.getMode()).toMatchObject({ id: 'plan' });
+    expect(session.getMode()).toMatchObject({ id: 'plan', defaultModelId: 'test-plan-model' });
     expect(session.getModelId()).toBe('test-model');
     expect(session.ownerId).toBe(harness.ownerId);
     expect([...storage.records.values()]).toEqual([
@@ -151,7 +152,7 @@ describe('Harness.session()', () => {
       modelId: 'ignored-model',
     });
 
-    expect(session.getMode()).toMatchObject({ id: 'plan' });
+    expect(session.getMode()).toMatchObject({ id: 'plan', defaultModelId: 'test-plan-model' });
     expect(session.getModelId()).toBe('test-model');
     expect(storage.records).toHaveLength(1);
   });
@@ -163,13 +164,14 @@ describe('Harness.session()', () => {
 
     const session = await harness.session({ sessionId: record!.id, resourceId: 'resource-1' });
 
-    expect(session.getMode()).toMatchObject({ id: 'build' });
+    expect(session.getMode()).toMatchObject({ id: 'build', defaultModelId: 'test-build-model' });
     expect(session.getModelId()).toBe('test-build-model');
   });
 
   it('uses top-level storage', async () => {
     const storage = new RecordingHarnessStorage();
     const harness = new Harness({
+    id: 'test-harness',
       agent: createAgent(),
       storage,
       memory: createMemory(),
@@ -181,7 +183,7 @@ describe('Harness.session()', () => {
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
 
     expect(storage.records).toHaveLength(1);
-    expect(session.getMode()).toMatchObject({ id: 'build' });
+    expect(session.getMode()).toMatchObject({ id: 'build', defaultModelId: 'test-build-model' });
   });
 
   it('resolves the harness domain from a top-level storage adapter', async () => {
@@ -191,10 +193,11 @@ describe('Harness.session()', () => {
       domains: { harness: storage },
     });
     const harness = new Harness({
-      agents: {},
+    id: 'test-harness',
+      agent: createAgent(),
       storage: storageAdapter,
       memory: createMemory(),
-      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'test-build-model' }],
+      modes: [{ id: 'build', defaultModelId: 'test-build-model' }],
       defaultModeId: 'build',
     });
 
@@ -203,7 +206,7 @@ describe('Harness.session()', () => {
 
     expect(storage.initCalls).toBe(1);
     expect(storage.records).toHaveLength(1);
-    expect(session.getMode()).toMatchObject({ id: 'build' });
+    expect(session.getMode()).toMatchObject({ id: 'build', defaultModelId: 'test-build-model' });
   });
 
   it('clones a session with a new memory thread', async () => {
@@ -221,7 +224,7 @@ describe('Harness.session()', () => {
     expect(clone.id).not.toBe(session.id);
     expect(clone.threadId).toBe('thread-2');
     expect(clone.resourceId).toBe('resource-1');
-    expect(clone.getMode()).toMatchObject({ id: 'plan' });
+    expect(clone.getMode()).toMatchObject({ id: 'plan', defaultModelId: 'test-plan-model' });
     expect(clone.getModelId()).toBe('test-model');
     expect(memory.cloneThread).toHaveBeenCalledWith({
       sourceThreadId: 'thread-1',
@@ -280,7 +283,7 @@ describe('Harness.session()', () => {
     expect(clone.id).toBe('session-2');
     expect(clone.threadId).toBe('thread-2');
     expect(clone.resourceId).toBe('resource-2');
-    expect(clone.getMode()).toMatchObject({ id: 'build' });
+    expect(clone.getMode()).toMatchObject({ id: 'build', defaultModelId: 'test-build-model' });
     expect(clone.getModelId()).toBe('override-model');
     expect(clone.ownerId).toBe(harness.ownerId);
     expect(storage.records.get('session-2')).toEqual(
@@ -362,6 +365,7 @@ describe('Harness.session()', () => {
       lastActivityAt: createdAt,
     });
     const harness = new Harness({
+    id: 'test-harness',
       agent: createAgent(),
       ownerId: 'owner-1',
       storage,
@@ -403,10 +407,11 @@ describe('Harness.session()', () => {
     const storage = new RecordingHarnessStorage();
     const memory = createMemory();
     const harness = new Harness({
+    id: 'test-harness',
       agent: createAgent(),
       storage,
       memory,
-      runtimeCompatibilityGeneration: 'runtime-v1',
+      runtimeCompatibilityGeneration: 'runtime-session',
       modes: [
         { id: 'build', defaultModelId: 'test-build-model' },
         { id: 'plan', defaultModelId: 'test-plan-model' },
@@ -428,7 +433,7 @@ describe('Harness.session()', () => {
       kind: 'question',
       status: 'responded',
       response: { answer: 'yes' },
-      runtimeCompatibilityGeneration: 'runtime-v1',
+      runtimeCompatibilityGeneration: 'runtime-session',
     });
     expect(session.getQueueDepth()).toBe(0);
     expect(storage.records.get(session.id)).toMatchObject({
@@ -439,6 +444,7 @@ describe('Harness.session()', () => {
   it('applies pending plan approval mode transitions at the session boundary', async () => {
     const storage = new RecordingHarnessStorage();
     const harness = new Harness({
+    id: 'test-harness',
       agent: createAgent(),
       storage,
       memory: createMemory(),
@@ -499,7 +505,7 @@ describe('Harness events', () => {
       modeId: 'plan',
       modelId: 'test-model',
     });
-    expect(events[0]?.id).toMatch(/^harness-v1:[0-9a-f-]{36}:0$/);
+    expect(events[0]?.id).toMatch(/^harness-session:[0-9a-f-]{36}:0$/);
     expect(events[0]?.timestamp).toEqual(expect.any(Number));
     expect(session.id).toMatch(/^sess-[a-f0-9]{32}$/);
   });
@@ -589,6 +595,7 @@ describe('Harness events', () => {
       declineToolCallGenerate: vi.fn().mockResolvedValue({ declined: true }),
     } as Partial<Agent>);
     const harness = new Harness({
+    id: 'test-harness',
       agent,
       storage,
       memory: createMemory(),

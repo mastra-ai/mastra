@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import type { SessionRecord } from '../../storage/domains/harness';
-import type { HarnessQuestionOption, HarnessQuestionSelectionMode } from '../types';
+import type { SessionRecord } from '../storage/domains/harness';
+import type { HarnessQuestionOption, HarnessQuestionSelectionMode } from './types';
 
 export interface HarnessEventBase {
   id: string;
@@ -91,7 +91,7 @@ export type HarnessEvent =
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
 export type HarnessEventUnsubscribe = () => void;
 
-export const HARNESS_EVENT_ID_PREFIX = 'harness-v1';
+export const HARNESS_EVENT_ID_PREFIX = 'harness-session';
 
 export interface ParsedHarnessEventId {
   epoch: string;
@@ -154,7 +154,7 @@ export function formatHarnessEventId(epoch: string, sequence: number): string {
 export function parseHarnessEventId(eventId: string): ParsedHarnessEventId {
   const parts = eventId.split(':');
   if (parts.length !== 3 || parts[0] !== HARNESS_EVENT_ID_PREFIX || parts[1] === '' || parts[2] === '') {
-    throw new HarnessValidationError('lastEventId', 'expected event id grammar harness-v1:<epoch>:<seq>');
+    throw new HarnessValidationError('lastEventId', 'expected event id grammar harness-session:<epoch>:<seq>');
   }
 
   const sequenceText = parts[2]!;
@@ -271,10 +271,10 @@ export class EventEmitter {
       try {
         const result = this.onEvent(event);
         if (result && typeof (result as Promise<void>).catch === 'function') {
-          (result as Promise<void>).catch(err => console.error('[harness/v1] event persistence rejected:', err));
+          (result as Promise<void>).catch(err => console.error('[session-harness] event persistence rejected:', err));
         }
       } catch (err) {
-        console.error('[harness/v1] event persistence threw:', err);
+        console.error('[session-harness] event persistence threw:', err);
       }
     }
 
@@ -282,10 +282,10 @@ export class EventEmitter {
       try {
         const result = listener(event);
         if (result && typeof (result as Promise<void>).catch === 'function') {
-          (result as Promise<void>).catch(err => console.error('[harness/v1] event listener rejected:', err));
+          (result as Promise<void>).catch(err => console.error('[session-harness] event listener rejected:', err));
         }
       } catch (err) {
-        console.error('[harness/v1] event listener threw:', err);
+        console.error('[session-harness] event listener threw:', err);
       }
     }
   }

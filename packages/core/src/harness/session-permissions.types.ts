@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// Permission policy + tool category types (v1).
+// Session permission policy + tool category types.
 //
-// These mirror the legacy harness shapes so the v1 tool composer can consume
+// These mirror the legacy harness shapes so the session tool composer can consume
 // the same policy surface. Defined here (re-exported) instead of imported
-// directly so the v1 module does not pull in legacy harness internals.
+// directly so the session module does not pull in legacy harness internals.
 // ---------------------------------------------------------------------------
 
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';

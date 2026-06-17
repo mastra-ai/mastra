@@ -104,7 +104,7 @@ describe('Harness: ask_user native suspension', () => {
     const events: any[] = [];
     harness.subscribe(event => events.push(event));
 
-    await harness.sendMessage({ content: 'Ask me where to deploy' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'Ask me where to deploy' });
 
     const suspendEvent = events.find(e => e.type === 'tool_suspended');
     expect(suspendEvent).toBeDefined();
@@ -125,7 +125,7 @@ describe('Harness: ask_user native suspension', () => {
     const events: any[] = [];
     harness.subscribe(event => events.push(event));
 
-    await harness.sendMessage({ content: 'Ask my name' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'Ask my name' });
 
     const suspendEvent = events.find(e => e.type === 'tool_suspended');
     expect(suspendEvent).toBeDefined();
@@ -157,7 +157,7 @@ describe('Harness: ask_user native suspension', () => {
     const events: any[] = [];
     harness.subscribe(event => events.push(event));
 
-    await harness.sendMessage({ content: 'Ask me to pick' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'Ask me to pick' });
 
     const suspendEvent = events.find(e => e.type === 'tool_suspended');
     expect(suspendEvent.suspendPayload.selectionMode).toBe('multi_select');
@@ -306,7 +306,7 @@ describe('Harness: ask_user native suspension', () => {
     const events: any[] = [];
     harness.subscribe(event => events.push(event));
 
-    await harness.sendMessage({ content: 'Ask me three things' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'Ask me three things' });
 
     // Only the first question suspends on the initial run.
     let suspensions = events.filter(e => e.type === 'tool_suspended');

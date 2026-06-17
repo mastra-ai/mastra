@@ -6,7 +6,7 @@ import type {
   PermissionRule,
   PermissionGrant,
   ToolCategory,
-} from './permissions.types';
+} from './session-permissions.types';
 
 interface ResolvedPolicy {
   policy: PermissionPolicy;

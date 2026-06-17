@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
-// Tool composition (v1).
+// Session tool composition.
 //
 // Combines an agent's tool surface with mode overrides, harness built-in
 // tools, and permission-rule filtering. The Session/Harness layer never
-// imports the legacy `buildToolsets` pipeline — this composer is the v1
+// imports the legacy `buildToolsets` pipeline — this composer is the session
 // surface for "what tools does this request see?".
 // ---------------------------------------------------------------------------
 
@@ -11,10 +11,10 @@ import { randomUUID } from 'node:crypto';
 
 import { z } from 'zod';
 
-import type { ToolsInput } from '../../agent/types';
-import { createTool } from '../../tools';
-import type { ToolExecutionContext } from '../../tools';
-import { evaluatePermission } from './permissions';
+import type { ToolsInput } from '../agent/types';
+import { createTool } from '../tools';
+import type { ToolExecutionContext } from '../tools';
+import { evaluatePermission } from './session-permissions';
 import type {
   PermissionCheckResult,
   PermissionPolicy,
@@ -22,8 +22,8 @@ import type {
   PermissionGrant,
   ToolCategory,
   ToolCategoryResolver,
-} from './permissions.types';
-import type { HarnessRequestContext } from './request-context';
+} from './session-permissions.types';
+import type { HarnessRequestContext } from './session-request-context';
 import type { Session } from './session';
 
 type AnySession = Session<any>;
@@ -37,7 +37,7 @@ type HarnessTaskRecord = {
 
 type TaskState = { tasks?: HarnessTaskRecord[] };
 
-export type { PermissionGrant, PermissionRule } from './permissions.types';
+export type { PermissionGrant, PermissionRule } from './session-permissions.types';
 
 interface PermissionRuntimeContext {
   permissionRules?: readonly PermissionRule[];

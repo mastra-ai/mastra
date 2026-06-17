@@ -85,7 +85,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     // a plain user message.
     const resumedGoal = goalManager.getGoal();
     try {
-      await state.harness.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
+      await (await state.harness.getCurrentSession()).sendMessage({ messages: createGoalReminderSignal(resumedGoal!) });
     } catch (err) {
       goalManager.pause();
       await goalManager.saveToThread(state);
@@ -356,7 +356,7 @@ async function startGoal(
   }
 
   try {
-    await state.harness.sendSignal(createGoalReminderSignal(goal)).accepted;
+    await (await state.harness.getCurrentSession()).sendMessage({ messages: createGoalReminderSignal(goal) });
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);

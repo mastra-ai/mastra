@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { MastraMemory } from '../../memory';
-import { HarnessStorage } from '../../storage/domains/harness';
-import type { SessionRecord } from '../../storage/domains/harness';
-import type { Workspace } from '../../workspace';
-import type { Skill } from '../../workspace/skills/types';
-import { Harness } from './harness';
-import { HarnessSkillNotFoundError } from './skills.types';
-import type { HarnessSkillMetadata } from './skills.types';
+import type { MastraMemory } from '../memory';
+import { HarnessStorage } from '../storage/domains/harness';
+import type { SessionRecord } from '../storage/domains/harness';
+import type { Workspace } from '../workspace';
+import type { Skill } from '../workspace/skills/types';
+import { Harness } from './session-harness';
+import { HarnessSkillNotFoundError } from './session-skills.types';
+import type { HarnessSkillMetadata } from './session-skills.types';
 
 class RecordingHarnessStorage extends HarnessStorage {
   readonly records = new Map<string, SessionRecord>();
@@ -83,15 +83,16 @@ const createMockWorkspace = ({ skills }: MockWorkspaceOptions) => {
   };
 };
 
-const openSession = async (harness: Harness<[{ id: 'build'; agentId: 'default'; defaultModelId: string }]>) =>
+const openSession = async (harness: Harness<[{ id: 'build'; defaultModelId: string }]>) =>
   harness.session({ threadId: 'thread-1', resourceId: 'resource-1', modeId: 'build', modelId: 'm' });
 
 const createHarness = ({ workspace }: { workspace?: Workspace } = {}) =>
   new Harness({
-    agents: {},
+    id: 'test-harness',
+    agent: {} as never,
     storage: new RecordingHarnessStorage(),
     memory: createMemory(),
-    modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' } as const],
+    modes: [{ id: 'build', defaultModelId: 'm' } as const],
     defaultModeId: 'build',
     // Use a function form so we don't have to satisfy Workspace's constructor
     // validation when the test only needs a stub.

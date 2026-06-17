@@ -1,29 +1,29 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { Agent } from '../../agent';
-import { MastraGateway } from '../../llm';
-import type { MastraModelGatewayInterface } from '../../llm';
-import type { Mastra } from '../../mastra';
-import type { MastraMemory } from '../../memory';
-import type { MastraCompositeStore } from '../../storage';
-import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
-import { augmentWithInit } from '../../storage/storageWithInit';
-import type { DynamicArgument } from '../../types';
-import { Workspace } from '../../workspace';
-import { EventEmitter, sessionCreatedPayload } from './events';
-import type { HarnessEventListener, HarnessEventUnsubscribe } from './events';
-import type { HarnessConfig } from './harness.types';
-import type { HarnessMode } from './mode';
+import type { Agent } from '../agent';
+import { MastraGateway } from '../llm';
+import type { MastraModelGatewayInterface } from '../llm';
+import type { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory';
+import type { MastraCompositeStore } from '../storage';
+import type { HarnessStorage, SessionRecord } from '../storage/domains/harness';
+import { augmentWithInit } from '../storage/storageWithInit';
+import type { DynamicArgument } from '../types';
+import { Workspace } from '../workspace';
+import { EventEmitter, sessionCreatedPayload } from './session-events';
+import type { HarnessEventListener, HarnessEventUnsubscribe } from './session-events';
+import type { HarnessConfig } from './session-harness.types';
+import type { HarnessMode } from './session-mode';
 import type {
   PermissionPolicy,
   PermissionRule,
   PermissionRequestedCallback,
   PermissionGrant,
   ToolCategoryResolver,
-} from './permissions.types';
-import { Session } from './session';
+} from './session-permissions.types';
+import { Session as HarnessSession } from './session';
 import type { AgentResolver, CloneSessionOptions } from './session.types';
-import type { SubagentRegistryConfig } from './subagents.types';
+import type { SubagentRegistryConfig } from './session-subagents.types';
 
 type SessionByIdOptions = {
   sessionId: string;
@@ -189,7 +189,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     return storage.listSessions();
   }
 
-  async session(opts: SessionOptions): Promise<Session<TState>> {
+  async session(opts: SessionOptions): Promise<HarnessSession<TState>> {
     const storage = await this.#requireStorage();
 
     if ('threadId' in opts) {
@@ -200,7 +200,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     return this.#sessionFromRecord(record, storage);
   }
 
-  async cloneSession(session: Session<TState>, opts: CloneSessionOptions = {}): Promise<Session<TState>> {
+  async cloneSession(session: HarnessSession<TState>, opts: CloneSessionOptions = {}): Promise<HarnessSession<TState>> {
     const storage = await this.#requireStorage();
     const source = await this.#loadSessionRecord(storage, session.id, session.resourceId);
     const modeId = opts.modeId ?? source.modeId;
@@ -246,7 +246,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     return this.#sessionFromRecord(record, storage);
   }
 
-  async #sessionByThread(storage: HarnessStorage, opts: SessionByThreadOptions): Promise<Session<TState>> {
+  async #sessionByThread(storage: HarnessStorage, opts: SessionByThreadOptions): Promise<HarnessSession<TState>> {
     const id = this.#sessionIdFor(opts.resourceId, opts.threadId);
     const existing = await storage.loadSession(id);
     if (existing) {
@@ -308,13 +308,13 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     return storage;
   }
 
-  #sessionFromRecord(record: SessionRecord, storage: HarnessStorage): Session<TState> {
+  #sessionFromRecord(record: SessionRecord, storage: HarnessStorage): HarnessSession<TState> {
     const mode = record.modeId ? this.#modesById.get(record.modeId) : this.#modesById.values().next().value;
     if (!mode) {
       throw new Error(`Harness session "${record.id}" references unknown mode "${record.modeId}"`);
     }
 
-    return new Session<TState>({
+    return new HarnessSession<TState>({
       id: record.id,
       ownerId: record.ownerId,
       threadId: record.threadId,

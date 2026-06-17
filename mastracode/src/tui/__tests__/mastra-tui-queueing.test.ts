@@ -243,13 +243,13 @@ describe('MastraTUI queueing', () => {
     expect(resolution).toEqual({ resolved: false, value: undefined });
   });
 
-  it('keeps signal messages pending after sendSignal accepts until the stream echoes them', async () => {
-    const sendSignal = vi
+  it('keeps signal messages pending after sendMessage accepts until the stream echoes them', async () => {
+    const sendMessage = vi
       .fn()
-      .mockReturnValue({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+      .mockReturnValue({ signal: { id: 'signal-1' }, accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
       harness: {
-        sendSignal,
+        getCurrentSession: vi.fn().mockResolvedValue({ sendMessage }),
         isCurrentThreadStreamActive: () => true,
         getCurrentRunId: () => null,
         getDisplayState: () => ({ isRunning: true }),
@@ -265,8 +265,8 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage('stay pending');
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({
-      content: 'stay pending',
+    expect(sendMessage).toHaveBeenCalledWith({
+      messages: 'stay pending',
       ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
     });
     expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(true);
@@ -276,14 +276,14 @@ describe('MastraTUI queueing', () => {
 
   it('creates a pending new thread before sending an optimistic signal', async () => {
     const createThread = vi.fn().mockResolvedValue({ id: 'thread-new' });
-    const sendSignal = vi
+    const sendMessage = vi
       .fn()
-      .mockReturnValue({ id: 'signal-after-new', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+      .mockReturnValue({ signal: { id: 'signal-after-new' }, accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
       pendingNewThread: true,
       harness: {
         createThread,
-        sendSignal,
+        getCurrentSession: vi.fn().mockResolvedValue({ sendMessage }),
         isCurrentThreadStreamActive: () => false,
         getDisplayState: () => ({ isRunning: false }),
       } as unknown as TUIState['harness'],
@@ -299,25 +299,25 @@ describe('MastraTUI queueing', () => {
     tui.sendOptimisticSignal('starts new thread', undefined, 'user-optimistic');
 
     expect(createThread).toHaveBeenCalledTimes(1);
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
 
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({
-      content: 'starts new thread',
+    expect(sendMessage).toHaveBeenCalledWith({
+      messages: 'starts new thread',
       ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
     });
     expect(state.pendingNewThread).toBe(false);
   });
 
   it('remaps pre-hook optimistic messages to signal ids for echo dedupe', async () => {
-    const sendSignal = vi
+    const sendMessage = vi
       .fn()
-      .mockReturnValue({ id: 'signal-after-hook', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+      .mockReturnValue({ signal: { id: 'signal-after-hook' }, accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
       harness: {
-        sendSignal,
+        getCurrentSession: vi.fn().mockResolvedValue({ sendMessage }),
         isCurrentThreadStreamActive: () => false,
         getCurrentRunId: () => null,
         getDisplayState: () => ({ isRunning: false }),
@@ -344,14 +344,14 @@ describe('MastraTUI queueing', () => {
 
   it('creates a pending new thread before sending an idle signal message', async () => {
     const createThread = vi.fn().mockResolvedValue({ id: 'thread-new' });
-    const sendSignal = vi
+    const sendMessage = vi
       .fn()
-      .mockReturnValue({ id: 'signal-after-new', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+      .mockReturnValue({ signal: { id: 'signal-after-new' }, accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
       pendingNewThread: true,
       harness: {
         createThread,
-        sendSignal,
+        getCurrentSession: vi.fn().mockResolvedValue({ sendMessage }),
         isCurrentThreadStreamActive: () => false,
         getDisplayState: () => ({ isRunning: false }),
       } as unknown as TUIState['harness'],
@@ -366,13 +366,13 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage('new thread follow-up');
 
     expect(createThread).toHaveBeenCalledTimes(1);
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
 
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({
-      content: 'new thread follow-up',
+    expect(sendMessage).toHaveBeenCalledWith({
+      messages: 'new thread follow-up',
       ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
     });
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
@@ -385,12 +385,12 @@ describe('MastraTUI queueing', () => {
   });
 
   it('renders idle signal messages directly instead of pending them', async () => {
-    const sendSignal = vi
+    const sendMessage = vi
       .fn()
-      .mockReturnValue({ id: 'signal-idle-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+      .mockReturnValue({ signal: { id: 'signal-idle-1' }, accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
       harness: {
-        sendSignal,
+        getCurrentSession: vi.fn().mockResolvedValue({ sendMessage }),
         isCurrentThreadStreamActive: () => false,
         getCurrentRunId: () => null,
         getDisplayState: () => ({ isRunning: false }),
@@ -406,8 +406,8 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage('render directly');
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({
-      content: 'render directly',
+    expect(sendMessage).toHaveBeenCalledWith({
+      messages: 'render directly',
       ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
     });
     expect(state.pendingSignalMessageComponentsById.has('signal-idle-1')).toBe(false);
@@ -421,12 +421,12 @@ describe('MastraTUI queueing', () => {
   });
 
   it('renders idle image signals with the echoed signal id so they dedupe', async () => {
-    const sendSignal = vi
+    const sendMessage = vi
       .fn()
-      .mockReturnValue({ id: 'signal-image-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+      .mockReturnValue({ signal: { id: 'signal-image-1' }, accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
       harness: {
-        sendSignal,
+        getCurrentSession: vi.fn().mockResolvedValue({ sendMessage }),
         isCurrentThreadStreamActive: () => false,
         getCurrentRunId: () => null,
         getDisplayState: () => ({ isRunning: false }),
@@ -442,8 +442,8 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage("what's in this image?", [{ data: 'data:image/png;base64,abc', mimeType: 'image/png' }]);
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({
-      content: [
+    expect(sendMessage).toHaveBeenCalledWith({
+      messages: [
         { type: 'text', text: "what's in this image?" },
         { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
       ],
@@ -886,7 +886,6 @@ describe('syncInitialThreadState', () => {
           { id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } },
           { id: 'thread-2', title: 'Other thread', metadata: {} },
         ]),
-        sendMessage: vi.fn(),
       },
       goalManager: {
         // Durable ThreadState load produced no objective, so the legacy
@@ -903,7 +902,6 @@ describe('syncInitialThreadState', () => {
     expect(state.currentThreadTitle).toBe('PR triage');
     expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
     expect(state.goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: persistedGoal });
-    expect(state.harness.sendMessage).not.toHaveBeenCalled();
   });
 
   it('does not re-hydrate from legacy metadata when the durable objective load succeeds', async () => {
@@ -928,7 +926,6 @@ describe('syncInitialThreadState', () => {
         listThreads: vi
           .fn()
           .mockResolvedValue([{ id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } }]),
-        sendMessage: vi.fn(),
       },
       goalManager: {
         // Durable ThreadState load produced an objective, so the stale legacy

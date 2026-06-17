@@ -31,11 +31,14 @@ function createCtx(options?: {
     chatContainer: new Container(),
     ui: { requestRender: vi.fn() },
   };
+  const session = {
+    queueMessage: vi.fn().mockResolvedValue(undefined),
+  };
   const harness = {
     hasWorkspace: vi.fn(() => options?.hasWorkspace ?? true),
     resolveWorkspace: vi.fn().mockResolvedValue(workspace),
     createThread: vi.fn().mockResolvedValue(undefined),
-    sendMessage: vi.fn().mockResolvedValue(undefined),
+    getCurrentSession: vi.fn().mockResolvedValue(session),
   };
 
   return {
@@ -47,6 +50,7 @@ function createCtx(options?: {
       showError: vi.fn(),
     } as any,
     harness,
+    session,
     state,
     workspace,
   };
@@ -82,7 +86,7 @@ describe('handleSkillCommand', () => {
   });
 
   it('loads a named skill and sends its instructions to the agent with immediate boundary spacing', async () => {
-    const { ctx, harness, state } = createCtx();
+    const { ctx, session, state } = createCtx();
     const previousComponent = new Container();
     (previousComponent as any).getChatSpacingKind = () => 'user-message';
     state.chatContainer.addChild(previousComponent);
@@ -95,8 +99,8 @@ describe('handleSkillCommand', () => {
     expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
     expect(state.chatContainer.children[2]).toBe(state.allSlashCommandComponents[0]);
     expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
-    expect(harness.sendMessage).toHaveBeenCalledWith({
-      content:
+    expect(session.queueMessage).toHaveBeenCalledWith({
+      messages:
         '<skill name="github-triage">\n' +
         '# GitHub triage\n\n' +
         'Review the issue.\n\n' +
@@ -111,7 +115,7 @@ describe('handleSkillCommand', () => {
   });
 
   it('preserves general XML/HTML in skill content but neutralizes the </skill> boundary token', async () => {
-    const { ctx, harness } = createCtx({
+    const { ctx, session } = createCtx({
       skill: {
         name: 'github-triage',
         instructions: 'Use <div>, A&B, "quotes". Embedded </skill> stays out of the way.',
@@ -123,8 +127,8 @@ describe('handleSkillCommand', () => {
 
     await handleSkillCommand(ctx, 'github-triage', []);
 
-    expect(harness.sendMessage).toHaveBeenCalledWith({
-      content:
+    expect(session.queueMessage).toHaveBeenCalledWith({
+      messages:
         '<skill name="github-triage">\n' +
         'Use <div>, A&B, "quotes". Embedded &lt;/skill&gt; stays out of the way.\n' +
         '</skill>',
@@ -132,14 +136,14 @@ describe('handleSkillCommand', () => {
   });
 
   it('creates a pending new thread before sending the skill activation', async () => {
-    const { ctx, harness, state } = createCtx({ pendingNewThread: true });
+    const { ctx, harness, session, state } = createCtx({ pendingNewThread: true });
 
     await handleSkillCommand(ctx, 'github-triage', []);
 
     expect(harness.createThread).toHaveBeenCalledTimes(1);
     expect(state.pendingNewThread).toBe(false);
     expect(harness.createThread.mock.invocationCallOrder[0]).toBeLessThan(
-      harness.sendMessage.mock.invocationCallOrder[0],
+      session.queueMessage.mock.invocationCallOrder[0],
     );
   });
 
@@ -153,29 +157,29 @@ describe('handleSkillCommand', () => {
         ]),
       },
     };
-    const { ctx, harness } = createCtx({ workspace });
+    const { ctx, session } = createCtx({ workspace });
 
     await handleSkillCommand(ctx, 'missing', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(session.queueMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith('Skill not found: missing. Available skills: review, browse');
   });
 
   it('shows an error when no skills are configured', async () => {
-    const { ctx, harness } = createCtx({ workspace: {} });
+    const { ctx, session } = createCtx({ workspace: {} });
 
     await handleSkillCommand(ctx, 'any', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(session.queueMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith('No skills configured.');
   });
 
   it('rejects empty skill names', async () => {
-    const { ctx, harness } = createCtx();
+    const { ctx, session } = createCtx();
 
     await handleSkillCommand(ctx, '', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(session.queueMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith('Usage: /skill/<name>');
   });
 
@@ -196,11 +200,11 @@ describe('handleSkillCommand', () => {
         ]),
       },
     };
-    const { ctx, harness } = createCtx({ workspace });
+    const { ctx, session } = createCtx({ workspace });
 
     await handleSkillCommand(ctx, 'internal-helper', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(session.queueMessage).not.toHaveBeenCalled();
     // The non-user-invocable skill must also be hidden from the "Available skills" hint.
     expect(ctx.showError).toHaveBeenCalledWith('Skill not found: internal-helper. Available skills: review');
   });

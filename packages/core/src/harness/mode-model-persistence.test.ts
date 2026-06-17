@@ -41,6 +41,30 @@ function createHarness(storage: InMemoryStore): Harness<HarnessTestState> {
   });
 }
 
+function createSessionBackedHarness(storage: InMemoryStore): Harness<HarnessTestState> {
+  return new Harness<HarnessTestState>({
+    id: 'test-harness',
+    resourceId: 'test-resource',
+    storage,
+    memory: {} as never,
+    agent: agent(),
+    stateSchema: undefined,
+    modes: [
+      {
+        id: 'build',
+        name: 'Build',
+        default: true,
+        defaultModelId: '__GATEWAY_OPENAI_MODEL__',
+      },
+      {
+        id: 'plan',
+        name: 'Plan',
+        defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      },
+    ],
+  });
+}
+
 describe('Harness mode-model persistence across restarts', () => {
   let storage: InMemoryStore;
 
@@ -126,6 +150,35 @@ describe('Harness mode-model persistence across restarts', () => {
     const restoreEvent = events.find(e => e.modeId === 'plan');
     expect(restoreEvent).toBeDefined();
     expect(restoreEvent?.previousModeId).toBe('build');
+  });
+
+  it('uses persisted session records as the source of truth when resuming a v0 Harness thread', async () => {
+    const session1 = createSessionBackedHarness(storage);
+    await session1.init();
+    const thread = await session1.createThread();
+
+    const harnessStorage = await storage.getStore('harness');
+    const [record] = (await harnessStorage!.listSessions()).filter(session => session.threadId === thread.id);
+    expect(record).toBeDefined();
+    expect(record).toMatchObject({
+      threadId: thread.id,
+      resourceId: 'test-resource',
+      modeId: 'build',
+      modelId: '__GATEWAY_OPENAI_MODEL__',
+    });
+
+    await harnessStorage!.updateSession(record!.id, {
+      modeId: 'plan',
+      modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      state: { currentModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' },
+    });
+
+    const session2 = createSessionBackedHarness(storage);
+    await session2.init();
+    await session2.switchThread({ threadId: thread.id });
+
+    expect(session2.getCurrentModeId()).toBe('plan');
+    expect(session2.getState().currentModelId).toBe('__GATEWAY_ANTHROPIC_MODEL_SONNET__');
   });
 
   it('approving a submit_plan suspension switches to the default mode and clears the suspension', async () => {

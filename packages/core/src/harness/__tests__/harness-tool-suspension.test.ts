@@ -137,7 +137,7 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.createThread();
 
     // Send a message — the tool should execute and call suspend()
-    await harness.sendMessage({ content: 'Deploy to production' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'Deploy to production' });
 
     // agent_end should fire with reason 'suspended', not 'complete'
     const agentEndEvent = events.find((e: any) => e.type === 'agent_end');
@@ -195,7 +195,7 @@ describe('Harness: tool suspension and resumption', () => {
 
     await harness.init();
     await harness.createThread();
-    await harness.sendMessage({ content: 'Do it' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'Do it' });
 
     const ds = harness.getDisplayState();
     expect(ds.pendingSuspensions.size).toBe(1);
@@ -265,7 +265,7 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.createThread();
 
     // First message triggers suspension
-    await harness.sendMessage({ content: 'Deploy to production' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'Deploy to production' });
 
     const suspendEnd = events.find((e: any) => e.type === 'agent_end');
     expect(suspendEnd?.reason).toBe('suspended');
@@ -340,7 +340,7 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.init();
     await harness.createThread();
 
-    await harness.sendMessage({ content: 'Deploy to production' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'Deploy to production' });
     await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
 
     expect(resumeStreamSpy).toHaveBeenCalled();
@@ -407,7 +407,7 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.init();
     await harness.createThread();
 
-    await harness.sendMessage({ content: 'Deploy to production' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'Deploy to production' });
     await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
 
     expect(resumeStreamSpy).toHaveBeenCalled();

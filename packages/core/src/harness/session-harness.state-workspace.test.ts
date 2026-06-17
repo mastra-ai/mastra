@@ -1,14 +1,14 @@
-import { RequestContext } from '@internal/core/request-context';
+import { RequestContext } from '../request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { MastraMemory, StorageThreadType } from '../../memory';
-import { HarnessStorage } from '../../storage/domains/harness';
-import type { SessionRecord } from '../../storage/domains/harness';
-import { Workspace } from '../../workspace';
-import { Harness } from './harness';
-import type { HarnessConfig } from './harness.types';
-import type { HarnessMode } from './mode';
-import { buildHarnessRequestContext } from './request-context';
+import type { MastraMemory, StorageThreadType } from '../memory';
+import { HarnessStorage } from '../storage/domains/harness';
+import type { SessionRecord } from '../storage/domains/harness';
+import { Workspace } from '../workspace';
+import { Harness } from './session-harness';
+import type { HarnessConfig } from './session-harness.types';
+import type { HarnessMode } from './session-mode';
+import { buildHarnessRequestContext } from './session-request-context';
 
 class RecordingHarnessStorage extends HarnessStorage {
   readonly records = new Map<string, SessionRecord>();
@@ -30,7 +30,7 @@ class RecordingHarnessStorage extends HarnessStorage {
   }
 }
 
-const modes: HarnessMode[] = [{ id: 'build', agentId: 'default', defaultModelId: 'test-model' }];
+const modes: HarnessMode[] = [{ id: 'build', defaultModelId: 'test-model' }];
 
 const createMemory = () =>
   ({
@@ -47,7 +47,7 @@ const createMemory = () =>
   }) as unknown as MastraMemory;
 
 type TestHarnessConfig<TState> = Partial<
-  Omit<HarnessConfig<HarnessMode[], TState>, 'agents' | 'mastra' | 'modes' | 'defaultModeId' | 'storage' | 'memory'>
+  Omit<HarnessConfig<HarnessMode[], TState>, 'agent' | 'mastra' | 'modes' | 'defaultModeId' | 'storage' | 'memory'>
 > & {
   memory?: HarnessConfig<HarnessMode[], TState>['memory'];
 };
@@ -56,7 +56,7 @@ const createHarness = <TState extends Record<string, unknown>>(config: TestHarne
   const storage = new RecordingHarnessStorage();
   const memory = createMemory();
   const harness = new Harness<HarnessMode[], TState>({
-    agents: {},
+    agent: {} as never,
     storage,
     memory,
     modes,
@@ -66,7 +66,7 @@ const createHarness = <TState extends Record<string, unknown>>(config: TestHarne
   return { harness, storage, memory };
 };
 
-describe('Harness v1 session state', () => {
+describe('Session harness state', () => {
   it('initializes sessions from schema defaults and initial state', async () => {
     const { harness } = createHarness<{ count: number; label: string }>({
       stateSchema: {
@@ -123,7 +123,7 @@ describe('Harness v1 session state', () => {
   });
 });
 
-describe('Harness v1 request context', () => {
+describe('Session harness request context', () => {
   it('builds a detached per-execution overlay without mutating caller context', () => {
     const callerContext = new RequestContext<unknown>([
       ['harness', { sessionId: 'caller-session' }],
@@ -151,7 +151,7 @@ describe('Harness v1 request context', () => {
   });
 });
 
-describe('Harness v1 workspace', () => {
+describe('Session harness workspace', () => {
   it('keeps configured workspace instances and config-created workspaces internal to the session', async () => {
     const workspace = new Workspace({ name: 'instance-workspace', skills: ['.'] });
     let instanceHarnessContext: Record<string, unknown> | undefined;

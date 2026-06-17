@@ -1,23 +1,16 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
-import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
-import type {
-  AgentThreadSubscription,
-  SendAgentNotificationSignalOptions,
-  SendAgentNotificationSignalResult,
-  ToolsInput,
-  ToolsetsInput,
-} from '../agent/types';
+import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import type { AgentThreadSubscription, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { getErrorFromUnknown } from '../error';
 import { getServerSideFallbackInfo } from '../llm/model/server-side-fallback';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
-import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
@@ -30,6 +23,9 @@ import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
+import { Harness as SessionRuntimeHarness } from './session-harness';
+import type { Session as HarnessThreadSessionRuntime } from './session';
+import type { HarnessMode as SessionRuntimeMode } from './session-mode';
 import {
   askUserTool,
   createSubagentTool,
@@ -102,14 +98,6 @@ function validateModes(modes: HarnessMode[]): void {
     }
   }
 }
-
-type HarnessSendNotificationSignalOptions = {
-  ifActive?: SendAgentNotificationSignalOptions['ifActive'];
-  ifIdle?: SendAgentNotificationSignalOptions['ifIdle'];
-  tracingContext?: TracingContext;
-  tracingOptions?: TracingOptions;
-  requestContext?: RequestContext;
-};
 
 /**
  * Build a user-facing message for a non-success stream finish reason.
@@ -438,7 +426,7 @@ function toNotificationContent(
  * })
  *
  * await harness.init()
- * await harness.sendMessage({ content: "Hello!" })
+ * await (await harness.getCurrentSession()).queueMessage({ messages: "Hello!" })
  * ```
  */
 export class Harness<TState = {}> {
@@ -492,6 +480,8 @@ export class Harness<TState = {}> {
   private switchModeVersion: number = 0;
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
+  private sessionRuntimeHarness: SessionRuntimeHarness<SessionRuntimeMode[], TState> | null = null;
+  private currentSessionRuntime: HarnessThreadSessionRuntime<TState> | null = null;
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
@@ -538,6 +528,24 @@ export class Harness<TState = {}> {
       this.browser = config.browser;
     } else if (typeof config.browser === 'function') {
       this.browserFn = config.browser;
+    }
+
+    const sessionRuntimeAgent = config.agent ?? defaultMode.agent;
+    if (config.storage && sessionRuntimeAgent) {
+      this.sessionRuntimeHarness = new SessionRuntimeHarness<SessionRuntimeMode[], TState>({
+        id: config.id,
+        ownerId: config.id,
+        storage: config.storage,
+        memory: config.memory as any,
+        stateSchema: config.stateSchema,
+        initialState: config.initialState,
+        workspace: config.workspace,
+        gateways: config.gateways,
+        modes: config.modes as unknown as SessionRuntimeMode[],
+        defaultModeId: this.currentModeId,
+        agent: sessionRuntimeAgent,
+        toolCategoryResolver: config.toolCategoryResolver as ((toolName: string) => string | null) | undefined,
+      });
     }
 
     // Seed model from mode default if not set
@@ -675,6 +683,7 @@ export class Harness<TState = {}> {
     await this.config.threadLock?.acquire(mostRecent.id);
     this.currentThreadId = mostRecent.id;
     await this.loadThreadMetadata();
+    await this.ensureCurrentSessionRuntime();
     await this.ensureCurrentAgentThreadSubscription();
 
     return mostRecent;
@@ -689,6 +698,83 @@ export class Harness<TState = {}> {
       throw new Error('Storage does not have a memory domain configured');
     }
     return memoryStorage;
+  }
+
+  private async getSessionStorage() {
+    if (!this.config.storage) return null;
+
+    try {
+      return (await this.config.storage.getStore('harness')) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private getSessionIdForThread(resourceId: string, threadId: string): string {
+    const hash = createHash('sha256').update(`${resourceId}\0${threadId}`).digest('hex').slice(0, 32);
+    return `sess-${hash}`;
+  }
+
+  private async ensureCurrentSessionRuntime(): Promise<HarnessThreadSessionRuntime<TState> | null> {
+    if (!this.sessionRuntimeHarness || !this.currentThreadId) return null;
+
+    const sessionStorage = await this.getSessionStorage();
+    if (!sessionStorage) return null;
+
+    const sessionId = this.getSessionIdForThread(this.resourceId, this.currentThreadId);
+    const hadSession = Boolean(await sessionStorage.loadSession(sessionId));
+    const currentMode = this.getCurrentMode();
+    const modelId = this.getCurrentModelId() || currentMode.defaultModelId;
+    const session = await this.sessionRuntimeHarness.session({
+      threadId: this.currentThreadId,
+      resourceId: this.resourceId,
+      modeId: this.currentModeId,
+      ...(modelId ? { modelId } : {}),
+    });
+
+    this.currentSessionRuntime = session;
+
+    if (!hadSession) {
+      if (modelId) {
+        session.setModelId(modelId);
+      }
+      await session.setState(this.state as Partial<TState>);
+      return session;
+    }
+
+    const sessionMode = session.getMode();
+    if (sessionMode.id !== this.currentModeId && this.config.modes.some(mode => mode.id === sessionMode.id)) {
+      const previousModeId = this.currentModeId;
+      this.currentModeId = sessionMode.id;
+      this.emit({ type: 'mode_changed', modeId: sessionMode.id, previousModeId });
+    }
+
+    const sessionState = session.getState() as Partial<TState> & { currentModelId?: string };
+    const sessionModelId = session.getModelId();
+    const updates = {
+      ...sessionState,
+      ...(sessionModelId ? { currentModelId: sessionModelId } : {}),
+    } as Partial<TState>;
+    if (Object.keys(updates).length > 0) {
+      await this.applyStateUpdates(updates);
+    }
+    return session;
+  }
+
+  async getCurrentSession(): Promise<HarnessThreadSessionRuntime<TState>> {
+    if (!this.currentThreadId) {
+      const thread = await this.createThread();
+      this.currentThreadId = thread.id;
+    }
+
+    const session = await this.ensureCurrentSessionRuntime();
+    if (!session) {
+      throw new Error('Session runtime is not configured on this Harness');
+    }
+
+    this.abortRequested = false;
+    await this.ensureCurrentAgentThreadSubscription();
+    return session;
   }
 
   // ===========================================================================
@@ -715,6 +801,10 @@ export class Harness<TState = {}> {
       this.state = result.value as TState;
     } else {
       this.state = newState as TState;
+    }
+
+    if (this.currentSessionRuntime) {
+      await this.currentSessionRuntime.setState(updates);
     }
 
     this.emit({ type: 'state_changed', state: this.state as Record<string, unknown>, changedKeys });
@@ -821,6 +911,7 @@ export class Harness<TState = {}> {
     // Update local state and emit events immediately so UIs can update
     // without waiting for storage round-trips.
     this.currentModeId = modeId;
+    await this.currentSessionRuntime?.setMode(mode as unknown as SessionRuntimeMode);
     this.emit({ type: 'mode_changed', modeId, previousModeId });
 
     // Save current model to the outgoing mode before switching
@@ -836,6 +927,7 @@ export class Harness<TState = {}> {
     const modeModelId = await this.loadModeModelId(modeId);
     if (this.switchModeVersion !== version) return;
     if (modeModelId) {
+      await this.currentSessionRuntime?.setModelId(modeModelId);
       void this.setState({ currentModelId: modeModelId } as unknown as Partial<TState>);
       this.emit({ type: 'model_changed', modelId: modeModelId } as HarnessEvent);
     }
@@ -990,6 +1082,7 @@ export class Harness<TState = {}> {
     const targetModeId = modeId ?? this.currentModeId;
 
     if (targetModeId === this.currentModeId) {
+      await this.currentSessionRuntime?.setModelId(modelId);
       void this.setState({ currentModelId: modelId } as unknown as Partial<TState>);
     }
 
@@ -1213,8 +1306,10 @@ export class Harness<TState = {}> {
     this.currentThreadId = thread.id;
 
     if (modelId && !currentStateModel) {
-      void this.setState({ currentModelId: modelId } as unknown as Partial<TState>);
+      await this.setState({ currentModelId: modelId } as unknown as Partial<TState>);
     }
+
+    await this.ensureCurrentSessionRuntime();
 
     this.tokenUsage = createEmptyTokenUsage();
     this.emit({ type: 'thread_created', thread });
@@ -1257,6 +1352,7 @@ export class Harness<TState = {}> {
       }
       this.cleanupAgentThreadSubscription();
       this.currentThreadId = null;
+      this.currentSessionRuntime = null;
       this.tokenUsage = createEmptyTokenUsage();
     }
 
@@ -1332,6 +1428,7 @@ export class Harness<TState = {}> {
     this.cleanupAgentThreadSubscription();
     this.currentThreadId = clonedThread.id;
     await this.loadThreadMetadata();
+    await this.ensureCurrentSessionRuntime();
     this.tokenUsage = createEmptyTokenUsage();
     this.emit({ type: 'thread_created', thread: clonedThread });
     await this.ensureCurrentAgentThreadSubscription();
@@ -1363,6 +1460,7 @@ export class Harness<TState = {}> {
     this.currentThreadId = threadId;
 
     await this.loadThreadMetadata();
+    await this.ensureCurrentSessionRuntime();
 
     this.emit({ type: 'thread_changed', threadId, previousThreadId });
     await this.ensureCurrentAgentThreadSubscription();
@@ -1990,12 +2088,13 @@ export class Harness<TState = {}> {
         this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length, runId: result.runId });
       } else {
         this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
-        await this.sendMessage({
-          content: next.content,
-          requestContext: next.requestContext,
+        const session = await this.getCurrentSession();
+        await session.sendMessage({
+          messages: this.createMessageInput({ content: next.content }),
           tracingContext: options?.tracingContext,
           tracingOptions: options?.tracingOptions,
         });
+        await session.waitForIdle();
       }
       return true;
     } catch (error) {
@@ -2115,147 +2214,6 @@ export class Harness<TState = {}> {
         await this.handleSubscribedStreamError(error);
       }
     }
-  }
-
-  /**
-   * Send a signal to the current agent/thread.
-   */
-  sendSignal(
-    input:
-      | AgentSignalInput
-      | {
-          content: AgentSignalContents;
-          ifActive?: { attributes?: AgentSignalAttributes };
-          ifIdle?: { attributes?: AgentSignalAttributes };
-          tracingContext?: TracingContext;
-          tracingOptions?: TracingOptions;
-          requestContext?: RequestContext;
-        },
-  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
-    const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
-    const ifActive = 'content' in input ? input.ifActive : undefined;
-    const ifIdle = 'content' in input ? input.ifIdle : undefined;
-    const signal = createSignal(
-      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
-    );
-    const accepted = Promise.resolve().then(async () => {
-      if (!this.currentThreadId) {
-        const thread = await this.createThread();
-        this.currentThreadId = thread.id;
-      }
-
-      const agent = this.getCurrentAgent();
-      await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
-
-      if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
-        const result = agent.sendSignal(signal, {
-          resourceId: this.resourceId,
-          threadId: this.currentThreadId,
-          ifActive,
-          ifIdle,
-        });
-        return { accepted: result.accepted, runId: result.runId };
-      }
-
-      const streamOptions = await this.buildAgentMessageStreamOptions({
-        requestContext: requestContextInput,
-        tracingContext,
-        tracingOptions,
-      });
-
-      const result = agent.sendSignal(signal, {
-        resourceId: this.resourceId,
-        threadId: this.currentThreadId,
-        ifActive,
-        ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
-      });
-      return { accepted: result.accepted, runId: result.runId };
-    });
-
-    return { id: signal.id, type: signal.type, accepted };
-  }
-
-  /**
-   * Send a notification signal to the current agent/thread.
-   */
-  async sendNotificationSignal(
-    input: SendNotificationSignalInput,
-    options: HarnessSendNotificationSignalOptions = {},
-  ): Promise<SendAgentNotificationSignalResult> {
-    const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
-    if (!this.currentThreadId) {
-      const thread = await this.createThread();
-      this.currentThreadId = thread.id;
-    }
-
-    const agent = this.getCurrentAgent();
-    await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
-
-    if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
-      return agent.sendNotificationSignal(input, {
-        resourceId: this.resourceId,
-        threadId: this.currentThreadId,
-        ifActive,
-        ifIdle,
-      });
-    }
-
-    const streamOptions = await this.buildAgentMessageStreamOptions({
-      requestContext: requestContextInput,
-      tracingContext,
-      tracingOptions,
-    });
-
-    return agent.sendNotificationSignal(input, {
-      resourceId: this.resourceId,
-      threadId: this.currentThreadId,
-      ifActive,
-      ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
-    });
-  }
-
-  /**
-   * Send a message to the current agent.
-   * Streams the response and emits events.
-   */
-  async sendMessage({
-    content,
-    files,
-    tracingContext,
-    tracingOptions,
-    requestContext: requestContextInput,
-  }: {
-    content: string;
-    files?: Array<{ data: string; mediaType: string; filename?: string }>;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const messageInput = this.createMessageInput({ content, files });
-
-    const wasActive = this.isCurrentThreadStreamActive();
-    let emittedAgentEnd = false;
-    const unsubscribeAgentEnd = wasActive
-      ? undefined
-      : this.subscribe(event => {
-          if (event.type === 'agent_end') emittedAgentEnd = true;
-        });
-    const signal = this.sendSignal({
-      content: messageInput,
-      tracingContext,
-      tracingOptions,
-      requestContext: requestContextInput,
-    });
-    await signal.accepted;
-    if (!wasActive) {
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await this.waitForCurrentThreadStreamIdle();
-      unsubscribeAgentEnd?.();
-      if (!emittedAgentEnd && this.pendingSuspensions.size === 0) {
-        this.emit({ type: 'agent_end', reason: 'complete' });
-      }
-    }
-    return;
   }
 
   async listMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
@@ -3409,11 +3367,14 @@ export class Harness<TState = {}> {
   /**
    * Steer the agent mid-stream: aborts current run and sends a new message.
    */
-  async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+  async steer({ content, requestContext: _requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
     this.followUpQueue = [];
     this.emit({ type: 'follow_up_queued', count: 0 });
-    await this.sendMessage({ content, requestContext });
+    const session = await this.getCurrentSession();
+    await session.sendMessage({
+      messages: this.createMessageInput({ content }),
+    });
   }
 
   /**
@@ -3424,7 +3385,10 @@ export class Harness<TState = {}> {
       this.followUpQueue.push({ content, requestContext });
       this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
     } else {
-      await this.sendMessage({ content, requestContext });
+      const session = await this.getCurrentSession();
+      await session.sendMessage({
+        messages: this.createMessageInput({ content }),
+      });
     }
   }
 
@@ -3455,22 +3419,6 @@ export class Harness<TState = {}> {
     return (
       this.agentThreadSubscription?.activeRunId() !== null && this.agentThreadSubscription?.activeRunId() !== undefined
     );
-  }
-
-  /**
-   * Resolve once the current thread's stream is fully idle.
-   *
-   * After `abort()` is called the run's status can still be `'running'` for a
-   * few microtasks while the underlying model stream finalizes. Callers that
-   * need to send a fresh signal after an abort (e.g. plan approval → mode
-   * switch → trigger reminder) should await this before calling `sendSignal`
-   * to avoid the new signal being queued onto the dying run, which would then
-   * be drained with the previous run's already-aborted abortSignal.
-   */
-  private async waitForCurrentThreadStreamIdle(): Promise<void> {
-    while (this.isCurrentThreadStreamActive() || this.currentRunId !== null) {
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
   }
 
   getCurrentTraceId(): string | null {
@@ -3672,9 +3620,9 @@ export class Harness<TState = {}> {
       // the dying run's pending queue and later get drained with the run's
       // already-aborted abortSignal — manifesting as a hang where the agent
       // never resumes after "The user has approved the plan, begin
-      // executing.". Waiting for the stream to be fully idle here ensures
-      // the next sendSignal() always starts a fresh run.
-      await this.waitForCurrentThreadStreamIdle();
+      // executing.". Waiting through the session ensures the next signal
+      // starts a fresh run.
+      await (await this.getCurrentSession()).waitForIdle();
     }
   }
 

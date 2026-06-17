@@ -1,13 +1,13 @@
-import type { Agent } from '../../agent';
-import type { MastraModelGatewayInterface } from '../../llm';
-import type { Mastra } from '../../mastra';
-import type { MastraMemory } from '../../memory';
-import type { PublicSchema } from '../../schema';
-import type { MastraCompositeStore } from '../../storage';
-import type { HarnessStorage } from '../../storage/domains/harness';
-import type { DynamicArgument } from '../../types';
-import type { Workspace, WorkspaceConfig } from '../../workspace';
-import type { HarnessMode } from './mode';
+import type { Agent } from '../agent';
+import type { MastraModelGatewayInterface } from '../llm';
+import type { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory';
+import type { PublicSchema } from '../schema';
+import type { MastraCompositeStore } from '../storage';
+import type { HarnessStorage } from '../storage/domains/harness';
+import type { DynamicArgument } from '../types';
+import type { Workspace, WorkspaceConfig } from '../workspace';
+import type { HarnessMode } from './session-mode';
 import type {
   PermissionPolicy,
   PermissionRule,
@@ -15,8 +15,8 @@ import type {
   PermissionGrant,
   ToolCategory,
   ToolCategoryResolver,
-} from './permissions.types';
-import type { SubagentRegistryConfig } from './subagents.types';
+} from './session-permissions.types';
+import type { SubagentRegistryConfig } from './session-subagents.types';
 
 export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   id: string;

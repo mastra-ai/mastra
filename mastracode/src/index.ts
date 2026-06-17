@@ -1,11 +1,8 @@
-import { createHash } from 'node:crypto';
-import { hostname } from 'node:os';
 import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
 import type { PubSub } from '@mastra/core/events';
 import { Harness } from '@mastra/core/harness';
-import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
 import type {
   HeartbeatHandler,
   HarnessConfig,
@@ -14,7 +11,6 @@ import type {
   HarnessSubagent,
   HarnessRequestContext,
 } from '@mastra/core/harness';
-import type { HarnessMode as HarnessModeV1 } from '@mastra/core/harness/v1';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import {
@@ -45,7 +41,6 @@ import {
   createMastraCodeModelCatalogProvider,
   getDynamicModel,
   getGoalJudgeModel,
-  resolveModel,
 } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
@@ -56,8 +51,6 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 // import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
-import { HarnessCompat } from './HarnessCompat.js';
-
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
@@ -98,14 +91,6 @@ import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
-function hash(input: string): string {
-  return createHash('sha256').update(input).digest('hex').slice(0, 32);
-}
-
-function isV1WorkspaceConfigCompatible(workspace: unknown): boolean {
-  if (!workspace || typeof workspace !== 'object') return false;
-  return 'filesystem' in workspace || 'sandbox' in workspace || 'skills' in workspace || 'mounts' in workspace;
-}
 
 function applyEffectiveDefaultsToModes(modes: HarnessMode[], effectiveDefaults: Record<string, string>): HarnessMode[] {
   return modes.map(mode => {
@@ -644,7 +629,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     }
   }
 
-  const ownerId = `mastracode-${hash(`${hostname()}\0${project.rootPath}`)}`;
   const initialState: Partial<MastraCodeState> = {
     projectPath: project.rootPath,
     projectName: project.name,
@@ -657,78 +641,43 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     configDir,
   };
   const workspace = config?.workspace ?? (args => getDynamicWorkspace(args));
-  const workspaceV1 =
-    typeof workspace === 'function' || isV1WorkspaceConfigCompatible(workspace) ? workspace : undefined;
-  const modesV1: HarnessModeV1[] = modes.map(mode => ({
-    id: mode.id,
-    defaultModelId: mode.defaultModelId ?? modes.find(candidate => candidate.id === defaultModeId)?.defaultModelId ?? '',
-    description: mode.description ?? mode.name,
-    instructions: mode.instructions,
-    tools: mode.tools,
-    additionalTools: mode.additionalTools,
-    transitionsTo: mode.transitionsTo,
-    metadata: {
-      ...mode.metadata,
-      default: mode.metadata?.default ?? mode.default,
-      agentId: CODE_AGENT_ID,
-    },
-  }));
-
-  const harnessV1 = new HarnessV1<HarnessModeV1[], MastraCodeState>({
-    id: 'mastra-code',
-    ownerId,
-    agent: codeAgent,
-    memory,
-    modes: modesV1,
-    defaultModeId,
-    storage: harnessStorage,
-    stateSchema: stateSchema as PublicSchema<MastraCodeState>,
-    initialState,
-    workspace: workspaceV1,
-    gateways: [mastraCodeGateway],
-    toolCategoryResolver: getToolCategory,
-  });
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const harness: Harness<MastraCodeState> = new HarnessCompat<MastraCodeState>(
-    {
-      id: 'mastra-code',
-      resourceId: project.resourceId,
-      storage,
-      observability,
-      memory,
-      pubsub: signalsPubSub,
-      stateSchema: typedStateSchema,
-      agent: codeAgent,
-      subagents: config?.subagents ?? [],
-      gateways: [mastraCodeGateway],
-      toolCategoryResolver: getToolCategory,
-      initialState,
-      workspace,
-      browser: config?.browser,
-      modes,
-      heartbeatHandlers,
-      resolveModel,
-      customModelCatalogProvider: createMastraCodeModelCatalogProvider(mastraCodeGateway),
-      modelUseCountProvider: () => loadSettings().modelUseCounts,
-      modelUseCountTracker: modelId => {
-        try {
-          const settings = loadSettings();
-          settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
-          saveSettings(settings);
-        } catch (error) {
-          console.error('Failed to persist model usage count', error);
-        }
-      },
-      threadLock: crossProcessPubSub
-        ? undefined
-        : {
-            acquire: acquireThreadLock,
-            release: releaseThreadLock,
-          },
+  const harness: Harness<MastraCodeState> = new Harness<MastraCodeState>({
+    id: 'mastra-code',
+    resourceId: project.resourceId,
+    storage,
+    observability,
+    memory,
+    pubsub: signalsPubSub,
+    stateSchema: typedStateSchema,
+    agent: codeAgent,
+    subagents: config?.subagents ?? [],
+    gateways: [mastraCodeGateway],
+    toolCategoryResolver: getToolCategory,
+    initialState,
+    workspace,
+    browser: config?.browser,
+    modes,
+    heartbeatHandlers,
+    customModelCatalogProvider: createMastraCodeModelCatalogProvider(mastraCodeGateway),
+    modelUseCountProvider: () => loadSettings().modelUseCounts,
+    modelUseCountTracker: modelId => {
+      try {
+        const settings = loadSettings();
+        settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
+        saveSettings(settings);
+      } catch (error) {
+        console.error('Failed to persist model usage count', error);
+      }
     },
-    harnessV1,
-  );
+    threadLock: crossProcessPubSub
+      ? undefined
+      : {
+          acquire: acquireThreadLock,
+          release: releaseThreadLock,
+        },
+  });
 
   // Sync hookManager session ID on thread changes
   if (hookManager) {
@@ -781,7 +730,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     hookManager,
     signalsPubSub,
     authStorage,
-    resolveModel,
     storageWarning,
     observabilityWarning,
     builtinPacks,

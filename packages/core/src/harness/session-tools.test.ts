@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildSessionToolsets } from './tools';
+import { buildSessionToolsets } from './session-tools';
 
 const stub = (id: string) => ({ id, description: id, parameters: {} as never, execute: async () => null }) as never;
 

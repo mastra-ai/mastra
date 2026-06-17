@@ -198,12 +198,12 @@ describe('handleGoalCommand', () => {
       }),
       saveToThread: vi.fn().mockResolvedValue(undefined),
     };
-    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
+    const session = { sendMessage: vi.fn().mockResolvedValue({ accepted: true, runId: 'run-1' }) };
     const showInfo = vi.fn();
     const ctx = {
       state: {
         goalManager,
-        harness: { sendSignal },
+        harness: { getCurrentSession: vi.fn().mockResolvedValue(session) },
       },
       showInfo,
       showError: vi.fn(),
@@ -216,14 +216,16 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     // No showInfo — only the signal renders the goal box (avoids duplicate).
     expect(showInfo).not.toHaveBeenCalled();
-    expect(sendSignal).toHaveBeenCalledWith({
-      type: 'system-reminder',
-      contents: 'finish the task',
-      attributes: { type: 'goal' },
-      metadata: {
-        goalId: 'goal-1',
-        maxTurns: DEFAULT_MAX_TURNS,
-        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+    expect(session.sendMessage).toHaveBeenCalledWith({
+      messages: {
+        type: 'system-reminder',
+        contents: 'finish the task',
+        attributes: { type: 'goal' },
+        metadata: {
+          goalId: 'goal-1',
+          maxTurns: DEFAULT_MAX_TURNS,
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+        },
       },
     });
   });
@@ -242,11 +244,12 @@ describe('handleGoalCommand', () => {
       resume: vi.fn(),
       saveToThread: vi.fn().mockResolvedValue(undefined),
     };
+    const getCurrentSession = vi.fn();
     const showInfo = vi.fn();
     const ctx = {
       state: {
         goalManager,
-        harness: { sendSignal: vi.fn() },
+        harness: { getCurrentSession },
       },
       showInfo,
       showError: vi.fn(),
@@ -256,9 +259,10 @@ describe('handleGoalCommand', () => {
     await handleGoalCommand(ctx, ['resume']);
 
     // The goal is active (waiting for user input is still active), so resume
-    // should report "already active" and NOT call resume() or sendSignal.
+    // should report "already active" and NOT call resume() or send a signal.
     expect(goalManager.resume).not.toHaveBeenCalled();
     expect(showInfo).toHaveBeenCalledWith('Goal is already active.');
+    expect(getCurrentSession).not.toHaveBeenCalled();
   });
 
   it('creates the pending new thread before saving a new goal', async () => {
@@ -279,7 +283,7 @@ describe('handleGoalCommand', () => {
     const createThread = vi.fn(async () => {
       currentThreadId = 'new-thread';
     });
-    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
+    const session = { sendMessage: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })) };
     const ctx = {
       state: {
         pendingNewThread: true,
@@ -287,7 +291,7 @@ describe('handleGoalCommand', () => {
         harness: {
           createThread,
           getCurrentThreadId: vi.fn(() => currentThreadId),
-          sendSignal,
+          getCurrentSession: vi.fn().mockResolvedValue(session),
         },
       },
       addUserMessage: vi.fn(),
@@ -302,12 +306,12 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     expect(createThread.mock.invocationCallOrder[0]).toBeLessThan(goalManager.saveToThread.mock.invocationCallOrder[0]);
     expect(goalManager.persistOnNextThreadCreate).not.toHaveBeenCalled();
-    expect(sendSignal).toHaveBeenCalledWith({
+    expect(session.sendMessage).toHaveBeenCalledWith({ messages: {
       type: 'system-reminder',
       contents: 'finish the task',
       attributes: { type: 'goal' },
       metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: '__GATEWAY_OPENAI_MODEL__' },
-    });
+    } });
   });
 
   it('starts a goal from a plan-approval-style title+plan with only the goal reminder XML', async () => {
@@ -331,14 +335,14 @@ describe('handleGoalCommand', () => {
       saveToThread: vi.fn().mockResolvedValue(undefined),
       isActive: vi.fn(() => true),
     };
-    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
+    const session = { sendMessage: vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })) };
     const ctx = {
       state: {
         pendingNewThread: false,
         goalManager,
         harness: {
           getCurrentThreadId: vi.fn(() => 'thread-1'),
-          sendSignal,
+          getCurrentSession: vi.fn().mockResolvedValue(session),
         },
       },
       addUserMessage: vi.fn(),
@@ -352,15 +356,17 @@ describe('handleGoalCommand', () => {
     // judge runs after the agent's first response.
     expect(goalManager.setGoal).toHaveBeenCalledWith(expect.anything(), objective, '__GATEWAY_OPENAI_MODEL__', 50);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
-    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
+    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(session.sendMessage.mock.invocationCallOrder[0]);
     expect(goalManager.isActive()).toBe(true);
 
-    expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect(sendSignal).toHaveBeenCalledWith({
-      type: 'system-reminder',
-      contents: '# Ship it\n\n1. Build\n2. Test',
-      attributes: { type: 'goal' },
-      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: '__GATEWAY_OPENAI_MODEL__' },
+    expect(session.sendMessage).toHaveBeenCalledTimes(1);
+    expect(session.sendMessage).toHaveBeenCalledWith({
+      messages: {
+        type: 'system-reminder',
+        contents: '# Ship it\n\n1. Build\n2. Test',
+        attributes: { type: 'goal' },
+        metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: '__GATEWAY_OPENAI_MODEL__' },
+      },
     });
   });
 
@@ -400,10 +406,12 @@ describe('handleGoalCommand', () => {
     goalManager.saveToThread.mockImplementation(async () => {
       isActiveAtSave = goalManager.isActive();
     });
-    const sendSignal = vi.fn(() => {
-      isActiveAtSendSignal = goalManager.isActive();
-      return { accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) };
-    });
+    const session = {
+      sendMessage: vi.fn(() => {
+        isActiveAtSendSignal = goalManager.isActive();
+        return { accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) };
+      }),
+    };
 
     const ctx = {
       state: {
@@ -411,7 +419,7 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           getCurrentThreadId: vi.fn(() => 'thread-1'),
-          sendSignal,
+          getCurrentSession: vi.fn().mockResolvedValue(session),
         },
       },
       addUserMessage: vi.fn(),
@@ -427,15 +435,15 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     expect(isActiveAtSave).toBe(true);
     expect(isActiveAtSendSignal).toBe(true);
-    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
-    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(session.sendMessage.mock.invocationCallOrder[0]);
+    expect(session.sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it('can activate goal mode without sending a trigger so plan approval can inject through the TUI', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
     const goalManager = new GoalManager();
-    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const session = { sendMessage: vi.fn().mockResolvedValue(undefined) };
 
     const ctx = {
       state: {
@@ -444,7 +452,7 @@ describe('handleGoalCommand', () => {
         harness: {
           getCurrentThreadId: vi.fn(() => 'thread-1'),
           setThreadSetting: vi.fn().mockResolvedValue(undefined),
-          sendMessage,
+          getCurrentSession: vi.fn().mockResolvedValue(session),
         },
       },
       addUserMessage: vi.fn(),
@@ -457,7 +465,7 @@ describe('handleGoalCommand', () => {
 
     expect(goalManager.isActive()).toBe(true);
     expect(goalManager.getGoal()).toMatchObject({ activeDurationMs: 0, activeStartedAt: undefined });
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(session.sendMessage).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 
@@ -558,12 +566,13 @@ describe('handleGoalCommand', () => {
       resume: vi.fn(),
       saveToThread: vi.fn(),
     };
-    const sendSignal = vi.fn();
+    const session = { sendMessage: vi.fn() };
+    const getCurrentSession = vi.fn().mockResolvedValue(session);
     const showInfo = vi.fn();
     const ctx = {
       state: {
         goalManager,
-        harness: { sendSignal },
+        harness: { getCurrentSession },
       },
       showInfo,
       updateStatusLine: vi.fn(),
@@ -574,7 +583,8 @@ describe('handleGoalCommand', () => {
     expect(showInfo).toHaveBeenCalledWith('Goal is already done. Use /goal <text> to set a new goal.');
     expect(goalManager.resume).not.toHaveBeenCalled();
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(getCurrentSession).not.toHaveBeenCalled();
+    expect(session.sendMessage).not.toHaveBeenCalled();
   });
 
   it('clears planStartedGoalId when /goal clear is called', async () => {
@@ -661,12 +671,12 @@ describe('handleGoalCommand', () => {
       persistOnNextThreadCreate: vi.fn(),
       saveToThread: vi.fn().mockResolvedValue(undefined),
     };
-    const sendSignal = vi.fn().mockResolvedValue({ accepted: Promise.resolve() });
+    const session = { sendMessage: vi.fn().mockResolvedValue({ accepted: Promise.resolve() }) };
     const state = {
       goalManager,
       harness: {
         getCurrentThreadId: vi.fn(() => 'thread-1'),
-        sendSignal,
+        getCurrentSession: vi.fn().mockResolvedValue(session),
       },
       planStartedGoalId: 'plan-goal-xyz',
     };

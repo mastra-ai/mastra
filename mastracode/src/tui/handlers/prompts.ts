@@ -294,10 +294,12 @@ export async function handlePlanApproval(
         // this signal always starts a fresh build-mode run instead of
         // queuing onto the dying one.
         try {
-          await state.harness.sendSignal({
-            type: 'system-reminder',
-            contents: 'The user has approved the plan, begin executing.',
-          }).accepted;
+          await (await state.harness.getCurrentSession()).sendMessage({
+            messages: {
+              type: 'system-reminder',
+              contents: 'The user has approved the plan, begin executing.',
+            },
+          });
         } catch (err) {
           ctx.showError(`Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`);
         }

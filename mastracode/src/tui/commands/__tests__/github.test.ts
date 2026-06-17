@@ -20,7 +20,7 @@ vi.mock('../../modal-question.js', () => ({
 }));
 
 function createContext() {
-  const sendSignal = vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
+  const session = { sendMessage: vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })) };
   const syncThreadNow = vi.fn(async () => 1);
   const subscribeThreadToPR = vi.fn(async () => ({ owner: 'mastra-ai', repo: 'mastra', number: 17447 }));
   const unsubscribeThreadFromPR = vi.fn(async () => ({
@@ -45,7 +45,7 @@ function createContext() {
       },
     },
     harness: {
-      sendSignal,
+      getCurrentSession: vi.fn().mockResolvedValue(session),
       getCurrentThreadId: vi.fn(() => 'thread-1'),
       getResourceId: vi.fn(() => 'resource-1'),
       listThreads: vi.fn(async () => []),
@@ -53,7 +53,7 @@ function createContext() {
     showInfo: vi.fn(),
     showError: vi.fn(),
   } as unknown as SlashCommandContext;
-  return { ctx, sendSignal, syncThreadNow, subscribeThreadToPR, unsubscribeThreadFromPR };
+  return { ctx, session, syncThreadNow, subscribeThreadToPR, unsubscribeThreadFromPR };
 }
 
 describe('handleGithubCommand', () => {
@@ -68,11 +68,11 @@ describe('handleGithubCommand', () => {
   });
 
   it('subscribes the current thread to an inline PR number', async () => {
-    const { ctx, sendSignal, subscribeThreadToPR } = createContext();
+    const { ctx, session, subscribeThreadToPR } = createContext();
 
     await handleGithubCommand(ctx, ['17447']);
 
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(session.sendMessage).not.toHaveBeenCalled();
     expect(subscribeThreadToPR).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1', pr: 17447 });
     expect(ctx.showInfo).toHaveBeenCalledWith('Subscribed to mastra-ai/mastra#17447.');
   });
@@ -98,11 +98,11 @@ describe('handleGithubCommand', () => {
   });
 
   it('unsubscribes the current thread from an inline PR', async () => {
-    const { ctx, sendSignal, unsubscribeThreadFromPR } = createContext();
+    const { ctx, session, unsubscribeThreadFromPR } = createContext();
 
     await handleGithubCommand(ctx, ['unsubscribe', 'mastra-ai/mastra#17447']);
 
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(session.sendMessage).not.toHaveBeenCalled();
     expect(unsubscribeThreadFromPR).toHaveBeenCalledWith({
       threadId: 'thread-1',
       resourceId: 'resource-1',
@@ -112,12 +112,12 @@ describe('handleGithubCommand', () => {
   });
 
   it('does not send a signal when experimental GitHub signals are disabled', async () => {
-    const { ctx, sendSignal } = createContext();
+    const { ctx, session } = createContext();
     loadSettingsMock.mockReturnValue({ signals: { experimentalGithubSignals: false } });
 
     await handleGithubCommand(ctx, ['17447']);
 
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(session.sendMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith(
       'Experimental GitHub signals are disabled. Enable them in /settings and restart MastraCode.',
     );
@@ -190,14 +190,14 @@ describe('handleGithubCommand', () => {
   });
 
   it('syncs GitHub subscriptions for the current thread', async () => {
-    const { ctx, sendSignal, syncThreadNow } = createContext();
+    const { ctx, session, syncThreadNow } = createContext();
     vi.mocked((ctx.harness as any).listThreads).mockResolvedValue([
       { id: 'thread-1', resourceId: 'resource-from-thread' },
     ]);
 
     await handleGithubCommand(ctx, ['sync']);
 
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(session.sendMessage).not.toHaveBeenCalled();
     expect(syncThreadNow).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-from-thread' });
     expect(ctx.showInfo).not.toHaveBeenCalled();
   });
@@ -212,7 +212,7 @@ describe('handleGithubCommand', () => {
   });
 
   it('shows GitHub subscription debug information for the current thread', async () => {
-    const { ctx, sendSignal } = createContext();
+    const { ctx, session } = createContext();
     vi.mocked((ctx.state as any).options.githubSignals.isPollingThread).mockReturnValue(true);
     vi.mocked((ctx.harness as any).listThreads).mockResolvedValue([
       {
@@ -245,7 +245,7 @@ describe('handleGithubCommand', () => {
 
     await handleGithubCommand(ctx, ['debug']);
 
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(session.sendMessage).not.toHaveBeenCalled();
     const formatLocal = (value: string) =>
       new Intl.DateTimeFormat(undefined, {
         dateStyle: 'medium',
@@ -258,11 +258,11 @@ describe('handleGithubCommand', () => {
   });
 
   it('shows an error for invalid PR references', async () => {
-    const { ctx, sendSignal } = createContext();
+    const { ctx, session } = createContext();
 
     await handleGithubCommand(ctx, ['not-a-pr']);
 
-    expect(sendSignal).not.toHaveBeenCalled();
+    expect(session.sendMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith(
       'Usage: /github 123, /github owner/repo#123, /github unsubscribe 123, /github sync, /github debug, or /github https://github.com/owner/repo/pull/123',
     );

@@ -1,4 +1,4 @@
-import { addPendingUserMessage, removePendingUserMessage } from '../render-messages.js';
+import { addPendingUserMessage } from '../render-messages.js';
 import type { SlashCommandContext } from './types.js';
 
 export function isCurrentThreadActive(ctx: SlashCommandContext): boolean {
@@ -16,15 +16,11 @@ export async function sendSlashCommandMessage(
     ctx.state.pendingNewThread = false;
   }
 
+  const session = await ctx.harness.getCurrentSession();
+
   if (isCurrentThreadActive(ctx)) {
-    const signal = ctx.harness.sendSignal({ content });
-    addPendingUserMessage(ctx.state, signal.id, displayText);
-    try {
-      await signal.accepted;
-    } catch (error) {
-      removePendingUserMessage(ctx.state, signal.id);
-      throw error;
-    }
+    const result = await session.sendMessage({ messages: content });
+    addPendingUserMessage(ctx.state, result.signal.id, displayText);
     return;
   }
 
@@ -37,5 +33,5 @@ export async function sendSlashCommandMessage(
     });
     ctx.state.ui.requestRender();
   }
-  await ctx.harness.sendMessage({ content });
+  await session.queueMessage({ messages: content });
 }

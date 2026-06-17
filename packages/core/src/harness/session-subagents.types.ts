@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Subagent registry (v1).
+// Session subagent registry.
 //
 // Subagents are short-lived agents spawned by the main session agent through
 // the built-in `subagent` tool. Each definition pins a backing agentId, may
@@ -7,10 +7,9 @@
 // tools it is allowed to use.
 // ---------------------------------------------------------------------------
 
-import type { AgentInstructions, ToolsInput } from '../../agent';
-import type { LanguageModel } from '../../llm';
-import type { LoopOptions } from '../../loop/types';
-import type { DynamicArgument } from '../../types';
+import type { AgentInstructions, ToolsInput } from '../agent';
+import type { LoopOptions } from '../loop/types';
+import type { DynamicArgument } from '../types';
 
 export interface SubagentDefinition {
   /** Human-readable name shown in tool output (e.g., "Explore"). */
@@ -68,6 +67,3 @@ export interface SubagentRegistryConfig {
   /** Subagent definitions keyed by type id (the `agentType` enum). */
   types: Record<string, SubagentDefinition>;
 }
-
-/** Resolves a model id to a `LanguageModel` for subagent execution. */
-export type ModelResolver = (modelId: string) => LanguageModel | Promise<LanguageModel>;

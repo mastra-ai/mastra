@@ -1,11 +1,11 @@
-import { RequestContext } from '@internal/core/request-context';
+import { RequestContext } from '../request-context';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { MastraMemory } from '../../memory';
-import { HarnessStorage } from '../../storage/domains/harness';
-import type { SessionRecord } from '../../storage/domains/harness';
-import { Harness } from './harness';
-import { buildHarnessBuiltInTools } from './tools';
+import type { MastraMemory } from '../memory';
+import { HarnessStorage } from '../storage/domains/harness';
+import type { SessionRecord } from '../storage/domains/harness';
+import { Harness } from './session-harness';
+import { buildHarnessBuiltInTools } from './session-tools';
 
 class MemStore extends HarnessStorage {
   readonly records = new Map<string, SessionRecord>();
@@ -55,10 +55,11 @@ describe('Harness — tools/skills/subagents config', () => {
       },
     };
     const harness = new Harness({
+    id: 'test-harness',
       agent: {} as never,
       memory,
       storage: new MemStore(),
-      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm', tools: { echo: echoTool } }],
+      modes: [{ id: 'build', defaultModelId: 'm', tools: { echo: echoTool } }],
       defaultModeId: 'build',
       workspace: () => workspace as never,
     });
@@ -79,10 +80,11 @@ describe('Harness — tools/skills/subagents config', () => {
 
   it('does not expose internal tool override helpers on the Session', async () => {
     const harness = new Harness({
+    id: 'test-harness',
       agent: {} as never,
       memory,
       storage: new MemStore(),
-      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm', tools: { echo: echoTool } }],
+      modes: [{ id: 'build', defaultModelId: 'm', tools: { echo: echoTool } }],
       defaultModeId: 'build',
     });
 
@@ -93,10 +95,11 @@ describe('Harness — tools/skills/subagents config', () => {
   it('keeps built-in task tools owned by the calling session', async () => {
     const storage = new MemStore();
     const harness = new Harness({
+    id: 'test-harness',
       agent: {} as never,
       memory,
       storage,
-      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
+      modes: [{ id: 'build', defaultModelId: 'm' }],
       defaultModeId: 'build',
     });
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
@@ -126,10 +129,11 @@ describe('Harness — tools/skills/subagents config', () => {
 
   it('returns a recoverable error when built-in tools execute for a different session', async () => {
     const harness = new Harness({
+    id: 'test-harness',
       agent: {} as never,
       memory,
       storage: new MemStore(),
-      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
+      modes: [{ id: 'build', defaultModelId: 'm' }],
       defaultModeId: 'build',
     });
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
@@ -156,12 +160,13 @@ describe('Harness — tools/skills/subagents config', () => {
       }),
     };
     const harness = new Harness({
+    id: 'test-harness',
       mastra: mastra as never,
       agent: 'default',
       memory,
       storage,
-      runtimeCompatibilityGeneration: 'runtime-v1',
-      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
+      runtimeCompatibilityGeneration: 'runtime-session',
+      modes: [{ id: 'build', defaultModelId: 'm' }],
       defaultModeId: 'build',
       sessions: { maxSubagentDepth: 1 },
       subagents: {
@@ -192,7 +197,7 @@ describe('Harness — tools/skills/subagents config', () => {
       resourceId: 'resource-1',
       modelId: 'm-sub',
       pending: [],
-      runtimeCompatibilityGeneration: 'runtime-v1',
+      runtimeCompatibilityGeneration: 'runtime-session',
     });
 
     const child = await harness.session({ sessionId: childId });
@@ -225,11 +230,12 @@ describe('Harness — tools/skills/subagents config', () => {
       }),
     };
     const harness = new Harness({
+    id: 'test-harness',
       mastra: mastra as never,
       agent: 'default',
       memory,
       storage,
-      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
+      modes: [{ id: 'build', defaultModelId: 'm' }],
       defaultModeId: 'build',
       sessions: { maxSubagentDepth: 1 },
       subagents: {
@@ -254,11 +260,12 @@ describe('Harness — tools/skills/subagents config', () => {
   it('validates subagent depth and runtime compatibility configuration', async () => {
     const storage = new MemStore();
     const harness = new Harness({
+    id: 'test-harness',
       agent: {} as never,
       memory,
       storage,
-      runtimeCompatibilityGeneration: 'runtime-v1',
-      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
+      runtimeCompatibilityGeneration: 'runtime-session',
+      modes: [{ id: 'build', defaultModelId: 'm' }],
       defaultModeId: 'build',
       sessions: { maxSubagentDepth: 2 },
       subagents: { types: { explore: { name: 'Explore', description: 'd', agentId: 'default' } } },
@@ -268,7 +275,7 @@ describe('Harness — tools/skills/subagents config', () => {
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
 
     expect(storage.records.get(session.id)).toMatchObject({
-      runtimeCompatibilityGeneration: 'runtime-v1',
+      runtimeCompatibilityGeneration: 'runtime-session',
     });
     expect('resolveToolCategory' in harness).toBe(false);
     expect('resolveModel' in harness).toBe(false);

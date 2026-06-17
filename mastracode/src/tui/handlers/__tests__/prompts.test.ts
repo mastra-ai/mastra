@@ -82,17 +82,17 @@ describe('handleAskQuestion goal mode', () => {
 });
 
 function createPlanApprovalCtx() {
-  const sendSignal = vi.fn().mockReturnValue({
-    id: 'sig-1',
-    type: 'system-reminder',
+  const sendMessage = vi.fn().mockResolvedValue({
+    signal: { id: 'sig-1', type: 'system-reminder' },
     accepted: Promise.resolve({ accepted: true, runId: 'run-1' }),
   });
+  const session = { sendMessage };
   const state = {
     harness: {
       setState: vi.fn().mockResolvedValue(undefined),
       getResourceId: vi.fn(() => 'resource-1'),
       respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
-      sendSignal,
+      getCurrentSession: vi.fn().mockResolvedValue(session),
     },
     goalManager: {
       getGoal: vi.fn(() => ({ id: 'goal-123', status: 'active', judgeModelId: 'openai/gpt-5.5' })),
@@ -120,7 +120,7 @@ function createPlanApprovalCtx() {
     fireMessage: vi.fn(),
     startGoal: vi.fn().mockResolvedValue(undefined),
   } as unknown as EventHandlerContext;
-  return { state, ctx, sendSignal };
+  return { state, ctx, sendMessage };
 }
 
 describe('handlePlanApproval goal mode', () => {
@@ -140,14 +140,14 @@ describe('handlePlanApproval goal mode', () => {
     expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
     // `startGoal` is invoked with the title+plan as the objective and the
     // default trigger — it owns sending the canonical goal-reminder signal
-    // via `harness.sendSignal`, so the handler does not also send one.
+    // via the current session, so the handler does not also send one.
     expect(ctx.startGoal).toHaveBeenCalledTimes(1);
     expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
     // The goal handler does not send the "begin executing" reminder — the
     // goal judge keeps the agent driving toward the goal.
-    expect(state.harness.sendSignal).not.toHaveBeenCalled();
+    expect(state.harness.getCurrentSession).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBe('goal-123');
   });
 
@@ -182,8 +182,8 @@ describe('handlePlanApproval regular approval', () => {
     expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
   });
 
-  it('approves the plan and sends a single begin-executing system-reminder through harness.sendSignal', async () => {
-    const { state, ctx, sendSignal } = createPlanApprovalCtx();
+  it('approves the plan and sends a single begin-executing system-reminder through the current session', async () => {
+    const { state, ctx, sendMessage } = createPlanApprovalCtx();
 
     const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
     const component = state.chatContainer.children[0];
@@ -201,10 +201,12 @@ describe('handlePlanApproval regular approval', () => {
     // the reminder a second time.
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
-    expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect(sendSignal).toHaveBeenCalledWith({
-      type: 'system-reminder',
-      contents: 'The user has approved the plan, begin executing.',
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith({
+      messages: {
+        type: 'system-reminder',
+        contents: 'The user has approved the plan, begin executing.',
+      },
     });
     // Regular approval should not enter goal mode or set the return flag.
     expect(ctx.startGoal).not.toHaveBeenCalled();

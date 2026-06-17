@@ -7,7 +7,7 @@
 // mode atomically with approval.
 // ---------------------------------------------------------------------------
 
-import type { ToolsInput } from '../../agent';
+import type { ToolsInput } from '../agent';
 
 export interface HarnessMode {
   /** Unique within `HarnessConfig.modes`. Validated at construction. */

@@ -1,32 +1,34 @@
 import { randomUUID } from 'node:crypto';
 
-import { RequestContext } from '@internal/core/request-context';
+import { RequestContext } from '../request-context';
+import { createMessageSignal, createSignal } from '../agent/signals';
+import type { AgentSignalInput } from '../agent/signals';
 import type {
   Agent,
   AgentMessageInput,
   QueueAgentMessageOptions,
   SendAgentMessageOptions,
   ToolsInput,
-} from '../../agent';
-import type { MastraDBMessage } from '../../agent/message-list';
-import type { MastraModelGatewayInterface } from '../../llm';
-import type { MastraMemory, StorageThreadType } from '../../memory';
-import { toStandardSchema } from '../../schema';
-import type { PublicSchema, StandardSchemaWithJSON } from '../../schema';
+} from '../agent';
+import type { MastraDBMessage } from '../agent/message-list';
+import type { MastraModelGatewayInterface } from '../llm';
+import type { MastraMemory, StorageThreadType } from '../memory';
+import { toStandardSchema } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type {
   HarnessPendingItemRecord,
   HarnessStorage,
   SessionRecord,
   SessionRecordUpdate,
-} from '../../storage/domains/harness';
-import type { ToolExecutionContext } from '../../tools';
-import type { DynamicArgument } from '../../types';
-import type { Workspace } from '../../workspace';
-import type { Skill as WorkspaceSkill, SkillMetadata as WorkspaceSkillMetadata } from '../../workspace/skills/types';
-import type { HarnessQuestionAnswer } from '../types';
-import { sessionCreatedPayload } from './events';
-import type { EventEmitter } from './events';
-import type { HarnessMode } from './mode';
+} from '../storage/domains/harness';
+import type { ToolExecutionContext } from '../tools';
+import type { DynamicArgument } from '../types';
+import type { Workspace } from '../workspace';
+import type { Skill as WorkspaceSkill, SkillMetadata as WorkspaceSkillMetadata } from '../workspace/skills/types';
+import type { HarnessQuestionAnswer } from './types';
+import { sessionCreatedPayload } from './session-events';
+import type { EventEmitter } from './session-events';
+import type { HarnessMode } from './session-mode';
 import type {
   PermissionCheckResult,
   PermissionPolicy,
@@ -35,9 +37,9 @@ import type {
   PermissionGrant,
   ToolCategory,
   ToolCategoryResolver,
-} from './permissions.types';
-import { buildHarnessRequestContext } from './request-context';
-import type { HarnessRequestContext, HarnessRequestContextSource } from './request-context';
+} from './session-permissions.types';
+import { buildHarnessRequestContext } from './session-request-context';
+import type { HarnessRequestContext, HarnessRequestContextSource } from './session-request-context';
 import type {
   AgentResolver,
   CloneSessionOptions,
@@ -48,10 +50,10 @@ import type {
   SessionSubscribeToThreadOptions,
   SessionThreadSubscription,
 } from './session.types';
-import { HarnessSkillNotFoundError } from './skills.types';
-import type { HarnessSkill, SkillSource } from './skills.types';
-import type { SubagentDefinition, SubagentRegistryConfig } from './subagents.types';
-import { buildHarnessBuiltInTools, buildSessionToolsets } from './tools';
+import { HarnessSkillNotFoundError } from './session-skills.types';
+import type { HarnessSkill, SkillSource } from './session-skills.types';
+import type { SubagentDefinition, SubagentRegistryConfig } from './session-subagents.types';
+import { buildHarnessBuiltInTools, buildSessionToolsets } from './session-tools';
 
 type JsonPrimitive = string | number | boolean | null;
 type JsonSerializable = JsonPrimitive | JsonSerializable[] | { [key: string]: JsonSerializable };
@@ -771,6 +773,27 @@ export class Session<TState = {}> {
     };
 
     return target as unknown as SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>;
+  }
+
+  #toAgentSignal(messages: SessionMessageOptions['messages']) {
+    if (messages && typeof messages === 'object' && !Array.isArray(messages)) {
+      if ('type' in messages && 'contents' in messages) {
+        return createSignal(messages as AgentSignalInput);
+      }
+
+      if ('content' in messages && !('contents' in messages)) {
+        const contents = (messages as { content?: AgentSignalInput['contents'] }).content;
+        if (contents !== undefined) {
+          return createSignal({
+            type: 'user',
+            tagName: 'user',
+            contents,
+          });
+        }
+      }
+    }
+
+    return createMessageSignal(this.#toAgentMessageInput(messages));
   }
 
   #toAgentMessageInput(messages: SessionMessageOptions['messages']): AgentMessageInput {

@@ -69,12 +69,13 @@ describe('Harness signal history rendering', () => {
     });
 
     try {
-      const signal = harness.sendSignal({
-        type: 'system-reminder',
-        contents: 'keep going',
-        attributes: { type: 'goal' },
+      const result = await (await harness.getCurrentSession()).sendMessage({
+        messages: {
+          contents: 'keep going',
+          attributes: { type: 'goal' },
+        },
       });
-      await signal.accepted;
+      await result.accepted;
 
       await vi.waitFor(() => {
         expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);

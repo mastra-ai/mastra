@@ -115,7 +115,7 @@ describe('Harness: non-success finish reasons', () => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'do something blocked' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'do something blocked' });
 
     // The run must not silently complete.
     const agentEnd = events.find(e => e.type === 'agent_end');
@@ -140,7 +140,7 @@ describe('Harness: non-success finish reasons', () => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'do something blocked' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'do something blocked' });
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('error');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
@@ -156,7 +156,7 @@ describe('Harness: non-success finish reasons', () => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'write a very long answer' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'write a very long answer' });
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('error');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
@@ -181,7 +181,7 @@ describe('Harness: non-success finish reasons', () => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'do something borderline' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'do something borderline' });
 
     // The turn still completes normally — the fallback answered it.
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('complete');
@@ -201,7 +201,7 @@ describe('Harness: non-success finish reasons', () => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'say hi' });
+    await (await harness.getCurrentSession()).queueMessage({ messages: 'say hi' });
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('complete');
     expect(events.some(e => e.type === 'error')).toBe(false);

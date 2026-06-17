@@ -12,7 +12,6 @@ const mastraCodeGatewayMock = {
 const createMastraCodeGatewayMock = vi.fn(() => mastraCodeGatewayMock);
 const mastraCodeCatalogProviderMock = vi.fn();
 const createMastraCodeModelCatalogProviderMock = vi.fn(() => mastraCodeCatalogProviderMock);
-const resolveModelMock = vi.fn();
 
 vi.mock('@mastra/core/llm', () => ({
   PROVIDER_REGISTRY: providerRegistryMock,
@@ -165,7 +164,6 @@ vi.mock('../agents/model.js', () => ({
   createMastraCodeModelCatalogProvider: createMastraCodeModelCatalogProviderMock,
   getDynamicModel: vi.fn(),
   getGoalJudgeModel: vi.fn(),
-  resolveModel: resolveModelMock,
 }));
 
 vi.mock('../agents/subagents/execute.js', () => ({
@@ -296,7 +294,6 @@ describe('createMastraCode', () => {
     createMastraCodeGatewayMock.mockClear();
     createMastraCodeModelCatalogProviderMock.mockClear();
     mastraCodeCatalogProviderMock.mockClear();
-    resolveModelMock.mockClear();
     mastraCodeGatewayMock.fetchProviders.mockClear();
     mastraCodeGatewayMock.buildUrl.mockClear();
     mastraCodeGatewayMock.getApiKey.mockClear();
@@ -347,7 +344,7 @@ describe('createMastraCode', () => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
   });
 
-  it('registers the MastraCode gateway and app-provided model hooks on Harness', async () => {
+  it('registers gateway hooks and passes session runtime inputs to Harness', async () => {
     const { createMastraCode } = await import('../index.js');
     const subagent = { id: 'review', name: 'Review', instructions: 'Review changes' };
 
@@ -362,16 +359,20 @@ describe('createMastraCode', () => {
 
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
       | {
+          agent?: unknown;
           gateways?: unknown[];
-          resolveModel?: unknown;
+          memory?: unknown;
           modelAuthChecker?: unknown;
           customModelCatalogProvider?: unknown;
+          storage?: unknown;
           subagents?: unknown[];
         }
       | undefined;
+    expect(harnessConfig?.agent).toBeDefined();
+    expect(harnessConfig?.memory).toBeDefined();
+    expect(harnessConfig?.storage).toBeDefined();
     expect(harnessConfig?.gateways).toEqual([mastraCodeGatewayMock]);
     expect(harnessConfig?.subagents).toEqual([subagent]);
-    expect(harnessConfig?.resolveModel).toBe(resolveModelMock);
     expect(createMastraCodeModelCatalogProviderMock).toHaveBeenCalledWith(mastraCodeGatewayMock);
     expect(harnessConfig?.modelAuthChecker).toBeUndefined();
     expect(harnessConfig?.customModelCatalogProvider).toBe(mastraCodeCatalogProviderMock);

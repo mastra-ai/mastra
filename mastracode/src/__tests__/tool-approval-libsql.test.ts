@@ -142,7 +142,7 @@ describe('tool approval with LibSQLStore via Harness', () => {
       });
     });
 
-    await Promise.all([harness.sendMessage({ content: 'Read test.txt' }), approvalPromise]);
+    await Promise.all([(await harness.getCurrentSession()).queueMessage({ messages: 'Read test.txt' }), approvalPromise]);
 
     // The tool should have been called
     expect(mockExecute).toHaveBeenCalledTimes(1);
