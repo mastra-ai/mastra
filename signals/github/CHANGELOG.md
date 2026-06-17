@@ -1,5 +1,14 @@
 # @mastra/github-signals
 
+## 0.1.4-alpha.1
+
+### Patch Changes
+
+- Sanitize PR comment bodies at ingestion by stripping all XML/HTML-like markup — HTML comments (including the large base64 machine-state blobs review bots like CodeRabbit hide inside them), `<details>` sections (delimiters and their collapsed inner content), and any leftover partial markup — and stop persisting the full comment body in notification metadata (the truncated excerpt is retained). Markdown code spans and fenced code blocks are preserved, so human-authored code examples such as `` `<Component>` `` or fenced JSX survive sanitization. This prevents oversized bot payloads from bloating notifications and overflowing agent context windows. The sanitizer uses `indexOf`-based block scanning with no backtracking regex to avoid catastrophic backtracking (ReDoS) on adversarial input. ([#18094](https://github.com/mastra-ai/mastra/pull/18094))
+
+- Updated dependencies [[`b7dff0a`](https://github.com/mastra-ai/mastra/commit/b7dff0a3d1022eb6868f48dc40a2b1febd5c277f), [`02087e1`](https://github.com/mastra-ai/mastra/commit/02087e1fbc54aa07f3071f7a200df1bf5be601a8), [`ab975d4`](https://github.com/mastra-ai/mastra/commit/ab975d4dd9488752f05bda7afa03166d207e3e2a)]:
+  - @mastra/core@1.44.0-alpha.1
+
 ## 0.1.4-alpha.0
 
 ### Patch Changes
