@@ -15,8 +15,14 @@ vi.mock('node:fs', () => ({
   default: {},
 }));
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   CombinedAutocompleteProvider: class {},
+  Container: class {
+    children: unknown[] = [];
+    addChild(child: unknown) {
+      this.children.push(child);
+    }
+  },
   Spacer: class {
     type = 'spacer';
     constructor(public height: number) {}

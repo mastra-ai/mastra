@@ -10,6 +10,7 @@ import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type {
   Resource,
   ResourceTemplate,
@@ -535,9 +536,10 @@ describe('MCPServer', () => {
 
     it('should throw an error when reading a non-existent resource URI', async () => {
       const uri = 'weather://nonexistent';
-      await expect(resourceTestInternalClient.readResource(uri)).rejects.toThrow(
-        'Resource not found: weather://nonexistent',
-      );
+      await expect(resourceTestInternalClient.readResource(uri)).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('Resource not found: weather://nonexistent'),
+      });
     });
   });
 
@@ -677,9 +679,10 @@ describe('MCPServer', () => {
 
     it('should throw an error when reading a non-existent resource', async () => {
       const uri = 'test://resource/nonexistent';
-      await expect(notificationTestInternalClient.readResource(uri)).rejects.toThrow(
-        'Resource not found: test://resource/nonexistent',
-      );
+      await expect(notificationTestInternalClient.readResource(uri)).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('Resource not found: test://resource/nonexistent'),
+      });
     });
 
     it('should list resource templates', async () => {
@@ -851,7 +854,10 @@ describe('MCPServer', () => {
     it('should throw error if required argument is missing', async () => {
       await expect(
         promptInternalClient.getPrompt({ name: 'explain-code', args: {} }), // missing 'code'
-      ).rejects.toThrow(/Missing required argument/);
+      ).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('Missing required argument: code'),
+      });
     });
 
     it('should succeed if all required arguments are provided', async () => {

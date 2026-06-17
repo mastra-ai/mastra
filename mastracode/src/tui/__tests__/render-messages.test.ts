@@ -1,4 +1,4 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -80,6 +80,50 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(true);
     expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
+  });
+
+  it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'tasks-state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'tasks',
+          mode: 'snapshot',
+          version: 1,
+          message: '<current-task-list>\n  ○ [pending] {id: alpha} Alpha\n</current-task-list>',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('tasks-state-signal-1')).toBe(false);
+  });
+
+  it('does not render the goal state signal inline (the goal/judge UI shows it)', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'goal-state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'goal',
+          mode: 'snapshot',
+          version: 1,
+          message: '<current-objective>\n  Ship the goal feature\n</current-objective>',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('goal-state-signal-1')).toBe(false);
   });
 
   it('renders generic reactive signals as inline signal components', () => {
@@ -286,10 +330,11 @@ describe('addUserMessage', () => {
       }),
     );
 
-    expect(state.chatContainer.children).toHaveLength(2);
+    // 3 children: TemporalGap, boundary-spacer, UserMessage
+    expect(state.chatContainer.children).toHaveLength(3);
     expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
-    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[1]);
+    expect(state.chatContainer.children[2]).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[2]);
   });
 
   it('renders a legacy persisted temporal-gap marker from whole-message XML', () => {

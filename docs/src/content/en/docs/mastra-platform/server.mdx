@@ -69,6 +69,10 @@ A deploy transitions through **queued → uploading → building → deploying �
 
 Automate deployments from GitHub Actions, GitLab CI, or any CI provider. After your first interactive deploy, CI/CD needs two things: an API token and the `.mastra-project.json` file committed to your repository.
 
+:::tip
+If your code lives on GitHub, the [GitHub integration](/docs/mastra-platform/github) gives you push-to-deploy without writing a workflow file. Use the CLI-based CI/CD flow below when you need GitLab, another CI provider, or custom build steps before deploy.
+:::
+
 ### Create an API token
 
 <Steps>

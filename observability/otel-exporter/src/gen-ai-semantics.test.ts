@@ -16,6 +16,20 @@ function createModelGenerationSpan(attributes: ModelGenerationAttributes): AnyEx
   } as AnyExportedSpan;
 }
 
+function createSpan(type: SpanType, metadata?: Record<string, unknown>): AnyExportedSpan {
+  return {
+    id: 'test-span-id',
+    traceId: 'test-trace-id',
+    name: 'test-span',
+    type,
+    startTime: new Date(),
+    isRootSpan: false,
+    isEvent: false,
+    metadata,
+    attributes: {},
+  } as AnyExportedSpan;
+}
+
 describe('getAttributes - token usage', () => {
   it('should extract basic tokens', () => {
     const span = createModelGenerationSpan({
@@ -99,5 +113,22 @@ describe('formatUsageMetrics', () => {
   it('should return empty metrics for undefined usage', () => {
     const result = formatUsageMetrics(undefined);
     expect(result).toEqual({});
+  });
+});
+
+describe('getAttributes - conversation id', () => {
+  it.each([SpanType.MODEL_GENERATION, SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL])(
+    'should set gen_ai.conversation.id from metadata.threadId for %s spans',
+    spanType => {
+      const attrs = getAttributes(createSpan(spanType, { threadId: 'thread-123' }));
+
+      expect(attrs['gen_ai.conversation.id']).toBe('thread-123');
+    },
+  );
+
+  it('should not set gen_ai.conversation.id when metadata.threadId is absent', () => {
+    const attrs = getAttributes(createSpan(SpanType.MODEL_GENERATION, { resourceId: 'resource-123' }));
+
+    expect(attrs).not.toHaveProperty('gen_ai.conversation.id');
   });
 });

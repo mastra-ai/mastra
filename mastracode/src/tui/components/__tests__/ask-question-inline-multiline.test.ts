@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock pi-tui — the real components touch the terminal at construction time.
-vi.mock('@mariozechner/pi-tui', async importOriginal => {
+vi.mock('@earendil-works/pi-tui', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
   class StubInput {
     onSubmit?: (value: string) => void;

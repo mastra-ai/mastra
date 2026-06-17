@@ -4,7 +4,8 @@
  * Implements SandboxProcessManager for Railway sandboxes.
  * Wraps the Railway SDK's `Sandbox.exec()` API.
  *
- * Railway's `exec(command)` returns an `ExecHandle` that runs the command
+ * Railway's `exec(command, options)` accepts per-call `cwd` and `env` options
+ * (since SDK v3.3.1) and returns an `ExecHandle` that runs the command
  * server-side, independently of the client. Each spawn() starts one exec.
  * The handle streams output via `onStdout`/`onStderr` callbacks wired to
  * `emitStdout`/`emitStderr`, exposes a durable `sessionName`, and can be
@@ -14,26 +15,9 @@
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { ExecHandle, ExecResult } from 'railway';
-import { shellQuote } from '../utils/shell-quote';
 import type { RailwaySandbox } from './index';
 
 export const LOG_PREFIX = '[RailwaySandbox]';
-
-/**
- * Build a shell command that applies a working directory and environment
- * variables, since Railway's `exec` takes neither per-call. Env vars are
- * exported via `env` so they apply to the command's process group.
- */
-export function buildSpawnCommand(command: string, cwd?: string, env: Record<string, string> = {}): string {
-  const envAssignments = Object.entries(env)
-    .map(([key, value]) => `${key}=${shellQuote(value)}`)
-    .join(' ');
-
-  const envPrefix = envAssignments ? `env ${envAssignments} ` : '';
-  // Wrap in a subshell so a `cd` and the user command compose cleanly.
-  const inner = cwd ? `cd ${shellQuote(cwd)} && ${command}` : command;
-  return `${envPrefix}sh -c ${shellQuote(inner)}`;
-}
 
 // =============================================================================
 // Railway Process Handle
@@ -160,19 +144,20 @@ export class RailwayProcessManager extends SandboxProcessManager<RailwaySandbox>
 
     // Merge default env with per-spawn env.
     const mergedEnv = { ...this.env, ...options.env };
-    const envs = Object.fromEntries(
+    const env = Object.fromEntries(
       Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
 
-    const fullCommand = buildSpawnCommand(command, options.cwd, envs);
     const pid = `railway-proc-${Date.now().toString(36)}-${(this._spawnCounter++).toString(36)}`;
 
     // Deferred reference — callbacks fire asynchronously after the handle is
     // assigned, so `handle` is always defined by the time they run.
     let handle: RailwayProcessHandle;
 
-    const execHandle = railway.exec(fullCommand, {
+    const execHandle = railway.exec(command, {
       ...(options.timeout !== undefined && { timeoutSec: Math.ceil(options.timeout / 1000) }),
+      ...(options.cwd !== undefined && { cwd: options.cwd }),
+      ...(Object.keys(env).length > 0 && { env }),
       onStdout: (chunk: string) => handle.emitStdout(chunk),
       onStderr: (chunk: string) => handle.emitStderr(chunk),
     });

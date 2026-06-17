@@ -2,7 +2,7 @@
  * Status line rendering — builds the bottom-of-screen status bar
  * showing model, mode, memory progress, and project path.
  */
-import { visibleWidth } from '@mariozechner/pi-tui';
+import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
@@ -84,7 +84,8 @@ export function updateStatusLine(state: TUIState): void {
   const currentMode = modes.length > 1 ? state.harness.getCurrentMode() : undefined;
   const judgeModeColor = mastra.blue;
   // Use judge color for goal judge activity, OM color for OM activity, otherwise mode color
-  const mainModeColor = currentMode?.color;
+  const currentModeColor = currentMode?.metadata?.color;
+  const mainModeColor = typeof currentModeColor === 'string' ? currentModeColor : undefined;
   const modeColor = isJudging
     ? judgeModeColor
     : showOMMode

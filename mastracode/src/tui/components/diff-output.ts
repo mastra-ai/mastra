@@ -2,9 +2,10 @@
  * Component that renders git diff output with syntax highlighting.
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, theme, mastra } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 function colorizeDiffLine(line: string): string {
   const t = theme.getTheme();
@@ -57,7 +58,6 @@ function colorizeDiffLine(line: string): string {
 export class DiffOutputComponent extends Container {
   constructor(command: string, diffOutput: string) {
     super();
-    this.addChild(new Spacer(1));
 
     // Command header
     this.addChild(
@@ -75,5 +75,9 @@ export class DiffOutputComponent extends Container {
         this.addChild(new Text(`  ${colorizeDiffLine(line)}`, BOX_INDENT, 0));
       }
     }
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
   }
 }

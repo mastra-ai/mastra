@@ -4,7 +4,7 @@
  * Hidden when no tasks exist OR when all tasks are completed.
  * Renders between status and editor.
  */
-import { Container, Text, Spacer, visibleWidth } from '@mariozechner/pi-tui';
+import { Container, Text, Spacer, visibleWidth } from '@earendil-works/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { getTermWidth, theme } from '../theme.js';

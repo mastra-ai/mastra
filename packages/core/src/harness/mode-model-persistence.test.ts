@@ -128,7 +128,7 @@ describe('Harness mode-model persistence across restarts', () => {
     expect(restoreEvent?.previousModeId).toBe('build');
   });
 
-  it('approving a plan resolves the suspended plan tool before aborting for the mode switch', async () => {
+  it('approving a submit_plan suspension switches to the default mode and clears the suspension', async () => {
     const session = createHarness(storage);
     await session.init();
     await session.createThread();
@@ -137,21 +137,18 @@ describe('Harness mode-model persistence across restarts', () => {
     const controller = new AbortController();
     (session as unknown as { abortController: AbortController | null }).abortController = controller;
 
-    let resolved: { action: 'approved' | 'rejected'; feedback?: string } | undefined;
-    let wasAbortedWhenResolved: boolean | undefined;
-    session.registerPlanApproval({
-      planId: 'plan-1',
-      resolve: result => {
-        wasAbortedWhenResolved = controller.signal.aborted;
-        resolved = result;
-      },
-    });
+    // Simulate a submit_plan tool that suspended during a plan-mode run.
+    const pendingSuspensions = (
+      session as unknown as { pendingSuspensions: Map<string, { runId: string; toolName: string }> }
+    ).pendingSuspensions;
+    pendingSuspensions.set('plan-call-1', { runId: 'run-1', toolName: 'submit_plan' });
 
-    await session.respondToPlanApproval({ planId: 'plan-1', response: { action: 'approved' } });
+    await session.respondToToolSuspension({ toolCallId: 'plan-call-1', resumeData: { action: 'approved' } });
 
-    expect(wasAbortedWhenResolved).toBe(false);
+    // Approval abandons the parked plan suspension and switches to the default
+    // (execution) mode, aborting the plan-mode run.
+    expect(pendingSuspensions.has('plan-call-1')).toBe(false);
     expect(controller.signal.aborted).toBe(true);
     expect(session.getCurrentModeId()).toBe('build');
-    expect(resolved).toEqual({ action: 'approved' });
   });
 });

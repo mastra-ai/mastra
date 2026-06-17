@@ -1,4 +1,4 @@
-import type { Component } from '@mariozechner/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 
 import type { TUIState } from './state.js';
 

@@ -221,7 +221,30 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // Ensure the workspace referenced by the agent exists in stored workspaces
     await this.ensureStoredWorkspace(finalInput.workspace as StorageWorkspaceRef | undefined);
 
+    // When creating a stored override for an agent that is already defined in
+    // code, the stored snapshot is an intentionally partial override (e.g.
+    // descriptions-only agents carry no instructions/model/name). Hydrating it
+    // as a standalone agent would fail because Agent requires a model. Persist
+    // the override and return the existing code-defined runtime agent instead.
+    const existingCodeAgent = this.getCodeDefinedAgent(finalInput.id);
+    if (existingCodeAgent) {
+      const adapter = await this.getStorageAdapter();
+      await adapter.create(finalInput);
+      this._cache.set(finalInput.id, existingCodeAgent);
+      return existingCodeAgent;
+    }
+
     return super.create(finalInput);
+  }
+
+  private getCodeDefinedAgent(id: string): Agent | undefined {
+    let agent: Agent | undefined;
+    try {
+      agent = this.mastra?.getAgentById(id);
+    } catch {
+      return undefined;
+    }
+    return agent?.source === 'code' ? agent : undefined;
   }
 
   /**
@@ -955,14 +978,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // When a stored config is an override for a code agent, adding it would create a
     // duplicate entry under a different key (agent.id vs config key), causing the list
     // endpoint to show the agent as "stored" instead of "code".
-    const existingCodeAgent = (() => {
-      try {
-        return this.mastra?.getAgentById(storedAgent.id);
-      } catch {
-        return undefined;
-      }
-    })();
-    if (!existingCodeAgent || existingCodeAgent.source !== 'code') {
+    if (!this.getCodeDefinedAgent(storedAgent.id)) {
       this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
     }
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);

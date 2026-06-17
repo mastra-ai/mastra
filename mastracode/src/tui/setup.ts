@@ -4,8 +4,8 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
-import { CombinedAutocompleteProvider, Spacer, Text } from '@mariozechner/pi-tui';
-import type { SlashCommand } from '@mariozechner/pi-tui';
+import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
+import type { SlashCommand } from '@earendil-works/pi-tui';
 import type { HarnessEventListener } from '@mastra/core/harness';
 
 import { getUserId } from '../utils/project.js';
@@ -55,11 +55,15 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
-    } else if (state.harness.isRunning()) {
-      // Clean up active inline components on abort
+    } else if (state.harness.isRunning() || state.harness.hasPendingSuspensions()) {
+      // Clean up active inline components on abort. hasPendingSuspensions covers
+      // the case where the run is parked in a tool suspend() (e.g. ask_user) —
+      // isRunning() is false there because the AbortController was nulled, but the
+      // run is still pending and must be abortable.
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else {
@@ -211,6 +215,14 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   state.userInitiatedAbort = true;
   activeGoalJudge.abortController.abort();
   activeGoalJudge.component.setInterrupted();
+  // Esc during an in-loop goal evaluation pauses the goal so it does not
+  // continue on the next iteration. Persist the paused state immediately so a
+  // thread switch or exit before the next save does not reload the old active
+  // objective and effectively undo the pause. `saveToThread` is best-effort, so
+  // run it fire-and-forget to keep this abort handler synchronous.
+  state.goalManager.pause();
+  void state.goalManager.saveToThread(state);
+  state.activeGoalJudge = undefined;
   state.ui.requestRender();
   return true;
 }
@@ -369,9 +381,9 @@ export function setupAutocomplete(state: TUIState): void {
           { value: 'pause', label: 'pause', description: 'Pause the goal continuation loop' },
           { value: 'resume', label: 'resume', description: 'Resume the current goal' },
           { value: 'clear', label: 'clear', description: 'Clear the current goal' },
+          { value: 'judge', label: 'judge', description: 'Set the goal judge model and max attempts' },
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     },
-    { name: 'judge', description: 'Set goal judge defaults' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
@@ -505,6 +517,7 @@ export function setupKeyHandlers(
     state.activeInlinePlanApproval = undefined;
     state.activeInlineQuestion = undefined;
     state.pendingInlineQuestions.length = 0;
+    state.pendingAskUserComponents?.clear();
     state.userInitiatedAbort = true;
     state.harness.abort();
   });

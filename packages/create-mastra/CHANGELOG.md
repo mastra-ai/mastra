@@ -1,5 +1,30 @@
 # create-mastra
 
+## 1.14.0
+
+### Minor Changes
+
+- Added five Gateway-first templates for documentation search, browser automation, meeting notes, company knowledge, and Claw workspace assistance. ([#17425](https://github.com/mastra-ai/mastra/pull/17425))
+
+  Example:
+
+  ```sh
+  npx create-mastra@latest --template template-docs-expert
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#17846](https://github.com/mastra-ai/mastra/pull/17846))
+  - Updated dependency [`posthog-node@^5.37.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.37.0) (from `^5.30.6`, in `dependencies`)
+
+- Republished clean patch versions after compromised npm releases were published outside of the trusted release workflow. ([#18049](https://github.com/mastra-ai/mastra/pull/18049))
+
+  These packages must be released as clean versions higher than the compromised versions currently present on npm so semver ranges resolve to trusted tarballs.
+
+## 1.13.0
+
+## 1.13.0-alpha.4
+
 ## 1.12.3-alpha.3
 
 ## 1.12.3-alpha.2

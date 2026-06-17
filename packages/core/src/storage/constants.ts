@@ -54,6 +54,9 @@ export const TABLE_NOTIFICATIONS = 'mastra_notifications';
 // Harness sessions
 export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
 
+// Thread state (per-thread, per-type durable state; e.g. the task list)
+export const TABLE_THREAD_STATE = 'mastra_thread_state';
+
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -91,7 +94,8 @@ export type TABLE_NAMES =
   | typeof TABLE_CHANNEL_CONFIG
   | typeof TABLE_TOOL_PROVIDER_CONNECTIONS
   | typeof TABLE_NOTIFICATIONS
-  | typeof TABLE_HARNESS_SESSIONS;
+  | typeof TABLE_HARNESS_SESSIONS
+  | typeof TABLE_THREAD_STATE;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -428,6 +432,14 @@ export const HARNESS_SESSIONS_SCHEMA: Record<string, StorageColumn> = {
   deletedAt: { type: 'timestamp', nullable: true },
 };
 
+export const THREAD_STATE_SCHEMA: Record<string, StorageColumn> = {
+  threadId: { type: 'text', nullable: false },
+  type: { type: 'text', nullable: false },
+  value: { type: 'jsonb', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
 export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   skillId: { type: 'text', nullable: false },
@@ -729,6 +741,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_TOOL_PROVIDER_CONNECTIONS]: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
   [TABLE_NOTIFICATIONS]: NOTIFICATIONS_SCHEMA,
   [TABLE_HARNESS_SESSIONS]: HARNESS_SESSIONS_SCHEMA,
+  [TABLE_THREAD_STATE]: THREAD_STATE_SCHEMA,
 };
 
 /**
@@ -743,6 +756,7 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
     compositePrimaryKey: ['authorId', 'providerId', 'connectionId'],
   },
   [TABLE_NOTIFICATIONS]: { columns: NOTIFICATIONS_SCHEMA, compositePrimaryKey: ['threadId', 'id'] },
+  [TABLE_THREAD_STATE]: { columns: THREAD_STATE_SCHEMA, compositePrimaryKey: ['threadId', 'type'] },
 };
 
 /**

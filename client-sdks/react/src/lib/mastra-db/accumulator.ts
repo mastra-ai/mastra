@@ -1403,6 +1403,12 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'response-metadata':
       return result;
 
+    // ----- Goal evaluation signal (feedback is already injected into the
+    // message history by the core goal step; the chunk is a consumer-only
+    // signal and is not surfaced as its own DB message). -----
+    case 'goal':
+      return result;
+
     // ----- Object chunks (object/object-result are not stored on DB messages) -----
     case 'object':
     case 'object-result':

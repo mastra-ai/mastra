@@ -1,7 +1,7 @@
 import type { HarnessThread } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@mariozechner/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', () => {
   class MockNode {
     children: any[] = [];
     addChild(child: any) {

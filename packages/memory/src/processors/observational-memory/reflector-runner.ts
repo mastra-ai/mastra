@@ -9,6 +9,7 @@ import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/stor
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { omDebug, omError } from './debug';
+import { withOmInternalThreadId } from './internal-request-context';
 import {
   createActivationMarker,
   createBufferingEndMarker,
@@ -259,6 +260,7 @@ export class ReflectorRunner {
     const originalTokens = this.tokenCounter.countObservations(observations);
     const resolvedModel = model ? { model } : this.resolveModel(originalTokens);
     const agent = this.createAgent(resolvedModel.model);
+    const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -310,7 +312,7 @@ export class ReflectorRunner {
                   },
                   providerOptions: this.reflectionConfig.providerOptions as any,
                   ...(abortSignal ? { abortSignal } : {}),
-                  ...(requestContext ? { requestContext } : {}),
+                  ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                   ...childObservabilityContext,
                   ...(attemptNumber === 1
                     ? {

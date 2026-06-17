@@ -1,7 +1,7 @@
 {
   "name": "@mastra/codemod",
   "type": "module",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "license": "Apache-2.0",
   "description": "Codemod CLI for Mastra",
   "bin": {
@@ -37,7 +37,7 @@
     "@internal/lint": "workspace:*",
     "@types/debug": "^4.1.13",
     "@types/jscodeshift": "^17.3.0",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.4.1",

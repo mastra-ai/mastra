@@ -1,4 +1,4 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => vi.resetModules());
@@ -73,6 +73,8 @@ vi.mock('../commands/goal.js', () => ({
 }));
 
 import { dispatchSlashCommand } from '../command-dispatch.js';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { SlashCommandComponent } from '../components/slash-command.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 
 describe('dispatchSlashCommand models routing', () => {
@@ -150,15 +152,15 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.showError).toHaveBeenCalledWith(state, 'Unknown command: models:pack');
   });
 
-  it('routes /judge to handleJudgeCommand', async () => {
+  it('routes /goal judge to handleGoalCommand', async () => {
     const state = { customSlashCommands: [] } as any;
     const ctx = {} as any;
 
-    const handled = await dispatchSlashCommand('/judge', state, () => ctx);
+    const handled = await dispatchSlashCommand('/goal judge', state, () => ctx);
 
     expect(handled).toBe(true);
-    expect(mocks.handleJudgeCommand).toHaveBeenCalledTimes(1);
-    expect(mocks.handleJudgeCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.handleGoalCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleGoalCommand).toHaveBeenCalledWith(ctx, ['judge']);
   });
 
   it('routes /github to handleGithubCommand', async () => {
@@ -367,14 +369,18 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.showInfo).toHaveBeenCalledWith(state, GOAL_JUDGE_INPUT_LOCK_MESSAGE);
   });
 
-  it('routes //deploy to a matching custom slash command', async () => {
+  it('routes //deploy to a matching custom slash command with immediate boundary spacing', async () => {
+    const previousComponent = new Container();
+    (previousComponent as any).getChatSpacingKind = () => 'user-message';
+    const chatContainer = new Container();
+    chatContainer.addChild(previousComponent);
     const state = {
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
       getCurrentThreadId: vi.fn(() => 'thread-1'),
       pendingNewThread: false,
       allSlashCommandComponents: [],
       messageComponentsById: new Map(),
-      chatContainer: { addChild: vi.fn() },
+      chatContainer,
       ui: { requestRender: vi.fn() },
       harness: {
         createThread: vi.fn().mockResolvedValue(undefined),
@@ -391,6 +397,10 @@ describe('dispatchSlashCommand models routing', () => {
     expect(state.harness.sendMessage).toHaveBeenCalledWith({
       content: '<slash-command name="deploy">\ncustom output\n</slash-command>',
     });
+    expect(state.chatContainer.children).toHaveLength(3);
+    expect(state.chatContainer.children[0]).toBe(previousComponent);
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    expect(state.chatContainer.children[2]).toBeInstanceOf(SlashCommandComponent);
     expect(mocks.showError).not.toHaveBeenCalled();
   });
 
@@ -462,7 +472,7 @@ describe('dispatchSlashCommand models routing', () => {
       pendingNewThread: true,
       allSlashCommandComponents: [],
       messageComponentsById: new Map(),
-      chatContainer: { addChild: vi.fn() },
+      chatContainer: new Container(),
       ui: { requestRender: vi.fn() },
       harness: {
         createThread: vi.fn().mockResolvedValue(undefined),
@@ -513,7 +523,7 @@ describe('dispatchSlashCommand models routing', () => {
       getCurrentThreadId: vi.fn(() => 'thread-1'),
       allSlashCommandComponents: [],
       messageComponentsById: new Map(),
-      chatContainer: { addChild: vi.fn() },
+      chatContainer: new Container(),
       ui: { requestRender: vi.fn() },
       harness: { sendMessage: vi.fn().mockResolvedValue(undefined) },
     } as any;
