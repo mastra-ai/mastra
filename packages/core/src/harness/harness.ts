@@ -454,9 +454,6 @@ export class Harness<TState = {}> {
   private listeners: HarnessEventListener[] = [];
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
-  private currentRunId: string | null = null;
-  private currentTraceId: string | null = null;
-  private currentOperationId: number = 0;
   private agentThreadSubscription: AgentThreadSubscription<any> | null = null;
   private agentThreadSubscriptionKey: string | null = null;
   private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
@@ -1819,8 +1816,7 @@ export class Harness<TState = {}> {
     this.agentThreadSubscription?.unsubscribe();
     this.agentThreadSubscription = null;
     this.agentThreadSubscriptionKey = null;
-    this.currentRunId = null;
-    this.currentTraceId = null;
+    this.#session.run.reset();
     this.abortController = null;
     this.abortRequested = false;
   }
@@ -1994,8 +1990,7 @@ export class Harness<TState = {}> {
   }): Promise<void> {
     const reason = error ? 'error' : suspended ? 'suspended' : aborted || this.abortRequested ? 'aborted' : 'complete';
     this.emit({ type: 'agent_end', reason });
-    this.currentRunId = null;
-    this.currentTraceId = null;
+    this.#session.run.reset();
     this.abortController = null;
     this.abortRequested = false;
     await this.drainFollowUpQueue();
@@ -2011,8 +2006,7 @@ export class Harness<TState = {}> {
     this.agentThreadSubscription?.unsubscribe();
     this.agentThreadSubscription = null;
     this.agentThreadSubscriptionKey = null;
-    this.currentRunId = null;
-    this.currentTraceId = null;
+    this.#session.run.reset();
     this.abortController = null;
     this.abortRequested = false;
     await this.drainFollowUpQueue();
@@ -2037,10 +2031,10 @@ export class Harness<TState = {}> {
 
         if (!currentRun) {
           currentRun = this.createStreamState();
-          this.currentOperationId += 1;
+          this.#session.run.nextOperation();
           this.abortController ??= new AbortController();
-          this.currentRunId = subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null);
-          this.currentTraceId = null;
+          this.#session.run.setRunId({ runId: subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null) });
+          this.#session.run.setTraceId({ traceId: null });
           this.emit({ type: 'agent_start' });
         }
 
@@ -2057,7 +2051,7 @@ export class Harness<TState = {}> {
             chunk.type === 'abort' ||
             chunk.type === 'tool-call-suspended'
           ) {
-            const finishedRunId: string | null = chunkRunId ?? this.currentRunId;
+            const finishedRunId: string | null = chunkRunId ?? this.#session.run.getRunId();
             const suspended =
               chunk.type === 'tool-call-suspended' ||
               (streamResult ?? this.finishStreamState(currentRun)).suspended ||
@@ -2121,7 +2115,7 @@ export class Harness<TState = {}> {
       const agent = this.getCurrentAgent();
       await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
 
-      if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
+      if (this.#session.run.getRunId() && this.agentThreadSubscription?.activeRunId()) {
         const result = agent.sendSignal(signal, {
           resourceId: this.resourceId,
           threadId: this.currentThreadId,
@@ -2165,7 +2159,7 @@ export class Harness<TState = {}> {
     const agent = this.getCurrentAgent();
     await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
 
-    if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
+    if (this.#session.run.getRunId() && this.agentThreadSubscription?.activeRunId()) {
       return agent.sendNotificationSignal(input, {
         resourceId: this.resourceId,
         threadId: this.currentThreadId,
@@ -2703,7 +2697,7 @@ export class Harness<TState = {}> {
   ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
     const state = this.createStreamState();
     const requestContext = await this.buildRequestContext(requestContextInput);
-    this.currentOperationId += 1;
+    this.#session.run.nextOperation();
     this.emit({ type: 'agent_start' });
 
     let result: { message: HarnessMessage; suspended?: boolean } | undefined;
@@ -2752,8 +2746,7 @@ export class Harness<TState = {}> {
             : 'complete',
     });
 
-    this.currentRunId = null;
-    this.currentTraceId = null;
+    this.#session.run.reset();
     this.abortController = null;
     this.abortRequested = false;
     await this.drainFollowUpQueue();
@@ -2767,7 +2760,7 @@ export class Harness<TState = {}> {
     requestContext: RequestContext,
   ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
     if ('runId' in chunk && chunk.runId) {
-      this.currentRunId = chunk.runId;
+      this.#session.run.setRunId({ runId: chunk.runId });
     }
 
     switch (chunk.type) {
@@ -2937,8 +2930,9 @@ export class Harness<TState = {}> {
         const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', chunk.payload.suspendPayload);
         const suspResumeSchema = chunk.payload.resumeSchema;
 
-        if (this.currentRunId) {
-          this.pendingSuspensions.set(suspToolCallId, { runId: this.currentRunId, toolName: suspToolName });
+        const suspRunId = this.#session.run.getRunId();
+        if (suspRunId) {
+          this.pendingSuspensions.set(suspToolCallId, { runId: suspRunId, toolName: suspToolName });
         }
         state.isSuspended = true;
 
@@ -3414,7 +3408,7 @@ export class Harness<TState = {}> {
   }
 
   getCurrentRunId(): string | null {
-    return this.agentThreadSubscription?.activeRunId() ?? this.currentRunId;
+    return this.agentThreadSubscription?.activeRunId() ?? this.#session.run.getRunId();
   }
 
   isCurrentThreadStreamActive(): boolean {
@@ -3434,13 +3428,13 @@ export class Harness<TState = {}> {
    * be drained with the previous run's already-aborted abortSignal.
    */
   private async waitForCurrentThreadStreamIdle(): Promise<void> {
-    while (this.isCurrentThreadStreamActive() || this.currentRunId !== null) {
+    while (this.isCurrentThreadStreamActive() || this.#session.run.getRunId() !== null) {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
   }
 
   getCurrentTraceId(): string | null {
-    return this.currentTraceId;
+    return this.#session.run.getTraceId();
   }
 
   private getSubagentDisplayName(agentType: string): string | undefined {
@@ -3651,7 +3645,8 @@ export class Harness<TState = {}> {
     toolCallId?: string;
     requestContext?: RequestContext;
   }): Promise<void> {
-    if (!this.currentRunId) {
+    const runId = this.#session.run.getRunId();
+    if (!runId) {
       throw new Error('No active run to approve tool call for');
     }
 
@@ -3664,7 +3659,7 @@ export class Harness<TState = {}> {
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
     await agent.approveToolCall({
-      runId: this.currentRunId,
+      runId,
       toolCallId,
       requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
@@ -3681,7 +3676,8 @@ export class Harness<TState = {}> {
     toolCallId?: string;
     requestContext?: RequestContext;
   }): Promise<void> {
-    if (!this.currentRunId) {
+    const runId = this.#session.run.getRunId();
+    if (!runId) {
       throw new Error('No active run to decline tool call for');
     }
 
@@ -3693,7 +3689,7 @@ export class Harness<TState = {}> {
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
     await agent.declineToolCall({
-      runId: this.currentRunId,
+      runId,
       toolCallId,
       requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,

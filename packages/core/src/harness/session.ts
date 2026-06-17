@@ -29,6 +29,57 @@ const MODE_ID_KEY = 'currentModeId';
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
 /**
+ * Owns the session's transient run identity: the id of the run currently
+ * streaming on the active thread, its trace id, and a monotonic operation
+ * counter bumped each time a new operation starts. All of this is per-run
+ * scratch state — it is never persisted and resets between runs.
+ *
+ * The Harness still owns the live agent subscription (`activeRunId()`); this
+ * holds the last run id observed on a chunk so callers have a stable value once
+ * the subscription has settled.
+ */
+export class SessionRun {
+  /** Id of the run currently streaming on the active thread, or null when idle. */
+  #runId: string | null = null;
+  /** Trace id for the current run, or null when unset. */
+  #traceId: string | null = null;
+  /** Monotonic counter bumped at the start of each operation. */
+  #operationId = 0;
+
+  /** The current run id (null when idle). */
+  getRunId(): string | null {
+    return this.#runId;
+  }
+
+  /** Set the current run id. */
+  setRunId({ runId }: { runId: string | null }): void {
+    this.#runId = runId;
+  }
+
+  /** The current trace id (null when unset). */
+  getTraceId(): string | null {
+    return this.#traceId;
+  }
+
+  /** Set the current trace id. */
+  setTraceId({ traceId }: { traceId: string | null }): void {
+    this.#traceId = traceId;
+  }
+
+  /** Clear run identity (run id + trace id) when a run ends or is reset. */
+  reset(): void {
+    this.#runId = null;
+    this.#traceId = null;
+  }
+
+  /** Bump and return the operation counter at the start of a new operation. */
+  nextOperation(): number {
+    this.#operationId += 1;
+    return this.#operationId;
+  }
+}
+
+/**
  * Owns the session's currently-selected model. Source of truth for "which model
  * is active", plus the per-mode model memory persisted to the thread-settings
  * store (so each mode remembers the model it was last used with).
@@ -168,6 +219,9 @@ export class SessionMode {
  *   The Session is the source of truth for which mode/model is active and owns
  *   the mode-switch sequence and per-mode model memory. The Harness still owns
  *   the mode *definitions* (`config.modes`).
+ * - transient run identity (`session.run`): the current run id, trace id, and a
+ *   monotonic operation counter. This is per-run scratch state and is never
+ *   persisted.
  *
  * Mode/model persistence is thread-scoped, so the Session writes through a
  * {@link ThreadSettingsStore} the Harness backs with thread metadata; when no
@@ -186,6 +240,8 @@ export class Session {
   readonly model = new SessionModel(() => this.#store);
   /** The session's currently-selected mode and switch sequence. */
   readonly mode = new SessionMode(() => this.#store, this.model);
+  /** Transient run identity (run id, trace id, operation counter) for the active run. */
+  readonly run = new SessionRun();
 
   /**
    * Attach the thread-settings store the Session persists mode/model through.
