@@ -298,6 +298,26 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
     try {
+      let finalCreatedAt = createdAt;
+      if (!finalCreatedAt) {
+        const existing = await this.#db.get<{
+          namespace: string;
+          workflow_name: string;
+          run_id: string;
+          snapshot: WorkflowRunState;
+          createdAt: string | Date;
+          updatedAt: string | Date;
+        }>({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          keys: {
+            namespace,
+            workflow_name: workflowName,
+            run_id: runId,
+          },
+        });
+        finalCreatedAt = existing?.createdAt ? ensureDate(existing.createdAt) : new Date();
+      }
+
       await this.#db.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
@@ -306,7 +326,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           run_id: runId,
           resourceId,
           snapshot,
-          createdAt: createdAt ?? new Date(),
+          createdAt: finalCreatedAt,
           updatedAt: updatedAt ?? new Date(),
         },
       });
