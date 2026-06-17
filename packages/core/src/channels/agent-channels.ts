@@ -912,9 +912,7 @@ export class AgentChannels {
       }
     }
 
-    const richText = message.formatted
-      ? chatModule().stringifyMarkdown(message.formatted).trim()
-      : undefined;
+    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : undefined;
     const text = [historyBlock, richText || message.text].filter(Boolean).join('\n\n');
     const parts: Exclude<AgentSignalContents, string> = [{ type: 'text', text }];
     const attachments = message.attachments.filter(a => a.url || a.fetchData);
@@ -1096,9 +1094,7 @@ export class AgentChannels {
         // Skip the current message that triggered this request
         if (msg.id === currentMessageId) continue;
 
-        const historyText = msg.formatted
-          ? chatModule().stringifyMarkdown(msg.formatted).trim()
-          : undefined;
+        const historyText = msg.formatted ? chatModule().stringifyMarkdown(msg.formatted).trim() : undefined;
         messages.push({
           id: msg.id,
           author: msg.author.fullName || msg.author.userName || 'Unknown',
