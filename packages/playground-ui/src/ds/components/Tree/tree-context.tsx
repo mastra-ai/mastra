@@ -3,6 +3,7 @@ import * as React from 'react';
 export interface TreeContextValue {
   selectedId?: string;
   onSelect?: (id: string) => void;
+  focusItem?: (item: HTMLElement, options?: { focus?: boolean }) => void;
 }
 
 const TreeContext = React.createContext<TreeContextValue | null>(null);
