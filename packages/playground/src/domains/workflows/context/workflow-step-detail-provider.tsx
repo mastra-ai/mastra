@@ -1,37 +1,8 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { createContext, useContext, useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
-
-export type StepDetailType = 'map-config' | 'nested-graph' | null;
-
-export type StepDetailData = {
-  type: StepDetailType;
-  stepName: string;
-  stepId?: string;
-  mapConfig?: string;
-  nestedGraph?: {
-    label: string;
-    stepGraph: SerializedStepFlowEntry[];
-    fullStep: string;
-  };
-};
-
-type WorkflowStepDetailContextType = {
-  stepDetail: StepDetailData | null;
-  showMapConfig: (params: { stepName: string; stepId?: string; mapConfig: string }) => void;
-  showNestedGraph: (params: { label: string; stepGraph: SerializedStepFlowEntry[]; fullStep: string }) => void;
-  closeStepDetail: () => void;
-};
-
-export const WorkflowStepDetailContext = createContext<WorkflowStepDetailContextType | null>(null);
-
-export function useWorkflowStepDetail() {
-  const context = useContext(WorkflowStepDetailContext);
-  if (!context) {
-    throw new Error('useWorkflowStepDetail must be used within WorkflowStepDetailProvider');
-  }
-  return context;
-}
+import { WorkflowStepDetailContext } from './workflow-step-detail-context';
+import type { StepDetailData } from './workflow-step-detail-context';
 
 export function WorkflowStepDetailProvider({ children }: { children: ReactNode }) {
   const [stepDetail, setStepDetail] = useState<StepDetailData | null>(null);
