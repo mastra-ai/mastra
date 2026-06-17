@@ -454,29 +454,59 @@ function getMergedNotificationSummary(label: string): string {
 }
 
 /**
- * Removes XML/HTML-like markup from a PR comment body, leaving only human-readable text.
+ * Removes a hidden block (its delimiters *and* its content) starting at every `open` marker.
  *
- * Review bots (e.g. CodeRabbit) embed large machine-only payloads in comments — base64 state blobs
- * inside `<!-- ... -->` comments (often >100KB) and verbose collapsed `<details>` sections. Rather than
- * targeting specific bot markers, we strip all HTML comments and tags generically, since none of that
- * markup is useful to downstream consumers and persisting it balloons notification payloads and can
- * overflow agent context windows.
+ * For each `open` occurrence the whole region up to and including the matching `close` is dropped.
+ * When `close` is missing the block is treated as unterminated and removed through end-of-string,
+ * so large payloads can't survive by omitting their closing marker. Matching is case-insensitive on
+ * the markers and uses plain `indexOf` scanning, so there is no regex backtracking (ReDoS-safe).
+ */
+function stripBlocks(text: string, open: string, close: string): string {
+  const haystack = text.toLowerCase();
+  const openLower = open.toLowerCase();
+  const closeLower = close.toLowerCase();
+  let result = '';
+  let cursor = 0;
+
+  for (;;) {
+    const start = haystack.indexOf(openLower, cursor);
+    if (start === -1) {
+      result += text.slice(cursor);
+      return result;
+    }
+    result += text.slice(cursor, start);
+    const end = haystack.indexOf(closeLower, start + openLower.length);
+    if (end === -1) return result; // unterminated: drop through EOF
+    cursor = end + closeLower.length;
+  }
+}
+
+/**
+ * Removes XML/HTML-like markup — and the content it hides — from a PR comment body, leaving only
+ * human-readable text.
  *
- * The patterns below are written to avoid catastrophic backtracking (ReDoS) on adversarial input:
- * each uses a negated character class with a possessive-style boundary instead of a backtrackable
- * `[\s\S]*?`, and any unterminated `<!--` / stray `<` is dropped so no partial markup survives.
+ * Review bots (e.g. CodeRabbit) embed large machine-only payloads in comments: base64 state blobs
+ * inside `<!-- ... -->` comments (often >100KB) and verbose collapsed `<details>` sections. Rather
+ * than targeting specific bot markers, we strip hidden blocks and tags generically, since none of
+ * that markup is useful to downstream consumers and persisting it balloons notification payloads and
+ * can overflow agent context windows.
+ *
+ * Block removal (comments, `<details>`) drops the *entire* section including its inner content, and
+ * any unterminated block is removed through end-of-string so a missing closing marker can't smuggle
+ * the payload through. All scanning is `indexOf`-based and the only regex used is a non-backtracking
+ * single-tag matcher, so adversarial input cannot trigger catastrophic backtracking (ReDoS). Finally,
+ * any stray `<` (e.g. an unterminated `<script`) is dropped so no partial markup remains.
  */
 export function sanitizeCommentText(body: string): string {
+  // Remove whole hidden sections (delimiters + content) before touching individual tags.
+  let text = stripBlocks(body, '<!--', '-->');
+  text = stripBlocks(text, '<details', '</details>');
   return (
-    body
-      // HTML comments, including the large base64 state blobs bots hide inside them.
-      // `[^-]*-+(?:[^->][^-]*-+)*` consumes up to the first `-->` without nested backtracking.
-      .replace(/<!--[^-]*-+(?:[^->][^-]*-+)*>/g, '')
-      // Any remaining XML/HTML-like tags (e.g. <details open>, </summary>, <br/>).
-      .replace(/<\/?[a-zA-Z][^>]*>/g, '')
-      // Drop any leftover unterminated comment opener or stray `<` to avoid partial markup.
-      .replace(/<!--/g, '')
-      .replace(/</g, '')
+    text
+      // Remaining standalone tags, e.g. <summary>, </p>, <br/>. `[^<>]*` cannot backtrack.
+      .replace(/<\/?[a-zA-Z][^<>]*>/g, '')
+      // Drop any leftover stray `<` (incl. unterminated `<script`/`<!--`) so no partial markup remains.
+      .replace(/<.*/gs, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim()
   );

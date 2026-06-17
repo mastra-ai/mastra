@@ -2660,32 +2660,45 @@ describe('GithubSignals', () => {
       expect(sanitized).not.toContain('eyJzdGF0ZSI');
     });
 
-    it('strips tags with attributes such as <details open> and any inner markup', () => {
+    it('removes <details> blocks including their collapsed inner content', () => {
       const body = [
         'Top-level walkthrough.',
         '<details open>',
         '<summary>Walkthrough</summary>',
         'collapsed detail content',
         '</details>',
-        '<br/>',
-        '<!-- a stray comment -->',
+        'After the section.',
       ].join('\n');
       const sanitized = sanitizeCommentText(body);
       expect(sanitized).toContain('Top-level walkthrough.');
-      expect(sanitized).toContain('collapsed detail content');
+      expect(sanitized).toContain('After the section.');
+      // The collapsed block content is dropped, not just its tags.
+      expect(sanitized).not.toContain('collapsed detail content');
+      expect(sanitized).not.toContain('Walkthrough');
       expect(sanitized).not.toContain('<details');
-      expect(sanitized).not.toContain('<summary>');
-      expect(sanitized).not.toContain('<br');
-      expect(sanitized).not.toContain('stray comment');
+      expect(sanitized).not.toContain('<summary');
     });
 
-    it('leaves no partial markup behind, including stray < or unterminated <!--', () => {
-      const body = 'before <!-- unterminated and a lone < bracket after';
+    it('strips standalone tags while keeping surrounding prose', () => {
+      const body = 'Looks good.<br/> Ship it.';
       const sanitized = sanitizeCommentText(body);
-      expect(sanitized).not.toContain('<!--');
-      expect(sanitized).not.toContain('<');
+      expect(sanitized).toContain('Looks good.');
+      expect(sanitized).toContain('Ship it.');
+      expect(sanitized).not.toContain('<br');
+    });
+
+    it('removes an unterminated comment and its payload through end-of-string', () => {
+      const body = 'before <!-- large-hidden-state-payload-with-no-closing-marker';
+      const sanitized = sanitizeCommentText(body);
       expect(sanitized).toContain('before');
-      expect(sanitized).toContain('bracket after');
+      expect(sanitized).not.toContain('<!--');
+      expect(sanitized).not.toContain('large-hidden-state');
+    });
+
+    it('leaves no stray < behind so no partial markup can survive', () => {
+      const sanitized = sanitizeCommentText('before <unterminated tag payload');
+      expect(sanitized).toContain('before');
+      expect(sanitized).not.toContain('<');
     });
 
     it('handles adversarial repeated comment openers without catastrophic backtracking', () => {
@@ -2694,6 +2707,14 @@ describe('GithubSignals', () => {
       const sanitized = sanitizeCommentText(body);
       expect(Date.now() - start).toBeLessThan(1000);
       expect(sanitized).toContain('tail');
+      expect(sanitized).not.toContain('<!--');
+    });
+
+    it('handles adversarial leading <!--- repetitions without catastrophic backtracking', () => {
+      const body = `${'<!---'.repeat(20000)}tail`;
+      const start = Date.now();
+      const sanitized = sanitizeCommentText(body);
+      expect(Date.now() - start).toBeLessThan(1000);
       expect(sanitized).not.toContain('<!--');
     });
 
