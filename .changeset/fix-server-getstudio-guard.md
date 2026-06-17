@@ -2,4 +2,4 @@
 "@mastra/server": patch
 ---
 
-Fix TypeError crash when getStudio is unavailable. The dual-auth request router now safely optional-chains getStudio?.() so deployments with an older @mastra/core (< 1.42.0) degrade gracefully to server-only auth instead of crashing on every request.
+Fix crash on every request when deployed with @mastra/core < 1.42.0. The server now gracefully falls back to server-only auth instead of throwing `TypeError: this.mastra.getStudio is not a function`.
