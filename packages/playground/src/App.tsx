@@ -77,6 +77,8 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
+import Topics from './pages/topics';
+import { TopicCrumb } from './pages/topics/topic-crumb';
 import Traces from './pages/traces';
 import TraceDetails from './pages/traces/trace';
 import Workflows from './pages/workflows';
@@ -376,6 +378,37 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
+      {
+        path: '/topics',
+        element: <Topics />,
+        handle: {
+          ...navHandle('/topics'),
+          crumbs: [navCrumb('/topics')],
+        },
+        children: [
+          { index: true },
+          {
+            path: ':topicId',
+            handle: {
+              crumbs: [{ id: 'topic', Component: TopicCrumb, heading: 'Topic' }],
+            } satisfies RouteHeaderHandle,
+          },
+          {
+            path: ':topicId/traces/:traceId',
+            handle: {
+              crumbs: ({ params }) => [
+                {
+                  id: 'topic',
+                  Component: TopicCrumb,
+                  heading: 'Topic',
+                  to: params.topicId ? `/topics/${encodeURIComponent(params.topicId)}` : '/topics',
+                },
+                { id: 'trace', Component: TraceCrumb, heading: 'Trace' },
+              ],
+            } satisfies RouteHeaderHandle,
+          },
+        ],
+      },
       { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
       {
         path: '/traces/:traceId',

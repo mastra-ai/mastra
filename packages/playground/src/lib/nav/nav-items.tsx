@@ -16,7 +16,7 @@ import {
   WorkflowIcon,
   WorkspacesIcon,
 } from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
+import { BookIcon, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -155,6 +155,14 @@ export const mainNav: NavSection[] = [
         activePaths: ['/traces'],
         Icon: TraceIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Traces documentation' },
+        isOnMastraPlatform: true,
+      },
+      {
+        name: 'Topics',
+        url: '/topics',
+        activePaths: ['/topics'],
+        Icon: LayoutGrid,
+        docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Topics documentation' },
         isOnMastraPlatform: true,
       },
       {

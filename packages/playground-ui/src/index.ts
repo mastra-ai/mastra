@@ -145,6 +145,7 @@ export { usePlaygroundStore } from './store/playground-store';
 export * from './domains/metrics';
 export * from './domains/traces';
 export * from './domains/logs';
+export * from './ee';
 
 // DS Types
 export type { LinkComponent, LinkComponentProps } from './ds/types/link-component';
