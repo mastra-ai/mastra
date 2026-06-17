@@ -56,7 +56,7 @@ vi.mock('./agents/subagents/execute.js', () => ({ executeSubagent: {} }));
 vi.mock('./agents/subagents/explore.js', () => ({ exploreSubagent: {} }));
 vi.mock('./agents/subagents/plan.js', () => ({ planSubagent: {} }));
 vi.mock('./agents/tools.js', () => ({ createDynamicTools: vi.fn(), createToolHooks: vi.fn() }));
-vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn() }));
+vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn(), getGoalJudgeTools: vi.fn() }));
 
 vi.mock('./auth/storage.js', () => ({
   AuthStorage: class {
