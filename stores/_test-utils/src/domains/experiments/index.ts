@@ -371,26 +371,23 @@ export function createExperimentsTests({
         expect(found!.toolMockReport).toEqual(toolMockReport);
       });
 
-      (supportsToolMocks ? it.skip : it)(
-        'rejects toolMockReport when the adapter does not support it',
-        async () => {
-          await expect(
-            experimentsStorage.addExperimentResult({
-              experimentId: exp.id,
-              itemId: 'item-mock-reject',
-              itemDatasetVersion: null,
-              input: { q: 'hello' },
-              output: null,
-              groundTruth: null,
-              error: null,
-              startedAt: new Date(),
-              completedAt: new Date(),
-              retryCount: 0,
-              toolMockReport: toolMockReportFixture,
-            }),
-          ).rejects.toThrow();
-        },
-      );
+      (supportsToolMocks ? it.skip : it)('rejects toolMockReport when the adapter does not support it', async () => {
+        await expect(
+          experimentsStorage.addExperimentResult({
+            experimentId: exp.id,
+            itemId: 'item-mock-reject',
+            itemDatasetVersion: null,
+            input: { q: 'hello' },
+            output: null,
+            groundTruth: null,
+            error: null,
+            startedAt: new Date(),
+            completedAt: new Date(),
+            retryCount: 0,
+            toolMockReport: toolMockReportFixture,
+          }),
+        ).rejects.toThrow();
+      });
 
       it('getExperimentResultById returns result or null', async () => {
         const result = await experimentsStorage.addExperimentResult({
