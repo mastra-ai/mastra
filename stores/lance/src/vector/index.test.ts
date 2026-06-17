@@ -2237,6 +2237,68 @@ describe('Lance vector store tests', () => {
       });
     });
   });
+
+  describe('score semantics (similarity, not raw distance)', () => {
+    it('returns a higher score for the closer vector (cosine default)', async () => {
+      const tableName = 'score_semantics_cosine_' + Date.now();
+      await vectorDB.createIndex({ indexName: tableName, dimension: 3, metric: 'cosine' });
+      await vectorDB.upsert({
+        indexName: tableName,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        ids: ['exact', 'far'],
+      });
+
+      const results = await vectorDB.query({ indexName: tableName, queryVector: [1, 0, 0], topK: 2 });
+
+      const exact = results.find(r => r.id === 'exact')!;
+      const far = results.find(r => r.id === 'far')!;
+      expect(exact).toBeDefined();
+      expect(far).toBeDefined();
+      // Higher score = more similar; the exact match must rank first and outscore the far one.
+      expect(results[0].id).toBe('exact');
+      expect(exact.score).toBeGreaterThan(far.score);
+      // cosine similarity: identical -> 1, orthogonal -> 0
+      expect(exact.score).toBeCloseTo(1, 5);
+      expect(far.score).toBeCloseTo(0, 5);
+
+      await vectorDB.deleteTable(tableName);
+    });
+
+    it('maps euclidean distance into a descending (0, 1] score', async () => {
+      const tableName = 'score_semantics_euclidean_' + Date.now();
+      await vectorDB.createIndex({ indexName: tableName, dimension: 3, metric: 'euclidean' });
+      await vectorDB.upsert({
+        indexName: tableName,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        ids: ['exact', 'far'],
+      });
+
+      const results = await vectorDB.query({
+        indexName: tableName,
+        queryVector: [1, 0, 0],
+        topK: 2,
+        metric: 'euclidean',
+      });
+
+      const exact = results.find(r => r.id === 'exact')!;
+      const far = results.find(r => r.id === 'far')!;
+      expect(results[0].id).toBe('exact');
+      expect(exact.score).toBeGreaterThan(far.score);
+      // 1 / (1 + distance): identical (distance 0) -> 1
+      expect(exact.score).toBeCloseTo(1, 5);
+      expect(exact.score).toBeLessThanOrEqual(1);
+      expect(far.score).toBeGreaterThan(0);
+      expect(far.score).toBeLessThan(1);
+
+      await vectorDB.deleteTable(tableName);
+    });
+  });
 });
 
 // Note: Lance's architecture (tables + column names + index names) doesn't align cleanly

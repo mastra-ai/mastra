@@ -39,6 +39,12 @@ interface LanceQueryVectorParams extends QueryVectorParams<LanceVectorFilter> {
   tableName?: string;
   columns?: string[];
   includeAllColumns?: boolean;
+  /**
+   * Distance metric used to compute `_distance` and convert it into a similarity `score`.
+   * Defaults to the table's vector index metric when one exists, otherwise 'cosine'
+   * (matching `createIndex`'s default and `@mastra/memory`'s usage).
+   */
+  metric?: 'cosine' | 'euclidean' | 'dotproduct';
 }
 
 export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
@@ -107,6 +113,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
     topK = 10,
     columns = [],
     includeAllColumns = false,
+    metric,
   }: LanceQueryVectorParams): Promise<QueryResult[]> {
     // Default tableName to indexName for compatibility with the standard QueryVectorParams interface.
     // This allows Memory and other consumers to call query without explicitly providing tableName.
@@ -154,8 +161,15 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
       // Open the table
       const table = await this.lanceClient.openTable(resolvedTableName);
 
-      // Create the query builder
-      let query = table.search(queryVector);
+      // Resolve the distance metric so `_distance` is computed consistently and can be
+      // converted into a similarity score. LanceDB defaults brute-force search to L2;
+      // setting the distance type explicitly keeps non-indexed tables consistent with the
+      // index metric and with how every other Mastra vector store reports scores.
+      const resolvedMetric = await this.resolveQueryMetric(table, metric);
+
+      // Create the query builder. `vectorSearch` returns a typed VectorQuery so the distance
+      // type can be set explicitly (unlike `search`, which may also return a full-text Query).
+      let query = table.vectorSearch(queryVector).distanceType(this.mastraMetricToLance(resolvedMetric));
 
       // Add filter if provided
       if (filter && Object.keys(filter).length > 0) {
@@ -219,7 +233,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
                 : Array.from(result.vector as any[])
               : undefined,
           document: result.document,
-          score: result._distance,
+          score: this.distanceToScore(result._distance, resolvedMetric),
         };
       });
     } catch (error: any) {
@@ -232,6 +246,79 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         },
         error,
       );
+    }
+  }
+
+  /**
+   * Maps a Mastra distance metric to the LanceDB distance type.
+   */
+  private mastraMetricToLance(metric: 'cosine' | 'euclidean' | 'dotproduct'): 'cosine' | 'l2' | 'dot' {
+    switch (metric) {
+      case 'euclidean':
+        return 'l2';
+      case 'dotproduct':
+        return 'dot';
+      case 'cosine':
+      default:
+        return 'cosine';
+    }
+  }
+
+  /**
+   * Determines the distance metric to use for a query.
+   *
+   * Precedence: an explicitly provided metric wins; otherwise the table's vector index
+   * metric is used when an index exists; otherwise it defaults to 'cosine' (matching
+   * `createIndex`'s default and `@mastra/memory`'s usage). Small tables (< 256 rows) have
+   * no index, so the default applies there.
+   */
+  private async resolveQueryMetric(
+    table: Table,
+    explicitMetric?: 'cosine' | 'euclidean' | 'dotproduct',
+  ): Promise<'cosine' | 'euclidean' | 'dotproduct'> {
+    if (explicitMetric) {
+      return explicitMetric;
+    }
+
+    try {
+      const indices = await table.listIndices();
+      for (const index of indices) {
+        const stats = await table.indexStats(index.name);
+        switch (stats?.distanceType) {
+          case 'l2':
+            return 'euclidean';
+          case 'dot':
+            return 'dotproduct';
+          case 'cosine':
+            return 'cosine';
+        }
+      }
+    } catch (error) {
+      this.logger.debug('Failed to resolve index metric; defaulting to cosine.', error);
+    }
+
+    return 'cosine';
+  }
+
+  /**
+   * Converts a LanceDB `_distance` (smaller = more similar) into a Mastra similarity
+   * `score` (larger = more similar), consistent with every other Mastra vector store.
+   *
+   * - cosine: LanceDB returns cosine distance (`1 - cosine_similarity`), so `1 - distance`
+   *   recovers the cosine similarity.
+   * - dotproduct: LanceDB's dot distance is `1 - dot_product`, so `1 - distance` recovers
+   *   the dot product (matching `@mastra/pg`).
+   * - euclidean: `1 / (1 + distance)` maps L2 distance into (0, 1] while preserving ranking
+   *   (matching `@mastra/pg` and `@mastra/s3vectors`).
+   */
+  private distanceToScore(distance: number, metric: 'cosine' | 'euclidean' | 'dotproduct'): number {
+    switch (metric) {
+      case 'euclidean':
+        return 1 / (1 + distance);
+      case 'dotproduct':
+      case 'cosine':
+      default:
+        return 1 - distance;
     }
   }
 
