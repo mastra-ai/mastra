@@ -6,7 +6,7 @@ import type { CSSProperties } from 'react';
 import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
-import { buildTimeline } from './workflow-timeline-utils';
+import { buildTimeline, formatTimelineDuration } from './workflow-timeline-utils';
 
 const StepStatusIcon = ({ status }: { status: Step['status'] }) => (
   <Icon>
@@ -104,7 +104,6 @@ export function WorkflowTimeline() {
             className="flex min-h-0 flex-col gap-2 overflow-y-auto"
           >
             {rows.map((row, index) => {
-              const timeDiff = row.durationMs / 1000;
               const isSelected = selectedStepId === row.stepId;
               const isHovered = hoverStepId === row.stepId;
 
@@ -142,7 +141,7 @@ export function WorkflowTimeline() {
                     />
                   </div>
                   <Txt as="span" variant="ui-sm" className="text-right text-neutral3 tabular-nums">
-                    {Number(timeDiff.toPrecision(3))}s
+                    {formatTimelineDuration(row.durationMs)}
                   </Txt>
                 </button>
               );

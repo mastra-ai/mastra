@@ -16,6 +16,10 @@ const isInputKey = (key: string) => key === 'input' || key.endsWith('.input');
 /** Smallest bar width (in %) so near-zero durations stay visible. */
 const MIN_WIDTH_PCT = 1;
 
+export function formatTimelineDuration(durationMs: number) {
+  return `${Number((durationMs / 1000).toPrecision(3))}s`;
+}
+
 /**
  * Build positioned timeline rows from the current run's steps.
  *

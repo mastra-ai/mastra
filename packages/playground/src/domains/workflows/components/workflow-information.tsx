@@ -1,7 +1,10 @@
+import type { GetWorkflowResponse } from '@mastra/client-js';
 import { Button, Icon, ScrollArea, toast } from '@mastra/playground-ui';
 import { Plus } from 'lucide-react';
+import type { ContextType, ReactNode } from 'react';
 import { useState, useEffect, useContext } from 'react';
 
+import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowRecentRuns } from '../runs/workflow-run-list';
@@ -15,10 +18,97 @@ export interface WorkflowInformationProps {
   initialRunId?: string;
 }
 
+type WorkflowActionProps = Pick<
+  ContextType<typeof WorkflowRunContext>,
+  | 'createWorkflowRun'
+  | 'streamWorkflow'
+  | 'resumeWorkflow'
+  | 'streamResult'
+  | 'isStreamingWorkflow'
+  | 'isCancellingWorkflowRun'
+  | 'cancelWorkflowRun'
+>;
+
+type InitialWorkflowSidebarProps = WorkflowActionProps & {
+  workflowId: string;
+  workflow?: GetWorkflowResponse;
+  isLoading: boolean;
+  setRunId: (runId: string) => void;
+};
+
+type RunWorkflowSidebarProps = InitialWorkflowSidebarProps & {
+  runId: string;
+  observeWorkflowStream?: ({
+    workflowId,
+    runId,
+    storeRunResult,
+  }: {
+    workflowId: string;
+    runId: string;
+    storeRunResult: WorkflowRunStreamResult | null;
+  }) => void;
+};
+
+function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onClick: () => void }) {
+  const { Link, paths } = useLinkComponent();
+
+  return (
+    <div className="flex-none border-b border-border1/50 px-4 py-4">
+      <Button
+        as={Link}
+        href={`${paths.workflowLink(workflowId)}/graph`}
+        variant="primary"
+        className="w-full"
+        onClick={onClick}
+      >
+        <Icon>
+          <Plus />
+        </Icon>
+        New workflow run
+      </Button>
+    </div>
+  );
+}
+
+function WorkflowInformationTopSection({ children, newRunButton }: { children: ReactNode; newRunButton?: ReactNode }) {
+  return (
+    <section
+      data-testid="workflow-information-top-section"
+      className="flex max-h-[50%] min-w-0 flex-none flex-col overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3"
+    >
+      {newRunButton}
+      <ScrollArea
+        data-testid="workflow-information-top-scroll-area"
+        className="min-h-0 flex-1"
+        viewPortClassName="h-full"
+        mask={{ top: false }}
+      >
+        {children}
+      </ScrollArea>
+    </section>
+  );
+}
+
+function InitialWorkflowSidebar(props: InitialWorkflowSidebarProps) {
+  return <WorkflowTrigger {...props} />;
+}
+
+function RunWorkflowSidebar({ runId, observeWorkflowStream, ...props }: RunWorkflowSidebarProps) {
+  return <WorkflowRunDetail {...props} runId={runId} observeWorkflowStream={observeWorkflowStream} />;
+}
+
+function RecentWorkflowRunsSection({ workflowId, activeRunId }: { workflowId: string; activeRunId?: string }) {
+  return (
+    <section className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3">
+      <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
+        <WorkflowRecentRuns workflowId={workflowId} runId={activeRunId} />
+      </ScrollArea>
+    </section>
+  );
+}
+
 export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInformationProps) {
   const { data: workflow, isLoading, error } = useWorkflow(workflowId);
-
-  const { Link, paths } = useLinkComponent();
 
   const {
     createWorkflowRun,
@@ -41,6 +131,20 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   const showNewRunButton =
     Boolean(initialRunId || runId || contextRunId || isStreamingWorkflow) || isCurrentRunFinished;
 
+  const actionProps = {
+    workflowId,
+    setRunId,
+    workflow: workflow ?? undefined,
+    isLoading,
+    createWorkflowRun,
+    streamWorkflow,
+    resumeWorkflow,
+    streamResult,
+    isStreamingWorkflow,
+    isCancellingWorkflowRun,
+    cancelWorkflowRun,
+  };
+
   useEffect(() => {
     if (!runId && !initialRunId) {
       closeStreamsAndReset();
@@ -58,83 +162,32 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     return null;
   }
 
+  if (!workflowId) {
+    return <div data-testid="workflow-information-panel" className="flex h-full min-h-0 w-full flex-col gap-2 p-2" />;
+  }
+
+  const resetToNewRun = () => {
+    closeStreamsAndReset();
+    clearData();
+    setRunId('');
+    setContextRunId('');
+  };
+
   return (
     <div data-testid="workflow-information-panel" className="flex h-full min-h-0 w-full flex-col gap-2 p-2">
-      {workflowId ? (
-        <>
-          <section
-            data-testid="workflow-information-top-section"
-            className="flex max-h-[50%] min-w-0 flex-none flex-col overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3"
-          >
-            {showNewRunButton && (
-              <div className="flex-none border-b border-border1/50 px-4 py-4">
-                <Button
-                  as={Link}
-                  href={`${paths.workflowLink(workflowId)}/graph`}
-                  variant="primary"
-                  className="w-full"
-                  onClick={() => {
-                    closeStreamsAndReset();
-                    clearData();
-                    setRunId('');
-                    setContextRunId('');
-                  }}
-                >
-                  <Icon>
-                    <Plus />
-                  </Icon>
-                  New workflow run
-                </Button>
-              </div>
-            )}
+      <WorkflowInformationTopSection
+        newRunButton={
+          showNewRunButton ? <NewWorkflowRunButton workflowId={workflowId} onClick={resetToNewRun} /> : undefined
+        }
+      >
+        {initialRunId ? (
+          <RunWorkflowSidebar {...actionProps} runId={initialRunId} observeWorkflowStream={observeWorkflowStream} />
+        ) : (
+          <InitialWorkflowSidebar {...actionProps} />
+        )}
+      </WorkflowInformationTopSection>
 
-            <ScrollArea
-              data-testid="workflow-information-top-scroll-area"
-              className="min-h-0 flex-1"
-              viewPortClassName="h-full"
-              mask={{ top: false }}
-            >
-              {initialRunId ? (
-                <WorkflowRunDetail
-                  workflowId={workflowId}
-                  runId={initialRunId}
-                  setRunId={setRunId}
-                  workflow={workflow ?? undefined}
-                  isLoading={isLoading}
-                  createWorkflowRun={createWorkflowRun}
-                  streamWorkflow={streamWorkflow}
-                  resumeWorkflow={resumeWorkflow}
-                  streamResult={streamResult}
-                  isStreamingWorkflow={isStreamingWorkflow}
-                  isCancellingWorkflowRun={isCancellingWorkflowRun}
-                  cancelWorkflowRun={cancelWorkflowRun}
-                  observeWorkflowStream={observeWorkflowStream}
-                />
-              ) : (
-                <WorkflowTrigger
-                  workflowId={workflowId}
-                  setRunId={setRunId}
-                  workflow={workflow ?? undefined}
-                  isLoading={isLoading}
-                  createWorkflowRun={createWorkflowRun}
-                  streamWorkflow={streamWorkflow}
-                  resumeWorkflow={resumeWorkflow}
-                  streamResult={streamResult}
-                  isStreamingWorkflow={isStreamingWorkflow}
-                  isCancellingWorkflowRun={isCancellingWorkflowRun}
-                  cancelWorkflowRun={cancelWorkflowRun}
-                />
-              )}
-            </ScrollArea>
-          </section>
-
-          <section className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3">
-            <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
-              <WorkflowRecentRuns workflowId={workflowId} runId={initialRunId || runId} />
-            </ScrollArea>
-          </section>
-        </>
-      ) : null}
+      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={initialRunId || runId} />
     </div>
   );
 }

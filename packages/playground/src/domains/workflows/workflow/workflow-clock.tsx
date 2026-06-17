@@ -1,5 +1,7 @@
-import { Txt, toSigFigs } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
+
+import { formatTimelineDuration } from './workflow-timeline-utils';
 
 interface ClockProps {
   startedAt: number;
@@ -17,11 +19,11 @@ export const Clock = ({ startedAt, endedAt }: ClockProps) => {
     return () => clearInterval(interval);
   }, [startedAt]);
 
-  const timeDiff = endedAt ? endedAt - startedAt : time - startedAt;
+  const durationMs = endedAt ? endedAt - startedAt : time - startedAt;
 
   return (
     <Txt variant="ui-xs" className="font-mono text-neutral3 whitespace-nowrap">
-      {toSigFigs(timeDiff, 3)}ms
+      {formatTimelineDuration(durationMs)}
     </Txt>
   );
 };

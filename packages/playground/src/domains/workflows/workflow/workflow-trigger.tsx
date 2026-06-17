@@ -135,6 +135,65 @@ function getRunDuration(result: WorkflowRunStreamResult | null, status?: Workflo
   return effectiveEndedAt === undefined ? undefined : effectiveEndedAt - startedAt;
 }
 
+function InitialWorkflowHeader({ workflow, workflowId }: { workflow: GetWorkflowResponse; workflowId: string }) {
+  const stepsCount = Object.keys(workflow.steps ?? {}).length;
+
+  return (
+    <div className="flex w-full items-center gap-2 px-5">
+      <Icon className="shrink-0 text-neutral4">
+        <WorkflowIcon />
+      </Icon>
+      <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold truncate">
+        {workflow.name ?? workflowId}
+      </Txt>
+      <CopyButton content={workflow.name ?? workflowId} variant="ghost" className="shrink-0" />
+      <Badge className="ml-auto shrink-0">
+        {stepsCount} step{stepsCount > 1 ? 's' : ''}
+      </Badge>
+    </div>
+  );
+}
+
+function RunWorkflowHeader({
+  runId,
+  status,
+  result,
+  timestamp,
+}: {
+  runId: string;
+  status?: WorkflowRunStatus;
+  result: WorkflowRunStreamResult | null;
+  timestamp?: number;
+}) {
+  const runDuration = getRunDuration(result, status);
+
+  return (
+    <div className="flex w-full items-start gap-3 px-5">
+      {status && (
+        <span className="shrink-0 pt-1">
+          <WorkflowRunStatusIcon status={status} />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <Txt as="span" variant="ui-md" className="block truncate font-semibold text-neutral5">
+          {formatRunStatus(status)}
+        </Txt>
+        <Txt as="span" variant="ui-xs" className="block truncate text-neutral3" title={runId}>
+          {runId}
+        </Txt>
+      </div>
+      <div className="shrink-0 text-right">
+        <Txt as="span" variant="ui-xs" className="block font-medium text-neutral5">
+          {formatRunDuration(runDuration)}
+        </Txt>
+        <Txt as="span" variant="ui-xs" className="block text-neutral3">
+          {formatRelativeTime(timestamp)}
+        </Txt>
+      </div>
+    </div>
+  );
+}
+
 export function WorkflowTrigger({
   workflowId,
   paramsRunId,
@@ -171,7 +230,8 @@ export function WorkflowTrigger({
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
   const observedParamRunRef = useRef<string | null>(null);
 
-  const streamResultToUse = result ?? streamResult;
+  const activeRunId = paramsRunId || contextRunId;
+  const streamResultToUse = activeRunId ? (result ?? streamResult) : null;
   const suspendedSteps = useSuspendedSteps(streamResultToUse, innerRunId);
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
 
@@ -218,10 +278,10 @@ export function WorkflowTrigger({
   }, [paramsRunId, observeWorkflowStream, setContextRunId, workflowId]);
 
   useEffect(() => {
-    if (!paramsRunId && !contextRunId && !streamResultToUse) {
+    if (!paramsRunId && !contextRunId) {
       setInnerRunId('');
     }
-  }, [contextRunId, paramsRunId, streamResultToUse]);
+  }, [contextRunId, paramsRunId]);
 
   if (isLoading) {
     return (
@@ -238,53 +298,17 @@ export function WorkflowTrigger({
 
   const isSuspendedSteps = suspendedSteps.length > 0;
 
-  const activeRunId = paramsRunId || innerRunId;
   const isViewingRun = !!activeRunId;
-  const stepsCount = Object.keys(workflow?.steps ?? {}).length;
   const runStatus = streamResultToUse?.status ?? paramsRunStatus;
-
-  const triggerHeadingSlot = (
-    <div className="flex w-full items-center gap-2 px-5">
-      <Icon className="shrink-0 text-neutral4">
-        <WorkflowIcon />
-      </Icon>
-      <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold truncate">
-        {workflow?.name ?? workflowId}
-      </Txt>
-      <CopyButton content={workflow?.name ?? workflowId} variant="ghost" className="shrink-0" />
-      <Badge className="ml-auto shrink-0">
-        {stepsCount} step{stepsCount > 1 ? 's' : ''}
-      </Badge>
-    </div>
-  );
-
-  const runDuration = getRunDuration(streamResultToUse, runStatus);
-  const runTimestamp = runSnapshot?.timestamp;
-
-  const runHeadingSlot = (
-    <div className="flex w-full items-start gap-3 px-5">
-      {runStatus && (
-        <span className="shrink-0 pt-1">
-          <WorkflowRunStatusIcon status={runStatus} />
-        </span>
-      )}
-      <div className="min-w-0 flex-1">
-        <Txt as="span" variant="ui-md" className="block truncate font-semibold text-neutral5">
-          {formatRunStatus(runStatus)}
-        </Txt>
-        <Txt as="span" variant="ui-xs" className="block truncate text-neutral3" title={activeRunId}>
-          {activeRunId}
-        </Txt>
-      </div>
-      <div className="shrink-0 text-right">
-        <Txt as="span" variant="ui-xs" className="block font-medium text-neutral5">
-          {formatRunDuration(runDuration)}
-        </Txt>
-        <Txt as="span" variant="ui-xs" className="block text-neutral3">
-          {formatRelativeTime(runTimestamp)}
-        </Txt>
-      </div>
-    </div>
+  const headingSlot = isViewingRun ? (
+    <RunWorkflowHeader
+      runId={activeRunId}
+      status={runStatus}
+      result={streamResultToUse}
+      timestamp={runSnapshot?.timestamp}
+    />
+  ) : (
+    <InitialWorkflowHeader workflow={workflow} workflowId={workflowId} />
   );
 
   return (
@@ -313,7 +337,7 @@ export function WorkflowTrigger({
             disableSubmit={isSuspendedSteps}
             isProcessorWorkflow={workflow?.isProcessorWorkflow}
             collapsible={false}
-            headingSlot={isViewingRun ? runHeadingSlot : triggerHeadingSlot}
+            headingSlot={headingSlot}
             leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
             submitActions={
               <>

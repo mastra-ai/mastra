@@ -30,7 +30,7 @@ describe('workflow card UI components', () => {
     expect(screen.getByRole('img', { name: 'Map step' })).not.toBeNull();
     expect(screen.queryByText('MAP')).toBeNull();
     expect(card.querySelector('[data-testid="workflow-card-progress-indicator"]')).toBeNull();
-    expect(screen.getByText('123ms').className).toContain('font-mono');
+    expect(screen.getByText('0.123s').className).toContain('font-mono');
     expect(screen.getByRole('button', { name: 'Map config' })).not.toBeNull();
   });
 

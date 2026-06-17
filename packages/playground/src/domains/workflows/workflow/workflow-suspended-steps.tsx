@@ -64,8 +64,8 @@ export function WorkflowSuspendedSteps({
   }
 
   return (
-    <div className="bg-surface4 p-4 space-y-4 border border-border1 rounded-lg">
-      <div className="flex items-center justify-between gap-2">
+    <div className="space-y-5 rounded-lg border border-border1 bg-surface4 p-5">
+      <div className="flex items-center justify-between gap-3">
         <Txt as="p" variant="ui-md" className="flex items-center gap-2 text-neutral6 font-semibold">
           <Icon>
             <CirclePause />
@@ -110,8 +110,8 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
   const [isPayloadOpen, setIsPayloadOpen] = useState(false);
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
+    <div className="space-y-5">
+      <div className="space-y-2">
         <Txt as="p" variant="ui-md" className="text-neutral6 font-medium truncate">
           {step.stepId}
         </Txt>
@@ -156,7 +156,7 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         <Txt as="p" variant="ui-sm" className="flex items-center gap-2 text-neutral3">
           <Icon>
             <MoveUpRight />
@@ -164,26 +164,28 @@ function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResum
           Your response
         </Txt>
 
-        <WorkflowInputData
-          schema={stepSchema}
-          isSubmitLoading={isStreaming}
-          submitButtonLabel="Resume"
-          submitButtonIcon={<Play />}
-          submitButtonFullWidth
-          collapsible={false}
-          hideHeading
-          hideInputTypeLabel
-          onSubmit={data => {
-            const stepIds = step.stepId?.split('.');
-            onResume({
-              stepId: stepIds,
-              runId: step.runId,
-              suspendPayload: step.suspendPayload,
-              resumeData: data,
-              isLoading: false,
-            });
-          }}
-        />
+        <div className="-mx-5">
+          <WorkflowInputData
+            schema={stepSchema}
+            isSubmitLoading={isStreaming}
+            submitButtonLabel="Resume"
+            submitButtonIcon={<Play />}
+            submitButtonFullWidth
+            collapsible={false}
+            hideHeading
+            hideInputTypeLabel
+            onSubmit={data => {
+              const stepIds = step.stepId?.split('.');
+              onResume({
+                stepId: stepIds,
+                runId: step.runId,
+                suspendPayload: step.suspendPayload,
+                resumeData: data,
+                isLoading: false,
+              });
+            }}
+          />
+        </div>
       </div>
     </div>
   );
