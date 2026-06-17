@@ -8,7 +8,7 @@ import {
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
-import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
+import { AgentEditFormProvider, isEditorEffectivelyReadOnly } from '@/domains/agents/context/agent-edit-form-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
 import { useAgentVersions, useAgentVersion } from '@/domains/agents/hooks/use-agent-versions';
@@ -44,6 +44,9 @@ function AgentPlayground() {
   const isCodeAgentOverride = codeAgent?.source === 'code';
   const isCodeSourceAgent = isCodeAgentOverride && editorSource === 'code';
   const isCodeAgentEditable = !isCodeAgentOverride || codeAgent?.editor !== false;
+  // A code agent that locks both instructions and tools leaves nothing editable, so surface the
+  // same Read-only badge / disabled save+publish as `editor: false` (without the full lock-out path).
+  const isEffectivelyReadOnly = isEditorEffectivelyReadOnly(isCodeAgentOverride, codeAgent?.editor);
   const showCodeModeActions = isCodeSourceAgent && isCodeAgentEditable;
   const canOpenPr = showCodeModeActions && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
   const openPrTitle = canOpenPr ? 'Open a pull request for these JSON changes' : undefined;
@@ -173,7 +176,7 @@ function AgentPlayground() {
         isSavingDraft={isSavingDraft}
         isPublishing={isSubmitting}
         hasDraft={hasDraft}
-        readOnly={isViewingPreviousVersion || !isCodeAgentEditable}
+        readOnly={isViewingPreviousVersion || !isCodeAgentEditable || isEffectivelyReadOnly}
         isCodeSourceAgent={isCodeSourceAgent}
         showCodeModeActions={showCodeModeActions}
         canOpenPr={canOpenPr}
