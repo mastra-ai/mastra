@@ -68,7 +68,7 @@ async function runHeadlessInProcess(terminal: { write: (text: string) => void })
   }) as typeof process.exit;
 
   try {
-    const { headlessMain } = await import('../../../src/headless.js');
+    const { headlessMain } = await import('../../src/headless.js');
     await headlessMain();
   } catch (error) {
     if (!(error instanceof Error) || !error.message.startsWith('MC_E2E_HEADLESS_EXIT:0')) throw error;

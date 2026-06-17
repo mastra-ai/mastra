@@ -1,6 +1,6 @@
 # Mastra Code TUI e2e runner
 
-Mastra Code scenarios live in `scripts/mc-e2e/scenarios/` and run through the zero-subprocess Vitest runner.
+Mastra Code scenarios live in `e2e/scenarios/` and run through the zero-subprocess Vitest runner.
 
 ## Run all scenarios
 
@@ -17,7 +17,7 @@ Failed runs keep their per-scenario temp directories under `mastracode/.tmp-mc-e
 Run one or more scenarios through the single-wrapper Vitest config:
 
 ```bash
-MC_E2E_VITEST_SCENARIOS=startup,automated-chat pnpm --filter ./mastracode exec vitest run --config scripts/mc-e2e/vitest.config.ts --reporter=dot
+MC_E2E_VITEST_SCENARIOS=startup,automated-chat pnpm --filter ./mastracode exec vitest run --config e2e/vitest.config.ts --reporter=dot
 ```
 
 List available scenarios:

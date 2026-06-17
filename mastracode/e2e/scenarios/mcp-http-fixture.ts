@@ -45,7 +45,7 @@ export type McpHttpFixtureOptions = {
   version?: string;
 };
 
-const requireFromMcpPackage = createRequire(new URL('../../../../packages/mcp/package.json', import.meta.url));
+const requireFromMcpPackage = createRequire(new URL('../../../packages/mcp/package.json', import.meta.url));
 
 async function loadMcpSdk(): Promise<{
   McpServer: McpServerConstructor;

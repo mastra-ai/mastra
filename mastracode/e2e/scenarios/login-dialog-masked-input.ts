@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { anthropicOAuthProvider } from '../../../src/auth/providers/anthropic.js';
+import { anthropicOAuthProvider } from '../../src/auth/providers/anthropic.js';
 import { expect } from './expect.js';
 import { createGlobalPatchScope } from './global-patches.js';
 import type { McE2eScenario } from './types.js';
