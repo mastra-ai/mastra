@@ -15,7 +15,7 @@ Use modes when a single conversational session needs to switch between distinct 
 
 ## Quickstart
 
-```typescript title="src/harness.ts"
+```typescript title="src/mastra/harness.ts"
 import { Harness } from '@mastra/core/harness'
 import { planAgent, buildAgent } from './agents'
 
@@ -34,7 +34,7 @@ await harness.init()
 
 Each mode requires an `id` and an `agent`. The agent can be a static `Agent` instance or a factory function that receives the current harness state:
 
-```typescript title="src/harness.ts"
+```typescript title="src/mastra/harness.ts"
 import { Harness } from '@mastra/core/harness'
 
 const harness = new Harness({

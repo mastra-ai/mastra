@@ -19,7 +19,7 @@ Use threads when your application needs persistent conversation history, multi-s
 
 On startup, call `selectOrCreateThread()` to resume the most recent thread or create a new one:
 
-```typescript title="src/harness.ts"
+```typescript title="src/mastra/harness.ts"
 await harness.init()
 const thread = await harness.selectOrCreateThread()
 ```
@@ -61,7 +61,7 @@ const cloned = await harness.cloneThread({ title: 'Alternative approach' })
 
 Pass a `threadLock` to the Harness constructor to prevent concurrent access from multiple processes. The lock is acquired before any thread operation and released on switch or delete:
 
-```typescript title="src/harness.ts"
+```typescript title="src/mastra/harness.ts"
 const harness = new Harness({
   id: 'my-agent',
   threadLock: {
@@ -82,7 +82,7 @@ const harness = new Harness({
 
 Pass a `stateSchema` (Standard JSON Schema) to validate state and extract defaults:
 
-```typescript title="src/harness.ts"
+```typescript title="src/mastra/harness.ts"
 import { Harness } from '@mastra/core/harness'
 import { z } from 'zod'
 

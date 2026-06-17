@@ -37,7 +37,7 @@ harness.setPermissionForTool({ toolName: 'dangerous_tool', policy: 'deny' })
 
 The `toolCategoryResolver` maps tool names to categories. Pass it to the Harness constructor:
 
-```typescript title="src/harness.ts"
+```typescript title="src/mastra/harness.ts"
 const harness = new Harness({
   id: 'my-agent',
   toolCategoryResolver: toolName => {
