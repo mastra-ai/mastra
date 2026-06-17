@@ -220,12 +220,16 @@ describe('GoalManager adapter', () => {
     const state = createState(agent);
     const manager = new GoalManager();
     await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
-    manager.pause();
+    manager.pause('Judge evaluation was interrupted.');
 
     await manager.saveToThread(state);
 
     expect(agent.updateObjectiveOptions).toHaveBeenCalledWith(
-      expect.objectContaining({ threadId: 'parent-thread', status: 'paused' }),
+      expect.objectContaining({
+        threadId: 'parent-thread',
+        status: 'paused',
+        pausedReason: 'Judge evaluation was interrupted.',
+      }),
     );
     expect(state.harness.setThreadSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
   });

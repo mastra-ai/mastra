@@ -424,6 +424,17 @@ export interface GoalConfig {
   /** Extra judge guidance. Defaults to the built-in goal judge prompt. */
   prompt?: string;
   /**
+   * Read-only verification tools the default goal judge may call before deciding
+   * (e.g. file read / search tools), letting it independently confirm the work
+   * was actually done rather than grading the assistant's text alone.
+   *
+   * May be a static toolset or a resolver function — use the function form when
+   * the tools depend on per-request state (e.g. the active workspace), mirroring
+   * `judge`. Ignored when a custom `scorer` is supplied (that scorer brings its
+   * own judging). When omitted, the default judge is text-only.
+   */
+  tools?: DynamicArgument<ToolsInput | undefined>;
+  /**
    * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
    * omitted, a default rubric scorer judges the objective with the judge model.
    */

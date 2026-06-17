@@ -138,12 +138,15 @@ export class GoalManager {
 
     if (agent && threadId) {
       const persisted = await agent.setObjective(objective, {
+        id,
         threadId,
         resourceId: state.harness.getResourceId(),
         ...(judgeModelId ? { judgeModelId } : {}),
         maxRuns: maxTurns,
       });
-      this.record = persisted ? { ...persisted, id } : this.localRecord(objective, judgeModelId, maxTurns, now, id);
+      this.record = persisted
+        ? { ...persisted, id: persisted.id ?? id }
+        : this.localRecord(objective, judgeModelId, maxTurns, now, id);
     } else {
       this.record = this.localRecord(objective, judgeModelId, maxTurns, now, id);
     }
@@ -179,17 +182,17 @@ export class GoalManager {
     return this.getGoal();
   }
 
-  pause(): GoalState | null {
+  pause(reason?: string): GoalState | null {
     if (this.record && this.record.status === 'active') {
       this.stopActiveTimer();
-      this.record = { ...this.record, status: 'paused', updatedAt: Date.now() };
+      this.record = { ...this.record, status: 'paused', pausedReason: reason, updatedAt: Date.now() };
     }
     return this.getGoal();
   }
 
   resume(): GoalState | null {
     if (this.record && this.record.status === 'paused') {
-      this.record = { ...this.record, status: 'active', updatedAt: Date.now() };
+      this.record = { ...this.record, status: 'active', pausedReason: undefined, updatedAt: Date.now() };
       this.startActiveTimer();
     }
     return this.getGoal();
@@ -240,6 +243,7 @@ export class GoalManager {
           const updated = await agent.updateObjectiveOptions({
             threadId,
             status: this.record.status,
+            ...(this.record.pausedReason ? { pausedReason: this.record.pausedReason } : {}),
             ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
             ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
           });
@@ -250,13 +254,18 @@ export class GoalManager {
             // thread state would no longer match the in-memory state.
             const desiredStatus = this.record.status;
             await agent.setObjective(this.record.objective, {
+              id: this.record.id,
               threadId,
               resourceId: state.harness.getResourceId(),
               ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
               ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
             });
             if (desiredStatus !== 'active') {
-              await agent.updateObjectiveOptions({ threadId, status: desiredStatus });
+              await agent.updateObjectiveOptions({
+                threadId,
+                status: desiredStatus,
+                ...(this.record.pausedReason ? { pausedReason: this.record.pausedReason } : {}),
+              });
             }
           }
         } else {
@@ -285,7 +294,7 @@ export class GoalManager {
       try {
         const record = await agent.getObjective({ threadId });
         if (record) {
-          this.record = { ...record, id: randomUUID() };
+          this.record = { ...record, id: record.id ?? randomUUID() };
           return;
         }
       } catch {

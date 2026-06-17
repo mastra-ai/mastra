@@ -53,7 +53,7 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
 
-import { getDynamicWorkspace } from './agents/workspace.js';
+import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
@@ -465,6 +465,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       judge: ctx => getGoalJudgeModel(ctx, config?.settingsPath),
       maxRuns: globalSettings.models.goalMaxTurns ?? 50,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,
+      // Read-only workspace tools the default goal judge may call to verify the
+      // agent's work against the actual filesystem (view, search_content,
+      // find_files, file_stat, lsp_inspect) rather than grading prose alone —
+      // restoring the original MastraCode judge's verification ability. Resolved
+      // per-request from the active workspace (mirrors `judge`).
+      tools: getGoalJudgeTools,
     },
     inputProcessors: [
       new AgentsMDInjector({
