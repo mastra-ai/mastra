@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-cloudflare",
-  "version": "0.12.2",
+  "version": "0.12.4",
   "description": "Mastra Cloudflare AI voice integration",
   "type": "module",
   "files": [
