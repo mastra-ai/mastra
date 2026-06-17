@@ -108,6 +108,80 @@ export const Default: Story = {
   ),
 };
 
+/**
+ * Borderless, zebra-striped table. The stripes and header band are translucent
+ * neutral overlays (theme-aware), so the list composites cleanly over any
+ * background — no card fill of its own. The header owns the card radius via
+ * `rounded-t-xl`, rows are `rounded-md` with a 1px gap, and anything trailing
+ * (e.g. `Pagination`) sits at the end instead of inside a bordered box.
+ */
+export const Striped: Story = {
+  render: function StripedStory() {
+    const [page, setPage] = useState(0);
+    return (
+      <DataList columns={COMPACT_COLUMNS} variant="striped" className="max-h-[320px]">
+        <DataList.Top>
+          <DataList.TopCell>ID</DataList.TopCell>
+          <DataList.TopCell>Input</DataList.TopCell>
+          <DataList.TopCell>Status</DataList.TopCell>
+          <DataList.TopCell>Date</DataList.TopCell>
+          <DataList.TopCell>Time</DataList.TopCell>
+        </DataList.Top>
+        {Array.from({ length: 12 }, (_, index) => {
+          const run = SAMPLE_RUNS[index % SAMPLE_RUNS.length];
+          return (
+            <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}}>
+              <DataList.IdCell id={`${run.id}_${index}`} />
+              <DataList.MonoCell>{run.input}</DataList.MonoCell>
+              <DataList.Cell height="compact">{run.status}</DataList.Cell>
+              <DataList.DateCell timestamp={run.createdAt} />
+              <DataList.TimeCell timestamp={run.createdAt} />
+            </DataList.RowButton>
+          );
+        })}
+        <DataList.Pagination
+          currentPage={page}
+          hasMore={page < 3}
+          onNextPage={() => setPage(p => p + 1)}
+          onPrevPage={() => setPage(p => Math.max(0, p - 1))}
+        />
+      </DataList>
+    );
+  },
+};
+
+/**
+ * Per-row `variant="error"` lays a subtle, theme-aware destructive tint over the
+ * row — it wins over the zebra background, so error rows read clearly while the
+ * rest keep striping. Useful for log/run lists where some rows failed.
+ */
+export const StripedWithErrorRows: Story = {
+  render: () => (
+    <DataList columns={COMPACT_COLUMNS} variant="striped" className="max-h-[320px]">
+      <DataList.Top>
+        <DataList.TopCell>ID</DataList.TopCell>
+        <DataList.TopCell>Input</DataList.TopCell>
+        <DataList.TopCell>Status</DataList.TopCell>
+        <DataList.TopCell>Date</DataList.TopCell>
+        <DataList.TopCell>Time</DataList.TopCell>
+      </DataList.Top>
+      {Array.from({ length: 10 }, (_, index) => {
+        const run = SAMPLE_RUNS[index % SAMPLE_RUNS.length];
+        const failed = run.status === 'failed';
+        return (
+          <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}} variant={failed ? 'error' : 'default'}>
+            <DataList.IdCell id={`${run.id}_${index}`} />
+            <DataList.MonoCell>{run.input}</DataList.MonoCell>
+            <DataList.Cell height="compact">{run.status}</DataList.Cell>
+            <DataList.DateCell timestamp={run.createdAt} />
+            <DataList.TimeCell timestamp={run.createdAt} />
+          </DataList.RowButton>
+        );
+      })}
+    </DataList>
+  ),
+};
+
 /* Anchor that ignores navigation so RowLink can render in Storybook. */
 const StoryLink: LinkComponent = forwardRef<HTMLAnchorElement, React.AnchorHTMLAttributes<HTMLAnchorElement>>(
   ({ children, href, onClick, ...rest }, ref) => (
@@ -375,10 +449,11 @@ export const Loading: Story = {
   render: () => <DataListSkeleton columns={COMPACT_COLUMNS} numberOfRows={5} />,
 };
 
-/** Page-based pagination footer — `Previous` shows when `currentPage > 0`, `Next` shows when `hasMore`. */
+/** Page-based pagination footer — `Previous` shows when `currentPage > 0`, `Next` shows when `hasMore`.
+ *  `currentPage` is zero-based: the footer renders it as `currentPage + 1`, so page `0` reads as "Page 1". */
 export const WithPagination: Story = {
   render: function WithPaginationStory() {
-    const [page, setPage] = useState(1);
+    const [page, setPage] = useState(0);
     return (
       <DataList columns={COMPACT_COLUMNS}>
         <DataList.Top>

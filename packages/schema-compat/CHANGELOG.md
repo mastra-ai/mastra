@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.2.12
+
+### Patch Changes
+
+- Fixed schema compatibility type declarations so JSON Schema types are bundled correctly. ([#17877](https://github.com/mastra-ai/mastra/pull/17877))
+
 ## 1.2.11
 
 ### Patch Changes
