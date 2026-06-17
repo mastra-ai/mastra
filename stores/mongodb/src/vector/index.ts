@@ -28,6 +28,13 @@ export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
 
 export interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVectorFilter> {
   documentFilter?: MongoDBVectorFilter;
+  /**
+   * Number of candidates the HNSW graph considers before selecting the
+   * top-K results. Higher values improve recall at the cost of latency.
+   * Must be >= topK. Defaults to 10 * topK, capped at 10000.
+   * See: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/
+   */
+  numCandidates?: number;
 }
 
 export interface MongoDBVectorConfig {
@@ -330,6 +337,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    *   in a `vector` field (default: false).
    * @param documentFilter - Optional filter applied to the `document` text
    *   field, independent of `filter`.
+   * @param numCandidates - HNSW candidate pool size. Higher values improve
+   *   recall at the cost of latency. Defaults to 10 * topK, capped at 10000.
    * @returns Array of results ordered by descending similarity score.
    */
   async query({
@@ -339,6 +348,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     filter,
     includeVector = false,
     documentFilter,
+    numCandidates,
   }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
     if (!queryVector) {
       throw new MastraError({
@@ -375,7 +385,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         index: indexNameInternal,
         queryVector: queryVector,
         path: this.embeddingFieldName,
-        numCandidates: Math.min(10000, Math.max(100, topK)),
+        numCandidates: Math.min(10000, Math.max(topK, numCandidates ?? topK * 10)),
         limit: Math.min(10000, topK),
       };
 
