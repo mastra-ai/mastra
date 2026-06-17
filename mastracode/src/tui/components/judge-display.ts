@@ -38,6 +38,7 @@ export class JudgeDisplayComponent extends Container {
   private turnsUsed: number;
   private maxTurns: number;
   private activity: string[] = [];
+  private streamingReason = '';
 
   constructor(result: GoalJudgeResult | null = null, turnsUsed = 0, maxTurns = 0) {
     super();
@@ -57,8 +58,14 @@ export class JudgeDisplayComponent extends Container {
     this.renderContent();
   }
 
+  setStreamingReason(reason: string): void {
+    this.streamingReason = reason;
+    this.renderContent();
+  }
+
   setResult(result: GoalJudgeResult, turnsUsed: number, maxTurns: number): void {
     this.result = result;
+    this.streamingReason = '';
     this.turnsUsed = turnsUsed;
     this.maxTurns = maxTurns;
     this.renderContent();
@@ -85,7 +92,7 @@ export class JudgeDisplayComponent extends Container {
     this.addChild(new Text(`${border('╭')}${border(horizontal)}${border('╮')}`, BOX_INDENT, 0));
     this.addChild(new Text(this.renderRow(this.renderHeader(title), innerWidth, border), BOX_INDENT, 0));
 
-    if (!this.result && this.activity.length === 0) {
+    if (!this.result && this.activity.length === 0 && !this.streamingReason) {
       this.addChild(new Text(this.renderRow(chalk.dim('evaluating…'), innerWidth, border), BOX_INDENT, 0));
     }
 
@@ -93,12 +100,13 @@ export class JudgeDisplayComponent extends Container {
       this.addChild(new Text(this.renderRow(this.renderActivityLine(line), innerWidth, border), BOX_INDENT, 0));
     }
 
-    if (this.activity.length > 0 && this.result) {
+    if (this.activity.length > 0 && (this.result || this.streamingReason)) {
       this.addChild(new Text(this.renderRow('', innerWidth, border), BOX_INDENT, 0));
     }
 
-    if (this.result) {
-      for (const line of this.wrapLine(this.result.reason, innerWidth)) {
+    const reason = this.result?.reason ?? this.streamingReason;
+    if (reason) {
+      for (const line of this.wrapLine(reason, innerWidth)) {
         this.addChild(new Text(this.renderRow(chalk.dim(line), innerWidth, border), BOX_INDENT, 0));
       }
     }

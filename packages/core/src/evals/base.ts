@@ -78,6 +78,8 @@ export interface ScorerJudgeConfig {
   memory?: MastraMemory;
   /** Default memory options passed to the internal judge agent run. */
   defaultMemoryOptions?: AgentMemoryOption;
+  /** Optional callback for observing the internal judge agent stream as soon as it starts. */
+  onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
 }
 
 export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
@@ -873,6 +875,7 @@ class MastraScorer<
     const memory = this.config.judge?.memory;
     const defaultMemoryOptions = this.config.judge?.defaultMemoryOptions;
     const stepMemoryOptions = originalStep.judge?.memory;
+    const onStream = originalStep.judge?.onStream ?? this.config.judge?.onStream;
     const memoryOptions = stepMemoryOptions
       ? {
           ...defaultMemoryOptions,
@@ -925,6 +928,7 @@ class MastraScorer<
             jsonPromptInjection,
           },
           ...judgeRunOptions,
+          ...(onStream ? { onStream } : {}),
         });
         const object = await result.object;
         return { result: (object as { score: number }).score, prompt, judgeModel };
@@ -945,6 +949,7 @@ class MastraScorer<
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
         result = await judge.stream(prompt, judgeRunOptions);
+        void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
       } else {
         result = await judge.generateLegacy(prompt, judgeRunOptions);
       }
@@ -963,6 +968,7 @@ class MastraScorer<
             jsonPromptInjection,
           },
           ...judgeRunOptions,
+          ...(onStream ? { onStream } : {}),
         });
         const object = await result.object;
         return { result: object, prompt, judgeModel };

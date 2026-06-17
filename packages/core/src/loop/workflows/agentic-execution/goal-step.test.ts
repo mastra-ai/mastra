@@ -54,6 +54,7 @@ async function runGoalStep(
   const store = createStore(record);
   const chunks: any[] = [];
   const messages: any[] = [];
+  const dataParts: any[] = [];
 
   const mastra: any = {
     generateId: () => `id-${Math.random().toString(36).slice(2)}`,
@@ -61,7 +62,7 @@ async function runGoalStep(
   };
 
   const messageList: any = {
-    add: (m: any) => messages.push(m),
+    add: (m: any, source?: string) => messages.push({ ...m, _source: source }),
     get: { all: { db: () => opts?.dbMessages ?? [] } },
   };
 
@@ -70,6 +71,7 @@ async function runGoalStep(
   // what sets it back to true to force another iteration.
   const stepResult: any = { isContinued: false };
   const inputData: any = {
+    messageId: 'response-1',
     output: { text: 'I did X', toolCalls: [], toolResults: [] },
     stepResult,
   };
@@ -104,7 +106,9 @@ async function runGoalStep(
     mastra,
     controller: { enqueue: (c: any) => chunks.push(c) },
     runId: 'run-1',
+    outputWriter: async (data: any, options: any) => dataParts.push({ data, options }),
     _internal: {
+      generateId: () => 'response-2',
       threadId: THREAD_ID,
       resourceId: 'resource-1',
       ...(opts?.useMemory ? { memory: { id: 'memory' } } : {}),
@@ -123,9 +127,12 @@ async function runGoalStep(
   return {
     chunk: resultChunk,
     pendingChunk: goalChunks.find(c => c.payload.pending),
+    goalChunks,
     record: store.states.get(`${THREAD_ID}:${GOAL_STATE_TYPE}`)!,
     stepResult,
     messages,
+    dataParts,
+    inputData,
   };
 }
 
@@ -158,6 +165,40 @@ describe('goal step waiting semantics', () => {
         title: 'Goal judge: implement X, then stop and wait for my review',
         metadata: { forkedSubagent: true, goalJudge: true, parentThreadId: THREAD_ID, goalId: 'goal-1' },
       });
+    } finally {
+      streamSpy.mockRestore();
+    }
+  });
+
+  it('emits judge activity chunks while scoring runs', async () => {
+    const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockImplementation((async () => {
+      return {
+        object: Promise.resolve({ decision: 'continue', reason: 'need verification' }),
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'tool-call', payload: { toolName: 'view', args: { path: 'packages/core/src/agent/goal/scorer.ts' } } });
+            controller.enqueue({ type: 'tool-result', payload: { toolName: 'view', args: { path: 'packages/core/src/agent/goal/scorer.ts' } } });
+            controller.enqueue({ type: 'text-delta', payload: { id: 'judge-text', text: '{"decision":"continue","reason":"need' } });
+            controller.enqueue({ type: 'text-delta', payload: { id: 'judge-text', text: ' verification"}' } });
+            controller.close();
+          },
+        }),
+      } as any;
+    }) as any);
+    try {
+      const { goalChunks } = await runGoalStep('continue', makeRecord({ id: 'goal-1' }));
+
+      await vi.waitFor(() => {
+        const activityChunks = goalChunks.filter(c => c.payload.activity?.length);
+        expect(activityChunks.map(c => c.payload.activity[0])).toEqual([
+          { type: 'tool-call', name: 'read', message: 'read packages/core/src/agent/goal/scorer.ts' },
+          { type: 'tool-result', name: 'read', message: 'read packages/core/src/agent/goal/scorer.ts' },
+          { type: 'reason', message: 'need' },
+          { type: 'reason', message: 'need verification' },
+        ]);
+      });
+      expect(goalChunks[0].payload.pending).toBe(true);
+      expect(goalChunks.at(-1)?.payload.pending).toBeFalsy();
     } finally {
       streamSpy.mockRestore();
     }
@@ -199,14 +240,17 @@ describe('goal step waiting semantics', () => {
     expect(chunk.payload.status).toBe('active');
   });
 
-  it('surfaces a "Waiting for the user" note in the transcript feedback on waiting', async () => {
-    const { messages } = await runGoalStep('waiting', makeRecord());
-    const text = messages
-      .flatMap(m => m.content?.parts ?? [])
-      .map((p: any) => p.text)
-      .join('\n');
-    expect(text).toContain('Waiting for the user');
-    expect(text).toContain('r:waiting');
+  it('persists waiting feedback as a goal-judge signal, not assistant-authored transcript text', async () => {
+    const { messages, chunk } = await runGoalStep('waiting', makeRecord());
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]._source).toBe('input');
+    expect(messages[0].role).toBe('signal');
+    expect(messages[0].content.metadata.signal.attributes).toEqual({ type: 'goal-judge' });
+    expect(messages[0].content.metadata.signal.metadata.goalEvaluation.waitingForUser).toBe(true);
+    expect(messages[0].content.metadata.signal.metadata.goalEvaluation.reason).toBe('r:waiting');
+    expect(chunk.payload.waitingForUser).toBe(true);
+    expect(chunk.payload.reason).toBe('r:waiting');
   });
 
   it('persists pausedReason only while parked (paused), not for waiting or active', async () => {
@@ -219,6 +263,29 @@ describe('goal step waiting semantics', () => {
 
     const done = await runGoalStep('done', makeRecord());
     expect(done.record.pausedReason).toBeUndefined();
+  });
+
+  it('emits a goal-judge signal through the current loop signal path on continue', async () => {
+    const { messages, dataParts, inputData } = await runGoalStep('continue', makeRecord({ runsUsed: 1, maxRuns: 10 }));
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]._source).toBe('input');
+    expect(messages[0].role).toBe('signal');
+    expect(messages[0].content.metadata.signal.attributes).toEqual({ type: 'goal-judge' });
+    expect(messages[0].content.metadata.signal.metadata.goalEvaluation).toMatchObject({
+      iteration: 2,
+      maxRuns: 10,
+      status: 'active',
+      passed: false,
+      reason: 'r:continue',
+    });
+    expect(messages[0].content.parts[0].text).toBe(
+      '[Goal attempt 2/10] The goal is not yet complete. Judge feedback: r:continue\n\nContinue working toward the goal: implement X, then stop and wait for my review',
+    );
+    expect(inputData.messageId).toBe('response-2');
+    expect(dataParts).toHaveLength(1);
+    expect(dataParts[0].options).toEqual({ messageId: 'response-2' });
+    expect(dataParts[0].data.type).toBe('data-signal');
   });
 
   it('emits a pending chunk before scoring so consumers can show a loading indicator', async () => {
@@ -258,14 +325,17 @@ describe('goal step judge-failure semantics', () => {
     expect(chunk.payload.judgeFailed).toBe(true);
   });
 
-  it('surfaces a "judge failed to evaluate" note in the transcript feedback', async () => {
-    const { messages } = await runGoalStep('done', makeRecord(), { throwingScorer: true });
-    const text = messages
-      .flatMap(m => m.content?.parts ?? [])
-      .map((p: any) => p.text)
-      .join('\n');
-    expect(text).toContain('the judge failed to evaluate');
-    expect(text).toContain('judge model exploded');
+  it('persists judge failure feedback as a goal-judge signal, not assistant-authored transcript text', async () => {
+    const { messages, chunk } = await runGoalStep('done', makeRecord(), { throwingScorer: true });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]._source).toBe('input');
+    expect(messages[0].role).toBe('signal');
+    expect(messages[0].content.metadata.signal.attributes).toEqual({ type: 'goal-judge' });
+    expect(messages[0].content.metadata.signal.metadata.goalEvaluation.judgeFailed).toBe(true);
+    expect(messages[0].content.metadata.signal.metadata.goalEvaluation.reason).toContain('judge model exploded');
+    expect(chunk.payload.judgeFailed).toBe(true);
+    expect(chunk.payload.reason).toContain('judge model exploded');
   });
 
   it('stops on the FIRST judge failure instead of iterating toward a large budget (infinite-loop regression)', async () => {
@@ -344,13 +414,16 @@ describe('goal step budget-exhaustion semantics', () => {
     expect(chunk.payload.passed).toBe(true);
   });
 
-  it('surfaces a "Goal paused" budget note in the transcript feedback', async () => {
-    const { messages } = await runGoalStep('continue', makeRecord({ maxRuns: 1 }));
-    const text = messages
-      .flatMap(m => m.content?.parts ?? [])
-      .map((p: any) => p.text)
-      .join('\n');
-    expect(text).toContain('Goal paused');
-    expect(text).toContain('budget');
+  it('persists budget pause feedback as a goal-judge signal, not assistant-authored transcript text', async () => {
+    const { messages, chunk } = await runGoalStep('continue', makeRecord({ maxRuns: 1 }));
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]._source).toBe('input');
+    expect(messages[0].role).toBe('signal');
+    expect(messages[0].content.metadata.signal.attributes).toEqual({ type: 'goal-judge' });
+    expect(messages[0].content.metadata.signal.metadata.goalEvaluation.status).toBe('paused');
+    expect(messages[0].content.metadata.signal.metadata.goalEvaluation.reason).toContain('budget');
+    expect(chunk.payload.status).toBe('paused');
+    expect(chunk.payload.reason).toContain('budget');
   });
 });

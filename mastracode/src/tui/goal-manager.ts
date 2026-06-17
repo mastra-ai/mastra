@@ -180,10 +180,10 @@ export class GoalManager {
     return this.getGoal();
   }
 
-  pause(): GoalState | null {
+  pause(reason?: string): GoalState | null {
     if (this.record && this.record.status === 'active') {
       this.stopActiveTimer();
-      this.record = { ...this.record, status: 'paused', updatedAt: Date.now() };
+      this.record = { ...this.record, status: 'paused', pausedReason: reason, updatedAt: Date.now() };
     }
     return this.getGoal();
   }
@@ -241,6 +241,7 @@ export class GoalManager {
           const updated = await agent.updateObjectiveOptions({
             threadId,
             status: this.record.status,
+            ...(this.record.pausedReason ? { pausedReason: this.record.pausedReason } : {}),
             ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
             ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
           });
@@ -258,7 +259,11 @@ export class GoalManager {
               ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
             });
             if (desiredStatus !== 'active') {
-              await agent.updateObjectiveOptions({ threadId, status: desiredStatus });
+              await agent.updateObjectiveOptions({
+                threadId,
+                status: desiredStatus,
+                ...(this.record.pausedReason ? { pausedReason: this.record.pausedReason } : {}),
+              });
             }
           }
         } else {

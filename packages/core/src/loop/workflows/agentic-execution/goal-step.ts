@@ -1,5 +1,5 @@
+import { generateId } from '@internal/ai-sdk-v5';
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import type { MastraDBMessage } from '../../../agent';
 import {
   createGoalScorer,
   GOAL_SCORE_WAITING,
@@ -13,18 +13,83 @@ import type { ResolvedGoalStore } from '../../../agent/goal';
 import type { ToolsInput } from '../../../agent/types';
 import type { MastraScorer } from '../../../evals';
 import { resolveModelConfig } from '../../../llm';
+import { createProcessorSendSignal } from '../../../processors/send-signal';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
-import type { ChunkType } from '../../../stream/types';
+import type { ChunkType, GoalEvaluationActivity } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
-import { runStreamCompletionScorers, formatStreamCompletionFeedback } from '../../network/validation';
+import { runStreamCompletionScorers } from '../../network/validation';
 import type { StreamCompletionContext } from '../../network/validation';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 
 function isWorkingMemoryTool(name: string): boolean {
   return name === 'updateWorkingMemory' || name === 'setWorkingMemory' || name === 'update-working-memory';
+}
+
+function formatJudgeActivityName(name: string | undefined): string | undefined {
+  if (!name) return undefined;
+  if (name === 'view') return 'read';
+  if (name === 'search_content') return 'search';
+  if (name === 'find_files') return 'find files';
+  if (name === 'file_stat') return 'stat';
+  if (name === 'lsp_inspect') return 'inspect';
+  return name;
+}
+
+function getStringArg(args: unknown, key: string): string | undefined {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return undefined;
+  const value = (args as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function truncateActivityDetail(value: string): string {
+  return value.length > 80 ? `${value.slice(0, 77)}...` : value;
+}
+
+function extractPartialReasonFromStructuredText(text: string): string | undefined {
+  const match = text.match(/"reason"\s*:\s*"((?:\\.|[^"\\])*)/);
+  const partialReason = match?.[1];
+  if (!partialReason) return undefined;
+  return partialReason
+    .replace(/\\n/g, '\n')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\')
+    .trim();
+}
+
+function formatJudgeActivityMessage(name: string | undefined, args: unknown): string | undefined {
+  const label = formatJudgeActivityName(name);
+  if (!label) return undefined;
+
+  if (name === 'view' || name === 'file_stat') {
+    const path = getStringArg(args, 'path');
+    return path ? `${label} ${truncateActivityDetail(path)}` : label;
+  }
+
+  if (name === 'search_content') {
+    const pattern = getStringArg(args, 'pattern');
+    const path = getStringArg(args, 'path');
+    const detail = [pattern, path].filter(Boolean).join(' in ');
+    return detail ? `${label} ${truncateActivityDetail(detail)}` : label;
+  }
+
+  if (name === 'find_files') {
+    const path = getStringArg(args, 'path');
+    const pattern = getStringArg(args, 'pattern');
+    const detail = [path, pattern].filter(Boolean).join(' ');
+    return detail ? `${label} ${truncateActivityDetail(detail)}` : label;
+  }
+
+  if (name === 'lsp_inspect') {
+    const path = getStringArg(args, 'path');
+    const line = !args || typeof args !== 'object' || Array.isArray(args) ? undefined : (args as Record<string, unknown>).line;
+    const detail = path ? `${path}${typeof line === 'number' ? `:${line}` : ''}` : undefined;
+    return detail ? `${label} ${truncateActivityDetail(detail)}` : label;
+  }
+
+  return label;
 }
 
 /**
@@ -37,7 +102,7 @@ function isWorkingMemoryTool(name: string): boolean {
 export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   params: OuterLLMRun<Tools, OUTPUT>,
 ) {
-  const { goal, messageList, requestContext, mastra, controller, runId, _internal, agentId, agentName } = params;
+  const { goal, messageList, requestContext, mastra, controller, runId, _internal, agentId, agentName, outputWriter } = params;
 
   return createStep({
     id: 'goalStep',
@@ -134,6 +199,58 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       // below handles it uniformly regardless of where the failure originated.
       let result: Awaited<ReturnType<typeof runStreamCompletionScorers>>;
       try {
+        const emitJudgeActivity = (activity: GoalEvaluationActivity, args?: unknown) => {
+          const name = activity.type === 'reason' ? activity.name : formatJudgeActivityName(activity.name ?? activity.message);
+          const message = activity.type === 'reason' ? activity.message : formatJudgeActivityMessage(activity.name ?? activity.message, args);
+          if (!message) return;
+          controller.enqueue({
+            type: 'goal',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              objective: record.objective,
+              iteration: record.runsUsed + 1,
+              maxRuns: effective.maxRuns,
+              passed: false,
+              status: record.status,
+              results: [],
+              duration: 0,
+              timedOut: false,
+              maxRunsReached: false,
+              suppressFeedback: true,
+              pending: true,
+              activity: [{ ...activity, name, message }],
+            },
+          } as ChunkType<OUTPUT>);
+        };
+        const observeJudgeStream = (stream: { fullStream?: AsyncIterable<ChunkType> }) => {
+          if (!stream.fullStream) return;
+          void (async () => {
+            let streamedText = '';
+            let lastReason = '';
+            for await (const chunk of stream.fullStream!) {
+              if (chunk.type === 'text-delta') {
+                streamedText += chunk.payload.text;
+                const reason = extractPartialReasonFromStructuredText(streamedText);
+                if (reason && reason !== lastReason) {
+                  lastReason = reason;
+                  emitJudgeActivity({ type: 'reason', message: reason });
+                }
+              } else if (chunk.type === 'tool-call') {
+                emitJudgeActivity(
+                  { type: 'tool-call', name: chunk.payload.toolName, message: chunk.payload.toolName },
+                  chunk.payload.args,
+                );
+              } else if (chunk.type === 'tool-result') {
+                emitJudgeActivity(
+                  { type: 'tool-result', name: chunk.payload.toolName, message: chunk.payload.toolName },
+                  chunk.payload.args,
+                );
+              }
+            }
+          })();
+        };
+
         // Resolve the scorer: a custom `goal.scorer` (instance or registered id),
         // else a default goal scorer built with the resolved judge model + prompt.
         // The judge model is only resolved to a concrete model when the default
@@ -168,6 +285,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
             judgeModel,
             prompt: effective.prompt,
             tools: goalTools,
+            onStream: observeJudgeStream,
             ...(_internal?.memory
               ? {
                   memory: _internal.memory,
@@ -316,64 +434,63 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       // The goal gate makes the final continuation decision: complete, parked,
       // waiting for user input, or budget reached → stop; otherwise force
       // another iteration toward the goal.
+      const shouldContinue = !result.complete && !waiting && !judgeFailed && !maxRunsReached;
       if (inputData.stepResult) {
-        inputData.stepResult.isContinued = !result.complete && !waiting && !judgeFailed && !maxRunsReached;
+        inputData.stepResult.isContinued = shouldContinue;
       }
 
       const suppressFeedback = false;
-      // The generic formatter renders any non-complete result as "🔄 keep
-      // working", which is misleading when the goal is parked. Replace the
-      // trailing guidance with a cause-specific note so the transcript reflects
-      // that the goal is paused, not iterating.
-      let feedback = formatStreamCompletionFeedback(result, maxRunsReached);
-      if (judgeFailed) {
-        feedback += `\n\n⏸️ Goal paused — the judge failed to evaluate: ${pausedReason}`;
-      } else if (waiting) {
-        feedback += `\n\n◌ Waiting for the user: ${result.completionReason ?? 'The goal asked to stop and wait for your input.'}`;
-      } else if (status === 'paused' && maxRunsReached) {
-        feedback += `\n\n⏸️ Goal paused — ${pausedReason}`;
-      }
-      messageList.add(
-        {
-          id: mastra?.generateId(),
-          createdAt: new Date(),
-          type: 'text',
-          role: 'assistant',
-          content: {
-            parts: [{ type: 'text', text: feedback }],
-            metadata: {
-              mode: 'stream',
-              completionResult: { passed: result.complete, suppressFeedback },
-            },
-            format: 2,
-          },
-        } as MastraDBMessage,
-        'response',
-      );
+      const goalEvaluationPayload = {
+        objective: record.objective,
+        iteration: runsUsed,
+        maxRuns: effective.maxRuns,
+        passed: result.complete,
+        status,
+        pausedReason,
+        judgeFailed,
+        waitingForUser: waiting,
+        results: result.scorers,
+        // Parked goals should render the pause cause, not the last continue
+        // reason that happened to exhaust the budget.
+        reason: status === 'paused' ? pausedReason : result.completionReason,
+        duration: result.totalDuration,
+        timedOut: result.timedOut,
+        maxRunsReached,
+        suppressFeedback,
+      };
+
+      let currentMessageId = inputData.messageId;
+      const sendSignal = createProcessorSendSignal({
+        messageList,
+        writer: outputWriter
+          ? {
+              custom: async (data, options) => {
+                await outputWriter(data as ChunkType, { ...options, messageId: currentMessageId });
+              },
+            }
+          : undefined,
+        rotateResponseMessageId: () => {
+          currentMessageId = _internal?.generateId?.() ?? generateId();
+          inputData.messageId = currentMessageId;
+          return currentMessageId;
+        },
+      });
+      const feedback = result.completionReason ?? 'The goal is not yet complete.';
+      const continuation = shouldContinue
+        ? `[Goal attempt ${runsUsed}/${effective.maxRuns}] The goal is not yet complete. Judge feedback: ${feedback}\n\nContinue working toward the goal: ${record.objective}`
+        : `${status} (${runsUsed}/${effective.maxRuns})\n${goalEvaluationPayload.reason ?? ''}`;
+      await sendSignal({
+        type: 'system-reminder',
+        contents: continuation,
+        attributes: { type: 'goal-judge' },
+        metadata: { goalEvaluation: goalEvaluationPayload },
+      });
 
       controller.enqueue({
         type: 'goal',
         runId,
         from: ChunkFrom.AGENT,
-        payload: {
-          objective: record.objective,
-          iteration: runsUsed,
-          maxRuns: effective.maxRuns,
-          passed: result.complete,
-          status,
-          pausedReason,
-          judgeFailed,
-          waitingForUser: waiting,
-          results: result.scorers,
-          // Prefer the completion reason, but fall back to the pause reason so a
-          // parked goal (judge failure or budget) always surfaces a cause to
-          // consumers that render `reason` (e.g. the TUI judge display).
-          reason: result.completionReason ?? pausedReason,
-          duration: result.totalDuration,
-          timedOut: result.timedOut,
-          maxRunsReached,
-          suppressFeedback,
-        },
+        payload: goalEvaluationPayload,
       } as ChunkType<OUTPUT>);
 
       return inputData;

@@ -314,6 +314,36 @@ describe('createScorer', () => {
       }
     });
 
+    it('exposes the internal judge stream when it starts', async () => {
+      let resolveObject!: (value: { score: number }) => void;
+      const judgeStream = { object: new Promise(resolve => (resolveObject = resolve)), fullStream: new ReadableStream() } as any;
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockResolvedValue(judgeStream);
+      try {
+        const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+        const onStream = vi.fn(() => resolveObject({ score: 1 }));
+
+        const scorer = createScorer({
+          id: 'judge-stream-scorer',
+          name: 'judge-stream-scorer',
+          description: 'Verifies scorer judge stream observer plumbing',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            onStream,
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        expect(onStream).toHaveBeenCalledWith(judgeStream);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
     it('lets the per-step judge override the scorer-level jsonPromptInjection', async () => {
       const streamSpy = vi.spyOn(Agent.prototype, 'stream');
       try {
@@ -377,8 +407,8 @@ describe('createScorer', () => {
 
         // Two stream calls: the failed first attempt + the jsonPromptInjection retry.
         expect(streamSpy).toHaveBeenCalledTimes(2);
-        expect((streamSpy.mock.calls[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
-        expect((streamSpy.mock.calls[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
+        expect(((streamSpy.mock.calls as any)[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
+        expect(((streamSpy.mock.calls as any)[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
         // The scorer recovered and produced the retried score.
         expect(result.score).toBe(1);
       } finally {

@@ -216,11 +216,15 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   activeGoalJudge.abortController.abort();
   activeGoalJudge.component.setInterrupted();
   // Esc during an in-loop goal evaluation pauses the goal so it does not
-  // continue on the next iteration. Persist the paused state immediately so a
-  // thread switch or exit before the next save does not reload the old active
-  // objective and effectively undo the pause. `saveToThread` is best-effort, so
-  // run it fire-and-forget to keep this abort handler synchronous.
-  state.goalManager.pause();
+  // continue on the next iteration. Abort the active harness run too: the core
+  // scorer owns the judge stream, so the TUI-local controller alone only changes
+  // the visual component and lets the judge continue in the background.
+  state.harness.abort();
+  // Persist the paused state immediately so a thread switch or exit before the
+  // next save does not reload the old active objective and effectively undo the
+  // pause. `saveToThread` is best-effort, so run it fire-and-forget to keep this
+  // abort handler synchronous.
+  state.goalManager.pause('Judge evaluation was interrupted.');
   void state.goalManager.saveToThread(state);
   state.activeGoalJudge = undefined;
   state.ui.requestRender();

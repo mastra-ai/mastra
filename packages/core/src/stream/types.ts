@@ -410,6 +410,12 @@ export interface IsTaskCompletePayload {
  * Payload for `goal` events emitted by the in-loop goal scorer. Consumers (TUIs,
  * `@mastra/client-js`) use this to render judge progress and the result.
  */
+export interface GoalEvaluationActivity {
+  type: 'tool-call' | 'tool-result' | 'reason';
+  name?: string;
+  message: string;
+}
+
 export interface GoalEvaluationPayload {
   /** The objective being judged. */
   objective: string;
@@ -454,6 +460,8 @@ export interface GoalEvaluationPayload {
    * evaluation is complete.
    */
   pending?: boolean;
+  /** Judge activity emitted while the evaluation is still running. */
+  activity?: GoalEvaluationActivity[];
 }
 
 export interface BackgroundTaskStartedPayload {

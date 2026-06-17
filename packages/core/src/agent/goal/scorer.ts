@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import type { AgentMemoryOption, ToolsInput } from '../../agent/types';
 import { createScorer } from '../../evals';
+import type { ScorerJudgeConfig } from '../../evals';
 import type { MastraModelConfig } from '../../llm';
 import type { MastraMemory } from '../../memory';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING, GOAL_SCORER_ID } from './objective';
@@ -96,12 +97,14 @@ export function createGoalScorer({
   tools,
   memory,
   defaultMemoryOptions,
+  onStream,
 }: {
   judgeModel: MastraModelConfig;
   prompt?: string;
   tools?: ToolsInput;
   memory?: MastraMemory;
   defaultMemoryOptions?: AgentMemoryOption;
+  onStream?: ScorerJudgeConfig['onStream'];
 }) {
   const hasTools = !!tools && Object.keys(tools).length > 0;
   const instructions = prompt ?? DEFAULT_GOAL_JUDGE_PROMPT;
@@ -116,6 +119,7 @@ export function createGoalScorer({
       ...(hasTools ? { tools } : {}),
       ...(memory ? { memory } : {}),
       ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),
+      ...(onStream ? { onStream } : {}),
     },
   })
     .analyze({
