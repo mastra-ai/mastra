@@ -3,7 +3,8 @@ import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
-import type { AgentExecutionOptions } from './agent.types';
+import { Agent } from './agent';
+import type { AgentExecutionOptions, PublicAgentExecutionOptions } from './agent.types';
 import type { AgentConfig } from './types';
 
 /**
@@ -149,6 +150,106 @@ describe('Agent Type Tests', () => {
       };
 
       expectTypeOf(config.id).toEqualTypeOf<'test-agent'>();
+    });
+  });
+
+  describe('Issue #16732: AgentExecutionOptions<undefined> should not require structuredOutput', () => {
+    it('should allow AgentExecutionOptions<undefined> without structuredOutput', () => {
+      assertType<AgentExecutionOptions<undefined>>({ maxSteps: 50 });
+    });
+
+    it('should allow PublicAgentExecutionOptions<undefined> without structuredOutput', () => {
+      assertType<PublicAgentExecutionOptions<undefined>>({ maxSteps: 50 });
+    });
+
+    it('should allow AgentExecutionOptions<null> without structuredOutput', () => {
+      assertType<AgentExecutionOptions<null>>({ maxSteps: 50 });
+    });
+
+    it('should still require structuredOutput for an object OUTPUT', () => {
+      const schema = z.object({ value: z.string() });
+      // @ts-expect-error structuredOutput is required when OUTPUT is an object
+      assertType<AgentExecutionOptions<{ value: string }>>({ maxSteps: 50 });
+      assertType<AgentExecutionOptions<{ value: string }>>({
+        maxSteps: 50,
+        structuredOutput: { schema },
+      });
+    });
+
+    it('should not require structuredOutput for a nullable union (T | undefined)', () => {
+      // NonNullable<string | undefined> is `string`, which is not an object type,
+      // so structuredOutput stays optional for the nullable-union case.
+      assertType<AgentExecutionOptions<string | undefined>>({ maxSteps: 50 });
+    });
+  });
+
+  // Editor ownership is enforced via the `TEditor` generic inferred at
+  // `new Agent({...})` from the literal `editor` property. Annotating a value
+  // as the bare `AgentConfig` (default `TEditor`) intentionally does NOT narrow
+  // ownership, so these tests construct agents to exercise inference.
+  describe('editor config ownership', () => {
+    it('requires instructions when editor is absent', () => {
+      // @ts-expect-error - instructions is required when not owned by the editor
+      new Agent({ id: 'a', name: 'A', model: {} as any });
+    });
+
+    it('requires instructions when editor is false (nothing owned)', () => {
+      new Agent({ id: 'a', name: 'A', model: {} as any, editor: false, instructions: 'hi', tools: {} });
+
+      // @ts-expect-error - instructions still required when editor is false
+      new Agent({ id: 'a', name: 'A', model: {} as any, editor: false });
+    });
+
+    it('forbids instructions in code when editor owns instructions', () => {
+      new Agent({ id: 'a', name: 'A', model: {} as any, editor: { instructions: true }, tools: {} });
+
+      new Agent({
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        editor: { instructions: true },
+        // @ts-expect-error - instructions are owned by the editor, code must not set them
+        instructions: 'hi',
+      });
+    });
+
+    it('forbids tools in code when editor owns tool membership', () => {
+      new Agent({ id: 'a', name: 'A', model: {} as any, editor: { tools: true }, instructions: 'hi' });
+
+      new Agent({
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        editor: { tools: true },
+        instructions: 'hi',
+        // @ts-expect-error - tool membership is owned by the editor, code must not set tools
+        tools: {},
+      });
+    });
+
+    it('keeps tools code-owned in descriptions-only mode', () => {
+      // description-only editing leaves tool membership in code, so tools stay allowed
+      new Agent({
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        editor: { tools: { description: true } },
+        instructions: 'hi',
+        tools: {},
+      });
+    });
+
+    it('forbids both fields when editor owns instructions and tools', () => {
+      new Agent({ id: 'a', name: 'A', model: {} as any, editor: { instructions: true, tools: true } });
+
+      new Agent({
+        id: 'a',
+        name: 'A',
+        model: {} as any,
+        editor: { instructions: true, tools: true },
+        // @ts-expect-error - both fields owned by the editor
+        instructions: 'hi',
+      });
     });
   });
 });

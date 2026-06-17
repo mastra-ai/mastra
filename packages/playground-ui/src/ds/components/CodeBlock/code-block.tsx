@@ -1,7 +1,4 @@
-import * as React from 'react';
-import type { ThemedToken } from 'shiki';
-
-import { highlight } from '../CodeEditor';
+import { Code } from '../Code';
 import { CopyButton } from '../CopyButton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { Tab, TabList, Tabs } from '../Tabs';
@@ -9,6 +6,8 @@ import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type CodeBlockSelector = 'select' | 'tabs';
+
+export type CodeBlockOverflow = 'wrap' | 'scroll';
 
 export interface CodeBlockOption {
   label: string;
@@ -23,6 +22,9 @@ export interface CodeBlockProps {
   selector?: CodeBlockSelector;
   fileName?: string;
   lang?: string;
+  /** `wrap` (default) breaks long lines — best for commands and snippets.
+   *  `scroll` preserves columns behind a horizontal scroll — best for source code. */
+  overflow?: CodeBlockOverflow;
   copyMessage?: string;
   copyTooltip?: string;
   className?: string;
@@ -36,6 +38,7 @@ export function CodeBlock({
   selector = 'select',
   fileName,
   lang,
+  overflow = 'wrap',
   copyMessage,
   copyTooltip,
   className,
@@ -88,7 +91,14 @@ export function CodeBlock({
       )}
 
       <div className="relative">
-        <HighlightedCode code={code} lang={lang} />
+        <Code
+          code={code}
+          lang={lang}
+          className={cn(
+            'px-4 py-3 font-mono text-ui-sm text-neutral5',
+            overflow === 'scroll' ? 'overflow-x-auto whitespace-pre' : 'whitespace-pre-wrap break-all',
+          )}
+        />
         <CopyButton
           content={code}
           copyMessage={copyMessage}
@@ -101,61 +111,5 @@ export function CodeBlock({
         />
       </div>
     </figure>
-  );
-}
-
-interface HighlightedCodeProps {
-  code: string;
-  lang?: string;
-}
-
-function HighlightedCode({ code, lang }: HighlightedCodeProps) {
-  const [tokens, setTokens] = React.useState<ThemedToken[][] | null>(null);
-
-  React.useEffect(() => {
-    if (!lang) {
-      setTokens(null);
-      return;
-    }
-    setTokens(null);
-    let cancelled = false;
-    void highlight(code, lang)
-      .then(result => {
-        if (!cancelled && result) setTokens(result);
-      })
-      .catch(() => {
-        // Highlighting failed — plain-text fallback remains visible.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [code, lang]);
-
-  const preClass = 'px-4 py-3 font-mono text-ui-sm text-neutral5 whitespace-pre-wrap break-all';
-
-  if (!lang || !tokens) {
-    return <pre className={preClass}>{code}</pre>;
-  }
-
-  return (
-    <pre className={preClass}>
-      <code>
-        {tokens.map((line, lineIndex) => (
-          <React.Fragment key={lineIndex}>
-            <span>
-              {line.map((token, tokenIndex) => (
-                <span
-                  key={tokenIndex}
-                  className="text-shiki-light bg-shiki-light-bg dark:text-shiki-dark dark:bg-shiki-dark-bg"
-                >
-                  {token.content}
-                </span>
-              ))}
-            </span>
-            {lineIndex !== tokens.length - 1 && '\n'}
-          </React.Fragment>
-        ))}
-      </code>
-    </pre>
   );
 }

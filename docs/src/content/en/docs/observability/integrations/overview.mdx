@@ -1,0 +1,52 @@
+---
+title: "Integrations overview"
+description: "Choose exporters, bridges, and processors for Mastra observability."
+packages:
+  - "@mastra/observability"
+---
+
+# Integrations overview
+
+Mastra observability integrations control where observability data goes and how it's transformed on the way out. Use integrations to store data in Mastra storage, send it to Mastra platform, connect to external observability providers, or redact exported span data.
+
+## When to use integrations
+
+- Keep observability available in Studio with `MastraStorageExporter`.
+- Send hosted observability data to Mastra platform with `MastraPlatformExporter`.
+- Forward traces to external providers such as Datadog, Langfuse, or OpenTelemetry backends.
+- Redact sensitive values before they leave the runtime.
+
+## Choose an integration path
+
+- Studio workflow: Start with [Mastra Storage](/docs/observability/integrations/exporters/mastra-storage).
+- Hosted Mastra workflow: Add [Mastra platform](/docs/observability/integrations/exporters/mastra-platform).
+- External observability stack: Choose one or more exporter pages under the sidebar `Exporters` section.
+- Existing distributed trace context: Use a bridge, then add exporters as needed.
+
+## Exporters
+
+Exporters send observability data to a destination:
+
+- [Mastra Storage](/docs/observability/integrations/exporters/mastra-storage): Persist observability data for Studio.
+- [Mastra platform](/docs/observability/integrations/exporters/mastra-platform): Send hosted observability data to Mastra platform.
+- External providers: Use exporter pages for Datadog, Langfuse, OpenTelemetry, and other supported platforms.
+
+## Bridges
+
+Bridges connect Mastra to an existing distributed tracing context:
+
+- [OpenTelemetry bridge](/docs/observability/integrations/bridges/otel): Integrate Mastra with an existing OpenTelemetry trace.
+- [Datadog bridge](/docs/observability/integrations/bridges/datadog): Integrate Mastra with Datadog tracing and LLM Observability flows.
+
+## Processors
+
+Processors transform or redact spans before export:
+
+- [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter): Redact sensitive fields before spans leave the runtime.
+
+## Next steps
+
+- [Configuration](/docs/observability/config)
+- [Tracing](/docs/observability/tracing/overview)
+- [Mastra Storage](/docs/observability/integrations/exporters/mastra-storage)
+- [OpenTelemetry bridge](/docs/observability/integrations/bridges/otel)

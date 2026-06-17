@@ -8,6 +8,7 @@ import type { MCPServerBase } from '../mcp';
 import type { ProcessorProvider } from '../processor-provider';
 import type { RequestContext } from '../request-context';
 import type { BlobStore } from '../storage/domains/blobs/base';
+import type { SourceControlProvider } from '../storage/source-control';
 import type {
   AgentInstructionBlock,
   StorageCreateAgentInput,
@@ -178,6 +179,32 @@ export interface MastraEditorConfig {
    * When present and enabled, the editor provides agent building capabilities.
    */
   builder?: AgentBuilderOptions;
+  /**
+   * Source of truth for agent overrides — controls how they are persisted and
+   * surfaced in Studio.
+   *
+   * - `'code'` — overrides live as deterministic per-agent JSON files on disk
+   *   (default `./mastra/editor/`). Studio replaces Save/Publish with
+   *   filesystem/PR actions and routes editor storage domains through a local
+   *   `FilesystemStore` at `codePath`.
+   * - `'db'` — overrides live in the configured storage backend. Studio shows
+   *   the standard Save/Publish flow.
+   */
+  source?: 'code' | 'db';
+  /**
+   * Filesystem path used by the `'code'` source for per-agent JSON files.
+   * Defaults to `./mastra/editor/`. Ignored when `source` is not `'code'`.
+   */
+  codePath?: string;
+  /**
+   * Optional provider used by the `'code'` source to persist overrides in a
+   * source-control backed system instead of the local filesystem.
+   *
+   * Local development can omit this and use `codePath`. Hosted deployments
+   * should provide a source provider or expose code-source editing as
+   * unavailable.
+   */
+  sourceControlProvider?: SourceControlProvider;
 }
 
 export interface GetByIdOptions {
@@ -410,6 +437,12 @@ export interface IMastraEditor {
 
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined;
+  /**
+   * Like {@link getToolProvider}, but throws {@link UnknownToolProviderError}
+   * when the id is unknown. Useful in HTTP handlers that want to translate
+   * a missing provider into a 404.
+   */
+  getToolProviderOrThrow(id: string): ToolProvider;
   /** List all registered tool providers */
   getToolProviders(): Record<string, ToolProvider>;
 
@@ -432,4 +465,14 @@ export interface IMastraEditor {
    * Optional for backwards compatibility.
    */
   resolveBuilder?(): Promise<IAgentBuilder | undefined>;
+
+  /**
+   * Returns the editor's configured source (`'code'` | `'db'`), or `undefined`
+   * if the editor was constructed without an explicit source. Optional for
+   * backwards compatibility.
+   */
+  getSource?(): 'code' | 'db' | undefined;
+
+  /** Returns the source control provider configured for code source, if any. */
+  getSourceControlProvider?(): SourceControlProvider | undefined;
 }

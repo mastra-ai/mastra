@@ -35,7 +35,7 @@ Observational memory lets the agent learn long-lived facts from past conversatio
 
 ## Observational memory model
 
-Observational memory runs an Observer and Reflector model on top of every conversation. The default model is `google/gemini-2.5-flash`, which requires a `GOOGLE_GENERATIVE_AI_API_KEY` environment variable in any environment where the Builder agent will run.
+Observational memory runs an Observer and Reflector model on top of every conversation. The default model is `__GATEWAY_GOOGLE_MODEL__`, which requires a `GOOGLE_API_KEY` environment variable in any environment where the Builder agent will run. Mastra also falls back to `GOOGLE_GENERATIVE_AI_API_KEY`.
 
 To use a different model, set `observationalMemory.model` to any model ID supported by the Mastra model router (and provide the matching provider credentials):
 
@@ -70,6 +70,6 @@ If a required adapter is missing, Mastra throws a descriptive error at agent run
 
 ## Related
 
-- [Memory overview](/docs/memory/overview) — concepts and core configuration.
-- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — the full `memory` field schema.
-- [Configuration](/docs/agent-builder/configuration) — wire `memory` alongside the rest of the Builder config.
+- [Memory overview](/docs/memory/overview): Concepts and core configuration.
+- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults): The full `memory` field schema.
+- [Configuration](/docs/agent-builder/configuration): Wire `memory` alongside the rest of the Builder config.

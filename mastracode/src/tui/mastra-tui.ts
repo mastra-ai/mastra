@@ -4,7 +4,7 @@
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import type { Component } from '@mariozechner/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
@@ -41,6 +41,7 @@ import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
+import { GradientAnimator } from './components/obi-loader.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
@@ -54,7 +55,6 @@ import {
   addPendingUserMessage,
   addUserMessage,
   removePendingUserMessage,
-  renderCompletedTasksInline,
   renderClearedTasksInline,
   renderExistingMessages,
 } from './render-messages.js';
@@ -72,7 +72,7 @@ import {
 } from './setup.js';
 import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
-import { createTUIState } from './state.js';
+import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
 
 // =============================================================================
@@ -90,6 +90,9 @@ export type { MastraTUIOptions } from './state.js';
  * active run it is tagged as while-active; when it starts a new run it is a message.
  * The LLM sees these as XML attributes on the `<user-message>` element.
  */
+type GithubPollingChangedHandler = (event: { threadId: string; resourceId: string; running: boolean }) => void;
+type GithubSignalsWithPollingEvents = { onPollingChanged?: (handler: GithubPollingChangedHandler) => void };
+
 const USER_SIGNAL_DELIVERY_OPTIONS: {
   ifActive: { attributes: AgentSignalAttributes };
   ifIdle: { attributes: AgentSignalAttributes };
@@ -112,7 +115,14 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   if (initThread?.title) {
     state.currentThreadTitle = initThread.title;
   }
-  state.goalManager.loadFromThreadMetadata(initThread?.metadata as Record<string, unknown> | undefined);
+  const metadata = initThread?.metadata as Record<string, unknown> | undefined;
+  state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
+  // Prefer the durable ThreadState objective; fall back to the legacy
+  // thread-metadata goal for threads created before the migration.
+  await state.goalManager.loadFromThread(state);
+  if (!state.goalManager.getGoal()) {
+    state.goalManager.loadFromThreadMetadata(metadata);
+  }
 }
 
 function shouldUseCaffeinate(): boolean {
@@ -145,6 +155,38 @@ export class MastraTUI {
   constructor(options: MastraTUIOptions) {
     this.state = createTUIState(options);
 
+    options.githubSignals?.onSubscriptionsChanged(event => {
+      const currentThreadId = this.state.harness.getCurrentThreadId?.();
+      const currentResourceId = this.state.harness.getResourceId?.();
+      if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
+      this.state.activeGithubPrSubscriptions = event.subscriptions.map(subscription => ({
+        owner: subscription.owner,
+        repo: subscription.repo,
+        prNumber: subscription.number,
+        lastSyncStatus: subscription.lastSyncStatus,
+        lastNotificationKind: subscription.lastNotificationKind,
+        lastNotificationPriority: subscription.lastNotificationPriority,
+      }));
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+    });
+
+    (options.githubSignals as GithubSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
+      const currentThreadId = this.state.harness.getCurrentThreadId?.();
+      const currentResourceId = this.state.harness.getResourceId?.();
+      if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
+      if (!this.state.githubPrGradientAnimator) {
+        this.state.githubPrGradientAnimator = new GradientAnimator(() => {
+          updateStatusLine(this.state);
+        });
+      }
+      this.state.githubPrPollingActive = event.running;
+      if (event.running) this.state.githubPrGradientAnimator.start();
+      else this.state.githubPrGradientAnimator.stop();
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+    });
+
     // Load user preferences
     const savedSettings = loadSettings();
     this.state.quietMode = savedSettings.preferences.quietMode;
@@ -153,15 +195,24 @@ export class MastraTUI {
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
     this.state.editor.handleInput = (data: string) => {
-      // If there's an active plan approval, route input to it
+      // If there's an active plan approval, route input to it. Ctrl+C still
+      // aborts: in raw mode the terminal delivers it as \x03 to the editor (the
+      // process SIGINT never fires), so the inline component would otherwise
+      // swallow it and leave the suspended submit_plan run parked. Fall through
+      // to the editor's Ctrl+C handler (which clears inline state and aborts).
       if (this.state.activeInlinePlanApproval) {
-        this.state.activeInlinePlanApproval.handleInput(data);
-        return;
+        if (data !== '\x03') {
+          this.state.activeInlinePlanApproval.handleInput(data);
+          return;
+        }
       }
-      // If there's an active inline question, route input to it
-      if (this.state.activeInlineQuestion) {
-        this.state.activeInlineQuestion.handleInput(data);
-        return;
+      // If there's an active inline question, route input to it (same Ctrl+C
+      // pass-through as plan approval above).
+      else if (this.state.activeInlineQuestion) {
+        if (data !== '\x03') {
+          this.state.activeInlineQuestion.handleInput(data);
+          return;
+        }
       }
       // If onboarding is active, route input there
       if (this.state.activeOnboarding) {
@@ -498,6 +549,7 @@ export class MastraTUI {
 
     // Initialize harness (but don't select thread yet)
     await this.state.harness.init();
+    await this.state.harness.getMastra()?.startWorkers();
 
     // Check for existing threads and prompt for resume
     await promptForThreadSelection(this.state);
@@ -1032,8 +1084,6 @@ export class MastraTUI {
         startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage, options),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
-      renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>
-        renderCompletedTasksInline(this.state, tasks, insertIndex, collapsed),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
         renderClearedTasksInline(this.state, clearedTasks, insertIndex),
       refreshModelAuthStatus: () => this.refreshModelAuthStatus(),
@@ -1329,7 +1379,8 @@ export class MastraTUI {
     const tools = this.state.allToolComponents.filter(
       (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
     );
-    const modeColor = this.state.harness?.getCurrentMode?.()?.color;
+    const color = this.state.harness?.getCurrentMode?.()?.metadata?.color;
+    const modeColor = typeof color === 'string' ? color : undefined;
     for (const tool of tools) {
       tool.setCompactToolModeColor?.(modeColor);
       tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
@@ -1468,7 +1519,7 @@ export class MastraTUI {
         this.state.ui,
       );
 
-      this.state.chatContainer.addChild(component);
+      insertChatComponentWithBoundarySpacing(this.state.chatContainer, component);
       this.state.activeInlineQuestion = component;
       component.focused = true;
       this.state.ui.requestRender();

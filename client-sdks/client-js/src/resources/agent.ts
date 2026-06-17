@@ -10,7 +10,7 @@ import type {
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -40,7 +40,9 @@ import type {
   AgentVersionResponse,
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
+  SendAgentMessageParams,
   SendAgentSignalParams,
+  QueueAgentMessageParams,
   SubscribeAgentThreadParams,
   ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
@@ -51,6 +53,7 @@ import type {
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -235,6 +238,8 @@ async function executeToolCallAndRespond<OUTPUT>({
           },
         });
 
+        const modelOutput = await getClientToolModelOutput(clientTool, result);
+
         // Build the tool-result content block. If we have observability
         // data (carrier + buffered spans/logs), attach it directly on
         // the result so it travels with the specific tool call it
@@ -244,6 +249,9 @@ async function executeToolCallAndRespond<OUTPUT>({
           toolCallId: toolCall.payload.toolCallId,
           toolName: toolCall.payload.toolName,
           result,
+          // Carry the client-side toModelOutput result so the server uses it
+          // when building the model prompt, while result keeps the raw value.
+          ...(modelOutput != null ? { providerOptions: { mastra: { modelOutput } } } : {}),
         };
 
         if (observability) {
@@ -456,6 +464,65 @@ export class Agent extends BaseResource {
     if (threadKey) deleteSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey);
   }
 
+  private prepareSignalRouteBody<
+    Params extends { resourceId?: string; threadId?: string; ifIdle?: { streamOptions?: unknown } },
+  >(params: Params): { body: Params; streamOptions?: SignalRuntimeOptions } {
+    const streamOptions = params.ifIdle?.streamOptions as SignalRuntimeOptions | undefined;
+    if (!streamOptions) return { body: params };
+
+    this.setSignalRuntimeOptions({
+      resourceId: params.resourceId,
+      threadId: params.threadId,
+      streamOptions,
+    });
+
+    return {
+      body: {
+        ...params,
+        ifIdle: {
+          ...params.ifIdle,
+          streamOptions: {
+            ...streamOptions,
+            requestContext: parseClientRequestContext(streamOptions.requestContext),
+            clientTools: processClientTools(streamOptions.clientTools),
+          },
+        },
+      } as Params,
+      streamOptions,
+    };
+  }
+
+  private async requestSignalRoute<
+    Params extends { resourceId?: string; threadId?: string; ifIdle?: { streamOptions?: unknown } },
+    Response extends { runId: string },
+  >(path: string, params: Params): Promise<Response> {
+    const { body, streamOptions } = this.prepareSignalRouteBody(params);
+
+    let response: Response;
+    try {
+      response = await this.request<Response>(path, {
+        method: 'POST',
+        body,
+      });
+    } catch (error) {
+      if (streamOptions) {
+        this.deleteLatestSignalRuntimeOptions({ resourceId: params.resourceId, threadId: params.threadId });
+      }
+      throw error;
+    }
+
+    if (streamOptions) {
+      this.setSignalRuntimeOptions({
+        runId: response.runId,
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+        streamOptions,
+      });
+    }
+
+    return response;
+  }
+
   /**
    * Retrieves details about the agent
    * @param requestContext - Optional request context to pass as query parameter
@@ -503,55 +570,24 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  sendMessage(params: SendAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/send-message`, params);
+  }
+
+  /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  queueMessage(params: QueueAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/queue-message`, params);
+  }
+
+  /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  async sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
-    const streamOptions = params.ifIdle?.streamOptions as SignalRuntimeOptions | undefined;
-    if (streamOptions) {
-      this.setSignalRuntimeOptions({
-        resourceId: params.resourceId,
-        threadId: params.threadId,
-        streamOptions,
-      });
-    }
-
-    const body = params.ifIdle?.streamOptions
-      ? {
-          ...params,
-          ifIdle: {
-            ...params.ifIdle,
-            streamOptions: {
-              ...params.ifIdle.streamOptions,
-              requestContext: parseClientRequestContext(params.ifIdle.streamOptions.requestContext),
-              clientTools: processClientTools(params.ifIdle.streamOptions.clientTools),
-            },
-          },
-        }
-      : params;
-
-    let response: { accepted: true; runId: string };
-    try {
-      response = await this.request<{ accepted: true; runId: string }>(`/agents/${this.agentId}/signals`, {
-        method: 'POST',
-        body,
-      });
-    } catch (error) {
-      if (streamOptions) {
-        this.deleteLatestSignalRuntimeOptions({ resourceId: params.resourceId, threadId: params.threadId });
-      }
-      throw error;
-    }
-
-    if (streamOptions) {
-      this.setSignalRuntimeOptions({
-        runId: response.runId,
-        resourceId: params.resourceId,
-        threadId: params.threadId,
-        streamOptions,
-      });
-    }
-
-    return response;
+  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
   }
 
   /**
@@ -560,6 +596,8 @@ export class Agent extends BaseResource {
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
     Response & {
       processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+      abort: () => Promise<boolean>;
+      unsubscribe: () => void;
     }
   > {
     const { resourceId, threadId } = params;
@@ -572,6 +610,8 @@ export class Agent extends BaseResource {
 
     const streamResponse = (await requestSubscription()) as Response & {
       processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+      abort: () => Promise<boolean>;
+      unsubscribe: () => void;
     };
 
     if (!streamResponse.body) {
@@ -579,231 +619,320 @@ export class Agent extends BaseResource {
     }
 
     const agent = this;
+    streamResponse.abort = async () => (await agent.abortThread({ resourceId, threadId })).aborted;
+
+    let unsubscribed = false;
+    let processAbortController: AbortController | undefined;
+    let processStarted = false;
+
+    streamResponse.unsubscribe = () => {
+      if (unsubscribed) return;
+      unsubscribed = true;
+      processAbortController?.abort();
+      if (!processStarted) {
+        void streamResponse.body?.cancel().catch(() => {});
+      }
+    };
 
     streamResponse.processDataStream = async ({ onChunk, reconnect }: ProcessAgentThreadStreamOptions) => {
-      const pendingToolCallsByRunId = new Map<
-        string,
-        Array<{
-          toolCallId: string;
-          toolName: string;
-          args?: unknown;
-          observability?: ClientToolObservabilityContext;
-        }>
-      >();
+      if (unsubscribed) return;
+      processStarted = true;
+      processAbortController = new AbortController();
+      const abortProcessStream = () => processAbortController?.abort();
+      const isClosed = () =>
+        unsubscribed || processAbortController?.signal.aborted || this.options.abortSignal?.aborted;
 
-      const handleSubscribedChunk = async (chunk: ChunkType) => {
-        if (chunk.type === 'tool-call') {
-          const payload = (
-            chunk as {
-              payload?: {
-                toolCallId?: string;
-                toolName?: string;
-                args?: unknown;
-                observability?: ClientToolObservabilityContext;
-              };
-            }
-          ).payload;
-          const toolCallId = payload?.toolCallId;
-          const toolName = payload?.toolName;
+      if (this.options.abortSignal?.aborted) {
+        abortProcessStream();
+      } else {
+        this.options.abortSignal?.addEventListener('abort', abortProcessStream, { once: true });
+      }
+
+      try {
+        const pendingToolCallsByRunId = new Map<
+          string,
+          Array<{
+            toolCallId: string;
+            toolName: string;
+            args?: unknown;
+            observability?: ClientToolObservabilityContext;
+          }>
+        >();
+
+        const handleSubscribedChunk = async (chunk: ChunkType) => {
+          if (chunk.type === 'tool-call') {
+            const payload = (
+              chunk as {
+                payload?: {
+                  toolCallId?: string;
+                  toolName?: string;
+                  args?: unknown;
+                  observability?: ClientToolObservabilityContext;
+                };
+              }
+            ).payload;
+            const toolCallId = payload?.toolCallId;
+            const toolName = payload?.toolName;
+            const runId = (chunk as { runId?: string }).runId;
+            if (!toolCallId || !toolName || !runId) return;
+
+            const pendingToolCalls = pendingToolCallsByRunId.get(runId) ?? [];
+            pendingToolCalls.push({ toolCallId, toolName, args: payload.args, observability: payload.observability });
+            pendingToolCallsByRunId.set(runId, pendingToolCalls);
+            return;
+          }
+
+          if (chunk.type !== 'finish') return;
+
           const runId = (chunk as { runId?: string }).runId;
-          if (!toolCallId || !toolName || !runId) return;
-
-          const pendingToolCalls = pendingToolCallsByRunId.get(runId) ?? [];
-          pendingToolCalls.push({ toolCallId, toolName, args: payload.args, observability: payload.observability });
-          pendingToolCallsByRunId.set(runId, pendingToolCalls);
-          return;
-        }
-
-        if (chunk.type !== 'finish') return;
-
-        const runId = (chunk as { runId?: string }).runId;
-        const finishPayload = chunk as {
-          payload?: {
-            stepResult?: { reason?: string };
-            messages?: { nonUser?: CoreMessage[] };
+          const finishPayload = chunk as {
+            payload?: {
+              stepResult?: { reason?: string };
+              messages?: { nonUser?: CoreMessage[] };
+            };
           };
-        };
-        if (!runId) return;
-        if (finishPayload.payload?.stepResult?.reason !== 'tool-calls') {
-          agent.deleteSignalRuntimeOptions(runId);
-          return;
-        }
+          if (!runId) return;
+          if (finishPayload.payload?.stepResult?.reason !== 'tool-calls') {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
 
-        const pendingToolCalls = pendingToolCallsByRunId.get(runId);
-        pendingToolCallsByRunId.delete(runId);
-        if (!pendingToolCalls?.length) {
-          agent.deleteSignalRuntimeOptions(runId);
-          return;
-        }
+          const pendingToolCalls = pendingToolCallsByRunId.get(runId);
+          pendingToolCallsByRunId.delete(runId);
+          if (!pendingToolCalls?.length) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
 
-        const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
-        const activeClientTools = activeRuntimeOptions?.clientTools;
-        if (!activeClientTools) {
-          agent.deleteSignalRuntimeOptions(runId);
-          return;
-        }
+          const activeRuntimeOptions = agent.getSignalRuntimeOptions({ runId, resourceId, threadId });
+          const activeClientTools = activeRuntimeOptions?.clientTools;
+          if (!activeClientTools) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
+          }
 
-        const activeRequestContext = activeRuntimeOptions.requestContext;
-        const processedClientTools = processClientTools(activeClientTools);
-        const processedRequestContext = parseClientRequestContext(activeRequestContext);
+          const activeRequestContext = activeRuntimeOptions.requestContext;
+          const processedClientTools = processClientTools(activeClientTools);
+          const processedRequestContext = parseClientRequestContext(activeRequestContext);
 
-        const toolResultMessages: CoreMessage[] = [];
-        for (const toolCall of pendingToolCalls) {
-          const clientTool = activeClientTools[toolCall.toolName] as Tool | undefined;
-          if (!clientTool || typeof clientTool.execute !== 'function') continue;
+          const toolResultMessages: AIV5Type.ModelMessage[] = [];
+          for (const toolCall of pendingToolCalls) {
+            const clientTool = activeClientTools[toolCall.toolName] as Tool | undefined;
+            if (!clientTool || typeof clientTool.execute !== 'function') continue;
 
-          let result: unknown;
-          let observability: ClientToolObservabilityEnvelope | undefined;
-          try {
-            const execution = await executeClientToolWithObservability({
-              clientTool,
-              args: toolCall.args,
-              toolName: toolCall.toolName,
-              parentContext: toolCall.observability,
-              executeContext: {
-                requestContext: activeRequestContext as RequestContext,
-                tracingContext: { currentSpan: undefined },
-                agent: {
-                  agentId: agent.agentId,
-                  messages: finishPayload.payload?.messages?.nonUser ?? [],
-                  toolCallId: toolCall.toolCallId,
-                  suspend: async () => {},
-                  threadId,
-                  resourceId,
+            let result: unknown;
+            let modelOutput: unknown;
+            let observability: ClientToolObservabilityEnvelope | undefined;
+            try {
+              const execution = await executeClientToolWithObservability({
+                clientTool,
+                args: toolCall.args,
+                toolName: toolCall.toolName,
+                parentContext: toolCall.observability,
+                executeContext: {
+                  requestContext: activeRequestContext as RequestContext,
+                  tracingContext: { currentSpan: undefined },
+                  agent: {
+                    agentId: agent.agentId,
+                    messages: finishPayload.payload?.messages?.nonUser ?? [],
+                    toolCallId: toolCall.toolCallId,
+                    suspend: async () => {},
+                    threadId,
+                    resourceId,
+                  },
                 },
-              },
+              });
+              result = execution.result;
+              observability = execution.observability;
+              try {
+                modelOutput = await getClientToolModelOutput(clientTool, result);
+              } catch {
+                // A failing toModelOutput shouldn't discard a successful tool
+                // execution; continue with the raw result only.
+                modelOutput = undefined;
+              }
+            } catch (error) {
+              result = { error: String(error) };
+              modelOutput = undefined;
+            }
+
+            const toolResultContent = {
+              type: 'tool-result',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              args: toolCall.args,
+              result,
+              ...(observability ? { __mastraObservability: observability } : {}),
+            } satisfies Extract<CoreMessage, { role: 'tool' }>['content'][number] & {
+              args?: unknown;
+              __mastraObservability?: ClientToolObservabilityEnvelope;
+            };
+
+            await onChunk({
+              type: 'tool-result',
+              runId,
+              payload: toolResultContent,
+            } as never);
+
+            const continuationToolCall = {
+              type: 'tool-call',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              input: toolCall.args,
+            } satisfies AIV5Type.ToolCallPart;
+            const continuationToolResult = {
+              type: 'tool-result',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              output: { type: 'json', value: result as JSONValue },
+              // Carry the client-side toModelOutput result so the server uses it
+              // when building the model prompt, while output keeps the raw result.
+              ...(modelOutput != null
+                ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
+                : {}),
+              ...(observability ? { __mastraObservability: observability } : {}),
+            } satisfies AIV5Type.ToolResultPart & { __mastraObservability?: ClientToolObservabilityEnvelope };
+
+            toolResultMessages.push({
+              role: 'assistant',
+              content: [continuationToolCall, continuationToolResult],
             });
-            result = execution.result;
-            observability = execution.observability;
-          } catch (error) {
-            result = { error: String(error) };
           }
 
-          const toolResultContent: Record<string, unknown> = {
-            type: 'tool-result',
-            toolCallId: toolCall.toolCallId,
-            toolName: toolCall.toolName,
-            result,
-          };
-
-          if (observability) {
-            toolResultContent.__mastraObservability = observability;
+          if (toolResultMessages.length === 0) {
+            agent.deleteSignalRuntimeOptions(runId);
+            return;
           }
 
-          await onChunk({
-            type: 'tool-result',
-            runId,
-            payload: toolResultContent,
-          } as never);
+          const continuationStreamOptions = {
+            ...activeRuntimeOptions,
+            requestContext: processedRequestContext,
+            memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
+            clientTools: processedClientTools,
+          } as StreamParamsBaseWithoutMessages<any>;
 
-          toolResultMessages.push({
-            role: 'tool',
-            content: [toolResultContent],
-          } as unknown as CoreMessage);
-        }
-
-        if (toolResultMessages.length === 0) {
-          agent.deleteSignalRuntimeOptions(runId);
-          return;
-        }
-
-        try {
-          const continuation = await agent.streamUntilIdle(
-            [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
-            {
-              ...activeRuntimeOptions,
-              runId: uuid(),
-              requestContext: processedRequestContext,
-              memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
-              clientTools: processedClientTools,
-            } as never,
-          );
-          try {
-            void continuation.body?.cancel?.();
-          } catch {
-            // ignore
-          }
-        } catch (error) {
-          console.error('Error running client-tool continuation:', error);
-        } finally {
-          agent.deleteSignalRuntimeOptions(runId);
-        }
-      };
-
-      const reconnectOptions =
-        reconnect === true
-          ? { maxRetries: Infinity, delayMs: 1000 }
-          : reconnect
-            ? { maxRetries: reconnect.maxRetries ?? Infinity, delayMs: reconnect.delayMs ?? 1000 }
-            : null;
-      let response: Response = streamResponse;
-      let attempts = 0;
-
-      // Sentinel used to distinguish errors thrown by the caller's `onChunk`
-      // callback from transport errors. Callback errors should not trigger a
-      // reconnect — we'd otherwise mask user bugs by resubscribing forever.
-      // The sentinel never escapes this method: we unwrap and rethrow the
-      // original error so consumers see exactly what they threw.
-      const onChunkErrorSentinel = Symbol('onChunkErrorSentinel');
-      const guardedOnChunk = async (chunk: ChunkType) => {
-        try {
-          await onChunk(chunk);
-          await handleSubscribedChunk(chunk);
-        } catch (cause) {
-          throw { [onChunkErrorSentinel]: true, cause };
-        }
-      };
-
-      while (true) {
-        if (!response.body) {
-          throw new Error('No response body');
-        }
-
-        try {
-          await processMastraStream({
-            stream: response.body as ReadableStream<Uint8Array>,
-            onChunk: guardedOnChunk,
-            signal: this.options.abortSignal,
+          agent.setSignalRuntimeOptions({
+            resourceId,
+            threadId,
+            streamOptions: continuationStreamOptions,
           });
-        } catch (error) {
-          if (typeof error === 'object' && error !== null && (error as any)[onChunkErrorSentinel]) {
-            throw (error as { cause: unknown }).cause;
+
+          const continuationMessages = (
+            threadId ? toolResultMessages : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages]
+          ) as MessageListInput;
+
+          try {
+            await agent.sendToolApproval({
+              resourceId: resourceId || agent.agentId,
+              threadId,
+              toolCallId: pendingToolCalls[0]!.toolCallId,
+              approved: true,
+              requestContext: processedRequestContext,
+              messages: continuationMessages,
+              streamOptions: continuationStreamOptions,
+            });
+          } catch (error) {
+            agent.deleteLatestSignalRuntimeOptions({ resourceId, threadId });
+            console.error('Error running client-tool continuation:', error);
+          } finally {
+            agent.deleteSignalRuntimeOptions(runId);
           }
-          if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
-            throw error;
+        };
+
+        const reconnectOptions =
+          reconnect === true
+            ? { maxRetries: Infinity, delayMs: 1000 }
+            : reconnect
+              ? { maxRetries: reconnect.maxRetries ?? Infinity, delayMs: reconnect.delayMs ?? 1000 }
+              : null;
+        let response: Response = streamResponse;
+        let attempts = 0;
+
+        // Sentinel used to distinguish errors thrown by the caller's `onChunk`
+        // callback from transport errors. Callback errors should not trigger a
+        // reconnect — we'd otherwise mask user bugs by resubscribing forever.
+        // The sentinel never escapes this method: we unwrap and rethrow the
+        // original error so consumers see exactly what they threw.
+        const onChunkErrorSentinel = Symbol('onChunkErrorSentinel');
+        const guardedOnChunk = async (chunk: ChunkType) => {
+          try {
+            await onChunk(chunk);
+            await handleSubscribedChunk(chunk);
+          } catch (cause) {
+            throw { [onChunkErrorSentinel]: true, cause };
           }
-        }
+        };
 
-        if (!reconnectOptions || this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
-          return;
-        }
-
-        while (attempts < reconnectOptions.maxRetries) {
-          attempts++;
-
-          if (this.options.abortSignal?.aborted) {
-            return;
-          }
-
-          await new Promise(resolve => setTimeout(resolve, reconnectOptions.delayMs));
-
-          if (this.options.abortSignal?.aborted) {
-            return;
+        while (true) {
+          if (!response.body) {
+            throw new Error('No response body');
           }
 
           try {
-            response = await requestSubscription();
-            break;
+            await processMastraStream({
+              stream: response.body as ReadableStream<Uint8Array>,
+              onChunk: guardedOnChunk,
+              signal: processAbortController.signal,
+            });
           } catch (error) {
-            if (this.options.abortSignal?.aborted || attempts >= reconnectOptions.maxRetries) {
+            if (typeof error === 'object' && error !== null && (error as any)[onChunkErrorSentinel]) {
+              throw (error as { cause: unknown }).cause;
+            }
+            if (!reconnectOptions || isClosed() || attempts >= reconnectOptions.maxRetries) {
+              if (isClosed()) return;
               throw error;
             }
           }
+
+          if (!reconnectOptions || isClosed() || attempts >= reconnectOptions.maxRetries) {
+            return;
+          }
+
+          while (attempts < reconnectOptions.maxRetries) {
+            attempts++;
+
+            if (isClosed()) {
+              return;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, reconnectOptions.delayMs));
+
+            if (isClosed()) {
+              return;
+            }
+
+            try {
+              response = await requestSubscription();
+              break;
+            } catch (error) {
+              if (isClosed() || attempts >= reconnectOptions.maxRetries) {
+                if (isClosed()) return;
+                throw error;
+              }
+            }
+          }
         }
+      } finally {
+        this.options.abortSignal?.removeEventListener('abort', abortProcessStream);
+        if (processAbortController?.signal.aborted) {
+          unsubscribed = true;
+        }
+        processAbortController = undefined;
       }
     };
 
     return streamResponse;
+  }
+
+  /**
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  async abortThread(params: SubscribeAgentThreadParams): Promise<{ aborted: boolean }> {
+    const { resourceId, threadId } = params;
+    return this.request<{ aborted: boolean }>(`/agents/${this.agentId}/threads/abort`, {
+      method: 'POST',
+      body: { resourceId, threadId },
+    });
   }
 
   /**
@@ -2006,6 +2135,7 @@ export class Agent extends BaseResource {
                 // a terminal chunk for client-executed tools.
                 const runId: string = streamRunId ?? toolCall.toolCallId;
                 let result: unknown;
+                let modelOutput: unknown;
                 let observability: ClientToolObservabilityEnvelope | undefined;
                 let synthetic:
                   | {
@@ -2052,6 +2182,8 @@ export class Agent extends BaseResource {
                       },
                     },
                   }));
+
+                  modelOutput = await getClientToolModelOutput(clientTool, result);
 
                   synthetic = {
                     type: 'tool-result',
@@ -2129,6 +2261,22 @@ export class Agent extends BaseResource {
                     result,
                     ...(observability ? { __mastraObservability: observability } : {}),
                   };
+                  if (modelOutput != null) {
+                    // Carry the client-side toModelOutput result so the server
+                    // uses it when building the model prompt; part-level
+                    // providerMetadata survives UI message ingestion. Merge
+                    // into any existing mastra metadata instead of replacing it.
+                    const partWithMetadata = toolInvocationPart as { providerMetadata?: Record<string, unknown> };
+                    const existingMastra =
+                      partWithMetadata.providerMetadata?.mastra != null &&
+                      typeof partWithMetadata.providerMetadata.mastra === 'object'
+                        ? (partWithMetadata.providerMetadata.mastra as Record<string, unknown>)
+                        : {};
+                    partWithMetadata.providerMetadata = {
+                      ...partWithMetadata.providerMetadata,
+                      mastra: { ...existingMastra, modelOutput },
+                    };
+                  }
                 }
 
                 const toolInvocation = lastMessage?.toolInvocations?.find(
@@ -2491,6 +2639,9 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   */
   async streamUntilIdle<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
@@ -2663,6 +2814,25 @@ export class Agent extends BaseResource {
     };
 
     return streamResponse;
+  }
+
+  async sendToolApproval(params: {
+    resourceId: string;
+    threadId: string;
+    toolCallId: string;
+    approved: boolean;
+    requestContext?: RequestContext | Record<string, any>;
+    messages?: MessageListInput;
+    streamOptions?: StreamParamsBaseWithoutMessages<any>;
+  }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
+    const { requestContext, ...rest } = params;
+    return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
+      `/agents/${this.agentId}/send-tool-approval`,
+      {
+        method: 'POST',
+        body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+      },
+    );
   }
 
   async declineToolCall(params: {
@@ -2851,6 +3021,8 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * @deprecated Use `resumeStream(resumeData, { untilIdle: true, ... })` instead.
+   *
    * Resumes a suspended agent stream until idle with custom resume data.
    * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
    */

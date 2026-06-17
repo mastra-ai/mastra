@@ -1,6 +1,8 @@
 import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown, Circle } from 'lucide-react';
 import * as React from 'react';
+import { usePortalContainer } from '@/ds/primitives/portal-container';
+import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
 const DropdownMenuRoot = MenuPrimitive.Root;
@@ -25,18 +27,17 @@ const popupClass = cn(
 );
 
 type DropdownMenuTriggerProps = MenuPrimitive.Trigger.Props & {
+  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
   asChild?: boolean;
 };
 
 const DropdownMenuTrigger = React.forwardRef<HTMLButtonElement, DropdownMenuTriggerProps>(
   ({ className, asChild, children, ...props }, ref) => {
-    const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
-
     return (
       <MenuPrimitive.Trigger
         ref={ref}
         className={cn('cursor-pointer outline-none', className)}
-        {...renderProps}
+        {...asChildRenderProps(asChild, children)}
         {...props}
       >
         {asChild ? undefined : children}
@@ -75,24 +76,29 @@ type DropdownMenuSubContentProps = MenuPrimitive.Popup.Props &
   Pick<MenuPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'>;
 
 const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubContentProps>(
-  ({ className, align = 'start', alignOffset = -4, side = 'right', sideOffset = 0, ...props }, ref) => (
-    <MenuPrimitive.Portal>
-      <MenuPrimitive.Positioner
-        align={align}
-        alignOffset={alignOffset}
-        side={side}
-        sideOffset={sideOffset}
-        className="z-50 outline-none"
-      >
-        <MenuPrimitive.Popup
-          ref={ref}
-          data-slot="dropdown-menu-sub-content"
-          className={cn(popupClass, className)}
-          {...props}
-        />
-      </MenuPrimitive.Positioner>
-    </MenuPrimitive.Portal>
-  ),
+  ({ className, align = 'start', alignOffset = -4, side = 'right', sideOffset = 0, ...props }, ref) => {
+    // Default to the nearest SideDialog/Drawer popup so the submenu stays
+    // interactive inside a modal drawer.
+    const resolvedContainer = usePortalContainer();
+    return (
+      <MenuPrimitive.Portal container={resolvedContainer}>
+        <MenuPrimitive.Positioner
+          align={align}
+          alignOffset={alignOffset}
+          side={side}
+          sideOffset={sideOffset}
+          className="z-50 outline-none"
+        >
+          <MenuPrimitive.Popup
+            ref={ref}
+            data-slot="dropdown-menu-sub-content"
+            className={cn(popupClass, className)}
+            {...props}
+          />
+        </MenuPrimitive.Positioner>
+      </MenuPrimitive.Portal>
+    );
+  },
 );
 DropdownMenuSubContent.displayName = 'DropdownMenuSubContent';
 
@@ -102,24 +108,29 @@ type DropdownMenuContentProps = MenuPrimitive.Popup.Props &
   };
 
 const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContentProps>(
-  ({ className, container, align = 'start', alignOffset = 0, side = 'bottom', sideOffset = 8, ...props }, ref) => (
-    <MenuPrimitive.Portal container={container}>
-      <MenuPrimitive.Positioner
-        align={align}
-        alignOffset={alignOffset}
-        side={side}
-        sideOffset={sideOffset}
-        className="z-50 outline-none"
-      >
-        <MenuPrimitive.Popup
-          ref={ref}
-          data-slot="dropdown-menu-content"
-          className={cn(popupClass, className)}
-          {...props}
-        />
-      </MenuPrimitive.Positioner>
-    </MenuPrimitive.Portal>
-  ),
+  ({ className, container, align = 'start', alignOffset = 0, side = 'bottom', sideOffset = 8, ...props }, ref) => {
+    // Default to the nearest SideDialog/Drawer popup so the menu stays
+    // interactive inside a modal drawer; an explicit `container` still wins.
+    const resolvedContainer = usePortalContainer(container);
+    return (
+      <MenuPrimitive.Portal container={resolvedContainer}>
+        <MenuPrimitive.Positioner
+          align={align}
+          alignOffset={alignOffset}
+          side={side}
+          sideOffset={sideOffset}
+          className="z-50 outline-none"
+        >
+          <MenuPrimitive.Popup
+            ref={ref}
+            data-slot="dropdown-menu-content"
+            className={cn(popupClass, className)}
+            {...props}
+          />
+        </MenuPrimitive.Positioner>
+      </MenuPrimitive.Portal>
+    );
+  },
 );
 DropdownMenuContent.displayName = 'DropdownMenuContent';
 

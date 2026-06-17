@@ -1,31 +1,58 @@
 /**
- * Row-level styling shared by anything that participates in the row sibling
+ * Row-level styling for the element that participates in the row sibling
  * chain — applied to `DataList.RowButton` / `DataList.RowLink` when used
- * standalone, and to `DataList.RowWrapper` when used as a wrapper around them.
+ * standalone, and to `DataList.RowWrapper` when used as a shell around them.
  *
- * Contains the `.data-list-row` marker class (used by the sibling-aware border
- * rules), the bottom/top border treatment, and rounded corners.
+ * Contains the `.data-list-row` marker class (used by the sibling-aware
+ * separator rules), the full-width separator treatment, and rounded corners.
  */
 export const dataListRowOuterStyles = [
-  'data-list-row col-span-full border-y border-b-border1 border-t-transparent',
-  '[.data-list-row:hover+&]:border-t-transparent [.data-list-row:focus-visible+&]:border-t-transparent',
-  '[.data-list-subheader+&]:border-t-transparent',
-  '[&:has(+.data-list-subheader)]:border-b-transparent',
-  '[&:not(:has(~.data-list-row))]:border-b-transparent',
+  'data-list-row col-span-full relative mt-[3px] mb-1',
+  'after:absolute after:inset-x-[-0.25rem] after:bottom-[-0.25rem] after:h-px after:bg-border1 after:content-[""] after:pointer-events-none',
+  '[&:has(+.data-list-subheader)]:after:hidden [&:not(:has(~.data-list-row))]:after:hidden',
   'transition-colors duration-200 rounded-lg',
 ] as const;
 
-export const dataListRowStyles = [
-  'mx-1 grid grid-cols-subgrid gap-8 px-5 outline-none cursor-pointer',
-  'hover:bg-surface4 hover:border-transparent focus-visible:bg-surface4 focus-visible:border-transparent focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
-  ...dataListRowOuterStyles,
+export const dataListRowInteractiveStyles = [
+  'grid grid-cols-subgrid gap-8 px-5 outline-none cursor-pointer',
+  'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+  'transition-colors duration-200 rounded-lg',
 ] as const;
+
+export const dataListRowStyles = ['mx-1', ...dataListRowInteractiveStyles, ...dataListRowOuterStyles] as const;
+
+export const dataListRowStaticStyles = ['mx-1 grid grid-cols-subgrid gap-8 px-5', ...dataListRowOuterStyles] as const;
+
+import { cva } from 'class-variance-authority';
+
+/** Tone for a single row. `error` lays a subtle, theme-aware destructive tint
+ *  over whatever background the row already has. */
+export type DataListRowVariant = 'default' | 'error';
+
+/**
+ * Per-row tone. Kept as a `.ts` cva (safe to export — no react-refresh concern).
+ * The error tint uses `!` so it wins over the striped variant's root-level zebra
+ * (a higher-specificity descendant rule) and over the base row hover.
+ */
+export const dataListRowVariants = cva('', {
+  variants: {
+    variant: {
+      default: '',
+      error: 'bg-notice-destructive/10! hover:bg-notice-destructive/15!',
+    },
+  },
+  defaultVariants: {
+    variant: 'default',
+  },
+});
 
 /**
  * Layout/state modifiers shared by interactive row primitives
  * (`DataList.RowButton`, `DataList.RowLink`).
  */
 export type DataListRowSharedProps = {
+  /** Row tone — `error` applies a subtle destructive background tint. */
+  variant?: DataListRowVariant;
   /**
    * Drop the row's default left margin. Use when the row is wrapped in a
    * `DataList.RowWrapper` that owns the leading inset (e.g. for selection rows where

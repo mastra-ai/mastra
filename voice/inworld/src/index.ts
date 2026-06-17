@@ -360,3 +360,5 @@ export class InworldVoice extends MastraVoice {
     return Buffer.concat(chunks).toString('utf-8');
   }
 }
+
+export * from './realtime';

@@ -1,11 +1,9 @@
-import { useComposerRuntime } from '@assistant-ui/react';
 import {
   Button,
   Input,
   Label,
   Txt,
   Icon,
-  getFileContentType,
   Dialog,
   DialogHeader,
   DialogTitle,
@@ -16,7 +14,7 @@ import {
 
 import { CloudUpload, Link } from 'lucide-react';
 import type { FormEvent } from 'react';
-import { useComposerAddAttachment } from '../hooks/use-composer-add-attachment';
+import { useComposerAttachments } from './composer-attachments';
 
 export interface AttachFileDialogProps {
   onOpenChange: (open: boolean) => void;
@@ -24,10 +22,32 @@ export interface AttachFileDialogProps {
 }
 
 export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) => {
-  const composerRuntime = useComposerRuntime();
-  const addFilInputAttachment = useComposerAddAttachment({
-    onChange: () => onOpenChange(false),
-  });
+  const { addFiles, addUrl } = useComposerAttachments();
+
+  const openFilePicker = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.hidden = true;
+    document.body.appendChild(input);
+
+    input.onchange = e => {
+      const fileList = (e.target as HTMLInputElement).files;
+      if (fileList && fileList.length > 0) {
+        addFiles(fileList);
+        onOpenChange(false);
+      }
+      document.body.removeChild(input);
+    };
+
+    input.oncancel = () => {
+      if (!input.files || input.files.length === 0) {
+        document.body.removeChild(input);
+      }
+    };
+
+    input.click();
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -36,17 +56,7 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
     const url = formData.get('url-attachment')?.toString();
 
     if (url) {
-      /**
-       * This is a hack.
-       * Assistant-ui does not allow to pass anything else than a file to be handled in their internal system.
-       * This workaround passes the URL as the filename and so we can use to in the mastra runtime
-       * to add the URL in the AI SDK core message by reading assistant-ui's file name (on an empty file :upside_down_face:)
-       */
-      const file = new File([], url, {
-        type: await getFileContentType(url),
-      });
-
-      void composerRuntime.addAttachment(file);
+      await addUrl(url);
       onOpenChange(false);
     }
   };
@@ -88,7 +98,8 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
               Or from your computer
             </Txt>
             <button
-              onClick={addFilInputAttachment}
+              type="button"
+              onClick={openFilePicker}
               className="w-full h-40 border border-border1 rounded-lg text-neutral3 border-dashed flex flex-col items-center justify-center gap-2 hover:bg-surface2 active:bg-surface3"
             >
               <CloudUpload className="size-12" />

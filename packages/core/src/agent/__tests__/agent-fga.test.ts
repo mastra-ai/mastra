@@ -6,6 +6,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
+import { EventEmitterPubSub } from '../../events';
+import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
@@ -112,12 +114,42 @@ describe('Agent FGA checks', () => {
       expect(fgaProvider.require).not.toHaveBeenCalled();
     });
 
-    it('should not call FGA check when no FGA provider configured', async () => {
-      const mastra = createMockMastra();
+    it('should bypass membership resolution for a tenant-scoped trusted actor', async () => {
+      const fgaProvider = createMockFGAProvider(true);
       const model = createMockModel();
 
       const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
-      (agent as any).__registerMastra(mastra);
+      const mastra = new Mastra({
+        agents: { testAgent: agent },
+        logger: false,
+        pubsub: new EventEmitterPubSub(),
+        server: { fga: fgaProvider },
+      });
+      await mastra.startWorkers();
+
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'org-1');
+
+      try {
+        await agent.generate('test', {
+          requestContext: requestContext as any,
+          actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+        });
+      } finally {
+        await mastra.stopWorkers();
+      }
+
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+      expect(model.doGenerateCalls).toHaveLength(1);
+    });
+
+    it('should not call FGA check when no FGA provider configured', async () => {
+      const model = createMockModel();
+
+      // No Mastra is registered, so the agent runs on its ephemeral Mastra,
+      // which has no FGA provider — exercising the "FGA not configured" path
+      // while still giving the evented loop the pubsub/workers it needs.
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
 
       const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1' });

@@ -17,11 +17,11 @@ Three categories of metrics are emitted automatically:
 
 :::note
 
-Metrics require an OLAP-capable store for observability. Relational databases like PostgreSQL, LibSQL, etc. are not supported for metrics. In-memory storage resets on restart.
+Metrics require an OLAP-capable store for observability. Relational databases like PostgreSQL, LibSQL, etc. aren't supported for metrics. In-memory storage resets on restart.
 
 For local development, use [DuckDB](https://duckdb.org/) through `@mastra/duckdb`. For production, use [ClickHouse](https://clickhouse.com/) through `@mastra/clickhouse`.
 
-Google Cloud Spanner supports metrics, but it is not recommended for heavy metrics workloads. The Spanner adapter disables metrics by default because metrics are write-heavy and scan-heavy. Set `disableMetrics: false` only for light workloads, or route metrics to an OLAP store.
+Google Cloud Spanner supports metrics, but it's not recommended for heavy metrics workloads. The Spanner adapter disables metrics by default because metrics are write-heavy and scan-heavy. Set `disableMetrics: false` only for light workloads, or route metrics to an OLAP store.
 
 :::
 
@@ -74,7 +74,7 @@ export const mastra = new Mastra({
 
 ## Studio
 
-The Studio metrics dashboard visualizes all automatic metrics with KPI cards, detailed breakdowns, and configurable time ranges. See [Studio observability](/docs/studio/observability) for a full walkthrough.
+The Studio metrics dashboard visualizes all automatic metrics with KPI cards, detailed breakdowns, token usage timelines, and configurable time ranges. See [Studio observability](/docs/studio/observability) for a full walkthrough.
 
 ## What Mastra measures
 
@@ -101,7 +101,8 @@ Before storage, all metric labels pass through a cardinality filter that blocks 
 ## Next steps
 
 - [Automatic metrics reference](/reference/observability/metrics/automatic-metrics)
+- [Querying metrics](/docs/observability/metrics/querying)
 - [Tracing overview](/docs/observability/tracing/overview)
 - [Studio observability](/docs/studio/observability)
 - [Observability overview](/docs/observability/overview)
-- [MastraStorageExporter reference](/docs/observability/tracing/exporters/mastra-storage)
+- [MastraStorageExporter reference](/docs/observability/integrations/exporters/mastra-storage)

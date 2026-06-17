@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
-import { dataListRowStyles } from './shared';
+import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
+import { dataListRowInteractiveStyles, dataListRowStyles, dataListRowVariants } from './shared';
 import type { DataListRowSharedProps } from './shared';
 import { cn } from '@/lib/utils';
 
@@ -12,9 +13,22 @@ export type DataListRowButtonProps = ComponentPropsWithoutRef<'button'> & DataLi
  */
 export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButtonProps>(
   (
-    { children, className, type = 'button', flushLeft, flushRight, colStart, colEnd, featured, style, ...rest },
+    {
+      children,
+      className,
+      type = 'button',
+      flushLeft,
+      flushRight,
+      colStart,
+      colEnd,
+      featured,
+      variant,
+      style,
+      ...rest
+    },
     ref,
   ) => {
+    const isWrapped = useDataListRowWrapperContext();
     const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
     const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
     return (
@@ -22,11 +36,14 @@ export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButton
         ref={ref}
         type={type}
         className={cn(
-          ...dataListRowStyles,
+          ...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles),
           'text-left',
-          flushLeft && 'ml-0!',
-          flushRight && 'mr-0!',
-          featured && 'bg-surface4',
+          !isWrapped && flushLeft && 'ml-0!',
+          !isWrapped && flushRight && 'mr-0!',
+          // `!` so the selection fill wins over the striped variant's zebra tint
+          // (a higher-specificity root descendant rule); same color in `default`.
+          featured && 'bg-surface4!',
+          dataListRowVariants({ variant }),
           className,
         )}
         style={resolvedStyle}

@@ -1,0 +1,53 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Create a prompt-context e2e task.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_task_prompt_write",
+            "name": "task_write",
+            "arguments": {
+              "tasks": [
+                {
+                  "id": "prompt-context-e2e",
+                  "content": "Verify current task list prompt context",
+                  "status": "in_progress",
+                  "activeForm": "Verifying current task list prompt context"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "toolCallId": "call_task_prompt_write",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Task state seeded for prompt-context verification."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Confirm current task prompt context.",
+        "hasToolResult": false,
+        "systemMessage": ["<current-task-list>", "{id: prompt-context-e2e}", "Verify current task list prompt context"]
+      },
+      "response": {
+        "content": "Current task prompt context observed."
+      }
+    }
+  ]
+}

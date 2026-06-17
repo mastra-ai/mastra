@@ -1,3 +1,4 @@
+import { createAlibaba } from '@ai-sdk/alibaba-v6';
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createCerebras } from '@ai-sdk/cerebras-v5';
 import { createDeepInfra } from '@ai-sdk/deepinfra-v5';
@@ -67,12 +68,24 @@ function interpolateUrlTemplate(url: string, envVars?: typeof process.env): stri
   });
 }
 
+function resolveApiKeyFromEnv(apiKeyEnvVar: ProviderConfig['apiKeyEnvVar']): string | undefined {
+  const envVars = Array.isArray(apiKeyEnvVar) ? apiKeyEnvVar : [apiKeyEnvVar];
+
+  for (const envVar of envVars) {
+    const apiKey = process.env[envVar];
+    if (apiKey) return apiKey;
+  }
+}
+
 // Provider-specific overrides for URL, npm package, and other config.
 // These take priority over what models.dev returns (e.g. correct base URLs, SDK packages).
 // This constant is ONLY used during generation in fetchProviders() to determine
 // which providers from models.dev should be included in the registry.
 // At runtime, buildUrl() and buildHeaders() use the pre-generated PROVIDER_REGISTRY instead.
 const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
+  google: {
+    apiKeyEnvVar: ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'],
+  },
   mistral: {
     url: 'https://api.mistral.ai/v1',
   },
@@ -234,10 +247,11 @@ export class ModelsDevGateway extends MastraModelGateway {
       throw new Error(`Could not find config for provider ${provider} with model id ${modelId}`);
     }
 
-    const apiKey = typeof config.apiKeyEnvVar === `string` ? process.env[config.apiKeyEnvVar] : undefined; // we only use single string env var for models.dev for now
+    const apiKey = resolveApiKeyFromEnv(config.apiKeyEnvVar);
 
     if (!apiKey) {
-      throw new Error(`Could not find API key process.env.${config.apiKeyEnvVar} for model id ${modelId}`);
+      const envVarDisplay = Array.isArray(config.apiKeyEnvVar) ? config.apiKeyEnvVar.join(' or ') : config.apiKeyEnvVar;
+      throw new Error(`Could not find API key process.env.${envVarDisplay} for model id ${modelId}`);
     }
 
     return Promise.resolve(apiKey);
@@ -260,32 +274,34 @@ export class ModelsDevGateway extends MastraModelGateway {
 
     switch (providerId) {
       case 'openai':
-        return createOpenAI({ apiKey, headers: mastraHeaders }).responses(modelId);
+        return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'gemini':
       case 'google':
-        return createGoogleGenerativeAI({ apiKey, headers: mastraHeaders }).chat(modelId);
+        return createGoogleGenerativeAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
       case 'anthropic':
-        return createAnthropic({ apiKey, headers: mastraHeaders })(modelId);
+        return createAnthropic({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'mistral':
-        return createMistral({ apiKey, headers: mastraHeaders })(modelId);
+        return createMistral({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'groq':
-        return createGroq({ apiKey, headers: mastraHeaders })(modelId);
+        return createGroq({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'openrouter':
-        return createOpenRouter({ apiKey, headers: mastraHeaders })(modelId) as unknown as GatewayLanguageModel;
+        return createOpenRouter({ apiKey, baseURL, headers: mastraHeaders })(
+          modelId,
+        ) as unknown as GatewayLanguageModel;
       case 'xai':
-        return createXai({ apiKey, headers: mastraHeaders })(modelId);
+        return createXai({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'deepseek':
-        return createDeepSeek({ apiKey, headers: mastraHeaders })(modelId);
+        return createDeepSeek({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'perplexity':
-        return createPerplexity({ apiKey, headers: mastraHeaders })(modelId);
+        return createPerplexity({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'cerebras':
-        return createCerebras({ apiKey, headers: mastraHeaders })(modelId);
+        return createCerebras({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'togetherai':
-        return createTogetherAI({ apiKey, headers: mastraHeaders })(modelId);
+        return createTogetherAI({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'deepinfra':
-        return createDeepInfra({ apiKey, headers: mastraHeaders })(modelId);
+        return createDeepInfra({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'vercel':
-        return createGateway({ apiKey, headers: mastraHeaders })(modelId);
+        return createGateway({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'moonshotai':
       case 'moonshotai-cn': {
         // moonshotai uses Anthropic-compatible API endpoint
@@ -296,6 +312,12 @@ export class ModelsDevGateway extends MastraModelGateway {
         // Check if this provider uses a specific SDK package (e.g., kimi-for-coding uses @ai-sdk/anthropic)
         const config = this.providerConfigs[providerId];
         const npm = config?.npm;
+
+        // Pattern match for any alibaba variant (alibaba, alibaba-cn, alibaba-coding-plan, etc.)
+        if (providerId.includes('alibaba')) {
+          if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
+          return createAlibaba({ apiKey, baseURL, headers: mastraHeaders })(modelId);
+        }
 
         if (npm === '@ai-sdk/anthropic') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);

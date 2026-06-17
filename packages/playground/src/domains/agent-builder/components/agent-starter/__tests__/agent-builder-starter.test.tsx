@@ -72,7 +72,7 @@ describe('AgentBuilderStarter', () => {
     navigateMock.mockReset();
   });
 
-  it('renders a submit button that is disabled until the input has content', () => {
+  it('renders a submit button that is disabled until the input has content', async () => {
     const { getByTestId } = renderStarter();
     const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
     const input = getByTestId('agent-builder-starter-input') as HTMLTextAreaElement;
@@ -81,7 +81,7 @@ describe('AgentBuilderStarter', () => {
     expect(submit.disabled).toBe(true);
 
     fireEvent.change(input, { target: { value: 'build something' } });
-    expect(submit.disabled).toBe(false);
+    await waitFor(() => expect(submit.disabled).toBe(false));
   });
 
   it('does not render a "create manually" affordance — users must use the prompt input', () => {
@@ -100,15 +100,20 @@ describe('AgentBuilderStarter', () => {
 
     const { getByTestId } = renderStarter();
     const input = getByTestId('agent-builder-starter-input') as HTMLTextAreaElement;
-    const submit = getByTestId('agent-builder-starter-submit');
+    const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
 
     fireEvent.change(input, { target: { value: 'build a tutor agent' } });
+    // Wait for builder settings to load so submit is no longer gated.
+    await waitFor(() => expect(submit.disabled).toBe(false));
 
     await act(async () => {
       fireEvent.click(submit);
     });
 
-    expect(capturedBody).toBeTruthy();
+    // The MSW handler populates `capturedBody` asynchronously, so wait for the
+    // POST to land before reading its fields. Avoids a race that previously
+    // made this assertion flaky on slow runners.
+    await waitFor(() => expect(capturedBody).not.toBeNull());
     expect(capturedBody.name).toBe('build a tutor agent');
     expect(capturedBody.instructions).toBe('');
     expect(capturedBody.model).toEqual({ provider: 'google', name: 'gemini-2.5-flash' });
@@ -139,12 +144,16 @@ describe('AgentBuilderStarter', () => {
     const longPrompt = 'build a really helpful pull request reviewer agent for typescript repos';
     const { getByTestId } = renderStarter();
     fireEvent.change(getByTestId('agent-builder-starter-input'), { target: { value: longPrompt } });
+    await waitFor(() =>
+      expect((getByTestId('agent-builder-starter-submit') as HTMLButtonElement).disabled).toBe(false),
+    );
 
     await act(async () => {
       fireEvent.click(getByTestId('agent-builder-starter-submit'));
     });
 
-    expect(capturedBody.name).toBe(longPrompt.slice(0, 20) + '…');
+    await waitFor(() => expect(capturedBody).not.toBeNull());
+    expect(capturedBody.name).toBe(longPrompt.slice(0, 20) + '\u2026');
     await waitFor(() => expect(navigateMock).toHaveBeenCalled());
   });
 
@@ -169,6 +178,9 @@ describe('AgentBuilderStarter', () => {
     const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
 
     fireEvent.change(input, { target: { value: 'standup bot' } });
+    // Wait for builder settings to load so submit is no longer gated by it,
+    // otherwise the click below is a no-op and the spinner never appears.
+    await waitFor(() => expect(submit.disabled).toBe(false));
     fireEvent.click(submit);
 
     await waitFor(() => expect(submit.disabled).toBe(true));
@@ -185,6 +197,58 @@ describe('AgentBuilderStarter', () => {
     expect(path).toBe(`/agent-builder/agents/${capturedId}/edit`);
   });
 
+  it('prefers the admin-configured modelPolicy default over the first allowed model (PLTFRM-1017)', async () => {
+    // When the admin configures a default model on an active policy, the
+    // starter must commit to that default — not the first allowlist entry
+    // (which is what we used to pick, and which broke the configured default).
+    // Model IDs use placeholder tokens documented in
+    // docs/src/plugins/remark-model-tokens/models.ts.
+    const ALLOWED_MODEL_PROVIDER = 'anthropic';
+    const ALLOWED_MODEL_ID = 'claude-opus-4-7'; // __GATEWAY_ANTHROPIC_MODEL_OPUS__
+    const DEFAULT_MODEL_PROVIDER = 'openai';
+    const DEFAULT_MODEL_ID = 'gpt-5.4'; // __GATEWAY_OPENAI_MODEL__
+
+    let capturedBody: any = null;
+    server.use(
+      http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+        HttpResponse.json({
+          enabled: true,
+          modelPolicy: {
+            active: true,
+            pickerVisible: true,
+            allowed: [
+              { provider: ALLOWED_MODEL_PROVIDER, modelId: ALLOWED_MODEL_ID },
+              { provider: DEFAULT_MODEL_PROVIDER },
+            ],
+            default: { provider: DEFAULT_MODEL_PROVIDER, modelId: DEFAULT_MODEL_ID },
+          },
+        }),
+      ),
+      http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: capturedBody.id });
+      }),
+    );
+
+    const { getByTestId } = renderStarter();
+
+    // The submit button is gated on `useBuilderSettings().isLoading`, so once
+    // it's enabled we know React Query has the policy cached and the next
+    // submit will see the active policy. This replaces the prior flaky
+    // `setTimeout(0)` workaround with a deterministic UI signal.
+    fireEvent.change(getByTestId('agent-builder-starter-input'), { target: { value: 'standup bot' } });
+    await waitFor(() =>
+      expect((getByTestId('agent-builder-starter-submit') as HTMLButtonElement).disabled).toBe(false),
+    );
+
+    await act(async () => {
+      fireEvent.click(getByTestId('agent-builder-starter-submit'));
+    });
+
+    await waitFor(() => expect(capturedBody).not.toBeNull());
+    expect(capturedBody.model).toEqual({ provider: DEFAULT_MODEL_PROVIDER, name: DEFAULT_MODEL_ID });
+  });
+
   it('does not navigate when the create request fails', async () => {
     server.use(
       http.post(`${BASE_URL}/api/stored/agents`, () => HttpResponse.json({ message: 'boom' }, { status: 500 })),
@@ -192,13 +256,14 @@ describe('AgentBuilderStarter', () => {
 
     const { getByTestId } = renderStarter();
     fireEvent.change(getByTestId('agent-builder-starter-input'), { target: { value: 'support triage' } });
+    const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
+    await waitFor(() => expect(submit.disabled).toBe(false));
 
     await act(async () => {
-      fireEvent.click(getByTestId('agent-builder-starter-submit'));
+      fireEvent.click(submit);
     });
 
     expect(navigateMock).not.toHaveBeenCalled();
-    const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
     await waitFor(() => expect(submit.disabled).toBe(false));
   });
 });

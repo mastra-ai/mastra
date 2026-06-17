@@ -2,6 +2,7 @@
  * Slash command dispatcher: routes command strings to extracted handlers.
  */
 import { processSlashCommand } from '../utils/slash-command-processor.js';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 import {
   handleHelpCommand,
@@ -40,8 +41,8 @@ import {
   handleApiKeysCommand,
   handleFeedbackCommand,
   handleObservabilityCommand,
+  handleGithubCommand,
   handleGoalCommand,
-  handleJudgeCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -245,11 +246,11 @@ export async function dispatchSlashCommand(
     case 'observability':
       await handleObservabilityCommand(buildCtx(), args);
       return true;
+    case 'github':
+      await handleGithubCommand(buildCtx(), args);
+      return true;
     case 'goal':
       await handleGoalCommand(buildCtx(), args);
-      return true;
-    case 'judge':
-      await handleJudgeCommand(buildCtx());
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);
@@ -300,7 +301,10 @@ async function handleGoalSourceCommand(
   const goalSkill = state.goalSkillCommands.find(skill => skill.name === sourceName);
   if (goalSkill) {
     try {
-      const workspace = ctx.getResolvedWorkspace();
+      let workspace = ctx.getResolvedWorkspace();
+      if (!workspace && ctx.harness?.hasWorkspace?.()) {
+        workspace = await ctx.harness.resolveWorkspace();
+      }
       const skill = await workspace?.skills?.get(goalSkill.path || goalSkill.name);
       if (!skill || skill.metadata?.goal !== true) {
         showError(state, `Unknown goal command: ${sourceName}`);
@@ -339,7 +343,7 @@ async function handleCustomSlashCommand(
       if (!isCurrentThreadActive(commandCtx)) {
         const slashComp = new SlashCommandComponent(command.name, processedContent.trim());
         state.allSlashCommandComponents.push(slashComp);
-        state.chatContainer.addChild(slashComp);
+        insertChatComponentWithBoundarySpacing(state.chatContainer, slashComp);
         state.ui.requestRender();
       }
 

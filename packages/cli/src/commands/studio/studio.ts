@@ -102,7 +102,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
   const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
   const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
   const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
-  const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'true' ? 'true' : 'false';
+  const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
 
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)

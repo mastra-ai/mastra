@@ -14,6 +14,7 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
+import { deserializeToolError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
@@ -74,26 +75,50 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         streamWriter,
       );
 
-      if (blocked) {
-        // Emit a tripwire chunk so downstream knows about the abort
+      const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
         rest.controller.enqueue({
           type: 'tripwire',
           payload: {
-            reason: reason || 'Output processor blocked content',
-            retry: tripwireOptions?.retry,
-            metadata: tripwireOptions?.metadata,
-            processorId,
+            reason: r || 'Output processor blocked content',
+            retry: opts?.retry,
+            metadata: opts?.metadata,
+            processorId: pid,
           },
         } as ChunkType<OUTPUT>);
+      };
+
+      if (blocked) {
+        // Emit a tripwire chunk so downstream knows about the abort
+        enqueueTripwire(reason, tripwireOptions, processorId);
         return null;
       }
 
       if (processed) {
         rest.controller.enqueue(processed as ChunkType<OUTPUT>);
-        return processed as ChunkType<OUTPUT>;
       }
 
-      return null;
+      // Emit any parts a processor stashed for reprocessing (e.g. the non-text
+      // part that triggered a BatchPartsProcessor flush), pushing each back
+      // through the whole chain so it gets downstream processing.
+      const reprocessed = await processorRunner.drainReprocessParts(
+        rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
+        observabilityContext,
+        rest.requestContext,
+        rest.messageList,
+        0,
+        streamWriter,
+      );
+      for (const r of reprocessed) {
+        if (r.blocked) {
+          enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
+          return processed ? (processed as ChunkType<OUTPUT>) : null;
+        }
+        if (r.part != null) {
+          rest.controller.enqueue(r.part as ChunkType<OUTPUT>);
+        }
+      }
+
+      return processed ? (processed as ChunkType<OUTPUT>) : null;
     } else {
       // No processor runner, just enqueue the chunk directly
       rest.controller.enqueue(chunk);
@@ -119,11 +144,16 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
        */
       /**
-       * Normalize modelOutput from toModelOutput() so that `type: 'media'` parts
-       * are converted to `type: 'image-data'` or `type: 'file-data'` as AI SDK
-       * providers expect. AI SDK does this internally in `mapToolResultOutput`,
-       * but Mastra calls toModelOutput directly and stores the result, bypassing
-       * that normalization.
+       * Normalize modelOutput from toModelOutput() into the AI SDK's
+       * LanguageModelV2ToolResultOutput shape.
+       *
+       * The AI SDK's content array only accepts type 'text' or 'media'.
+       * Mastra's createTool docs show type 'image-url' as a convenience shorthand,
+       * so we normalize that here into type 'media' with the correct structure.
+       *
+       * Previously this converted 'media' -> 'image-data'/'file-data' which was wrong
+       * (those types are not valid in LanguageModelV2ToolResultOutput).
+       * See: https://github.com/mastra-ai/mastra/issues/17876
        */
       function normalizeModelOutput(output: unknown): unknown {
         if (output == null || typeof output !== 'object') return output;
@@ -136,11 +166,25 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           value: (obj.value as unknown[]).map(item => {
             if (item == null || typeof item !== 'object') return item;
             const part = item as Record<string, unknown>;
-            if (part.type !== 'media') return part;
-            if (typeof part.mediaType === 'string' && part.mediaType.startsWith('image/')) {
-              return { type: 'image-data', data: part.data, mediaType: part.mediaType };
+            // Normalize 'image-url' convenience type -> 'media' as AI SDK expects
+            if (part.type === 'image-url' && typeof part.url === 'string') {
+              // Prefer caller-supplied mediaType; fall back to parsing data: URI or defaulting to image/jpeg
+              const mediaType =
+                typeof part.mediaType === 'string' && part.mediaType
+                  ? part.mediaType
+                  : part.url.startsWith('data:')
+                    ? part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg'
+                    : 'image/jpeg';
+              return { type: 'media', data: part.url, mediaType };
             }
-            return { type: 'file-data', data: part.data, mediaType: part.mediaType };
+            // 'image-data'/'file-data' from old normalizeModelOutput — convert back to 'media'
+            if (part.type === 'image-data' && typeof part.data === 'string') {
+              return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'image/jpeg' };
+            }
+            if (part.type === 'file-data' && typeof part.data === 'string') {
+              return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'application/octet-stream' };
+            }
+            return part;
           }),
         };
       }
@@ -248,20 +292,24 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
         if (errorResults?.length) {
           for (const toolCall of errorResults) {
+            // `toolCall.error` arrives as the plain {name,message,stack} the workflow step
+            // serializes (Error instances become `{}` over the pubsub bus). Reify here so
+            // chunk consumers see a real Error with name/message/stack intact.
+            const reifiedError = deserializeToolError(toolCall.error);
             const chunk = await transformToolChunk(
               {
                 type: 'tool-error',
                 runId: rest.runId,
                 from: ChunkFrom.AGENT,
                 payload: {
-                  error: toolCall.error,
+                  error: reifiedError,
                   args: toolCall.args,
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
                   providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
                 },
               },
-              toolCall,
+              { ...toolCall, error: reifiedError },
               'error',
             );
             const processed = await processAndEnqueueChunk(chunk);
@@ -274,7 +322,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolCallId: toolCall.toolCallId,
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
-                result: toolCall.error?.message ?? toolCall.error,
+                // Use the already-reified Error rather than `toolCall.error` (which is the
+                // plain {name,message,stack} shape after the pubsub JSON round-trip).
+                // Without reification the `instanceof Error` check below falls through to
+                // `safeStringify`, dumping the whole stringified payload into the history.
+                result: reifiedError.message || 'Tool execution failed',
               },
               ...(withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,

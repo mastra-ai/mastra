@@ -2,8 +2,9 @@
  * Lightweight inline indicator for temporal gaps between messages.
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 export interface TemporalGapOptions {
   message?: string;
@@ -15,10 +16,13 @@ export class TemporalGapComponent extends Container {
     super();
 
     this.addChild(new Text(theme.fg('dim', `  ⏳ ${resolveGapText(options)}`), BOX_INDENT, 0));
-    this.addChild(new Spacer(1));
   }
 
   setExpanded(_expanded: boolean): void {}
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
+  }
 }
 
 function resolveGapText(options: TemporalGapOptions): string {

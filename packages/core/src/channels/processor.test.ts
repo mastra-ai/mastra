@@ -53,9 +53,9 @@ describe('ChatChannelProcessor', () => {
     const args = createArgs({
       channel: { platform: 'slack', isDM: true, userName: 'caleb' } as ChannelContext,
       messageList,
-      // The runner builds args.systemMessages from getAllSystemMessages(), which
-      // flattens tagged messages into a single untagged array.
-      systemMessages: messageList.getAllSystemMessages(),
+      // args.systemMessages exposes only the untagged bucket; tagged messages
+      // owned by other processors remain accessible via messageList.
+      systemMessages: messageList.getSystemMessages(),
     });
 
     processor.processInputStep(args);
@@ -69,8 +69,7 @@ describe('ChatChannelProcessor', () => {
     expect(instructionsAfter).toHaveLength(1);
     expect(instructionsAfter[0]!.content).toBe('agent base instructions');
 
-    // And the channel system message must be present under its own tag — not
-    // merged into the flat untagged array. This is the core of the fix.
+    // And the channel system message must be present under its own tag.
     const channelAfter = args.messageList.getSystemMessages('chat-channel-context');
     expect(channelAfter).toHaveLength(1);
     expect(channelAfter[0]!.content).toContain('communicating via slack');
@@ -82,11 +81,11 @@ describe('ChatChannelProcessor', () => {
     const channel: ChannelContext = { platform: 'slack', isDM: true, userName: 'caleb' } as ChannelContext;
 
     // Step 1
-    const args1 = createArgs({ channel, messageList, systemMessages: messageList.getAllSystemMessages() });
+    const args1 = createArgs({ channel, messageList, systemMessages: messageList.getSystemMessages() });
     processor.processInputStep(args1);
 
     // Step 2 — same channel context, system messages list is re-derived
-    const args2 = createArgs({ channel, messageList, systemMessages: messageList.getAllSystemMessages() });
+    const args2 = createArgs({ channel, messageList, systemMessages: messageList.getSystemMessages() });
     processor.processInputStep(args2);
 
     const channelMessages = messageList.getSystemMessages('chat-channel-context');

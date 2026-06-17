@@ -302,6 +302,7 @@ export function zodToJsonSchema(
 
     const jsonSchema = zV4.toJSONSchema(zodSchema, {
       unrepresentable: 'any',
+      io: 'input',
       override: (ctx: any) => {
         // Handle both Zod v4 structures: _def directly or nested in _zod
         const def = ctx.zodSchema?._def || ctx.zodSchema?._zod?.def;

@@ -166,6 +166,8 @@ Usage:
       let truncated = false;
       const MAX_LINE_LENGTH = 500;
       const GLOBAL_CAP = 1000;
+      const normalizedContextLines = Math.max(0, Math.floor(contextLines));
+      let emittedContextHunk = false;
 
       for (const filePath of filePaths) {
         if (truncated) break;
@@ -181,6 +183,7 @@ Usage:
 
         const lines = content.split('\n');
         let fileMatchCount = 0;
+        const fileMatches: Array<{ lineIndex: number; columnIndex: number }> = [];
 
         for (let i = 0; i < lines.length; i++) {
           const currentLine = lines[i]!;
@@ -191,31 +194,7 @@ Usage:
 
           filesWithMatches.add(filePath);
 
-          let lineContent = currentLine;
-          if (lineContent.length > MAX_LINE_LENGTH) {
-            lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
-          }
-
-          // Add context lines before the match
-          if (contextLines > 0) {
-            const beforeStart = Math.max(0, i - contextLines);
-            for (let b = beforeStart; b < i; b++) {
-              outputLines.push(`${filePath}:${b + 1}- ${lines[b]}`);
-            }
-          }
-
-          // Add the matching line
-          outputLines.push(`${filePath}:${i + 1}:${lineMatch.index + 1}: ${lineContent}`);
-
-          // Add context lines after the match
-          if (contextLines > 0) {
-            const afterEnd = Math.min(lines.length - 1, i + contextLines);
-            for (let a = i + 1; a <= afterEnd; a++) {
-              outputLines.push(`${filePath}:${a + 1}- ${lines[a]}`);
-            }
-            // Separator between context groups
-            outputLines.push('--');
-          }
+          fileMatches.push({ lineIndex: i, columnIndex: lineMatch.index });
 
           totalMatchCount++;
           fileMatchCount++;
@@ -227,6 +206,60 @@ Usage:
           if (totalMatchCount >= GLOBAL_CAP) {
             truncated = true;
             break;
+          }
+        }
+
+        if (normalizedContextLines > 0) {
+          const hunks: Array<{
+            start: number;
+            end: number;
+            matchesByLine: Map<number, number>;
+          }> = [];
+
+          for (const match of fileMatches) {
+            const start = Math.max(0, match.lineIndex - normalizedContextLines);
+            const end = Math.min(lines.length - 1, match.lineIndex + normalizedContextLines);
+            const previousHunk = hunks[hunks.length - 1];
+
+            if (previousHunk && start <= previousHunk.end + 1) {
+              previousHunk.end = Math.max(previousHunk.end, end);
+              previousHunk.matchesByLine.set(match.lineIndex, match.columnIndex);
+            } else {
+              hunks.push({
+                start,
+                end,
+                matchesByLine: new Map([[match.lineIndex, match.columnIndex]]),
+              });
+            }
+          }
+
+          for (const hunk of hunks) {
+            if (emittedContextHunk) {
+              outputLines.push('--');
+            }
+            emittedContextHunk = true;
+
+            for (let i = hunk.start; i <= hunk.end; i++) {
+              const columnIndex = hunk.matchesByLine.get(i);
+
+              if (columnIndex !== undefined) {
+                let lineContent = lines[i]!;
+                if (lineContent.length > MAX_LINE_LENGTH) {
+                  lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
+                }
+                outputLines.push(`${filePath}:${i + 1}:${columnIndex + 1}: ${lineContent}`);
+              } else {
+                outputLines.push(`${filePath}:${i + 1}- ${lines[i]}`);
+              }
+            }
+          }
+        } else {
+          for (const match of fileMatches) {
+            let lineContent = lines[match.lineIndex]!;
+            if (lineContent.length > MAX_LINE_LENGTH) {
+              lineContent = lineContent.slice(0, MAX_LINE_LENGTH) + '...';
+            }
+            outputLines.push(`${filePath}:${match.lineIndex + 1}:${match.columnIndex + 1}: ${lineContent}`);
           }
         }
       }

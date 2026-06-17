@@ -9,16 +9,24 @@ import type { FGACheckContext, IFGAProvider } from './interfaces/fga';
 import type { MastraFGAPermissionInput } from './interfaces/permissions.generated';
 import { getSafeLicenseSummary } from './license';
 
+export type ActorSignal =
+  | true
+  | {
+      actorKind: 'system';
+      sourceWorkflow?: string;
+    };
+
 export interface CheckFGAOptions {
   fgaProvider: IFGAProvider | undefined;
   user: any;
   resource: { type: string; id: string };
   permission: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   context?: FGACheckContext;
+  requestContext?: FGACheckContext['requestContext'];
+  actor?: ActorSignal;
 }
 
 export interface RequireFGAOptions extends CheckFGAOptions {
-  requestContext?: FGACheckContext['requestContext'];
   metadata?: Record<string, unknown>;
 }
 
@@ -43,6 +51,22 @@ function mergeFGAContext({
   }
 
   return Object.keys(mergedContext).length > 0 ? mergedContext : undefined;
+}
+
+function isActorSignal(actor: unknown): actor is ActorSignal {
+  if (actor === true) {
+    return true;
+  }
+
+  if (typeof actor !== 'object' || actor === null) {
+    return false;
+  }
+
+  const candidate = actor as { actorKind?: unknown; sourceWorkflow?: unknown };
+  return (
+    candidate.actorKind === 'system' &&
+    (candidate.sourceWorkflow === undefined || typeof candidate.sourceWorkflow === 'string')
+  );
 }
 
 export function getAgentFGAResourceId(agentId: string): string {
@@ -82,13 +106,46 @@ export async function checkFGA(options: CheckFGAOptions): Promise<void> {
  * user fails closed.
  */
 export async function requireFGA(options: RequireFGAOptions): Promise<void> {
-  const { fgaProvider, user, resource, permission, context, requestContext, metadata } = options;
+  const { fgaProvider, user, resource, permission, context, requestContext, metadata, actor } = options;
 
   if (!fgaProvider) {
     return;
   }
 
   const fgaContext = mergeFGAContext({ context, requestContext, metadata });
+  const license = getSafeLicenseSummary();
+
+  if (isActorSignal(actor)) {
+    const tenantOrganizationId = fgaContext?.requestContext?.get('organizationId');
+    if (typeof tenantOrganizationId !== 'string' || tenantOrganizationId.length === 0) {
+      throw new FGADeniedError(user, resource, permission, 'trusted actor requires organizationId / tenant scope');
+    }
+
+    const sourceWorkflow =
+      (actor === true ? undefined : actor.sourceWorkflow) ??
+      (typeof fgaContext?.metadata?.['sourceWorkflow'] === 'string'
+        ? fgaContext.metadata['sourceWorkflow']
+        : undefined);
+
+    try {
+      captureEEEvent('ee_feature_used', license.anonymousId || getEETelemetryFallbackDistinctId(), {
+        feature: 'fga',
+        actor_kind: 'system',
+        resource_type: resource.type,
+        resource_id: resource.id,
+        permission,
+        user_id: null,
+        organization_membership_id: null,
+        source_workflow: sourceWorkflow,
+        license_valid: license.valid,
+        license_hash: license.licenseHash,
+        is_dev_environment: license.isDevEnvironment,
+      });
+    } catch {
+      // Telemetry must never affect auth or EE feature behavior.
+    }
+    return;
+  }
 
   if (!user) {
     throw new FGADeniedError(user, resource, permission, 'authenticated user is required');
@@ -99,15 +156,15 @@ export async function requireFGA(options: RequireFGAOptions): Promise<void> {
     fgaContext ? { resource, permission, context: fgaContext } : { resource, permission },
   );
 
-  const license = getSafeLicenseSummary();
   try {
     captureEEEvent('ee_feature_used', user?.id || license.anonymousId || getEETelemetryFallbackDistinctId(), {
       feature: 'fga',
+      actor_kind: 'user',
       resource_type: resource.type,
       resource_id: resource.id,
       permission,
-      user_id: user?.id,
-      organization_membership_id: user?.organizationMembershipId,
+      user_id: user?.id ?? null,
+      organization_membership_id: user?.organizationMembershipId ?? null,
       license_valid: license.valid,
       license_hash: license.licenseHash,
       is_dev_environment: license.isDevEnvironment,

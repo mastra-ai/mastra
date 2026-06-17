@@ -1,13 +1,13 @@
 import type { HarnessRequestContext } from '@mastra/core/harness';
-import type { MastraCodeState } from '../schema.js';
+import type { MastraCodeComposedState } from '../schema.js';
 import { detectCommonBinariesAsync } from '../utils/binaries.js';
 import { getCurrentGitBranchAsync } from '../utils/project.js';
 import type { PromptContext } from './prompts/index.js';
 import { buildFullPrompt } from './prompts/index.js';
 
 export async function getDynamicInstructions({ requestContext }: { requestContext: { get(key: string): unknown } }) {
-  const harnessContext = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
-  const state = harnessContext?.state;
+  const harnessContext = requestContext.get('harness') as HarnessRequestContext<MastraCodeComposedState> | undefined;
+  const state = harnessContext?.getState?.();
   const modeId = harnessContext?.modeId ?? 'build';
   const projectPath = state?.projectPath ?? process.cwd();
 

@@ -29,7 +29,8 @@ import { executeWithContext } from '../observability/utils';
 import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
-import { createWorkflow, createStep } from '../workflows/workflow';
+import { createWorkflow } from '../workflows/create';
+import { createStep } from '../workflows/workflow';
 import type {
   ScoringSamplingConfig,
   ScorerRunInputForAgent,
@@ -1041,6 +1042,8 @@ export type MastraPartType =
   | 'data-tool-call-approval'
   | 'data-tool-call-suspended'
   | 'data-system-reminder'
+  | 'data-signal'
+  | 'data-user-message'
   | 'data-tripwire'
   | 'data-structured-output'
   // Allow arbitrary strings for custom data-* types

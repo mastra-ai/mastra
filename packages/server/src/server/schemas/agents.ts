@@ -58,8 +58,18 @@ const userMessageSignalContentsSchema = z.union([
   z.array(z.union([signalTextPartSchema, signalFilePartSchema])),
 ]);
 
+const agentMessageInputObjectSchema = z.object({
+  contents: userMessageSignalContentsSchema,
+  attributes: signalAttributesSchema.optional(),
+  metadata: jsonRecordSchema.optional(),
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+});
+
+const agentMessageInputSchema = z.union([userMessageSignalContentsSchema, agentMessageInputObjectSchema]);
+
 const agentSignalSchema = baseSignalSchema.extend({
-  type: z.string(),
+  type: z.enum(['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder']),
+  tagName: z.string().optional(),
   contents: userMessageSignalContentsSchema,
   providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
 });
@@ -173,6 +183,14 @@ const modelConfigSchema = z.object({
   // Additional fields from AgentModelManagerConfig can be added here
 });
 
+const agentEditorConfigSchema = z.union([
+  z.literal(false),
+  z.object({
+    instructions: z.boolean().optional(),
+    tools: z.union([z.boolean(), z.object({ description: z.boolean().optional() })]).optional(),
+  }),
+]);
+
 /**
  * Main schema for serialized agent representation
  */
@@ -189,13 +207,16 @@ export const serializedAgentSchema = z.object({
   provider: z.string().optional(),
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
+  supportsMemory: z.boolean().optional(),
   modelList: z.array(modelConfigSchema).optional(),
   defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  source: z.enum(['code', 'stored']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
   hasDraft: z.boolean().optional(),
+  editor: agentEditorConfigSchema.optional(),
 });
 
 /**
@@ -225,6 +246,8 @@ export const providerSchema = z.object({
 export const providersResponseSchema = z.object({
   providers: z.array(providerSchema),
 });
+
+export type ProviderListItem = z.infer<typeof providerSchema>;
 
 /**
  * Schema for list agents endpoint response
@@ -355,6 +378,9 @@ export const agentExecutionBodySchema = z
         fallbackValue: z.any().optional(),
       })
       .optional(),
+
+    // Idle-loop streaming (collapses streamUntilIdle into stream)
+    untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
   })
   .passthrough(); // Allow additional fields for forward compatibility
 
@@ -370,6 +396,7 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
 
 export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
   maxIdleMs: z.number().int().positive().optional(),
+  untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
 });
 
 export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
@@ -441,6 +468,12 @@ export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
  */
 export const toolCallResponseSchema = z.object({
   fullStream: z.any(), // ReadableStream
+});
+
+export const sendToolApprovalResponseSchema = z.object({
+  accepted: z.literal(true),
+  runId: z.string(),
+  toolCallId: z.string().optional(),
 });
 
 // ============================================================================
@@ -541,38 +574,68 @@ export const observeAgentBodySchema = z.object({
 const signalActiveBehaviorSchema = z.enum(['deliver', 'persist', 'discard']);
 const signalIdleBehaviorSchema = z.enum(['wake', 'persist', 'discard']);
 
-const sendAgentSignalBaseBodySchema = z.object({
-  signal: agentSignalSchema,
+const signalTargetBaseBodySchema = z.object({
   ifActive: z
     .object({
       behavior: signalActiveBehaviorSchema.optional(),
+      attributes: signalAttributesSchema.optional(),
     })
     .optional(),
 });
 
-export const sendAgentSignalBodySchema = z.union([
-  sendAgentSignalBaseBodySchema.extend({
+const signalTargetBodySchema = z.union([
+  signalTargetBaseBodySchema.extend({
     runId: z.string(),
     resourceId: z.string().optional(),
     threadId: z.string().optional(),
     ifIdle: z.undefined().optional(),
   }),
-  sendAgentSignalBaseBodySchema.extend({
-    runId: z.string().optional(),
+  signalTargetBaseBodySchema.extend({
+    runId: z.undefined().optional(),
     resourceId: z.string(),
     threadId: z.string(),
     ifIdle: z
       .object({
         behavior: signalIdleBehaviorSchema.optional(),
         streamOptions: agentExecutionBodySchema.omit({ messages: true }).optional(),
+        attributes: signalAttributesSchema.optional(),
       })
       .optional(),
   }),
 ]);
 
+export const sendAgentSignalBodySchema = z.union([
+  signalTargetBodySchema.options[0].extend({ signal: agentSignalSchema }),
+  signalTargetBodySchema.options[1].extend({ signal: agentSignalSchema }),
+]);
+
+export const sendAgentMessageBodySchema = z.union([
+  signalTargetBodySchema.options[0].extend({ message: agentMessageInputSchema }),
+  signalTargetBodySchema.options[1].extend({ message: agentMessageInputSchema }),
+]);
+
+export const queueAgentMessageBodySchema = sendAgentMessageBodySchema;
+
 export const subscribeAgentThreadBodySchema = z.object({
   resourceId: z.string().optional(),
   threadId: z.string(),
+});
+
+export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema;
+
+export const sendToolApprovalBodySchema = z.object({
+  resourceId: z.string(),
+  threadId: z.string(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+  toolCallId: z.string(),
+  approved: z.boolean(),
+  format: z.string().optional(),
+  messages: z.array(coreMessageSchema).optional(),
+  streamOptions: z.any().optional(),
+});
+
+export const abortAgentThreadResponseSchema = z.object({
+  aborted: z.boolean(),
 });
 
 /**

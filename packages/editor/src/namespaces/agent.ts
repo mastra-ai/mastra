@@ -38,6 +38,8 @@ import type {
 import type { MastraBrowser } from '@mastra/core/browser';
 
 import { RequestContext } from '@mastra/core/request-context';
+import { resolveStoredToolProviders } from '@mastra/core/tool-provider';
+import type { ToolProviders } from '@mastra/core/tool-provider';
 
 import { evaluateRuleGroup } from '../rule-evaluator';
 import { resolveInstructionBlocks } from '../instruction-builder';
@@ -45,6 +47,8 @@ import { hydrateProcessorGraph, selectFirstMatchingGraph } from '../processor-gr
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
+
+type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
 
 // ============================================================================
 // Builder Defaults
@@ -217,7 +221,30 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // Ensure the workspace referenced by the agent exists in stored workspaces
     await this.ensureStoredWorkspace(finalInput.workspace as StorageWorkspaceRef | undefined);
 
+    // When creating a stored override for an agent that is already defined in
+    // code, the stored snapshot is an intentionally partial override (e.g.
+    // descriptions-only agents carry no instructions/model/name). Hydrating it
+    // as a standalone agent would fail because Agent requires a model. Persist
+    // the override and return the existing code-defined runtime agent instead.
+    const existingCodeAgent = this.getCodeDefinedAgent(finalInput.id);
+    if (existingCodeAgent) {
+      const adapter = await this.getStorageAdapter();
+      await adapter.create(finalInput);
+      this._cache.set(finalInput.id, existingCodeAgent);
+      return existingCodeAgent;
+    }
+
     return super.create(finalInput);
+  }
+
+  private getCodeDefinedAgent(id: string): Agent | undefined {
+    let agent: Agent | undefined;
+    try {
+      agent = this.mastra?.getAgentById(id);
+    } catch {
+      return undefined;
+    }
+    return agent?.source === 'code' ? agent : undefined;
   }
 
   /**
@@ -344,6 +371,19 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     options?: { status?: 'draft' | 'published' } | { versionId: string },
     requestContext?: RequestContext,
   ): Promise<Agent> {
+    const editorConfig = (
+      agent as Agent & { __getEditorConfig?: () => AgentEditorConfig | undefined }
+    ).__getEditorConfig?.();
+    if (editorConfig === false) {
+      return agent;
+    }
+
+    const instructionsEditable = editorConfig === undefined ? true : editorConfig.instructions === true;
+    const toolsConfig = editorConfig === undefined ? true : editorConfig.tools;
+    const toolsEditable = toolsConfig === true;
+    const toolDescriptionsEditable =
+      typeof toolsConfig === 'object' && toolsConfig !== null && toolsConfig.description === true;
+
     let storedConfig: StorageResolvedAgentType | null = null;
     try {
       this.ensureRegistered();
@@ -378,7 +418,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     this.logger?.debug(`[applyStoredOverrides] Applying stored overrides to code agent "${agent.id}"`);
 
     // --- Instructions ---
-    if (storedConfig.instructions !== undefined && storedConfig.instructions !== null) {
+    if (instructionsEditable && storedConfig.instructions !== undefined && storedConfig.instructions !== null) {
       const resolved = this.resolveStoredInstructions(storedConfig.instructions);
       if (resolved !== undefined) {
         fork.__updateInstructions(resolved);
@@ -389,15 +429,29 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     const hasStoredTools = storedConfig.tools != null;
     const hasStoredMCPClients = storedConfig.mcpClients != null;
     const hasStoredIntegrationTools = storedConfig.integrationTools != null;
+    const hasStoredToolProviders =
+      storedConfig.toolProviders != null && Object.keys(storedConfig.toolProviders as object).length > 0;
 
-    if (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools) {
+    if (
+      toolsEditable &&
+      (hasStoredTools || hasStoredMCPClients || hasStoredIntegrationTools || hasStoredToolProviders)
+    ) {
       const hasConditionalTools = this.isConditionalVariants(storedConfig.tools);
       const hasConditionalMCPClients =
         storedConfig.mcpClients != null && this.isConditionalVariants(storedConfig.mcpClients);
       const hasConditionalIntegrationTools =
         storedConfig.integrationTools != null && this.isConditionalVariants(storedConfig.integrationTools);
+      const hasConditionalToolProviders =
+        storedConfig.toolProviders != null && this.isConditionalVariants(storedConfig.toolProviders);
+      // toolProviders need request-time context for `caller-supplied` scope, so they
+      // always force the dynamic branch (mirrors the create-stored-agent path).
       const isDynamicTools =
-        hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasStoredIntegrationTools;
+        hasConditionalTools ||
+        hasConditionalMCPClients ||
+        hasConditionalIntegrationTools ||
+        hasStoredIntegrationTools ||
+        hasConditionalToolProviders ||
+        hasStoredToolProviders;
 
       if (isDynamicTools) {
         // Wrap in a dynamic function that merges at request time
@@ -435,7 +489,24 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
             requestContext,
           );
 
-          return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools };
+          // Resolve tool providers (v1 toolProviders)
+          const resolvedToolProvidersConfig = hasConditionalToolProviders
+            ? this.accumulateObjectVariants(
+                storedConfig!.toolProviders as StorageConditionalVariant<ToolProviders>[],
+                ctx,
+              )
+            : (storedConfig!.toolProviders as ToolProviders | undefined);
+          const providerTools = await resolveStoredToolProviders(
+            resolvedToolProvidersConfig,
+            (providerId: string) => this.editor.getToolProviderOrThrow(providerId),
+            {
+              requestContext: ctx,
+              authorId: storedConfig!.authorId,
+              logger: this.logger,
+            },
+          );
+
+          return { ...codeTools, ...registryTools, ...mcpTools, ...integrationTools, ...providerTools };
         };
         fork.__setTools(toolsFn);
       } else {
@@ -452,6 +523,30 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           storedConfig.integrationTools as Record<string, StorageMCPClientToolsConfig> | undefined,
         );
         fork.__setTools({ ...codeTools, ...registryTools, ...mcpTools, ...integrationTools });
+      }
+    } else if (toolDescriptionsEditable && hasStoredTools) {
+      const hasConditionalTools = this.isConditionalVariants(storedConfig.tools);
+
+      if (hasConditionalTools) {
+        const originalTools = agent.listTools.bind(agent);
+        const toolsFn = async ({ requestContext }: { requestContext: RequestContext }): Promise<ToolsInput> => {
+          const codeTools = await originalTools({ requestContext });
+          const resolvedToolsConfig = this.accumulateObjectVariants(
+            storedConfig!.tools as StorageConditionalVariant<Record<string, StorageToolConfig>>[],
+            requestContext.toJSON(),
+          );
+
+          return this.applyStoredToolDescriptions(codeTools, resolvedToolsConfig);
+        };
+        fork.__setTools(toolsFn);
+      } else {
+        const codeTools = await fork.listTools();
+        fork.__setTools(
+          this.applyStoredToolDescriptions(
+            codeTools,
+            storedConfig.tools as Record<string, StorageToolConfig> | string[] | undefined,
+          ),
+        );
       }
     }
 
@@ -534,6 +629,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       storedAgent.mcpClients != null && this.isConditionalVariants(storedAgent.mcpClients);
     const hasConditionalIntegrationTools =
       storedAgent.integrationTools != null && this.isConditionalVariants(storedAgent.integrationTools);
+    const hasToolProviders =
+      storedAgent.toolProviders != null && Object.keys(storedAgent.toolProviders as object).length > 0;
+    const hasConditionalToolProviders =
+      storedAgent.toolProviders != null && this.isConditionalVariants(storedAgent.toolProviders);
     const hasConditionalWorkflows = storedAgent.workflows != null && this.isConditionalVariants(storedAgent.workflows);
     const hasConditionalAgents = storedAgent.agents != null && this.isConditionalVariants(storedAgent.agents);
     const hasConditionalMemory = storedAgent.memory != null && this.isConditionalVariants(storedAgent.memory);
@@ -554,7 +653,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // If any is conditional, the combined result must be a dynamic function.
     const hasIntegrationTools = storedAgent.integrationTools != null;
     const isDynamicTools =
-      hasConditionalTools || hasConditionalMCPClients || hasConditionalIntegrationTools || hasIntegrationTools;
+      hasConditionalTools ||
+      hasConditionalMCPClients ||
+      hasConditionalIntegrationTools ||
+      hasIntegrationTools ||
+      hasConditionalToolProviders ||
+      hasToolProviders;
 
     let tools:
       | Record<string, ToolAction<any, any, any, any, any, any>>
@@ -599,10 +703,27 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           requestContext,
         );
 
-        return { ...registryTools, ...mcpTools, ...integrationTools };
+        // Resolve tool providers (v1 toolProviders)
+        const resolvedToolProvidersConfig = hasConditionalToolProviders
+          ? this.accumulateObjectVariants(storedAgent.toolProviders as StorageConditionalVariant<ToolProviders>[], ctx)
+          : (storedAgent.toolProviders as ToolProviders | undefined);
+        const providerTools = await resolveStoredToolProviders(
+          resolvedToolProvidersConfig,
+          (providerId: string) => this.editor.getToolProviderOrThrow(providerId),
+          {
+            requestContext: ctx,
+            authorId: storedAgent.authorId,
+            logger: this.logger,
+          },
+        );
+
+        return { ...registryTools, ...mcpTools, ...integrationTools, ...providerTools };
       };
     } else {
-      // All are static — resolve once at agent creation time (no requestContext available)
+      // All are static — resolve once at agent creation time (no requestContext available).
+      // Note: `hasToolProviders` is part of `isDynamicTools` above, so the v1 toolProviders
+      // path is always handled in the dynamic branch (where `requestContext` is available
+      // for `caller-supplied` scope). Nothing to resolve here.
       const registryTools = this.resolveStoredTools(storedAgent.tools as Record<string, StorageToolConfig> | undefined);
       const mcpTools = await this.resolveStoredMCPTools(
         storedAgent.mcpClients as Record<string, StorageMCPClientToolsConfig> | undefined,
@@ -857,14 +978,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // When a stored config is an override for a code agent, adding it would create a
     // duplicate entry under a different key (agent.id vs config key), causing the list
     // endpoint to show the agent as "stored" instead of "code".
-    const existingCodeAgent = (() => {
-      try {
-        return this.mastra?.getAgentById(storedAgent.id);
-      } catch {
-        return undefined;
-      }
-    })();
-    if (!existingCodeAgent || existingCodeAgent.source !== 'code') {
+    if (!this.getCodeDefinedAgent(storedAgent.id)) {
       this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
     }
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
@@ -890,6 +1004,27 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const context = requestContext.toJSON();
       return resolveInstructionBlocks(blocks, context, { promptBlocksStorage: promptBlocksStore });
     };
+  }
+
+  private applyStoredToolDescriptions(
+    codeTools: ToolsInput,
+    storedTools?: Record<string, StorageToolConfig> | string[],
+  ): ToolsInput {
+    if (!storedTools || Array.isArray(storedTools)) {
+      return codeTools;
+    }
+
+    let nextTools: ToolsInput | undefined;
+    for (const [toolKey, toolConfig] of Object.entries(storedTools)) {
+      if (!toolConfig.description || !(toolKey in codeTools)) {
+        continue;
+      }
+
+      nextTools ??= { ...codeTools };
+      nextTools[toolKey] = { ...codeTools[toolKey], description: toolConfig.description };
+    }
+
+    return nextTools ?? codeTools;
   }
 
   /**

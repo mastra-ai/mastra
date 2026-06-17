@@ -188,18 +188,18 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
 
     let sourcePkgName = pkgName;
     let sourcePkgRootPath = await getPackageRootPath(pkgName, resolverParentFile);
-    if (!sourcePkgRootPath) {
-      continue;
-    }
+    let typesFiles;
 
-    let pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
-    const exportSpecifier =
-      pkgJson.name && pkgJson.name !== pkgName
-        ? moduleSpecifier.getLiteralValue().replace(pkgName, pkgJson.name)
-        : moduleSpecifier.getLiteralValue();
-    let typesFiles = resolveExports(pkgJson, exportSpecifier, {
-      conditions: ['types'],
-    });
+    if (sourcePkgRootPath) {
+      const pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
+      const exportSpecifier =
+        pkgJson.name && pkgJson.name !== pkgName
+          ? moduleSpecifier.getLiteralValue().replace(pkgName, pkgJson.name)
+          : moduleSpecifier.getLiteralValue();
+      typesFiles = resolveExports(pkgJson, exportSpecifier, {
+        conditions: ['types'],
+      });
+    }
 
     if (!typesFiles || typesFiles.length === 0) {
       const typesPkgName = getTypesPackageName(pkgName);
@@ -210,7 +210,7 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
 
       sourcePkgName = typesPkgName;
       sourcePkgRootPath = typesPkgRootPath;
-      pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
+      const pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
       typesFiles = pkgJson.types ? [pkgJson.types] : resolveExports(pkgJson, typesPkgName, { conditions: ['types'] });
     }
 

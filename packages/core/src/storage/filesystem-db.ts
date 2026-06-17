@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, statSync, rmSync } from 'node:fs';
-import { join, dirname, relative, resolve, sep } from 'node:path';
+import { join, dirname, relative, resolve, sep, extname } from 'node:path';
 
 /**
  * FilesystemDB is a thin I/O layer for filesystem-based storage.
@@ -98,6 +98,46 @@ export class FilesystemDB {
    */
   clearDomain(filename: string): void {
     this.writeDomain(filename, {});
+  }
+
+  listDomainFiles(directory: string, extension = '.json'): string[] {
+    const baseDir = resolve(this.dir, directory);
+    const rootDir = resolve(this.dir);
+    if (!baseDir.startsWith(rootDir + sep) && baseDir !== rootDir) {
+      throw new Error(`Path traversal detected: directory "${directory}" escapes storage directory`);
+    }
+    if (!existsSync(baseDir)) return [];
+    if (!statSync(baseDir).isDirectory()) {
+      throw new Error(`Configured domain path "${directory}" is a file, expected a directory`);
+    }
+
+    return readdirSync(baseDir)
+      .filter(file => extname(file) === extension && statSync(join(baseDir, file)).isFile())
+      .map(file => `${directory}/${file}`);
+  }
+
+  /**
+   * Check whether a domain file currently exists on disk.
+   */
+  domainFileExists(filename: string): boolean {
+    const filePath = resolve(this.dir, filename);
+    const rootDir = resolve(this.dir);
+    if (!filePath.startsWith(rootDir + sep) && filePath !== rootDir) {
+      throw new Error(`Path traversal detected: file "${filename}" escapes storage directory`);
+    }
+    return existsSync(filePath);
+  }
+
+  removeDomainFile(filename: string): void {
+    this.cache.delete(filename);
+    const filePath = resolve(this.dir, filename);
+    const rootDir = resolve(this.dir);
+    if (!filePath.startsWith(rootDir + sep) && filePath !== rootDir) {
+      throw new Error(`Path traversal detected: file "${filename}" escapes storage directory`);
+    }
+    if (existsSync(filePath)) {
+      rmSync(filePath);
+    }
   }
 
   /**

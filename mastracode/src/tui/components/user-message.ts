@@ -2,8 +2,8 @@
  * Component that renders a user message with a thin border that fits the content.
  */
 
-import { Container, Markdown, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
-import type { MarkdownTheme } from '@mariozechner/pi-tui';
+import { Container, Markdown, Text, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
+import type { MarkdownTheme } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -68,6 +68,10 @@ class BorderedBox {
       if (w > maxContentWidth) maxContentWidth = w;
     }
 
+    // Cap content width so the box never exceeds the render width
+    const maxAllowedContent = maxInnerWidth;
+    maxContentWidth = Math.min(maxContentWidth, maxAllowedContent);
+
     // Box inner width = content width + prompt prefix (the "│ " and " │" add the padding)
     let boxInner = maxContentWidth + 2;
     // When a label is present, ensure the box is wide enough so the top border
@@ -99,8 +103,14 @@ class BorderedBox {
 
     // Content lines with side borders, first line gets "> " prefix
     for (let i = 0; i < trimmedLines.length; i++) {
-      const trimmed = trimmedLines[i]!;
-      const vis = visibleWidth(stripAnsi(trimmed));
+      let trimmed = trimmedLines[i]!;
+      let vis = visibleWidth(stripAnsi(trimmed));
+      // Truncate content that exceeds the available inner width
+      const lineMaxWidth = i === 0 ? boxInner - promptWidth : boxInner;
+      if (vis > lineMaxWidth) {
+        trimmed = truncateToWidth(trimmed, lineMaxWidth);
+        vis = visibleWidth(stripAnsi(trimmed));
+      }
       if (i === 0) {
         const padNeeded = Math.max(0, boxInner - vis - promptWidth);
         lines.push(borderColor('│') + ' ' + promptPrefix + trimmed + ' '.repeat(padNeeded) + ' ' + borderColor('│'));
@@ -147,7 +157,6 @@ export class PendingUserMessageComponent extends Container {
     const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
     const displayText = `${prefix}${text.replace(/\[image\]\s*/g, '').trim()}`.trim();
     this.addChild(new Text(theme.fg('dim', `↳ ${displayText || 'Message'} pending…`), BOX_INDENT_STR.length, 0));
-    this.addChild(new Spacer(1));
   }
 
   getChatSpacingKind(): ChatSpacingKind {

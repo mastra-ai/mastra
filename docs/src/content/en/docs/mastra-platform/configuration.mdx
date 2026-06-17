@@ -11,7 +11,7 @@ This page explains both mechanisms and how they differ between Studio and Server
 
 ## Project config
 
-The `.mastra-project.json` file is auto-generated on your first Studio or Server deploy. It links your local project to a platform project.
+The `.mastra-project.json` file is auto-generated on your first Studio or Server deploy. It links your local project to a platform project. The [GitHub integration](/docs/mastra-platform/github) writes the same file into linked repositories.
 
 Commit it to your version control so that subsequent deploys (including from CI) target the correct project.
 
@@ -76,4 +76,4 @@ cp .mastra-project.production.json .mastra-project.json
 mastra studio deploy --env-file .env.production --yes
 ```
 
-Each project has its own Studio URL and can send observability data to the Mastra platform. When using [`MastraPlatformExporter`](/docs/observability/tracing/exporters/mastra-platform), set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` per environment so traces route to the matching platform project.
+Each project has its own Studio URL and can send observability data to the Mastra platform. When using [`MastraPlatformExporter`](/docs/observability/integrations/exporters/mastra-platform), set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` per environment so traces route to the matching platform project.

@@ -7,6 +7,7 @@ import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } fr
 import type { LoaderFunctionArgs, RouteObject } from 'react-router';
 import { AgentBuilderRootLayout } from './domains/agent-builder/layouts/agent-builder-root-layout';
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
+import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
@@ -27,6 +28,7 @@ import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
+import AgentChannelsPage from './pages/agents/agent-channels';
 import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentReview from './pages/agents/agent-review';
@@ -57,6 +59,7 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import ExperimentPage from './pages/experiments/experiment';
+import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -91,7 +94,8 @@ import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersona
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
-import { StudioConfigProvider, useStudioConfig } from '@/domains/configuration/context/studio-config-context';
+import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { McpServerCrumb, McpServerToolCrumb } from '@/domains/mcps/mcp-crumbs';
 import { ProcessorCrumb } from '@/domains/processors/processor-crumb';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
@@ -119,6 +123,7 @@ declare global {
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
+    MASTRA_PLATFORM_PROJECT_ID?: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
     MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
@@ -445,6 +450,7 @@ export const routes: RouteObject[] = [
               ]
             : []),
           { path: 'traces', element: <AgentTraces /> },
+          { path: 'channels', element: <AgentChannelsPage /> },
         ],
       },
 
@@ -453,6 +459,12 @@ export const routes: RouteObject[] = [
         path: '/tools/:toolId',
         element: <Tool />,
         handle: navHandleWithChildren('/tools', [{ id: 'tool', Component: ToolCrumb, heading: 'Tool' }]),
+      },
+
+      {
+        path: '/integrations',
+        element: <IntegrationsPage />,
+        handle: { crumbs: [{ id: 'integrations', label: 'Integrations' }] } satisfies RouteHeaderHandle,
       },
 
       { path: '/processors', element: <Processors />, handle: navHandle('/processors') },
@@ -676,7 +688,9 @@ function App() {
     <MastraReactProvider baseUrl={baseUrl} headers={studioHeaders} apiPrefix={apiPrefix} customFetch={customFetch}>
       <RoleImpersonationProvider>
         <PostHogProvider>
-          <RouterProvider router={router} />
+          <RoutePermissionsGate baseUrl={baseUrl}>
+            <RouterProvider router={router} />
+          </RoutePermissionsGate>
         </PostHogProvider>
       </RoleImpersonationProvider>
     </MastraReactProvider>

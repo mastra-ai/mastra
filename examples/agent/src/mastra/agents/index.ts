@@ -16,6 +16,34 @@ export { dynamicToolsAgent } from './dynamic-tools-agent.js';
 export { slackDemoAgent } from './slack-agent.js';
 const memory = new Memory();
 
+/**
+ * Code-defined agent that Studio is allowed to override in full.
+ * Use this fixture to verify the "Download JSON" / "Open PR" flow on the
+ * code-agent CMS edit page.
+ */
+export const codeOverrideEditableAgent = new Agent({
+  id: 'code-override-editable',
+  name: 'Code Override Editable',
+  description: 'Code-defined agent that Studio may override (instructions + tools)',
+  // instructions: 'You are the original code-defined instructions for the editable override agent.',
+  model: 'openai/gpt-5.4-mini',
+  editor: { instructions: true, tools: true },
+});
+
+/**
+ * Code-defined agent locked from Studio overrides via `editor: false`.
+ * The CMS edit page should hide Download JSON / Open PR / Save / Publish buttons
+ * and the sidebar should expose no editable sections.
+ */
+export const codeOverrideLockedAgent = new Agent({
+  id: 'code-override-locked',
+  name: 'Code Override Locked',
+  description: 'Code-defined agent locked from Studio overrides.',
+  instructions: 'These instructions are owned by code and cannot be edited from Studio.',
+  model: 'openai/gpt-5.4-mini',
+  editor: false,
+});
+
 // Define schema directly compatible with OpenAI's requirements
 const mySchema = jsonSchema({
   type: 'object',
@@ -41,6 +69,22 @@ export const weatherInfo = tool({
       wind: '10 mph',
     };
   },
+});
+
+/**
+ * Code-defined agent that only allows Studio to override tool DESCRIPTIONS
+ * (not tool membership). Verifies the descriptions-only mode of the Tools tab:
+ * Add/Remove tool controls and MCP/Integration sections must be hidden,
+ * but per-tool description inputs stay editable.
+ */
+export const codeOverrideDescriptionsOnlyAgent = new Agent({
+  id: 'code-override-descriptions-only',
+  name: 'Code Override Descriptions Only',
+  description: 'Code-defined agent that only allows editing tool descriptions from Studio.',
+  instructions: 'Code-defined instructions that Studio cannot override in descriptions-only mode.',
+  model: 'openai/gpt-5.4-mini',
+  tools: { cookingTool, weatherInfo },
+  editor: { tools: { description: true } },
 });
 
 export const chefAgent = new Agent({

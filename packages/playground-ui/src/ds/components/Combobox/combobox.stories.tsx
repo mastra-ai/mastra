@@ -14,7 +14,7 @@ const meta: Meta<typeof Combobox> = {
     },
     variant: {
       control: { type: 'select' },
-      options: ['default', 'ghost'],
+      options: ['default', 'outline', 'ghost'],
     },
   },
 };
@@ -108,7 +108,7 @@ export const ManyOptions: Story = {
 export const Variants: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      {(['default', 'ghost'] as const).map(variant => (
+      {(['default', 'outline', 'ghost'] as const).map(variant => (
         <Fragment key={variant}>
           <Combobox variant={variant} options={frameworkOptions} placeholder={variant} className="w-[200px]" />
         </Fragment>
@@ -134,7 +134,7 @@ export const WithDescriptions: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      {(['default', 'md', 'sm'] as const).map(size => (
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
         <Fragment key={size}>
           <Combobox size={size} options={frameworkOptions} placeholder={size} className="w-[200px]" />
         </Fragment>
