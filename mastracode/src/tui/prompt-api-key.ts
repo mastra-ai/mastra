@@ -2,7 +2,7 @@
  * Shared helper: prompt user for an API key when they select a model without one.
  */
 
-import type { TUI } from '@mariozechner/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import type { AuthStorage } from '../auth/storage.js';
 import { ApiKeyDialogComponent } from './components/api-key-dialog.js';
 import type { ModelItem } from './components/model-selector.js';

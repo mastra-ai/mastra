@@ -62,7 +62,7 @@ import {
 import { ProviderLogo } from '@/domains/llm';
 import { ReasoningStreamingLine } from '@/lib/ai-ui/messages/reasoning-streaming-line';
 import { SignalBadge } from '@/lib/ai-ui/messages/signal-badge';
-import { isSignalData } from '@/lib/ai-ui/messages/signal-data';
+import { getSignalType, isSignalData, isUserSignalType, toReactiveSignalData } from '@/lib/ai-ui/messages/signal-data';
 
 interface MessageRowProps {
   message: MastraDBMessage;
@@ -122,8 +122,27 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
 
 const getMessageDisplayRole = (message: MastraDBMessage): MastraDBMessage['role'] | null => {
   if (message.role === 'assistant' || message.role === 'user' || message.role === 'system') return message.role;
-  if (message.role === 'signal' && message.type === 'user') return 'user';
+  if (message.role === 'signal') return isUserSignalType(getSignalType(message)) ? 'user' : 'assistant';
   return null;
+};
+
+/**
+ * Convert a persisted reactive (non-user) `signal` row into an assistant message
+ * carrying a single `data-signal` part, so the `SignalBadge` renderer shows it
+ * on read-back. Restores 1.41.0 behavior lost in the chat renderer rewrite
+ * (PR #17774).
+ */
+const toReactiveSignalMessage = (message: MastraDBMessage): MastraDBMessage | null => {
+  const data = toReactiveSignalData(message);
+  if (!isSignalData(data)) return null;
+  return {
+    ...message,
+    role: 'assistant',
+    content: {
+      ...message.content,
+      parts: [{ type: 'data-signal', data }],
+    },
+  } as MastraDBMessage;
 };
 
 const getRequireApprovalMetadata = (message: MastraDBMessage): RequireApprovalMetadata | undefined => {
@@ -156,6 +175,7 @@ const findApprovalEntry = (
 const toDisplayMessage = (message: MastraDBMessage): MastraDBMessage | null => {
   const displayRole = getMessageDisplayRole(message);
   if (displayRole === null) return null;
+  if (message.role === 'signal' && displayRole === 'assistant') return toReactiveSignalMessage(message);
   if (displayRole === message.role) return message;
   return { ...message, role: displayRole };
 };

@@ -2,6 +2,7 @@
  * Slash command dispatcher: routes command strings to extracted handlers.
  */
 import { processSlashCommand } from '../utils/slash-command-processor.js';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 import {
   handleHelpCommand,
@@ -342,7 +343,7 @@ async function handleCustomSlashCommand(
       if (!isCurrentThreadActive(commandCtx)) {
         const slashComp = new SlashCommandComponent(command.name, processedContent.trim());
         state.allSlashCommandComponents.push(slashComp);
-        state.chatContainer.addChild(slashComp);
+        insertChatComponentWithBoundarySpacing(state.chatContainer, slashComp);
         state.ui.requestRender();
       }
 

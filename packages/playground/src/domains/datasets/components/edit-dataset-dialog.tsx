@@ -87,14 +87,17 @@ function editDatasetFormReducer(state: EditDatasetFormState, action: EditDataset
 }
 
 export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: EditDatasetDialogProps) {
+  // The form lives inside DialogContent so it mounts/unmounts with the popup:
+  // Base UI unmounts the popup's children after the exit transition completes,
+  // which both resets the form state for the next open and keeps the closing
+  // popup instance alive through its own exit transition. Keying a remount on
+  // `open` here would destroy the popup mid-transition and orphan it on screen
+  // (see https://github.com/mastra-ai/mastra/issues/17890).
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <EditDatasetDialogForm
-        key={`${dataset.id}:${open ? 'open' : 'closed'}`}
-        dataset={dataset}
-        onOpenChange={onOpenChange}
-        onSuccess={onSuccess}
-      />
+      <DialogContent className="max-w-2xl">
+        <EditDatasetDialogForm key={dataset.id} dataset={dataset} onOpenChange={onOpenChange} onSuccess={onSuccess} />
+      </DialogContent>
     </Dialog>
   );
 }
@@ -161,7 +164,7 @@ function EditDatasetDialogForm({ onOpenChange, dataset, onSuccess }: EditDataset
   };
 
   return (
-    <DialogContent className="max-w-2xl">
+    <>
       <DialogHeader>
         <DialogTitle>Edit Dataset</DialogTitle>
       </DialogHeader>
@@ -224,6 +227,6 @@ function EditDatasetDialogForm({ onOpenChange, dataset, onSuccess }: EditDataset
           </div>
         </form>
       </DialogBody>
-    </DialogContent>
+    </>
   );
 }
