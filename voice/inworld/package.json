@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-inworld",
-  "version": "0.3.0",
+  "version": "0.3.3-alpha.0",
   "description": "Mastra Inworld AI voice integration — streaming TTS, batch STT, and realtime full-duplex voice",
   "type": "module",
   "files": [
