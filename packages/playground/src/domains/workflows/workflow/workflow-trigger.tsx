@@ -260,8 +260,12 @@ export function WorkflowTrigger({
   };
 
   const handleCancelWorkflowRun = async () => {
-    const response = await cancelWorkflowRun({ workflowId, runId: innerRunId });
-    setCancelResponse(response);
+    try {
+      const response = await cancelWorkflowRun({ workflowId, runId: innerRunId });
+      setCancelResponse(response);
+    } catch {
+      toast.error('Error cancelling workflow run');
+    }
   };
 
   useEffect(() => {

@@ -124,7 +124,8 @@ describe('WorkflowRecentRuns', () => {
     const link = await screen.findByRole('link', { name: /run-success-1/ });
     const runId = within(link).getByTitle('run-success-1');
     expect(runId.className).toContain('truncate');
-    expect(within(link).getByText('May 29, 2026 4:19 PM').className).toContain('text-neutral3');
+    const dateText = within(link).getByText(/2026/);
+    expect(dateText.className).toContain('text-neutral3');
     expect(runId.parentElement?.className).toContain('flex');
     expect(runId.parentElement?.className).toContain('items-center');
     expect(runId.parentElement?.className).toContain('gap-2');

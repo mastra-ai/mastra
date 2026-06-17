@@ -187,7 +187,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         )}
       </WorkflowInformationTopSection>
 
-      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={initialRunId || runId} />
+      <RecentWorkflowRunsSection workflowId={workflowId} activeRunId={initialRunId || runId || contextRunId} />
     </div>
   );
 }

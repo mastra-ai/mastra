@@ -39,7 +39,7 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
           </Tooltip>
 
           <Badge>
-            {stepsCount} step{stepsCount > 1 ? 's' : ''}
+            {stepsCount} step{stepsCount === 1 ? '' : 's'}
           </Badge>
 
           {workflow?.isProcessorWorkflow && (

@@ -25,7 +25,7 @@ export const CollapsiblePanel = ({ collapsedSize, children, direction, onResize,
       collapsedSize={collapsedSize}
       {...props}
       onResize={(size, id, prevSize) => {
-        if (collapsedSize && typeof collapsedSize === 'number') {
+        if (typeof collapsedSize === 'number') {
           if (size.inPixels <= collapsedSize) {
             setCollapsed(true);
           } else if (collapsed) {
