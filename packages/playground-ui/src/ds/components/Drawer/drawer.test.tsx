@@ -22,6 +22,20 @@ afterEach(() => {
   cleanup();
 });
 
+const firePointerEvent = (
+  element: Element,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  init: Record<string, number>,
+) => {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+
+  Object.entries(init).forEach(([key, value]) => {
+    Object.defineProperty(event, key, { value });
+  });
+
+  fireEvent(element, event);
+};
+
 describe('Drawer', () => {
   it('mounts every drawer part inside an open drawer without throwing', () => {
     expect(() =>
@@ -223,6 +237,7 @@ describe('Drawer', () => {
     const viewport = document.querySelector('[data-slot="drawer-viewport"]');
     const popup = document.querySelector('[data-slot="drawer-popup"]');
     expect(document.querySelector('[data-slot="drawer-backdrop"]')).toBeNull();
+    expect(document.querySelector('[data-slot="drawer-overlay-dismiss-layer"]')).toBeNull();
     expect(viewport?.getAttribute('data-variant')).toBe('floating');
     expect(viewport?.classList.contains('pointer-events-none')).toBe(false);
     expect(viewport?.classList.contains('p-3')).toBe(true);
@@ -262,9 +277,11 @@ describe('Drawer', () => {
     );
 
     const backdrop = document.querySelector('[data-slot="drawer-backdrop"]');
+    const overlayDismissLayer = document.querySelector('[data-slot="drawer-overlay-dismiss-layer"]');
     const viewport = document.querySelector('[data-slot="drawer-viewport"]');
     const popup = document.querySelector('[data-slot="drawer-popup"]');
     expect(backdrop?.getAttribute('data-overlay')).toBe('transparent');
+    expect(overlayDismissLayer).not.toBeNull();
     expect(backdrop?.classList.contains('bg-transparent')).toBe(true);
     expect(backdrop?.classList.contains('bg-overlay')).toBe(false);
     expect(backdrop?.classList.contains('backdrop-blur-xs')).toBe(false);
@@ -282,13 +299,59 @@ describe('Drawer', () => {
     );
 
     const backdrop = document.querySelector('[data-slot="drawer-backdrop"]');
+    const overlayDismissLayer = document.querySelector('[data-slot="drawer-overlay-dismiss-layer"]');
     const viewport = document.querySelector('[data-slot="drawer-viewport"]');
     const popup = document.querySelector('[data-slot="drawer-popup"]');
     expect(backdrop?.getAttribute('data-overlay')).toBe('visible');
+    expect(overlayDismissLayer).not.toBeNull();
     expect(backdrop?.classList.contains('bg-overlay')).toBe(true);
     expect(viewport?.classList.contains('pointer-events-none')).toBe(false);
     expect(popup?.getAttribute('data-swipe-direction')).toBe('right');
     expect(popup?.classList.contains('drawer-popup-floating')).toBe(true);
+  });
+
+  it.each(['transparent', 'visible'] as const)(
+    'dismisses a floating drawer when dragging its %s overlay in the drawer swipe direction',
+    overlay => {
+      const onOpenChange = vi.fn();
+      render(
+        <Drawer side="right" variant="floating" overlay={overlay} defaultOpen onOpenChange={onOpenChange}>
+          <DrawerContent>
+            <DrawerTitle>Draggable overlay drawer</DrawerTitle>
+          </DrawerContent>
+        </Drawer>,
+      );
+
+      const overlayDismissLayer = document.querySelector('[data-slot="drawer-overlay-dismiss-layer"]');
+      expect(overlayDismissLayer).not.toBeNull();
+
+      firePointerEvent(overlayDismissLayer!, 'pointerdown', { button: 0, clientX: 120, clientY: 100, pointerId: 1 });
+      firePointerEvent(overlayDismissLayer!, 'pointermove', { buttons: 1, clientX: 180, clientY: 100, pointerId: 1 });
+      firePointerEvent(overlayDismissLayer!, 'pointerup', { button: 0, clientX: 180, clientY: 100, pointerId: 1 });
+
+      expect(onOpenChange).toHaveBeenCalledWith(false, expect.anything());
+    },
+  );
+
+  it('does not treat a short overlay drag as an outside click dismissal', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Drawer side="right" variant="floating" overlay="transparent" defaultOpen onOpenChange={onOpenChange}>
+        <DrawerContent>
+          <DrawerTitle>Short drag overlay drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const overlayDismissLayer = document.querySelector('[data-slot="drawer-overlay-dismiss-layer"]');
+    expect(overlayDismissLayer).not.toBeNull();
+
+    firePointerEvent(overlayDismissLayer!, 'pointerdown', { button: 0, clientX: 120, clientY: 100, pointerId: 1 });
+    firePointerEvent(overlayDismissLayer!, 'pointermove', { buttons: 1, clientX: 130, clientY: 100, pointerId: 1 });
+    firePointerEvent(overlayDismissLayer!, 'pointerup', { button: 0, clientX: 130, clientY: 100, pointerId: 1 });
+    fireEvent.click(overlayDismissLayer!);
+
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   it('keeps outside interactions from dismissing a floating drawer without an overlay', () => {

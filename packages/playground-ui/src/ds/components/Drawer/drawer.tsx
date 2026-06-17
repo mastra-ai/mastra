@@ -145,6 +145,8 @@ const sideToSwipeDirection: Record<DrawerSide, 'up' | 'down' | 'left' | 'right'>
   right: 'right',
 };
 
+const OVERLAY_DISMISS_DRAG_THRESHOLD = 40;
+
 type DrawerContextValue = {
   side: DrawerSide;
   variant: DrawerVariant;
@@ -191,8 +193,10 @@ function Drawer<Payload = unknown>({
   ...props
 }: DrawerProps<Payload>) {
   const resolvedOverlay = resolveDrawerOverlay(overlay, variant);
+  const hasFloatingOverlayDismissLayer = variant === 'floating' && resolvedOverlay !== 'none';
   const resolvedModal = modal ?? (resolvedOverlay === 'none' ? false : undefined);
-  const resolvedDisablePointerDismissal = disablePointerDismissal ?? (resolvedOverlay === 'none' ? true : undefined);
+  const resolvedDisablePointerDismissal =
+    disablePointerDismissal ?? (resolvedOverlay === 'none' || hasFloatingOverlayDismissLayer ? true : undefined);
   const contextValue = React.useMemo<DrawerContextValue>(
     () => ({ side, variant, resolvedOverlay }),
     [side, variant, resolvedOverlay],
@@ -364,6 +368,123 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
 };
 DrawerFloatingSideHandle.displayName = 'DrawerFloatingSideHandle';
 
+type OverlayGestureState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  hasDragged: boolean;
+} | null;
+
+const getOverlayDragDisplacement = (side: DrawerSide, deltaX: number, deltaY: number) => {
+  switch (side) {
+    case 'top':
+      return -deltaY;
+    case 'right':
+      return deltaX;
+    case 'bottom':
+      return deltaY;
+    case 'left':
+      return -deltaX;
+    default:
+      return 0;
+  }
+};
+
+type DrawerOverlayDismissLayerProps = {
+  side: DrawerSide;
+};
+
+// Base UI's backdrop is visual only; floating overlays need their own outside gesture target.
+const DrawerOverlayDismissLayer = ({ side }: DrawerOverlayDismissLayerProps) => {
+  const closeRef = React.useRef<HTMLButtonElement>(null);
+  const gestureRef = React.useRef<OverlayGestureState>(null);
+  const suppressNextClickRef = React.useRef(false);
+
+  const closeDrawer = React.useCallback(() => {
+    closeRef.current?.click();
+  }, []);
+
+  const resetGesture = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (gesture && event.currentTarget.hasPointerCapture?.(gesture.pointerId)) {
+      event.currentTarget.releasePointerCapture(gesture.pointerId);
+    }
+
+    gestureRef.current = null;
+  }, []);
+
+  return (
+    <>
+      <DrawerClose asChild>
+        <button ref={closeRef} type="button" aria-hidden tabIndex={-1} className="hidden" />
+      </DrawerClose>
+      <div
+        aria-hidden
+        data-slot="drawer-overlay-dismiss-layer"
+        className="fixed inset-0 z-50 touch-none select-none"
+        onPointerDown={event => {
+          event.stopPropagation();
+
+          if (event.button > 0) {
+            return;
+          }
+
+          gestureRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            hasDragged: false,
+          };
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+        }}
+        onPointerMove={event => {
+          const gesture = gestureRef.current;
+          if (!gesture || gesture.pointerId !== event.pointerId) {
+            return;
+          }
+
+          const deltaX = event.clientX - gesture.startX;
+          const deltaY = event.clientY - gesture.startY;
+          gesture.hasDragged = gesture.hasDragged || Math.hypot(deltaX, deltaY) > 3;
+        }}
+        onPointerUp={event => {
+          const gesture = gestureRef.current;
+          if (!gesture || gesture.pointerId !== event.pointerId) {
+            return;
+          }
+
+          event.stopPropagation();
+          const deltaX = event.clientX - gesture.startX;
+          const deltaY = event.clientY - gesture.startY;
+          const shouldClose = getOverlayDragDisplacement(side, deltaX, deltaY) >= OVERLAY_DISMISS_DRAG_THRESHOLD;
+          suppressNextClickRef.current = gesture.hasDragged || shouldClose;
+          resetGesture(event);
+
+          if (shouldClose) {
+            closeDrawer();
+          }
+        }}
+        onPointerCancel={event => {
+          event.stopPropagation();
+          resetGesture(event);
+        }}
+        onClick={event => {
+          event.stopPropagation();
+
+          if (suppressNextClickRef.current) {
+            suppressNextClickRef.current = false;
+            event.preventDefault();
+            return;
+          }
+
+          closeDrawer();
+        }}
+      />
+    </>
+  );
+};
+DrawerOverlayDismissLayer.displayName = 'DrawerOverlayDismissLayer';
+
 type DrawerContentProps = Omit<DrawerPrimitive.Popup.Props, 'className' | 'children'> & {
   className?: string;
   children?: React.ReactNode;
@@ -378,10 +499,13 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
     const { side, variant: contextVariant, resolvedOverlay } = useDrawerContext();
     const resolvedVariant = variant ?? contextVariant;
     const showHandle = side === 'top' || side === 'bottom';
+    const showOverlayDismissLayer =
+      contextVariant === 'floating' && resolvedVariant === 'floating' && resolvedOverlay !== 'none';
 
     return (
       <DrawerPortal>
         {resolvedOverlay !== 'none' && <DrawerBackdrop />}
+        {showOverlayDismissLayer && <DrawerOverlayDismissLayer side={side} />}
         <DrawerViewport variant={resolvedVariant}>
           <DrawerPopup ref={ref} variant={resolvedVariant} className={className} {...props}>
             {showHandle && side === 'bottom' && <DrawerHandleBar />}
