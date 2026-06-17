@@ -39,12 +39,12 @@ export const browserSettingsPersistenceScenario = {
     terminal.submit(`/browser set profile ${profilePath}`);
     await runtime.waitForScreenText(/Note: Cleared cdpUrl \(incompatible with profile\)\./i, terminal, 8_000);
     await runtime.waitForScreenText(/Set profile =/i, terminal, 8_000);
-    await runtime.waitForScreenText(/browser-profile-e2e/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_AFTER_PROFILE_CDP="+(b.cdpUrl||"missing")); console.log("BROWSER_AFTER_PROFILE_PRESERVE="+(b.stagehand&&b.stagehand.preserveUserDataDir));'`,
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_AFTER_PROFILE_CDP="+(b.cdpUrl||"missing")); console.log("BROWSER_AFTER_PROFILE_SET="+(b.profile&&b.profile.endsWith("browser-profile-e2e"))); console.log("BROWSER_AFTER_PROFILE_PRESERVE="+(b.stagehand&&b.stagehand.preserveUserDataDir));'`,
     );
     await runtime.waitForScreenText(/BROWSER_AFTER_PROFILE_CDP=missing/i, terminal, 8_000);
+    await runtime.waitForScreenText(/BROWSER_AFTER_PROFILE_SET=true/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSER_AFTER_PROFILE_PRESERVE=true/i, terminal, 8_000);
 
     terminal.submit(`/browser set executablePath ${executablePath}`);

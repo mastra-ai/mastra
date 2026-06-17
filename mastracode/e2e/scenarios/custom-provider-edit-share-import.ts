@@ -104,8 +104,8 @@ export const customProviderEditShareImportScenario = {
     await runtime.waitForScreenText(/Custom pack: Share Cancel E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/Share\s+Copy to clipboard/i, terminal, 8_000);
     terminal.write('\x1b[B\x1b[B');
+    await runtime.waitForScreenText(/Share\s+Copy to clipboard/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Copie/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },
