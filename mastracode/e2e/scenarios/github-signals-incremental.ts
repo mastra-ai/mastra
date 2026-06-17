@@ -81,8 +81,6 @@ export const githubSignalsIncrementalScenario = {
   description:
     'loads a persisted GitHub PR subscription, syncs a changed gitcrawl snapshot, and renders the incremental notification',
   testName: 'renders an incremental GitHub notification after /github sync observes changed PR state',
-  useOpenAIModel: true,
-  aimockFixture: 'github-signals-incremental.json',
   prepare(context) {
     mkdirSync(context.projectDir, { recursive: true });
 
@@ -165,9 +163,6 @@ values
         unixSocketPubSub: false,
       },
     });
-  },
-  verifyAimockRequests(requests) {
-    if (requests.length < 1) throw new Error(`Expected at least 1 AIMock request, received ${requests.length}`);
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
