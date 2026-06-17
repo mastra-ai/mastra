@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
@@ -1673,6 +1674,61 @@ describe('Agent Routes Authorization', () => {
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+    });
+
+    it('maps a rejected accepted promise (USER MastraError) to a 400', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-reject-user',
+        resourceId: 'user-a',
+        title: 'Signal Thread Reject User',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      (mockAgent as any).sendSignal = vi.fn(() => ({
+        accepted: Promise.reject(
+          new MastraError({
+            category: ErrorCategory.USER,
+            domain: ErrorDomain.MASTRA_SERVER,
+            id: 'NO_MODEL_SELECTED',
+            text: 'No model selected',
+          }),
+        ),
+      }));
+
+      await expect(
+        SEND_AGENT_SIGNAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'signal-thread-reject-user',
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'No model selected' }));
+    });
+
+    it('maps a rejected accepted promise (non-USER error) to a 500', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-reject-system',
+        resourceId: 'user-a',
+        title: 'Signal Thread Reject System',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      (mockAgent as any).sendSignal = vi.fn(() => ({
+        accepted: Promise.reject(new Error('lease backend exploded')),
+      }));
+
+      await expect(
+        SEND_AGENT_SIGNAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'signal-thread-reject-system',
+        } as any),
+      ).rejects.toMatchObject({ status: 500 });
     });
 
     it('should reject sending a message to a thread owned by a different resource', async () => {
