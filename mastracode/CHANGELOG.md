@@ -1,5 +1,26 @@
 # mastracode
 
+## 0.23.1-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/agent-browser@0.3.4-alpha.0
+  - @mastra/core@1.43.1-alpha.0
+  - @mastra/duckdb@1.4.3-alpha.0
+  - @mastra/fastembed@1.1.3-alpha.0
+  - @mastra/github-signals@0.1.4-alpha.0
+  - @mastra/libsql@1.13.3-alpha.0
+  - @mastra/mcp@1.10.1-alpha.0
+  - @mastra/memory@1.20.6-alpha.0
+  - @mastra/observability@1.14.4-alpha.0
+  - @mastra/pg@1.13.3-alpha.0
+  - @mastra/schema-compat@1.2.14-alpha.0
+  - @mastra/stagehand@0.2.7-alpha.0
+  - @mastra/tavily@1.0.5-alpha.0
+
 ## 0.23.0
 
 ### Minor Changes
