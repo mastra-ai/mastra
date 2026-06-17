@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.2.13
+
+### Patch Changes
+
+- Republished a clean package version after `1.2.12` became unavailable for reuse during npm incident recovery.
+
 ## 1.2.12
 
 ### Patch Changes
