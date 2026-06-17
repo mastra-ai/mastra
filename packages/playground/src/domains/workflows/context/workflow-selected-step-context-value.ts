@@ -6,4 +6,7 @@ export type WorkflowSelectedStepContextType = {
   setSelectedStepId: Dispatch<SetStateAction<string | null>>;
 };
 
-export const WorkflowSelectedStepContext = createContext<WorkflowSelectedStepContextType | null>(null);
+export const WorkflowSelectedStepContext = createContext<WorkflowSelectedStepContextType>({
+  selectedStepId: null,
+  setSelectedStepId: () => undefined,
+});
