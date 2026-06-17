@@ -1,5 +1,16 @@
 # @mastra/langfuse
 
+## 1.3.8-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/core@1.43.1-alpha.0
+  - @mastra/observability@1.14.4-alpha.0
+  - @mastra/otel-exporter@1.2.5-alpha.0
+
 ## 1.3.6
 
 ### Patch Changes
