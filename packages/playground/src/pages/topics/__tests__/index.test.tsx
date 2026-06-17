@@ -100,6 +100,7 @@ describe('TopicsPage', () => {
     expect(screen.queryByTestId('topics-sidebar')).toBeNull();
     expect(screen.queryByText('Back to topics')).toBeNull();
     expect(screen.getByText('Refunds')).not.toBeNull();
+    expect(screen.getByText('Refund requests, policy checks, and payment reversals.')).not.toBeNull();
     expect(screen.getByText('summary:2')).not.toBeNull();
     expect(screen.getByText('trace:none')).not.toBeNull();
   });

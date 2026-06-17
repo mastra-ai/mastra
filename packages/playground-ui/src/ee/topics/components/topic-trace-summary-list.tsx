@@ -12,19 +12,6 @@ export interface TopicTraceSummaryListProps {
   pageSize?: number;
 }
 
-function formatDuration(durationMs: number | undefined): string {
-  if (durationMs === undefined) return '';
-  if (durationMs < 1000) return `${durationMs}ms`;
-  return `${(durationMs / 1000).toFixed(1)}s`;
-}
-
-function formatStartedAt(startedAt: TopicTraceSummary['startedAt']): string {
-  if (!startedAt) return '';
-  const date = startedAt instanceof Date ? startedAt : new Date(startedAt);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString();
-}
-
 export function TopicTraceSummaryList({
   traces,
   selectedTraceId,
@@ -50,13 +37,10 @@ export function TopicTraceSummaryList({
         }}
       />
 
-      <DataList columns="minmax(10rem,1.2fr) minmax(7rem,.7fr) minmax(7rem,.7fr) minmax(7rem,.7fr)" className="min-h-0 flex-1">
+      <DataList columns="minmax(12rem,1fr)" className="min-h-0 flex-1">
         <DataList.Top>
           <DataList.TopCells>
-            <DataList.TopCell>Name</DataList.TopCell>
-            <DataList.TopCell>Status</DataList.TopCell>
-            <DataList.TopCell>Duration</DataList.TopCell>
-            <DataList.TopCell>Started</DataList.TopCell>
+            <DataList.TopCell>Trace summary</DataList.TopCell>
           </DataList.TopCells>
         </DataList.Top>
 
@@ -70,10 +54,7 @@ export function TopicTraceSummaryList({
               onClick={() => onTraceSelect(trace)}
               aria-pressed={selectedTraceId === trace.id}
             >
-              <DataList.NameCell>{trace.name ?? trace.id}</DataList.NameCell>
-              <DataList.TextCell>{trace.status}</DataList.TextCell>
-              <DataList.TextCell>{formatDuration(trace.durationMs)}</DataList.TextCell>
-              <DataList.TextCell>{formatStartedAt(trace.startedAt)}</DataList.TextCell>
+              <DataList.TextCell>{trace.name ?? trace.id}</DataList.TextCell>
             </DataList.RowButton>
           ))
         )}

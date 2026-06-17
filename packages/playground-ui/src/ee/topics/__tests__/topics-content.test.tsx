@@ -50,7 +50,10 @@ describe('TopicsContent', () => {
     expect(screen.getByText('Refund-related traces')).not.toBeNull();
     expect(screen.getAllByText('2 traces').length).toBeGreaterThan(0);
     expect(screen.getByText('100% of topic traces')).not.toBeNull();
+    expect(screen.getByText('Trace summary')).not.toBeNull();
     expect(screen.getByRole('button', { name: /Refund request/ })).not.toBeNull();
+    expect(screen.queryByText('Status')).toBeNull();
+    expect(screen.queryByText('Duration')).toBeNull();
   });
 
   it('filters trace summaries inside the selected subtopic', async () => {

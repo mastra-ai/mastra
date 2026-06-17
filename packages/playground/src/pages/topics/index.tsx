@@ -100,9 +100,12 @@ export default function TopicsPage() {
     >
       {selectedSubtopic ? (
         <section className="flex h-full min-w-0 flex-col gap-4">
-          <header className="flex items-center gap-3">
-            <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: stringToColor(selectedSubtopic.name) }} />
-            <h1 className="text-icon-xl font-semibold text-neutral6">{selectedSubtopic.name}</h1>
+          <header className="flex items-start gap-3">
+            <span className="mt-2 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: stringToColor(selectedSubtopic.name) }} />
+            <div className="min-w-0 space-y-1">
+              <h1 className="text-icon-xl font-semibold text-neutral6">{selectedSubtopic.name}</h1>
+              {selectedSubtopic.description ? <p className="text-ui-sm text-neutral3">{selectedSubtopic.description}</p> : null}
+            </div>
           </header>
           <TopicTraceSummaryList
             traces={selectedSubtopic.traceSummaries}
