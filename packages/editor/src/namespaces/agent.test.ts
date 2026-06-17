@@ -1,16 +1,21 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 
 import { MastraEditor } from '../index';
 
-async function createEditorWithStore() {
+async function createEditorWithStore(agents?: Record<string, Agent>) {
   const storage = new InMemoryStore();
   const editor = new MastraEditor();
-  new Mastra({ storage, editor });
+  new Mastra({ storage, editor, agents });
   const agentsStore = await storage.getStore('agents');
   if (!agentsStore) throw new Error('Agents storage domain is not available');
-  return { editor, agentsStore };
+  const workspaceStore = await storage.getStore('workspaces');
+  if (!workspaceStore) throw new Error('Workspaces storage domain is not available');
+  return { editor, agentsStore, workspaceStore };
 }
 
 describe('EditorAgentNamespace.update', () => {
@@ -121,5 +126,88 @@ describe('EditorAgentNamespace.update', () => {
 
     const versions = await agentsStore.listVersions({ agentId: 'unchanged-config-agent' });
     expect(versions.versions).toHaveLength(1);
+  });
+
+  it('creates a version when SDK updates skillsFormat', async () => {
+    const { editor, agentsStore } = await createEditorWithStore();
+
+    await editor.agent.create({
+      id: 'skills-format-agent',
+      name: 'Skills Format Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+      skillsFormat: 'xml',
+    });
+
+    const updated = await editor.agent.update({
+      id: 'skills-format-agent',
+      skillsFormat: 'markdown',
+    });
+
+    expect(updated.toRawConfig()?.skillsFormat).toBe('markdown');
+
+    const versions = await agentsStore.listVersions({ agentId: 'skills-format-agent' });
+    expect(versions.versions).toHaveLength(2);
+    const versionTwo = versions.versions.find(version => version.versionNumber === 2);
+    expect(versionTwo?.changedFields).toEqual(['skillsFormat']);
+    expect(versionTwo?.skillsFormat).toBe('markdown');
+  });
+
+  it('persists inline workspaces before creating a version from an SDK update', async () => {
+    const { editor, workspaceStore } = await createEditorWithStore();
+
+    await editor.agent.create({
+      id: 'workspace-update-agent',
+      name: 'Workspace Update Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    const workspace = {
+      type: 'inline' as const,
+      config: {
+        name: 'Updated Workspace',
+        description: 'Persisted from update',
+        skills: ['skill-1'],
+      },
+    };
+
+    await editor.agent.update({
+      id: 'workspace-update-agent',
+      workspace,
+    });
+
+    const workspaceId = `inline-${createHash('sha256')
+      .update(JSON.stringify(workspace.config))
+      .digest('hex')
+      .slice(0, 12)}`;
+    const storedWorkspace = await workspaceStore.getByIdResolved(workspaceId);
+    expect(storedWorkspace?.name).toBe('Updated Workspace');
+  });
+
+  it('returns a merged code-defined agent when SDK updates a partial stored override', async () => {
+    const codeAgent = new Agent({
+      id: 'code-defined-update-agent',
+      name: 'Code Defined Update Agent',
+      instructions: 'Code instructions',
+      model: 'openai/gpt-4o',
+    });
+    const { editor } = await createEditorWithStore({ codeAgent });
+
+    await editor.agent.create({
+      id: 'code-defined-update-agent',
+      instructions: 'Stored ONE',
+    } as any);
+
+    const updated = await editor.agent.update({
+      id: 'code-defined-update-agent',
+      instructions: 'Stored TWO',
+    });
+
+    expect(await updated.getInstructions()).toBe('Stored TWO');
+    expect(updated.model).toBe('openai/gpt-4o');
+
+    const fetched = await editor.agent.getById('code-defined-update-agent');
+    expect(await fetched?.getInstructions()).toBe('Stored TWO');
   });
 });

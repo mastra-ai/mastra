@@ -71,6 +71,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'requestContextSchema',
   'mcpClients',
   'skills',
+  'skillsFormat',
   'workspace',
   'browser',
 ] as const satisfies (keyof StorageAgentSnapshotType)[];
@@ -259,6 +260,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       input as Record<string, unknown>,
       AGENT_SNAPSHOT_CONFIG_FIELDS,
     );
+    if ('workspace' in providedConfig) {
+      await this.ensureStoredWorkspaceRefs(providedConfig.workspace);
+    }
+
     const versionResult =
       Object.keys(providedConfig).length > 0
         ? await createVersionFromSnapshotUpdate<AgentVersion, CreateVersionInput, StorageAgentSnapshotType>({
@@ -280,6 +285,13 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     this._cache.delete(input.id);
     this.onCacheEvict(input.id);
+
+    const existingCodeAgent = this.getCodeDefinedAgent(input.id);
+    if (existingCodeAgent) {
+      const hydrated = await this.applyStoredOverrides(existingCodeAgent, { status: 'draft' });
+      this._cache.set(input.id, hydrated);
+      return hydrated;
+    }
 
     const resolved = await store.getByIdResolved(input.id, { status: 'draft' });
     if (!resolved) {
@@ -331,6 +343,21 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       return undefined;
     }
     return agent?.source === 'code' ? agent : undefined;
+  }
+
+  private async ensureStoredWorkspaceRefs(
+    workspace: StorageAgentSnapshotType['workspace'] | null | undefined,
+  ): Promise<void> {
+    if (!workspace) return;
+
+    if (this.isConditionalVariants(workspace)) {
+      for (const variant of workspace) {
+        await this.ensureStoredWorkspace(variant.value);
+      }
+      return;
+    }
+
+    await this.ensureStoredWorkspace(workspace);
   }
 
   /**
