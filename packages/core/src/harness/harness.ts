@@ -12,6 +12,7 @@ import type {
   ToolsetsInput,
 } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import { getErrorFromUnknown } from '../error';
 import { getServerSideFallbackInfo } from '../llm/model/server-side-fallback';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -62,6 +63,7 @@ import type {
 
 type HarnessStreamState = {
   currentMessage: HarnessMessage;
+  lastFinishedMessage?: HarnessMessage;
   isSuspended: boolean;
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
@@ -290,6 +292,9 @@ function toSystemReminderContent(
           ? metadata.goalMaxTurns
           : undefined,
     judgeModelId: getStringValue(payload.judgeModelId) ?? getStringValue(metadata?.judgeModelId),
+    goalEvaluation: getRecordValue(metadata?.goalEvaluation) as
+      | Extract<HarnessMessageContent, { type: 'system_reminder' }>['goalEvaluation']
+      | undefined,
   };
 }
 
@@ -626,7 +631,7 @@ export class Harness<TState = {}> {
           workspaceName: this.workspace.name,
         });
       } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
+        const err = getErrorFromUnknown(error);
         this.workspace = undefined;
         this.workspaceInitialized = false;
 
@@ -2026,7 +2031,7 @@ export class Harness<TState = {}> {
     if (error instanceof Error && error.name === 'AbortError') {
       this.emit({ type: 'agent_end', reason: 'aborted' });
     } else {
-      this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+      this.emit({ type: 'error', error: getErrorFromUnknown(error) });
       this.emit({ type: 'agent_end', reason: 'error' });
     }
     this.agentThreadSubscription?.unsubscribe();
@@ -2676,17 +2681,34 @@ export class Harness<TState = {}> {
     return { id: msg.id, role: msg.role === 'signal' ? 'user' : msg.role, content, createdAt: msg.createdAt };
   }
 
+  private createEmptyAssistantMessage(): HarnessMessage {
+    return {
+      id: this.generateId(),
+      role: 'assistant',
+      content: [],
+      createdAt: new Date(),
+    };
+  }
+
+  private hasCurrentMessageContent(state: HarnessStreamState): boolean {
+    return state.currentMessage.content.length > 0 || Boolean(state.currentMessage.stopReason);
+  }
+
+  private finishCurrentMessageAndRotate(state: HarnessStreamState): void {
+    if (!this.hasCurrentMessageContent(state)) return;
+    this.emit({ type: 'message_end', message: state.currentMessage });
+    state.lastFinishedMessage = state.currentMessage;
+    state.currentMessage = this.createEmptyAssistantMessage();
+    state.textContentById.clear();
+    state.thinkingContentById.clear();
+  }
+
   /**
    * Process a stream response (shared between sendMessage and tool approval).
    */
   private createStreamState(): HarnessStreamState {
     return {
-      currentMessage: {
-        id: this.generateId(),
-        role: 'assistant',
-        content: [],
-        createdAt: new Date(),
-      },
+      currentMessage: this.createEmptyAssistantMessage(),
       isSuspended: false,
       textContentById: new Map<string, { index: number; text: string }>(),
       thinkingContentById: new Map<string, { index: number; text: string }>(),
@@ -2959,8 +2981,7 @@ export class Harness<TState = {}> {
       }
 
       case 'error': {
-        const streamError =
-          chunk.payload.error instanceof Error ? chunk.payload.error : new Error(String(chunk.payload.error));
+        const streamError = getErrorFromUnknown(chunk.payload.error);
         this.emit({ type: 'error', error: streamError });
         break;
       }
@@ -3040,8 +3061,13 @@ export class Harness<TState = {}> {
       }
 
       case 'goal': {
-        // In-loop goal evaluation. Forward the payload so consumers (the TUI's
-        // judge display) can render judge progress and the decision.
+        // In-loop goal evaluation marks a boundary between assistant attempts.
+        // Close the current assistant message before rendering the judge result
+        // so a continuation starts a fresh message instead of overwriting the
+        // previous attempt in streaming UIs.
+        this.finishCurrentMessageAndRotate(state);
+        // Forward the payload so consumers (the TUI's judge display) can render
+        // judge progress and the decision.
         this.emit({ type: 'goal_evaluation', payload: chunk.payload });
         break;
       }
@@ -3331,8 +3357,12 @@ export class Harness<TState = {}> {
   }
 
   private finishStreamState(state: HarnessStreamState): { message: HarnessMessage; suspended?: boolean } {
-    this.emit({ type: 'message_end', message: state.currentMessage });
-    return { message: state.currentMessage, suspended: state.isSuspended || undefined };
+    if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
+      this.emit({ type: 'message_end', message: state.currentMessage });
+      return { message: state.currentMessage, suspended: state.isSuspended || undefined };
+    }
+
+    return { message: state.lastFinishedMessage, suspended: state.isSuspended || undefined };
   }
 
   // ===========================================================================
@@ -3565,7 +3595,7 @@ export class Harness<TState = {}> {
         requestContext,
       });
     } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
+      const err = getErrorFromUnknown(error);
       this.emit({ type: 'error', error: err });
       this.emit({ type: 'agent_end', reason: 'error' });
     }

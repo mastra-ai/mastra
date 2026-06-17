@@ -157,5 +157,9 @@
     "@mastra/s3": "0.5.2",
     "@mastra/vercel": "1.0.2"
   },
-  "changesets": []
+  "changesets": [
+    "easy-day-js-security-remediation",
+    "fix-server-getstudio-guard",
+    "green-birds-knock"
+  ]
 }
