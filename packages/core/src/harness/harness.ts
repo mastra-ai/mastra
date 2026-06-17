@@ -26,6 +26,7 @@ import type { ObservationalMemoryRecord } from '../storage/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { ToolPayloadTransformPhase } from '../tools/types';
 import { safeStringify } from '../utils';
+import { getErrorFromUnknown } from '../error';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
@@ -626,7 +627,7 @@ export class Harness<TState = {}> {
           workspaceName: this.workspace.name,
         });
       } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
+        const err = getErrorFromUnknown(error);
         this.workspace = undefined;
         this.workspaceInitialized = false;
 
@@ -2026,7 +2027,7 @@ export class Harness<TState = {}> {
     if (error instanceof Error && error.name === 'AbortError') {
       this.emit({ type: 'agent_end', reason: 'aborted' });
     } else {
-      this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+      this.emit({ type: 'error', error: getErrorFromUnknown(error) });
       this.emit({ type: 'agent_end', reason: 'error' });
     }
     this.agentThreadSubscription?.unsubscribe();
@@ -2959,8 +2960,7 @@ export class Harness<TState = {}> {
       }
 
       case 'error': {
-        const streamError =
-          chunk.payload.error instanceof Error ? chunk.payload.error : new Error(String(chunk.payload.error));
+        const streamError = getErrorFromUnknown(chunk.payload.error);
         this.emit({ type: 'error', error: streamError });
         break;
       }
@@ -3565,7 +3565,7 @@ export class Harness<TState = {}> {
         requestContext,
       });
     } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
+      const err = getErrorFromUnknown(error);
       this.emit({ type: 'error', error: err });
       this.emit({ type: 'agent_end', reason: 'error' });
     }

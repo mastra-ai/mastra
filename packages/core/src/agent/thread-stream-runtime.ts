@@ -7,6 +7,7 @@ import { parseMemoryRequestContext } from '../memory/types';
 import type { RequestContext } from '../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
+import { getErrorFromUnknown } from '../error';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
@@ -669,7 +670,7 @@ export class AgentThreadStreamRuntime {
         this.#publish(pubsub, key, {
           type: 'run-failed',
           runId: pending.runId,
-          error: err instanceof Error ? err.message : String(err),
+          error: getErrorFromUnknown(err).message,
         });
         void this.#drainPendingContinuations(state, pubsub, key).then(started => {
           if (!started) {
@@ -751,7 +752,7 @@ export class AgentThreadStreamRuntime {
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: pendingIdle.runId,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorFromUnknown(err).message,
       });
       void this.#drainPendingIdleSignals(state, pubsub, key);
     }
@@ -1411,7 +1412,7 @@ export class AgentThreadStreamRuntime {
         this.#publish(pubsub, key, {
           type: 'run-failed',
           runId,
-          error: err instanceof Error ? err.message : String(err),
+          error: getErrorFromUnknown(err).message,
         });
         void this.#drainPendingIdleSignals(state, pubsub, key);
       });
