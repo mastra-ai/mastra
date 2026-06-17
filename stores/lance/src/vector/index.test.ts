@@ -2298,6 +2298,38 @@ describe('Lance vector store tests', () => {
 
       await vectorDB.deleteTable(tableName);
     });
+
+    it('resolves the metric from the table index when metric is omitted', async () => {
+      const tableName = 'score_semantics_index_metric_' + Date.now();
+      // 256+ rows are required for index creation; place the exact/far vectors deterministically.
+      const rows = Array.from({ length: 300 }, (_, i) => ({
+        id: String(i + 1),
+        vector: i === 0 ? [1, 0, 0] : i === 1 ? [0, 1, 0] : [Math.random(), Math.random(), Math.random()],
+      }));
+      await vectorDB.createTable(tableName, rows);
+      await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 3, metric: 'euclidean' });
+
+      // No metric passed: resolveQueryMetric should read 'euclidean' from the index stats.
+      const results = await vectorDB.query({
+        indexName: 'vector',
+        tableName,
+        queryVector: [1, 0, 0],
+        topK: 300,
+      });
+
+      const exact = results.find(r => r.id === '1')!;
+      const far = results.find(r => r.id === '2')!;
+      expect(exact).toBeDefined();
+      expect(far).toBeDefined();
+      expect(exact.score).toBeGreaterThan(far.score);
+      // Euclidean: exact (distance ~0) scores ~1; far (distance ~sqrt(2)) scores ~0.414.
+      // Cosine would instead give far a score of ~0, so this confirms the euclidean
+      // metric was inferred from the index rather than the cosine default.
+      expect(exact.score).toBeGreaterThan(0.9);
+      expect(far.score).toBeGreaterThan(0.3);
+
+      await vectorDB.deleteTable(tableName);
+    });
   });
 });
 
