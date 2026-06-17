@@ -1,11 +1,11 @@
-import { visibleWidth } from '@mariozechner/pi-tui';
-import type { SelectListTheme } from '@mariozechner/pi-tui';
+import { visibleWidth } from '@earendil-works/pi-tui';
+import type { SelectListTheme } from '@earendil-works/pi-tui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the keybindings helper so handleInput tests can simulate up/down/enter/esc
 // without depending on the real config. The mock recognises a small set of
 // sentinel strings the tests pass in directly.
-vi.mock('@mariozechner/pi-tui', async importOriginal => {
+vi.mock('@earendil-works/pi-tui', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,

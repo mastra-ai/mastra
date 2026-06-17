@@ -18,6 +18,8 @@ import type { SlashCommandContext } from './types.js';
  */
 const ACTIVE_BROWSER_KEY = 'activeBrowserSettings';
 
+type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: string) => Promise<void> };
+
 /**
  * /browser command - Configure browser automation for agents.
  *
@@ -88,9 +90,16 @@ function applyBrowserToAgents(
   browserSettings?: BrowserSettings,
 ): void {
   const modes = ctx.harness.listModes();
+  let harnessState: unknown;
   for (const mode of modes) {
-    const agent = typeof mode.agent === 'function' ? mode.agent(ctx.state.harness.getState()) : mode.agent;
-    agent.setBrowser(browser);
+    const modeAgent = (mode as { agent?: unknown }).agent;
+    const agent =
+      typeof modeAgent === 'function'
+        ? (modeAgent((harnessState ??= ctx.state.harness.getState())) as {
+            setBrowser?: (browser?: MastraBrowser) => void;
+          })
+        : (modeAgent as { setBrowser?: (browser?: MastraBrowser) => void } | undefined);
+    agent?.setBrowser?.(browser);
   }
   // Track the active browser settings in harness state
   ctx.harness.setState({ [ACTIVE_BROWSER_KEY]: browserSettings } as any);
@@ -425,9 +434,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
 
     // Get browser instance from the current mode's agent
     const currentMode = ctx.harness.getCurrentMode();
-    const agent =
-      typeof currentMode.agent === 'function' ? currentMode.agent(ctx.state.harness.getState()) : currentMode.agent;
-    const browserInstance = agent.browser;
+    const browserInstance = currentMode.agent?.browser;
 
     if (!browserInstance) {
       ctx.showError('Browser not enabled. Run /browser on first.');
@@ -439,11 +446,12 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       ctx.showError('Current browser instance does not support exporting storage state.');
       return;
     }
+    const exportableBrowser = browserInstance as StorageStateExportBrowser;
 
     const expandedPath = exportPath.replace(/^~/, process.env.HOME || '~');
 
     try {
-      await browserInstance.exportStorageState(expandedPath);
+      await exportableBrowser.exportStorageState(expandedPath);
       ctx.showInfo(`Storage state exported to: ${expandedPath}`);
     } catch (error) {
       ctx.showError(`Failed to export storage state: ${error instanceof Error ? error.message : String(error)}`);

@@ -19,14 +19,14 @@ type SessionStateFields = {
   modeId?: string;
 };
 
-export function v1ModeToLegacy<TState = {}>(mode: HarnessMode, agent: Agent): HarnessModeLegacy<TState> {
+export function v1ModeToLegacy(mode: HarnessMode, agent: Agent): HarnessModeLegacy {
   const meta = mode.metadata ?? {};
   return {
     id: mode.id,
     name: mode.description,
     default: meta.default === true,
     defaultModelId: mode.defaultModelId,
-    color: typeof meta.color === 'string' ? meta.color : undefined,
+    metadata: meta,
     agent,
   };
 }
@@ -207,7 +207,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     };
   }
 
-  getCurrentMode(): HarnessModeLegacy<TState> {
+  getCurrentMode(): HarnessModeLegacy {
     if (!this.#session) {
       return super.getCurrentMode();
     }

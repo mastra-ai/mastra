@@ -6,7 +6,7 @@ import type { SlashCommandContext } from '../types.js';
 
 const selectorInstances: Array<any> = [];
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   Spacer: class {
     constructor(public size: number) {}
   },

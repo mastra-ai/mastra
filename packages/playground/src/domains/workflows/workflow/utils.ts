@@ -2,6 +2,28 @@ import Dagre from '@dagrejs/dagre';
 import type { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { Node, Edge } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
+import {
+  resolveWorkflowGraphStep,
+  WORKFLOW_BOUNDARY_NODE_TYPE,
+  WORKFLOW_STEP_NODE_TYPE,
+} from './workflow-step-node-utils';
+
+const WORKFLOW_START_NODE_ID = '__workflow-start__';
+const WORKFLOW_END_NODE_ID = '__workflow-end__';
+
+const getNodeSize = (node: Node): { width: number; height: number } => {
+  if (node.type === WORKFLOW_BOUNDARY_NODE_TYPE) {
+    return {
+      width: node.measured?.width ?? 56,
+      height: node.measured?.height ?? 56,
+    };
+  }
+
+  return {
+    width: node.measured?.width ?? 274,
+    height: node.measured?.height ?? (node?.data?.isLarge ? 260 : 100),
+  };
+};
 
 export type ConditionConditionType = 'if' | 'else' | 'when' | 'until' | 'while' | 'dountil' | 'dowhile';
 
@@ -67,8 +89,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   nodes.forEach(node =>
     g.setNode(node.id, {
       ...node,
-      width: node.measured?.width ?? 274,
-      height: node.measured?.height ?? (node?.data?.isLarge ? 260 : 100),
+      ...getNodeSize(node),
     }),
   );
 
@@ -80,10 +101,11 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   return {
     nodes: nodes.map(node => {
       const position = g.node(node.id);
+      const { width, height } = getNodeSize(node);
       // We are shifting the dagre node position (anchor=center center) to the top left
       // so it matches the React Flow node anchor point (top left).
-      const positionX = position.x - (node.measured?.width ?? 274) / 2;
-      const positionY = position.y - (node.measured?.height ?? (node?.data?.isLarge ? 260 : 100)) / 2;
+      const positionX = position.x - width / 2;
+      const positionY = position.y - height / 2;
       const x = positionX;
       const y = positionY;
 
@@ -104,6 +126,13 @@ const defaultEdgeOptions = {
     color: '#8e8e8e',
   },
 };
+
+const conditionWorkflowStep = (condition: { id: string; fn: string }) =>
+  resolveWorkflowGraphStep({
+    type: 'conditional',
+    steps: [],
+    serializedConditions: [condition],
+  });
 
 export type WStep = {
   [key: string]: {
@@ -171,9 +200,11 @@ const getStepNodeAndEdge = ({
             {
               id: condition.id,
               position: { x: xIndex * 300, y: yIndex * 100 },
-              type: 'condition-node',
+              type: WORKFLOW_STEP_NODE_TYPE,
               data: {
                 label: condition.id,
+                workflowStep: conditionWorkflowStep(condition),
+                nodeRole: 'condition',
                 previousStepId: prevStepIds[prevStepIds.length - 1],
                 nextStepId: stepFlow.step.id,
                 withoutTopHandle: !prevNodeIds.length,
@@ -187,9 +218,10 @@ const getStepNodeAndEdge = ({
       {
         id: nodeId,
         position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
-        type: hasGraph ? 'nested-node' : 'default-node',
+        type: WORKFLOW_STEP_NODE_TYPE,
         data: {
           label: formatMappingLabel(stepFlow.step.id, prevStepIds, nextStepIds),
+          workflowStep: resolveWorkflowGraphStep(stepFlow),
           stepId: stepFlow.step.id,
           description: stepFlow.step.description,
           withoutTopHandle: condition ? false : !prevNodeIds.length,
@@ -250,9 +282,11 @@ const getStepNodeAndEdge = ({
             {
               id: condition.id,
               position: { x: xIndex * 300, y: yIndex * 100 },
-              type: 'condition-node',
+              type: WORKFLOW_STEP_NODE_TYPE,
               data: {
                 label: condition.id,
+                workflowStep: conditionWorkflowStep(condition),
+                nodeRole: 'condition',
                 previousStepId: prevStepIds[prevStepIds.length - 1],
                 nextStepId: stepFlow.id,
                 withoutTopHandle: false,
@@ -266,9 +300,10 @@ const getStepNodeAndEdge = ({
       {
         id: nodeId,
         position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
-        type: 'default-node',
+        type: WORKFLOW_STEP_NODE_TYPE,
         data: {
           label: stepFlow.id,
+          workflowStep: resolveWorkflowGraphStep(stepFlow),
           withoutTopHandle: condition ? false : !prevNodeIds.length,
           withoutBottomHandle: !nextNodeIds.length,
           ...(stepFlow.type === 'sleepUntil' ? { date: stepFlow.date } : { duration: stepFlow.duration }),
@@ -317,18 +352,18 @@ const getStepNodeAndEdge = ({
 
   if (stepFlow.type === 'loop') {
     const { step: _step, serializedCondition, loopType } = stepFlow;
-    const hasGraph = _step.component === 'WORKFLOW';
     const nodes = [
       {
         id: _step.id,
         position: { x: xIndex * 300, y: yIndex * 100 },
-        type: hasGraph ? 'nested-node' : 'default-node',
+        type: WORKFLOW_STEP_NODE_TYPE,
         data: {
           label: _step.id,
+          workflowStep: resolveWorkflowGraphStep(stepFlow),
           description: _step.description,
           withoutTopHandle: !prevNodeIds.length,
           withoutBottomHandle: false,
-          stepGraph: hasGraph ? _step.serializedStepFlow : undefined,
+          stepGraph: _step.component === 'WORKFLOW' ? _step.serializedStepFlow : undefined,
           canSuspend: _step.canSuspend,
           metadata: _step.metadata,
         },
@@ -336,9 +371,11 @@ const getStepNodeAndEdge = ({
       {
         id: serializedCondition.id,
         position: { x: xIndex * 300, y: (yIndex + 1) * 100 },
-        type: 'condition-node',
+        type: WORKFLOW_STEP_NODE_TYPE,
         data: {
           label: serializedCondition.id,
+          workflowStep: conditionWorkflowStep(serializedCondition),
+          nodeRole: 'condition',
           // conditionStepId: _step.id,
           previousStepId: _step.id,
           nextStepId: nextStepIds[0],
@@ -442,7 +479,7 @@ const getStepNodeAndEdge = ({
     return {
       nodes,
       edges,
-      nextPrevNodeIds: nodes.filter(({ type }) => type !== 'condition-node').map(node => node.id),
+      nextPrevNodeIds: nodes.filter(({ data }) => data.nodeRole !== 'condition').map(node => node.id),
       nextPrevStepIds,
     };
   }
@@ -491,6 +528,56 @@ export const constructNodesAndEdges = ({
     prevStepIds = nextPrevStepIds;
     allPrevNodeIds.push(...prevNodeIds);
   }
+
+  const edgeTargetIds = new Set(edges.map(edge => edge.target));
+  const edgeSourceIds = new Set(edges.map(edge => edge.source));
+  const sourceNodeIds = nodes.filter(node => !edgeTargetIds.has(node.id)).map(node => node.id);
+  const terminalNodeIds = nodes.filter(node => !edgeSourceIds.has(node.id)).map(node => node.id);
+  const sourceNodeIdSet = new Set(sourceNodeIds);
+  const terminalNodeIdSet = new Set(terminalNodeIds);
+
+  nodes = nodes.map(node => ({
+    ...node,
+    data: {
+      ...node.data,
+      ...(sourceNodeIdSet.has(node.id) ? { withoutTopHandle: false } : {}),
+      ...(terminalNodeIdSet.has(node.id) ? { withoutBottomHandle: false } : {}),
+    },
+  }));
+
+  nodes = [
+    {
+      id: WORKFLOW_START_NODE_ID,
+      position: { x: 0, y: 0 },
+      type: WORKFLOW_BOUNDARY_NODE_TYPE,
+      data: { label: 'Start', boundaryRole: 'start' },
+    },
+    ...nodes,
+    {
+      id: WORKFLOW_END_NODE_ID,
+      position: { x: 0, y: 0 },
+      type: WORKFLOW_BOUNDARY_NODE_TYPE,
+      data: { label: 'End', boundaryRole: 'end' },
+    },
+  ];
+
+  edges = [
+    ...sourceNodeIds.map(nodeId => ({
+      id: `e${WORKFLOW_START_NODE_ID}-${nodeId}`,
+      source: WORKFLOW_START_NODE_ID,
+      target: nodeId,
+      data: { boundaryPayload: 'workflow-input' },
+      ...defaultEdgeOptions,
+    })),
+    ...edges,
+    ...terminalNodeIds.map(nodeId => ({
+      id: `e${nodeId}-${WORKFLOW_END_NODE_ID}`,
+      source: nodeId,
+      target: WORKFLOW_END_NODE_ID,
+      data: { boundaryPayload: 'workflow-output' },
+      ...defaultEdgeOptions,
+    })),
+  ];
 
   const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
 
