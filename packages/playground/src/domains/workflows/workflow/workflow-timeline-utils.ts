@@ -2,6 +2,7 @@ import type { Step } from '../context/use-current-run';
 
 export interface TimelineRow {
   stepId: string;
+  step: Step;
   status: Step['status'];
   /** Bar left position, 0–100. */
   offsetPct: number;
@@ -9,7 +10,10 @@ export interface TimelineRow {
   widthPct: number;
   durationMs: number;
   isRunning: boolean;
+  isNestedEntry: boolean;
 }
+
+export const isNestedTimelineEntry = (stepId: string) => stepId.includes('.');
 
 const isInputKey = (key: string) => key === 'input' || key.endsWith('.input');
 
@@ -47,11 +51,13 @@ export function buildTimeline(steps: Record<string, Step>, now: number): Timelin
 
     return {
       stepId,
+      step,
       status: step.status,
       offsetPct,
       widthPct,
       durationMs,
       isRunning,
+      isNestedEntry: isNestedTimelineEntry(stepId),
     };
   });
 }

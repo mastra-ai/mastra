@@ -125,7 +125,7 @@ describe('WorkflowTimeline', () => {
 
     const rows = screen.getAllByTestId('workflow-timeline-row');
     expect(rows.length).toBe(3);
-    expect(rows[0].tagName).toBe('BUTTON');
+    expect(rows[0].getAttribute('role')).toBe('button');
   });
 
   it('marks timeline rows as hovered and selected from pointer and click interactions', async () => {
@@ -249,5 +249,106 @@ describe('WorkflowTimeline', () => {
       expect(screen.getByText('1s')).not.toBeNull();
       expect(screen.getAllByText(/s$/).length).toBeGreaterThan(0);
     });
+  });
+
+  it('reuses workflow card badge indicators for timeline rows', async () => {
+    const startedAt = new Date(2026, 4, 29, 16, 19, 44).getTime();
+    const steps: Record<string, Step> = {
+      'sleep-step': {
+        status: 'success',
+        startedAt,
+        endedAt: startedAt + 1000,
+        duration: 1000,
+      },
+      'suspend-step': {
+        status: 'suspended',
+        startedAt: startedAt + 1000,
+        endedAt: startedAt + 2000,
+        canSuspend: true,
+      },
+    };
+
+    renderControlledTimeline(steps);
+
+    expect(await screen.findByTestId('workflow-card-indicator-sleep')).not.toBeNull();
+    expect(screen.getByTestId('workflow-card-indicator-suspend')).not.toBeNull();
+  });
+
+  it('opens step input and output JSON dialogs from timeline action buttons', async () => {
+    const startedAt = new Date(2026, 4, 29, 16, 19, 44).getTime();
+    const steps: Record<string, Step & { payload?: unknown }> = {
+      'io-step': {
+        status: 'success',
+        startedAt,
+        endedAt: startedAt + 1000,
+        payload: { prompt: 'hello' },
+        output: { answer: 'world' },
+      },
+    };
+
+    renderControlledTimeline(steps);
+
+    await screen.findByText('Io Step');
+
+    fireEvent.click(screen.getByRole('button', { name: 'View step input' }));
+    expect(await screen.findByText('Io Step input')).not.toBeNull();
+    expect(screen.getByText(/prompt/)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'View step output' }));
+    expect(await screen.findByText('Io Step output')).not.toBeNull();
+    expect(screen.getByText(/answer/)).not.toBeNull();
+  });
+
+  it('keeps timeline input and output buttons visible but disabled for running steps', async () => {
+    const startedAt = new Date(2026, 4, 29, 16, 19, 44).getTime();
+    const steps = {
+      'running-step': {
+        status: 'running',
+        startedAt,
+        payload: { prompt: 'hello' },
+      },
+    } satisfies Record<string, Step & { payload?: unknown }>;
+
+    renderControlledTimeline(steps);
+
+    await screen.findByText('Running Step');
+
+    const inputButton = screen.getByRole('button', { name: 'View step input' });
+    const outputButton = screen.getByRole('button', { name: 'View step output' });
+
+    expect(inputButton.hasAttribute('disabled')).toBe(true);
+    expect(outputButton.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('marks nested timeline entries disabled without changing hover or selection', async () => {
+    const startedAt = new Date(2026, 4, 29, 16, 19, 44).getTime();
+    const steps = {
+      'parent.child': {
+        status: 'success',
+        startedAt,
+        endedAt: startedAt + 1000,
+        payload: { nested: true },
+      },
+    } satisfies Record<string, Step & { payload?: unknown }>;
+
+    renderControlledTimeline(steps);
+
+    await screen.findByText('Parent Child');
+
+    const row = screen.getByTestId('workflow-timeline-row');
+    expect(row.getAttribute('aria-disabled')).toBe('true');
+    expect(row.getAttribute('data-workflow-step-nested')).toBe('true');
+
+    fireEvent.mouseEnter(row);
+    expect(row.getAttribute('data-workflow-step-hovered')).toBeNull();
+
+    fireEvent.click(row);
+    expect(row.getAttribute('aria-pressed')).toBe('false');
+    expect(row.getAttribute('data-workflow-step-active')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'View step input' }));
+    expect(await screen.findByText('Parent Child input')).not.toBeNull();
   });
 });

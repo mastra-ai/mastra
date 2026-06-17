@@ -13,41 +13,55 @@ import { useState } from 'react';
 
 export interface WorkflowJsonDialogProps {
   data: Record<string, unknown>;
-  triggerLabel: string;
+  triggerLabel?: string;
   title: string;
   triggerIcon?: ReactNode;
+  trigger?: ReactNode;
   variant?: ComponentProps<typeof Button>['variant'];
   size?: ComponentProps<typeof Button>['size'];
   className?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
+
+export const WorkflowJsonDialogContent = ({ data, title }: Pick<WorkflowJsonDialogProps, 'data' | 'title'>) => (
+  <DialogContent className="max-w-3xl">
+    <DialogHeader>
+      <DialogTitle>{title}</DialogTitle>
+    </DialogHeader>
+    <DialogBody className="max-h-[90vh]">
+      <CodeEditor data={data} className="p-0" />
+    </DialogBody>
+  </DialogContent>
+);
 
 export const WorkflowJsonDialog = ({
   data,
   triggerLabel,
   title,
   triggerIcon = <Braces className="shrink-0 text-neutral3" />,
+  trigger,
   variant = 'default',
   size = 'md',
   className,
+  open: controlledOpen,
+  onOpenChange,
 }: WorkflowJsonDialogProps) => {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = onOpenChange ?? setUncontrolledOpen;
 
   return (
     <>
-      <Button type="button" variant={variant} size={size} className={className} onClick={() => setOpen(true)}>
-        {triggerIcon}
-        <span className="truncate">{triggerLabel}</span>
-      </Button>
+      {trigger ?? (
+        <Button type="button" variant={variant} size={size} className={className} onClick={() => setOpen(true)}>
+          {triggerIcon}
+          {triggerLabel && <span className="truncate">{triggerLabel}</span>}
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
-          </DialogHeader>
-          <DialogBody className="max-h-[90vh]">
-            <CodeEditor data={data} className="p-0" />
-          </DialogBody>
-        </DialogContent>
+        <WorkflowJsonDialogContent data={data} title={title} />
       </Dialog>
     </>
   );
