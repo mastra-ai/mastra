@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { getErrorFromUnknown } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
@@ -7,7 +8,6 @@ import { parseMemoryRequestContext } from '../memory/types';
 import type { RequestContext } from '../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
-import { getErrorFromUnknown } from '../error';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';

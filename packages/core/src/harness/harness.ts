@@ -12,6 +12,7 @@ import type {
   ToolsetsInput,
 } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import { getErrorFromUnknown } from '../error';
 import { getServerSideFallbackInfo } from '../llm/model/server-side-fallback';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -26,7 +27,6 @@ import type { ObservationalMemoryRecord } from '../storage/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { ToolPayloadTransformPhase } from '../tools/types';
 import { safeStringify } from '../utils';
-import { getErrorFromUnknown } from '../error';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
