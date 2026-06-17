@@ -1023,6 +1023,24 @@ type BaseMemoryConfig = {
          * Can be static or a function that receives request context for dynamic customization.
          */
         instructions?: DynamicArgument<string>;
+        /**
+         * Callback invoked once after the generated title has been written to storage.
+         * Useful for pushing real-time notifications (e.g. SSE events) to clients
+         * without needing to wrap or subclass a storage adapter.
+         *
+         * @param threadId - The ID of the thread whose title was generated.
+         * @param title    - The generated title string.
+         * @example
+         * ```typescript
+         * generateTitle: {
+         *   model: openai("gpt-4o-mini"),
+         *   onTitleGenerated: (threadId, title) => {
+         *     sseEmitter.push(threadId, { type: "title", title });
+         *   },
+         * }
+         * ```
+         */
+        onTitleGenerated?: (threadId: string, title: string) => void | Promise<void>;
       };
 
   /**

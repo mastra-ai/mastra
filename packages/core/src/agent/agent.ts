@@ -6903,6 +6903,7 @@ export class Agent<
           model: titleModel,
           instructions: titleInstructions,
           minMessages,
+          onTitleGenerated,
         } = this.resolveTitleGenerationConfig(
           config?.generateTitle as
             | boolean
@@ -6910,6 +6911,7 @@ export class Agent<
                 model?: DynamicArgument<MastraModelConfig, TRequestContext>;
                 instructions?: DynamicArgument<string>;
                 minMessages?: number;
+                onTitleGenerated?: (threadId: string, title: string) => void | Promise<void>;
               }
             | undefined,
         );
@@ -6940,6 +6942,9 @@ export class Agent<
                       title,
                       metadata: thread.metadata,
                     });
+                    if (typeof onTitleGenerated === 'function') {
+                      await onTitleGenerated(thread.id, title);
+                    }
                   } catch (error) {
                     this.logger.error('Error persisting generated title:', error);
                   }
@@ -8822,6 +8827,7 @@ export class Agent<
           model?: DynamicArgument<MastraModelConfig, TRequestContext>;
           instructions?: DynamicArgument<string>;
           minMessages?: number;
+          onTitleGenerated?: (threadId: string, title: string) => void | Promise<void>;
         }
       | undefined,
   ): {
@@ -8829,6 +8835,7 @@ export class Agent<
     model?: DynamicArgument<MastraModelConfig, TRequestContext>;
     instructions?: DynamicArgument<string>;
     minMessages?: number;
+    onTitleGenerated?: (threadId: string, title: string) => void | Promise<void>;
   } {
     if (typeof generateTitleConfig === 'boolean') {
       return { shouldGenerate: generateTitleConfig };
@@ -8840,6 +8847,7 @@ export class Agent<
         model: generateTitleConfig.model,
         instructions: generateTitleConfig.instructions,
         minMessages: generateTitleConfig.minMessages,
+        onTitleGenerated: generateTitleConfig.onTitleGenerated,
       };
     }
 
