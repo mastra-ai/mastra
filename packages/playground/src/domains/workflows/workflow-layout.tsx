@@ -7,6 +7,7 @@ import { SchemaRequestContextProvider } from '@/domains/request-context/context/
 import { WorkflowInformation } from '@/domains/workflows/components/workflow-information';
 import { WorkflowLayout as WorkflowLayoutUI } from '@/domains/workflows/components/workflow-layout';
 import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-provider';
+import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow-step-detail-provider';
 import { useWorkflowRun } from '@/hooks/use-workflow-runs';
 import { useWorkflow } from '@/hooks/use-workflows';
 
@@ -52,15 +53,17 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
       <SchemaRequestContextProvider>
         <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
-          <div className="h-full min-h-0">
-            <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
-            <WorkflowLayoutUI
-              workflowId={workflowId!}
-              leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
-            >
-              {children}
-            </WorkflowLayoutUI>
-          </div>
+          <WorkflowStepDetailProvider>
+            <div className="h-full min-h-0">
+              <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
+              <WorkflowLayoutUI
+                workflowId={workflowId!}
+                leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
+              >
+                {children}
+              </WorkflowLayoutUI>
+            </div>
+          </WorkflowStepDetailProvider>
         </WorkflowRunProvider>
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>
