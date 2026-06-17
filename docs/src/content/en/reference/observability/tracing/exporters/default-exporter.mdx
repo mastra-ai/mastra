@@ -1,6 +1,6 @@
 ---
 title: "Reference: DefaultExporter | Observability"
-description: API reference for the DefaultExporter
+description: API reference for the deprecated DefaultExporter (replaced by MastraStorageExporter)
 packages:
   - "@mastra/observability"
 ---
@@ -9,7 +9,15 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # DefaultExporter
 
-Persists traces to Mastra's configured storage with automatic batching and retry logic.
+**Deprecated in `@mastra/observability@1.12.0`** in favor of [`MastraStorageExporter`](/reference/observability/tracing/exporters/mastra-storage-exporter).
+
+:::warning[Deprecated]
+
+`DefaultExporter` is retained for backward compatibility and will be removed in a future major version. Use [`MastraStorageExporter`](/reference/observability/tracing/exporters/mastra-storage-exporter) for new projects. The two classes share the same constructor, configuration, and runtime behavior; `DefaultExporter` keeps its original `mastra-default-observability-exporter` exporter `name` so monitoring rules built against it keep working.
+
+:::
+
+Persists observability events to Mastra Storage with automatic batching and retry logic.
 
 ## Constructor
 
@@ -170,6 +178,8 @@ Failed flushes are retried with exponential backoff:
 - Maximum attempts: `maxRetries`
 - Batch is dropped after all retries fail
 
+When storage doesn't support a signal or retries are exhausted, `DefaultExporter` emits an `ObservabilityDropEvent` through `onDroppedEvent` handlers registered on exporters and bridges. The drop event includes the signal, reason, count, exporter name, storage name when known, and sanitized error details.
+
 ### Out-of-Order Handling
 
 For `batch-with-updates` strategy:
@@ -201,7 +211,7 @@ const customExporter = new DefaultExporter({
 ### Documentation
 
 - [Tracing Overview](/docs/observability/tracing/overview): Complete guide
-- [Exporters](/docs/observability/tracing/overview#exporters): Exporter concepts
+- [Exporters](/docs/observability/integrations/overview#exporters): Exporter concepts
 
 ### Other Exporters
 

@@ -12,7 +12,7 @@ import {
   deleteStoredPromptBlockResponseSchema,
 } from '../schemas/stored-prompt-blocks';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
 import { handleError } from './error';
 import { handleAutoVersioning } from './version-helpers';
@@ -51,7 +51,7 @@ export const LIST_STORED_PROMPT_BLOCKS_ROUTE = createRoute({
   description: 'Returns a paginated list of all prompt blocks stored in the database',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -64,13 +64,14 @@ export const LIST_STORED_PROMPT_BLOCKS_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
       }
 
+      const scope = await getStoredResourceScope(mastra, requestContext);
       const result = await promptBlockStore.listResolved({
         page,
         perPage,
         orderBy,
         status,
         authorId,
-        metadata,
+        metadata: scopeStoredResourceMetadata(metadata, scope),
       });
 
       // For each block, fetch the latest version to compute hasDraft.
@@ -105,7 +106,7 @@ export const GET_STORED_PROMPT_BLOCK_ROUTE = createRoute({
     'Returns a specific prompt block from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
-  handler: async ({ mastra, storedPromptBlockId, status }) => {
+  handler: async ({ mastra, storedPromptBlockId, status, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -123,6 +124,7 @@ export const GET_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       if (!promptBlock) {
         throw new HTTPException(404, { message: `Stored prompt block with id ${storedPromptBlockId} not found` });
       }
+      assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const latestVersion = await promptBlockStore.getLatestVersion(storedPromptBlockId);
 
@@ -156,6 +158,7 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
     content,
     rules,
     requestContextSchema,
+    requestContext,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -188,7 +191,7 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
         promptBlock: {
           id,
           authorId,
-          metadata,
+          metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
           name,
           description,
           content,
@@ -243,6 +246,7 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
     content,
     rules,
     requestContextSchema,
+    requestContext,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -261,12 +265,18 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored prompt block with id ${storedPromptBlockId} not found` });
       }
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      assertStoredResourceScope(existing, scope);
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
 
       // Update the prompt block with both metadata-level and config-level fields
       const updatedPromptBlock = await promptBlockStore.update({
         id: storedPromptBlockId,
         authorId,
-        metadata,
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
         name,
         description,
         content,
@@ -325,7 +335,7 @@ export const DELETE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
   description: 'Deletes a prompt block from storage by its unique identifier',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
-  handler: async ({ mastra, storedPromptBlockId }) => {
+  handler: async ({ mastra, storedPromptBlockId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -343,6 +353,7 @@ export const DELETE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored prompt block with id ${storedPromptBlockId} not found` });
       }
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
       await promptBlockStore.delete(storedPromptBlockId);
 

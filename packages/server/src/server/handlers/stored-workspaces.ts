@@ -11,8 +11,15 @@ import {
   deleteStoredWorkspaceResponseSchema,
 } from '../schemas/stored-workspaces';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { toSlug } from '../utils';
+import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
+import {
+  assertReadAccess,
+  assertWriteAccess,
+  getCallerAuthorId,
+  matchesAuthorFilter,
+  resolveAuthorFilter,
+} from './authorship';
 import { handleError } from './error';
 
 // ============================================================================
@@ -32,7 +39,7 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
   description: 'Returns a paginated list of all workspace configurations stored in the database',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
-  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata }) => {
+  handler: async ({ mastra, page, perPage, orderBy, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -45,15 +52,39 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
       }
 
+      // Resolve the visibility scope for this caller. Non-owner queries for
+      // another author return nothing (workspaces have no `public` visibility
+      // yet); default lists return the caller's rows plus legacy unowned
+      // records.
+      const filter = resolveAuthorFilter({
+        requestContext,
+        resource: 'stored-workspaces',
+        queryAuthorId: authorId,
+      });
+
+      const scope = await getStoredResourceScope(mastra, requestContext);
       const result = await workspaceStore.listResolved({
         page,
         perPage,
         orderBy,
-        authorId,
-        metadata,
+        authorId: filter.kind === 'exact' ? filter.authorId : undefined,
+        metadata: scopeStoredResourceMetadata(metadata, scope),
       });
 
-      return result;
+      // Post-filter to enforce ownership rules across all backends. Storage
+      // adapters can only do an equality filter on authorId, so we apply the
+      // ownedOrPublic / ownedOrPublicOthers logic here. `total` is left as the
+      // storage-reported count to keep pagination math working.
+      const visibleWorkspaces = result.workspaces.filter(record => matchesAuthorFilter(record, filter));
+
+      // Annotate each workspace with whether it's registered at runtime
+      const runtimeWorkspaces = mastra.listWorkspaces();
+      const workspaces = visibleWorkspaces.map(ws => ({
+        ...ws,
+        runtimeRegistered: ws.id in runtimeWorkspaces,
+      }));
+
+      return { ...result, workspaces };
     } catch (error) {
       return handleError(error, 'Error listing stored workspaces');
     }
@@ -74,7 +105,7 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
     'Returns a specific workspace from storage by its unique identifier (resolved with active version config)',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
-  handler: async ({ mastra, storedWorkspaceId }) => {
+  handler: async ({ mastra, storedWorkspaceId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -92,6 +123,15 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
       if (!workspace) {
         throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
       }
+      assertStoredResourceScope(workspace, await getStoredResourceScope(mastra, requestContext));
+
+      // Throws 404 if the caller isn't the owner, admin, or `stored-workspaces:read[:<id>]` holder.
+      assertReadAccess({
+        requestContext,
+        resource: 'stored-workspaces',
+        resourceId: storedWorkspaceId,
+        record: workspace,
+      });
 
       return workspace;
     } catch (error) {
@@ -116,7 +156,6 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
   handler: async ({
     mastra,
     id: providedId,
-    authorId,
     metadata,
     name,
     description,
@@ -128,6 +167,7 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
     tools,
     autoSync,
     operationTimeout,
+    requestContext,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -156,11 +196,16 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
         throw new HTTPException(409, { message: `Workspace with id ${id} already exists` });
       }
 
+      // Force authorId from the authenticated caller; ignore any body-provided value.
+      // No caller (auth not configured) leaves authorId undefined so legacy
+      // single-user setups continue to behave as today.
+      const authorId = getCallerAuthorId(requestContext) ?? undefined;
+
       await workspaceStore.create({
         workspace: {
           id,
           authorId,
-          metadata,
+          metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
           name,
           description,
           filesystem,
@@ -205,7 +250,6 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
     mastra,
     storedWorkspaceId,
     // Metadata-level fields
-    authorId,
     metadata,
     // Config fields (snapshot-level)
     name,
@@ -218,6 +262,7 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
     tools,
     autoSync,
     operationTimeout,
+    requestContext,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -236,13 +281,33 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
       }
+      const scope = await getStoredResourceScope(mastra, requestContext);
+      assertStoredResourceScope(existing, scope);
 
-      // Update the workspace with both metadata-level and config-level fields
-      // The storage layer handles separating these into record updates vs new-version creation
-      await workspaceStore.update({
-        id: storedWorkspaceId,
-        authorId,
-        metadata,
+      // Throws 404 if the caller isn't the owner, admin, or `stored-workspaces:edit[:<id>]` holder.
+      assertWriteAccess({
+        requestContext,
+        resource: 'stored-workspaces',
+        resourceId: storedWorkspaceId,
+        action: 'edit',
+        record: existing,
+      });
+
+      const scopedMetadata =
+        metadata !== undefined
+          ? scopeStoredResourceMetadata({ ...(existing.metadata ?? {}), ...metadata }, scope)
+          : undefined;
+
+      // Update the workspace with both metadata-level and config-level fields.
+      // The storage layer handles separating these into record updates vs
+      // new-version creation. Strip undefined keys so omitted fields don't
+      // overwrite persisted values (same pattern as stored-skills PATCH).
+      // Note: authorId is intentionally not accepted here. Ownership cannot be
+      // transferred via PATCH; admins must use a dedicated flow if that is ever
+      // needed.
+      const updateInput: Record<string, unknown> = { id: storedWorkspaceId };
+      const candidate: Record<string, unknown> = {
+        ...(scopedMetadata !== undefined ? { metadata: scopedMetadata } : {}),
         name,
         description,
         filesystem,
@@ -253,7 +318,11 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
         tools,
         autoSync,
         operationTimeout,
-      });
+      };
+      for (const [key, value] of Object.entries(candidate)) {
+        if (value !== undefined) updateInput[key] = value;
+      }
+      await workspaceStore.update(updateInput as Parameters<typeof workspaceStore.update>[0]);
 
       // Return the resolved workspace with the updated config
       const resolved = await workspaceStore.getByIdResolved(storedWorkspaceId);
@@ -281,7 +350,7 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
   description: 'Deletes a workspace from storage by its unique identifier',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
-  handler: async ({ mastra, storedWorkspaceId }) => {
+  handler: async ({ mastra, storedWorkspaceId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -299,6 +368,16 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!existing) {
         throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
       }
+      assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
+
+      // Throws 404 if the caller isn't the owner, admin, or `stored-workspaces:delete[:<id>]` holder.
+      assertWriteAccess({
+        requestContext,
+        resource: 'stored-workspaces',
+        resourceId: storedWorkspaceId,
+        action: 'delete',
+        record: existing,
+      });
 
       await workspaceStore.delete(storedWorkspaceId);
 

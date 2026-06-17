@@ -12,7 +12,7 @@ export function MainSidebarNav({
 }: MainSidebarNavProps) {
   return (
     <nav aria-label={ariaLabel} className={cn('flex flex-col flex-1 min-h-0', className)} {...props}>
-      <ScrollArea showMask className="flex-1 min-h-0">
+      <ScrollArea className="flex-1 min-h-0" viewPortClassName="px-0.5">
         {children}
       </ScrollArea>
     </nav>

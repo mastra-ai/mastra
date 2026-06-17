@@ -141,4 +141,31 @@ describe('setupDebugLogging', () => {
     expect(content).toContain('[ERROR]');
     expect(content).toContain('test error via 1');
   });
+
+  it('should truncate an oversized existing log then append repeated debug sessions without partial lines', async () => {
+    vi.stubEnv('MASTRA_DEBUG', 'true');
+    const projectMod = await import('../project.js');
+    vi.spyOn(projectMod, 'getAppDataDir').mockReturnValue(tmpDir);
+    const logFile = path.join(tmpDir, 'debug.log');
+    const oldLine = '[ERROR] 2026-01-01T00:00:00.000Z old complete log line\n';
+    fs.writeFileSync(logFile, oldLine.repeat(Math.ceil((6 * 1024 * 1024) / oldLine.length)));
+
+    setupDebugLogging();
+    console.warn('session-one warning');
+    await new Promise(r => setTimeout(r, 100));
+
+    setupDebugLogging();
+    console.error('session-two error');
+    await new Promise(r => setTimeout(r, 100));
+
+    const content = fs.readFileSync(logFile, 'utf-8');
+    const lines = content.split('\n').filter(Boolean);
+    expect(fs.statSync(logFile).size).toBeLessThan(5 * 1024 * 1024);
+    expect(lines[0]).toBe(oldLine.trimEnd());
+    expect(lines.every(line => line.startsWith('[ERROR]') || line.startsWith('[WARN]'))).toBe(true);
+    expect(content).toContain('session-one warning');
+    expect(content).toContain('session-two error');
+    expect(content.match(/session-one warning/g)).toHaveLength(1);
+    expect(content.match(/session-two error/g)).toHaveLength(1);
+  });
 });

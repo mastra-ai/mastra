@@ -22,9 +22,10 @@ import type {
   ListMCPServerVersionsInput,
   ListMCPServerVersionsOutput,
 } from '@mastra/core/storage/domains/mcp-servers';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
   'name',
@@ -57,15 +58,43 @@ export class MCPServersPG extends MCPServersStorage {
     this.#indexes = indexes?.filter(idx => (MCPServersPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: 'idx_mcp_server_versions_server_version',
+        name: `${schemaPrefix}idx_mcp_server_versions_server_version`,
         table: TABLE_MCP_SERVER_VERSIONS,
         columns: ['mcpServerId', 'versionNumber'],
         unique: true,
       },
     ];
+  }
+
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    for (const tableName of MCPServersPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    for (const idx of MCPServersPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return MCPServersPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   async createDefaultIndexes(): Promise<void> {
@@ -380,7 +409,14 @@ export class MCPServersPG extends MCPServersStorage {
         [...queryParams, limitValue, offset],
       );
 
-      const mcpServers = (dataResult || []).map(row => this.parseMCPServerRow(row));
+      const mcpServers = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseMCPServerRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map mcp server row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         mcpServers,
@@ -598,7 +634,14 @@ export class MCPServersPG extends MCPServersStorage {
         [mcpServerId, limitValue, offset],
       );
 
-      const versions = (dataResult || []).map(row => this.parseVersionRow(row));
+      const versions = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseVersionRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map mcp server version row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         versions,
@@ -691,41 +734,13 @@ export class MCPServersPG extends MCPServersStorage {
   // Private Helper Methods
   // ==========================================================================
 
-  private parseJson(value: any, fieldName?: string): any {
-    if (!value) return undefined;
-    if (typeof value !== 'string') return value;
-
-    try {
-      return JSON.parse(value);
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      const details: Record<string, string> = {
-        valueLength: String(value.length),
-      };
-      if (fieldName) {
-        details.field = fieldName;
-      }
-
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'PARSE_JSON', 'INVALID_JSON'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.SYSTEM,
-          text: `Failed to parse JSON${fieldName ? ` for field "${fieldName}"` : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          details,
-        },
-        error,
-      );
-    }
-  }
-
   private parseMCPServerRow(row: any): StorageMCPServerType {
     return {
       id: row.id as string,
       status: row.status as StorageMCPServerType['status'],
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
-      metadata: this.parseJson(row.metadata, 'metadata'),
+      metadata: parseJsonResilient(row.metadata, 'metadata'),
       createdAt: new Date(row.createdAtZ || row.createdAt),
       updatedAt: new Date(row.updatedAtZ || row.updatedAt),
     };
@@ -740,14 +755,14 @@ export class MCPServersPG extends MCPServersStorage {
       version: row.version as string,
       description: row.description as string | undefined,
       instructions: row.instructions as string | undefined,
-      repository: this.parseJson(row.repository, 'repository'),
+      repository: parseJsonResilient(row.repository, 'repository'),
       releaseDate: row.releaseDate as string | undefined,
       isLatest: row.isLatest as boolean | undefined,
       packageCanonical: row.packageCanonical as string | undefined,
-      tools: this.parseJson(row.tools, 'tools'),
-      agents: this.parseJson(row.agents, 'agents'),
-      workflows: this.parseJson(row.workflows, 'workflows'),
-      changedFields: this.parseJson(row.changedFields, 'changedFields'),
+      tools: parseJsonResilient(row.tools, 'tools'),
+      agents: parseJsonResilient(row.agents, 'agents'),
+      workflows: parseJsonResilient(row.workflows, 'workflows'),
+      changedFields: parseJsonResilient(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAtZ || row.createdAt),
     };

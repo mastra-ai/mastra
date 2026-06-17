@@ -1,4 +1,4 @@
-import type { DropResult } from '@hello-pangea/dnd';
+import type { DropResult, DroppableProvided, DroppableStateSnapshot } from '@hello-pangea/dnd';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { Icon } from '@mastra/playground-ui';
 import { GripVertical } from 'lucide-react';
@@ -64,7 +64,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
 
               {/* Drop zone */}
               <Droppable droppableId={zone.id} direction="horizontal">
-                {(provided, snapshot) => (
+                {(provided: DroppableProvided, snapshot: DroppableStateSnapshot) => (
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}

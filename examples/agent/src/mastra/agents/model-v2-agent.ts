@@ -568,6 +568,9 @@ You can handle both at the same time — start a background research while answe
     },
     waitTimeoutMs: 10000,
   },
+  defaultOptions: {
+    autoResumeSuspendedTools: true,
+  },
 });
 
 export const subscriptionOrchestratorAgent = new Agent({
@@ -598,5 +601,6 @@ export const subscriptionOrchestratorAgent = new Agent({
   memory: new Memory(),
   defaultOptions: {
     maxSteps: 10,
+    autoResumeSuspendedTools: true,
   },
 });

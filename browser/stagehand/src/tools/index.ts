@@ -12,6 +12,7 @@ import { STAGEHAND_TOOLS } from './constants';
 import { createExtractTool } from './extract';
 import { createNavigateTool } from './navigate';
 import { createObserveTool } from './observe';
+import { createScreenshotTool } from './screenshot';
 import { createTabsTool } from './tabs';
 
 export { STAGEHAND_TOOLS, type StagehandToolName } from './constants';
@@ -30,5 +31,7 @@ export function createStagehandTools(browser: StagehandBrowser): Record<string, 
     [STAGEHAND_TOOLS.NAVIGATE]: createNavigateTool(browser),
     [STAGEHAND_TOOLS.TABS]: createTabsTool(browser),
     [STAGEHAND_TOOLS.CLOSE]: createCloseTool(browser),
+    // Utility
+    [STAGEHAND_TOOLS.SCREENSHOT]: createScreenshotTool(browser),
   };
 }

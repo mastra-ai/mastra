@@ -320,16 +320,15 @@ describe('createOnScorerHook', () => {
     expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
-  it('should call addScoreToTrace on exporters with expected arguments', async () => {
-    const mockExporter = {
-      addScoreToTrace: vi.fn().mockResolvedValue(undefined),
-    };
+  it('does not publish a ScoreEvent itself — that is MastraScorer.run()`s job', async () => {
+    const addScoreSpy = vi.fn().mockResolvedValue(undefined);
+    mockMastra.observability = { addScore: addScoreSpy };
 
     const hookData = {
       runId: 'run-1',
       scorer: { id: 'test-scorer' },
-      input: [],
-      output: {},
+      input: [{ message: 'hi' }],
+      output: { result: 'ok' },
       source: 'LIVE' as const,
       entity: { id: 'agent-1' },
       entityType: 'AGENT' as const,
@@ -338,17 +337,15 @@ describe('createOnScorerHook', () => {
           id: 'span-123',
           traceId: 'trace-abc',
           isValid: true,
-          metadata: { sessionId: 'session-789', extra: 'meta' },
-          observabilityInstance: {
-            getExporters: () => [mockExporter],
-          },
+          metadata: { sessionId: 'session-789' },
+          getCorrelationContext: vi.fn().mockReturnValue({ traceId: 'trace-abc', spanId: 'span-123' }),
         },
       },
     };
 
     const mockScorer = {
       id: 'test-scorer',
-      name: 'test-scorer',
+      name: 'Test Scorer',
       run: vi.fn().mockResolvedValue({ score: 0.9, reason: 'great' }),
     };
 
@@ -358,169 +355,9 @@ describe('createOnScorerHook', () => {
 
     await hook(hookData);
 
-    expect(mockExporter.addScoreToTrace).toHaveBeenCalledTimes(1);
-    expect(mockExporter.addScoreToTrace).toHaveBeenCalledWith({
-      traceId: 'trace-abc',
-      spanId: 'span-123',
-      score: 0.9,
-      reason: 'great',
-      scorerName: 'test-scorer',
-      metadata: { sessionId: 'session-789', extra: 'meta' },
-    });
-  });
-
-  it('should call addScoreToTrace for multiple exporters', async () => {
-    const exporterA = { addScoreToTrace: vi.fn().mockResolvedValue(undefined) };
-    const exporterB = { addScoreToTrace: vi.fn().mockResolvedValue(undefined) };
-
-    const hookData = {
-      runId: 'run-2',
-      scorer: { id: 'perf-scorer' },
-      input: [],
-      output: {},
-      source: 'LIVE' as const,
-      entity: { id: 'agent-2' },
-      entityType: 'AGENT' as const,
-      tracingContext: {
-        currentSpan: {
-          id: 'span-999',
-          traceId: 'trace-zzz',
-          isValid: true,
-          metadata: { key: 'value' },
-          observabilityInstance: {
-            getExporters: () => [exporterA, exporterB],
-          },
-        },
-      },
-    };
-
-    const mockScorer = {
-      id: 'perf-scorer',
-      name: 'perf-scorer',
-      run: vi.fn().mockResolvedValue({ score: 0.42, reason: 'ok' }),
-    };
-
-    mockMastra.getAgentById.mockReturnValue({
-      listScorers: vi.fn().mockReturnValue({ 'perf-scorer': { scorer: mockScorer } }),
-    });
-
-    await hook(hookData);
-
-    const expectedPayload = {
-      traceId: 'trace-zzz',
-      spanId: 'span-999',
-      score: 0.42,
-      reason: 'ok',
-      scorerName: 'perf-scorer',
-      metadata: { key: 'value' },
-    };
-
-    expect(exporterA.addScoreToTrace).toHaveBeenCalledTimes(1);
-    expect(exporterA.addScoreToTrace).toHaveBeenCalledWith(expectedPayload);
-    expect(exporterB.addScoreToTrace).toHaveBeenCalledTimes(1);
-    expect(exporterB.addScoreToTrace).toHaveBeenCalledWith(expectedPayload);
-  });
-
-  it('should skip exporters without addScoreToTrace method', async () => {
-    const exporterWithMethod = { addScoreToTrace: vi.fn().mockResolvedValue(undefined) };
-    const exporterWithoutMethod = {};
-
-    const hookData = {
-      runId: 'run-3',
-      scorer: { id: 'test-scorer' },
-      input: [],
-      output: {},
-      source: 'LIVE' as const,
-      entity: { id: 'agent-3' },
-      entityType: 'AGENT' as const,
-      tracingContext: {
-        currentSpan: {
-          id: 'span-456',
-          traceId: 'trace-def',
-          isValid: true,
-          metadata: {},
-          observabilityInstance: {
-            getExporters: () => [exporterWithMethod, exporterWithoutMethod],
-          },
-        },
-      },
-    };
-
-    const mockScorer = {
-      id: 'test-scorer',
-      name: 'test-scorer',
-      run: vi.fn().mockResolvedValue({ score: 0.7 }),
-    };
-
-    mockMastra.getAgentById.mockReturnValue({
-      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
-    });
-
-    await hook(hookData);
-
-    // Only the exporter with addScoreToTrace should be called
-    expect(exporterWithMethod.addScoreToTrace).toHaveBeenCalledTimes(1);
-    expect(exporterWithMethod.addScoreToTrace).toHaveBeenCalledWith({
-      traceId: 'trace-def',
-      spanId: 'span-456',
-      score: 0.7,
-      reason: undefined,
-      scorerName: 'test-scorer',
-      metadata: {},
-    });
-  });
-
-  it('should handle addScoreToTrace throwing without failing the hook', async () => {
-    const mockExporter = {
-      addScoreToTrace: vi.fn().mockRejectedValue(new Error('Exporter failed')),
-    };
-
-    const hookData = {
-      runId: 'run-4',
-      scorer: { id: 'test-scorer' },
-      input: [],
-      output: {},
-      source: 'LIVE' as const,
-      entity: { id: 'agent-4' },
-      entityType: 'AGENT' as const,
-      tracingContext: {
-        currentSpan: {
-          id: 'span-789',
-          traceId: 'trace-ghi',
-          isValid: true,
-          metadata: { test: 'data' },
-          observabilityInstance: {
-            getExporters: () => [mockExporter],
-          },
-        },
-      },
-    };
-
-    const mockScorer = {
-      id: 'test-scorer',
-      name: 'test-scorer',
-      run: vi.fn().mockResolvedValue({ score: 0.8, reason: 'good' }),
-    };
-
-    mockMastra.getAgentById.mockReturnValue({
-      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
-    });
-
-    // Should not throw even if addScoreToTrace fails
-    await expect(hook(hookData)).resolves.not.toThrow();
-
-    // Should still call addScoreToTrace (the error is handled internally)
-    expect(mockExporter.addScoreToTrace).toHaveBeenCalledTimes(1);
-    expect(mockExporter.addScoreToTrace).toHaveBeenCalledWith({
-      traceId: 'trace-ghi',
-      spanId: 'span-789',
-      score: 0.8,
-      reason: 'good',
-      scorerName: 'test-scorer',
-      metadata: { test: 'data' },
-    });
-
-    // Storage should still be called despite exporter failure
+    // Hook only writes to the legacy scores store. ScoreEvent emission is owned by
+    // MastraScorer.run() — emitting again here would double-publish to every exporter.
+    expect(addScoreSpy).not.toHaveBeenCalled();
     expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
   });
 });

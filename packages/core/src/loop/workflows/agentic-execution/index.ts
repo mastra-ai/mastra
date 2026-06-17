@@ -1,16 +1,20 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
-import { createWorkflow } from '../../../workflows';
+import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '../../../workflows/create';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { createBackgroundTaskCheckStep } from './background-task-check-step';
+import { createGoalStep } from './goal-step';
 import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
+import { createSignalDrainStep } from './signal-drain-step';
 import { resolveConfiguredToolCallConcurrency, resolveToolCallConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
+
+export const AGENTIC_EXECUTION_WORKFLOW_ID = 'executionWorkflow';
 
 export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
@@ -57,14 +61,28 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     ...rest,
   });
 
+  const signalDrainStep = createSignalDrainStep({
+    models,
+    _internal,
+    ...rest,
+  });
+
   const isTaskCompleteStep = createIsTaskCompleteStep({
     models,
     _internal,
     ...rest,
   });
 
+  const goalStep = createGoalStep({
+    models,
+    _internal,
+    ...rest,
+  });
+
+  const createWorkflow = process.env.MASTRA_EVENTED_EXECUTION === 'true' ? createEventedWorkflow : createDirectWorkflow;
+
   return createWorkflow({
-    id: 'executionWorkflow',
+    id: AGENTIC_EXECUTION_WORKFLOW_ID,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     options: {
@@ -73,7 +91,17 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
         // VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
-      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      shouldPersistSnapshot: params => {
+        // We need a persisted snapshot record to support `resumeStream()`.
+        // - Create the initial record early ("pending")
+        // - Update it when execution is suspended ("paused"/"suspended")
+        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        return (
+          params.workflowStatus === 'pending' ||
+          params.workflowStatus === 'paused' ||
+          params.workflowStatus === 'suspended'
+        );
+      },
       validateInputs: false,
     },
   })
@@ -88,6 +116,8 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     .foreach(toolCallStep, toolCallForeachOptions)
     .then(llmMappingStep)
     .then(backgroundTaskCheckStep)
+    .then(signalDrainStep)
     .then(isTaskCompleteStep)
+    .then(goalStep)
     .commit();
 }

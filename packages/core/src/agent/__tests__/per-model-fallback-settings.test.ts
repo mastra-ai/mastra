@@ -1,6 +1,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import type { Processor } from '../../processors';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
@@ -167,6 +168,79 @@ describe('Per-fallback-entry settings', () => {
       const po = primary.doStreamCalls[0]?.providerOptions as Record<string, Record<string, unknown>>;
       expect(po?.openai).toEqual({ user: 'abc', reasoningEffort: 'high' });
       expect(po?.google).toEqual({ thinkingConfig: { thinkingBudget: 0 } });
+    });
+
+    it('should pass merged providerOptions to processInputStep during stream', async () => {
+      const primary = createRecordingStreamModel('provider-options-processor', 'ok');
+      let processorProviderOptions: unknown;
+
+      const captureProviderOptionsProcessor = {
+        id: 'capture-provider-options-processor',
+        processInputStep: async ({ providerOptions }) => {
+          processorProviderOptions = providerOptions;
+          return {};
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'provider-options-to-processor',
+        name: 'ProviderOptions Processor Test',
+        instructions: 'You are a test agent',
+        model: [
+          {
+            model: primary,
+            maxRetries: 0,
+            providerOptions: { openai: { promptCacheRetention: '24h' } } as any,
+          },
+        ],
+        inputProcessors: [captureProviderOptionsProcessor],
+      });
+
+      await (
+        await agent.stream('Hello', {
+          providerOptions: { openai: { user: 'abc' }, google: { thinkingConfig: { thinkingBudget: 0 } } } as any,
+        })
+      ).text;
+
+      expect(processorProviderOptions).toEqual({
+        openai: { user: 'abc', promptCacheRetention: '24h' },
+        google: { thinkingConfig: { thinkingBudget: 0 } },
+      });
+    });
+
+    it('should let processInputStep override merged providerOptions before stream execution', async () => {
+      const primary = createRecordingStreamModel('provider-options-processor-override', 'ok');
+
+      const overrideProviderOptionsProcessor = {
+        id: 'override-provider-options-processor',
+        processInputStep: async () => ({
+          providerOptions: { openai: { promptCacheRetention: 'in_memory' } } as any,
+        }),
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'provider-options-processor-override',
+        name: 'ProviderOptions Processor Override Test',
+        instructions: 'You are a test agent',
+        model: [
+          {
+            model: primary,
+            maxRetries: 0,
+            providerOptions: { openai: { promptCacheRetention: '24h' } } as any,
+          },
+        ],
+        inputProcessors: [overrideProviderOptionsProcessor],
+      });
+
+      await (
+        await agent.stream('Hello', {
+          providerOptions: { openai: { user: 'abc' } } as any,
+        })
+      ).text;
+
+      expect(primary.doStreamCalls[0]?.providerOptions).toEqual({
+        openai: { promptCacheRetention: 'in_memory' },
+      });
     });
 
     it('should not leak primary providerOptions into the fallback after failover', async () => {

@@ -72,6 +72,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     agentBackgroundConfig: _internal?.agentBackgroundConfig,
     backgroundTaskManagerConfig: _internal?.backgroundTaskManagerConfig,
     skipBgTaskWait: _internal?.skipBgTaskWait,
+    drainPendingSignals: _internal?.drainPendingSignals,
+    initialSignalEchoes: _internal?.initialSignalEchoes ? [..._internal.initialSignalEchoes] : undefined,
   };
 
   let startTimestamp = internalToUse.now?.();

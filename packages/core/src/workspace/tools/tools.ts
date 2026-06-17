@@ -14,6 +14,7 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, FileReadRequiredError } from '../errors';
 import { InMemoryFileReadTracker, InMemoryFileWriteLock } from '../filesystem';
 import type { FileReadTracker, FileWriteLock, WorkspaceFilesystem } from '../filesystem';
+import type { WorkspaceSandbox } from '../sandbox';
 import type { Workspace } from '../workspace';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { deleteFileTool } from './delete-file';
@@ -34,6 +35,7 @@ import type {
   DynamicToolConfigValue,
   ToolConfigContext,
   ToolConfigWithArgsContext,
+  WorkspaceToolHooks,
 } from './types';
 export type {
   WorkspaceToolConfig,
@@ -45,6 +47,10 @@ export type {
   ToolConfigContext,
   ToolConfigWithArgsContext,
   DynamicToolConfigValue,
+  WorkspaceToolHookContext,
+  WorkspaceToolBeforeHookResult,
+  WorkspaceToolAfterHookContext,
+  WorkspaceToolHooks,
 } from './types';
 import { writeFileTool } from './write-file';
 
@@ -76,6 +82,13 @@ function hasFilesystemConfig(workspace: Workspace): boolean {
   return !!workspace.filesystem;
 }
 
+function hasSandboxConfig(workspace: Workspace): boolean {
+  if (typeof (workspace as any)?.hasSandboxConfig === 'function') {
+    return (workspace as any).hasSandboxConfig();
+  }
+  return !!workspace.sandbox;
+}
+
 /**
  * Normalize a requestContext value to a plain Record.
  * Callers may pass a Map-like RequestContext (with `.entries()`) or a plain
@@ -97,6 +110,7 @@ export interface ResolvedToolConfig {
   requireReadBeforeWrite?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
   maxOutputTokens?: number;
   name?: string;
+  hooks?: WorkspaceToolHooks;
 }
 
 /**
@@ -121,6 +135,7 @@ export async function resolveToolConfig(
   let requireReadBeforeWrite: DynamicToolConfigValue<ToolConfigWithArgsContext> | undefined;
   let maxOutputTokens: number | undefined;
   let name: string | undefined;
+  const hooks = toolsConfig?.hooks;
 
   if (toolsConfig) {
     if (toolsConfig.enabled !== undefined) {
@@ -153,45 +168,66 @@ export async function resolveToolConfig(
   // Resolve `enabled` now (tool-listing time) — safe default: false (fail-closed)
   const resolvedEnabled = await resolveDynamicValue(enabled, context, false);
 
-  return { enabled: resolvedEnabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name };
+  return { enabled: resolvedEnabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name, hooks };
 }
 
 // ---------------------------------------------------------------------------
 // Wrapper helpers
 // ---------------------------------------------------------------------------
 
+type ResolveTargets = { filesystem?: boolean; sandbox?: boolean };
+
 /**
- * Resolve the effective workspace for tool execution. When a dynamic filesystem
- * resolver is configured (no static filesystem), resolves the filesystem from
- * requestContext and returns a proxy workspace that exposes it via `.filesystem`.
- * Falls back to the workspace as-is when a static filesystem is available.
+ * Resolve the effective workspace for tool execution. When a dynamic resolver
+ * is configured for a requested provider (no static instance), resolves it from
+ * requestContext and returns a proxy workspace that exposes the resolved value.
+ * Returns the workspace unchanged when no resolution is needed, so tools that
+ * don't touch a given provider don't pay the cost of calling its resolver.
  */
-async function resolveEffectiveWorkspace(workspace: Workspace, context: any): Promise<Workspace> {
-  if (!workspace.filesystem && hasFilesystemConfig(workspace)) {
-    const requestContext = context?.requestContext ?? new RequestContext();
+async function resolveEffectiveWorkspace(
+  workspace: Workspace,
+  context: any,
+  targets: ResolveTargets,
+): Promise<Workspace> {
+  workspace.lastAccessedAt = new Date();
+
+  const needsFilesystem = !!(targets.filesystem && !workspace.filesystem && hasFilesystemConfig(workspace));
+  const needsSandbox = !!(targets.sandbox && !workspace.sandbox && hasSandboxConfig(workspace));
+  if (!needsFilesystem && !needsSandbox) return workspace;
+
+  const requestContext: RequestContext = context?.requestContext ?? new RequestContext();
+  const overrides: { filesystem?: WorkspaceFilesystem; sandbox?: WorkspaceSandbox } = {};
+
+  if (needsFilesystem) {
     const resolvedFs = await workspace.resolveFilesystem({ requestContext });
-    if (resolvedFs) {
-      return new Proxy(workspace, {
-        get(target: any, prop: string | symbol) {
-          if (prop === 'filesystem') return resolvedFs;
-          return target[prop];
-        },
-      });
-    }
+    if (resolvedFs) overrides.filesystem = resolvedFs;
   }
-  return workspace;
+
+  if (needsSandbox) {
+    const resolvedSandbox = await workspace.resolveSandbox({ requestContext });
+    if (resolvedSandbox) overrides.sandbox = resolvedSandbox;
+  }
+
+  if (!overrides.filesystem && !overrides.sandbox) return workspace;
+
+  return new Proxy(workspace, {
+    get(target: any, prop: string | symbol) {
+      if (prop === 'filesystem' && overrides.filesystem) return overrides.filesystem;
+      if (prop === 'sandbox' && overrides.sandbox) return overrides.sandbox;
+      return target[prop];
+    },
+  });
 }
 
 /**
  * Clone a standalone tool with config overrides and inject workspace into context.
- * When the workspace uses a dynamic filesystem resolver, the filesystem is resolved
- * from requestContext and made available via the workspace proxy.
+ * `targets` declares which providers the tool needs resolved per request.
  */
-function wrapTool(tool: any, workspace: Workspace): any {
+function wrapTool(tool: any, workspace: Workspace, targets: ResolveTargets): any {
   return {
     ...tool,
     execute: async (input: any, context: any = {}) => {
-      const effectiveWorkspace = await resolveEffectiveWorkspace(context?.workspace ?? workspace, context);
+      const effectiveWorkspace = await resolveEffectiveWorkspace(context?.workspace ?? workspace, context, targets);
       const enrichedContext = { ...context, workspace: effectiveWorkspace };
       return tool.execute(input, enrichedContext);
     },
@@ -214,7 +250,9 @@ function wrapWithReadTracker(
   return {
     ...tool,
     execute: async (input: any, context: any = {}) => {
-      const effectiveWorkspace = await resolveEffectiveWorkspace(context?.workspace ?? workspace, context);
+      const effectiveWorkspace = await resolveEffectiveWorkspace(context?.workspace ?? workspace, context, {
+        filesystem: true,
+      });
       let enrichedContext: any = { ...context, workspace: effectiveWorkspace };
       const fs: WorkspaceFilesystem | undefined = effectiveWorkspace.filesystem;
 
@@ -284,6 +322,35 @@ function wrapWithReadTracker(
  * read-before-write checks) so concurrent calls to the same path
  * run one at a time.
  */
+function wrapWithToolHooks(
+  tool: any,
+  hooks: WorkspaceToolHooks,
+  toolName: string,
+  workspaceToolName: WorkspaceToolName,
+): any {
+  return {
+    ...tool,
+    execute: async (input: any, context: any = {}) => {
+      const hookContext = { toolName, workspaceToolName, input, context };
+      const beforeResult = await hooks.beforeToolCall?.(hookContext);
+      if (beforeResult?.proceed === false) {
+        return beforeResult.output;
+      }
+
+      let output: unknown;
+      try {
+        output = await tool.execute(input, context);
+      } catch (error) {
+        await hooks.afterToolCall?.({ ...hookContext, output, error });
+        throw error;
+      }
+
+      await hooks.afterToolCall?.({ ...hookContext, output });
+      return output;
+    },
+  };
+}
+
 function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
   return {
     ...tool,
@@ -332,7 +399,12 @@ export async function createWorkspaceTools(
   const addTool = async (
     name: WorkspaceToolName,
     tool: any,
-    opts?: { requireWrite?: boolean; readTrackerMode?: 'read' | 'write'; useWriteLock?: boolean },
+    opts?: {
+      requireWrite?: boolean;
+      readTrackerMode?: 'read' | 'write';
+      useWriteLock?: boolean;
+      targets?: ResolveTargets;
+    },
   ) => {
     const config = await resolveToolConfig(toolsConfig, name, effectiveConfigContext);
     if (!config.enabled) return;
@@ -370,12 +442,7 @@ export async function createWorkspaceTools(
     if (opts?.readTrackerMode) {
       wrapped = wrapWithReadTracker(wrapped, workspace, readTracker, config, opts.readTrackerMode);
     } else {
-      wrapped = wrapTool(wrapped, workspace);
-    }
-
-    // Write lock is outermost — serializes the entire enriched execute pipeline
-    if (opts?.useWriteLock) {
-      wrapped = wrapWithWriteLock(wrapped, writeLock);
+      wrapped = wrapTool(wrapped, workspace, opts?.targets ?? {});
     }
 
     // Use custom name if provided, otherwise use the default constant name
@@ -392,6 +459,16 @@ export async function createWorkspaceTools(
     if (exposedName !== name && 'id' in wrapped) {
       wrapped = { ...wrapped, id: exposedName };
     }
+
+    if (config.hooks) {
+      wrapped = wrapWithToolHooks(wrapped, config.hooks, exposedName, name);
+    }
+
+    // Write lock is outermost — serializes the entire enriched execute pipeline
+    if (opts?.useWriteLock) {
+      wrapped = wrapWithWriteLock(wrapped, writeLock);
+    }
+
     tools[exposedName] = wrapped;
   };
 
@@ -408,11 +485,15 @@ export async function createWorkspaceTools(
       readTrackerMode: 'write',
       useWriteLock: true,
     });
-    await addTool(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES, listFilesTool);
-    await addTool(WORKSPACE_TOOLS.FILESYSTEM.DELETE, deleteFileTool, { requireWrite: true, useWriteLock: true });
-    await addTool(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT, fileStatTool);
-    await addTool(WORKSPACE_TOOLS.FILESYSTEM.MKDIR, mkdirTool, { requireWrite: true });
-    await addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, grepTool);
+    await addTool(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES, listFilesTool, { targets: { filesystem: true } });
+    await addTool(WORKSPACE_TOOLS.FILESYSTEM.DELETE, deleteFileTool, {
+      requireWrite: true,
+      useWriteLock: true,
+      targets: { filesystem: true },
+    });
+    await addTool(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT, fileStatTool, { targets: { filesystem: true } });
+    await addTool(WORKSPACE_TOOLS.FILESYSTEM.MKDIR, mkdirTool, { requireWrite: true, targets: { filesystem: true } });
+    await addTool(WORKSPACE_TOOLS.FILESYSTEM.GREP, grepTool, { targets: { filesystem: true } });
 
     // AST edit tool (only if @ast-grep/napi is available at runtime)
     if (isAstGrepAvailable()) {
@@ -448,23 +529,30 @@ export async function createWorkspaceTools(
     await addTool(WORKSPACE_TOOLS.SEARCH.INDEX, indexContentTool, { requireWrite: true });
   }
 
-  // Sandbox tools
   if (workspace.sandbox) {
     if (workspace.sandbox.executeCommand) {
       // Pick the right tool variant based on whether processes are available
       const baseTool = workspace.sandbox.processes ? executeCommandWithBackgroundTool : executeCommandTool;
-      await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, baseTool);
+      await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, baseTool, { targets: { sandbox: true } });
     }
 
     // Background process tools (only when process manager is available)
     if (workspace.sandbox.processes) {
-      await addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool);
-      await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool);
+      await addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool, { targets: { sandbox: true } });
     }
+  } else if (hasSandboxConfig(workspace)) {
+    await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, executeCommandWithBackgroundTool, {
+      targets: { sandbox: true },
+    });
+    await addTool(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT, getProcessOutputTool, { targets: { sandbox: true } });
+    await addTool(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, killProcessTool, { targets: { sandbox: true } });
   }
 
-  // LSP tools — always available (tool handles case when LSP not configured)
-  await addTool(WORKSPACE_TOOLS.LSP.LSP_INSPECT, lspInspectTool);
+  // LSP tools — always available (tool handles case when LSP not configured).
+  // Needs the filesystem resolved so lsp_inspect can map paths via the
+  // request's filesystem (resolveAbsolutePath) on dynamic-filesystem workspaces.
+  await addTool(WORKSPACE_TOOLS.LSP.LSP_INSPECT, lspInspectTool, { targets: { filesystem: true } });
 
   return tools;
 }

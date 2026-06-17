@@ -16,6 +16,7 @@ import type {
   ScoreEvent,
   FeedbackEvent,
   ObservabilityEvent,
+  ObservabilityDropEvent,
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 
@@ -25,6 +26,17 @@ import { TracingEventType } from '@mastra/core/observability';
  * ObservabilityEvents, so this matches either.
  */
 export type ObservabilityHandler = ObservabilityEvents & { name: string };
+
+type LegacyScoreHandler = ObservabilityHandler & {
+  addScoreToTrace?: (args: {
+    traceId: string;
+    spanId?: string;
+    score: number;
+    reason?: string;
+    scorerName: string;
+    metadata?: Record<string, any>;
+  }) => void | Promise<void>;
+};
 
 /**
  * Route a single event to the appropriate method on a handler.
@@ -69,6 +81,23 @@ export function routeToHandler(
         if (handler.onScoreEvent) {
           return catchAsyncResult(handler.onScoreEvent(event as ScoreEvent), handler.name, 'score', logger);
         }
+        if ((handler as LegacyScoreHandler).addScoreToTrace) {
+          const score = (event as ScoreEvent).score;
+          if (!score.traceId) break;
+          return catchAsyncResult(
+            (handler as LegacyScoreHandler).addScoreToTrace!({
+              traceId: score.traceId,
+              ...(score.spanId ? { spanId: score.spanId } : {}),
+              score: score.score,
+              ...(score.reason ? { reason: score.reason } : {}),
+              scorerName: score.scorerName ?? score.scorerId,
+              ...(score.metadata ? { metadata: score.metadata as Record<string, any> } : {}),
+            }),
+            handler.name,
+            'score',
+            logger,
+          );
+        }
         break;
 
       case 'feedback':
@@ -76,6 +105,26 @@ export function routeToHandler(
           return catchAsyncResult(handler.onFeedbackEvent(event as FeedbackEvent), handler.name, 'feedback', logger);
         }
         break;
+    }
+  } catch (err) {
+    logger.error(`[Observability] Handler error [handler=${handler.name}]:`, err);
+  }
+}
+
+/**
+ * Route exporter pipeline drop events to a handler.
+ *
+ * Drop events are meta-events for alerting and health reporting, so they use a
+ * dedicated hook instead of the normal observability signal router.
+ */
+export function routeDropToHandler(
+  handler: ObservabilityHandler,
+  event: ObservabilityDropEvent,
+  logger: IMastraLogger,
+): void | Promise<void> {
+  try {
+    if (handler.onDroppedEvent) {
+      return catchAsyncResult(handler.onDroppedEvent(event), handler.name, 'drop', logger);
     }
   } catch (err) {
     logger.error(`[Observability] Handler error [handler=${handler.name}]:`, err);

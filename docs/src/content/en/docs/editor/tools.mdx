@@ -32,7 +32,7 @@ In the Studio, select a tool in the agent's tool list and edit the **Description
 
 Each tool in an agent can have display conditions — rule groups that control whether the tool is available at runtime. This uses the same rule system as [prompt blocks](/docs/editor/prompts#display-conditions).
 
-When a request comes in, the editor evaluates each tool's rules against the current context (agent variables and request context). Tools whose conditions are not met are excluded from that run.
+When a request comes in, the editor evaluates each tool's rules against the current context (agent variables and request context). Tools whose conditions aren't met are excluded from that run.
 
 Use display conditions to:
 
@@ -81,7 +81,7 @@ Integration providers connect external tool platforms to the editor. Once regist
    })
    ```
 
-   Composio tool slugs use a format like `GITHUB_CREATE_ISSUE`. Tool calls are scoped to a `userId` passed through request context for per-user authentication.
+   Composio tool slugs use a format like `GITHUB_CREATE_ISSUE`. Tool calls are scoped to the `resourceId` passed through request context for per-user authentication.
 
 ### Arcade
 
@@ -138,7 +138,7 @@ Tools from MCP servers are namespaced as `serverName_toolName` to avoid conflict
 
 ### Conditional activation
 
-MCP client references in an agent can have display conditions, just like [prompt blocks](/docs/editor/prompts). This lets you conditionally include MCP tools based on request context or agent variables.
+MCP client references in an agent can have display conditions, like [prompt blocks](/docs/editor/prompts). This lets you conditionally include MCP tools based on request context or agent variables.
 
 ## How tools are merged
 

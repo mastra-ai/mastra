@@ -15,10 +15,25 @@ import {
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
+import { MASTRA_IS_STUDIO_KEY } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MastraServer } from '../index';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
+  const start = Date.now();
+  while (!assertion()) {
+    if (Date.now() - start > timeout) {
+      throw new Error('Timed out waiting for assertion');
+    }
+    await sleep(1);
+  }
+}
 
 // Wrapper describe block so the factory can call describe() inside
 describe('Hono Server Adapter', () => {
@@ -90,6 +105,8 @@ describe('Hono Server Adapter', () => {
       const isStream =
         contentType.includes('text/plain') ||
         contentType.includes('text/event-stream') ||
+        contentType.includes('audio/') ||
+        contentType.includes('application/octet-stream') ||
         response.headers?.get('transfer-encoding') === 'chunked';
 
       // Extract headers
@@ -106,11 +123,14 @@ describe('Hono Server Adapter', () => {
           headers,
         };
       } else {
+        // Read the body exactly once; parsing JSON from text avoids consuming
+        // the body twice when the payload is not valid JSON.
+        const rawText = await response.text();
         let data: unknown;
         try {
-          data = await response.json();
+          data = JSON.parse(rawText);
         } catch {
-          data = await response.text();
+          data = rawText;
         }
 
         return {
@@ -121,6 +141,93 @@ describe('Hono Server Adapter', () => {
         };
       }
     },
+  });
+
+  describe('SSE stream handshake', () => {
+    let context: AdapterTestContext;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    it('writes an initial SSE comment when sseFlushOnConnect is true', async () => {
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/waiting-stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        sseFlushOnConnect: true,
+        handler: async () => new ReadableStream(),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(new Request('http://localhost/test/waiting-stream'));
+      const reader = response.body!.getReader();
+
+      try {
+        const firstChunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timed out waiting for SSE handshake')), 100),
+          ),
+        ]);
+
+        expect(new TextDecoder().decode(firstChunk.value)).toBe(': connected\n\n');
+      } finally {
+        await reader.cancel();
+      }
+    });
+
+    it('does not write an initial SSE comment when sseFlushOnConnect is not set', async () => {
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/waiting-stream-no-flush',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'text-delta', textDelta: 'hello' });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(new Request('http://localhost/test/waiting-stream-no-flush'));
+      const reader = response.body!.getReader();
+
+      try {
+        const firstChunk = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timed out waiting for first chunk')), 100),
+          ),
+        ]);
+
+        const text = new TextDecoder().decode(firstChunk.value);
+        expect(text).not.toContain(': connected');
+        expect(text).toContain('data: ');
+      } finally {
+        await reader.cancel();
+      }
+    });
   });
 
   describe('Stream Data Redaction', () => {
@@ -186,6 +293,47 @@ describe('Hono Server Adapter', () => {
       const finish = chunks.find(c => c.type === 'finish');
       expect(finish).toBeDefined();
       expect(finish.payload.metadata.request).toBeUndefined();
+    });
+
+    it('should pass SSE comment chunks through without data wrapping', async () => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-comment',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(': heartbeat\n\n');
+              controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/sse-comment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).toContain(': heartbeat\n\n');
+      expect(text).toContain('data: {"type":"text-delta","payload":{"text":"hello"}}\n\n');
+      expect(text).not.toContain('data: ": heartbeat');
     });
 
     it('should NOT redact sensitive data when streamOptions.redact is false', async () => {
@@ -728,6 +876,46 @@ describe('Hono Server Adapter', () => {
       expect(data).toEqual({ echo: { test: 'data' } });
     });
 
+    it('should propagate request abort signals to custom API route handlers', async () => {
+      const signalAbort = vi.fn();
+      let routeSignal: AbortSignal | undefined;
+      const customRoutes = [
+        registerApiRoute('/signal', {
+          method: 'GET',
+          handler: async c => {
+            routeSignal = c.req.raw.signal;
+            routeSignal.addEventListener('abort', signalAbort);
+            return c.json({ aborted: routeSignal.aborted });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      const controller = new AbortController();
+      const response = await app.request(
+        new Request('http://localhost/signal', {
+          signal: controller.signal,
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ aborted: false });
+      expect(routeSignal?.aborted).toBe(false);
+
+      controller.abort();
+      await waitFor(() => signalAbort.mock.calls.length > 0);
+      expect(routeSignal?.aborted).toBe(true);
+    });
+
     it('should throw when a custom route path starts with the server prefix', async () => {
       const customRoutes = [
         registerApiRoute('/mastra/custom', {
@@ -820,6 +1008,7 @@ describe('Hono Server Adapter', () => {
         handler: async ({ requestContext }) => {
           return {
             resourceId: requestContext?.get('mastra__resourceId') ?? null,
+            isStudio: requestContext?.get(MASTRA_IS_STUDIO_KEY) ?? null,
             customKey: requestContext?.get('myKey') ?? null,
           };
         },
@@ -835,6 +1024,7 @@ describe('Hono Server Adapter', () => {
           body: JSON.stringify({
             requestContext: {
               mastra__resourceId: 'injected-victim-id',
+              [MASTRA_IS_STUDIO_KEY]: true,
               myKey: 'safe-value',
             },
           }),
@@ -844,6 +1034,7 @@ describe('Hono Server Adapter', () => {
       expect(response.status).toBe(200);
       const data = await response.json();
       expect(data.resourceId).toBeNull();
+      expect(data.isStudio).toBeNull();
       expect(data.customKey).toBe('safe-value');
     });
 
@@ -901,6 +1092,7 @@ describe('Hono Server Adapter', () => {
           return {
             resourceId: requestContext?.get('mastra__resourceId') ?? null,
             threadId: requestContext?.get('mastra__threadId') ?? null,
+            isStudio: requestContext?.get(MASTRA_IS_STUDIO_KEY) ?? null,
             customKey: requestContext?.get('myKey') ?? null,
           };
         },
@@ -912,6 +1104,7 @@ describe('Hono Server Adapter', () => {
       const queryContext = JSON.stringify({
         mastra__resourceId: 'injected-victim-id',
         mastra__threadId: 'injected-thread-id',
+        [MASTRA_IS_STUDIO_KEY]: true,
         myKey: 'safe-value',
       });
 
@@ -925,7 +1118,72 @@ describe('Hono Server Adapter', () => {
       const data = await response.json();
       expect(data.resourceId).toBeNull();
       expect(data.threadId).toBeNull();
+      expect(data.isStudio).toBeNull();
       expect(data.customKey).toBe('safe-value');
+    });
+
+    it('should set reserved Studio context from x-mastra-client-type header', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            isStudio: requestContext?.get(MASTRA_IS_STUDIO_KEY) ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/context', {
+          method: 'GET',
+          headers: { 'x-mastra-client-type': 'studio' },
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.isStudio).toBe(true);
+    });
+
+    it('should not set reserved Studio context when x-mastra-client-type is not studio', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            isStudio: requestContext?.get(MASTRA_IS_STUDIO_KEY) ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      for (const headers of [{ 'x-mastra-client-type': 'playground' }, {}]) {
+        const response = await app.request(
+          new Request('http://localhost/test/context', {
+            method: 'GET',
+            headers,
+          }),
+        );
+
+        expect(response.status).toBe(200);
+        const data = await response.json();
+        expect(data.isStudio).toBeNull();
+      }
     });
   });
 });

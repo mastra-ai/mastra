@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "1.0.6",
+  "version": "1.0.9-alpha.0",
   "description": "DynamoDB storage adapter for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "dev": "tsup --watch && tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "lint": "eslint .",
@@ -37,8 +37,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1040.0",
-    "@aws-sdk/lib-dynamodb": "^3.1040.0",
+    "@aws-sdk/client-dynamodb": "^3.1058.0",
+    "@aws-sdk/lib-dynamodb": "^3.1058.0",
     "electrodb": "^3.7.2"
   },
   "peerDependencies": {
@@ -49,11 +49,12 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

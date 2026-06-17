@@ -1,4 +1,4 @@
-import { ButtonWithTooltip, Button, TextFieldBlock, Txt } from '@mastra/playground-ui';
+import { Button, TextFieldBlock, Txt } from '@mastra/playground-ui';
 import { Plus, Trash } from 'lucide-react';
 import { useId } from 'react';
 
@@ -78,9 +78,9 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
         defaultValue={header.value}
       />
 
-      <ButtonWithTooltip type="button" onClick={onRemove} aria-label="Remove header" tooltipContent="Remove header">
+      <Button type="button" onClick={onRemove} aria-label="Remove header" tooltip="Remove header">
         <Trash />
-      </ButtonWithTooltip>
+      </Button>
     </div>
   );
 };

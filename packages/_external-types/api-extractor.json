@@ -1,7 +1,15 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
   "mainEntryPointFilePath": "./dist/index.d.ts",
-  "bundledPackages": ["ai", "ai-v5", "@ai-sdk/provider-utils"],
+  "bundledPackages": [
+    "ai",
+    "@ai-sdk/provider-utils",
+    "@ai-sdk/ui-utils",
+    "@standard-schema/spec",
+    "eventsource-parser",
+    "json-schema",
+    "@opentelemetry/api"
+  ],
   "dtsRollup": {
     "enabled": true,
     "publicTrimmedFilePath": "./dist/index.d.ts"

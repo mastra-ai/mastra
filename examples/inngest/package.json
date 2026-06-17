@@ -16,14 +16,13 @@
   "packageManager": "pnpm@10.18.2",
   "dependencies": {
     "@hono/node-server": "^1.19.8",
-    "@inngest/realtime": "^0.4.5",
     "@mastra/core": "1.0.0-beta.20",
     "@mastra/deployer": "1.0.0-beta.20",
     "@mastra/inngest": "1.0.0-beta.11",
     "@mastra/libsql": "1.0.0-beta.11",
     "@mastra/loggers": "1.0.0-beta.4",
     "@mastra/observability": "1.0.0-beta.10",
-    "inngest": "^3.50.0",
+    "inngest": "^4.2.6",
     "mastra": "1.0.0-beta.13",
     "zod": "^3.25.76"
   },

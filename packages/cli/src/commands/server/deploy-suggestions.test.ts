@@ -49,6 +49,7 @@ vi.mock('@clack/prompts', () => ({
 }));
 
 beforeEach(() => {
+  vi.resetModules();
   vi.resetAllMocks();
   mockResolveAuth.mockResolvedValue({ token: 't', orgId: 'o' });
   mockResolveProjectId.mockResolvedValue('proj-1');

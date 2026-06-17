@@ -462,6 +462,134 @@ describe('MastraModelOutput', () => {
       expect((await output.totalUsage)?.raw).toEqual(rawUsage);
     });
 
+    it('should call onFinish with the suspended payload shape when the stream suspends', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: 'partial answer' },
+        },
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'findUserTool',
+            args: { name: 'Dero Israel' },
+            providerExecuted: false,
+          },
+        },
+        {
+          type: 'tool-call-approval',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'findUserTool',
+            args: { name: 'Dero Israel' },
+            resumeSchema: '{}',
+          },
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      // Core fields the AGENT_RUN span end reads.
+      expect(finishPayload).toMatchObject({
+        finishReason: 'suspended',
+        suspendReason: 'tool-call-approval',
+        toolName: 'findUserTool',
+        toolCallId: 'call-1',
+      });
+      // Empty defaults keep the suspended callback payload contract-complete.
+      expect(finishPayload.text).toBe('');
+      expect(finishPayload.toolCalls).toEqual([]);
+      expect(finishPayload.toolResults).toEqual([]);
+      expect(finishPayload.steps).toEqual([]);
+      expect(finishPayload.usage).toEqual({ inputTokens: undefined, outputTokens: undefined, totalTokens: undefined });
+      expect(finishPayload.totalUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+      expect(finishPayload.response).toEqual({});
+      expect(finishPayload.content).toEqual([]);
+    });
+
+    it('should call onFinish with the aborted payload shape when the stream is aborted', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: 'partial answer' },
+        },
+        {
+          type: 'abort',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      // Core field the AGENT_RUN span end reads.
+      expect(finishPayload).toMatchObject({
+        finishReason: 'aborted',
+      });
+      // Empty defaults keep the aborted callback payload contract-complete without
+      // reconstructing partial buffered state from a mid-flight canceled stream.
+      expect(finishPayload.text).toBe('');
+      expect(finishPayload.toolCalls).toEqual([]);
+      expect(finishPayload.toolResults).toEqual([]);
+      expect(finishPayload.steps).toEqual([]);
+      expect(finishPayload.usage).toEqual({ inputTokens: undefined, outputTokens: undefined, totalTokens: undefined });
+      expect(finishPayload.totalUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+      expect(finishPayload.response).toEqual({});
+      expect(finishPayload.content).toEqual([]);
+    });
+
     it('should keep the latest step raw usage across multiple steps', async () => {
       const runId = 'test-run';
       const firstRaw = {
@@ -596,6 +724,123 @@ describe('MastraModelOutput', () => {
       expect(finishPayload?.usage).toBeDefined();
       expect('raw' in finishPayload.usage).toBe(false);
       expect('raw' in finishPayload.totalUsage).toBe(false);
+    });
+  });
+
+  describe('client tool observability carriers', () => {
+    it('preserves observability on synthetic tool calls created from streaming input', async () => {
+      const runId = 'test-run';
+      const observability = {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            providerExecuted: false,
+            observability,
+          },
+        },
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            argsTextDelta: '{"location":"Paris"}',
+          },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+          },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+      const result = await output.getFullOutput();
+
+      expect(result.toolCalls[0]?.payload).toMatchObject({
+        toolCallId: 'call-1',
+        toolName: 'getWeather',
+        args: { location: 'Paris' },
+        observability,
+      });
+    });
+
+    it('merges observability from the final tool-call onto an existing synthetic tool call', async () => {
+      const runId = 'test-run';
+      const observability = {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            providerExecuted: false,
+          },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+          },
+        },
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            args: { location: 'Paris' },
+            providerExecuted: false,
+            observability,
+          },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+      const result = await output.getFullOutput();
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.payload.observability).toEqual(observability);
     });
   });
 });

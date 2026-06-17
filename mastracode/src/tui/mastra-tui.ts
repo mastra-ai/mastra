@@ -4,9 +4,9 @@
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { Spacer } from '@mariozechner/pi-tui';
-import type { Component } from '@mariozechner/pi-tui';
-import type { HarnessEvent } from '@mastra/core/harness';
+import type { Component } from '@earendil-works/pi-tui';
+import type { AgentSignalAttributes } from '@mastra/core/agent';
+import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
@@ -31,21 +31,30 @@ import {
   isNewerVersion,
   runUpdate,
 } from '../utils/update-check.js';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
+import { startGoalWithDefaults } from './commands/goal.js';
 
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
+import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
+import { GradientAnimator } from './components/obi-loader.js';
+import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
+import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { askModalQuestion } from './modal-question.js';
+import { showModalOverlay } from './overlay.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
 import {
+  addPendingUserMessage,
   addUserMessage,
-  renderCompletedTasksInline,
+  removePendingUserMessage,
   renderClearedTasksInline,
   renderExistingMessages,
 } from './render-messages.js';
@@ -54,6 +63,7 @@ import {
   buildLayout,
   setupAutocomplete,
   loadCustomSlashCommands,
+  refreshSkillsAutocomplete,
   setupKeyHandlers,
   subscribeToHarness,
   updateTerminalTitle,
@@ -62,7 +72,7 @@ import {
 } from './setup.js';
 import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
-import { createTUIState } from './state.js';
+import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
 
 // =============================================================================
@@ -75,10 +85,45 @@ export type { MastraTUIOptions } from './state.js';
 // MastraTUI Class
 // =============================================================================
 
+/**
+ * Delivery option attributes applied to user-message signals. When the signal is delivered to an
+ * active run it is tagged as while-active; when it starts a new run it is a message.
+ * The LLM sees these as XML attributes on the `<user-message>` element.
+ */
+type GithubPollingChangedHandler = (event: { threadId: string; resourceId: string; running: boolean }) => void;
+type GithubSignalsWithPollingEvents = { onPollingChanged?: (handler: GithubPollingChangedHandler) => void };
+
+const USER_SIGNAL_DELIVERY_OPTIONS: {
+  ifActive: { attributes: AgentSignalAttributes };
+  ifIdle: { attributes: AgentSignalAttributes };
+} = {
+  ifActive: { attributes: { delivery: 'while-active' } },
+  ifIdle: { attributes: { delivery: 'message' } },
+};
+
 /** How often to recheck for updates during a long-running session (ms). */
 const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
+
+export async function syncInitialThreadState(state: TUIState): Promise<void> {
+  const initThreadId = state.harness.getCurrentThreadId();
+  if (!initThreadId) return;
+
+  const initThreads = await state.harness.listThreads();
+  const initThread = initThreads.find(t => t.id === initThreadId);
+  if (initThread?.title) {
+    state.currentThreadTitle = initThread.title;
+  }
+  const metadata = initThread?.metadata as Record<string, unknown> | undefined;
+  state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
+  // Prefer the durable ThreadState objective; fall back to the legacy
+  // thread-metadata goal for threads created before the migration.
+  await state.goalManager.loadFromThread(state);
+  if (!state.goalManager.getGoal()) {
+    state.goalManager.loadFromThreadMetadata(metadata);
+  }
+}
 
 function shouldUseCaffeinate(): boolean {
   return process.platform === 'darwin' && process.env.MASTRACODE_DISABLE_CAFFEINATE !== '1';
@@ -100,6 +145,7 @@ export function consumePendingImages(
 export class MastraTUI {
   private state: TUIState;
   private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private idleCounterTimer: ReturnType<typeof setInterval> | null = null;
   private hasShownUpdateBanner = false;
   private caffeinateProcess: ChildProcess | null = null;
   private lastStreamError: string | null = null;
@@ -109,22 +155,64 @@ export class MastraTUI {
   constructor(options: MastraTUIOptions) {
     this.state = createTUIState(options);
 
+    options.githubSignals?.onSubscriptionsChanged(event => {
+      const currentThreadId = this.state.harness.getCurrentThreadId?.();
+      const currentResourceId = this.state.harness.getResourceId?.();
+      if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
+      this.state.activeGithubPrSubscriptions = event.subscriptions.map(subscription => ({
+        owner: subscription.owner,
+        repo: subscription.repo,
+        prNumber: subscription.number,
+        lastSyncStatus: subscription.lastSyncStatus,
+        lastNotificationKind: subscription.lastNotificationKind,
+        lastNotificationPriority: subscription.lastNotificationPriority,
+      }));
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+    });
+
+    (options.githubSignals as GithubSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
+      const currentThreadId = this.state.harness.getCurrentThreadId?.();
+      const currentResourceId = this.state.harness.getResourceId?.();
+      if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
+      if (!this.state.githubPrGradientAnimator) {
+        this.state.githubPrGradientAnimator = new GradientAnimator(() => {
+          updateStatusLine(this.state);
+        });
+      }
+      this.state.githubPrPollingActive = event.running;
+      if (event.running) this.state.githubPrGradientAnimator.start();
+      else this.state.githubPrGradientAnimator.stop();
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+    });
+
     // Load user preferences
     const savedSettings = loadSettings();
     this.state.quietMode = savedSettings.preferences.quietMode;
+    this.state.quietModeMaxToolPreviewLines = savedSettings.preferences.quietModeMaxToolPreviewLines;
 
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
     this.state.editor.handleInput = (data: string) => {
-      // If there's an active plan approval, route input to it
+      // If there's an active plan approval, route input to it. Ctrl+C still
+      // aborts: in raw mode the terminal delivers it as \x03 to the editor (the
+      // process SIGINT never fires), so the inline component would otherwise
+      // swallow it and leave the suspended submit_plan run parked. Fall through
+      // to the editor's Ctrl+C handler (which clears inline state and aborts).
       if (this.state.activeInlinePlanApproval) {
-        this.state.activeInlinePlanApproval.handleInput(data);
-        return;
+        if (data !== '\x03') {
+          this.state.activeInlinePlanApproval.handleInput(data);
+          return;
+        }
       }
-      // If there's an active inline question, route input to it
-      if (this.state.activeInlineQuestion) {
-        this.state.activeInlineQuestion.handleInput(data);
-        return;
+      // If there's an active inline question, route input to it (same Ctrl+C
+      // pass-through as plan approval above).
+      else if (this.state.activeInlineQuestion) {
+        if (data !== '\x03') {
+          this.state.activeInlineQuestion.handleInput(data);
+          return;
+        }
       }
       // If onboarding is active, route input there
       if (this.state.activeOnboarding) {
@@ -221,6 +309,8 @@ export class MastraTUI {
       if (!userInput.trim() && userInput !== ' ') continue;
 
       try {
+        const pendingNewThread = this.state.pendingNewThread;
+
         // Handle slash commands
         if (userInput.startsWith('/')) {
           const handled = await this.handleSlashCommand(userInput);
@@ -242,46 +332,14 @@ export class MastraTUI {
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
-        // Show the user message in the TUI right away — before any async work
-        // (thread creation, hooks, sending) so the UI feels instant even when
-        // GC pauses or I/O slow things down.
-        const messageId = `user-${Date.now()}`;
-        addUserMessage(this.state, {
-          id: messageId,
-          role: 'user',
-          content: [
-            { type: 'text', text: content },
-            ...(images?.map(img => ({
-              type: 'image' as const,
-              data: img.data,
-              mimeType: img.mimeType,
-            })) ?? []),
-          ],
-          createdAt: new Date(),
-        });
-        this.state.ui.requestRender();
-
+        const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
         const allowed = await this.runUserPromptHook(userInput);
         if (!allowed) {
-          // Hook blocked the message — remove it from the chat
-          const comp = this.state.messageComponentsById.get(messageId);
-          if (comp) {
-            this.state.chatContainer.removeChild(comp as never);
-            this.state.messageComponentsById.delete(messageId);
-            this.state.ui.requestRender();
-          }
+          this.removeOptimisticUserMessage(optimisticMessageId);
           continue;
         }
 
-        // Create thread lazily on first message (may load last-used model).
-        // Runs after the hook check so we don't create a thread for blocked messages.
-        if (this.state.pendingNewThread) {
-          await this.state.harness.createThread();
-          this.state.pendingNewThread = false;
-        }
-
-        // Normal send — fire and forget; events handle the rest
-        this.fireMessage(content, images);
+        this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
       } catch (error) {
         showError(this.state, error instanceof Error ? error.message : 'Unknown error');
       }
@@ -293,18 +351,155 @@ export class MastraTUI {
    * Errors are handled via harness events.
    */
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
+    this.clearIdleCounter();
     const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
     this.state.harness.sendMessage({ content, files }).catch(error => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
   }
 
+  private createUserSignalMessage(
+    content: string,
+    images?: Array<{ data: string; mimeType: string }>,
+    id = '',
+  ): HarnessMessage {
+    return {
+      id,
+      role: 'user',
+      content: [
+        { type: 'text', text: content },
+        ...(images?.map(img => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType })) ?? []),
+      ],
+      createdAt: new Date(),
+    };
+  }
+
+  private createUserSignalContent(content: string, images?: Array<{ data: string; mimeType: string }>) {
+    return images?.length
+      ? [
+          { type: 'text' as const, text: content },
+          ...images.map(img => ({ type: 'file' as const, data: img.data, mediaType: img.mimeType })),
+        ]
+      : content;
+  }
+
+  private renderOptimisticUserMessage(content: string, images?: Array<{ data: string; mimeType: string }>): string {
+    const messageId = `user-${Date.now()}`;
+    const isInterjection = this.state.harness.isCurrentThreadStreamActive();
+    addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
+      ...(isInterjection ? { label: 'steer' } : {}),
+    });
+    this.state.ui.requestRender();
+    return messageId;
+  }
+
+  private removeOptimisticUserMessage(messageId: string): void {
+    const component = this.state.messageComponentsById.get(messageId);
+    if (!component) return;
+    this.state.chatContainer.removeChild(component as never);
+    this.state.messageComponentsById.delete(messageId);
+    this.state.ui.requestRender();
+  }
+
+  private remapOptimisticUserMessage(optimisticMessageId: string, signalId: string): void {
+    if (optimisticMessageId === signalId) return;
+    const component = this.state.messageComponentsById.get(optimisticMessageId);
+    if (!component) return;
+    this.state.messageComponentsById.delete(optimisticMessageId);
+    this.state.messageComponentsById.set(signalId, component);
+  }
+
+  private createPendingNewThread(): Promise<void> | undefined {
+    if (!this.state.pendingNewThread) return undefined;
+    this.state.pendingNewThread = false;
+    return this.state.harness.createThread().then(() => undefined);
+  }
+
+  private sendOptimisticSignal(
+    content: string,
+    images: Array<{ data: string; mimeType: string }> | undefined,
+    optimisticMessageId: string,
+    pendingNewThread: boolean,
+  ): void {
+    const send = () => {
+      this.clearIdleCounter();
+      this.state.analytics?.capture('mastracode_prompt_submitted', {
+        threadId: this.state.harness.getCurrentThreadId(),
+        resourceId: this.state.harness.getResourceId(),
+        mode: this.state.harness.getCurrentModeId(),
+        hasImages: Boolean(images?.length),
+        isFirstPromptInThread: pendingNewThread,
+        pendingNewThread,
+      });
+
+      const signal = this.state.harness.sendSignal({
+        content: this.createUserSignalContent(content, images),
+        ...USER_SIGNAL_DELIVERY_OPTIONS,
+      });
+      this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
+      signal.accepted.catch((error: unknown) => {
+        this.removeOptimisticUserMessage(signal.id);
+        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      });
+    };
+
+    const pendingThread = this.createPendingNewThread();
+    if (!pendingThread) {
+      send();
+      return;
+    }
+
+    pendingThread.then(send).catch((error: unknown) => {
+      this.removeOptimisticUserMessage(optimisticMessageId);
+      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+    });
+  }
+
+  private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
+    const hasActiveRun = this.state.harness.isCurrentThreadStreamActive();
+
+    const send = () => {
+      this.clearIdleCounter();
+      const signal = this.state.harness.sendSignal({
+        content: this.createUserSignalContent(content, images),
+        ...USER_SIGNAL_DELIVERY_OPTIONS,
+      });
+
+      if (hasActiveRun) {
+        addPendingUserMessage(this.state, signal.id, content, images, { isInterjection: true });
+      } else {
+        addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
+      }
+
+      signal.accepted.catch((error: unknown) => {
+        if (hasActiveRun) {
+          removePendingUserMessage(this.state, signal.id);
+        } else {
+          this.removeOptimisticUserMessage(signal.id);
+        }
+        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+      });
+    };
+
+    const pendingThread = this.createPendingNewThread();
+    if (!pendingThread) {
+      send();
+      return;
+    }
+
+    pendingThread.then(send).catch((error: unknown) => {
+      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+    });
+  }
+
   private queueFollowUpMessage(text: string): void {
     if (text.startsWith('/')) {
+      const messageId = `queued-slash-${Date.now()}-${this.state.pendingSlashCommands.length}`;
       this.state.pendingSlashCommands.push(text);
+      this.state.pendingSlashCommandMessageIds.push(messageId);
       this.state.pendingQueuedActions.push('slash');
+      addPendingUserMessage(this.state, messageId, text);
       updateStatusLine(this.state);
-      this.state.ui.requestRender();
       return;
     }
 
@@ -334,6 +529,11 @@ export class MastraTUI {
       this.updateCheckTimer = null;
     }
 
+    if (this.idleCounterTimer) {
+      clearInterval(this.idleCounterTimer);
+      this.idleCounterTimer = null;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -349,6 +549,7 @@ export class MastraTUI {
 
     // Initialize harness (but don't select thread yet)
     await this.state.harness.init();
+    await this.state.harness.getMastra()?.startWorkers();
 
     // Check for existing threads and prompt for resume
     await promptForThreadSelection(this.state);
@@ -356,8 +557,12 @@ export class MastraTUI {
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
 
-    // Setup autocomplete
+    // Install autocomplete immediately; refresh once the workspace resolves.
     setupAutocomplete(this.state);
+    refreshSkillsAutocomplete(this.state).catch(err => {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[skill autocomplete refresh] ${msg}\n`);
+    });
 
     // Build UI layout
     buildLayout(this.state, () => this.refreshModelAuthStatus());
@@ -381,32 +586,19 @@ export class MastraTUI {
     // This emits om_status → display_state_changed → updateStatusLine.
     await this.state.harness.loadOMProgress();
 
-    // Sync current thread title — the thread_changed event from
+    // Sync current thread metadata — the thread_changed event from
     // promptForThreadSelection fired before we subscribed above.
-    const initThreadId = this.state.harness.getCurrentThreadId();
-    if (initThreadId) {
-      const initThreads = await this.state.harness.listThreads();
-      const initThread = initThreads.find(t => t.id === initThreadId);
-      if (initThread?.title) {
-        this.state.currentThreadTitle = initThread.title;
-      }
-    }
+    await syncInitialThreadState(this.state);
 
     // Start the UI
     this.state.ui.start();
     this.state.isInitialized = true;
 
     // Start MCP connections now that the TUI owns the terminal.
-    // Using showInfo() instead of console.info() avoids corrupting the display.
     if (this.state.mcpManager?.hasServers()) {
-      const serverCount = Object.keys(this.state.mcpManager.getConfig().mcpServers ?? {}).length;
-      showInfo(this.state, `MCP: Connecting to ${serverCount} server(s)...`);
       this.state.mcpManager
         .initInBackground()
         .then(result => {
-          if (result.connected.length > 0) {
-            showInfo(this.state, `MCP: ${result.connected.length} server(s) connected, ${result.totalTools} tool(s)`);
-          }
           for (const s of result.failed) {
             showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
           }
@@ -422,7 +614,7 @@ export class MastraTUI {
     // Set terminal title
     updateTerminalTitle(this.state);
     // Render existing messages
-    await renderExistingMessages(this.state);
+    await this.renderExistingMessagesAndSeedIdleCounter();
     // Render existing tasks if any
     await renderExistingTasks(this.state);
 
@@ -430,8 +622,10 @@ export class MastraTUI {
       await this.showOnboarding();
     }
 
-    // Check for updates (after onboarding so it doesn't interfere)
-    await this.checkForUpdate();
+    await this.showQuietModePreferencePromptIfNeeded();
+
+    // Check for updates after first render so network latency never blocks startup.
+    void this.checkForUpdate().catch(() => {});
 
     // Periodically recheck for updates during long-running sessions (passive only)
     this.updateCheckTimer = setInterval(() => {
@@ -442,6 +636,47 @@ export class MastraTUI {
   private async refreshModelAuthStatus(): Promise<void> {
     this.state.modelAuthStatus = await this.state.harness.getCurrentModelAuthStatus();
     updateStatusLine(this.state);
+  }
+
+  private startIdleCounter(idleStartedAt = Date.now(), now = Date.now()): void {
+    this.state.idleStartedAt = idleStartedAt;
+    this.state.idleCounter?.setIdleStartedAt(idleStartedAt, now);
+    this.state.ui.requestRender?.();
+
+    if (this.idleCounterTimer) {
+      clearInterval(this.idleCounterTimer);
+    }
+
+    this.idleCounterTimer = setInterval(() => {
+      this.state.idleCounter?.update();
+      this.state.ui.requestRender?.();
+    }, 60_000);
+  }
+
+  private async renderExistingMessagesAndSeedIdleCounter(): Promise<void> {
+    await renderExistingMessages(this.state);
+
+    if (this.state.harness.isRunning()) {
+      this.clearIdleCounter();
+      return;
+    }
+
+    if (this.state.lastRenderedMessageAt === undefined) {
+      this.clearIdleCounter();
+      return;
+    }
+
+    this.startIdleCounter(this.state.lastRenderedMessageAt);
+  }
+
+  private clearIdleCounter(): void {
+    this.state.idleStartedAt = undefined;
+    this.state.idleCounter?.setIdleStartedAt(undefined);
+    if (this.idleCounterTimer) {
+      clearInterval(this.idleCounterTimer);
+      this.idleCounterTimer = null;
+    }
+    this.state.ui.requestRender?.();
   }
 
   // ===========================================================================
@@ -460,6 +695,7 @@ export class MastraTUI {
 
   private async handleEvent(event: HarnessEvent): Promise<void> {
     if (event.type === 'agent_start') {
+      this.clearIdleCounter();
       this.startCaffeinate();
       this.lastStreamError = null;
     }
@@ -475,6 +711,7 @@ export class MastraTUI {
 
     try {
       await dispatchEvent(event, this.getEventContext(), this.state);
+      this.captureHarnessAnalytics(event);
 
       if (event.type === 'thread_created') {
         await this.syncThreadActivePackMetadata(event.thread);
@@ -484,6 +721,7 @@ export class MastraTUI {
 
       if (event.type === 'agent_end') {
         const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
+        this.startIdleCounter();
         await this.runStopHook(stopReason);
 
         if (event.reason === 'error' && this.lastStreamError) {
@@ -495,6 +733,45 @@ export class MastraTUI {
       if (event.type === 'agent_end') {
         this.stopCaffeinate();
       }
+    }
+  }
+
+  private captureHarnessAnalytics(event: HarnessEvent): void {
+    const analytics = this.state.analytics;
+    if (!analytics) {
+      return;
+    }
+
+    if (event.type === 'thread_created') {
+      analytics.capture('mastracode_thread_changed', {
+        action: 'created',
+        threadId: event.thread.id,
+        resourceId: event.thread.resourceId,
+        mode: this.state.harness.getCurrentModeId(),
+        hasTitle: Boolean(event.thread.title),
+      });
+      return;
+    }
+
+    if (event.type === 'thread_changed') {
+      analytics.capture('mastracode_thread_changed', {
+        action: 'switched',
+        threadId: event.threadId,
+        previousThreadId: event.previousThreadId,
+        resourceId: this.state.harness.getResourceId(),
+        mode: this.state.harness.getCurrentModeId(),
+      });
+      return;
+    }
+
+    if (event.type === 'model_changed') {
+      analytics.capture('mastracode_model_changed', {
+        modelId: event.modelId,
+        scope: event.scope,
+        mode: event.modeId ?? this.state.harness.getCurrentModeId(),
+        threadId: this.state.harness.getCurrentThreadId(),
+        resourceId: this.state.harness.getResourceId(),
+      });
     }
   }
 
@@ -587,6 +864,7 @@ export class MastraTUI {
       cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
       google: hasEnv('google') ? ('apikey' as const) : false,
       deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
+      'github-copilot': accessLevel('github-copilot'),
     };
     // Gateway covers all providers
     const mgKey =
@@ -683,16 +961,22 @@ export class MastraTUI {
    * If no follow-ups are pending, appends to end.
    */
   private addChildBeforeFollowUps(child: Component): void {
-    if (this.state.followUpComponents.length > 0) {
-      const firstFollowUp = this.state.followUpComponents[0];
-      const idx = this.state.chatContainer.children.indexOf(firstFollowUp as any);
+    const firstPinned = [
+      ...this.state.followUpComponents,
+      ...this.state.pendingSignalMessageComponentsById.values(),
+    ].find(pinned =>
+      this.state.chatContainer.children.includes(('component' in pinned ? pinned.component : pinned) as any),
+    );
+
+    if (firstPinned) {
+      const component = 'component' in firstPinned ? firstPinned.component : firstPinned;
+      const idx = this.state.chatContainer.children.indexOf(component as any);
       if (idx >= 0) {
-        (this.state.chatContainer.children as unknown[]).splice(idx, 0, child);
-        this.state.chatContainer.invalidate();
+        insertChatComponentWithBoundarySpacing(this.state.chatContainer, child, idx);
         return;
       }
     }
-    this.state.chatContainer.addChild(child);
+    insertChatComponentWithBoundarySpacing(this.state.chatContainer, child);
   }
 
   // ===========================================================================
@@ -702,6 +986,13 @@ export class MastraTUI {
   private getUserInput(): Promise<string> {
     return new Promise(resolve => {
       this.state.editor.onSubmit = (text: string) => {
+        if (isGoalJudgeInputLocked(this.state)) {
+          this.state.editor.setText(text);
+          showGoalJudgeInputLockInfo(this.state);
+          this.state.ui.requestRender();
+          return;
+        }
+
         // Add to history for arrow up/down navigation (skip empty)
         if (text.trim()) {
           this.state.editor.addToHistory(text);
@@ -709,7 +1000,26 @@ export class MastraTUI {
         this.state.editor.setText('');
 
         if (this.state.harness.isRunning()) {
-          this.queueFollowUpMessage(text);
+          if (text.startsWith('/')) {
+            // Run slash commands immediately — they are either settings
+            // commands (no agent interaction) or agent-facing commands the
+            // user explicitly chose to run mid-stream.  Use Ctrl+F to
+            // queue instead.
+            this.handleSlashCommand(text).catch(error => {
+              showError(this.state, error instanceof Error ? error.message : 'Slash command failed');
+            });
+            return;
+          }
+
+          const { content, images } = consumePendingImages(text, this.state.pendingImages);
+          this.state.pendingImages = [];
+          if (images?.length) {
+            this.state.pendingImages = images;
+            this.queueFollowUpMessage(text);
+            return;
+          }
+
+          this.signalMessage(content);
           return;
         }
 
@@ -743,6 +1053,7 @@ export class MastraTUI {
       harness: this.state.harness,
       hookManager: this.state.hookManager,
       mcpManager: this.state.mcpManager,
+      analytics: this.state.analytics,
       authStorage: this.state.authStorage,
       customSlashCommands: this.state.customSlashCommands,
       showInfo: msg => showInfo(this.state, msg),
@@ -751,7 +1062,7 @@ export class MastraTUI {
       stop: () => this.stop(),
       getResolvedWorkspace: () => this.getResolvedWorkspace(),
       addUserMessage: msg => addUserMessage(this.state, msg),
-      renderExistingMessages: () => renderExistingMessages(this.state),
+      renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
       showOnboarding: () => this.showOnboarding(),
     };
   }
@@ -764,14 +1075,15 @@ export class MastraTUI {
       showFormattedError: event => showFormattedError(this.state, event),
       updateStatusLine: () => updateStatusLine(this.state),
       notify: (reason, message) => notify(this.state, reason, message),
+      analytics: this.state.analytics,
       handleSlashCommand: input => this.handleSlashCommand(input),
       addUserMessage: msg => addUserMessage(this.state, msg),
       addChildBeforeFollowUps: child => this.addChildBeforeFollowUps(child),
       fireMessage: (content, images) => this.fireMessage(content, images),
+      startGoal: (objective, cancelMessage, options) =>
+        startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage, options),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
-      renderExistingMessages: () => renderExistingMessages(this.state),
-      renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>
-        renderCompletedTasksInline(this.state, tasks, insertIndex, collapsed),
+      renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
         renderClearedTasksInline(this.state, clearedTasks, insertIndex),
       refreshModelAuthStatus: () => this.refreshModelAuthStatus(),
@@ -795,6 +1107,12 @@ export class MastraTUI {
       return;
     }
 
+    const authMode = await promptAuthMode(this.state.ui, providerName, provider?.authModes);
+    if (authMode === null) {
+      // User cancelled at the mode-selection step.
+      return;
+    }
+
     return new Promise(resolve => {
       const dialog = new LoginDialogComponent(this.state.ui, providerId, (success, message) => {
         this.state.ui.hideOverlay();
@@ -806,11 +1124,7 @@ export class MastraTUI {
         resolve();
       });
 
-      this.state.ui.showOverlay(dialog, {
-        width: '80%',
-        maxHeight: '60%',
-        anchor: 'center',
-      });
+      showModalOverlay(this.state.ui, dialog, { widthPercent: 0.8, maxHeight: '60%' });
       dialog.focused = true;
 
       this.state
@@ -825,6 +1139,7 @@ export class MastraTUI {
             dialog.showProgress(message);
           },
           signal: dialog.signal,
+          authMode,
         })
         .then(async () => {
           this.state.ui.hideOverlay();
@@ -891,11 +1206,13 @@ export class MastraTUI {
         previous,
         onComplete: async (result: OnboardingResult) => {
           this.state.activeOnboarding = undefined;
+          this.state.ui.hideOverlay();
           await this.applyOnboardingResult(result);
           resolve();
         },
         onCancel: () => {
           this.state.activeOnboarding = undefined;
+          this.state.ui.hideOverlay();
           const settings = loadSettings();
           if (!settings.onboarding.completedAt) {
             settings.onboarding.skippedAt = new Date().toISOString();
@@ -941,22 +1258,15 @@ export class MastraTUI {
               },
             });
 
-            this.state.ui.showOverlay(selector, {
-              width: '80%',
-              maxHeight: '60%',
-              anchor: 'center',
-            });
+            showModalOverlay(this.state.ui, selector, { maxHeight: '75%' });
             selector.focused = true;
           });
         },
       });
 
       this.state.activeOnboarding = component;
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.chatContainer.addChild(component);
-      this.state.chatContainer.addChild(new Spacer(1));
-      this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
+      showModalOverlay(this.state.ui, component, { maxHeight: '80%' });
+      component.focused = true;
     });
   }
 
@@ -1055,6 +1365,74 @@ export class MastraTUI {
     return true;
   }
 
+  private applyQuietModePreference(enabled: boolean, previewLineLimit = this.state.quietModeMaxToolPreviewLines): void {
+    const settings = loadSettings();
+    settings.preferences.quietMode = enabled;
+    settings.preferences.quietModeMaxToolPreviewLines = previewLineLimit;
+    settings.onboarding.quietModePreferenceSelected = true;
+    saveSettings(settings);
+
+    this.state.quietMode = enabled;
+    this.state.quietModeMaxToolPreviewLines = previewLineLimit;
+    this.state.taskProgress?.setQuietMode(enabled);
+
+    const tools = this.state.allToolComponents.filter(
+      (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
+    );
+    const color = this.state.harness?.getCurrentMode?.()?.metadata?.color;
+    const modeColor = typeof color === 'string' ? color : undefined;
+    for (const tool of tools) {
+      tool.setCompactToolModeColor?.(modeColor);
+      tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
+      tool.setQuietPreviewLineLimit?.(previewLineLimit);
+    }
+    this.state.ui.requestRender();
+  }
+
+  private parseQuietPreviewLineAnswer(answer: string | null): number {
+    if (answer === 'None') return 0;
+    const match = answer?.match(/^(\d+)/);
+    return match ? Number(match[1]) : this.state.quietModeMaxToolPreviewLines;
+  }
+
+  async showQuietModePreferencePromptIfNeeded(): Promise<void> {
+    const settings = loadSettings();
+    if (settings.onboarding.quietModePreferenceSelected) return;
+
+    const answer = await askModalQuestion(this.state.ui, {
+      question:
+        'Try compact quiet mode?\n\nQuiet mode keeps tool calls and task progress compact so long sessions are easier to scan.',
+      options: [
+        { label: 'Enable quiet mode', description: 'Use compact rendering by default' },
+        { label: 'Keep classic mode', description: 'Keep the current full rendering' },
+      ],
+      allowCustomResponse: false,
+      selectedOptionLabel: 'Enable quiet mode',
+      overlay: { maxHeight: '50%' },
+    });
+
+    if (answer !== 'Enable quiet mode') {
+      this.applyQuietModePreference(false);
+      return;
+    }
+
+    const previewLineAnswer = await askModalQuestion(this.state.ui, {
+      question: 'How many quiet-mode tool preview lines should be shown?\n\nYou can change this later in /settings.',
+      options: [
+        { label: 'None', description: 'Hide compact tool detail previews' },
+        { label: '1 line', description: 'Show the latest preview line' },
+        { label: '2 lines', description: 'Default' },
+        { label: '4 lines', description: 'Show more streaming detail' },
+        { label: '8 lines', description: 'Show the most detail' },
+      ],
+      allowCustomResponse: false,
+      selectedOptionLabel: '2 lines',
+      overlay: { maxHeight: '50%' },
+    });
+
+    this.applyQuietModePreference(true, this.parseQuietPreviewLineAnswer(previewLineAnswer));
+  }
+
   // ===========================================================================
   // Auto-Update
   // ===========================================================================
@@ -1106,9 +1484,9 @@ export class MastraTUI {
   }
 
   /**
-   * Show an inline Y/N prompt offering to auto-update.
+   * Show a Y/N prompt offering to auto-update (inline in the chat flow).
    */
-  private showUpdatePrompt(
+  private async showUpdatePrompt(
     currentVersion: string,
     latestVersion: string,
     pm: Awaited<ReturnType<typeof detectPackageManager>>,
@@ -1120,54 +1498,52 @@ export class MastraTUI {
     }
     question += `\n\nWould you like to update now?`;
 
-    return new Promise<void>(resolve => {
-      const questionComponent = new AskQuestionInlineComponent(
+    const answer = await new Promise<string | null>(resolve => {
+      const component = new AskQuestionInlineComponent(
         {
           question,
           options: [
             { label: 'Yes', description: 'Update and restart' },
             { label: 'No', description: 'Skip this version' },
           ],
-          formatResult: answer => (answer === 'Yes' ? 'Updating…' : 'Update skipped.'),
-          onSubmit: async answer => {
+          allowCustomResponse: false,
+          onSubmit: answer => {
             this.state.activeInlineQuestion = undefined;
-            if (answer === 'Yes') {
-              showInfo(this.state, `Updating to v${latestVersion}…`);
-              const ok = await runUpdate(pm, latestVersion);
-              if (ok) {
-                showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
-                this.stop();
-                process.exit(0);
-              } else {
-                const cmd = getInstallCommand(pm, latestVersion);
-                showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
-              }
-            } else {
-              // User declined — save the dismissed version
-              const settings = loadSettings();
-              settings.updateDismissedVersion = latestVersion;
-              saveSettings(settings);
-              showInfo(this.state, `Update skipped. Run /update to update later.`);
-            }
-            resolve();
+            resolve(answer);
           },
           onCancel: () => {
             this.state.activeInlineQuestion = undefined;
-            // Treat cancel (Esc / Ctrl+C) the same as "No"
-            const settings = loadSettings();
-            settings.updateDismissedVersion = latestVersion;
-            saveSettings(settings);
-            resolve();
+            resolve(null);
           },
         },
         this.state.ui,
       );
 
-      this.state.activeInlineQuestion = questionComponent;
-      this.state.chatContainer.addChild(questionComponent);
-      this.state.chatContainer.addChild(new Spacer(1));
+      insertChatComponentWithBoundarySpacing(this.state.chatContainer, component);
+      this.state.activeInlineQuestion = component;
+      component.focused = true;
       this.state.ui.requestRender();
-      this.state.chatContainer.invalidate();
     });
+
+    if (answer === 'Yes') {
+      showInfo(this.state, `Updating to v${latestVersion}…`);
+      const ok = await runUpdate(pm, latestVersion);
+      if (ok) {
+        showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
+        this.stop();
+        process.exit(0);
+      } else {
+        const cmd = getInstallCommand(pm, latestVersion);
+        showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
+      }
+    } else {
+      // User declined — save the dismissed version
+      const settings = loadSettings();
+      settings.updateDismissedVersion = latestVersion;
+      saveSettings(settings);
+      if (answer === 'No') {
+        showInfo(this.state, `Update skipped. Run /update to update later.`);
+      }
+    }
   }
 }

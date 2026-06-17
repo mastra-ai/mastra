@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { createStep } from '../../../../workflows';
 import { MessageList } from '../../../message-list';
-import type { MastraDBMessage } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
 import type {
   DurableLLMStepOutput,
@@ -84,50 +83,48 @@ export function createDurableLLMMappingStep() {
 
       // 2. Add tool results to message list
       if (toolResults.length > 0) {
-        // Create tool result parts for each tool call
-        const toolResultParts = toolResults.map(toolResult => {
-          // Determine the result content
-          let resultContent: string;
-          if (toolResult.error) {
-            resultContent = `Error: ${toolResult.error.message}`;
-          } else if (toolResult.result !== undefined) {
-            resultContent =
-              typeof toolResult.result === 'string' ? toolResult.result : JSON.stringify(toolResult.result);
-          } else {
-            resultContent = '';
-          }
-
-          return {
+        for (const toolResult of toolResults) {
+          const result = toolResult.error ? toolResult.error.message : toolResult.result;
+          const updated = messageList.updateToolInvocation({
             type: 'tool-invocation' as const,
             toolInvocation: {
               state: 'result' as const,
               toolCallId: toolResult.toolCallId,
               toolName: toolResult.toolName,
               args: toolResult.args,
-              result: resultContent,
+              result,
             },
-          };
-        });
+          });
 
-        // Add as assistant message with tool results
-        const toolResultMessage: MastraDBMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: toolResultParts,
-          },
-          createdAt: new Date(),
-        };
-
-        messageList.add(toolResultMessage, 'response');
+          if (!updated) {
+            messageList.add(
+              [
+                {
+                  role: 'tool' as const,
+                  content: [
+                    {
+                      type: 'tool-result' as const,
+                      toolCallId: toolResult.toolCallId,
+                      toolName: toolResult.toolName,
+                      result,
+                      isError: toolResult.error !== undefined,
+                    },
+                  ],
+                },
+              ],
+              'response',
+            );
+          }
+        }
       }
 
       // 3. Determine if we should continue
-      // Preserve the LLM step's isContinued (which respects finishReason),
-      // but force-stop if all tools errored (no point re-calling LLM)
+      // Preserve the LLM step's isContinued (which respects finishReason).
+      // Keep ToolNotFoundError recoverable so the model can see the error and
+      // retry with one of the currently available tool names.
       const allToolsErrored = toolResults.length > 0 && toolResults.every(r => r.error !== undefined);
-      const isContinued = llmOutput.stepResult.isContinued && !allToolsErrored;
+      const allToolsNotFound = allToolsErrored && toolResults.every(r => r.error?.name === 'ToolNotFoundError');
+      const isContinued = llmOutput.stepResult.isContinued && (!allToolsErrored || allToolsNotFound);
 
       // 4. Build the output
       const output: DurableAgenticExecutionOutput = {
@@ -139,7 +136,7 @@ export function createDurableLLMMappingStep() {
         },
         toolResults,
         output: {
-          text: undefined, // Text is in the LLM output, would be extracted from assistant message
+          text: llmOutput.text,
           toolCalls: llmOutput.toolCalls,
           usage: llmOutput.stepResult.totalUsage ?? {
             inputTokens: 0,

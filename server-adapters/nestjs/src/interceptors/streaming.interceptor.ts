@@ -128,6 +128,10 @@ export class StreamingInterceptor implements NestInterceptor {
       response.setHeader('X-Accel-Buffering', 'no');
     }
 
+    if (streamFormat === 'sse' && result.sseFlushOnConnect) {
+      response.write(': connected\n\n');
+    }
+
     const data = result.data;
     const hasFullStream = data !== null && typeof data === 'object' && 'fullStream' in data;
     const stream = hasFullStream ? (data as { fullStream: ReadableStream }).fullStream : (data as ReadableStream);
@@ -152,6 +156,11 @@ export class StreamingInterceptor implements NestInterceptor {
         }
 
         if (value) {
+          if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+            response.write(value);
+            continue;
+          }
+
           // Optionally redact sensitive data
           const outputValue = shouldRedact ? redactStreamChunk(value) : value;
 

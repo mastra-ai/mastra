@@ -69,7 +69,7 @@ const messageContentSchema = z
 const processorMessageSchema = z
   .object({
     id: z.string(),
-    role: z.enum(['user', 'assistant', 'system', 'tool']),
+    role: z.enum(['user', 'assistant', 'system', 'tool', 'signal']),
     createdAt: z.coerce.date().optional(),
     content: z.union([messageContentSchema, z.string()]),
   })

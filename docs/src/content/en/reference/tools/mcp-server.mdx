@@ -30,7 +30,7 @@ const myAgent = new Agent({
   name: 'MyExampleAgent',
   description: 'A generalist to help with basic questions.',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 const weatherTool = createTool({
@@ -112,6 +112,20 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     type: 'string',
     isOptional: true,
     description: 'Optional instructions describing how to use the server and its features.',
+  },
+  {
+    name: 'mapAuthInfoToUser',
+    type: '({ authInfo, extra, requestContext }) => unknown | null | undefined | Promise<unknown | null | undefined>',
+    isOptional: true,
+    description:
+      'Maps MCP transport auth data from `extra.authInfo` into the `user` value used by Mastra FGA checks. Use this when an OAuth-protected MCP server is registered on a Mastra instance with an FGA provider.',
+  },
+  {
+    name: 'fga',
+    type: "{ resourceMapping?: Partial<Record<'tool' | 'tools', { fgaResourceType: string; deriveId?: ({ user, resourceId, requestContext }) => string | undefined }>>; permissionMapping?: Record<string, string> }",
+    isOptional: true,
+    description:
+      "Overrides resource and permission mappings for this MCP server's `tools/list` and `tools/call` FGA checks. Use this when MCP authorization should be scoped differently from internal agent or workflow tool execution.",
   },
   {
     name: 'repository',
@@ -1323,6 +1337,79 @@ Whatever you set on `req.auth` in your HTTP middleware becomes available as `con
 
 ```
 req.auth = { ... }  →  context?.mcp?.extra?.authInfo.extra = { ... }
+```
+
+### Map auth data for FGA
+
+When an `MCPServer` is registered on a Mastra instance with a fine-grained authorization (FGA) provider, Mastra checks `requestContext.get('user')` before listing or calling tools. HTTP MCP transports pass authenticated data as `extra.authInfo`, so use `mapAuthInfoToUser` to set the user shape expected by your FGA provider.
+
+```typescript
+const server = new MCPServer({
+  id: 'my-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { getUserData },
+  mapAuthInfoToUser: ({ authInfo }) => {
+    const user = authInfo as {
+      extra?: {
+        userId?: string
+        organizationMembershipId?: string
+      }
+    }
+
+    if (!user.extra?.userId) {
+      return null
+    }
+
+    return {
+      id: user.extra.userId,
+      organizationMembershipId: user.extra.organizationMembershipId,
+    }
+  },
+})
+```
+
+### Scope MCP tool FGA separately
+
+Use `fga.resourceMapping` and `fga.permissionMapping` when MCP clients need a different authorization scope than internal agent or workflow tool execution. The override applies only to `tools/list` and `tools/call` checks for this MCP server.
+
+```typescript
+import { MastraFGAPermissions } from '@mastra/core/auth/ee'
+
+const server = new MCPServer({
+  id: 'my-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { getUserData },
+  mapAuthInfoToUser: ({ authInfo }) => {
+    const user = authInfo as {
+      extra?: {
+        userId?: string
+        organizationMembershipId?: string
+      }
+    }
+
+    if (!user.extra?.userId) {
+      return null
+    }
+
+    return {
+      id: user.extra.userId,
+      organizationMembershipId: user.extra.organizationMembershipId,
+    }
+  },
+  fga: {
+    resourceMapping: {
+      tool: {
+        fgaResourceType: 'user',
+        deriveId: ({ user }) => (user as { id: string }).id,
+      },
+    },
+    permissionMapping: {
+      [MastraFGAPermissions.TOOLS_EXECUTE]: 'read',
+    },
+  },
+})
 ```
 
 ### Setting Up Authentication Middleware

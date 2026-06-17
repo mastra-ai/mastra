@@ -1,5 +1,5 @@
-import React from 'react';
-import { groupTracesByThread } from '../utils/group-traces-by-thread';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useEffect, useRef } from 'react';
 import { getInputPreview } from '../utils/span-utils';
 import { DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,10 @@ export type TraceAttributes = {
 
 export type TracesListViewTrace = {
   traceId: string;
+  /** Required for branch rows; absent on plain trace rows (which are root-rooted). */
+  spanId?: string | null;
+  /** `null`/missing → root span. Drives the Kind column's icon (top-level trace vs nested branch). */
+  parentSpanId?: string | null;
   name: string;
   entityType?: string | null;
   entityId?: string | null;
@@ -23,10 +27,13 @@ export type TracesListViewTrace = {
   input?: unknown;
   startedAt?: Date | string | null;
   createdAt: Date | string;
-  threadId?: string | null;
 };
 
-const COLUMNS = 'auto auto auto auto minmax(5rem,1fr) auto auto';
+// Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
+const COLUMNS = '6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
+
+const ROW_HEIGHT = 36;
+const OVERSCAN = 8;
 
 export type TracesListViewProps = {
   traces: TracesListViewTrace[];
@@ -37,15 +44,25 @@ export type TracesListViewProps = {
   filtersApplied?: boolean;
   /** Currently featured/selected trace — its row gets the highlighted background. */
   featuredTraceId?: string | null;
+  /**
+   * Required in branches mode to disambiguate rows sharing a `traceId`. When set,
+   * a row is featured only when both `traceId` and `spanId` match.
+   */
+  featuredSpanId?: string | null;
+  /** Branches mode mixes root traces with subtraces — enables the Trace/Subtrace tooltip on the
+   *  level icon in the Name column, which is meaningless when every row is a root. */
+  isBranchesMode?: boolean;
+  /** Keys (`traceId:spanId`) of rows that just arrived via delta polling. Rows whose key is in
+   *  this set get a temporary tint to distinguish them from rows present since the last page-mode
+   *  fetch. Auto-expires upstream (in useTraces) after a short window. */
+  recentlyAddedKeys?: Set<string>;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
-  groupByThread?: boolean;
-  threadTitles?: Record<string, string>;
 };
 
 /**
- * Pure presentational list. Renders the TracesDataList primitive with rows, optional thread grouping,
- * empty state, and infinite-paging loader. Owns no state.
+ * Virtualized presentational list. Renders only the visible window via TanStack Virtual, and
+ * uses DataList primitives for layout (CSS Grid with subgrid rows).
  */
 export function TracesListView({
   traces,
@@ -55,42 +72,51 @@ export function TracesListView({
   setEndOfListElement,
   filtersApplied,
   featuredTraceId,
+  featuredSpanId,
+  isBranchesMode,
+  recentlyAddedKeys,
   onTraceClick,
-  groupByThread,
-  threadTitles,
 }: TracesListViewProps) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const virtualizer = useVirtualizer({
+    count: traces.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: OVERSCAN,
+  });
+
+  // Reset scroll to top whenever a fresh query resolves (filter / date range change).
+  // `isLoading` only flips on initial fetches — `fetchNextPage` keeps it `false`, so this
+  // effect doesn't fire during pagination.
+  //
+  // Why the manual scroll event: when the skeleton-vs-list branch swaps in the new scroll
+  // container, it mounts at `scrollTop = 0`. The virtualizer rebinds its listener but
+  // doesn't re-read `scrollTop`, so it keeps the stale `scrollOffset` from the previous
+  // element. `scrollToOffset(0)` no-ops because the new element is already at 0 (no scroll
+  // event fires). Dispatching a synthetic `scroll` forces the virtualizer's handler to
+  // read the fresh `scrollTop` and recompute `virtualItems` with `paddingTop = 0`.
+  const wasLoadingRef = useRef(isLoading);
+  useEffect(() => {
+    if (wasLoadingRef.current && !isLoading) {
+      scrollRef.current?.dispatchEvent(new Event('scroll'));
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading]);
+
   if (isLoading) {
     return <DataListSkeleton columns={COLUMNS} />;
   }
 
-  const renderRows = (rows: TracesListViewTrace[]) =>
-    rows.map(trace => {
-      const isFeatured = trace.traceId === featuredTraceId;
-      const displayDate = trace.startedAt ?? trace.createdAt;
-      const entityName =
-        trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
-
-      return (
-        <TracesDataList.RowButton
-          key={trace.traceId}
-          onClick={() => onTraceClick(trace)}
-          className={cn(isFeatured && 'bg-surface4')}
-        >
-          <TracesDataList.IdCell traceId={trace.traceId} />
-          <TracesDataList.DateCell timestamp={displayDate} />
-          <TracesDataList.TimeCell timestamp={displayDate} />
-          <TracesDataList.NameCell name={trace.name} />
-          <TracesDataList.InputCell input={getInputPreview(trace.input)} />
-          <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
-          <TracesDataList.StatusCell status={trace.attributes?.status} />
-        </TracesDataList.RowButton>
-      );
-    });
+  const virtualItems = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
+  const paddingTop = virtualItems[0]?.start ?? 0;
+  const paddingBottom =
+    virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <TracesDataList columns={COLUMNS} className="min-w-0">
+    <TracesDataList columns={COLUMNS} variant="striped" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>ID</TracesDataList.TopCell>
         <TracesDataList.TopCell>Date</TracesDataList.TopCell>
         <TracesDataList.TopCell>Time</TracesDataList.TopCell>
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
@@ -103,47 +129,50 @@ export function TracesListView({
         <TracesDataList.NoMatch
           message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
         />
-      ) : groupByThread ? (
-        (() => {
-          const { groups, ungrouped } = groupTracesByThread(traces);
-          return (
-            <>
-              {groups.map(group => (
-                <React.Fragment key={group.threadId}>
-                  <TracesDataList.Subheader>
-                    <TracesDataList.SubHeading className="flex gap-2">
-                      <span className="uppercase">Thread</span>
-                      {threadTitles?.[group.threadId] && <b>'{threadTitles[group.threadId]}'</b>}
-                      <b># {group.threadId}</b>
-                      <span className="text-neutral2">({group.traces.length})</span>
-                    </TracesDataList.SubHeading>
-                  </TracesDataList.Subheader>
-                  {renderRows(group.traces)}
-                </React.Fragment>
-              ))}
-              {ungrouped.length > 0 && (
-                <>
-                  <TracesDataList.Subheader>
-                    <TracesDataList.SubHeading className="flex gap-2 uppercase">
-                      <span>No thread</span>
-                      <span className="text-neutral2">({ungrouped.length})</span>
-                    </TracesDataList.SubHeading>
-                  </TracesDataList.Subheader>
-                  {renderRows(ungrouped)}
-                </>
-              )}
-            </>
-          );
-        })()
       ) : (
-        renderRows(traces)
-      )}
-      {traces.length > 0 && (
-        <TracesDataList.NextPageLoading
-          isLoading={isFetchingNextPage}
-          hasMore={hasNextPage}
-          setEndOfListElement={setEndOfListElement}
-        />
+        <>
+          <TracesDataList.Spacer height={paddingTop} />
+          {virtualItems.map(vi => {
+            const trace = traces[vi.index];
+            if (!trace) return null;
+
+            const isFeatured =
+              trace.traceId === featuredTraceId && (featuredSpanId == null || trace.spanId === featuredSpanId);
+            const rowKey = `${trace.traceId}:${trace.spanId ?? ''}`;
+            const isRecentlyAdded = recentlyAddedKeys?.has(rowKey) ?? false;
+            const displayDate = trace.startedAt ?? trace.createdAt;
+            const entityName =
+              trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
+
+            return (
+              <TracesDataList.RowButton
+                key={rowKey}
+                ref={virtualizer.measureElement}
+                data-index={vi.index}
+                onClick={() => onTraceClick(trace)}
+                featured={isFeatured}
+                className={cn(isRecentlyAdded && 'animate-row-highlight')}
+              >
+                <TracesDataList.DateCell timestamp={displayDate} />
+                <TracesDataList.TimeCell timestamp={displayDate} />
+                <TracesDataList.NameCell
+                  name={trace.name}
+                  parentSpanId={trace.parentSpanId}
+                  showLevelTooltip={isBranchesMode}
+                />
+                <TracesDataList.InputCell input={getInputPreview(trace.input)} />
+                <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
+                <TracesDataList.StatusCell status={trace.attributes?.status} />
+              </TracesDataList.RowButton>
+            );
+          })}
+          <TracesDataList.Spacer height={paddingBottom} />
+          <TracesDataList.NextPageLoading
+            isLoading={isFetchingNextPage}
+            hasMore={hasNextPage}
+            setEndOfListElement={setEndOfListElement}
+          />
+        </>
       )}
     </TracesDataList>
   );

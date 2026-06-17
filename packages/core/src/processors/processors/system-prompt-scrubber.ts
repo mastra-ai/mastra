@@ -4,7 +4,7 @@ import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
-import { resolveObservabilityContext } from '../../observability';
+import { InternalSpans, resolveObservabilityContext } from '../../observability';
 import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
@@ -101,6 +101,9 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
       name: 'system-prompt-detector',
       model: this.model,
       instructions: this.instructions,
+      options: {
+        tracingPolicy: { internal: InternalSpans.ALL },
+      },
     });
   }
 

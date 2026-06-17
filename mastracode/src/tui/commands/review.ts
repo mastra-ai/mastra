@@ -1,3 +1,4 @@
+import { sendSlashCommandMessage } from './send-slash-command-message.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleReviewCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
@@ -43,20 +44,8 @@ export async function handleReviewCommand(ctx: SlashCommandContext, args: string
     }
   }
 
-  ctx.addUserMessage({
-    id: `user-${Date.now()}`,
-    role: 'user',
-    content: [
-      {
-        type: 'text',
-        text: prNumber ? `/review ${args.join(' ')}` : '/review',
-      },
-    ],
-    createdAt: new Date(),
-  });
-  ctx.state.ui.requestRender();
-
-  ctx.state.harness.sendMessage({ content: prompt }).catch(error => {
+  const displayText = prNumber ? `/review ${args.join(' ')}` : '/review';
+  sendSlashCommandMessage(ctx, displayText, prompt).catch(error => {
     ctx.showError(error instanceof Error ? error.message : 'Review failed');
   });
 }

@@ -11,6 +11,7 @@ describe('getAvailableModePacks', () => {
       cerebras: false,
       google: false,
       deepseek: false,
+      'github-copilot': false,
     });
 
     expect(packs.find(pack => pack.id === 'openai')?.models).toEqual({
@@ -27,8 +28,56 @@ describe('getAvailableModePacks', () => {
       cerebras: false,
       google: false,
       deepseek: false,
+      'github-copilot': false,
     });
 
     expect(PROVIDER_DEFAULT_MODELS['openai-codex']).toBe(packs.find(pack => pack.id === 'openai')?.models.build);
+  });
+
+  it('exposes a GitHub Copilot pack with defaults for build, plan, and fast modes', () => {
+    const packs = getAvailableModePacks({
+      anthropic: false,
+      openai: false,
+      cerebras: false,
+      google: false,
+      deepseek: false,
+      'github-copilot': 'oauth',
+    });
+
+    const pack = packs.find(p => p.id === 'github-copilot');
+    expect(pack).toBeDefined();
+    expect(pack?.models).toEqual({
+      plan: 'github-copilot/gemini-2.5-pro',
+      build: 'github-copilot/gpt-4.1',
+      fast: 'github-copilot/grok-code-fast-1',
+    });
+  });
+
+  it('keeps the GitHub Copilot OAuth post-login default aligned with the build model', () => {
+    const packs = getAvailableModePacks({
+      anthropic: false,
+      openai: false,
+      cerebras: false,
+      google: false,
+      deepseek: false,
+      'github-copilot': 'oauth',
+    });
+
+    expect(PROVIDER_DEFAULT_MODELS['github-copilot']).toBe(
+      packs.find(pack => pack.id === 'github-copilot')?.models.build,
+    );
+  });
+
+  it('hides the GitHub Copilot pack when access is unavailable', () => {
+    const packs = getAvailableModePacks({
+      anthropic: false,
+      openai: false,
+      cerebras: false,
+      google: false,
+      deepseek: false,
+      'github-copilot': false,
+    });
+
+    expect(packs.find(p => p.id === 'github-copilot')).toBeUndefined();
   });
 });

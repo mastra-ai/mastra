@@ -46,7 +46,8 @@ describe('Harness OM failure abort behavior', () => {
     expect((errorEvent as Extract<HarnessEvent, { type: 'error' }>).error.message).toContain(
       'Observational memory observation buffering failed: Bad Request',
     );
-    expect((harness as any).abortRequested).toBe(true);
+    expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
+    expect((harness as any).abortRequested).toBe(false);
     expect((harness as any).abortController).toBeNull();
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
@@ -79,7 +80,8 @@ describe('Harness OM failure abort behavior', () => {
     expect((errorEvent as Extract<HarnessEvent, { type: 'error' }>).error.message).toContain(
       'Observational memory reflection run failed: Model unavailable',
     );
-    expect((harness as any).abortRequested).toBe(true);
+    expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
+    expect((harness as any).abortRequested).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
 });

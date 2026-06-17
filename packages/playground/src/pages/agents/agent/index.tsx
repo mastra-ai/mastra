@@ -11,7 +11,7 @@ import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skil
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
-import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-context';
+import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
@@ -41,6 +41,16 @@ function Agent() {
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
   } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
+
+  const sidebarThreads = useMemo(
+    () =>
+      (threads || []).map(thread => ({
+        ...thread,
+        createdAt: new Date(thread.createdAt),
+        updatedAt: new Date(thread.updatedAt),
+      })),
+    [threads],
+  );
 
   useEffect(() => {
     if (threadId) return;
@@ -133,6 +143,7 @@ function Agent() {
                 key={`session-${agentId}-${actualThreadId}`}
                 agentId={agentId!}
                 threadId={actualThreadId!}
+                enabled={Boolean(agent?.browserTools?.length)}
               >
                 <ThreadInputProvider>
                   <ObservationalMemoryProvider>
@@ -140,23 +151,24 @@ function Agent() {
                       <AgentLayout
                         agentId={agentId!}
                         leftSlot={
-                          hasMemory && (
-                            <AgentSidebar
-                              agentId={agentId!}
-                              threadId={actualThreadId!}
-                              threads={threads || []}
-                              isLoading={isThreadsLoading}
-                            />
-                          )
+                          <AgentSidebar
+                            agentId={agentId!}
+                            threadId={actualThreadId!}
+                            threads={sidebarThreads}
+                            isLoading={isThreadsLoading}
+                            memoryType={memory?.memoryType}
+                            hasMemory={hasMemory}
+                          />
                         }
                         browserOverlay={<BrowserViewPanel />}
-                        rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                        rightSlot={<AgentInformation agentId={agentId!} />}
                       >
                         <AgentChat
                           key={actualThreadId!}
                           agentId={agentId!}
                           agentName={agent?.name}
                           modelVersion={agent?.modelVersion}
+                          supportsMemory={agent?.supportsMemory}
                           threadId={actualThreadId!}
                           memory={hasMemory}
                           refreshThreadList={handleRefreshThreadList}

@@ -228,6 +228,27 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   }
 
   /**
+   * Get all available roles defined in the role mapping.
+   *
+   * Returns role IDs and names derived from the roleMapping keys,
+   * excluding the `_default` fallback entry.
+   */
+  async getAvailableRoles(): Promise<{ id: string; name: string }[]> {
+    return Object.keys(this.options.roleMapping)
+      .filter(key => key !== '_default')
+      .map(key => ({ id: key, name: key.charAt(0).toUpperCase() + key.slice(1) }));
+  }
+
+  /**
+   * Get resolved permissions for a specific role.
+   *
+   * Looks up the role in the roleMapping and returns its permissions.
+   */
+  async getPermissionsForRole(roleId: string): Promise<string[]> {
+    return resolvePermissionsFromMapping([roleId], this.options.roleMapping);
+  }
+
+  /**
    * Clear the roles cache.
    *
    * Call this when system-wide role changes occur.

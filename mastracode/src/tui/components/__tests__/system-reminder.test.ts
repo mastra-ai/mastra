@@ -32,19 +32,59 @@ describe('SystemReminderComponent', () => {
     });
   });
 
-  it('renders the Loaded AGENTS.md title and path for dynamic instruction reminders', () => {
+  it('renders a single loaded path line for dynamic instruction reminders', () => {
     const comp = new SystemReminderComponent({
       message: 'Use the nested instructions when replying.',
       reminderType: 'dynamic-agents-md',
-      path: '/repo/src/agents/nested/AGENTS.md',
+      path: `${process.cwd()}/packages/core/AGENTS.md`,
+    });
+
+    const lines = nonEmpty(renderPlain(comp)).map(line => line.trimEnd());
+
+    expect(lines).toEqual(['  loaded packages/core/AGENTS.md']);
+  });
+
+  it('does not render generic dynamic instruction reminder text when a path is available', () => {
+    const comp = new SystemReminderComponent({
+      message:
+        'When using guidance from a discovered instruction file, mention the instruction file you used and how it affected your response.',
+      reminderType: 'dynamic-agents-md',
+      path: `${process.cwd()}/packages/core/AGENTS.md`,
+    });
+
+    const rendered = renderPlain(comp).join('\n');
+
+    expect(rendered).toContain('loaded packages/core/AGENTS.md');
+    expect(rendered).not.toContain('When using guidance from a discovered instruction file');
+    expect(rendered).not.toContain('Loading instruction file contents');
+  });
+
+  it('renders initial goal metadata inline in the title', () => {
+    const comp = new SystemReminderComponent({
+      message: 'Finish the implementation.',
+      reminderType: 'goal',
+      goalMaxTurns: 20,
+      judgeModelId: 'openai/gpt-5.5',
     });
 
     const lines = nonEmpty(renderPlain(comp));
 
-    expect(lines.some(line => line.includes('Loaded AGENTS.md'))).toBe(true);
-    expect(lines.some(line => line.includes('/repo/src/agents/nested/AGENTS.md'))).toBe(true);
-    expect(lines.some(line => line.includes('Type: dynamic-agents-md'))).toBe(false);
-    expect(lines.some(line => line.includes('Path: /repo/src/agents/nested/AGENTS.md'))).toBe(false);
+    expect(lines.some(line => line.includes('Goal (20 max attempts, judge: openai/gpt-5.5)'))).toBe(true);
+    expect(lines.some(line => line.includes('Finish the implementation.'))).toBe(true);
+    expect(lines.some(line => line.trim() === 'Goal set (20 max attempts, judge: openai/gpt-5.5)')).toBe(false);
+    expect(lines.some(line => line.includes('System Reminder'))).toBe(false);
+  });
+
+  it('renders Goal title for goal judge reminders', () => {
+    const comp = new SystemReminderComponent({
+      message: '[Goal attempt 1/20] Keep working.',
+      reminderType: 'goal-judge',
+    });
+
+    const lines = nonEmpty(renderPlain(comp));
+
+    expect(lines.some(line => line.includes('Goal'))).toBe(true);
+    expect(lines.some(line => line.includes('System Reminder'))).toBe(false);
   });
 
   it('renders the original title for regular system reminders', () => {
@@ -59,24 +99,20 @@ describe('SystemReminderComponent', () => {
     expect(lines.some(line => line.includes('Loaded AGENTS.md'))).toBe(false);
   });
 
-  it('renders cwd-relative paths when possible', () => {
+  it('renders cwd-relative loaded instruction paths when possible', () => {
     const comp = new SystemReminderComponent({
       message: 'Use the nested instructions when replying.',
       path: `${process.cwd()}/src/agents/nested/AGENTS.md`,
     });
 
-    const lines = nonEmpty(renderPlain(comp));
+    const lines = nonEmpty(renderPlain(comp)).map(line => line.trimEnd());
 
-    expect(lines.some(line => line.includes('src/agents/nested/AGENTS.md'))).toBe(true);
-    expect(lines.some(line => line.includes(`Path: ${process.cwd()}/src/agents/nested/AGENTS.md`))).toBe(false);
-    expect(lines.some(line => line.includes(`Path: src/agents/nested/AGENTS.md`))).toBe(false);
+    expect(lines).toEqual(['  loaded src/agents/nested/AGENTS.md']);
   });
 
   it('keeps the right border aligned on every rendered line', () => {
     const comp = new SystemReminderComponent({
       message: 'Use the nested instructions when replying.',
-      reminderType: 'dynamic-agents-md',
-      path: '/repo/src/agents/nested/AGENTS.md',
     });
 
     const lines = nonEmpty(renderPlain(comp));

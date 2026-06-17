@@ -40,6 +40,10 @@ export type { ResourceIdentifier, ACLGrant, IACLProvider, IACLManager } from './
 export type {
   FGACheckContext,
   FGACheckParams,
+  FGARouteConfig,
+  FGARouteInfo,
+  FGARouteResolver,
+  FGARouteResolverContext,
   FGAResource,
   FGACreateResourceParams,
   FGAUpdateResourceParams,

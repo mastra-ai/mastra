@@ -1,0 +1,433 @@
+{
+  "meta": {
+    "name": "core-src-processors-provider-history-compat-native-anthropic-foreign-reasoning.e2e",
+    "testFile": "packages/core/src/processors/provider-history-compat.e2e.test.ts",
+    "model": "minimax/minimax-m2.5",
+    "createdAt": "2026-05-18T10:50:50.227Z",
+    "updatedAt": "2026-05-18T11:35:39.875Z"
+  },
+  "recordings": [
+    {
+      "hash": "48bf1d615872451d",
+      "request": {
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "minimax/minimax-m2.5",
+          "messages": [
+            {
+              "role": "system",
+              "content": "Answer briefly, but use reasoning if available."
+            },
+            {
+              "role": "user",
+              "content": "What is 19 * 23? Reply with one sentence."
+            }
+          ],
+          "reasoning": {
+            "effort": "low",
+            "exclude": false
+          }
+        },
+        "timestamp": 1779104135071
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-expose-headers": "X-Generation-Id,cf-ray",
+          "cf-ray": "9fda8f2d3da05e0e-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:35:35 GMT",
+          "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+          "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+          "server": "cloudflare",
+          "x-content-type-options": "nosniff",
+          "x-generation-id": "gen-1779104135-EodzGuIvRvaYbjZ3ZNqR"
+        },
+        "body": {
+          "id": "gen-1779104135-EodzGuIvRvaYbjZ3ZNqR",
+          "object": "chat.completion",
+          "created": 1779104135,
+          "model": "minimax/minimax-m2.5-20260211",
+          "provider": "AkashML",
+          "system_fingerprint": null,
+          "choices": [
+            {
+              "index": 0,
+              "logprobs": null,
+              "finish_reason": "stop",
+              "native_finish_reason": "stop",
+              "message": {
+                "role": "assistant",
+                "content": "19 multiplied by 23 equals 437.",
+                "refusal": null,
+                "reasoning": "We need to answer 19 * 23. 19*20 = 380; 19*3 = 57; sum = 437. The user says: \"What is 19 * 23? Reply with one sentence.\" So respond with one sentence that gives the answer. Could be \"19 multiplied by 23 equals 437.\" Or just \"19 * 23 = 437.\" Use one sentence. Provide answer.\n\nWe must abide by guidelines: it's a simple math request, no policy issues.\n\nAnswer: \"19 multiplied by 23 equals 437.\"\n\nOne sentence. Ensure it's exactly one sentence.\n",
+                "reasoning_details": [
+                  {
+                    "type": "reasoning.text",
+                    "text": "We need to answer 19 * 23. 19*20 = 380; 19*3 = 57; sum = 437. The user says: \"What is 19 * 23? Reply with one sentence.\" So respond with one sentence that gives the answer. Could be \"19 multiplied by 23 equals 437.\" Or just \"19 * 23 = 437.\" Use one sentence. Provide answer.\n\nWe must abide by guidelines: it's a simple math request, no policy issues.\n\nAnswer: \"19 multiplied by 23 equals 437.\"\n\nOne sentence. Ensure it's exactly one sentence.\n",
+                    "format": "unknown",
+                    "index": 0
+                  }
+                ]
+              }
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 38,
+            "completion_tokens": 138,
+            "total_tokens": 176,
+            "cost": 0.0001644,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.0001644,
+              "upstream_inference_prompt_cost": 0.0000057,
+              "upstream_inference_completions_cost": 0.0001587
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 116,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ef5d0450db9d98b6",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 64000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Reply exactly as requested."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "What is 19 * 23? Reply with one sentence."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "19 multiplied by 23 equals 437."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with only: OK"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1779104136959
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "4000000",
+          "anthropic-ratelimit-input-tokens-remaining": "4000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-05-18T11:35:37Z",
+          "anthropic-ratelimit-output-tokens-limit": "800000",
+          "anthropic-ratelimit-output-tokens-remaining": "800000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-05-18T11:35:37Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-05-18T11:35:37Z",
+          "anthropic-ratelimit-tokens-limit": "4800000",
+          "anthropic-ratelimit-tokens-remaining": "4800000",
+          "anthropic-ratelimit-tokens-reset": "2026-05-18T11:35:37Z",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fda8f387f6d7212-BRU",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:35:37 GMT",
+          "request-id": "req_011Cb9xvDWUW56K3nhjpnoWr",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-12d0e59b166d440ac0cd8adb6d6dd494-aff78b9658c0b446-01",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "432",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_01MMsmbxQtiCJebiibpZMKiD",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "OK"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 50,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 4,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "0b24f1797f932178",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 2224,
+          "thinking": {
+            "type": "enabled",
+            "budget_tokens": 1024
+          },
+          "system": [
+            {
+              "type": "text",
+              "text": "Reply exactly as requested."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "What is 17 * 29? Reply with one sentence."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1779104137618
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "4000000",
+          "anthropic-ratelimit-input-tokens-remaining": "4000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-05-18T11:35:38Z",
+          "anthropic-ratelimit-output-tokens-limit": "800000",
+          "anthropic-ratelimit-output-tokens-remaining": "800000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-05-18T11:35:38Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-05-18T11:35:37Z",
+          "anthropic-ratelimit-tokens-limit": "4800000",
+          "anthropic-ratelimit-tokens-remaining": "4800000",
+          "anthropic-ratelimit-tokens-reset": "2026-05-18T11:35:38Z",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fda8f3c3cf47212-BRU",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:35:38 GMT",
+          "request-id": "req_011Cb9xvG42Pud4Epe1LthKh",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6abb229e2583468a12992bb3ce1fd2c6-018168a633e93cc8-01",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "1209",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_012YuD8YNLmmR7VBkCEBmKWf",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "17 * 29 = ?\n\nLet me calculate this:\n17 * 29 = 17 * (30 - 1) = 17 * 30 - 17 * 1 = 510 - 17 = 493\n\nOr I can do it another way:\n17 * 29 = (20 - 3) * 29 = 20 * 29 - 3 * 29 = 580 - 87 = 493\n\nSo 17 * 29 = 493\n\nThe user wants me to reply with one sentence.",
+              "signature": "Er8DCmMIDRgCKkBgSQbx81IQ2ur3Tn1d4mDMWQZXVrKVZMPP5dMdd9UBmQ34nOsBuqxm7SYj8aoKHrG0+2fQEq9T8o6UuIomqg7pMhljbGF1ZGUtaGFpa3UtNC01LTIwMjUxMDAxOAASDPlToVuoe8e0cWDDphoM6XlVcQSyw0jihcynIjC9TqkffDCLrtpoZKUt+p9D1tPjrLVGjY9rk02cB0vUq9tunBjhMhFMVe6XDL71yhcqiQJdpO4vdEc2Srq6FbqC/XY+K1Wq/aLZW3x2utXCGrHwxhfR4L+gCXiKoPXd9kulkKeEV4p5p5ZPADfLd2cOPjgThsO7gE0safmaaal5X8m22UaIccZl7C5JrFeQGg2f+F4ymcpm/W5WrZ8uuMxIPgYJ44OOs9Kp5+1IpsjtKeI7FzdQG/6gLVTTFMryOIMfaKpfCSRO4N/jdYAUt3jxwuC+KVINdgq3UsfI/82OWEWkf5KCJQjZmLWD77g9mWJtwGlsMAxFhzj0UDCGPl46pyfbdMhDf1zcrc6t5LGImygxhmvib9ZeHfTjTZijeV/5+Oj+bvRmSo0Z//U4KMKuue1WqZKSBgVH+urmGAE="
+            },
+            {
+              "type": "text",
+              "text": "17 * 29 equals 493."
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 56,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 159,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "debd2cc54278c94c",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 2224,
+          "thinking": {
+            "type": "enabled",
+            "budget_tokens": 1024
+          },
+          "system": [
+            {
+              "type": "text",
+              "text": "Reply exactly as requested."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "What is 17 * 29? Reply with one sentence."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "thinking",
+                  "thinking": "17 * 29 = ?\n\nLet me calculate this:\n17 * 29 = 17 * (30 - 1) = 17 * 30 - 17 * 1 = 510 - 17 = 493\n\nOr I can do it another way:\n17 * 29 = (20 - 3) * 29 = 20 * 29 - 3 * 29 = 580 - 87 = 493\n\nSo 17 * 29 = 493\n\nThe user wants me to reply with one sentence.",
+                  "signature": "Er8DCmMIDRgCKkBgSQbx81IQ2ur3Tn1d4mDMWQZXVrKVZMPP5dMdd9UBmQ34nOsBuqxm7SYj8aoKHrG0+2fQEq9T8o6UuIomqg7pMhljbGF1ZGUtaGFpa3UtNC01LTIwMjUxMDAxOAASDPlToVuoe8e0cWDDphoM6XlVcQSyw0jihcynIjC9TqkffDCLrtpoZKUt+p9D1tPjrLVGjY9rk02cB0vUq9tunBjhMhFMVe6XDL71yhcqiQJdpO4vdEc2Srq6FbqC/XY+K1Wq/aLZW3x2utXCGrHwxhfR4L+gCXiKoPXd9kulkKeEV4p5p5ZPADfLd2cOPjgThsO7gE0safmaaal5X8m22UaIccZl7C5JrFeQGg2f+F4ymcpm/W5WrZ8uuMxIPgYJ44OOs9Kp5+1IpsjtKeI7FzdQG/6gLVTTFMryOIMfaKpfCSRO4N/jdYAUt3jxwuC+KVINdgq3UsfI/82OWEWkf5KCJQjZmLWD77g9mWJtwGlsMAxFhzj0UDCGPl46pyfbdMhDf1zcrc6t5LGImygxhmvib9ZeHfTjTZijeV/5+Oj+bvRmSo0Z//U4KMKuue1WqZKSBgVH+urmGAE="
+                },
+                {
+                  "type": "text",
+                  "text": "17 * 29 equals 493."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with only: OK"
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1779104138984
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
+          "anthropic-ratelimit-input-tokens-limit": "4000000",
+          "anthropic-ratelimit-input-tokens-remaining": "4000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-05-18T11:35:39Z",
+          "anthropic-ratelimit-output-tokens-limit": "800000",
+          "anthropic-ratelimit-output-tokens-remaining": "800000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-05-18T11:35:39Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-05-18T11:35:39Z",
+          "anthropic-ratelimit-tokens-limit": "4800000",
+          "anthropic-ratelimit-tokens-remaining": "4800000",
+          "anthropic-ratelimit-tokens-reset": "2026-05-18T11:35:39Z",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fda8f44cfc67212-BRU",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:35:39 GMT",
+          "request-id": "req_011Cb9xvMtGA5YREucGMn4ae",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-0e5b19473c750bbd932f2950da132413-dd0decaa5fbb37cf-01",
+          "vary": "Accept-Encoding",
+          "x-envoy-upstream-service-time": "740",
+          "x-robots-tag": "none"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_018w3U7C7yFQ1GzWzcxMYspq",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "The user is asking me to reply with only \"OK\". This is a straightforward request that I should follow.",
+              "signature": "EqsCCmMIDRgCKkAVPbTmXhDmIgKo9CLil0RUO4LLF8mTxCaCrMb7l6nHTM8GSNXqB2x20Z6vpqJqMRBvwKQ1ZTzpoQK2DkfExQI/MhljbGF1ZGUtaGFpa3UtNC01LTIwMjUxMDAxOAASDNtS+X1ypEtpOv6awhoMqpIFtqf7l/U7r/5SIjAkPErSklxRLWmLhnqrQnRZJ24VK9/lVY7yDMoUxFHi+oTyafUvBpbyyGFVbKx2gcYqdhqo8BghImMQWmqkWzcAcl6UcVPDKaTSBuxVbhxonq/TWZLf2/m1FgBI/ho1jm+qrVaeimWu3wxF1ntOWjzrYmgzoLLDG5WR1NSPtTvXlMISmZ++xAvWuXThkAtxYsSm24+O7aYzGnLBK2sQBwfVblHKkQYdwcwYAQ=="
+            },
+            {
+              "type": "text",
+              "text": "OK"
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 78,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 35,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          }
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

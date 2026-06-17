@@ -98,10 +98,12 @@ export function filterObservedMessages(opts: {
   record?: ObservationalMemoryRecord;
   useMarkerBoundaryPruning?: boolean;
   fallbackCursor?: { createdAt: string; id: string };
+  preserveMessageIds?: Set<string>;
 }): void {
   const { messageList, record } = opts;
   const allMessages = messageList.get.all.db();
   const useMarkerBoundaryPruning = opts.useMarkerBoundaryPruning ?? true;
+  const preserveMessageIds = opts.preserveMessageIds ?? new Set<string>();
 
   let markerMessageIndex = -1;
   let markerMessage: MastraDBMessage | null = null;
@@ -120,7 +122,7 @@ export function filterObservedMessages(opts: {
     const messagesToRemove: string[] = [];
     for (let i = 0; i < markerMessageIndex; i++) {
       const msg = allMessages[i];
-      if (msg?.id && msg.id !== 'om-continuation') {
+      if (msg?.id && msg.id !== 'om-continuation' && !preserveMessageIds.has(msg.id)) {
         messagesToRemove.push(msg.id);
       }
     }
@@ -145,7 +147,7 @@ export function filterObservedMessages(opts: {
     const messagesToRemove: string[] = [];
 
     for (const msg of allMessages) {
-      if (!msg?.id || msg.id === 'om-continuation') continue;
+      if (!msg?.id || msg.id === 'om-continuation' || preserveMessageIds.has(msg.id)) continue;
 
       if (observedIds.has(msg.id)) {
         messagesToRemove.push(msg.id);

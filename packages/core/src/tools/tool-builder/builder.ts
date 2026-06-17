@@ -11,7 +11,9 @@ import {
   convertZodSchemaToAISDKSchema,
   jsonSchema,
 } from '@mastra/schema-compat';
+import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../../auth/ee';
 import { backgroundOverrideJsonSchema, backgroundOverrideZodSchema } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
@@ -22,10 +24,10 @@ import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { StandardSchemaWithJSON } from '../../schema';
-import { isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
+import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
-import { isZodObject } from '../../utils/zod-utils';
+import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
@@ -33,11 +35,48 @@ import type {
   CoreTool,
   McpMetadata,
   MastraToolInvocationOptions,
+  NeedsApprovalFn,
   ToolAction,
   VercelTool,
   VercelToolV5,
 } from '../types';
+import { noopObserve } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
+
+/**
+ * Merge two RequestContexts so non-serializable values survive the evented
+ * workflow engine's toJSON/reconstruct cycle.
+ *
+ * The evented engine serialises the RequestContext via `toJSON()` when
+ * publishing workflow events.  Values that fail `JSON.stringify` (functions,
+ * objects with circular references — e.g. the `harness` context) are silently
+ * dropped.  The reconstructed RC handed to steps is therefore *degraded*.
+ *
+ * Tools, however, also hold a reference to the *original* RC captured during
+ * tool conversion (the "closure" RC).  By merging both — exec first, then
+ * closure on top — keys that survived serialisation are preserved while
+ * non-serializable keys from the closure (like `harness`) are restored.
+ */
+function mergeRequestContexts(
+  closureRC: RequestContext | undefined,
+  execRC: RequestContext | undefined,
+): RequestContext {
+  if (!closureRC && !execRC) return new RequestContext();
+  if (!closureRC) return execRC instanceof RequestContext ? execRC : new RequestContext();
+  if (!execRC || !(execRC instanceof RequestContext) || execRC.size() === 0) return closureRC;
+
+  const merged = new RequestContext();
+  // Start with the evented engine's serialised snapshot
+  for (const [key, value] of execRC.entries()) {
+    merged.set(key, value);
+  }
+  // Overlay closure values — restores non-serializable keys and ensures the
+  // authoritative (non-degraded) copy wins for keys present in both.
+  for (const [key, value] of closureRC.entries()) {
+    merged.set(key, value);
+  }
+  return merged;
+}
 
 /**
  * Types that can be converted to Mastra tools.
@@ -56,6 +95,133 @@ interface LogMessageOptions {
   start: string;
   error: string;
   logData: Record<string, unknown>;
+}
+
+/**
+ * Detect Zod v4 schemas. Zod v3 stores the type name as `_def.typeName`
+ * (e.g. "ZodObject"); Zod v4 stores it as `_def.type` (e.g. "object"). We
+ * cannot use `instanceof` here because both Zod versions may be loaded in the
+ * same process and the prototype identity is not guaranteed.
+ */
+function isZodV4Schema(schema: unknown): boolean {
+  const def = (schema as any)?._def;
+  return !!def && typeof def.type === 'string' && !def.typeName;
+}
+
+/**
+ * Build a Standard Schema that:
+ *  - exposes the spliced JSON Schema (with `_background`/`suspendedToolRunId`/
+ *    `resumeData` properties added) so provider compat layers see the override
+ *    fields when serializing the tool to an LLM, and
+ *  - delegates runtime `validate` to the *original* schema so Zod v3
+ *    `.transform()` / `.default()` / `.refine()` and other Standard Schema
+ *    parsing behavior still run before `execute()` sees the args.
+ *
+ * Injected override keys (`_background`, `suspendedToolRunId`, `resumeData`)
+ * are stripped from the input before delegating, then merged back into the
+ * validated value so the inner `execute()` still receives them — matching the
+ * Zod v4 `.extend()` path's behavior.
+ *
+ * If the original schema has no `~standard.validate` (e.g. a raw JSON Schema
+ * with no Standard Schema wrapper), fall back to validating against the
+ * spliced JSON Schema directly.
+ */
+function buildJsonOverrideSchema(
+  originalSchema: unknown,
+  splicedJsonSchema: JSONSchema7Definition,
+  injectedKeys: readonly string[],
+): StandardSchemaWithJSON {
+  const fallback = toStandardSchema(splicedJsonSchema as any);
+  const original = originalSchema as { '~standard'?: { validate?: (v: unknown) => any } } | undefined;
+  const originalValidate = original?.['~standard']?.validate?.bind(original['~standard']);
+
+  // Standard Schema for *just* the injected override fields, so we can validate
+  // malformed override payloads (e.g. `_background: { enabled: "yes" }`) before
+  // merging them into the result. Matches the Zod v4 `.extend()` path's
+  // behavior, which validates these fields as part of the object.
+  // See https://github.com/mastra-ai/mastra/pull/16915#discussion_r3282600679
+  const splicedProperties =
+    splicedJsonSchema && typeof splicedJsonSchema === 'object' && 'properties' in splicedJsonSchema
+      ? ((splicedJsonSchema.properties ?? {}) as Record<string, JSONSchema7Definition>)
+      : {};
+  const injectedProperties: Record<string, JSONSchema7Definition> = {};
+  for (const key of injectedKeys) {
+    if (splicedProperties[key] !== undefined) injectedProperties[key] = splicedProperties[key];
+  }
+  const injectedValidator = toStandardSchema({
+    type: 'object',
+    properties: injectedProperties,
+    additionalProperties: false,
+  } as any);
+
+  const stripInjected = (input: unknown) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return { stripped: input, injected: {} };
+    const injected: Record<string, unknown> = {};
+    const stripped: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+      if (injectedKeys.includes(k)) injected[k] = v;
+      else stripped[k] = v;
+    }
+    return { stripped, injected };
+  };
+
+  const validate = (input: unknown) => {
+    const { stripped, injected } = stripInjected(input);
+
+    const baseResult = originalValidate
+      ? (originalValidate(stripped) as
+          | { value: unknown }
+          | { issues: readonly unknown[] }
+          | Promise<{ value: unknown } | { issues: readonly unknown[] }>)
+      : fallback['~standard'].validate(stripped);
+
+    const injectedResult = injectedValidator['~standard'].validate(injected);
+
+    const combine = (
+      base: { value: unknown } | { issues: readonly unknown[] },
+      inj: { value: unknown } | { issues: readonly unknown[] },
+    ) => {
+      const baseIssues = 'issues' in base ? (base.issues ?? []) : [];
+      const injIssues = 'issues' in inj ? (inj.issues ?? []) : [];
+      if (baseIssues.length || injIssues.length) {
+        return { issues: [...baseIssues, ...injIssues] };
+      }
+      const baseValue = (base as { value: unknown }).value;
+      const injValue = (inj as { value: unknown }).value;
+      if (baseValue && typeof baseValue === 'object' && !Array.isArray(baseValue)) {
+        const injMerged =
+          injValue && typeof injValue === 'object' && !Array.isArray(injValue)
+            ? (injValue as Record<string, unknown>)
+            : injected;
+        return { value: { ...(baseValue as Record<string, unknown>), ...injMerged } };
+      }
+      return base;
+    };
+
+    const baseIsPromise = baseResult && typeof (baseResult as Promise<unknown>).then === 'function';
+    const injIsPromise = injectedResult && typeof (injectedResult as Promise<unknown>).then === 'function';
+    if (baseIsPromise || injIsPromise) {
+      return Promise.all([baseResult, injectedResult]).then(([b, i]) =>
+        combine(
+          b as { value: unknown } | { issues: readonly unknown[] },
+          i as { value: unknown } | { issues: readonly unknown[] },
+        ),
+      );
+    }
+    return combine(
+      baseResult as { value: unknown } | { issues: readonly unknown[] },
+      injectedResult as { value: unknown } | { issues: readonly unknown[] },
+    );
+  };
+
+  return {
+    '~standard': {
+      version: 1,
+      vendor: 'mastra-json-override',
+      validate,
+      jsonSchema: fallback['~standard'].jsonSchema,
+    },
+  } as StandardSchemaWithJSON;
 }
 
 export class CoreToolBuilder extends MastraBase {
@@ -95,15 +261,26 @@ export class CoreToolBuilder extends MastraBase {
           schema = z.object({});
         }
 
-        if (isZodObject(schema)) {
-          let nextSchema = schema;
+        // Preferred path: when the user's input schema is a Zod v4 ZodObject
+        // (the common case for tools authored with `zod` / `zod/v4`), keep using
+        // `.extend()`. This preserves the exact JSON Schema shape that existing
+        // provider compat layers + LLM recordings expect.
+        //
+        // Fallback path: for everything else (Zod v3 ZodObject, raw JSON Schema,
+        // `JsonSchemaWrapper`, etc.) splice the override fields directly into a
+        // JSON Schema. Mixing a Zod v4 wrapper (`backgroundOverrideZodSchema`,
+        // `.nullable()`, `.optional()`) into a Zod v3 ZodObject's `.shape` is
+        // what triggered the original crash:
+        //   `TypeError: keyValidator._parse is not a function`.
+        if (isZodObject(schema) && isZodV4Schema(schema)) {
+          let nextSchema: z.ZodObject<any> = schema as z.ZodObject<any>;
           if (isBackgroundEligible) {
-            nextSchema = nextSchema.extend({
+            nextSchema = safeExtendZodObject(nextSchema, {
               _background: backgroundOverrideZodSchema,
             });
           }
           if (isResumableTool) {
-            nextSchema = nextSchema.extend({
+            nextSchema = safeExtendZodObject(nextSchema, {
               suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
               resumeData: z
                 .any()
@@ -113,29 +290,40 @@ export class CoreToolBuilder extends MastraBase {
           }
           this.originalTool.inputSchema = nextSchema;
         } else {
-          // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
-          // Extract JSON Schema, add suspend/resume fields, re-wrap.
-          const jsonSchema = standardSchemaToJSONSchema(schema as any, { io: 'input' });
+          // Normalize to Standard Schema, extract JSON Schema, splice overrides.
+          const standardSchema = isStandardSchemaWithJSON(schema) ? schema : toStandardSchema(schema);
+          const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
+
           if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
+            const properties: Record<string, JSONSchema7Definition> = { ...(jsonSchema.properties ?? {}) };
+            const injectedKeys: string[] = [];
+
             if (isBackgroundEligible) {
-              jsonSchema.properties = {
-                ...jsonSchema.properties,
-                _background: backgroundOverrideJsonSchema,
-              };
+              properties._background = backgroundOverrideJsonSchema;
+              injectedKeys.push('_background');
             }
             if (isResumableTool) {
-              jsonSchema.properties = {
-                ...jsonSchema.properties,
-                suspendedToolRunId: {
-                  type: ['string', 'null'],
-                  description: 'The runId of the suspended tool',
-                },
-                resumeData: {
-                  description: 'The resumeData object created from the resumeSchema of suspended tool',
-                },
+              // Match the pre-PR JSON Schema shape so existing provider compat
+              // layers + LLM recordings collapse it identically.
+              properties.suspendedToolRunId = {
+                type: ['string', 'null'],
+                description: 'The runId of the suspended tool',
               };
+              properties.resumeData = {
+                description: 'The resumeData object created from the resumeSchema of suspended tool',
+              };
+              injectedKeys.push('suspendedToolRunId', 'resumeData');
             }
-            this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
+
+            // Preserve the original schema's runtime validator (Zod v3
+            // `.transform()` / `.default()` / `.refine()` etc.) while exposing
+            // the spliced JSON Schema for provider serialization. See
+            // https://github.com/mastra-ai/mastra/pull/16915#discussion_r3282520408
+            this.originalTool.inputSchema = buildJsonOverrideSchema(
+              schema,
+              { ...jsonSchema, properties },
+              injectedKeys,
+            );
           }
         }
       }
@@ -312,6 +500,7 @@ export class CoreToolBuilder extends MastraBase {
             )
           : undefined,
         toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+        transform: 'transform' in this.originalTool ? this.originalTool.transform : undefined,
         inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
       } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
     }
@@ -398,12 +587,14 @@ export class CoreToolBuilder extends MastraBase {
             mastra: wrappedMastra,
             memory: options.memory,
             runId: options.runId,
-            requestContext: execOptions.requestContext ?? options.requestContext ?? new RequestContext(),
+            requestContext: mergeRequestContexts(options.requestContext, execOptions.requestContext),
+            actor: execOptions.actor,
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,
             // Browser for web automation (lazily initialized on first use)
             browser: options.browser,
+            observe: execOptions.observe ?? noopObserve,
             writer: new ToolStream(
               {
                 prefix: 'tool',
@@ -571,6 +762,38 @@ export class CoreToolBuilder extends MastraBase {
         requestContext: toolRequestContext,
         mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
       });
+
+      const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
+      const user = toolRequestContext?.get('user');
+      if (fgaProvider) {
+        const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
+          await import('../../auth/ee/fga-check');
+        const toolResourceId = mcpMeta?.serverName
+          ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
+          : options.agentId
+            ? getAgentToolFGAResourceId(options.agentId, options.name)
+            : getStandaloneToolFGAResourceId(options.name);
+        await requireFGA({
+          fgaProvider,
+          user,
+          resource: { type: 'tool', id: toolResourceId },
+          permission: MastraFGAPermissions.TOOLS_EXECUTE,
+          requestContext: toolRequestContext,
+          actor: execOptions?.actor,
+          context: {
+            resourceId: options.resourceId,
+          },
+          metadata: {
+            toolName: options.name,
+            agentId: options.agentId,
+            agentName: options.agentName,
+            runId: options.runId,
+            threadId: options.threadId,
+            executionResourceId: options.resourceId,
+            mcpMetadata: mcpMeta,
+          },
+        });
+      }
 
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
@@ -762,7 +985,7 @@ export class CoreToolBuilder extends MastraBase {
     // Map AI SDK's needsApproval to our requireApproval
     // needsApproval can be boolean or a function that takes input and returns boolean
     let requireApproval = false;
-    let needsApprovalFn: ((input: any) => boolean | Promise<boolean>) | undefined;
+    let needsApprovalFn: NeedsApprovalFn | undefined;
 
     if (typeof this.options.requireApproval === 'function') {
       requireApproval = true;
@@ -783,6 +1006,19 @@ export class CoreToolBuilder extends MastraBase {
         // Set requireApproval to true so the tool-call-step knows to check the function
         requireApproval = true;
       }
+    }
+
+    // Preserve a needsApprovalFn that was attached directly to the tool instance
+    // (e.g. MCP tools wrap a server-level `requireToolApproval` function and set
+    // `needsApprovalFn` on the tool while keeping `requireApproval` as a boolean).
+    // The branches above only derive needsApprovalFn from options/AI SDK shapes, so
+    // without this it would be dropped during conversion and conditional approval
+    // would silently fall back to the boolean flag.
+    const instanceNeedsApprovalFn = getNeedsApprovalFn(this.originalTool);
+    if (!needsApprovalFn && instanceNeedsApprovalFn) {
+      needsApprovalFn = instanceNeedsApprovalFn;
+      // Ensure the tool-call-step knows to evaluate the function per call.
+      requireApproval = true;
     }
 
     const definition = {
@@ -809,6 +1045,7 @@ export class CoreToolBuilder extends MastraBase {
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
       toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+      transform: 'transform' in this.originalTool ? this.originalTool.transform : undefined,
       inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
       onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
       onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,

@@ -1,4 +1,3 @@
-import { Spacer } from '@mariozechner/pi-tui';
 import { GatewayRegistry } from '@mastra/core/llm';
 import {
   loadSettings,
@@ -6,72 +5,27 @@ import {
   MEMORY_GATEWAY_PROVIDER,
   MEMORY_GATEWAY_DEFAULT_URL,
 } from '../../onboarding/settings.js';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';
 
-function askText(ctx: SlashCommandContext, question: string, defaultValue?: string): Promise<string | null> {
-  return new Promise(resolve => {
-    const component = new AskQuestionInlineComponent(
-      {
-        question,
-        allowEmptyInput: false,
-        onSubmit: answer => {
-          ctx.state.activeInlineQuestion = undefined;
-          const trimmed = answer.trim();
-          resolve(trimmed.length > 0 ? trimmed : null);
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve(null);
-        },
-      },
-      ctx.state.ui,
-    );
-
-    if (defaultValue) {
-      (component as any).input?.setValue?.(defaultValue);
-    }
-
-    ctx.state.activeInlineQuestion = component;
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(component);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
-  });
+async function askText(ctx: SlashCommandContext, question: string, defaultValue?: string): Promise<string | null> {
+  const answer = await askModalQuestion(ctx.state.ui, { question, defaultValue });
+  const trimmed = answer?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-function askSelect(
+async function askSelect(
   ctx: SlashCommandContext,
   question: string,
   options: Array<{ label: string; value: string; description?: string }>,
 ): Promise<string | null> {
-  return new Promise(resolve => {
-    const component = new AskQuestionInlineComponent(
-      {
-        question,
-        options: options.map(option => ({ label: option.label, description: option.description })),
-        onSubmit: answer => {
-          ctx.state.activeInlineQuestion = undefined;
-          const selected = options.find(option => option.label === answer);
-          const trimmed = answer.trim();
-          resolve(selected?.value ?? (trimmed.length > 0 ? trimmed : null));
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve(null);
-        },
-      },
-      ctx.state.ui,
-    );
-
-    ctx.state.activeInlineQuestion = component;
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(component);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+  const answer = await askModalQuestion(ctx.state.ui, {
+    question,
+    options: options.map(option => ({ label: option.label, description: option.description })),
   });
+  const selected = options.find(option => option.label === answer);
+  const trimmed = answer?.trim() ?? '';
+  return selected?.value ?? (trimmed.length > 0 ? trimmed : null);
 }
 
 async function refreshGatewayModels(ctx: SlashCommandContext): Promise<void> {

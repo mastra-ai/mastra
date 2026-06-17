@@ -49,16 +49,18 @@ function rowToTask(row: Record<string, unknown>): BackgroundTask {
     runId: String(row.run_id),
     result: parseJson(row.result),
     error: parseJson(row.error),
+    suspendPayload: parseJson(row.suspend_payload),
     retryCount: Number(row.retry_count ?? 0),
     maxRetries: Number(row.max_retries ?? 0),
     timeoutMs: Number(row.timeout_ms ?? 300_000),
     createdAt: asDate(row.createdAt) ?? new Date(),
     startedAt: asDate(row.startedAt),
+    suspendedAt: asDate(row.suspendedAt),
     completedAt: asDate(row.completedAt),
   };
 }
 
-function dateColumnName(col: 'createdAt' | 'startedAt' | 'completedAt'): string {
+function dateColumnName(col: 'createdAt' | 'startedAt' | 'suspendedAt' | 'completedAt'): string {
   return col;
 }
 
@@ -74,6 +76,11 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
     await this.#db.createTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_BACKGROUND_TASKS,
+      schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+      ifNotExists: ['suspend_payload', 'suspendedAt'],
     });
   }
 
@@ -97,11 +104,13 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
           args: serializeJson(task.args),
           result: serializeJson(task.result),
           error: serializeJson(task.error),
+          suspend_payload: serializeJson(task.suspendPayload),
           retry_count: task.retryCount,
           max_retries: task.maxRetries,
           timeout_ms: task.timeoutMs,
           createdAt: task.createdAt.toISOString(),
           startedAt: task.startedAt?.toISOString() ?? null,
+          suspendedAt: task.suspendedAt?.toISOString() ?? null,
           completedAt: task.completedAt?.toISOString() ?? null,
         },
       });
@@ -133,6 +142,10 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
       columns.push('error');
       values.push(serializeJson(update.error));
     }
+    if ('suspendPayload' in update) {
+      columns.push('suspend_payload');
+      values.push(serializeJson(update.suspendPayload));
+    }
     if ('retryCount' in update) {
       columns.push('retry_count');
       values.push(update.retryCount as number);
@@ -140,6 +153,10 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
     if ('startedAt' in update) {
       columns.push('startedAt');
       values.push(update.startedAt?.toISOString() ?? null);
+    }
+    if ('suspendedAt' in update) {
+      columns.push('suspendedAt');
+      values.push(update.suspendedAt?.toISOString() ?? null);
     }
     if ('completedAt' in update) {
       columns.push('completedAt');
@@ -204,6 +221,7 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
         if (filter.threadId) builder.whereAnd('thread_id = ?', filter.threadId);
         if (filter.resourceId) builder.whereAnd('resource_id = ?', filter.resourceId);
         if (filter.toolName) builder.whereAnd('tool_name = ?', filter.toolName);
+        if (filter.toolCallId) builder.whereAnd('tool_call_id = ?', filter.toolCallId);
         if (filter.runId) builder.whereAnd('run_id = ?', filter.runId);
 
         const dateCol = dateColumnName(filter.dateFilterBy ?? 'createdAt');
@@ -291,6 +309,7 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
       if (filter.threadId) query.whereAnd('thread_id = ?', filter.threadId);
       if (filter.resourceId) query.whereAnd('resource_id = ?', filter.resourceId);
       if (filter.toolName) query.whereAnd('tool_name = ?', filter.toolName);
+      if (filter.toolCallId) query.whereAnd('tool_call_id = ?', filter.toolCallId);
       if (filter.runId) query.whereAnd('run_id = ?', filter.runId);
 
       const dateCol = dateColumnName(filter.dateFilterBy ?? 'createdAt');

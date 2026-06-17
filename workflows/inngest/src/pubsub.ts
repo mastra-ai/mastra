@@ -1,12 +1,16 @@
-import { subscribe } from '@inngest/realtime';
 import { PubSub } from '@mastra/core/events';
 import type { Event } from '@mastra/core/events';
 import type { Inngest } from 'inngest';
+import { subscribe } from 'inngest/realtime';
 
 /**
- * Type for Inngest's publish function, available inside Inngest function context.
+ * Build a TopicRef compatible with Inngest SDK v4's `inngest.realtime.publish()`.
+ * The runtime only requires `channel` and `topic`; `config.schema` is optional and
+ * we leave it absent so no validation runs.
  */
-export type InngestPublishFn = (opts: { channel: string; topic: string; data: any }) => Promise<void>;
+function buildTopicRef(channel: string, topic: string) {
+  return { channel, topic, config: {} as any };
+}
 
 /**
  * Parse a topic string and extract the runId and topic type.
@@ -37,19 +41,20 @@ function parseTopic(topic: string): { runId: string; topicType: 'workflow' | 'ag
  * PubSub implementation for Inngest workflows.
  *
  * This bridges the PubSub abstract class interface with Inngest's realtime system:
- * - publish() uses Inngest's publish function (only available in function context)
- * - subscribe() uses @inngest/realtime subscribe for real-time streaming
+ * - publish() uses `inngest.realtime.publish()` (Inngest SDK v4 client API).
+ *   This is non-durable: it executes immediately and is not memoized as a step.
+ *   When called inside an Inngest function it auto-includes the current runId.
+ * - subscribe() uses `inngest/realtime` subscribe for real-time streaming.
  *
  * Supported topic formats:
  * - "workflow.events.v2.{runId}" - workflow events
+ *   -> Inngest channel: "workflow:{workflowId}:{runId}", topic: "watch"
  * - "agent.stream.{runId}" - agent stream events (for InngestAgent)
- *
- * Both map to Inngest channel: "workflow:{workflowId}:{runId}"
+ *   -> Inngest channel: "agent:{runId}", topic: "agent-stream"
  */
 export class InngestPubSub extends PubSub {
   private inngest: Inngest;
   private workflowId: string;
-  private publishFn?: InngestPublishFn;
   private subscriptions: Map<
     string,
     {
@@ -58,11 +63,10 @@ export class InngestPubSub extends PubSub {
     }
   > = new Map();
 
-  constructor(inngest: Inngest, workflowId: string, publishFn?: InngestPublishFn) {
+  constructor(inngest: Inngest, workflowId: string) {
     super();
     this.inngest = inngest;
     this.workflowId = workflowId;
-    this.publishFn = publishFn;
   }
 
   /**
@@ -76,11 +80,6 @@ export class InngestPubSub extends PubSub {
    *   (Note: agent stream uses runId-only channel so nested workflows can publish to same channel)
    */
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
-    if (!this.publishFn) {
-      // Silently ignore if no publish function (e.g., outside Inngest context)
-      return;
-    }
-
     const parsed = parseTopic(topic);
     if (!parsed) {
       return; // Ignore unrecognized topic formats
@@ -97,11 +96,7 @@ export class InngestPubSub extends PubSub {
       // For agent stream events, send the full event structure so subscribers can access type/runId/data
       // For workflow events, send just the data (existing behavior)
       const dataToSend = topicType === 'agent' ? event : event.data;
-      await this.publishFn({
-        channel,
-        topic: inngestTopic,
-        data: dataToSend,
-      });
+      await this.inngest.realtime.publish(buildTopicRef(channel, inngestTopic), dataToSend);
     } catch (err: any) {
       // For agent stream terminal events, rethrow — losing a finish/error event
       // causes the client stream to hang indefinitely

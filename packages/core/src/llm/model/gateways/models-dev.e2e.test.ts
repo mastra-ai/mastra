@@ -20,7 +20,10 @@ describe('ModelsDevGateway - Real API Integration', () => {
     // Validate each provider has the expected shape
     for (const [providerId, config] of Object.entries(providers)) {
       expect(config.apiKeyEnvVar, `Provider ${providerId} missing apiKeyEnvVar`).toBeDefined();
-      expect(typeof config.apiKeyEnvVar).toBe('string');
+      expect(
+        typeof config.apiKeyEnvVar === 'string' || Array.isArray(config.apiKeyEnvVar),
+        `Provider ${providerId} apiKeyEnvVar must be a string or string array`,
+      ).toBe(true);
 
       expect(config.name, `Provider ${providerId} missing name`).toBeDefined();
       expect(typeof config.name).toBe('string');
@@ -50,6 +53,10 @@ describe('ModelsDevGateway - Real API Integration', () => {
     if (providers.groq) {
       expect(providers.groq.url).toBe('https://api.groq.com/openai/v1');
       expect(providers.groq.apiKeyEnvVar).toBe('GROQ_API_KEY');
+    }
+
+    if (providers.google) {
+      expect(providers.google.apiKeyEnvVar).toEqual(['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY']);
     }
 
     if (providers.vercel) {

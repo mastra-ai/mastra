@@ -1,6 +1,6 @@
 {
   "name": "@mastra/clickhouse",
-  "version": "1.7.0",
+  "version": "1.10.1-alpha.0",
   "description": "Clickhouse provider for Mastra - includes db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "pretest": "docker compose up -d --wait",
     "test": "vitest run",
@@ -32,23 +32,26 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@clickhouse/client": "^1.18.2"
+    "@clickhouse/client": "^1.20.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.34.0-0 <2.0.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "files": [
     "dist",

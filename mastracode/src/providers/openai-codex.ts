@@ -16,6 +16,8 @@ import { AuthStorage } from '../auth/storage.js';
 
 // Codex API endpoint (not standard OpenAI API)
 const CODEX_API_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
+const CODEX_ORIGINATOR = 'mastracode';
+const CODEX_USER_AGENT = 'mastracode';
 
 // Singleton auth storage instance (shared with claude-max.ts)
 let authStorageInstance: AuthStorage | null = null;
@@ -155,8 +157,14 @@ export function buildOpenAICodexOAuthFetch(
     }
 
     headers.set('Authorization', `Bearer ${accessToken}`);
+    if (!headers.has('originator')) {
+      headers.set('originator', CODEX_ORIGINATOR);
+    }
+    if (!headers.has('User-Agent')) {
+      headers.set('User-Agent', CODEX_USER_AGENT);
+    }
     if (accountId) {
-      headers.set('ChatGPT-Account-Id', accountId);
+      headers.set('ChatGPT-Account-ID', accountId);
     }
 
     // URL rewriting — only when rewriteUrl !== false
@@ -196,10 +204,13 @@ export function openaiCodexProvider(
   const middleware = createCodexMiddleware(reasoningEffort);
   const headers = options?.headers;
 
+  const baseURL = process.env.OPENAI_BASE_URL;
+
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const openai = createOpenAI({
       apiKey: 'test-api-key',
+      baseURL,
       headers,
     });
     return wrapLanguageModel({
@@ -210,6 +221,7 @@ export function openaiCodexProvider(
 
   const openai = createOpenAI({
     apiKey: 'oauth-dummy-key',
+    baseURL,
     headers,
     fetch: buildOpenAICodexOAuthFetch() as any,
   });

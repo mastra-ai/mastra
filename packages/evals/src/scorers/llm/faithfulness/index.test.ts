@@ -1,9 +1,12 @@
 import { openai } from '@ai-sdk/openai';
-import { createLLMMock } from '@internal/test-utils';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createLLMMock, setupDummyApiKeys } from '@internal/test-utils';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createFaithfulnessScorer } from './index';
+
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const testCases = [
   {

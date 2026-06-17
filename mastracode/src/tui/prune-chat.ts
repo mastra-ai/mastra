@@ -1,9 +1,9 @@
-import type { Component } from '@mariozechner/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 
 import type { TUIState } from './state.js';
 
-const MAX_CHILDREN = 200;
-const KEEP_CHILDREN = 100;
+const MAX_CHILDREN = 5000;
+const KEEP_CHILDREN = 3000;
 
 export function pruneChatContainer(state: TUIState): void {
   const children = state.chatContainer.children as Component[];
@@ -25,4 +25,9 @@ export function pruneChatContainer(state: TUIState): void {
   state.allShellComponents = state.allShellComponents.filter(
     component => !removed.has(component as unknown as Component),
   );
+  for (const [id, pending] of state.pendingSignalMessageComponentsById) {
+    if (removed.has(pending.component as unknown as Component)) {
+      state.pendingSignalMessageComponentsById.delete(id);
+    }
+  }
 }

@@ -1,11 +1,4 @@
 import {
-  Breadcrumb,
-  Button,
-  Crumb,
-  DocsIcon,
-  Header,
-  HeaderAction,
-  Icon,
   MainContentLayout,
   PermissionDenied,
   SessionExpired,
@@ -13,16 +6,18 @@ import {
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { Bot, Folder, Wand2 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import { Link, useParams, useSearchParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 
 import { validateAgentId } from './validate-agent-id';
 import { ReferenceViewerDialog } from '@/domains/workspace/components/reference-viewer-dialog';
 import { SkillDetail } from '@/domains/workspace/components/skill-detail';
 import { useWorkspaceFile } from '@/domains/workspace/hooks/use-workspace';
 import { useWorkspaceSkill, useWorkspaceSkillReference } from '@/domains/workspace/hooks/use-workspace-skills';
+import { navCrumb } from '@/lib/nav';
+import { RouteHeaderCrumbs } from '@/lib/route-header';
+import type { CrumbDef } from '@/lib/route-header';
 
 export default function WorkspaceSkillDetailPage() {
   const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();
@@ -34,25 +29,28 @@ export default function WorkspaceSkillDetailPage() {
   const skillPath = searchParams.get('path');
   const decodedSkillPath = skillPath ? decodeURIComponent(skillPath) : undefined;
 
-  // Check if we came from an agent page (for breadcrumb context)
+  // When the page is reached from an agent (?agentId=...), swap the breadcrumb
+  // from "Workspaces > workspaceId > skill" to "Agents > agentId > skill".
+  // Validate the URL-provided id against the cached agents list so URL tampering
+  // doesn't link to a non-existent agent. Cache may be cold on a direct visit;
+  // we fall back to the workspace breadcrumb in that case.
   const agentId = searchParams.get('agentId');
   const decodedAgentId = agentId ? decodeURIComponent(agentId) : null;
-
-  // Validate agentId against cached agent list (no extra API call).
-  // If the cache is cold (e.g. direct URL visit) or the ID doesn't match,
-  // we fall back to the workspace breadcrumb.
-  // Note: getQueriesData matches all queries starting with ['agents'] (across requestContext variants).
-  // We take the first match, which is acceptable since agent IDs are globally unique.
   const agentsCache = queryClient.getQueriesData<Record<string, unknown>>({ queryKey: ['agents'] });
   const cachedAgents = agentsCache?.[0]?.[1] ?? null;
   const validAgentId = validateAgentId(decodedAgentId, cachedAgents);
 
-  // Build back link based on context
-  const backLink = validAgentId
-    ? `/agents/${validAgentId}` // Back to agent
-    : workspaceId
-      ? `/workspaces/${workspaceId}?tab=skills` // Back to workspace skills tab
-      : '/workspaces';
+  const agentCrumbs = useMemo<CrumbDef[] | null>(
+    () =>
+      validAgentId
+        ? [
+            navCrumb('/agents'),
+            { id: 'agent', label: validAgentId, to: `/agents/${encodeURIComponent(validAgentId)}` },
+            { id: 'skill', label: decodedSkillName },
+          ]
+        : null,
+    [validAgentId, decodedSkillName],
+  );
 
   const [viewingReference, setViewingReference] = useState<string | null>(null);
 
@@ -80,49 +78,10 @@ export default function WorkspaceSkillDetailPage() {
     },
   );
 
-  // Breadcrumb component based on context
-  const renderBreadcrumb = (currentLabel: string) =>
-    validAgentId ? (
-      // Agent context: Agent > Skill
-      <Breadcrumb>
-        <Crumb as={Link} to={backLink}>
-          <Icon>
-            <Bot className="h-4 w-4" />
-          </Icon>
-          {validAgentId}
-        </Crumb>
-        <Crumb as="span" to="" isCurrent>
-          <Icon>
-            <Wand2 className="h-4 w-4" />
-          </Icon>
-          {currentLabel}
-        </Crumb>
-      </Breadcrumb>
-    ) : (
-      // Workspace context: Workspace > Skills > Skill
-      <Breadcrumb>
-        <Crumb as={Link} to={backLink}>
-          <Icon>
-            <Folder className="h-4 w-4" />
-          </Icon>
-          Workspace
-        </Crumb>
-        <Crumb as={Link} to={backLink}>
-          <Icon>
-            <Wand2 className="h-4 w-4" />
-          </Icon>
-          Skills
-        </Crumb>
-        <Crumb as="span" to="" isCurrent>
-          {currentLabel}
-        </Crumb>
-      </Breadcrumb>
-    );
-
   if (isLoading) {
     return (
       <MainContentLayout>
-        <Header>{renderBreadcrumb('Loading...')}</Header>
+        {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
         <div className="grid place-items-center h-full">
           <div className="h-8 w-8 border-2 border-accent1 border-t-transparent rounded-full animate-spin" />
         </div>
@@ -134,7 +93,7 @@ export default function WorkspaceSkillDetailPage() {
   if (error && is401UnauthorizedError(error)) {
     return (
       <MainContentLayout>
-        <Header>{renderBreadcrumb('Session Expired')}</Header>
+        {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
         <div className="flex h-full items-center justify-center">
           <SessionExpired />
         </div>
@@ -146,7 +105,7 @@ export default function WorkspaceSkillDetailPage() {
   if (error && is403ForbiddenError(error)) {
     return (
       <MainContentLayout>
-        <Header>{renderBreadcrumb('Permission Denied')}</Header>
+        {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
         <div className="flex h-full items-center justify-center">
           <PermissionDenied resource="workspaces" />
         </div>
@@ -157,11 +116,11 @@ export default function WorkspaceSkillDetailPage() {
   if (error || !skill) {
     return (
       <MainContentLayout>
-        <Header>{renderBreadcrumb('Error')}</Header>
+        {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
         <div className="grid place-items-center h-full">
           <div className="text-center">
             <p className="text-red-400 mb-2">Failed to load skill</p>
-            <p className="text-sm text-neutral3">{error?.message ?? 'Skill not found'}</p>
+            <p className="text-sm text-neutral3">{error instanceof Error ? error.message : 'Skill not found'}</p>
           </div>
         </div>
       </MainContentLayout>
@@ -170,19 +129,7 @@ export default function WorkspaceSkillDetailPage() {
 
   return (
     <MainContentLayout>
-      <Header>
-        {renderBreadcrumb(skill.name)}
-
-        <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/workspace/skills" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
-            Documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
+      {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
       <div className="grid overflow-y-auto overflow-x-hidden h-full">
         <div className="max-w-[100rem] px-[3rem] mx-auto py-8 h-full w-full overflow-x-hidden">
           <SkillDetail skill={skill} rawSkillMd={rawSkillMdData?.content} onReferenceClick={setViewingReference} />

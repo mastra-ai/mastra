@@ -1,7 +1,5 @@
-import { Spacer } from '@mariozechner/pi-tui';
-
 import { loadSettings, OBSERVABILITY_AUTH_PREFIX, saveSettings } from '../../onboarding/settings.js';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { askModalQuestion } from '../modal-question.js';
 import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -61,81 +59,39 @@ function showStatus(ctx: SlashCommandContext): void {
   ctx.showInfo(lines.join('\n'));
 }
 
-function showInlineQuestion(ctx: SlashCommandContext, component: AskQuestionInlineComponent): void {
-  ctx.state.activeInlineQuestion = component;
-  ctx.state.chatContainer.addChild(new Spacer(1));
-  ctx.state.chatContainer.addChild(component);
-  ctx.state.chatContainer.addChild(new Spacer(1));
-  ctx.state.ui.requestRender();
-  ctx.state.chatContainer.invalidate();
-}
-
-function handleConnect(ctx: SlashCommandContext): Promise<void> {
+async function handleConnect(ctx: SlashCommandContext): Promise<void> {
   if (!ctx.authStorage) {
     ctx.showError('Auth storage not available. Cannot store credentials.');
-    return Promise.resolve();
+    return;
   }
 
   const resourceId = ctx.harness.getResourceId();
+  const projectId = await askModalQuestion(ctx.state.ui, { question: 'Enter your cloud project ID:' });
+  if (!projectId) return;
 
-  return new Promise<void>(resolve => {
-    const projectIdQuestion = new AskQuestionInlineComponent(
-      {
-        question: 'Enter your cloud project ID:',
-        formatResult: (answer: string) => `Project ID: ${answer}`,
-        onSubmit: (projectId: string) => {
-          ctx.state.activeInlineQuestion = undefined;
+  if (!VALID_PROJECT_ID.test(projectId)) {
+    ctx.showError('Invalid project ID. Only letters, numbers, hyphens, and underscores are allowed.');
+    return;
+  }
 
-          if (!VALID_PROJECT_ID.test(projectId)) {
-            ctx.showError('Invalid project ID. Only letters, numbers, hyphens, and underscores are allowed.');
-            resolve();
-            return;
-          }
+  const token = await askModalQuestion(ctx.state.ui, { question: 'Enter your cloud access token:' });
+  if (!token) return;
 
-          const tokenQuestion = new AskQuestionInlineComponent(
-            {
-              question: 'Enter your cloud access token:',
-              formatResult: () => 'Token: ••••••••',
-              onSubmit: (token: string) => {
-                ctx.state.activeInlineQuestion = undefined;
+  const settings = loadSettings();
+  settings.observability.resources[resourceId] = {
+    projectId,
+    configuredAt: new Date().toISOString(),
+  };
+  saveSettings(settings);
 
-                const settings = loadSettings();
-                settings.observability.resources[resourceId] = {
-                  projectId,
-                  configuredAt: new Date().toISOString(),
-                };
-                saveSettings(settings);
+  ctx.authStorage.setStoredApiKey(`${OBSERVABILITY_AUTH_PREFIX}${resourceId}`, token);
 
-                ctx.authStorage!.setStoredApiKey(`${OBSERVABILITY_AUTH_PREFIX}${resourceId}`, token);
-
-                ctx.showInfo(
-                  `${theme.fg('success', '✓')} Cloud observability configured.\n` +
-                    `  Project:  ${projectId}\n` +
-                    `  Resource: ${resourceId}\n\n` +
-                    theme.fg('dim', 'Restart MastraCode for the new configuration to take effect.'),
-                );
-                resolve();
-              },
-              onCancel: () => {
-                ctx.state.activeInlineQuestion = undefined;
-                resolve();
-              },
-            },
-            ctx.state.ui,
-          );
-
-          showInlineQuestion(ctx, tokenQuestion);
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve();
-        },
-      },
-      ctx.state.ui,
-    );
-
-    showInlineQuestion(ctx, projectIdQuestion);
-  });
+  ctx.showInfo(
+    `${theme.fg('success', '✓')} Cloud observability configured.\n` +
+      `  Project:  ${projectId}\n` +
+      `  Resource: ${resourceId}\n\n` +
+      theme.fg('dim', 'Restart MastraCode for the new configuration to take effect.'),
+  );
 }
 
 function handleLocal(ctx: SlashCommandContext, args: string[]): void {

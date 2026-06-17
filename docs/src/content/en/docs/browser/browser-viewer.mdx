@@ -7,7 +7,7 @@ packages:
 
 # BrowserViewer
 
-The `@mastra/browser-viewer` package provides browser automation for CLI-based tools like [agent-browser](https://www.npmjs.com/package/agent-browser), [browser-use](https://pypi.org/project/browser-use/), and [browse](https://www.npmjs.com/package/@browserbasehq/browse-cli). BrowserViewer launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through [workspace tools](/docs/workspace/overview).
+The `@mastra/browser-viewer` package provides browser automation for CLI-based tools like [agent-browser](https://www.npmjs.com/package/agent-browser), [browser-use](https://pypi.org/project/browser-use/), and [browse](https://www.npmjs.com/package/browse). BrowserViewer launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through [workspace tools](/docs/workspace/overview).
 
 ## When to use BrowserViewer
 
@@ -45,6 +45,8 @@ Create a workspace with BrowserViewer and assign it to an agent:
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
 import { Workspace, LocalSandbox } from '@mastra/core/workspace'
 import { BrowserViewer } from '@mastra/browser-viewer'
 
@@ -60,14 +62,19 @@ const workspace = new Workspace({
 
 const browserAgent = new Agent({
   id: 'browser-agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
   instructions: `You are a web automation assistant.
 Use browser-use commands to navigate and interact with websites.`,
+  memory: new Memory(),
 })
 
 export const mastra = new Mastra({
   agents: { browserAgent },
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
 })
 ```
 
@@ -84,33 +91,6 @@ When the agent runs a CLI command like `browser-use open https://example.com`, M
 
 BrowserViewer supports three CLI providers. Each CLI must be installed separately in your workspace environment. Each CLI also publishes a [skill](/docs/workspace/skills) that teaches the agent its commands and workflows.
 
-### agent-browser
-
-```bash
-npm install -g agent-browser
-npx skills add vercel-labs/agent-browser
-```
-
-CDP flag: `--cdp`
-
-### browser-use
-
-```bash
-pip install browser-use
-npx skills add browser-use/browser-use --skill browser-use
-```
-
-CDP flag: `--cdp-url`
-
-### browse-cli
-
-```bash
-npm install -g @browserbasehq/browse-cli
-npx skills add browserbase/skills
-```
-
-CDP flag: `--ws`
-
 Set the `cli` option to match the CLI your agent uses:
 
 ```typescript
@@ -119,6 +99,33 @@ const viewer = new BrowserViewer({
   headless: false,
 })
 ```
+
+### `agent-browser`
+
+```bash
+npm install -g agent-browser
+npx skills add vercel-labs/agent-browser
+```
+
+CDP flag: `--cdp`
+
+### `browser-use`
+
+```bash
+pip install browser-use
+npx skills add browser-use/browser-use --skill browser-use
+```
+
+CDP flag: `--cdp-url`
+
+### `browse`
+
+```bash
+npm install -g browse
+browse skills install
+```
+
+CDP flag: `--ws`
 
 :::note
 

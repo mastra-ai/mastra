@@ -6,7 +6,6 @@
  * the same workflow infrastructure with complete Inngest integration.
  */
 
-import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { DefaultStorage } from '@mastra/libsql';
@@ -50,7 +49,6 @@ describe('createInngestAgent factory function', () => {
   const inngest = new Inngest({
     id: 'create-inngest-agent-tests',
     baseUrl: `http://localhost:${INNGEST_PORT}`,
-    middleware: [realtimeMiddleware()],
   });
 
   it('should create an InngestAgent from a regular Agent', () => {
@@ -142,7 +140,6 @@ describe('createInngestAgent with Mastra auto-registration', () => {
   const inngest = new Inngest({
     id: 'auto-reg-tests',
     baseUrl: `http://localhost:${INNGEST_PORT}`,
-    middleware: [realtimeMiddleware()],
   });
 
   it('should auto-register workflow when added to Mastra via config', () => {

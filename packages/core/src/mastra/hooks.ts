@@ -1,4 +1,3 @@
-import pMap from 'p-map';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
 import type { ScoringHookInput } from '../evals/types';
@@ -87,33 +86,10 @@ export function createOnScorerHook(mastra: Mastra) {
         },
       };
       // Legacy score-store emission. This path is being deprecated.
+      // ScoreEvent emission already happens inside MastraScorer.run() (see
+      // packages/core/src/evals/base.ts). The hook must not republish or every
+      // exporter would receive the same score twice.
       await validateAndSaveScore(storage, payload);
-
-      if (currentSpan && spanId && traceId) {
-        await pMap(
-          currentSpan.observabilityInstance.getExporters(),
-          async exporter => {
-            if (exporter.addScoreToTrace) {
-              try {
-                await exporter.addScoreToTrace({
-                  traceId: traceId,
-                  spanId: spanId,
-                  score: runResult.score as number,
-                  reason: runResult.reason as string,
-                  scorerName: scorerToUse.scorer.id,
-                  metadata: {
-                    ...(currentSpan.metadata ?? {}),
-                  },
-                });
-              } catch (error) {
-                // Log error but don't fail the hook if exporter fails
-                mastra.getLogger()?.error(`Failed to add score to trace via exporter: ${error}`);
-              }
-            }
-          },
-          { concurrency: 3 },
-        );
-      }
     } catch (error) {
       const mastraError = new MastraError(
         {

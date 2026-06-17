@@ -135,7 +135,7 @@ describe('NestJS Adapter - Server App Access', () => {
 
       const response = await executeExpressRequest(expressApp, {
         method: 'GET',
-        path: '/agents',
+        path: '/api/agents',
       });
       expect(response.status).toBe(200);
       expect(response.body).toBeDefined();
@@ -154,7 +154,7 @@ describe('NestJS Adapter - Server App Access', () => {
 
       const getResponse = await executeExpressRequest(expressApp, {
         method: 'GET',
-        path: '/agents',
+        path: '/api/agents',
       });
       expect(getResponse.status).toBe(200);
       expect(getResponse.body).toBeDefined();

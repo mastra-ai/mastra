@@ -57,8 +57,24 @@ const workspace = new Workspace({
   },
   {
     name: 'sandbox',
-    type: 'WorkspaceSandbox',
-    description: 'Sandbox provider instance (e.g., LocalSandbox)',
+    type: 'WorkspaceSandbox | WorkspaceSandboxResolver',
+    description:
+      'Sandbox provider instance, or a resolver function that receives `requestContext` and returns a sandbox per request. See [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox).',
+    isOptional: true,
+  },
+  {
+    name: 'instructions.dynamicSandbox',
+    type: "'placeholder' | 'resolve' | (({ requestContext }) => string)",
+    description:
+      "Controls how a resolver-backed `sandbox` contributes to workspace instructions. `'placeholder'` (default) emits stable text without calling the resolver. `'resolve'` calls the resolver and uses the sandbox's own instructions. A function returns custom text without resolving. Has no effect on a static sandbox.",
+    isOptional: true,
+    defaultValue: "'placeholder'",
+  },
+  {
+    name: 'sandboxCacheKey',
+    type: '({ requestContext }) => string | undefined',
+    description:
+      'Stable cache key for a resolver-backed `sandbox`. When set, resolved sandboxes are memoized per key instead of per `RequestContext` instance, so background-process tools reach the same sandbox across follow-up requests. Has no effect on a static sandbox.',
     isOptional: true,
   },
   {
@@ -160,6 +176,12 @@ const workspace = new Workspace({
             isOptional: true,
             defaultValue: '2000',
           },
+          {
+            name: 'hooks',
+            type: 'WorkspaceToolHooks',
+            description: 'Hooks that run before and after every enabled workspace tool call. See Tool hooks below.',
+            isOptional: true,
+          },
         ],
       },
     ],
@@ -224,6 +246,49 @@ const workspace = new Workspace({
 
 Tool names must be unique across all workspace tools. Setting a custom name that conflicts with another tool's default or custom name throws an error.
 
+### Tool hooks
+
+Set `tools.hooks` to run logic before and after every enabled workspace tool call. Hooks run after name remapping, so the context includes both the exposed `toolName` and the original `workspaceToolName`.
+
+```typescript {6-14}
+import { Workspace } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  id: 'my-workspace',
+  tools: {
+    hooks: {
+      beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+        console.log(`Running ${toolName} (${workspaceToolName})`, input)
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error })
+      },
+    },
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'beforeToolCall',
+    type: '(context: WorkspaceToolHookContext) => void | WorkspaceToolBeforeHookResult | Promise<void | WorkspaceToolBeforeHookResult>',
+    isOptional: true,
+    description:
+      'Runs before a workspace tool executes. Receives `{ toolName, workspaceToolName, input, context }`. Return `{ proceed: false, output }` to skip the tool call and use `output` as its result.',
+  },
+  {
+    name: 'afterToolCall',
+    type: '(context: WorkspaceToolAfterHookContext) => void | Promise<void>',
+    isOptional: true,
+    description:
+      'Runs after a workspace tool executes. Receives `{ toolName, workspaceToolName, input, context, output, error }`. `output` is undefined when the tool throws, and `error` is set instead.',
+  },
+]}
+/>
+
+If the owning agent also defines [tool hooks](/reference/agents/agent#tool-hooks), workspace hooks run inside the agent hook wrapper: agent `beforeToolCall` runs first, then workspace `beforeToolCall`, then the tool, then workspace `afterToolCall`, then agent `afterToolCall`.
+
 ## Properties
 
 <PropertiesTable
@@ -252,7 +317,8 @@ Tool names must be unique across all workspace tools. Setting a custom name that
   {
     name: 'sandbox',
     type: 'WorkspaceSandbox | undefined',
-    description: 'The sandbox provider',
+    description:
+      'The static sandbox provider. Returns `undefined` when a resolver function is configured — use `hasSandboxConfig()` to check availability.',
   },
   {
     name: 'skills',
@@ -309,6 +375,12 @@ Destroy the workspace and clean up resources.
 await workspace.destroy()
 ```
 
+`destroy()` closes workspace-owned resources in order: language servers, browsers, sandbox providers, and filesystem providers. It also clears cached sandbox references.
+
+Call `destroy()` when your application is done with a workspace. `mastra.shutdown()` calls it for registered workspaces during shutdown. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
+
+`LocalFilesystem.destroy()` doesn't delete files on disk. Resolver-backed filesystem and sandbox providers are owned by your application and must be cleaned up by your application.
+
 ### Search operations
 
 #### `index(path, content, options?)`
@@ -341,6 +413,39 @@ const info = await workspace.getInfo()
 // { id, name, status, createdAt, lastAccessedAt, filesystem?, sandbox? }
 ```
 
+Pass `resolveDynamicProviders: false` to report resolver-backed providers as dynamic without invoking their resolver.
+
+```typescript
+const info = await workspace.getInfo({ resolveDynamicProviders: false })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options.includeFileCount',
+    type: 'boolean',
+    description: 'Whether to count total files. This can be slow for large workspaces.',
+    isOptional: true,
+  },
+  {
+    name: 'options.requestContext',
+    type: 'RequestContext',
+    description: 'Passed to dynamic provider resolvers when `resolveDynamicProviders` is enabled.',
+    isOptional: true,
+  },
+  {
+    name: 'options.resolveDynamicProviders',
+    type: 'boolean',
+    description:
+      'Whether to invoke dynamic provider resolvers. Set to `false` when you only need metadata and want resolver-backed providers reported as `dynamic`.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+]}
+/>
+
 #### `getInstructions(opts?)`
 
 Returns combined instructions from the filesystem and sandbox providers. Injected into the agent's system message to help it understand the execution context.
@@ -370,6 +475,30 @@ const instructions = workspace.getInstructions({ requestContext })
 />
 
 **Returns:** `string`
+
+#### `getInstructionsAsync(opts?)`
+
+Returns combined workspace instructions. Use this when the workspace uses resolver-backed providers. A dynamic filesystem is resolved per request; a dynamic sandbox contributes stable placeholder text unless `instructions.dynamicSandbox` is set to `'resolve'`.
+
+```typescript
+const instructions = await workspace.getInstructionsAsync({ requestContext })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'opts.requestContext',
+    type: 'RequestContext',
+    description:
+      "Passed to the dynamic filesystem resolver, and to the dynamic sandbox resolver when `instructions.dynamicSandbox` is `'resolve'`.",
+    isOptional: true,
+  },
+]}
+/>
+
+**Returns:** `Promise<string>`
 
 To override the default output, pass an `instructions` option to [LocalFilesystem](/reference/workspace/local-filesystem#constructor-parameters) or [LocalSandbox](/reference/workspace/local-sandbox#constructor-parameters).
 
@@ -452,6 +581,73 @@ const fs = await workspace.resolveFilesystem({ requestContext: ctx })
 
 **Returns:** `Promise<WorkspaceFilesystem | undefined>`
 
+### Dynamic sandbox
+
+#### `hasSandboxConfig()`
+
+Check whether a sandbox is configured, either as a static instance or a resolver function. Use this instead of checking `workspace.sandbox` directly, because a resolver-based workspace returns `undefined` from the `sandbox` property.
+
+```typescript
+if (workspace.hasSandboxConfig()) {
+  // Sandbox tools are available
+}
+```
+
+**Returns:** `boolean`
+
+#### `resolveSandbox({ requestContext })`
+
+Resolve the sandbox for a given request context. When a resolver function is configured, calls it with the provided `requestContext`. When a static sandbox is configured, returns it directly. Returns `undefined` if no sandbox is configured.
+
+```typescript
+import { RequestContext } from '@mastra/core/request-context'
+
+const ctx = new RequestContext([['user-id', 'alice']])
+const sandbox = await workspace.resolveSandbox({ requestContext: ctx })
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'The request context to pass to the resolver function.',
+  },
+]}
+/>
+
+**Returns:** `Promise<WorkspaceSandbox | undefined>`
+
+#### `clearSandboxCache(cacheKey?)`
+
+Clear resolver-backed sandboxes cached by `sandboxCacheKey`. Pass a cache key to clear one entry, or omit it to clear all keyed sandbox entries.
+
+This method doesn't clear the per-`RequestContext` weak cache. Those entries are garbage-collection managed.
+
+The workspace doesn't own resolver-returned sandboxes. This method only drops workspace references. Destroy the sandbox in your own lifecycle code.
+
+```typescript
+workspace.clearSandboxCache('thread-123')
+workspace.clearSandboxCache()
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cacheKey',
+    type: 'string',
+    description: 'The cache key to clear. Omit this value to clear all keyed sandbox entries.',
+    isOptional: true,
+  },
+]}
+/>
+
+**Returns:** `void`
+
 ## Agent tools
 
 A workspace provides tools to agents based on what's configured.
@@ -462,7 +658,7 @@ Added when a filesystem is configured:
 
 | Tool | Description |
 | - | - |
-| `mastra_workspace_read_file` | Read file contents. Supports optional line range for reading specific portions of large files. |
+| `mastra_workspace_read_file` | Read file contents. Text files return as text (with optional line range). Images and PDFs return as native media parts the model can view directly. Other binaries return metadata only unless an explicit `encoding` is passed. |
 | `mastra_workspace_write_file` | Create or overwrite a file with new content. Creates parent directories automatically. |
 | `mastra_workspace_edit_file` | Edit an existing file by finding and replacing text. Useful for targeted changes without rewriting the entire file. |
 | `mastra_workspace_list_files` | List directory contents as a tree structure. Supports recursive listing with depth limits, glob patterns, and `.gitignore` filtering (enabled by default). |
@@ -473,6 +669,43 @@ Added when a filesystem is configured:
 
 With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem), write tools are always included and read-only is enforced at runtime.
 
+The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control which mime types are surfaced to the model as native media parts and how large those files can be:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'mediaTypes',
+    type: 'string[] | ((mimeType: string) => boolean) | false',
+    description:
+      "Which mime types to surface to the model as media parts (file/image parts) rather than as text. Accepts an array of globs (e.g. `['image/*']`), a custom predicate function, or `false` to disable media detection. Defaults to the cross-provider-safe intersection of image formats plus PDF. Only applies when the caller doesn't pass an explicit `encoding`.",
+    isOptional: true,
+    defaultValue: "['image/png', 'image/jpeg', 'image/webp', 'application/pdf']",
+  },
+  {
+    name: 'maxMediaBytes',
+    type: 'number',
+    description:
+      'Maximum file size (in bytes) to inline as a media part. Files larger than this fall back to metadata-only output rather than being fully base64-encoded into context and persisted in storage on rehydration.',
+    isOptional: true,
+    defaultValue: '10 * 1024 * 1024 (10 MiB)',
+  },
+]}
+/>
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+      // Broaden to any image (including SVG, BMP, HEIC) — may fail on some providers
+      mediaTypes: ['image/*'],
+      // Raise the inline-media cap to 25 MiB
+      maxMediaBytes: 25 * 1024 * 1024,
+    },
+  },
+})
+```
+
 ### Sandbox tools
 
 Added when a sandbox is configured:
@@ -482,6 +715,8 @@ Added when a sandbox is configured:
 | `mastra_workspace_execute_command` | Execute a shell command. Returns stdout, stderr, and exit code. When the sandbox has a process manager, accepts `background: true` to spawn a long-running process and return a PID. |
 | `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
 | `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
+
+With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
 
 The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
 

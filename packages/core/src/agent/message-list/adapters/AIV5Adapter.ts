@@ -1,9 +1,15 @@
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
-import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
+import type {
+  MastraDBMessage,
+  MastraMessageContentV2,
+  MastraMessagePart,
+  MastraToolInvocationPart,
+  MessageSource,
+} from '../state/types';
 import type { AIV5Type } from '../types';
 import { sanitizeToolName } from '../utils/tool-name';
 
@@ -23,6 +29,70 @@ function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
     }
     return true;
   });
+}
+
+function getSignalType(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const type = (signal as Record<string, unknown>).type;
+    return typeof type === 'string' ? type : message.type;
+  }
+
+  return message.type;
+}
+
+function getSignalTagName(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const tagName = (signal as Record<string, unknown>).tagName;
+    if (typeof tagName === 'string') return tagName;
+  }
+
+  const type = getSignalType(message);
+  if (type === 'user') return 'user';
+  if (type === 'reactive') return message.type;
+  return type;
+}
+
+function isUserSignalType(type: string | undefined): boolean {
+  return type === 'user' || type === 'user-message';
+}
+
+function getTextContent(message: MastraDBMessage): string {
+  return typeof message.content.content === 'string'
+    ? message.content.content
+    : (message.content.parts.find(part => part.type === 'text')?.text ?? '');
+}
+
+function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UIDataTypes> {
+  const signal =
+    message.content.metadata?.signal && typeof message.content.metadata.signal === 'object'
+      ? (message.content.metadata.signal as Record<string, unknown>)
+      : {};
+  const metadata =
+    signal.metadata && typeof signal.metadata === 'object' && !Array.isArray(signal.metadata)
+      ? (signal.metadata as Record<string, unknown>)
+      : {};
+  const attributes =
+    signal.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
+      ? (signal.attributes as Record<string, unknown>)
+      : {};
+
+  const type = getSignalType(message) ?? 'signal';
+  const tagName = getSignalTagName(message) ?? type;
+  return {
+    type: type === 'user' ? 'data-user-message' : 'data-signal',
+    data: {
+      id: typeof signal.id === 'string' ? signal.id : message.id,
+      type,
+      tagName,
+      contents: 'contents' in signal ? signal.contents : getTextContent(message),
+      createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
+      ...(typeof signal.acceptedAt === 'string' ? { acceptedAt: signal.acceptedAt } : {}),
+      ...(Object.keys(attributes).length ? { attributes } : {}),
+      ...(Object.keys(metadata).length ? { metadata } : {}),
+    },
+  } as AIV5Type.DataUIPart<AIV5.UIDataTypes>;
 }
 
 /**
@@ -82,6 +152,53 @@ function getMastraCreatedAt(providerMetadata?: AIV5Type.ProviderMetadata): numbe
   return typeof createdAt === 'number' ? createdAt : undefined;
 }
 
+function getDisplayTransform(
+  providerMetadata: unknown,
+  phase: 'input-available' | 'output-available' | 'error' | 'approval' | 'suspend',
+  fallback: unknown,
+  enabled = true,
+) {
+  if (!enabled) {
+    return fallback;
+  }
+  const transform = getTransformedToolPayload(providerMetadata, 'display', phase);
+  return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
+}
+
+function transformToolStateDataForDisplay(data: unknown, phase: 'approval' | 'suspend', enabled = true): unknown {
+  if (!enabled) {
+    return data;
+  }
+  if (!data || typeof data !== 'object') {
+    return data;
+  }
+
+  const stateData = data as Record<string, unknown>;
+  const metadata = stateData.metadata ?? stateData.providerMetadata;
+  const argsTransform = getTransformedToolPayload(metadata, 'display', phase);
+  const inputTransform = getTransformedToolPayload(metadata, 'display', 'input-available');
+  const transformedArgs =
+    phase === 'approval'
+      ? hasTransformedToolPayload(argsTransform)
+        ? argsTransform.transformed
+        : hasTransformedToolPayload(inputTransform)
+          ? inputTransform.transformed
+          : undefined
+      : hasTransformedToolPayload(inputTransform)
+        ? inputTransform.transformed
+        : hasTransformedToolPayload(argsTransform)
+          ? argsTransform.transformed
+          : undefined;
+  const transformedSuspendPayload =
+    phase === 'suspend' && hasTransformedToolPayload(argsTransform) ? argsTransform.transformed : undefined;
+
+  return {
+    ...stateData,
+    ...(transformedArgs !== undefined ? { args: transformedArgs } : {}),
+    ...(transformedSuspendPayload !== undefined ? { suspendPayload: transformedSuspendPayload } : {}),
+  };
+}
+
 export interface AIV5AdapterContext {
   memoryInfo: { threadId?: string; resourceId?: string } | null;
   newMessageId?(): string;
@@ -97,9 +214,16 @@ export class AIV5Adapter {
   /**
    * Direct conversion from MastraDBMessage to AIV5 UIMessage
    */
-  static toUIMessage(dbMsg: MastraDBMessage): AIV5Type.UIMessage {
+  static toUIMessage(dbMsg: MastraDBMessage, options?: { transformToolPayloads?: boolean }): AIV5Type.UIMessage {
+    const signalType = dbMsg.role === 'signal' ? getSignalType(dbMsg) : undefined;
+    const isUserMessageSignal = isUserSignalType(signalType);
+    const transformToolPayloads = options?.transformToolPayloads ?? true;
     const parts: AIV5Type.UIMessage['parts'] = [];
     const metadata: Record<string, unknown> = { ...(dbMsg.content.metadata || {}) };
+
+    if (dbMsg.role === 'signal' && !isUserMessageSignal) {
+      parts.push(toSignalDataPart(dbMsg));
+    }
 
     // Add Mastra-specific metadata
     if (dbMsg.createdAt) metadata.createdAt = dbMsg.createdAt;
@@ -109,6 +233,15 @@ export class AIV5Adapter {
     // Preserve message-level providerMetadata in metadata so it survives UI → Model conversion
     if (dbMsg.content.providerMetadata) {
       metadata.providerMetadata = dbMsg.content.providerMetadata;
+    }
+
+    if (dbMsg.role === 'signal' && !isUserMessageSignal) {
+      return {
+        id: dbMsg.id,
+        role: 'system',
+        metadata,
+        parts,
+      };
     }
 
     // 1. Handle tool invocations (only if not already in parts array)
@@ -171,9 +304,29 @@ export class AIV5Adapter {
             parts.push({
               type: `tool-${inv.toolName}`,
               toolCallId: inv.toolCallId,
-              input: inv.args,
-              output: inv.result,
+              input: getDisplayTransform(part.providerMetadata, 'input-available', inv.args, transformToolPayloads),
+              output: getDisplayTransform(
+                part.providerMetadata,
+                'output-available',
+                getDisplayTransform(part.providerMetadata, 'error', inv.result, transformToolPayloads),
+                transformToolPayloads,
+              ),
               state: 'output-available',
+              callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
+            } satisfies AIV5Type.ToolUIPart);
+          } else if (inv.state === 'output-error') {
+            parts.push({
+              type: `tool-${inv.toolName}`,
+              toolCallId: inv.toolCallId,
+              input: getDisplayTransform(part.providerMetadata, 'input-available', inv.args, transformToolPayloads),
+              errorText: getDisplayTransform(
+                part.providerMetadata,
+                'error',
+                inv.errorText || '',
+                transformToolPayloads,
+              ) as string,
+              state: 'output-error',
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
               providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
@@ -181,7 +334,7 @@ export class AIV5Adapter {
             parts.push({
               type: `tool-${inv.toolName}`,
               toolCallId: inv.toolCallId,
-              input: inv.args,
+              input: getDisplayTransform(part.providerMetadata, 'input-available', inv.args, transformToolPayloads),
               state: 'input-available',
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
               providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
@@ -292,6 +445,15 @@ export class AIV5Adapter {
           v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
           parts.push(v5UIPart);
           hasNonToolReasoningParts = true;
+        } else if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+          parts.push({
+            ...part,
+            data: transformToolStateDataForDisplay(
+              part.data,
+              part.type === 'data-tool-call-suspended' ? 'suspend' : 'approval',
+              transformToolPayloads,
+            ),
+          });
         } else {
           // Other parts (step-start, etc.) can be pushed as-is
           parts.push(part);
@@ -345,7 +507,7 @@ export class AIV5Adapter {
 
         insertToolStateDataPart(toolCallId, {
           type: 'data-tool-call-suspended',
-          data: suspendedTool,
+          data: transformToolStateDataForDisplay(suspendedTool, 'suspend', transformToolPayloads),
         } as AIV5Type.DataUIPart<AIV5.UIDataTypes>);
         existingToolStateDataPartIds.add(toolCallId);
       }
@@ -365,7 +527,7 @@ export class AIV5Adapter {
 
         insertToolStateDataPart(toolCallId, {
           type: 'data-tool-call-approval',
-          data: pendingToolApproval,
+          data: transformToolStateDataForDisplay(pendingToolApproval, 'approval', transformToolPayloads),
         } as AIV5Type.DataUIPart<AIV5.UIDataTypes>);
         existingToolStateDataPartIds.add(toolCallId);
       }
@@ -373,7 +535,7 @@ export class AIV5Adapter {
 
     return {
       id: dbMsg.id,
-      role: dbMsg.role,
+      role: dbMsg.role === 'signal' ? (isUserMessageSignal ? 'user' : 'system') : dbMsg.role,
       metadata,
       parts,
     };
@@ -478,7 +640,7 @@ export class AIV5Adapter {
               },
               providerMetadata: callProviderMetadata,
               createdAt: getMastraCreatedAt(callProviderMetadata),
-            } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata; createdAt?: number };
+            } satisfies MastraToolInvocationPart;
           }
           return {
             type: 'tool-invocation' as const,
@@ -490,7 +652,7 @@ export class AIV5Adapter {
             },
             providerMetadata: callProviderMetadata,
             createdAt: getMastraCreatedAt(callProviderMetadata),
-          } satisfies ToolInvocationUIPart & { providerMetadata?: AIV5Type.ProviderMetadata; createdAt?: number };
+          } satisfies MastraToolInvocationPart;
         }
 
         if (p.type === 'reasoning') {

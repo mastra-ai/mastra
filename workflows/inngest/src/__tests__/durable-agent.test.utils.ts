@@ -11,8 +11,8 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
-import { realtimeMiddleware } from '@inngest/realtime/middleware';
 import { Mastra } from '@mastra/core/mastra';
+import type { ApiRoute } from '@mastra/core/server';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { Inngest } from 'inngest';
@@ -32,6 +32,9 @@ let sharedMastra: Mastra | null = null;
 let sharedServer: ServerType | null = null;
 let inngestDevServer: ChildProcess | null = null;
 
+type ApiRouteCreateHandler = Extract<ApiRoute, { createHandler: unknown }>['createHandler'];
+type ApiRouteHandler = Awaited<ReturnType<ApiRouteCreateHandler>>;
+
 /**
  * Generate unique test ID to isolate each test.
  * Uses a short UUID for readability in logs.
@@ -49,7 +52,6 @@ export function getSharedInngest(): Inngest {
     sharedInngest = new Inngest({
       id: 'durable-agent-tests',
       baseUrl: `http://localhost:${INNGEST_PORT}`,
-      middleware: [realtimeMiddleware()],
     });
   }
   return sharedInngest;
@@ -198,7 +200,7 @@ export async function setupSharedTestInfrastructure(): Promise<void> {
         {
           path: '/inngest/api',
           method: 'ALL',
-          createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+          createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }) as unknown as ApiRouteHandler,
         },
       ],
     },

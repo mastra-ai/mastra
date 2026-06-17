@@ -1,0 +1,99 @@
+---
+title: "Reference: UnixSocketPubSub | PubSub"
+description: API reference for UnixSocketPubSub, the Unix socket pub/sub implementation for cross-process delivery on one host.
+packages:
+  - "@mastra/core"
+---
+
+# UnixSocketPubSub
+
+`UnixSocketPubSub` is a [`PubSub`](/reference/pubsub/base) implementation that delivers events across processes on a single host using a Unix domain socket. It elects one process as a broker, and other processes connect to it as clients. If the broker exits, the remaining clients elect a new broker automatically.
+
+Use it when several local processes need to share a stream, such as coordinating thread streams across the Mastra Code terminal interface. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For distributed delivery across hosts, use [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
+
+`UnixSocketPubSub` is a push transport: events arrive without a read loop, so Mastra doesn't run a pull worker for it.
+
+## Usage example
+
+Pass a socket path that every participating process shares.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { UnixSocketPubSub } from '@mastra/core/events'
+
+export const mastra = new Mastra({
+  pubsub: new UnixSocketPubSub('/tmp/mastra/events.sock'),
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'socketPath',
+    type: 'string',
+    description: 'Path to the Unix domain socket. All processes that share a stream must use the same path.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'UnixSocketPubSubOptions',
+    description: 'Optional configuration.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'maxRemoteClientQueuedBytes',
+        type: 'number',
+        description:
+          'Maximum bytes buffered for a slow remote client before its frames are dropped, which keeps one stuck subscriber from blocking others.',
+        isOptional: true,
+        defaultValue: '67108864',
+      },
+    ],
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'socketPath',
+    type: 'string',
+    description: 'The socket path passed to the constructor.',
+  },
+  {
+    name: 'supportedModes',
+    type: 'ReadonlyArray<"pull" | "push">',
+    description: 'Returns `["push"]`.',
+  },
+  {
+    name: 'isBroker',
+    type: 'boolean',
+    description: 'Whether this instance currently acts as the broker.',
+  },
+  {
+    name: 'remoteClientCount',
+    type: 'number',
+    description: 'Number of remote clients connected to this broker. Always 0 when this instance is not the broker.',
+  },
+]}
+/>
+
+## Methods
+
+`UnixSocketPubSub` implements the [`PubSub`](/reference/pubsub/base) contract. The method below is specific to this implementation.
+
+### `close()`
+
+Closes the socket connection and, when this instance is the broker, releases the broker role. Call this during graceful shutdown.
+
+```typescript
+await pubsub.close()
+```
+
+## Broker election
+
+The first process to bind the socket becomes the broker and routes events between all connected clients. Other processes connect as clients. When the broker exits, an exclusive lock file serializes the next election so exactly one client becomes the new broker, and the remaining clients resubscribe to it. This avoids a split-brain state where two processes both act as broker.

@@ -38,6 +38,9 @@ const packageManagerCommands: Record<PackageManager, string> = {
   bun: 'bun add',
 };
 
+const versionBadgeClassName =
+  'inline-flex h-[1.375rem] items-center rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs font-semibold leading-none tracking-normal text-black/80 tabular-nums whitespace-nowrap dark:text-neutral6';
+
 export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => {
   const { data, isLoading: isLoadingPackages } = useMastraPackages();
   const installedPackages = data?.packages ?? [];
@@ -63,8 +66,8 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   if (isLoadingPackages) {
     return (
-      <div className="px-3 py-2">
-        <div className="animate-pulse h-4 bg-surface2 rounded w-16"></div>
+      <div className="flex items-center justify-end gap-2 px-3 h-9">
+        <div className="animate-pulse h-[1.125rem] w-20 bg-surface4 rounded-full" />
       </div>
     );
   }
@@ -81,25 +84,25 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   return (
     <Dialog>
-      <DialogTrigger asChild>
-        <button className="px-3 py-2 hover:bg-surface2 transition-colors rounded w-full text-left">
-          <div className="flex items-center gap-1.5">
-            <Txt as="span" variant="ui-sm" className="text-accent1 font-mono">
-              mastra version:
-            </Txt>
-          </div>
-          <div className="flex items-center gap-2">
-            <Txt as="span" variant="ui-sm" className="text-neutral3 font-mono">
-              {mainVersion}
-            </Txt>
-            {isLoadingUpdates && <Spinner className="w-3 h-3" color="currentColor" />}
-            <span className="flex items-center -space-x-1.5">
-              {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
-              {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
+      <div className="flex px-3 py-1.5">
+        <DialogTrigger asChild>
+          <button
+            type="button"
+            className="flex rounded-lg p-1 hover:bg-sidebar-nav-hover transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring"
+          >
+            <span className="relative inline-flex">
+              {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
+                <span className="absolute -right-1.5 -top-1.5 flex items-center gap-1">
+                  {isLoadingUpdates && <Spinner className="size-3 text-neutral3" />}
+                  {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
+                  {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
+                </span>
+              )}
+              <span className={versionBadgeClassName}>v{mainVersion}</span>
             </span>
-          </div>
-        </button>
-      </DialogTrigger>
+          </button>
+        </DialogTrigger>
+      </div>
       <PackagesModalContent
         packages={packageUpdates}
         isLoadingUpdates={isLoadingUpdates}

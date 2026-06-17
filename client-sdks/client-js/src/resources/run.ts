@@ -360,6 +360,43 @@ export class Run extends BaseResource {
   }
 
   /**
+   * Resumes a suspended workflow step without waiting for the workflow to complete (fire-and-forget)
+   * and returns immediately with the runId. The workflow continues executing in the background.
+   *
+   * Use this when you want to dispatch a resume and return immediately (e.g. an HTTP handler that
+   * never needs the resolved result inline). For Inngest-backed workflows this also avoids the
+   * `getRunOutput()` polling race that `resumeAsync()` can hit.
+   *
+   * TODO(v2): in Mastra v2 this fire-and-forget behavior should become the behavior of
+   * `resumeAsync()` (to mirror `start`/`resume` fire-and-forget semantics), and this method
+   * should be removed. Kept as a separate method in v1 to avoid a breaking contract change.
+   *
+   * @param params - Object containing the step, resumeData and requestContext
+   * @returns Promise containing the runId of the resumed workflow run
+   */
+  resumeNoWait(params: {
+    step?: string | string[];
+    resumeData?: Record<string, any>;
+    requestContext?: RequestContext | Record<string, any>;
+    tracingOptions?: TracingOptions;
+    perStep?: boolean;
+    forEachIndex?: number;
+  }): Promise<{ runId: string }> {
+    const requestContext = parseClientRequestContext(params.requestContext);
+    return this.request<{ runId: string }>(`/workflows/${this.workflowId}/resume-no-wait?runId=${this.runId}`, {
+      method: 'POST',
+      body: {
+        step: params.step,
+        resumeData: params.resumeData,
+        requestContext,
+        tracingOptions: params.tracingOptions,
+        perStep: params.perStep,
+        forEachIndex: params.forEachIndex,
+      },
+    });
+  }
+
+  /**
    * Resumes a suspended workflow step that uses stream asynchronously and returns a promise that resolves when the workflow is complete
    * @param params - Object containing the step, resumeData and requestContext
    * @returns Promise containing the workflow resume results

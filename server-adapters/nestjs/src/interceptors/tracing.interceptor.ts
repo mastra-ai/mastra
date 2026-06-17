@@ -78,7 +78,7 @@ export class TracingInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
     const routePath = getMastraRoutePath(request.path, this.options.prefix);
-    const matchResult = this.routeHandler.matchRoute(request.method.toUpperCase(), routePath);
+    const matchResult = routePath ? this.routeHandler.matchRoute(request.method.toUpperCase(), routePath) : null;
     const routeTemplate = matchResult?.route.path ?? request.route?.path ?? request.path;
 
     const span = tracer.startSpan(`HTTP ${request.method} ${routeTemplate}`, {

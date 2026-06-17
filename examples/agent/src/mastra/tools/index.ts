@@ -303,6 +303,13 @@ export const deleteSubscription = createTool({
  * This is a heavier call that returns description, market data, links, categories, etc.
  * Configured with `background: { enabled: true }` so the agent dispatches it
  * to run asynchronously while continuing the conversation.
+ *
+ * Suspends on first invocation and waits for an analyst's approval before
+ * making the network call. Resume with:
+ *   mastra.backgroundTaskManager?.resume(taskId, { approved: true, coinId? });
+ *
+ * Pass `approved: false` (or any non-truthy `approved`) to decline the
+ * request — the tool throws and the background task fails.
  */
 export const cryptoResearchTool = createTool({
   id: 'crypto-research',
@@ -338,9 +345,37 @@ export const cryptoResearchTool = createTool({
     homepage: z.string().nullable(),
     subreddit: z.string().nullable(),
   }),
-  execute: async ({ coinId }) => {
+  resumeSchema: z.object({
+    approved: z.boolean(),
+    coinId: z.string().optional(),
+  }),
+  execute: async ({ coinId }, context) => {
     await new Promise(resolve => setTimeout(resolve, 30000));
-    const url = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(coinId)}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
+    const { suspend, resumeData } = context.agent ?? {};
+    if (!resumeData) {
+      // First invocation — pause IMMEDIATELY until an analyst approves
+      // the research run. Suspend has to fire before any latency so the
+      // wrapping `streamUntilIdle` / `resumeStreamUntilIdle` window picks
+      // up the `background-task-suspended` lifecycle event in time. The
+      // bg-task workflow persists `status: 'suspended'` + `suspendPayload`
+      // and the task is resumed with
+      // `mastra.backgroundTaskManager?.resume(taskId, { approved: true })`.
+      return suspend?.({
+        awaiting: 'analyst-approval',
+        coinId,
+        message: `Approve deep research on "${coinId}"? Optionally pass a different coinId on resume.`,
+      });
+    }
+
+    if (resumeData.approved !== true) {
+      throw new Error(`Research on "${coinId}" was declined by the analyst.`);
+    }
+
+    // Simulate the long-running research call after approval lands.
+    await new Promise(resolve => setTimeout(resolve, 30000));
+
+    const finalCoinId = resumeData.coinId ?? coinId;
+    const url = `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(finalCoinId)}?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false`;
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -350,10 +385,8 @@ export const cryptoResearchTool = createTool({
     const data = await response.json();
     const market = data.market_data || {};
 
-    // await new Promise(resolve => setTimeout(resolve, 15000));
-
     return {
-      name: data.name || coinId,
+      name: data.name || finalCoinId,
       symbol: (data.symbol || '').toUpperCase(),
       description: (data.description?.en || 'No description available.').slice(0, 1000),
       marketCapRank: data.market_cap_rank ?? null,

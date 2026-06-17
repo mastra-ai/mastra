@@ -205,6 +205,20 @@ describe('LocalSandbox', () => {
       expect(result.exitCode).not.toBe(0);
     });
 
+    it('should decode UTF-8 characters split across stdout chunks', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+      const script = [
+        'const b = Buffer.from([0xf0, 0x9f, 0x99, 0x82]);',
+        'process.stdout.write(b.subarray(0, 2));',
+        'setTimeout(() => process.stdout.write(b.subarray(2)), 10);',
+      ].join('');
+
+      const result = await sandbox.executeCommand('node', ['-e', script]);
+
+      expect(result.success).toBe(true);
+      expect(Buffer.from(result.stdout, 'utf8')).toEqual(Buffer.from([0xf0, 0x9f, 0x99, 0x82]));
+    });
+
     it('should use working directory', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
       // Create a file in tempDir

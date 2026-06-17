@@ -14,6 +14,7 @@
 import { test, expect } from '@playwright/test';
 import { setupAdminAuth, setupMockAuth, MOCK_USERS } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Admin Role', () => {
   test.afterEach(async () => {
@@ -26,7 +27,7 @@ test.describe('Admin Role', () => {
       await page.goto('/agents');
 
       // Wait for page to load
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Verify all main navigation links are visible
       await expect(page.getByRole('link', { name: /^Agents$/i })).toBeVisible();
@@ -40,16 +41,16 @@ test.describe('Admin Role', () => {
 
       // Navigate through all main sections
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       await page.goto('/workflows');
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       await page.goto('/tools');
-      await expect(page.locator('h1')).toHaveText('Tools');
+      await expectCurrentBreadcrumb(page, 'Tools');
 
       await page.goto('/mcps');
-      await expect(page.locator('h1')).toHaveText('MCP Servers');
+      await expectCurrentBreadcrumb(page, 'MCP Servers');
     });
   });
 
@@ -59,7 +60,7 @@ test.describe('Admin Role', () => {
       await page.goto('/agents');
 
       // Should see the agents page
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Should see at least the weather-agent in the list
       await expect(page.getByText('Weather Agent')).toBeVisible();
@@ -109,10 +110,10 @@ test.describe('Admin Role', () => {
       await page.goto('/workflows');
 
       // Should see the workflows page
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page.locator('.entity-list-row').filter({ hasText: /workflow/i });
+      const workflowRow = page.locator('.data-list-row').filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 
@@ -122,7 +123,7 @@ test.describe('Admin Role', () => {
 
       // Click on a workflow
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /workflow/i })
         .first()
         .click();
@@ -164,10 +165,10 @@ test.describe('Admin Role', () => {
       await page.goto('/tools');
 
       // Should see the tools page
-      await expect(page.locator('h1')).toHaveText('Tools');
+      await expectCurrentBreadcrumb(page, 'Tools');
 
       // Should see tools in the list
-      const toolRow = page.locator('.entity-list-row').filter({ hasText: /weatherInfo|simpleMcpTool/i });
+      const toolRow = page.locator('.data-list-row').filter({ hasText: /weatherInfo|simpleMcpTool/i });
       await expect(toolRow.first()).toBeVisible();
     });
 
@@ -177,7 +178,7 @@ test.describe('Admin Role', () => {
 
       // Click on weatherInfo tool
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /weatherInfo/i })
         .click();
 
@@ -211,7 +212,7 @@ test.describe('Admin Role', () => {
       await page.goto('/mcps');
 
       // Should see the MCP servers page
-      await expect(page.locator('h1')).toHaveText('MCP Servers');
+      await expectCurrentBreadcrumb(page, 'MCP Servers');
     });
 
     test('admin can access MCP server configuration', async ({ page }) => {
@@ -234,15 +235,15 @@ test.describe('Admin Role', () => {
       });
 
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Navigate to workflows - should work
       await page.goto('/workflows');
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Navigate to tools - should work
       await page.goto('/tools');
-      await expect(page.locator('h1')).toHaveText('Tools');
+      await expectCurrentBreadcrumb(page, 'Tools');
     });
 
     test('admin sees correct user info', async ({ page }) => {
@@ -250,7 +251,7 @@ test.describe('Admin Role', () => {
       await page.goto('/agents');
 
       // User info might not be displayed in all views, so we just verify the page loads
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('admin can access all protected routes without redirect', async ({ page }) => {

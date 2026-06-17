@@ -1,11 +1,14 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
+import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
+import type { ApplyStateSignalResult } from '../agent/state-signals';
 import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
@@ -56,6 +59,22 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
   /**
+   * Add a signal to the message list, rotate the response message id when supported,
+   * and emit the signal as a data-* stream part when a writer is available.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  sendSignal?: (signal: AgentSignalInput) => Promise<CreatedAgentSignal>;
+  /**
+   * Add a named state signal to the message list, stream it when possible, and update
+   * thread-level state tracking metadata.
+   *
+   * @experimental Agent state signals are experimental and may change in a future release.
+   */
+  sendStateSignal?: (
+    signal: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
+  ) => Promise<CreatedAgentSignal | ApplyStateSignalResult>;
+  /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
    */
@@ -85,7 +104,8 @@ export interface ProcessorMessageContext<TTripwireMetadata = unknown> extends Pr
 }
 
 /**
- * Return type for processInput that includes modified system messages
+ * Return type for processInput that includes modified untagged system messages.
+ * Tagged system messages owned by other processors are preserved.
  */
 export interface ProcessInputResultWithSystemMessages {
   messages: MastraDBMessage[];
@@ -108,7 +128,7 @@ export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputR
  * Arguments for processInput method
  */
 export interface ProcessInputArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
-  /** All system messages (agent instructions, user-provided, memory) for read/modify access */
+  /** Untagged system messages for read/modify access. Tagged processor-owned messages remain on messageList. */
   systemMessages: CoreMessageV4[];
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
@@ -157,7 +177,7 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   /** Mark the current assistant response message ID as complete and rotate to a fresh one, when supported by the caller */
   rotateResponseMessageId?: () => string;
 
-  /** All system messages (agent instructions, user-provided, memory) for read/modify access */
+  /** Untagged system messages for read/modify access. Tagged processor-owned messages remain on messageList. */
   systemMessages: CoreMessageV4[];
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
@@ -193,6 +213,9 @@ export type RunProcessInputStepArgs = Omit<
   messageId?: string;
   rotateResponseMessageId?: () => string;
   retryCount?: number;
+  memory?: MastraMemory;
+  resourceId?: string;
+  threadId?: string;
 };
 
 /**
@@ -212,7 +235,10 @@ export type ProcessInputStepResult = {
 
   messages?: MastraDBMessage[];
   messageList?: MessageList;
-  /** Replace all system messages with these */
+  /**
+   * Replace untagged system messages with these while preserving tagged system messages
+   * owned by other processors.
+   */
   systemMessages?: CoreMessageV4[];
   providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
@@ -229,6 +255,202 @@ export type ProcessInputStepResult = {
 };
 
 export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & { model?: MastraLanguageModel };
+
+/**
+ * Arguments for processLLMRequest method.
+ *
+ * Called *after* `MessageList` has been converted to the LLM-shaped prompt
+ * (`LanguageModelV2Prompt`) and *before* the prompt is forwarded to the
+ * provider. Mutations affect only what is sent to the model on this call —
+ * they are *not* persisted back to the message list, so reasoning,
+ * tool-result formats, etc. can be rewritten transiently without losing data
+ * in memory, UI, or future model swaps.
+ */
+export type ProcessorStateSignal = Omit<AgentStateSignalInput, 'id'> & {
+  id?: string;
+};
+
+export type ProcessorActiveStateSignal = CreatedAgentSignal & {
+  type: 'state';
+  metadata?: Record<string, unknown> & {
+    state?: {
+      id?: string;
+      threadId?: string;
+      cacheKey?: string;
+      version?: number;
+      mode?: 'snapshot' | 'delta';
+    };
+  };
+};
+
+/**
+ * Arguments for computeStateSignal method.
+ *
+ * Called once per model input step after normal per-step input processing and
+ * before the LLM request is finalized. State signals require memory-backed
+ * threads so the runtime can track versions on thread metadata.
+ */
+export interface ComputeStateSignalArgs<
+  TTripwireMetadata = unknown,
+> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** The current step number (0-indexed) */
+  stepNumber: number;
+  /** All completed steps so far. */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+  /** Memory resource id for the active thread. */
+  resourceId: string;
+  /** Memory thread id that scopes this processor's state signal identity. */
+  threadId: string;
+  /** Active state signal copies for this processor/thread currently known to the runtime. */
+  activeStateSignals: ProcessorActiveStateSignal[];
+  /** Facts derived from the active message context window for this processor/thread. */
+  contextWindow: {
+    /** Whether the active message window already contains a snapshot for this processor/thread. */
+    hasSnapshot: boolean;
+  };
+  /** Latest snapshot signal for this processor/thread, resolved from message history when needed. */
+  lastSnapshot?: ProcessorActiveStateSignal;
+  /** Delta signals accepted after the latest snapshot for this processor/thread. */
+  deltasSinceSnapshot: ProcessorActiveStateSignal[];
+  /** Last persisted tracking metadata for this processor/thread. */
+  tracking?: ProcessorStateSignalTracking;
+}
+
+/**
+ * Thread metadata stored under metadata.mastra.stateSignals[stateId].
+ */
+export type ProcessorStateSignalTracking = {
+  currentCacheKey?: string;
+  currentMode?: 'snapshot' | 'delta';
+  version?: number;
+  lastSignalId?: string;
+  lastSnapshotSignalId?: string;
+  updatedAt?: string;
+  activeCopies?: Array<{ id: string; cacheKey?: string; mode?: 'snapshot' | 'delta'; version?: number }>;
+};
+
+export type ComputeStateSignalResult = ProcessorStateSignal | undefined | void;
+
+export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
+  /** The LLM request prompt that will be sent to the provider on this call. Processors may return a modified copy. */
+  prompt: LanguageModelV2Prompt;
+  /** The model the prompt is being sent to. Use to scope provider-specific rewrites. */
+  model: MastraLanguageModel;
+  /** The current step number (0-indexed) within the agentic loop. */
+  stepNumber: number;
+  /** All completed steps so far. */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state that persists across all method calls within this request. */
+  state: Record<string, unknown>;
+}
+
+/**
+ * Result from processLLMRequest method. Returning `undefined` (or `void`)
+ * indicates no changes — the original prompt is forwarded as-is.
+ *
+ * When `response` is set, the agentic loop will skip the model call entirely
+ * and synthesize a stream from the cached chunks. This enables response
+ * caching at the provider boundary: a processor reads from a cache in
+ * `processLLMRequest` and writes to it in `processLLMResponse` after a real
+ * call completes.
+ */
+export type ProcessLLMRequestResult =
+  | {
+      /** The prompt to forward to the provider for this call. */
+      prompt?: LanguageModelV2Prompt;
+      /**
+       * When set, the loop emits these chunks instead of invoking the model.
+       * The cached chunks must be in the same shape `MastraModelOutput`
+       * receives from a live model — typically captured via
+       * `processLLMResponse` on a previous call.
+       */
+      response?: CachedLLMStepResponse;
+    }
+  | undefined
+  | void;
+
+/**
+ * Portable shape used to cache and replay LLM step chunks across runs.
+ *
+ * Only the fields required to rebuild the response are persisted —
+ * per-run metadata such as `runId` and `from` is reattached at replay time
+ * by the loop, so cached values are stable across runs and machines.
+ */
+export interface CachedLLMStepChunk {
+  type: string;
+  payload: unknown;
+}
+
+/**
+ * Cached LLM step response, replayable in place of a live model call.
+ *
+ * Returned from `processLLMRequest` when a cache hit occurs and captured by
+ * `processLLMResponse` after a live call completes so future cache hits can
+ * replay the same response.
+ */
+export interface CachedLLMStepResponse {
+  /**
+   * The chunks produced by the LLM call, in original order. Replayed via a
+   * synthetic `ReadableStream` on cache hit. Stored in stripped form
+   * (`{ type, payload }`); the loop reattaches `runId`/`from` on replay.
+   */
+  chunks: CachedLLMStepChunk[];
+  /** Warnings reported by the language model call (e.g. unsupported settings). */
+  warnings?: LanguageModelV2CallWarning[];
+  /** Provider request body captured for tracing/observability. */
+  request?: unknown;
+  /** Raw provider response captured for tracing/observability. */
+  rawResponse?: unknown;
+}
+
+/**
+ * Arguments for processLLMResponse method.
+ *
+ * Called *after* the LLM step completes (or a cached response is replayed)
+ * and *after* output processors have collected the response chunks. Use this
+ * hook for side effects on the actual response the model produced (or that
+ * was replayed) — typically to write to a response cache.
+ *
+ * The `state` object is shared with `processLLMRequest` for the same request,
+ * so a processor can stash a cache key in `processLLMRequest` and read it
+ * back here to write the response.
+ */
+export interface ProcessLLMResponseArgs<TTripwireMetadata = unknown> extends ProcessorContext<TTripwireMetadata> {
+  /**
+   * Chunks produced by the LLM call (or replayed from cache) for this step.
+   * Stored in stripped form (`{ type, payload }`) so cached values are stable
+   * across runs.
+   */
+  chunks: CachedLLMStepChunk[];
+  /** The model that produced (or would have produced) the response. */
+  model: MastraLanguageModel;
+  /** The current step number (0-indexed). */
+  stepNumber: number;
+  /** All completed steps so far (including this step). */
+  steps: Array<StepResult<any>>;
+  /** Per-processor state shared with `processLLMRequest`. */
+  state: Record<string, unknown>;
+  /** Warnings reported by the language model call. */
+  warnings?: LanguageModelV2CallWarning[];
+  /** Provider request body, when available. */
+  request?: unknown;
+  /** Raw provider response, when available. */
+  rawResponse?: unknown;
+  /**
+   * `true` when this response was replayed from a cache via
+   * `processLLMRequest` returning `{ response }`. Processors that write to a
+   * cache should typically skip writes when this is `true`.
+   */
+  fromCache: boolean;
+}
+
+/**
+ * Result from processLLMResponse method. Returning `undefined` (or `void`)
+ * is the only supported result today; this exists for future extensibility.
+ */
+export type ProcessLLMResponseResult = undefined | void;
 
 /**
  * Arguments for processOutputStream method
@@ -268,7 +490,7 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   text?: string;
   /** Token usage for the current step (input tokens, output tokens, etc.) */
   usage: LanguageModelUsage;
-  /** All system messages */
+  /** Untagged system messages. Tagged processor-owned messages remain on messageList. */
   systemMessages: CoreMessageV4[];
   /** All completed steps so far (including the current step) */
   steps: Array<StepResult<any>>;
@@ -422,6 +644,71 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
     | undefined;
 
   /**
+   * State lane id used for `computeStateSignal` history and tracking. Defaults to the processor id.
+   *
+   * @experimental Agent state signals are experimental and may change in a future release.
+   */
+  stateId?: string;
+
+  /**
+   * Compute this processor's thread-scoped state signal for the current model input step.
+   *
+   * Called after this processor's `processInputStep` hook and before the model request is finalized.
+   * The runtime persists version/cache-key tracking on memory thread metadata keyed by state id.
+   * Returning `undefined` means the state has not changed for this step.
+   *
+   * @experimental Agent state signals are experimental and may change in a future release.
+   */
+  computeStateSignal?(
+    args: ComputeStateSignalArgs<TTripwireMetadata>,
+  ): Promise<ComputeStateSignalResult> | ComputeStateSignalResult;
+
+  /**
+   * Process the LLM-shaped prompt after `MessageList` has been converted to
+   * `LanguageModelV2Prompt` and immediately before it is forwarded to the
+   * provider on this call.
+   *
+   * Unlike `processInputStep`, mutations made here are *not* persisted to the
+   * message list — they affect only what is sent to the model on this call.
+   * This makes the hook ideal for transient, model-aware rewrites such as:
+   *
+   * - Stripping fields a specific provider rejects (e.g. `reasoning_content`
+   *   on Cerebras) without losing reasoning traces in memory or UI.
+   * - Re-shaping tool-result formats when switching between providers mid-loop.
+   * - Trimming or coalescing roles to match per-provider input requirements.
+   *
+   * Return `{ prompt }` to forward your modified prompt, or `undefined`/`void`
+   * to pass the original prompt through unchanged.
+   */
+  processLLMRequest?(
+    args: ProcessLLMRequestArgs<TTripwireMetadata>,
+  ): Promise<ProcessLLMRequestResult> | ProcessLLMRequestResult;
+
+  /**
+   * Process the LLM response immediately after the step completes (or after a
+   * cached response is replayed) and after output processors collect the
+   * chunks. Pairs with {@link Processor.processLLMRequest}: the same `state`
+   * object is shared between the two calls for the same request, so a
+   * processor can stash a cache key in `processLLMRequest` and read it back
+   * here to write the response.
+   *
+   * Use this hook for response-level side effects — typically:
+   *
+   * - Writing to a response cache so the next `processLLMRequest` call can
+   *   short-circuit by returning `{ response }`.
+   * - Mirroring response chunks to an external sink for replay (test
+   *   recorders, audit logs).
+   *
+   * Skip writes when `args.fromCache` is `true` — that response did not come
+   * from the model on this call.
+   *
+   * Return `undefined`/`void`. Errors thrown here propagate to the caller.
+   */
+  processLLMResponse?(
+    args: ProcessLLMResponseArgs<TTripwireMetadata>,
+  ): Promise<ProcessLLMResponseResult> | ProcessLLMResponseResult;
+
+  /**
    * Process output after each LLM response in the agentic loop, before tool execution.
    * Unlike processOutputResult which runs once at the end, this runs at every step.
    *
@@ -533,10 +820,16 @@ export abstract class BaseProcessor<TId extends string = string, TTripwireMetada
 
 type WithRequired<T, K extends keyof T> = T & { [P in K]-?: NonNullable<T[P]> };
 
-// InputProcessor requires either processInput OR processInputStep (or both)
+// InputProcessor requires processInput, processInputStep, computeStateSignal, processLLMRequest, or processLLMResponse (or any combination)
 export type InputProcessor<TTripwireMetadata = unknown> =
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInput'> & Processor<string, TTripwireMetadata>)
   | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processInputStep'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'computeStateSignal'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMRequest'> &
+      Processor<string, TTripwireMetadata>)
+  | (WithRequired<Processor<string, TTripwireMetadata>, 'id' | 'processLLMResponse'> &
       Processor<string, TTripwireMetadata>);
 
 // OutputProcessor requires processOutputStream OR processOutputResult OR processOutputStep
@@ -567,7 +860,10 @@ export type ProcessorTypes<TTripwireMetadata = unknown> =
  * A Workflow that can be used as a processor.
  * The workflow must accept ProcessorStepInput and return ProcessorStepOutput.
  */
-export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any>;
+export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOutput, ProcessorStepOutput, any> & {
+  /** @internal Processors in a combined workflow that compute state signals after input-step execution. */
+  __stateSignalProcessors?: Processor[];
+};
 
 /**
  * Input processor config: can be a Processor or a Workflow.
@@ -589,42 +885,19 @@ export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
  */
 export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> = ErrorProcessor<TTripwireMetadata>;
 
-/**
- * Type guard to check if an object is a Workflow that can be used as a processor.
- * A ProcessorWorkflow must have 'id', 'inputSchema', 'outputSchema', and 'execute' properties.
- */
-export function isProcessorWorkflow(obj: unknown): obj is ProcessorWorkflow {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    'id' in obj &&
-    typeof (obj as any).id === 'string' &&
-    'inputSchema' in obj &&
-    'outputSchema' in obj &&
-    'execute' in obj &&
-    typeof (obj as any).execute === 'function' &&
-    // Must NOT have processor-specific methods (to distinguish from Processor)
-    !('processInput' in obj) &&
-    !('processInputStep' in obj) &&
-    !('processOutputStream' in obj) &&
-    !('processOutputResult' in obj) &&
-    !('processOutputStep' in obj) &&
-    !('processToolResult' in obj) &&
-    !('processAPIError' in obj)
-  );
-}
+export { isProcessorWorkflow } from './is-processor-workflow';
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
 export {
   isRetryableOpenAIResponsesStreamError,
   StreamErrorRetryProcessor,
   type StreamErrorRetryMatcher,
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';
-export { ProviderHistoryCompat, anthropicToolIdFormat } from './provider-history-compat';
 export type { CompatRule } from './provider-history-compat';
-export { ProcessorState, ProcessorRunner } from './runner';
+export { ProcessorState, ProcessorRunner, createProcessorSendSignal } from './runner';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

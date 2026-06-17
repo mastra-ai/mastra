@@ -6,8 +6,8 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, SettingItem, TUI } from '@mariozechner/pi-tui';
+import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi-tui';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
 import { ModelSelectorComponent } from './model-selector.js';
 import type { ModelItem } from './model-selector.js';
@@ -21,6 +21,8 @@ export interface OMSettingsConfig {
   reflectorModelId: string;
   observationThreshold: number;
   reflectionThreshold: number;
+  cavemanObservations: boolean;
+  observeAttachments: 'auto' | boolean;
 }
 
 export interface OMSettingsCallbacks {
@@ -28,7 +30,16 @@ export interface OMSettingsCallbacks {
   onReflectorModelChange: (model: ModelItem) => void | Promise<void>;
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
+  onCavemanObservationsChange: (enabled: boolean) => void;
+  onObserveAttachmentsChange: (value: 'auto' | boolean) => void | Promise<void>;
   onClose: () => void;
+}
+
+interface BooleanSubmenuLabels {
+  onLabel?: string;
+  offLabel?: string;
+  onDescription?: string;
+  offDescription?: string;
 }
 
 // =============================================================================
@@ -158,6 +169,32 @@ class ThresholdSubmenu extends Container {
 }
 
 // =============================================================================
+// Boolean Submenu
+// =============================================================================
+
+class BooleanSubmenu extends SelectList {
+  constructor(
+    currentValue: boolean,
+    onSelect: (value: boolean) => void,
+    onBack: () => void,
+    labels?: BooleanSubmenuLabels,
+  ) {
+    const items: SelectItem[] = [
+      { value: 'on', label: `  ${labels?.onLabel ?? 'On'}`, description: labels?.onDescription ?? '' },
+      { value: 'off', label: `  ${labels?.offLabel ?? 'Off'}`, description: labels?.offDescription ?? '' },
+    ];
+    super(items, items.length, getSelectListTheme());
+
+    this.setSelectedIndex(currentValue ? 0 : 1);
+
+    this.onSelect = (item: SelectItem) => {
+      onSelect(item.value === 'on');
+    };
+    this.onCancel = onBack;
+  }
+}
+
+// =============================================================================
 // OM Settings Component
 // =============================================================================
 
@@ -260,11 +297,62 @@ export class OMSettingsComponent extends Box implements Focusable {
             () => done(),
           ),
       },
+      {
+        id: 'caveman-observations',
+        label: 'Caveman observations',
+        description:
+          'Optional. Use terse caveman-style compression for observations and reflections ' +
+          'instead of standard prose. Off by default; turn on if you prefer the more compact style',
+        currentValue: config.cavemanObservations ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new BooleanSubmenu(
+            config.cavemanObservations,
+            value => {
+              config.cavemanObservations = value;
+              callbacks.onCavemanObservationsChange(value);
+              done(value ? 'On' : 'Off');
+            },
+            () => done(),
+            {
+              onDescription: 'Caveman-style terse compression',
+              offDescription: 'Standard prose observations',
+            },
+          ),
+      },
+      {
+        id: 'observe-attachments',
+        label: 'Observe attachments',
+        description:
+          'Forward image and file attachments to the Observer LLM. ' + 'Auto checks model capabilities to decide',
+        currentValue: formatAttachmentValue(config.observeAttachments),
+        submenu: (_currentValue, done) => {
+          const items: SelectItem[] = [
+            { value: 'auto', label: '  Auto', description: 'Use model capabilities to decide' },
+            { value: 'on', label: '  On', description: 'Always forward attachments' },
+            { value: 'off', label: '  Off', description: 'Drop attachments (placeholder text only)' },
+          ];
+          const list = new SelectList(items, items.length, getSelectListTheme());
+          const currentIndex = config.observeAttachments === 'auto' ? 0 : config.observeAttachments ? 1 : 2;
+          list.setSelectedIndex(currentIndex);
+          list.onSelect = async (item: SelectItem) => {
+            const value: 'auto' | boolean = item.value === 'auto' ? 'auto' : item.value === 'on';
+            try {
+              await callbacks.onObserveAttachmentsChange(value);
+              config.observeAttachments = value;
+              done(formatAttachmentValue(value));
+            } catch (error) {
+              console.error('Failed to update observe attachments setting:', error);
+            }
+          };
+          list.onCancel = () => done();
+          return list;
+        },
+      },
     ];
 
     this.settingsList = new SettingsList(
       items,
-      10,
+      11,
       getSettingsListTheme(),
       (_id, _newValue) => {
         // All changes handled via submenu callbacks
@@ -288,4 +376,9 @@ function getShortModelName(modelId: string): string {
   if (!modelId) return '(none)';
   const parts = modelId.split('/');
   return parts.length > 1 ? parts.slice(1).join('/') : modelId;
+}
+
+function formatAttachmentValue(value: 'auto' | boolean): string {
+  if (value === 'auto') return 'Auto';
+  return value ? 'On' : 'Off';
 }
