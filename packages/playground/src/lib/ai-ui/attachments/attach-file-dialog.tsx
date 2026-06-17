@@ -56,8 +56,14 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
     const url = formData.get('url-attachment')?.toString();
 
     if (url) {
-      await addUrl(url);
-      onOpenChange(false);
+      try {
+        await addUrl(url);
+        onOpenChange(false);
+      } catch (err) {
+        // Keep the dialog open so the user can retry if resolving the URL fails
+        // (e.g. a content-type lookup error on a CORS-restricted host).
+        console.error('Failed to add URL attachment', err);
+      }
     }
   };
 

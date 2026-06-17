@@ -123,4 +123,50 @@ describe('composer attachments', () => {
     const imagePart = (messages[0]!.content as Array<{ type: string; image?: string }>)[0];
     expect(imagePart!.image).toBe('https://example.com/pic.png');
   });
+
+  it('classifies a gs:// URL as a forwarded URL attachment', async () => {
+    // No HEAD handler: fetch('gs://...') rejects, so the content type is
+    // inferred from the extension (video/mp4).
+    const { ref } = renderProvider();
+
+    await act(async () => {
+      await ref.current!.addUrl('gs://my-bucket/clip.mp4');
+    });
+
+    const att = ref.current!.attachments[0] as ComposerAttachment;
+    expect(att.isUrl).toBe(true);
+    expect(att.kind).toBe('video');
+    expect(att.contentType).toBe('video/mp4');
+  });
+
+  it('forwards a gs:// video as a file part containing the raw URI', async () => {
+    const { ref } = renderProvider();
+
+    await act(async () => {
+      await ref.current!.addUrl('gs://my-bucket/clip.mp4');
+    });
+
+    const messages = await ref.current!.toCoreUserMessages();
+    const filePart = (messages[0]!.content as Array<{ type: string; data?: string; mimeType?: string }>)[0];
+    expect(filePart!.type).toBe('file');
+    expect(filePart!.data).toBe('gs://my-bucket/clip.mp4');
+    expect(filePart!.mimeType).toBe('video/mp4');
+  });
+
+  it('inlines a local video file as a data URI file part', async () => {
+    const { ref } = renderProvider();
+
+    act(() => {
+      ref.current!.addFiles([new File(['video-bytes'], 'movie.mp4', { type: 'video/mp4' })]);
+    });
+
+    const att = ref.current!.attachments[0] as ComposerAttachment;
+    expect(att.kind).toBe('video');
+    expect(att.isUrl).toBe(false);
+
+    const messages = await ref.current!.toCoreUserMessages();
+    const filePart = (messages[0]!.content as Array<{ type: string; data?: string }>)[0];
+    expect(filePart!.type).toBe('file');
+    expect(filePart!.data).toMatch(/^data:video\/mp4;base64,/);
+  });
 });

@@ -1,3 +1,4 @@
+import { isBrowserFetchableUrl, isNonFetchableRemoteUrl } from '@mastra/playground-ui';
 import type { FilePart } from '@mastra/react';
 
 import { InMessageAttachment } from './in-message-attachment';
@@ -8,8 +9,10 @@ export interface UserFilePartRendererProps {
 
 /**
  * Renders a user `MessageFactory` `File` slot. Image parts render an inline image
- * preview; everything else renders a document preview using the URL when the data
- * is an `https://` link, otherwise the raw data.
+ * preview when the source is browser-fetchable; video, audio, and cloud-storage
+ * URIs (gs://, s3://) render a placeholder chip; everything else renders a
+ * document preview, using the URL when it is an http(s) link, otherwise the raw
+ * data.
  */
 export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
   // The declared `FilePart` type is V4-shaped (`{ mimeType, data }`), but the
@@ -19,19 +22,29 @@ export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
   const fileType = part as FilePart & { mediaType?: string; url?: string };
   const data = fileType.url ?? fileType.data;
   const mimeType = fileType.mediaType ?? fileType.mimeType;
-  const isUrl = typeof data === 'string' && data.startsWith('https://');
+  const src = typeof data === 'string' ? data : undefined;
+  const isFetchableUrl = typeof data === 'string' && isBrowserFetchableUrl(data);
+  const isNonFetchableUrl = typeof data === 'string' && isNonFetchableRemoteUrl(data);
   const isImage = typeof mimeType === 'string' && mimeType.startsWith('image/');
+  const isVideo = typeof mimeType === 'string' && mimeType.startsWith('video/');
+  const isAudio = typeof mimeType === 'string' && mimeType.startsWith('audio/');
+
+  // Cloud-storage URIs (gs://, s3://) and audio/video can't be previewed
+  // in-browser — show a labeled chip instead of a broken image/preview.
+  if (isNonFetchableUrl || isVideo || isAudio) {
+    return <InMessageAttachment type="file" contentType={mimeType} name={src} src={isFetchableUrl ? src : undefined} />;
+  }
 
   if (isImage) {
-    return <InMessageAttachment type="image" src={typeof data === 'string' ? data : undefined} />;
+    return <InMessageAttachment type="image" src={src} />;
   }
 
   return (
     <InMessageAttachment
       type="document"
       contentType={mimeType}
-      src={isUrl ? data : undefined}
-      data={typeof data === 'string' ? data : undefined}
+      src={isFetchableUrl ? data : undefined}
+      data={src}
     />
   );
 };

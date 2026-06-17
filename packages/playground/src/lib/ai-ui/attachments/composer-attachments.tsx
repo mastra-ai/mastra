@@ -1,9 +1,9 @@
 import type { CoreUserMessage } from '@mastra/core/llm';
-import { fileToBase64, getFileContentType } from '@mastra/playground-ui';
+import { fileToBase64, getFileContentType, isRemoteUrl } from '@mastra/playground-ui';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-export type ComposerAttachmentKind = 'image' | 'pdf' | 'text';
+export type ComposerAttachmentKind = 'image' | 'pdf' | 'video' | 'text';
 
 export interface ComposerAttachment {
   id: string;
@@ -12,7 +12,7 @@ export interface ComposerAttachment {
   name: string;
   contentType: string;
   kind: ComposerAttachmentKind;
-  /** True when this attachment was added by URL (name is a https:// link). */
+  /** True when this attachment was added by URL (name is a remote link, e.g. https://, gs://, s3://). */
   isUrl: boolean;
 }
 
@@ -30,6 +30,7 @@ const ComposerAttachmentsContext = createContext<ComposerAttachmentsContextValue
 const kindForContentType = (contentType: string): ComposerAttachmentKind => {
   if (contentType.startsWith('image/')) return 'image';
   if (contentType === 'application/pdf') return 'pdf';
+  if (contentType.startsWith('video/')) return 'video';
   return 'text';
 };
 
@@ -45,7 +46,7 @@ const fileToText = (file: File): Promise<string> =>
   });
 
 const toAttachment = (file: File): ComposerAttachment => {
-  const isUrl = file.name.startsWith('https://');
+  const isUrl = isRemoteUrl(file.name);
   const contentType = file.type || 'text/plain';
   return {
     id: nextId(),
@@ -73,6 +74,23 @@ const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<Cor
 
   if (att.kind === 'pdf') {
     const data = att.isUrl ? att.name : `data:application/pdf;base64,${await fileToBase64(att.file)}`;
+    return {
+      role: 'user' as const,
+      content: [
+        {
+          type: 'file' as const,
+          data,
+          mimeType: att.contentType,
+          filename: att.name,
+        },
+      ],
+    };
+  }
+
+  if (att.kind === 'video') {
+    // URL attachments forward the raw URI so the model provider fetches it
+    // server-side (e.g. Vertex AI for gs://). Local files are inlined as a data URI.
+    const data = att.isUrl ? att.name : `data:${att.contentType};base64,${await fileToBase64(att.file)}`;
     return {
       role: 'user' as const,
       content: [
