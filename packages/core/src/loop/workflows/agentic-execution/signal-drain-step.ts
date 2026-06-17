@@ -2,9 +2,9 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { ChunkType } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
-import { processSignalInput } from './process-signal-input';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
+import { processSignalInput } from './process-signal-input';
 
 export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   _internal,

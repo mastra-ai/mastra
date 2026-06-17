@@ -1,8 +1,8 @@
-import type { CreatedAgentSignal } from '../../../agent/signals';
 import { MessageList } from '../../../agent/message-list';
+import type { CreatedAgentSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
-import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
+import type { IMastraLogger } from '../../../logger';
 import type { InputProcessorOrWorkflow, ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
