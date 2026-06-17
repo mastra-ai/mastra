@@ -56,6 +56,7 @@ jobs:
           cd packages/mcp-docs-server
           pnpm version prerelease --preid ${{ steps.determine-tag.outputs.tag }} --no-git-tag-version
           cd ../..
+          pnpm prettier --write packages/mcp-docs-server/package.json --log-level warn
           git add packages/mcp-docs-server/package.json
           git commit -m "chore: bump @mastra/mcp-docs-server prerelease version"
 
@@ -68,4 +69,7 @@ jobs:
         with:
           title: 'chore: version packages'
           commit: 'chore: version packages'
-          version: pnpm changeset-cli version
+          # Run prettier after versioning so the version-bumped package.json
+          # files stay formatted and don't fail the Lint (prettier --check) job.
+          # Mirrors the Lint workflow's prettier invocation so scopes match.
+          version: pnpm changeset-cli version && pnpm prettier --write . '!docs/**/*' '!examples/**/*' '!explorations/**/*' --log-level warn
