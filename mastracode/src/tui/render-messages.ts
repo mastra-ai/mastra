@@ -302,7 +302,11 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     };
 
     if (reminderPart.reminderType === 'goal-judge' && goalMetadata.goalEvaluation) {
-      const judgeComponent = new JudgeDisplayComponent(null, goalMetadata.goalEvaluation.iteration, goalMetadata.goalEvaluation.maxRuns);
+      const judgeComponent = new JudgeDisplayComponent(
+        null,
+        goalMetadata.goalEvaluation.iteration,
+        goalMetadata.goalEvaluation.maxRuns,
+      );
       judgeComponent.setEvaluation(goalMetadata.goalEvaluation);
       addChildBeforeMessageOrFollowUps(state, judgeComponent, reminderPart.precedesMessageId);
       state.messageComponentsById.set(message.id, judgeComponent);

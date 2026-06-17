@@ -743,7 +743,14 @@ export class Agent<
    */
   async setObjective(
     objective: string,
-    options: { threadId: string; resourceId?: string; judgeModelId?: string; maxRuns?: number; prompt?: string; id?: string },
+    options: {
+      threadId: string;
+      resourceId?: string;
+      judgeModelId?: string;
+      maxRuns?: number;
+      prompt?: string;
+      id?: string;
+    },
   ): Promise<GoalObjectiveRecord | undefined> {
     const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
     if (!store || !options.threadId) return undefined;

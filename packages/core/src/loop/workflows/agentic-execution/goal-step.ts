@@ -52,11 +52,7 @@ function extractPartialReasonFromStructuredText(text: string): string | undefine
   const match = text.match(/"reason"\s*:\s*"((?:\\.|[^"\\])*)/);
   const partialReason = match?.[1];
   if (!partialReason) return undefined;
-  return partialReason
-    .replace(/\\n/g, '\n')
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, '\\')
-    .trim();
+  return partialReason.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\').trim();
 }
 
 function formatJudgeActivityMessage(name: string | undefined, args: unknown): string | undefined {
@@ -84,7 +80,8 @@ function formatJudgeActivityMessage(name: string | undefined, args: unknown): st
 
   if (name === 'lsp_inspect') {
     const path = getStringArg(args, 'path');
-    const line = !args || typeof args !== 'object' || Array.isArray(args) ? undefined : (args as Record<string, unknown>).line;
+    const line =
+      !args || typeof args !== 'object' || Array.isArray(args) ? undefined : (args as Record<string, unknown>).line;
     const detail = path ? `${path}${typeof line === 'number' ? `:${line}` : ''}` : undefined;
     return detail ? `${label} ${truncateActivityDetail(detail)}` : label;
   }
@@ -102,7 +99,8 @@ function formatJudgeActivityMessage(name: string | undefined, args: unknown): st
 export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   params: OuterLLMRun<Tools, OUTPUT>,
 ) {
-  const { goal, messageList, requestContext, mastra, controller, runId, _internal, agentId, agentName, outputWriter } = params;
+  const { goal, messageList, requestContext, mastra, controller, runId, _internal, agentId, agentName, outputWriter } =
+    params;
 
   return createStep({
     id: 'goalStep',
@@ -200,8 +198,12 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       let result: Awaited<ReturnType<typeof runStreamCompletionScorers>>;
       try {
         const emitJudgeActivity = (activity: GoalEvaluationActivity, args?: unknown) => {
-          const name = activity.type === 'reason' ? activity.name : formatJudgeActivityName(activity.name ?? activity.message);
-          const message = activity.type === 'reason' ? activity.message : formatJudgeActivityMessage(activity.name ?? activity.message, args);
+          const name =
+            activity.type === 'reason' ? activity.name : formatJudgeActivityName(activity.name ?? activity.message);
+          const message =
+            activity.type === 'reason'
+              ? activity.message
+              : formatJudgeActivityMessage(activity.name ?? activity.message, args);
           if (!message) return;
           controller.enqueue({
             type: 'goal',

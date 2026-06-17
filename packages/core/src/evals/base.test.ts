@@ -224,7 +224,9 @@ describe('createScorer', () => {
     });
 
     it('forwards judge memory to the internal judge agent run', async () => {
-      const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockResolvedValue({ object: Promise.resolve({ score: 1 }) } as any);
+      const streamSpy = vi
+        .spyOn(Agent.prototype, 'stream')
+        .mockResolvedValue({ object: Promise.resolve({ score: 1 }) } as any);
       try {
         const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
         const memory = { id: 'judge-memory' } as any;
@@ -266,7 +268,9 @@ describe('createScorer', () => {
     });
 
     it('merges per-step judge memory options onto scorer defaults', async () => {
-      const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockResolvedValue({ object: Promise.resolve({ value: 1 }) } as any);
+      const streamSpy = vi
+        .spyOn(Agent.prototype, 'stream')
+        .mockResolvedValue({ object: Promise.resolve({ value: 1 }) } as any);
       try {
         const model = createMockModel({ mockText: { value: 1 }, version: 'v2' });
         const memory = { id: 'judge-memory' } as any;
@@ -316,7 +320,10 @@ describe('createScorer', () => {
 
     it('exposes the internal judge stream when it starts', async () => {
       let resolveObject!: (value: { score: number }) => void;
-      const judgeStream = { object: new Promise(resolve => (resolveObject = resolve)), fullStream: new ReadableStream() } as any;
+      const judgeStream = {
+        object: new Promise(resolve => (resolveObject = resolve)),
+        fullStream: new ReadableStream(),
+      } as any;
       const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockResolvedValue(judgeStream);
       try {
         const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });

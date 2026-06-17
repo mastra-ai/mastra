@@ -176,9 +176,18 @@ describe('goal step waiting semantics', () => {
         object: Promise.resolve({ decision: 'continue', reason: 'need verification' }),
         fullStream: new ReadableStream({
           start(controller) {
-            controller.enqueue({ type: 'tool-call', payload: { toolName: 'view', args: { path: 'packages/core/src/agent/goal/scorer.ts' } } });
-            controller.enqueue({ type: 'tool-result', payload: { toolName: 'view', args: { path: 'packages/core/src/agent/goal/scorer.ts' } } });
-            controller.enqueue({ type: 'text-delta', payload: { id: 'judge-text', text: '{"decision":"continue","reason":"need' } });
+            controller.enqueue({
+              type: 'tool-call',
+              payload: { toolName: 'view', args: { path: 'packages/core/src/agent/goal/scorer.ts' } },
+            });
+            controller.enqueue({
+              type: 'tool-result',
+              payload: { toolName: 'view', args: { path: 'packages/core/src/agent/goal/scorer.ts' } },
+            });
+            controller.enqueue({
+              type: 'text-delta',
+              payload: { id: 'judge-text', text: '{"decision":"continue","reason":"need' },
+            });
             controller.enqueue({ type: 'text-delta', payload: { id: 'judge-text', text: ' verification"}' } });
             controller.close();
           },

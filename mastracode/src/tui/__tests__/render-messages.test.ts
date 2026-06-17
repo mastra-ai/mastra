@@ -407,7 +407,10 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children[0]).toBeInstanceOf(JudgeDisplayComponent);
     expect(state.allSystemReminderComponents).toHaveLength(0);
     expect(state.messageComponentsById.get('goal-judge-1')).toBe(state.chatContainer.children[0]);
-    const rendered = (state.chatContainer.children[0] as JudgeDisplayComponent).render(80).join('\n').replace(/\x1b\[[0-9;]*m/g, '');
+    const rendered = (state.chatContainer.children[0] as JudgeDisplayComponent)
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
     expect(rendered).toContain('continue');
     expect(rendered).toContain('(2/20)');
     expect(rendered).toContain('Need another fact.');

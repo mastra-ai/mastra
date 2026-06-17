@@ -144,7 +144,9 @@ export class GoalManager {
         ...(judgeModelId ? { judgeModelId } : {}),
         maxRuns: maxTurns,
       });
-      this.record = persisted ? { ...persisted, id: persisted.id ?? id } : this.localRecord(objective, judgeModelId, maxTurns, now, id);
+      this.record = persisted
+        ? { ...persisted, id: persisted.id ?? id }
+        : this.localRecord(objective, judgeModelId, maxTurns, now, id);
     } else {
       this.record = this.localRecord(objective, judgeModelId, maxTurns, now, id);
     }

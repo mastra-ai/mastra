@@ -62,7 +62,10 @@ function extractTextContent(content: unknown): string {
   return String(content ?? '');
 }
 
-function getLatestUserContext(run: { input?: unknown }): { lastUserContent: string | null; assistantStepsSinceLastUser: number } {
+function getLatestUserContext(run: { input?: unknown }): {
+  lastUserContent: string | null;
+  assistantStepsSinceLastUser: number;
+} {
   const input = run.input as Record<string, unknown> | undefined;
   const messages = Array.isArray(input?.messages) ? input.messages : [];
   let lastUserIndex = -1;
