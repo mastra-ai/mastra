@@ -30,6 +30,7 @@ import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
+import { Session } from './session';
 import {
   askUserTool,
   createSubagentTool,
@@ -485,8 +486,7 @@ export class Harness<TState = {}> {
     | undefined = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
   private tokenUsage: TokenUsage = createEmptyTokenUsage();
-  private sessionGrantedCategories = new Set<string>();
-  private sessionGrantedTools = new Set<string>();
+  readonly #session = new Session();
   private displayState: HarnessDisplayState = defaultDisplayState();
   private stateUpdateQueue: Promise<void> = Promise.resolve();
   private switchModeVersion: number = 0;
@@ -558,6 +558,15 @@ export class Harness<TState = {}> {
    */
   getMastra(): Mastra | undefined {
     return this.#internalMastra;
+  }
+
+  /**
+   * The current harness session. Owns per-session runtime state such as
+   * session-scoped permission grants. Prefer `harness.session.*` over the
+   * (removed) re-exposed grant helpers on the Harness.
+   */
+  get session(): Session {
+    return this.#session;
   }
 
   /**
@@ -1771,21 +1780,6 @@ export class Harness<TState = {}> {
   // Permissions
   // ===========================================================================
 
-  grantSessionCategory({ category }: { category: ToolCategory }): void {
-    this.sessionGrantedCategories.add(category);
-  }
-
-  grantSessionTool({ toolName }: { toolName: string }): void {
-    this.sessionGrantedTools.add(toolName);
-  }
-
-  getSessionGrants(): { categories: ToolCategory[]; tools: string[] } {
-    return {
-      categories: [...this.sessionGrantedCategories] as ToolCategory[],
-      tools: [...this.sessionGrantedTools],
-    };
-  }
-
   getToolCategory({ toolName }: { toolName: string }): ToolCategory | null {
     return this.config.toolCategoryResolver?.(toolName) ?? null;
   }
@@ -1824,11 +1818,11 @@ export class Harness<TState = {}> {
 
     if (toolPolicy) return toolPolicy;
 
-    if (this.sessionGrantedTools.has(toolName)) return 'allow';
+    if (this.#session.hasToolGrant(toolName)) return 'allow';
 
     const category = this.getToolCategory({ toolName });
     if (category) {
-      if (this.sessionGrantedCategories.has(category)) return 'allow';
+      if (this.#session.hasCategoryGrant(category)) return 'allow';
       const categoryPolicy = rules.categories[category];
       if (categoryPolicy) return categoryPolicy;
     }
@@ -3543,7 +3537,7 @@ export class Harness<TState = {}> {
       if (tn) {
         const category = this.getToolCategory({ toolName: tn });
         if (category) {
-          this.grantSessionCategory({ category });
+          this.#session.grantCategory(category);
         }
       }
       this.pendingApprovalResolve({ decision: 'approve', requestContext });
