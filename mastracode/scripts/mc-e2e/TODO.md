@@ -1,6 +1,6 @@
 # Skipped E2E Scenarios
 
-These scenarios are temporarily skipped on the rebased `tests-mc-rebased-candidate` branch because current `main` behavior drifted from the original scenario expectations. Each skip should be revisited and either fixed in product code or updated only if the new behavior is intentional.
+These scenarios are temporarily skipped because current behavior drifted from the original scenario expectations. Each skip should be revisited and either fixed in product code or updated only if the new behavior is intentional. Remove the scenario's `skipReason` when it is fixed.
 
 | Scenario | Recap | Why it seems to be failing |
 |---|---|---|
