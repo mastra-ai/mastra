@@ -6,7 +6,6 @@ settings:
 
 overrides:
   '@mastra/auth-auth0': link:../../auth/auth0
-  '@mastra/auth-clerk': link:../../auth/clerk
   '@mastra/auth-better-auth': link:../../auth/better-auth
   '@mastra/auth-okta': link:../../auth/okta
   '@mastra/auth-workos': link:../../auth/workos
@@ -42,9 +41,6 @@ importers:
       '@mastra/auth-better-auth':
         specifier: link:../../auth/better-auth
         version: link:../../auth/better-auth
-      '@mastra/auth-clerk':
-        specifier: link:../../auth/clerk
-        version: link:../../auth/clerk
       '@mastra/auth-cloud':
         specifier: link:../../auth/cloud
         version: link:../../auth/cloud
