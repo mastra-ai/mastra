@@ -13,6 +13,7 @@ import type { Workflow } from '@mastra/core/workflows';
 import type { MastraScorers } from '@mastra/core/evals';
 import type {
   StorageResolvedAgentType,
+  StorageAgentSnapshotType,
   StorageScorerConfig,
   StorageToolConfig,
   StorageMCPClientToolsConfig,
@@ -35,6 +36,7 @@ import type {
   StorageWorkspaceRef,
   StorageBrowserRef,
 } from '@mastra/core/storage';
+import type { AgentVersion, CreateVersionInput } from '@mastra/core/storage/domains/agents';
 import type { MastraBrowser } from '@mastra/core/browser';
 
 import { RequestContext } from '@mastra/core/request-context';
@@ -47,8 +49,31 @@ import { hydrateProcessorGraph, selectFirstMatchingGraph } from '../processor-gr
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
+import { createVersionFromSnapshotUpdate, getProvidedSnapshotFields } from './versioned-update';
 
 type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
+
+const AGENT_SNAPSHOT_CONFIG_FIELDS = [
+  'name',
+  'description',
+  'instructions',
+  'model',
+  'tools',
+  'defaultOptions',
+  'workflows',
+  'agents',
+  'integrationTools',
+  'toolProviders',
+  'inputProcessors',
+  'outputProcessors',
+  'memory',
+  'scorers',
+  'requestContextSchema',
+  'mcpClients',
+  'skills',
+  'workspace',
+  'browser',
+] as const satisfies (keyof StorageAgentSnapshotType)[];
 
 // ============================================================================
 // Builder Defaults
@@ -132,6 +157,19 @@ function applyBuilderDefaults(
   return Object.keys(defaults).length > 0 ? { ...input, ...defaults } : input;
 }
 
+function getProvidedAgentRecordFields(input: StorageUpdateAgentInput): StorageUpdateAgentInput | null {
+  const { id, authorId, visibility, activeVersionId, metadata, status } = input;
+  const recordFields: StorageUpdateAgentInput = { id };
+
+  if (authorId !== undefined) recordFields.authorId = authorId;
+  if (visibility !== undefined) recordFields.visibility = visibility;
+  if (activeVersionId !== undefined) recordFields.activeVersionId = activeVersionId;
+  if (metadata !== undefined) recordFields.metadata = metadata;
+  if (status !== undefined) recordFields.status = status;
+
+  return Object.keys(recordFields).length > 1 ? recordFields : null;
+}
+
 // ============================================================================
 // EditorAgentNamespace
 // ============================================================================
@@ -203,6 +241,54 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
    */
   protected async hydrate(storedAgent: StorageResolvedAgentType): Promise<Agent> {
     return this.createAgentFromStoredConfig(storedAgent);
+  }
+
+  override async update(input: StorageUpdateAgentInput): Promise<Agent> {
+    this.ensureRegistered();
+    const storage = this.mastra?.getStorage();
+    if (!storage) throw new Error('Storage is not configured');
+    const store = await storage.getStore('agents');
+    if (!store) throw new Error('Agents storage domain is not available');
+
+    const existing = await store.getById(input.id);
+    if (!existing) {
+      throw new Error(`Agent with id ${input.id} not found`);
+    }
+
+    const providedConfig = getProvidedSnapshotFields<StorageAgentSnapshotType>(
+      input as Record<string, unknown>,
+      AGENT_SNAPSHOT_CONFIG_FIELDS,
+    );
+    const versionResult =
+      Object.keys(providedConfig).length > 0
+        ? await createVersionFromSnapshotUpdate<AgentVersion, CreateVersionInput, StorageAgentSnapshotType>({
+            store,
+            parentId: input.id,
+            parentIdField: 'agentId',
+            snapshotFields: AGENT_SNAPSHOT_CONFIG_FIELDS,
+            providedConfig,
+          })
+        : { versionCreated: false as const };
+
+    const recordFields = getProvidedAgentRecordFields(input);
+    if (recordFields || versionResult.versionCreated) {
+      await store.update({
+        ...(recordFields ?? { id: input.id }),
+        ...(versionResult.versionCreated ? { activeVersionId: versionResult.version.id } : {}),
+      });
+    }
+
+    this._cache.delete(input.id);
+    this.onCacheEvict(input.id);
+
+    const resolved = await store.getByIdResolved(input.id, { status: 'draft' });
+    if (!resolved) {
+      throw new Error(`Failed to resolve entity ${input.id} after update`);
+    }
+
+    const hydrated = await this.hydrate(resolved);
+    this._cache.set(input.id, hydrated);
+    return hydrated;
   }
 
   /**
