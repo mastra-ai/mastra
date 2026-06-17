@@ -72,7 +72,10 @@ const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<Cor
   }
 
   if (att.kind === 'pdf') {
-    const data = att.isUrl ? att.name : `data:application/pdf;base64,${await fileToBase64(att.file)}`;
+    // `fileToBase64` already returns a full data URL (`data:application/pdf;base64,...`),
+    // so it must be used as-is. Prepending the prefix here produced a malformed,
+    // double-prefixed data URL that broke the PDF preview.
+    const data = att.isUrl ? att.name : await fileToBase64(att.file);
     return {
       role: 'user' as const,
       content: [
