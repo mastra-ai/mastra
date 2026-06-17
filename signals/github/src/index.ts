@@ -506,7 +506,9 @@ function preserveMarkdownCode(text: string): { text: string; restore: (sanitized
   const protectedText = text
     // Fenced code blocks first so inline-code matching does not touch their contents.
     .replace(/```[\s\S]*?```/g, stash)
-    // Simple inline code spans.
+    // Multi-backtick inline spans (e.g. ``code with ` inside``) before the single-backtick pass.
+    .replace(/(`{2,})(?!`)[\s\S]*?[^`]\1(?!`)/g, stash)
+    // Single-backtick inline code spans.
     .replace(/`[^`\n]*`/g, stash);
 
   return {
@@ -531,8 +533,10 @@ function preserveMarkdownCode(text: string): { text: string; restore: (sanitized
  * removal (comments, `<details>`) drops the *entire* section including its inner content, and any
  * unterminated block is removed through end-of-string so a missing closing marker can't smuggle the
  * payload through. All scanning is `indexOf`-based and the only regex used is a non-backtracking
- * single-tag matcher, so adversarial input cannot trigger catastrophic backtracking (ReDoS). Finally,
- * any stray `<` (e.g. an unterminated `<script`) is dropped so no partial markup remains.
+ * single-tag matcher, so adversarial input cannot trigger catastrophic backtracking (ReDoS). Any
+ * unterminated markup fragment (e.g. a dangling `<script` with no `>`) is dropped through end-of-
+ * string, and finally every remaining lone `<` is removed so no partial markup survives — while
+ * ordinary prose like `coverage < 80%` keeps its text intact.
  */
 export function sanitizeCommentText(body: string): string {
   // Protect Markdown code regions before any stripping touches the text.
@@ -543,11 +547,14 @@ export function sanitizeCommentText(body: string): string {
   const stripped = text
     // Remaining standalone tags, e.g. <summary>, </p>, <br/>. `[^<>]*` cannot backtrack.
     .replace(/<\/?[a-zA-Z][^<>]*>/g, '')
-    // Drop any leftover stray `<` (incl. unterminated `<script`/`<!--`) so no partial markup remains.
-    .replace(/<.*/gs, '');
-  return restore(stripped)
+    // Drop an unterminated markup fragment (`<!--`, `</`, `<tag`...) from its start through EOF.
+    .replace(/<[!/a-zA-Z][\s\S]*$/g, '')
+    // Strip any lone `<` left over, but keep surrounding prose (e.g. `coverage < 80%`).
+    .replace(/</g, '')
+    // Normalize prose whitespace *before* restoring code, so stashed blocks are never mutated.
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+  return restore(stripped);
 }
 
 /** Applies {@link sanitizeCommentText} to an optional comment body, preserving `undefined`. */

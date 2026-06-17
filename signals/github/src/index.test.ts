@@ -2747,6 +2747,30 @@ describe('GithubSignals', () => {
       expect(sanitized).not.toContain('secret');
       expect(sanitized).not.toContain('<details');
     });
+
+    it('preserves angle-bracket code inside a multi-backtick inline span', () => {
+      const sanitized = sanitizeCommentText('Use ``<Component prop="`a`" />`` here');
+      expect(sanitized).toBe('Use ``<Component prop="`a`" />`` here');
+    });
+
+    it('keeps ordinary prose containing a lone "<" (e.g. comparisons)', () => {
+      const sanitized = sanitizeCommentText('coverage < 80% but tests pass');
+      expect(sanitized).toBe('coverage  80% but tests pass');
+    });
+
+    it('leaves no "<script" or lone "<" in the output even when unterminated', () => {
+      const sanitized = sanitizeCommentText('hello <script>alert(1) and a dangling <scr');
+      expect(sanitized).not.toContain('<script');
+      expect(sanitized).not.toContain('<');
+      expect(sanitized).toContain('hello');
+    });
+
+    it('does not collapse blank lines inside a preserved fenced code block', () => {
+      const body = ['intro', '```ts', 'const a = 1;', '', '', '', 'const b = 2;', '```'].join('\n');
+      const sanitized = sanitizeCommentText(body);
+      // The 3+ blank lines inside the fence are restored verbatim, not normalized to one.
+      expect(sanitized).toContain('const a = 1;\n\n\n\nconst b = 2;');
+    });
   });
 
   it('starts polling after subscribe and stops after the last subscription is removed', async () => {
