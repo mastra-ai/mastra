@@ -233,6 +233,7 @@ export async function applyStateSignal({
   activeStateSignals,
   defaultId,
   acceptedAt,
+  beforeAddSignal,
   writeSignal,
 }: {
   input: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string });
@@ -245,6 +246,7 @@ export async function applyStateSignal({
   activeStateSignals?: ActiveStateSignal[];
   defaultId?: string;
   acceptedAt?: Date;
+  beforeAddSignal?: () => void;
   writeSignal?: (signal: CreatedAgentSignal) => Promise<void> | void;
 }): Promise<ApplyStateSignalResult> {
   const { stateId, signal, cacheKey, mode } = createStateSignalInput(input, { defaultId, acceptedAt });
@@ -280,6 +282,7 @@ export async function applyStateSignal({
     },
   });
 
+  beforeAddSignal?.();
   if (messageList) {
     messageList.addSignal(updatedSignal);
   }

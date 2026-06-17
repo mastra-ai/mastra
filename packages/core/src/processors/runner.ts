@@ -325,6 +325,7 @@ export class ProcessorRunner {
     threadId,
     abortSignal,
     retryCount,
+    rotateResponseMessageId,
   }: {
     processor: Processor;
     messageList: MessageList;
@@ -339,6 +340,7 @@ export class ProcessorRunner {
     threadId?: string;
     abortSignal?: AbortSignal;
     retryCount: number;
+    rotateResponseMessageId?: () => string;
   }): Promise<void> {
     const computeStateSignal = processor.computeStateSignal?.bind(processor);
     if (!computeStateSignal) return;
@@ -368,6 +370,12 @@ export class ProcessorRunner {
     };
 
     const stateId = processor.stateId ?? processor.id;
+    const beforeAddStateSignal = rotateResponseMessageId
+      ? () => {
+          messageList.markResponseMessageBoundary();
+          rotateResponseMessageId();
+        }
+      : undefined;
     const trackingById = getStateSignalsMetadata(thread.metadata);
     const tracking = trackingById[stateId];
     const { activeStateSignals, contextWindow, lastSnapshot, deltasSinceSnapshot } = await resolveStateSignalHistory({
@@ -406,6 +414,7 @@ export class ProcessorRunner {
           memoryConfig: memoryContext?.memoryConfig,
           messageList,
           defaultId: stateId,
+          beforeAddSignal: beforeAddStateSignal,
           writeSignal: signal => writer?.custom(signal.toDataPart()),
         });
         if (!sendResult.skipped) {
@@ -427,6 +436,7 @@ export class ProcessorRunner {
       memoryConfig: memoryContext?.memoryConfig,
       messageList,
       defaultId: stateId,
+      beforeAddSignal: beforeAddStateSignal,
       writeSignal: signal => writer?.custom(signal.toDataPart()),
     });
   }
@@ -443,6 +453,7 @@ export class ProcessorRunner {
     threadId,
     abortSignal,
     retryCount,
+    rotateResponseMessageId,
   }: {
     workflow: ProcessorWorkflow;
     messageList: MessageList;
@@ -455,6 +466,7 @@ export class ProcessorRunner {
     threadId?: string;
     abortSignal?: AbortSignal;
     retryCount: number;
+    rotateResponseMessageId?: () => string;
   }): Promise<void> {
     for (const processor of workflow.__stateSignalProcessors ?? []) {
       const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
@@ -475,6 +487,7 @@ export class ProcessorRunner {
         threadId,
         abortSignal,
         retryCount,
+        rotateResponseMessageId,
       });
     }
   }
@@ -1386,6 +1399,13 @@ export class ProcessorRunner {
           threadId: args.threadId,
           abortSignal: args.abortSignal,
           retryCount: args.retryCount ?? 0,
+          rotateResponseMessageId: args.rotateResponseMessageId
+            ? () => {
+                const nextMessageId = args.rotateResponseMessageId!();
+                stepInput.messageId = nextMessageId;
+                return nextMessageId;
+              }
+            : undefined,
         });
         continue;
       }
@@ -1515,6 +1535,12 @@ export class ProcessorRunner {
               memoryConfig: memoryContext?.memoryConfig,
               messageList,
               defaultId: processor.stateId ?? processor.id,
+              beforeAddSignal: rotateResponseMessageId
+                ? () => {
+                    messageList.markResponseMessageBoundary();
+                    rotateResponseMessageId();
+                  }
+                : undefined,
               writeSignal: signal => writer?.custom(signal.toDataPart()),
             });
             return result.skipped ? result : result.signal;
@@ -1551,6 +1577,7 @@ export class ProcessorRunner {
           threadId: args.threadId,
           abortSignal: args.abortSignal,
           retryCount: args.retryCount ?? 0,
+          rotateResponseMessageId,
         });
 
         // Stop recording and get mutations for this processor
