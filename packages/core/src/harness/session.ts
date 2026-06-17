@@ -1,6 +1,19 @@
 import { createEmptyTokenUsage } from './types';
 import type { TokenUsage, ToolCategory } from './types';
 
+/**
+ * Minimal persistence surface the Session uses to read and write per-thread
+ * settings (mode id, per-mode model id, …). The Harness backs this with thread
+ * metadata; when no storage is configured it is absent and the Session keeps
+ * its state purely in memory.
+ */
+export interface ThreadSettingsStore {
+  /** Read a setting for the active thread, or undefined when unset/unavailable. */
+  get(key: string): Promise<unknown>;
+  /** Persist a setting for the active thread (no-op when storage is unavailable). */
+  set(key: string, value: unknown): Promise<void>;
+}
+
 /** Usage fields that are summed across steps when present on a step's usage. */
 type OptionalUsageField = 'reasoningTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens';
 
@@ -10,21 +23,83 @@ function addOptionalUsageField(usage: TokenUsage, key: OptionalUsageField, value
   }
 }
 
+/** Persisted thread-setting key for the currently-selected mode. */
+const MODE_ID_KEY = 'currentModeId';
+/** Persisted thread-setting key prefix for a mode's last-used model. */
+const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
+
 /**
- * Owns the session's currently-selected mode id and the concurrency guard for
- * switching modes. The Harness still owns the mode *definitions*
- * (`config.modes`) and the persistence/hydration of the selected mode; this
- * only tracks which mode is active and coordinates overlapping switches.
+ * Owns the session's currently-selected model. Source of truth for "which model
+ * is active", plus the per-mode model memory persisted to the thread-settings
+ * store (so each mode remembers the model it was last used with).
+ */
+export class SessionModel {
+  #id = '';
+  readonly #store: () => ThreadSettingsStore | undefined;
+
+  constructor(store: () => ThreadSettingsStore | undefined) {
+    this.#store = store;
+  }
+
+  /** The currently-selected model id ('' when none selected yet). */
+  get(): string {
+    return this.#id;
+  }
+
+  /** Whether a model is currently selected. */
+  hasSelection(): boolean {
+    return this.#id !== '';
+  }
+
+  /** Set the in-memory selected model id (no persistence). */
+  set({ modelId }: { modelId: string }): void {
+    this.#id = modelId;
+  }
+
+  /** Persist `modelId` as the last-used model for `modeId`. */
+  async saveForMode({ modeId, modelId }: { modeId: string; modelId: string }): Promise<void> {
+    await this.#store()?.set(modeModelKey(modeId), modelId);
+  }
+
+  /**
+   * Resolve the model for `modeId`: the persisted per-mode model if present,
+   * else `defaultModelId`, else null.
+   */
+  async resolveForMode({
+    modeId,
+    defaultModelId,
+  }: {
+    modeId: string;
+    defaultModelId?: string;
+  }): Promise<string | null> {
+    const stored = (await this.#store()?.get(modeModelKey(modeId))) as string | undefined;
+    if (stored) return stored;
+    return defaultModelId ?? null;
+  }
+}
+
+/**
+ * Owns the session's currently-selected mode and the logic for switching modes.
+ * Holds the active mode id and runs the version-guarded switch sequence —
+ * persisting the selection and coordinating the per-mode model with
+ * {@link SessionModel}. The Harness still owns the mode *definitions*
+ * (`config.modes`); this owns "which mode is active" and how a switch unfolds.
  */
 export class SessionMode {
   /** Id of the currently-selected mode. Empty until the Harness resolves its default mode. */
   #id = '';
   /**
-   * Monotonically increasing counter bumped on each switch. An async
-   * `switchMode` captures the version it began with and bails if a newer switch
-   * has since superseded it.
+   * Monotonically increasing counter bumped on each switch. A slower in-flight
+   * switch detects it was superseded by a newer one and bails.
    */
   #switchVersion = 0;
+  readonly #store: () => ThreadSettingsStore | undefined;
+  readonly #model: SessionModel;
+
+  constructor(store: () => ThreadSettingsStore | undefined, model: SessionModel) {
+    this.#store = store;
+    this.#model = model;
+  }
 
   /** The currently-selected mode id. */
   get(): string {
@@ -32,23 +107,48 @@ export class SessionMode {
   }
 
   /** Set the currently-selected mode id (on default resolution or hydration). */
-  set(modeId: string): void {
+  set({ modeId }: { modeId: string }): void {
     this.#id = modeId;
   }
 
   /**
-   * Begin a switch to `modeId`: set the mode and bump the switch version,
-   * returning the version this switch owns. Use {@link isCurrentSwitch} after
-   * each await to detect whether a newer switch has superseded this one.
+   * Switch to `modeId`, coordinating the selected model and persistence.
+   *
+   * The Harness handles aborting in-flight work and emitting events; this owns
+   * the version-guarded sequence: remember the outgoing mode's model, persist
+   * the new mode, then resolve and apply the incoming mode's model. A newer
+   * switch starting mid-flight supersedes this one, which then bails.
+   *
+   * Returns the resolved model id for the new mode (or null), so the caller can
+   * emit `model_changed` after applying it.
    */
-  beginSwitch(modeId: string): number {
+  async switch({
+    modeId,
+    defaultModelId,
+  }: {
+    modeId: string;
+    defaultModelId?: string;
+  }): Promise<{ modelId: string | null }> {
+    const previousModeId = this.#id;
+    const previousModelId = this.#model.get();
+    const version = ++this.#switchVersion;
     this.#id = modeId;
-    return ++this.#switchVersion;
-  }
 
-  /** Whether `version` is still the latest switch (i.e. not superseded). */
-  isCurrentSwitch(version: number): boolean {
-    return this.#switchVersion === version;
+    // Remember the outgoing mode's model before moving on.
+    if (previousModelId) {
+      await this.#model.saveForMode({ modeId: previousModeId, modelId: previousModelId });
+    }
+    if (this.#switchVersion !== version) return { modelId: null };
+
+    await this.#store()?.set(MODE_ID_KEY, modeId);
+    if (this.#switchVersion !== version) return { modelId: null };
+
+    const modelId = await this.#model.resolveForMode({ modeId, defaultModelId });
+    if (this.#switchVersion !== version) return { modelId: null };
+    if (modelId) {
+      this.#model.set({ modelId });
+    }
+    return { modelId };
   }
 }
 
@@ -64,9 +164,14 @@ export class SessionMode {
  * - the live token-usage counter for the active thread. The Session holds the
  *   in-memory running tally; the Harness remains responsible for persisting it
  *   to (and hydrating it from) thread metadata, because usage is thread-scoped.
- * - the currently-selected mode (`session.mode`) — the active mode id and the
- *   switch-version guard. The Harness still owns the mode *definitions*
- *   (`config.modes`) and the persistence/hydration of the selected mode.
+ * - the currently-selected mode (`session.mode`) and model (`session.model`).
+ *   The Session is the source of truth for which mode/model is active and owns
+ *   the mode-switch sequence and per-mode model memory. The Harness still owns
+ *   the mode *definitions* (`config.modes`).
+ *
+ * Mode/model persistence is thread-scoped, so the Session writes through a
+ * {@link ThreadSettingsStore} the Harness backs with thread metadata; when no
+ * storage is configured the store is absent and state stays in memory.
  */
 export class Session {
   /** Tool categories the user has granted "allow" for the lifetime of this session. */
@@ -75,8 +180,21 @@ export class Session {
   readonly #grantedTools = new Set<string>();
   /** Running token-usage tally for the active thread. */
   #tokenUsage: TokenUsage = createEmptyTokenUsage();
-  /** The session's currently-selected mode and switch-concurrency guard. */
-  readonly mode = new SessionMode();
+  /** Thread-settings persistence handle, injected by the Harness via {@link setStore}. */
+  #store: ThreadSettingsStore | undefined;
+  /** The session's currently-selected model (source of truth) + per-mode memory. */
+  readonly model = new SessionModel(() => this.#store);
+  /** The session's currently-selected mode and switch sequence. */
+  readonly mode = new SessionMode(() => this.#store, this.model);
+
+  /**
+   * Attach the thread-settings store the Session persists mode/model through.
+   * The Harness calls this once storage is available; without it, mode/model
+   * state lives purely in memory.
+   */
+  setStore(store: ThreadSettingsStore | undefined): void {
+    this.#store = store;
+  }
 
   /** Grant a tool category "allow" for the remainder of the session. */
   grantCategory(category: ToolCategory): void {

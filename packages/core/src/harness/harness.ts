@@ -521,7 +521,11 @@ export class Harness<TState = {}> {
           : 'Harness requires at least one agent mode',
       );
     }
-    this.#session.mode.set(defaultMode.id);
+    this.#session.mode.set({ modeId: defaultMode.id });
+    this.#session.setStore({
+      get: key => this.getThreadSetting({ key }),
+      set: (key, value) => this.setThreadSetting({ key, value }),
+    });
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
     if (config.workspace instanceof Workspace) {
@@ -537,10 +541,15 @@ export class Harness<TState = {}> {
       this.browserFn = config.browser;
     }
 
-    // Seed model from mode default if not set
-    const currentModel = (this.state as any).currentModelId;
-    if (!currentModel && defaultMode.defaultModelId) {
-      void this.setState({ currentModelId: defaultMode.defaultModelId } as unknown as Partial<TState>);
+    // Seed the selected model: an explicit initialState.currentModelId wins,
+    // otherwise fall back to the default mode's model. The model lives on the
+    // session, not in persisted state, so initialState.currentModelId is read
+    // here as a construction-time input only.
+    const initialModelId = (config.initialState as { currentModelId?: string } | undefined)?.currentModelId;
+    if (initialModelId) {
+      this.#session.model.set({ modelId: initialModelId });
+    } else if (defaultMode.defaultModelId) {
+      this.#session.model.set({ modelId: defaultMode.defaultModelId });
     }
   }
 
@@ -821,53 +830,20 @@ export class Harness<TState = {}> {
 
     this.abort();
 
-    const currentModelId = this.getCurrentModelId();
     const previousModeId = this.#session.mode.get();
 
-    // Update local state and emit events immediately so UIs can update
-    // without waiting for storage round-trips.
-    const version = this.#session.mode.beginSwitch(modeId);
+    // Emit the mode change immediately so UIs can update without waiting for
+    // the storage round-trips inside session.mode.switch().
     this.emit({ type: 'mode_changed', modeId, previousModeId });
 
-    // Save current model to the outgoing mode before switching
-    if (currentModelId) {
-      await this.setThreadSetting({ key: `modeModelId_${previousModeId}`, value: currentModelId });
+    // The session owns the version-guarded switch sequence: remember the
+    // outgoing mode's model, persist the new mode, then resolve and apply the
+    // incoming mode's model. It returns the resolved model (or null if a newer
+    // switch superseded this one) so we can emit model_changed.
+    const { modelId } = await this.#session.mode.switch({ modeId, defaultModelId: mode.defaultModelId });
+    if (modelId) {
+      this.emit({ type: 'model_changed', modelId } as HarnessEvent);
     }
-    if (!this.#session.mode.isCurrentSwitch(version)) return;
-
-    await this.setThreadSetting({ key: 'currentModeId', value: modeId });
-    if (!this.#session.mode.isCurrentSwitch(version)) return;
-
-    // Load the incoming mode's model
-    const modeModelId = await this.loadModeModelId(modeId);
-    if (!this.#session.mode.isCurrentSwitch(version)) return;
-    if (modeModelId) {
-      void this.setState({ currentModelId: modeModelId } as unknown as Partial<TState>);
-      this.emit({ type: 'model_changed', modelId: modeModelId } as HarnessEvent);
-    }
-  }
-
-  /**
-   * Load the stored model ID for a specific mode.
-   * Falls back to: thread metadata -> mode's defaultModelId -> current model.
-   */
-  private async loadModeModelId(modeId: string): Promise<string | null> {
-    if (this.currentThreadId && this.config.storage) {
-      try {
-        const memoryStorage = await this.getMemoryStorage();
-        const thread = await memoryStorage.getThreadById({ threadId: this.currentThreadId });
-        const meta = thread?.metadata as Record<string, unknown> | undefined;
-        const stored = meta?.[`modeModelId_${modeId}`] as string | undefined;
-        if (stored) return stored;
-      } catch {
-        // Fall through to defaults
-      }
-    }
-
-    const mode = this.config.modes.find(m => m.id === modeId);
-    if (mode?.defaultModelId) return mode.defaultModelId;
-
-    return null;
   }
 
   private propagateRuntimeServicesToAgent(agent: Agent): Agent {
@@ -968,7 +944,7 @@ export class Harness<TState = {}> {
    * Get a short display name from the current model ID.
    */
   getModelName(): string {
-    const modelId = this.getCurrentModelId();
+    const modelId = this.#session.model.get();
     if (!modelId || modelId === 'unknown') return modelId || 'unknown';
     const parts = modelId.split('/');
     return parts[parts.length - 1] || modelId;
@@ -978,7 +954,7 @@ export class Harness<TState = {}> {
    * Get the full model ID (e.g., "anthropic/claude-sonnet-4").
    */
   getFullModelId(): string {
-    return this.getCurrentModelId();
+    return this.#session.model.get();
   }
 
   /**
@@ -996,11 +972,11 @@ export class Harness<TState = {}> {
     const targetModeId = modeId ?? this.#session.mode.get();
 
     if (targetModeId === this.#session.mode.get()) {
-      void this.setState({ currentModelId: modelId } as unknown as Partial<TState>);
+      this.#session.model.set({ modelId });
     }
 
     if (scope === 'thread') {
-      await this.setThreadSetting({ key: `modeModelId_${targetModeId}`, value: modelId });
+      await this.#session.model.saveForMode({ modeId: targetModeId, modelId });
     }
 
     try {
@@ -1012,21 +988,12 @@ export class Harness<TState = {}> {
     this.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId } as HarnessEvent);
   }
 
-  getCurrentModelId(): string {
-    const state = this.getState() as { currentModelId?: string };
-    return state.currentModelId ?? '';
-  }
-
-  hasModelSelected(): boolean {
-    return this.getCurrentModelId() !== '';
-  }
-
   /**
    * Check if the current model's provider has authentication configured.
    * Uses app-provided catalog/auth hooks; Harness does not resolve gateway auth itself.
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
-    const modelId = this.getCurrentModelId();
+    const modelId = this.#session.model.get();
     if (!modelId) return { hasAuth: true };
 
     try {
@@ -1143,7 +1110,7 @@ export class Harness<TState = {}> {
       updatedAt: now,
     };
 
-    const currentStateModel = (this.state as any).currentModelId;
+    const currentStateModel = this.#session.model.get();
     const currentMode = this.getCurrentMode();
     const modelId = currentStateModel || currentMode.defaultModelId;
 
@@ -1219,7 +1186,7 @@ export class Harness<TState = {}> {
     this.currentThreadId = thread.id;
 
     if (modelId && !currentStateModel) {
-      void this.setState({ currentModelId: modelId } as unknown as Partial<TState>);
+      this.#session.model.set({ modelId });
     }
 
     this.#session.resetTokenUsage();
@@ -1410,6 +1377,20 @@ export class Harness<TState = {}> {
     }));
   }
 
+  async getThreadSetting({ key }: { key: string }): Promise<unknown> {
+    if (!this.currentThreadId || !this.config.storage) return undefined;
+
+    try {
+      const memoryStorage = await this.getMemoryStorage();
+      const thread = await memoryStorage.getThreadById({ threadId: this.currentThreadId });
+      const metadata = thread?.metadata as Record<string, unknown> | undefined;
+      return metadata?.[key];
+    } catch {
+      // Settings reads are not critical
+      return undefined;
+    }
+  }
+
   async setThreadSetting({ key, value }: { key: string; value: unknown }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
@@ -1492,23 +1473,24 @@ export class Harness<TState = {}> {
         const modeExists = this.config.modes.some(m => m.id === savedModeId);
         if (modeExists && savedModeId !== this.#session.mode.get()) {
           previousModeIdForEmit = this.#session.mode.get();
-          this.#session.mode.set(savedModeId);
+          this.#session.mode.set({ modeId: savedModeId });
         }
       }
 
-      // Resolve the model for the (now-restored) current mode.
+      // Resolve the model for the (now-restored) current mode and apply it to
+      // the session (source of truth for the selected model).
       // Order: per-mode thread metadata → mode's defaultModelId → legacy
       // global currentModelId (set by createThread).
       const currentModeId = this.#session.mode.get();
       const modeModelKey = `modeModelId_${currentModeId}`;
       if (meta?.[modeModelKey]) {
-        updates.currentModelId = meta[modeModelKey];
+        this.#session.model.set({ modelId: meta[modeModelKey] as string });
       } else {
         const currentMode = this.config.modes.find(m => m.id === currentModeId);
         if (currentMode?.defaultModelId) {
-          updates.currentModelId = currentMode.defaultModelId;
+          this.#session.model.set({ modelId: currentMode.defaultModelId });
         } else if (meta?.currentModelId) {
-          updates.currentModelId = meta.currentModelId;
+          this.#session.model.set({ modelId: meta.currentModelId as string });
         }
       }
 
@@ -1951,7 +1933,7 @@ export class Harness<TState = {}> {
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
     // block is transparently retried on the fallback model instead of failing.
-    const fableFallback = buildFableFallbackProviderOptions(this.getCurrentModelId());
+    const fableFallback = buildFableFallbackProviderOptions(this.#session.model.get());
     if (fableFallback) {
       shared.providerOptions = { anthropic: { ...fableFallback.anthropic } };
     }
@@ -4234,7 +4216,7 @@ export class Harness<TState = {}> {
         resolveModel: this.config.resolveModel,
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
-        getParentModelId: () => this.getCurrentModelId(),
+        getParentModelId: () => this.#session.model.get(),
         // Resolved lazily so forked subagents see the current mode's agent
         // even if the mode switches between tool-call scheduling and execution.
         getParentAgent: () => {
@@ -4331,7 +4313,10 @@ export class Harness<TState = {}> {
       updateState: updater => this.updateState(updater),
       threadId: this.currentThreadId,
       resourceId: this.resourceId,
-      modeId: this.#session.mode.get(),
+      session: {
+        modeId: this.#session.mode.get(),
+        modelId: this.#session.model.get(),
+      },
       abortSignal: this.abortController?.signal,
       workspace: this.workspace,
       emitEvent: event => this.emit(event),

@@ -485,7 +485,7 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]),
-          getCurrentModelId: vi.fn(() => 'anthropic/claude-sonnet-4-5'),
+          session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         },
         ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() },
       },
@@ -525,7 +525,7 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]),
-          getCurrentModelId: vi.fn(() => 'anthropic/claude-sonnet-4-5'),
+          session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         },
         ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() },
       },

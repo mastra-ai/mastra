@@ -667,7 +667,7 @@ describe('headless mode — --model flag', () => {
     expect(modelChanged.modelId).toBe('anthropic/claude-haiku-4-5');
 
     // Verify the harness state was updated
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
+    expect(harness.session.model.get()).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('returns exit code 1 for an unknown model', async () => {
@@ -848,7 +848,7 @@ describe('headless mode — --model flag', () => {
 
     expect(exitCode).toBe(0);
     expect(stderrCalls.join('')).toContain('--model overrides --mode');
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
+    expect(harness.session.model.get()).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('emits structured warning in JSON mode when --model and --mode are both provided', async () => {
@@ -931,7 +931,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     );
 
     expect(exitCode).toBe(0);
-    expect(harness.getCurrentModelId()).toBe('cerebras/zai-glm-4.7');
+    expect(harness.session.model.get()).toBe('cerebras/zai-glm-4.7');
   });
 
   it('--model still overrides effectiveDefaults', async () => {
@@ -960,7 +960,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
 
     expect(exitCode).toBe(0);
     // --model should win over effectiveDefaults
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
+    expect(harness.session.model.get()).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('--mode returns exit code 1 when resolved model is not available', async () => {

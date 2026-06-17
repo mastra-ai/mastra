@@ -220,7 +220,7 @@ function buildRequestContext(harness: Harness<any>, threadId: string): Record<st
   return {
     threadId,
     mode: state.currentMode ?? state.mode,
-    modelId: state.currentModelId,
+    modelId: harness.session.model.get(),
     projectPath: state.projectPath,
     projectName: state.projectName,
     gitBranch: state.gitBranch,
