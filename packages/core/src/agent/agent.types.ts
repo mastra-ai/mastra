@@ -689,8 +689,7 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * @example
    * ```typescript
    * const stream = await agent.stream("Hello", {
-   *   threadId: "my-thread",
-   *   resourceId: "user-123",
+   *   memory: { thread: "my-thread", resource: "user-123" },
    *   persistPartialOnAbort: true,
    * });
    * ```

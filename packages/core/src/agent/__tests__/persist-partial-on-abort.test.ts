@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list';
-import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
+import { MockLanguageModelV2 } from './mock-model';
 
 function buildAbortingStreamModel(opts: { chunks: string[]; abortAfterChunk: number }) {
   const { chunks, abortAfterChunk } = opts;
@@ -45,6 +45,20 @@ function buildAbortingStreamModel(opts: { chunks: string[]; abortAfterChunk: num
   });
 
   return { model, abortController };
+}
+
+async function waitFor(
+  condition: () => boolean,
+  opts: { timeout?: number; interval?: number } = {},
+): Promise<void> {
+  const { timeout = 1000, interval = 10 } = opts;
+  const start = Date.now();
+  while (!condition()) {
+    if (Date.now() - start >= timeout) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
 }
 
 function extractAssistantText(messages: MastraDBMessage[]): string {
@@ -93,8 +107,8 @@ describe('persistPartialOnAbort', () => {
       await stream.consumeStream();
     } catch {}
 
-    // Wait a tick for any async persistence to settle
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for any async persistence to settle (none expected in this case)
+    await waitFor(() => savedMessages.length > 0, { timeout: 200 });
 
     const assistantText = extractAssistantText(savedMessages);
     // By default, partial output should NOT be saved
@@ -131,8 +145,8 @@ describe('persistPartialOnAbort', () => {
       await stream.consumeStream();
     } catch {}
 
-    // Wait for async persistence
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // Wait for async persistence to complete
+    await waitFor(() => extractAssistantText(savedMessages).length > 0);
 
     const assistantText = extractAssistantText(savedMessages);
     // With persistPartialOnAbort: true, the partial text received before abort should be saved
@@ -190,7 +204,8 @@ describe('persistPartialOnAbort', () => {
       await stream.consumeStream();
     } catch {}
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Give any (unexpected) async persistence a chance to settle before asserting
+    await waitFor(() => savedMessages.some(m => m.role === 'assistant'), { timeout: 200 });
 
     const assistantMessages = savedMessages.filter(m => m.role === 'assistant');
     // Empty partial output should not be persisted
