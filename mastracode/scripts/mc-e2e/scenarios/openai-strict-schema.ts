@@ -72,7 +72,6 @@ export const openaiStrictSchemaScenario = {
         disableHooks: true,
         disableMcp: true,
         extraTools: { strict_schema_probe: strictSchemaProbeTool },
-        memory: false,
         unixSocketPubSub: false,
       },
     });

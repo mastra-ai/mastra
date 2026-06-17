@@ -7,9 +7,9 @@ const originalPackName = 'Imported Pack E2E';
 const importedPack = {
   name: originalPackName,
   models: {
-    plan: 'pack-import-e2e/import-plan',
-    build: 'pack-import-e2e/import-build',
-    fast: 'pack-import-e2e/import-fast',
+    plan: 'openai/gpt-5.5',
+    build: 'openai/gpt-5.5',
+    fast: 'openai/gpt-5.4-mini',
   },
 };
 const importedPackString = `mastra-pack:${Buffer.from(JSON.stringify(importedPack), 'utf8').toString('base64')}`;
@@ -33,7 +33,7 @@ export const customPackImportOverwriteScenario = {
         name: providerName,
         url: 'http://127.0.0.1:43212/v1',
         apiKey: 'sk-pack-import-e2e',
-        models: ['old-plan', 'old-build', 'old-fast', 'import-plan', 'import-build', 'import-fast'],
+        models: ['old-plan', 'old-build', 'old-explore', 'import-plan', 'import-build', 'import-explore'],
       },
     ];
     settings.customModelPacks = [
@@ -42,7 +42,7 @@ export const customPackImportOverwriteScenario = {
         models: {
           plan: 'pack-import-e2e/old-plan',
           build: 'pack-import-e2e/old-build',
-          fast: 'pack-import-e2e/old-fast',
+          fast: 'pack-import-e2e/old-explore',
         },
         createdAt: new Date(0).toISOString(),
       },
@@ -81,12 +81,12 @@ export const customPackImportOverwriteScenario = {
     );
     await runtime.waitForScreenText(/IMPORT_PACK_COUNT=1/i, terminal, 8_000);
     await runtime.waitForScreenText(/IMPORT_ACTIVE=custom:Imported Pack E2E/i, terminal, 8_000);
-    await runtime.waitForScreenText(/IMPORT_DEFAULT_PLAN=pack-import-e2e\/import-plan/i, terminal, 8_000);
-    await runtime.waitForScreenText(/IMPORT_DEFAULT_BUILD=pack-import-e2e\/import-build/i, terminal, 8_000);
-    await runtime.waitForScreenText(/IMPORT_DEFAULT_FAST=pack-import-e2e\/import-fast/i, terminal, 8_000);
-    await runtime.waitForScreenText(/IMPORT_PACK_PLAN=pack-import-e2e\/import-plan/i, terminal, 8_000);
-    await runtime.waitForScreenText(/IMPORT_PACK_BUILD=pack-import-e2e\/import-build/i, terminal, 8_000);
-    await runtime.waitForScreenText(/IMPORT_PACK_FAST=pack-import-e2e\/import-fast/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_DEFAULT_PLAN=openai\/gpt-5\.5/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_DEFAULT_BUILD=openai\/gpt-5\.5/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_DEFAULT_FAST=openai\/gpt-5\.4-mini/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_PACK_PLAN=openai\/gpt-5\.5/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_PACK_BUILD=openai\/gpt-5\.5/i, terminal, 8_000);
+    await runtime.waitForScreenText(/IMPORT_PACK_FAST=openai\/gpt-5\.4-mini/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

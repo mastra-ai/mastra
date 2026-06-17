@@ -3,14 +3,13 @@ import { join } from 'node:path';
 import type { McE2eScenario } from './types.js';
 
 const providerName = 'Share Edit E2E';
-const providerId = 'share-edit-e2e';
 const packName = 'Share Cancel E2E';
 const pack = {
   name: packName,
   models: {
-    plan: `${providerId}/plan-model`,
-    build: `${providerId}/build-model`,
-    fast: `${providerId}/fast-model`,
+    plan: 'openai/gpt-5.5',
+    build: 'openai/gpt-5.5',
+    fast: 'openai/gpt-5.4-mini',
   },
 };
 const sharedPackString = `mastra-pack:${Buffer.from(JSON.stringify(pack), 'utf8').toString('base64')}`;

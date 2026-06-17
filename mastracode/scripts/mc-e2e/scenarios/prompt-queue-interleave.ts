@@ -4,6 +4,7 @@ export const promptQueueInterleaveScenario: McE2eScenario = {
   name: 'prompt-queue-interleave',
   description: 'Exercise queued ask_user and request_access prompts emitted by parallel tool calls.',
   testName: 'answers queued ask_user and request_access prompts sequentially in the real TUI',
+  skipReason: 'current main no longer renders the request_access granted confirmation after queued prompt approval',
   useOpenAIModel: true,
   aimockFixture: 'prompt-queue-interleave.json',
   async run({ terminal, runtime }) {

@@ -1450,6 +1450,8 @@ export class MastraTUI {
    * @param passive When true, only show an info message (used for periodic rechecks).
    */
   private async checkForUpdate(passive = false): Promise<void> {
+    if (process.env.MASTRACODE_DISABLE_UPDATE_CHECK === '1') return;
+
     const currentVersion = this.state.options.version;
     if (!currentVersion) return;
 

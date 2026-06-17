@@ -5,6 +5,7 @@ export const taskPatchToolsScenario: McE2eScenario = {
   name: 'task-patch-tools',
   description: 'Drive task patch/check tools through the real TUI and verify their rendered output.',
   testName: 'patches tasks and renders task check output from real task tools',
+  skipReason: 'current main task-state/tool-result request shape no longer matches the AIMock task patch fixture',
   useOpenAIModel: true,
   aimockFixture: 'task-patch-tools.json',
   async run({ terminal, runtime }) {

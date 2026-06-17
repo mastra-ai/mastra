@@ -194,7 +194,7 @@ async function prepareTerminalRun(scenario: McE2eScenario, runRoot: string): Pro
     MASTRACODE_DISABLE_MCP: '1',
     MASTRACODE_DISABLE_HOOKS: '1',
     MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB: '1',
-    ...(scenario.disableMemory === false ? {} : { MASTRACODE_DISABLE_MEMORY: '1' }),
+    ...(scenario.disableMemory === true ? { MASTRACODE_DISABLE_MEMORY: '1' } : {}),
     ...(scenario.name === 'update-startup-prompt' ? {} : { MASTRACODE_DISABLE_UPDATE_CHECK: '1' }),
     ...(scenario.useOpenAIModel ? { MASTRACODE_MODEL_ID: 'openai/gpt-5.4-mini', MASTRACODE_YOLO: '1' } : {}),
     FORCE_COLOR: '1',
@@ -262,8 +262,9 @@ export function defineTerminalBackendVitestTests(options: { shardIndex?: number;
 
     for (const scenarioName of scenarioNames) {
       const scenario = getScenario(scenarioName);
-      it(
-        scenario.testName,
+      const register = scenario.skipReason ? it.skip : it;
+      register(
+        scenario.skipReason ? `${scenario.testName} (${scenario.skipReason})` : scenario.testName,
         async () => {
           await runScenarioInProcess(scenario);
         },

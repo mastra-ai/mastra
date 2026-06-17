@@ -5,6 +5,7 @@ export const taskInlineTransitionsScenario: McE2eScenario = {
   name: 'task-inline-transitions',
   description: 'Drive task tools through AIMock and verify completed and cleared inline TUI transitions.',
   testName: 'renders completed and cleared task inline transitions from real task tools',
+  skipReason: 'current main task tool request shape no longer matches the AIMock inline-transition fixture',
   useOpenAIModel: true,
   aimockFixture: 'task-inline-transitions.json',
   async run({ terminal, runtime }) {

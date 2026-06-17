@@ -177,6 +177,7 @@ export type McE2eScenario = {
   name: ScenarioName;
   description: string;
   testName: string;
+  skipReason?: string;
   projectFixture?: 'long-branch';
   useOpenAIModel?: boolean;
   disableMemory?: boolean;

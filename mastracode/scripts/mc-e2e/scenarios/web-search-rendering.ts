@@ -31,7 +31,6 @@ export const webSearchRenderingScenario = {
         disableHooks: true,
         disableMcp: true,
         extraTools: { web_search_20250305: webSearchTool },
-        memory: false,
         unixSocketPubSub: false,
       },
     });

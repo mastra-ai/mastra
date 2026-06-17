@@ -10,6 +10,7 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
   aimockFixture: 'om-pack-startup-restore.json',
   env: () => ({
     OPENAI_API_KEY: 'mc-e2e-openai-key',
+    GOOGLE_GENERATIVE_AI_API_KEY: 'mc-e2e-google-key',
   }),
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
@@ -23,7 +24,7 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
     };
     settings.models = {
       ...settings.models,
-      activeOmPackId: 'openai',
+      activeOmPackId: 'gemini',
       omModelOverride: null,
       observerModelOverride: null,
       reflectorModelOverride: null,
@@ -39,15 +40,15 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
 
     terminal.submit('/om');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Observer model\s+gpt-5\.4-mini/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Reflector model\s+gpt-5\.4-mini/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observer model\s+gemini-2\.5-flash/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Reflector model\s+gemini-2\.5-flash/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const m=s.models||{}; console.log("OM_PACK_SETTINGS="+[m.activeOmPackId,m.omModelOverride||"null",m.observerModelOverride||"null",m.reflectorModelOverride||"null"].join(":"));'`,
     );
-    await runtime.waitForScreenText(/OM_PACK_SETTINGS=openai:null:null:null/i, terminal, 8_000);
+    await runtime.waitForScreenText(/OM_PACK_SETTINGS=gemini:null:null:null/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },
