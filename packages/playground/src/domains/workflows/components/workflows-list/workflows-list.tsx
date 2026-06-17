@@ -33,7 +33,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
   }
 
   return (
-    <EntityList columns="auto 1fr auto">
+    <EntityList columns="auto 1fr auto" variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
