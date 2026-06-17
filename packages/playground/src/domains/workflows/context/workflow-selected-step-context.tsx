@@ -5,12 +5,8 @@ import { WorkflowSelectedStepContext } from './workflow-selected-step-context-va
 
 export function WorkflowSelectedStepProvider({ children }: { children: ReactNode }) {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
-  const [hoverStepId, setHoverStepId] = useState<string | null>(null);
 
-  const value = useMemo(
-    () => ({ selectedStepId, hoverStepId, setSelectedStepId, setHoverStepId }),
-    [selectedStepId, hoverStepId],
-  );
+  const value = useMemo(() => ({ selectedStepId, setSelectedStepId }), [selectedStepId]);
 
   return <WorkflowSelectedStepContext.Provider value={value}>{children}</WorkflowSelectedStepContext.Provider>;
 }
