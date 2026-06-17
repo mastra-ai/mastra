@@ -9,8 +9,10 @@ import { cn } from '@/lib/utils';
  * - `default`: bordered card, `surface2` body, hairline row separators.
  * - `striped`: borderless and full-bleed, zebra-striped rows (every other row
  *   tinted), contrasting sticky header band, no row separators.
+ * - `lined`: borderless and full-bleed like `striped`, but rows stay transparent
+ *   and use subtle separators instead of zebra tints.
  */
-export type DataListVariant = 'default' | 'striped';
+export type DataListVariant = 'default' | 'striped' | 'lined';
 
 export type DataListRootProps = {
   children: ReactNode;
@@ -27,43 +29,52 @@ export type DataListRootProps = {
 
 /**
  * Root grid styling per `variant`. Kept module-private (an exported cva in a
- * `.tsx` trips react-refresh). The striped treatment is driven entirely from the
- * root with CSS descendant selectors on the `.data-list-top` / `.data-list-row`
- * markers — the header and row primitives stay untouched, no JS per-row index:
- * - no container fill or border: the stripes are translucent neutral overlays
- *   (`surface-overlay-*`, theme-aware) so the list composites over any view.
+ * `.tsx` trips react-refresh). The borderless table treatments are driven
+ * entirely from the root with CSS descendant selectors on the `.data-list-top` /
+ * `.data-list-row` markers - the header and row primitives stay untouched, no JS
+ * per-row index:
+ * - no container fill or border: rows composite over any view.
  * - `gap-y-px`: a uniform 1px gap between every grid track (header and rows).
  * - header: a contrasting band that owns the radius (the container no longer
  *   rounds/clips) — `rounded-t-xl` top, `rounded-b-md` bottom to match the rows
  *   sitting below the 1px gap, no hairline.
- * - rows: full-bleed, `rounded-md` (last row included), no separators; rows zero
+ * - rows: full-bleed, `rounded-md` (last row included); rows zero
  *   their own margins so the grid gap is the only spacing.
- * - zebra: tint every other row with `:even`; hover & focus use `!` so they
- *   still win over the zebra tint.
+ * - striped adds translucent zebra tints with `:even`; hover & focus use `!` so
+ *   they still win over root-level row styling.
  */
+const borderlessTableStyles = [
+  'gap-y-px',
+  // The header is sticky, so it must be opaque to occlude rows scrolling
+  // behind it (a translucent overlay would show ghosted content through it).
+  // Row fills, when present, stay translucent — only the header needs to be solid.
+  '[&_.data-list-top]:mx-0 [&_.data-list-top]:bg-surface4 [&_.data-list-top]:after:hidden',
+  '[&_.data-list-top]:rounded-t-xl [&_.data-list-top]:rounded-b-md',
+  // header column separators: a short, faint vertical line centered in the gap
+  // to the left of every header cell but the first. A `before` pseudo (not a
+  // `border-l` + padding) keeps header text aligned with the row cells below.
+  // The cell's default `overflow-hidden` would clip a gap-positioned pseudo, so
+  // these cells switch to `overflow-visible`; the title text still truncates via
+  // its inner `truncate` span, so nothing else spills.
+  '[&_.data-list-top>*:not(:first-child)]:relative [&_.data-list-top>*:not(:first-child)]:overflow-visible',
+  '[&_.data-list-top>*:not(:first-child)]:before:absolute [&_.data-list-top>*:not(:first-child)]:before:-left-4 [&_.data-list-top>*:not(:first-child)]:before:top-1/2 [&_.data-list-top>*:not(:first-child)]:before:-translate-y-1/2 [&_.data-list-top>*:not(:first-child)]:before:h-4 [&_.data-list-top>*:not(:first-child)]:before:w-px [&_.data-list-top>*:not(:first-child)]:before:bg-border2 [&_.data-list-top>*:not(:first-child)]:before:content-[""]',
+  '[&_.data-list-row]:mx-0 [&_.data-list-row]:my-0 [&_.data-list-row]:rounded-md',
+  '[&_.data-list-row]:hover:bg-surface-overlay-strong!',
+  '[&_.data-list-row]:focus-visible:bg-surface-overlay-strong!',
+] as const;
+
 const dataListRootVariants = cva('grid min-w-0 max-w-full content-start', {
   variants: {
     variant: {
       default: 'bg-surface2 border border-border1 rounded-xl',
       striped: cn(
-        'gap-y-px',
-        // The header is sticky, so it must be opaque to occlude rows scrolling
-        // behind it (a translucent overlay would show ghosted content through it).
-        // Rows keep the translucent tints — only the header needs to be solid.
-        '[&_.data-list-top]:mx-0 [&_.data-list-top]:bg-surface4 [&_.data-list-top]:after:hidden',
-        '[&_.data-list-top]:rounded-t-xl [&_.data-list-top]:rounded-b-md',
-        // header column separators: a short, faint vertical line centered in the gap
-        // to the left of every header cell but the first. A `before` pseudo (not a
-        // `border-l` + padding) keeps header text aligned with the row cells below.
-        // The cell's default `overflow-hidden` would clip a gap-positioned pseudo, so
-        // these cells switch to `overflow-visible`; the title text still truncates via
-        // its inner `truncate` span, so nothing else spills.
-        '[&_.data-list-top>*:not(:first-child)]:relative [&_.data-list-top>*:not(:first-child)]:overflow-visible',
-        '[&_.data-list-top>*:not(:first-child)]:before:absolute [&_.data-list-top>*:not(:first-child)]:before:-left-4 [&_.data-list-top>*:not(:first-child)]:before:top-1/2 [&_.data-list-top>*:not(:first-child)]:before:-translate-y-1/2 [&_.data-list-top>*:not(:first-child)]:before:h-4 [&_.data-list-top>*:not(:first-child)]:before:w-px [&_.data-list-top>*:not(:first-child)]:before:bg-border2 [&_.data-list-top>*:not(:first-child)]:before:content-[""]',
-        '[&_.data-list-row]:mx-0 [&_.data-list-row]:my-0 [&_.data-list-row]:rounded-md [&_.data-list-row]:after:hidden',
+        ...borderlessTableStyles,
+        '[&_.data-list-row]:after:hidden',
         '[&_.data-list-row]:even:bg-surface-overlay-soft',
-        '[&_.data-list-row]:hover:bg-surface-overlay-strong!',
-        '[&_.data-list-row]:focus-visible:bg-surface-overlay-strong!',
+      ),
+      lined: cn(
+        ...borderlessTableStyles,
+        '[&_.data-list-row]:after:inset-x-0 [&_.data-list-row]:after:bottom-0 [&_.data-list-row]:after:bg-border1/60',
       ),
     },
   },
@@ -73,19 +84,19 @@ const dataListRootVariants = cva('grid min-w-0 max-w-full content-start', {
 });
 
 export function DataListRoot({ children, columns, className, variant = 'default', scrollRef }: DataListRootProps) {
-  const isStriped = variant === 'striped';
+  const usesOverlayScrollArea = variant === 'striped' || variant === 'lined';
 
   const grid = (
     <div
-      // Striped scrolls inside the ScrollArea viewport (below); default scrolls the
-      // grid natively, so it owns `scrollRef`.
-      ref={isStriped ? undefined : scrollRef}
+      // Borderless table variants scroll inside the ScrollArea viewport (below);
+      // default scrolls the grid natively, so it owns `scrollRef`.
+      ref={usesOverlayScrollArea ? undefined : scrollRef}
       className={cn(
         dataListRootVariants({ variant }),
-        // Default is its own scroll container; striped delegates scrolling to the
-        // ScrollArea viewport, so the grid just lays out.
-        !isStriped && 'max-h-full overflow-auto',
-        !isStriped && className,
+        // Default is its own scroll container; borderless table variants delegate
+        // scrolling to the ScrollArea viewport, so the grid just lays out.
+        !usesOverlayScrollArea && 'max-h-full overflow-auto',
+        !usesOverlayScrollArea && className,
       )}
       style={{ gridTemplateColumns: columns }}
     >
@@ -93,13 +104,13 @@ export function DataListRoot({ children, columns, className, variant = 'default'
     </div>
   );
 
-  if (!isStriped) return grid;
+  if (!usesOverlayScrollArea) return grid;
 
-  // Striped always uses the DS ScrollArea: an overlay scrollbar (no reserved
-  // gutter, so the sticky header spans the full width and both top corners clip
-  // cleanly) plus the default edge fades. When the list virtualizes it passes a
-  // `scrollRef`; forwarding it as `viewportRef` makes the virtualizer scroll this
-  // viewport, so virtualization works without a native scrollbar.
+  // Borderless table variants always use the DS ScrollArea: an overlay scrollbar
+  // (no reserved gutter, so the sticky header spans the full width and both top
+  // corners clip cleanly) plus the default edge fades. When the list virtualizes
+  // it passes a `scrollRef`; forwarding it as `viewportRef` makes the virtualizer
+  // scroll this viewport, so virtualization works without a native scrollbar.
   //
   // `rounded-t-xl` clips the viewport top. Masks default to every overflowing
   // edge except the top — a top fade would fade the opaque sticky header.

@@ -151,6 +151,39 @@ export const Striped: Story = {
 };
 
 /**
+ * Borderless table with the same sticky header, rounded rows, overlay scrollbar,
+ * and edge fades as `Striped`, but default rows stay transparent and use subtle
+ * separators instead of zebra backgrounds. Error rows still receive their
+ * destructive tint.
+ */
+export const Lined: Story = {
+  render: () => (
+    <DataList columns={COMPACT_COLUMNS} variant="lined" className="max-h-[320px]">
+      <DataList.Top>
+        <DataList.TopCell>ID</DataList.TopCell>
+        <DataList.TopCell>Input</DataList.TopCell>
+        <DataList.TopCell>Status</DataList.TopCell>
+        <DataList.TopCell>Date</DataList.TopCell>
+        <DataList.TopCell>Time</DataList.TopCell>
+      </DataList.Top>
+      {Array.from({ length: 12 }, (_, index) => {
+        const run = SAMPLE_RUNS[index % SAMPLE_RUNS.length];
+        const failed = run.status === 'failed';
+        return (
+          <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}} variant={failed ? 'error' : 'default'}>
+            <DataList.IdCell id={`${run.id}_${index}`} />
+            <DataList.MonoCell>{run.input}</DataList.MonoCell>
+            <DataList.Cell height="compact">{run.status}</DataList.Cell>
+            <DataList.DateCell timestamp={run.createdAt} />
+            <DataList.TimeCell timestamp={run.createdAt} />
+          </DataList.RowButton>
+        );
+      })}
+    </DataList>
+  ),
+};
+
+/**
  * Per-row `variant="error"` lays a subtle, theme-aware destructive tint over the
  * row — it wins over the zebra background, so error rows read clearly while the
  * rest keep striping. Useful for log/run lists where some rows failed.
