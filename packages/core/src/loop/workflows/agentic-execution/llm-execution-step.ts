@@ -1608,6 +1608,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             toolResultTripwireFromStream = streamToolResultTripwire;
 
+            if (toolResultTripwireFromStream) {
+              return buildTripWireBailResponse({
+                error: toolResultTripwireFromStream,
+                controller,
+                runId,
+                model: currentStep.model,
+                messageList,
+                messageId: currentStep.messageId,
+                stepTools: currentStep.tools,
+                _internal: _internal!,
+              });
+            }
+
             // Build messages from the full chunk sequence and add to messageList.
             // This replaces the old inline flush approach — all parts are built in
             // correct stream order with proper providerMetadata attribution.
