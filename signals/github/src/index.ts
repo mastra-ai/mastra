@@ -481,9 +481,44 @@ function stripBlocks(text: string, open: string, close: string): string {
   }
 }
 
+/** Sentinel marker wrapping a stashed Markdown code region; `\u0000` cannot appear in GitHub text. */
+const CODE_TOKEN_PREFIX = '\u0000CODE';
+const CODE_TOKEN_SUFFIX = '\u0000';
+
+/**
+ * Temporarily removes Markdown code spans and fenced code blocks so tag stripping can't damage
+ * human-authored code examples.
+ *
+ * GitHub renders Markdown, so legitimate code like `` `<Component>` ``, generic type examples, or
+ * fenced JSX/TSX must survive sanitization. Each code region is replaced with an opaque token and
+ * pushed onto a stash; {@link restore} swaps the tokens back after the surrounding prose has been
+ * stripped of markup. Fenced blocks are matched before inline spans so backtick runs inside a fence
+ * are not mistaken for inline code.
+ */
+function preserveMarkdownCode(text: string): { text: string; restore: (sanitized: string) => string } {
+  const preserved: string[] = [];
+  const stash = (match: string): string => {
+    const token = `${CODE_TOKEN_PREFIX}${preserved.length}${CODE_TOKEN_SUFFIX}`;
+    preserved.push(match);
+    return token;
+  };
+
+  const protectedText = text
+    // Fenced code blocks first so inline-code matching does not touch their contents.
+    .replace(/```[\s\S]*?```/g, stash)
+    // Simple inline code spans.
+    .replace(/`[^`\n]*`/g, stash);
+
+  return {
+    text: protectedText,
+    restore: sanitized =>
+      sanitized.replace(/\u0000CODE(\d+)\u0000/g, (_, index: string) => preserved[Number(index)] ?? ''),
+  };
+}
+
 /**
  * Removes XML/HTML-like markup — and the content it hides — from a PR comment body, leaving only
- * human-readable text.
+ * human-readable text while preserving Markdown code examples.
  *
  * Review bots (e.g. CodeRabbit) embed large machine-only payloads in comments: base64 state blobs
  * inside `<!-- ... -->` comments (often >100KB) and verbose collapsed `<details>` sections. Rather
@@ -491,25 +526,28 @@ function stripBlocks(text: string, open: string, close: string): string {
  * that markup is useful to downstream consumers and persisting it balloons notification payloads and
  * can overflow agent context windows.
  *
- * Block removal (comments, `<details>`) drops the *entire* section including its inner content, and
- * any unterminated block is removed through end-of-string so a missing closing marker can't smuggle
- * the payload through. All scanning is `indexOf`-based and the only regex used is a non-backtracking
+ * Markdown code spans/fenced blocks are stashed first and restored last, so legitimate code such as
+ * `` `<Component>` `` or fenced JSX is kept intact while bot markup elsewhere is removed. Block
+ * removal (comments, `<details>`) drops the *entire* section including its inner content, and any
+ * unterminated block is removed through end-of-string so a missing closing marker can't smuggle the
+ * payload through. All scanning is `indexOf`-based and the only regex used is a non-backtracking
  * single-tag matcher, so adversarial input cannot trigger catastrophic backtracking (ReDoS). Finally,
  * any stray `<` (e.g. an unterminated `<script`) is dropped so no partial markup remains.
  */
 export function sanitizeCommentText(body: string): string {
+  // Protect Markdown code regions before any stripping touches the text.
+  const { text: protectedBody, restore } = preserveMarkdownCode(body);
   // Remove whole hidden sections (delimiters + content) before touching individual tags.
-  let text = stripBlocks(body, '<!--', '-->');
+  let text = stripBlocks(protectedBody, '<!--', '-->');
   text = stripBlocks(text, '<details', '</details>');
-  return (
-    text
-      // Remaining standalone tags, e.g. <summary>, </p>, <br/>. `[^<>]*` cannot backtrack.
-      .replace(/<\/?[a-zA-Z][^<>]*>/g, '')
-      // Drop any leftover stray `<` (incl. unterminated `<script`/`<!--`) so no partial markup remains.
-      .replace(/<.*/gs, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-  );
+  const stripped = text
+    // Remaining standalone tags, e.g. <summary>, </p>, <br/>. `[^<>]*` cannot backtrack.
+    .replace(/<\/?[a-zA-Z][^<>]*>/g, '')
+    // Drop any leftover stray `<` (incl. unterminated `<script`/`<!--`) so no partial markup remains.
+    .replace(/<.*/gs, '');
+  return restore(stripped)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /** Applies {@link sanitizeCommentText} to an optional comment body, preserving `undefined`. */

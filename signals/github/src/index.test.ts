@@ -2722,6 +2722,31 @@ describe('GithubSignals', () => {
       const body = 'Thanks for the fix — looks good to me.';
       expect(sanitizeCommentText(body)).toBe(body);
     });
+
+    it('preserves angle-bracket code inside an inline code span', () => {
+      const sanitized = sanitizeCommentText('Use `<Component>` here');
+      expect(sanitized).toBe('Use `<Component>` here');
+    });
+
+    it('preserves JSX/TSX inside fenced code blocks while stripping markup outside', () => {
+      const body = ['Before <br/> the block.', '```tsx', 'const x = <Component prop="a" />;', '```', 'After.'].join(
+        '\n',
+      );
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('const x = <Component prop="a" />;');
+      expect(sanitized).toContain('```tsx');
+      expect(sanitized).toContain('Before  the block.');
+      expect(sanitized).toContain('After.');
+      expect(sanitized).not.toContain('<br');
+    });
+
+    it('still strips real markup that appears outside code spans', () => {
+      const body = 'See `<Component>` but not <details open>secret</details> here.';
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('`<Component>`');
+      expect(sanitized).not.toContain('secret');
+      expect(sanitized).not.toContain('<details');
+    });
   });
 
   it('starts polling after subscribe and stops after the last subscription is removed', async () => {
