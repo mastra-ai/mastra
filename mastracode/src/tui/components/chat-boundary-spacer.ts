@@ -1,21 +1,16 @@
-import type { Component } from '@mariozechner/pi-tui';
-import { getSpacingBetweenComponents } from './chat-spacing.js';
+import { Spacer } from '@earendil-works/pi-tui';
 
-export class ChatBoundarySpacer implements Component {
+/**
+ * Static spacer placed above a chat component.
+ *
+ * Height is set once during reconciliation via `setLines()` and stays
+ * fixed until the next reconciliation pass — no per-frame recomputation.
+ */
+export class ChatBoundarySpacer extends Spacer {
   readonly isChatBoundarySpacer = true;
 
-  constructor(
-    private readonly getPrev: () => Component | undefined,
-    private readonly getNext: () => Component | undefined,
-    private readonly getPrevPrev: () => Component | undefined = () => undefined,
-    private readonly getNextNext: () => Component | undefined = () => undefined,
-  ) {}
-
-  invalidate(): void {}
-
-  render(): string[] {
-    const spacing = getSpacingBetweenComponents(this.getPrev(), this.getNext(), this.getPrevPrev(), this.getNextNext());
-    return Array.from({ length: spacing }, () => '');
+  constructor(lines = 1) {
+    super(lines);
   }
 }
 

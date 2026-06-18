@@ -1,4 +1,4 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -556,6 +556,59 @@ describe('MastraTUI queueing', () => {
     expect(ctx.updateStatusLine).toHaveBeenCalledTimes(6);
   });
 
+  it('adds goal activity to the active judge display while pending', () => {
+    const state = createQueueState({
+      goalManager: {
+        applyEvaluation: vi.fn(),
+        getGoal: vi.fn(() => ({
+          id: 'goal-activity',
+          status: 'active',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 1,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleGoalEvaluation(ctx, createGoalPayload({ pending: true }));
+    handleGoalEvaluation(
+      ctx,
+      createGoalPayload({
+        pending: true,
+        activity: [{ type: 'tool-call', name: 'read', message: 'read' }],
+      } as any),
+    );
+
+    expect((state.activeGoalJudge?.component as any).activity).toEqual(['read']);
+    expect(state.goalManager.applyEvaluation).not.toHaveBeenCalled();
+    expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('ignores late goal chunks after the user has aborted and paused the goal', () => {
+    const applyEvaluation = vi.fn();
+    const state = createQueueState({
+      userInitiatedAbort: true,
+      goalManager: {
+        applyEvaluation,
+        getGoal: vi.fn(() => ({
+          id: 'paused-goal',
+          status: 'paused',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 5,
+          maxTurns: 500,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 5, status: 'active' }));
+
+    expect(applyEvaluation).not.toHaveBeenCalled();
+    expect(state.activeGoalJudge).toBeUndefined();
+    expect(state.ui.requestRender).not.toHaveBeenCalled();
+  });
+
   it('switches to plan mode when a plan-started goal completes with status=done', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
     const applyEvaluation = vi.fn();
@@ -637,6 +690,7 @@ describe('MastraTUI queueing', () => {
 
     expect(switchMode).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBe('plan-goal-123');
+    expect(state.activeGoalJudge).toBeUndefined();
   });
 
   it('does not switch to plan mode when goal evaluation reports status=paused', () => {

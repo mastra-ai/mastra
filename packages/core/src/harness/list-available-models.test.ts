@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import type { CustomModelCatalogProvider } from './types';
 
-function createHarness(customModelCatalogProvider: () => unknown[]) {
+function createHarness(customModelCatalogProvider: CustomModelCatalogProvider) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -83,5 +84,56 @@ describe('Harness.listAvailableModels', () => {
       useCount: 11,
     });
     expect(refreshedModels.find(model => model.id === 'acme/sonic-fast')).toBeUndefined();
+  });
+
+  it('uses app-provided model catalog and resolver hooks for gateway-backed models', async () => {
+    const resolveModel = vi.fn(modelId => ({ modelId }));
+    const customModelCatalogProvider = vi.fn(() => [
+      {
+        id: 'test-gateway/acme/sonic-fast',
+        provider: 'test-gateway/acme',
+        modelName: 'sonic-fast',
+        hasApiKey: true,
+        apiKeyEnvVar: 'ACME_API_KEY',
+      },
+    ]);
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+    });
+    const harness = new Harness({
+      id: 'test-harness',
+      storage: new InMemoryStore(),
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent,
+          defaultModelId: 'test-gateway/acme/sonic-fast',
+        },
+      ],
+      resolveModel,
+      customModelCatalogProvider,
+      omConfig: {
+        defaultObserverModelId: 'test-gateway/acme/sonic-fast',
+      },
+    });
+
+    const observerModel = harness.getResolvedObserverModel() as { modelId?: string };
+    expect(observerModel).toMatchObject({ modelId: 'test-gateway/acme/sonic-fast' });
+    expect(resolveModel).toHaveBeenCalledWith('test-gateway/acme/sonic-fast');
+
+    const models = await harness.listAvailableModels();
+    expect(models.find(model => model.id === 'test-gateway/acme/sonic-fast')).toMatchObject({
+      provider: 'test-gateway/acme',
+      modelName: 'sonic-fast',
+      hasApiKey: true,
+      apiKeyEnvVar: 'ACME_API_KEY',
+    });
+
+    await expect(harness.getCurrentModelAuthStatus()).resolves.toEqual({ hasAuth: true, apiKeyEnvVar: undefined });
   });
 });

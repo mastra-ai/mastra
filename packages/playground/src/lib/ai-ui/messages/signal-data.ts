@@ -1,3 +1,5 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+
 export type SignalData = {
   id?: string;
   type?: string;
@@ -23,6 +25,67 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 export const isSignalData = (value: unknown): value is SignalData => {
   if (!isRecord(value)) return false;
   return value.type === 'notification' || value.type === 'state' || value.type === 'reactive';
+};
+
+const getSignalMetadata = (message: MastraDBMessage): Record<string, unknown> | undefined => {
+  const signal = message.content.metadata?.signal;
+  return isRecord(signal) ? signal : undefined;
+};
+
+/**
+ * Resolve the signal type for a persisted `role: 'signal'` message, mirroring
+ * core's `getSignalType`. The type is stored under `content.metadata.signal.type`,
+ * falling back to the top-level `message.type`.
+ */
+export const getSignalType = (message: MastraDBMessage): string | undefined => {
+  const type = getSignalMetadata(message)?.type;
+  return typeof type === 'string' ? type : message.type;
+};
+
+/**
+ * User-message signals (the persisted echo of a user turn sent via `sendSignal`)
+ * use `type: 'user'` or `'user-message'`. They render as a user message on
+ * reload. Every other signal is a reactive/non-user signal that mirrors the
+ * streaming accumulator's `data-signal` behavior: a signal badge folded onto an
+ * assistant message.
+ */
+export const isUserSignalType = (type: string | undefined): boolean => type === 'user' || type === 'user-message';
+
+const signalPartsToContents = (parts: MastraDBMessage['content']['parts']): unknown => {
+  const contents: Array<{ type: 'text'; text: string } | { type: 'file'; data: string; mediaType: string }> = [];
+  for (const rawPart of parts) {
+    const part = rawPart as Record<string, unknown>;
+    if (part.type === 'text' && typeof part.text === 'string') {
+      contents.push({ type: 'text', text: part.text });
+      continue;
+    }
+    if (part.type === 'file' && typeof part.data === 'string') {
+      const mediaType =
+        (typeof part.mediaType === 'string' ? part.mediaType : undefined) ??
+        (typeof part.mimeType === 'string' ? part.mimeType : undefined) ??
+        'application/octet-stream';
+      contents.push({ type: 'file', data: part.data, mediaType });
+    }
+  }
+  return contents.length === 1 && contents[0]?.type === 'text' ? contents[0].text : contents;
+};
+
+/**
+ * Build the `data-signal` payload for a persisted reactive signal row so the
+ * existing `SignalBadge` can render it on read-back. Mirrors the 1.41.0
+ * `to-assistant-ui-message` conversion that was lost when the chat renderer was
+ * rewritten (PR #17774).
+ */
+export const toReactiveSignalData = (message: MastraDBMessage): SignalData => {
+  const signal = getSignalMetadata(message) ?? {};
+  return {
+    id: typeof signal.id === 'string' ? signal.id : message.id,
+    type: getSignalType(message),
+    tagName: typeof signal.tagName === 'string' ? signal.tagName : message.type,
+    contents: signalPartsToContents(message.content.parts),
+    ...(isRecord(signal.attributes) ? { attributes: signal.attributes as SignalData['attributes'] } : {}),
+    ...(isRecord(signal.metadata) ? { metadata: signal.metadata } : {}),
+  };
 };
 
 export const getNotificationMetadata = (signal: SignalData): NotificationSignalMetadata | undefined => {

@@ -242,6 +242,8 @@ export const weatherTool = createTool({
 })
 ```
 
+`toModelOutput` also works on client-side tools passed through `clientTools`. The mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result.
+
 ## Transform tool payloads for UI and transcripts
 
 Use `transform` when a tool returns raw data your application needs, but browser-facing streams or user-visible transcript messages should receive a smaller or safer shape. `transform` is separate from `toModelOutput`: `toModelOutput` shapes the payload sent back to the model, while `transform` shapes tool input, output, errors, approval payloads, and suspension payloads for `display` and `transcript` targets.

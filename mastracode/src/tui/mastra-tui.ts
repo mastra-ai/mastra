@@ -4,7 +4,7 @@
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import type { Component } from '@mariozechner/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
@@ -148,6 +148,7 @@ export class MastraTUI {
   private idleCounterTimer: ReturnType<typeof setInterval> | null = null;
   private hasShownUpdateBanner = false;
   private caffeinateProcess: ChildProcess | null = null;
+  private cleanupKeyHandlers?: () => void;
   private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
@@ -534,6 +535,11 @@ export class MastraTUI {
       this.idleCounterTimer = null;
     }
 
+    if (this.cleanupKeyHandlers) {
+      this.cleanupKeyHandlers();
+      this.cleanupKeyHandlers = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -568,7 +574,7 @@ export class MastraTUI {
     buildLayout(this.state, () => this.refreshModelAuthStatus());
 
     // Setup key handlers
-    setupKeyHandlers(this.state, {
+    this.cleanupKeyHandlers = setupKeyHandlers(this.state, {
       stop: () => this.stop(),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
     });
@@ -1379,7 +1385,8 @@ export class MastraTUI {
     const tools = this.state.allToolComponents.filter(
       (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
     );
-    const modeColor = this.state.harness?.getCurrentMode?.()?.color;
+    const color = this.state.harness?.getCurrentMode?.()?.metadata?.color;
+    const modeColor = typeof color === 'string' ? color : undefined;
     for (const tool of tools) {
       tool.setCompactToolModeColor?.(modeColor);
       tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
@@ -1443,6 +1450,8 @@ export class MastraTUI {
    * @param passive When true, only show an info message (used for periodic rechecks).
    */
   private async checkForUpdate(passive = false): Promise<void> {
+    if (process.env.MASTRACODE_DISABLE_UPDATE_CHECK === '1') return;
+
     const currentVersion = this.state.options.version;
     if (!currentVersion) return;
 
@@ -1518,7 +1527,7 @@ export class MastraTUI {
         this.state.ui,
       );
 
-      this.state.chatContainer.addChild(component);
+      insertChatComponentWithBoundarySpacing(this.state.chatContainer, component);
       this.state.activeInlineQuestion = component;
       component.focused = true;
       this.state.ui.requestRender();

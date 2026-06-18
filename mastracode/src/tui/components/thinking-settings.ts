@@ -5,8 +5,8 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { SelectItem, Focusable } from '@mariozechner/pi-tui';
+import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import type { SelectItem, Focusable } from '@earendil-works/pi-tui';
 import { theme, getSelectListTheme } from '../theme.js';
 
 // =============================================================================

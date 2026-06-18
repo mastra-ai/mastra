@@ -5,7 +5,7 @@
  * Also includes pure helper functions for content partitioning.
  */
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
-import { GOAL_STATE_ID, TASKS_STATE_ID } from '@mastra/core/tools';
+import { TASKS_STATE_ID } from '@mastra/core/tools';
 
 import {
   insertChatComponentWithBoundarySpacing,
@@ -26,7 +26,8 @@ import { getMarkdownTheme } from '../theme.js';
 import type { EventHandlerContext } from './types.js';
 
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
-  return ctx.state.harness.getCurrentMode?.()?.color;
+  const color = ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+  return typeof color === 'string' ? color : undefined;
 }
 
 /**
@@ -82,6 +83,7 @@ type StreamedReactiveSignalPart = {
 // These are internal control-plane signals handled by GithubSignals. The user-visible
 // result is rendered by github-sync-status, so showing these would duplicate the UI.
 const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+const GOAL_STATE_SIGNAL_ID = 'goal';
 
 function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
@@ -380,7 +382,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     // is surfaced by the goal/judge UI (driven by the `goal` chunk), so likewise
     // don't echo its raw <current-objective> snapshot. Other state-signal
     // categories still render inline.
-    if (stateSignal.stateId === TASKS_STATE_ID || stateSignal.stateId === GOAL_STATE_ID) continue;
+    if (stateSignal.stateId === TASKS_STATE_ID || stateSignal.stateId === GOAL_STATE_SIGNAL_ID) continue;
     const stateSignalKey = `state:${message.id}:${stateSignal.cacheKey ?? ''}:${stateSignal.stateId}:${stateSignal.mode}:${stateSignal.version ?? ''}:${stateSignal.message ?? ''}`;
     if (!state.currentRunSystemReminderKeys.has(stateSignalKey)) {
       state.currentRunSystemReminderKeys.add(stateSignalKey);

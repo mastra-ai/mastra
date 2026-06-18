@@ -35,7 +35,7 @@ catalog:
   '@microsoft/api-extractor': ^7.57.7
   '@vitest/coverage-v8': 4.1.8
   '@vitest/ui': 4.1.8
-  date-fns: 4.1.0
+  date-fns: 4.4.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^6.0.3
@@ -78,7 +78,13 @@ minimumReleaseAgeExclude:
   - 'mastra'
   - 'create-mastra'
   - 'mastracode'
+  - '@earendil-works/pi-tui'
   - railway@3.3.1
+  # Turso-recommended busy_timeout fix (libsql-client-ts#288/#345). Adopted
+  # immediately on their guidance; pinned so the release-age gate still applies
+  # to any later @libsql/client versions.
+  - '@libsql/client@0.17.4'
+  - '@libsql/core@0.17.4'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -103,6 +109,13 @@ overrides:
   better-auth: ^1.4.18
   js-yaml: ^3.14.2
   glob@<=10.5.0: 10.5.0
+  # image-size 2.x (incl. 2.0.2 latest) has unpatched DoS infinite-loop flaws
+  # (CVE-2025-71330 / GHSA-w3rx-r6r6-pgpr). No fixed 2.x exists, so pin to the
+  # maintained legacy 1.2.1 release, which predates the vulnerable code paths
+  # and is API-compatible (default imageSize(buffer) usage). See issue #17975.
+  # Scoped to @mastra/memory only — a global override breaks the docs build,
+  # which relies on the `image-size/fromFile` subpath export added in 2.x.
+  '@mastra/memory>image-size': 1.2.1
   body-parser@<=2.2.1: 2.2.2
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.7.1

@@ -965,6 +965,28 @@ export class Mastra<
   }
 
   /**
+   * Sets the studio configuration for this Mastra instance.
+   *
+   * The studio configuration controls authentication and authorization for Studio UI,
+   * separate from the server configuration. This enables dual auth patterns where
+   * Studio users (e.g., internal team) use different auth than API consumers.
+   *
+   * @param studio - The studio configuration object
+   *
+   * @example
+   * ```typescript
+   * // Set studio auth separately from server auth
+   * mastra.setStudio({
+   *   auth: new MastraAuthStudio(),
+   *   rbac: new MastraRBACStudio({ roleMapping: { admin: ['*'] } }),
+   * });
+   * ```
+   */
+  public setStudio(studio: StudioConfig): void {
+    this.#studio = studio;
+  }
+
+  /**
    * Registers an exporter on the default observability instance.
    *
    * If the current observability is a no-op (user didn't configure any), it is
@@ -4304,6 +4326,17 @@ export class Mastra<
       }
     } else {
       targets = this.#workers;
+    }
+
+    // Ensure storage is fully initialized before any worker starts. The
+    // scheduler worker runs an immediate warm-up tick on start(), which can
+    // dispatch an internal scheduled workflow (e.g. the notification
+    // dispatcher) and persist a workflow snapshot. Without awaiting init here,
+    // that write can race the lazy storage.init() that creates
+    // `mastra_workflow_snapshot`, producing "no such table" errors on SQL
+    // stores (see #17905). init() is idempotent and a no-op when disabled.
+    if (this.#storage) {
+      await this.#storage.init();
     }
 
     for (const worker of targets) {

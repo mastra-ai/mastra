@@ -20,7 +20,7 @@ const autocompleteProviders: Array<{
   fdPath: string | null | undefined;
 }> = [];
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   CombinedAutocompleteProvider: class {
     constructor(
       commands: Array<{
@@ -393,7 +393,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(abortController.signal.aborted).toBe(true);
     expect(component.setInterrupted).toHaveBeenCalledTimes(1);
     expect(state.userInitiatedAbort).toBe(true);
-    expect(state.harness.abort).not.toHaveBeenCalled();
+    expect(state.harness.abort).toHaveBeenCalledTimes(1);
     expect(editor.setText).not.toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
   });
@@ -433,6 +433,29 @@ describe('setupKeyboardShortcuts', () => {
     expect(state.harness.abort).toHaveBeenCalledTimes(1);
     expect(state.userInitiatedAbort).toBe(true);
     expect(editor.setText).not.toHaveBeenCalled();
+  });
+
+  it('aborts the harness and persists a paused goal when clearing during goal judge evaluation', () => {
+    const { state, actions } = createState(true);
+    const abortController = { abort: vi.fn() };
+    const component = { setInterrupted: vi.fn() };
+    state.activeGoalJudge = { modelId: 'openai/gpt-5.5', abortController, component };
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(abortController.abort).toHaveBeenCalledTimes(1);
+    expect(component.setInterrupted).toHaveBeenCalledTimes(1);
+    expect(state.harness.abort).toHaveBeenCalledTimes(1);
+    expect(state.goalManager.pause).toHaveBeenCalledWith('Judge evaluation was interrupted.');
+    expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(state.activeGoalJudge).toBeUndefined();
+    expect(state.userInitiatedAbort).toBe(true);
   });
 
   it('aborts and clears an active plan approval parked in a tool suspension', () => {

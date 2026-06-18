@@ -1,4 +1,4 @@
-import type { TUI } from '@mariozechner/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SubagentExecutionComponent } from '../subagent-execution.js';

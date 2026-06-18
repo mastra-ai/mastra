@@ -1,6 +1,6 @@
 {
   "name": "@mastra/couchbase",
-  "version": "1.0.3",
+  "version": "1.0.4-alpha.0",
   "description": "Couchbase vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -36,7 +36,7 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.4.1",

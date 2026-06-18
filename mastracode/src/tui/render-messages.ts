@@ -3,11 +3,12 @@
  *
  * Pure functions that operate on TUIState — no class dependency.
  */
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Component } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
-import { GOAL_STATE_ID, TASKS_STATE_ID } from '@mastra/core/tools';
+import type { GoalEvaluationPayload } from '@mastra/core/stream';
+import { TASKS_STATE_ID } from '@mastra/core/tools';
 import chalk from 'chalk';
 import {
   insertChatComponentWithBoundarySpacing,
@@ -16,6 +17,7 @@ import {
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
+import { JudgeDisplayComponent } from './components/judge-display.js';
 import { NotificationSummaryComponent } from './components/notification-summary.js';
 import { NotificationComponent } from './components/notification.js';
 import { OMMarkerComponent } from './components/om-marker.js';
@@ -40,6 +42,7 @@ const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
 // These are internal control-plane signals handled by GithubSignals. The user-visible
 // result is rendered by github-sync-status, so showing these would duplicate the UI.
 const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+const GOAL_STATE_SIGNAL_ID = 'goal';
 
 function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
@@ -59,7 +62,8 @@ function getPendingUserMessageLabel(isInterjection?: boolean): string | undefine
 }
 
 function getCurrentModeColor(state: TUIState): string | undefined {
-  return state.harness.getCurrentMode?.()?.color;
+  const color = state.harness.getCurrentMode?.()?.metadata?.color;
+  return typeof color === 'string' ? color : undefined;
 }
 
 // =============================================================================
@@ -93,7 +97,6 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
     const text = chalk.hex(theme.getTheme().dim).strikethrough(task.content);
     container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
-  container.addChild(new Spacer(1));
   insertTaskHistoryComponent(state, container, insertIndex);
 }
 
@@ -292,7 +295,25 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   );
 
   if (reminderPart) {
-    const goalMetadata = reminderPart as typeof reminderPart & { goalMaxTurns?: number; judgeModelId?: string };
+    const goalMetadata = reminderPart as typeof reminderPart & {
+      goalMaxTurns?: number;
+      judgeModelId?: string;
+      goalEvaluation?: GoalEvaluationPayload;
+    };
+
+    if (reminderPart.reminderType === 'goal-judge' && goalMetadata.goalEvaluation) {
+      const judgeComponent = new JudgeDisplayComponent(
+        null,
+        goalMetadata.goalEvaluation.iteration,
+        goalMetadata.goalEvaluation.maxRuns,
+      );
+      judgeComponent.setEvaluation(goalMetadata.goalEvaluation);
+      addChildBeforeMessageOrFollowUps(state, judgeComponent, reminderPart.precedesMessageId);
+      state.messageComponentsById.set(message.id, judgeComponent);
+      state.ui.requestRender();
+      return;
+    }
+
     const reminderComponent = createReminderComponent(reminderPart.reminderType, {
       message: reminderPart.message,
       path: reminderPart.path,
@@ -326,7 +347,10 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   // from task tool history), so skip its raw <current-task-list> snapshot here.
   // The `goal` state signal is surfaced by the goal/judge UI, so likewise skip
   // its raw <current-objective> snapshot.
-  if (stateSignalPart && (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_ID)) {
+  if (
+    stateSignalPart &&
+    (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_SIGNAL_ID)
+  ) {
     return;
   }
 
@@ -413,6 +437,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     .join('\n');
 
   const imageCount = message.content.filter(c => c.type === 'image').length;
+  const fileCount = message.content.filter(c => c.type === 'file').length;
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
@@ -440,7 +465,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     const slashComp = new SlashCommandComponent(commandName, commandContent);
     state.allSlashCommandComponents.push(slashComp);
-    state.chatContainer.addChild(slashComp);
+    insertChatComponentWithBoundarySpacing(state.chatContainer, slashComp);
     state.ui.requestRender();
     return;
   }
@@ -467,7 +492,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     const skillComp = new SlashCommandComponent(commandName, skillContent);
     state.allSlashCommandComponents.push(skillComp);
-    state.chatContainer.addChild(skillComp);
+    insertChatComponentWithBoundarySpacing(state.chatContainer, skillComp);
     state.ui.requestRender();
     return;
   }
@@ -515,7 +540,11 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     return;
   }
 
-  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
+  const attachmentLabels = [
+    imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}]` : '',
+    fileCount > 0 ? `[${fileCount} file${fileCount > 1 ? 's' : ''}]` : '',
+  ].filter(Boolean);
+  const prefix = attachmentLabels.length > 0 ? `${attachmentLabels.join(' ')} ` : '';
   if (displayText || prefix) {
     const label = getUserMessageLabel(message, options?.label);
     const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {

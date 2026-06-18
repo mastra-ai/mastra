@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-studio",
-  "version": "1.2.3",
+  "version": "1.2.6-alpha.0",
   "description": "Mastra Studio Auth integration — proxies authentication through Mastra shared API",
   "type": "module",
   "main": "dist/index.js",
@@ -29,7 +29,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.4.1",

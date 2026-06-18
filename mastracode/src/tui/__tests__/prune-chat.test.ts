@@ -1,4 +1,4 @@
-import { Container, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import { describe, expect, it } from 'vitest';
 
 import { SlashCommandComponent } from '../components/slash-command.js';

@@ -1,6 +1,7 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
+import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -2584,8 +2585,11 @@ describe('Observer Agent Helpers', () => {
           ],
         };
 
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_THREAD_ID_KEY, 'test-thread');
+
         await observer.call(undefined, [message], undefined, {
-          requestContext: { threadId: 'test-thread' } as any,
+          requestContext,
         });
 
         // The function model should be resolved with requestContext, looked up,
@@ -2698,8 +2702,11 @@ describe('Observer Agent Helpers', () => {
           ],
         };
 
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_THREAD_ID_KEY, 'test-thread');
+
         await observer.call(undefined, [message], undefined, {
-          requestContext: { threadId: 'test-thread' } as any,
+          requestContext,
         });
 
         expect(spy).toHaveBeenCalledWith('openai/gpt-4o');
@@ -3298,7 +3305,13 @@ describe('didProviderChange', () => {
 
   it('returns true when both sides are fully-formatted but differ', () => {
     expect(didProviderChange('openai/gpt-4o', 'anthropic/claude-opus-4-7')).toBe(true);
-    expect(didProviderChange('openai.responses/gpt-5.4', 'openai/gpt-5.4')).toBe(true);
+    expect(didProviderChange('openai/gpt-4o', 'openai/gpt-5.4')).toBe(true);
+    expect(didProviderChange('openai.responses/gpt-4o', 'openai/gpt-5.4')).toBe(true);
+  });
+
+  it('returns false when provider subnamespaces differ but base provider and modelId match', () => {
+    expect(didProviderChange('openai.responses/gpt-5.4', 'openai/gpt-5.4')).toBe(false);
+    expect(didProviderChange('openai/gpt-5.4', 'openai.responses/gpt-5.4')).toBe(false);
   });
 
   it('returns false when persisted history has bare modelId that matches actor modelId', () => {
