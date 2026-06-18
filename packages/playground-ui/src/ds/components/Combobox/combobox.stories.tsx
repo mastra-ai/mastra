@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { Combobox } from './combobox';
+import { MultiCombobox } from './multi-combobox';
 
 const meta: Meta<typeof Combobox> = {
   title: 'Composite/Combobox',
@@ -21,6 +22,7 @@ const meta: Meta<typeof Combobox> = {
 
 export default meta;
 type Story = StoryObj<typeof Combobox>;
+type MultiStory = StoryObj<typeof MultiCombobox>;
 
 const frameworkOptions = [
   { label: 'React', value: 'react' },
@@ -38,6 +40,15 @@ const modelOptions = [
   { label: 'Claude 3 Opus', value: 'claude-3-opus' },
   { label: 'Claude 3 Sonnet', value: 'claude-3-sonnet' },
   { label: 'Claude 3 Haiku', value: 'claude-3-haiku' },
+];
+
+const capabilityOptions = [
+  { label: 'Logs', value: 'logs', description: 'Inspect application output' },
+  { label: 'Traces', value: 'traces', description: 'Follow request spans' },
+  { label: 'Metrics', value: 'metrics', description: 'Monitor service health' },
+  { label: 'Datasets', value: 'datasets', description: 'Review evaluation data' },
+  { label: 'Workflows', value: 'workflows', description: 'Run multi-step processes' },
+  { label: 'Scorers', value: 'scorers', description: 'Evaluate generated output' },
 ];
 
 export const Default: Story = {
@@ -141,4 +152,22 @@ export const Sizes: Story = {
       ))}
     </div>
   ),
+};
+
+export const MultiSelect: MultiStory = {
+  render: function MultiSelectStory() {
+    const [value, setValue] = useState<string[]>(['logs', 'traces']);
+
+    return (
+      <MultiCombobox
+        options={capabilityOptions}
+        value={value}
+        onValueChange={setValue}
+        placeholder="Select capabilities..."
+        searchPlaceholder="Search capabilities..."
+        emptyText="No capabilities found."
+        className="w-[280px]"
+      />
+    );
+  },
 };
