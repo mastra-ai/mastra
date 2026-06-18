@@ -9,11 +9,9 @@ packages:
 
 Modes define the different behaviors a Harness can run. Each mode layers its own instructions and tool overrides on top of a shared backing agent, so the same agent can act as a planner in one mode and an executor in another. The Harness keeps exactly one mode active at a time, carries the thread and state across switches, and handles the transition between them.
 
-## Modes are required
+Every Harness needs at least one mode — the `modes` array is required, and the Harness throws at construction if it's empty. A single-purpose Harness still defines one mode; multiple modes are how you give a session more than one behavior to switch between. The active mode at startup is the one marked `metadata.default`, the mode named by `defaultModeId`, or the first mode in the array if neither is set.
 
-Every Harness has at least one mode. The `modes` array is required, and the Harness throws at construction if it's empty. A single-purpose Harness still defines one mode; multiple modes are how you give a single session more than one behavior to switch between.
-
-The active mode at startup is the one marked `metadata.default`, the mode named by `defaultModeId`, or the first mode in the array if neither is set. A mode supplies three things that change how the agent behaves:
+A mode supplies three things that change how the agent behaves:
 
 - **Instructions**: layered on top of the backing agent's own instructions while the mode is active.
 - **Tools**: either replacing or adding to the backing agent's tools (see [Mode tool overrides](#mode-tool-overrides)).
