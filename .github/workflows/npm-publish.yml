@@ -43,7 +43,7 @@ jobs:
         (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore: version packages') && github.event.head_commit.author.username == 'dane-ai-mastra[bot]') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_type == 'prerelease')
       )
-    runs-on: starsling-ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
@@ -157,7 +157,7 @@ jobs:
       github.repository == 'mastra-ai/mastra' && 
       github.event_name == 'workflow_dispatch' && 
       github.event.inputs.publish_type == 'stable'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
@@ -315,7 +315,7 @@ jobs:
         (github.event.inputs.publish_type == 'stable' && !inputs.dry_run && needs.stable.result == 'success') ||
         github.event.inputs.publish_type == 'enter-prerelease'
       )
-    runs-on: starsling-ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -386,7 +386,7 @@ jobs:
       github.event_name == 'workflow_dispatch' && 
       github.event.inputs.publish_type == 'snapshot' &&
       github.ref != 'refs/heads/main'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
