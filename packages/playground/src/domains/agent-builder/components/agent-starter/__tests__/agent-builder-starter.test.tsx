@@ -131,9 +131,7 @@ describe('AgentBuilderStarter', () => {
   });
 
   it('omits the request-context schema when auth is disabled', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
-    );
+    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })));
 
     let capturedBody: any = null;
     server.use(
