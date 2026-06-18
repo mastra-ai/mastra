@@ -286,7 +286,7 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           createThread,
-          session: { identity: { getThreadId: vi.fn(() => currentThreadId) } },
+          session: { thread: { getId: vi.fn(() => currentThreadId) } },
           sendSignal,
         },
       },
@@ -337,7 +337,7 @@ describe('handleGoalCommand', () => {
         pendingNewThread: false,
         goalManager,
         harness: {
-          session: { identity: { getThreadId: vi.fn(() => 'thread-1') } },
+          session: { thread: { getId: vi.fn(() => 'thread-1') } },
           sendSignal,
         },
       },
@@ -410,7 +410,7 @@ describe('handleGoalCommand', () => {
         pendingNewThread: false,
         goalManager,
         harness: {
-          session: { identity: { getThreadId: vi.fn(() => 'thread-1') } },
+          session: { thread: { getId: vi.fn(() => 'thread-1') } },
           sendSignal,
         },
       },
@@ -442,7 +442,7 @@ describe('handleGoalCommand', () => {
         pendingNewThread: false,
         goalManager,
         harness: {
-          session: { identity: { getThreadId: vi.fn(() => 'thread-1') } },
+          session: { thread: { getId: vi.fn(() => 'thread-1') } },
           setThreadSetting: vi.fn().mockResolvedValue(undefined),
           sendMessage,
         },
@@ -665,7 +665,7 @@ describe('handleGoalCommand', () => {
     const state = {
       goalManager,
       harness: {
-        session: { identity: { getThreadId: vi.fn(() => 'thread-1') } },
+        session: { thread: { getId: vi.fn(() => 'thread-1') } },
         sendSignal,
       },
       planStartedGoalId: 'plan-goal-xyz',

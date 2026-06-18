@@ -131,7 +131,7 @@ export class GoalManager {
     judgeModelId: string,
     maxTurns: number = DEFAULT_MAX_TURNS,
   ): Promise<GoalState | null> {
-    const threadId = state.harness.session.identity.getThreadId();
+    const threadId = state.harness.session.thread.getId();
     const agent = this.getAgent(state);
     const now = Date.now();
     const id = randomUUID();
@@ -162,7 +162,7 @@ export class GoalManager {
    */
   async updateJudgeDefaults(state: TUIState, judgeModelId: string, maxTurns: number): Promise<GoalState | null> {
     if (!this.record) return null;
-    const threadId = state.harness.session.identity.getThreadId();
+    const threadId = state.harness.session.thread.getId();
     const agent = this.getAgent(state);
     if (agent && threadId) {
       const updated = await agent.updateObjectiveOptions({
@@ -233,7 +233,7 @@ export class GoalManager {
    * stale state from older sessions does not resurface.
    */
   async saveToThread(state: TUIState): Promise<void> {
-    const threadId = state.harness.session.identity.getThreadId();
+    const threadId = state.harness.session.thread.getId();
     const agent = this.getAgent(state);
     try {
       if (agent && threadId) {
@@ -288,7 +288,7 @@ export class GoalManager {
     this.activeStartedAt = null;
     this.activeDurationMs = 0;
 
-    const threadId = state.harness.session.identity.getThreadId();
+    const threadId = state.harness.session.thread.getId();
     const agent = this.getAgent(state);
     if (agent && threadId) {
       try {

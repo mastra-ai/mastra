@@ -768,7 +768,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       if (event.type === 'thread_changed') void startGithubPollingForCurrentThread(event.threadId);
       else if (event.type === 'thread_created') void startGithubPollingForCurrentThread(event.thread.id);
     });
-    void startGithubPollingForCurrentThread(harness.session.identity.getThreadId());
+    void startGithubPollingForCurrentThread(harness.session.thread.getId());
   }
 
   // Persist MastraCode-owned /om settings per-thread (mastracode-only concern;

@@ -43,17 +43,14 @@ const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
  * updates the current resourceId while the default is retained so the session
  * can return to its own identity.
  *
- * `threadId` is null until the session is bound to a thread (created, switched
- * to, or reacquired); switching/deleting threads updates it, and the Harness
- * owns the surrounding teardown (subscription, display state).
+ * The active thread the session is bound to lives on {@link SessionThread}, not
+ * here — identity is the stable "who", the thread is the navigational "where".
  */
 export class SessionIdentity {
   /** The memory resourceId the session currently reads/writes under. */
   #resourceId: string;
   /** The resourceId the session started with, retained across resource switches. */
   readonly #defaultResourceId: string;
-  /** The active thread id, or null when the session is not bound to a thread. */
-  #threadId: string | null = null;
 
   constructor({ resourceId }: { resourceId: string }) {
     this.#resourceId = resourceId;
@@ -74,15 +71,47 @@ export class SessionIdentity {
   setResourceId({ resourceId }: { resourceId: string }): void {
     this.#resourceId = resourceId;
   }
+}
+
+/**
+ * Owns the session's navigational thread state: which thread the session is
+ * currently bound to. `null` until the session is bound (a thread is created,
+ * switched to, or reacquired on startup); switching/deleting updates it.
+ *
+ * In the multi-user model each session has its own current thread while the
+ * Harness host shares storage, the thread lock, and the event bus — so the
+ * thread binding is per-session state and lives here, not on the host.
+ */
+export class SessionThread {
+  /** The active thread id, or null when the session is not bound to a thread. */
+  #threadId: string | null = null;
 
   /** The active thread id, or null when the session is not bound to a thread. */
-  getThreadId(): string | null {
+  getId(): string | null {
     return this.#threadId;
   }
 
-  /** Bind the session to a thread (or clear it with null). */
-  setThreadId({ threadId }: { threadId: string | null }): void {
+  /** Whether the session is currently bound to a thread. */
+  isSet(): boolean {
+    return this.#threadId !== null;
+  }
+
+  /** The active thread id, throwing when the session is not bound to a thread. */
+  requireId(): string {
+    if (this.#threadId === null) {
+      throw new Error('No active thread on this session');
+    }
+    return this.#threadId;
+  }
+
+  /** Bind the session to a thread. */
+  set({ threadId }: { threadId: string }): void {
     this.#threadId = threadId;
+  }
+
+  /** Clear the session's thread binding. */
+  clear(): void {
+    this.#threadId = null;
   }
 }
 
@@ -674,6 +703,8 @@ export class Session {
   readonly approval = new SessionApproval();
   /** The session's identity: the memory resourceId it reads/writes under. */
   readonly identity: SessionIdentity;
+  /** The thread the session is currently bound to (navigational state). */
+  readonly thread = new SessionThread();
 
   constructor({ resourceId }: { resourceId: string }) {
     this.identity = new SessionIdentity({ resourceId });

@@ -25,7 +25,7 @@ export const notificationInboxCrudFlowScenario = {
       },
       onCreated: result => {
         const seedNotifications = async () => {
-          const threadId = result.harness.session.identity.getThreadId();
+          const threadId = result.harness.session.thread.getId();
           if (seeded || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
           seeded = true;
           if (timer) clearInterval(timer);

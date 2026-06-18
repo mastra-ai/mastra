@@ -68,7 +68,7 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
 export async function handleCloneCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
 
-  const currentThreadId = state.harness.session.identity.getThreadId();
+  const currentThreadId = state.harness.session.thread.getId();
   if (!currentThreadId) {
     ctx.showInfo('No active thread to clone');
     return;

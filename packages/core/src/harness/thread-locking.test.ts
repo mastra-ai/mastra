@@ -256,10 +256,10 @@ describe('Harness thread locking', () => {
 
     it('clears currentThreadId when deleting the current thread', async () => {
       const thread = await harness.createThread({ title: 'current' });
-      expect(harness.session.identity.getThreadId()).toBe(thread.id);
+      expect(harness.session.thread.getId()).toBe(thread.id);
 
       await harness.memory.deleteThread({ threadId: thread.id });
-      expect(harness.session.identity.getThreadId()).toBeNull();
+      expect(harness.session.thread.getId()).toBeNull();
     });
 
     it('does not release lock when deleting a non-current thread', async () => {
@@ -270,7 +270,7 @@ describe('Harness thread locking', () => {
       await harness.memory.deleteThread({ threadId: first.id });
       // Should not release lock since first is not the current thread (second is)
       expect(release).not.toHaveBeenCalled();
-      expect(harness.session.identity.getThreadId()).toBe(second.id);
+      expect(harness.session.thread.getId()).toBe(second.id);
     });
 
     it('throws when thread does not exist', async () => {

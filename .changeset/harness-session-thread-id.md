@@ -3,16 +3,17 @@
 'mastracode': patch
 ---
 
-Move Harness `currentThreadId` onto `Session.identity`
+Move the session's active thread binding onto `Session.thread`
 
-`SessionIdentity` now owns the current thread id alongside `resourceId`/`defaultResourceId`,
-exposing `getThreadId()` / `setThreadId({ threadId })`. The `currentThreadId` field and the
-`Harness.getCurrentThreadId()` public accessor are removed; all reads/writes inside Harness
-delegate to `this.#session.identity`. Internal call sites that relied on flow-narrowing of the
-old `string | null` field now capture a narrowed local before use (e.g. `renameThread`,
-`*ThreadSetting`, `loadThreadMetadata`, `loadOMProgress`, signal/notification paths,
-`listMessages`, tool approve/decline/resume, `persistTokenUsage`).
+The active thread id no longer lives on `SessionIdentity` (which now owns only
+`resourceId`/`defaultResourceId` — the stable "who"). A dedicated `SessionThread`
+owns the navigational "where": `session.thread.getId()` / `set({ threadId })` /
+`clear()` / `isSet()` / `requireId()`.
 
-Consumers read the thread id via `harness.session.identity.getThreadId()`. All mastracode
-production sites, e2e scenarios, and test mocks are migrated accordingly; `HarnessCompat`
-delegates to the session.
+In the multi-user model each session has its own current thread while the Harness
+host shares storage, the thread lock, and the event bus — so the thread binding is
+per-session state and lives on the session, not the host.
+
+`Harness.getCurrentThreadId()` is removed; consumers read
+`harness.session.thread.getId()`. All mastracode production sites, e2e scenarios,
+and test mocks are migrated; `HarnessCompat` delegates to the session.

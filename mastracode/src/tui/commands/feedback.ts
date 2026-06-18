@@ -35,7 +35,7 @@ export async function handleFeedbackCommand(ctx: SlashCommandContext, args: stri
   // We pass both so the cloud endpoint can correlate feedback to the correct trace.
   const traceId = ctx.harness.session.run.getTraceId() ?? undefined;
   const runId = ctx.harness.session.getCurrentRunId() ?? undefined;
-  const threadId = ctx.harness.session.identity.getThreadId() ?? undefined;
+  const threadId = ctx.harness.session.thread.getId() ?? undefined;
 
   if (!traceId && !runId && !threadId) {
     ctx.showError('No active session to attach feedback to.');

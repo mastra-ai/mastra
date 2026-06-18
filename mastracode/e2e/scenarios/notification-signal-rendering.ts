@@ -25,7 +25,7 @@ export const notificationSignalRenderingScenario = {
       },
       onCreated: result => {
         timer = setInterval(() => {
-          const threadId = result.harness.session.identity.getThreadId();
+          const threadId = result.harness.session.thread.getId();
           if (sent || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
           sent = true;
           if (timer) clearInterval(timer);

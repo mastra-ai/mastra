@@ -98,7 +98,7 @@ describe('dispatchSlashCommand models routing', () => {
     const state = {
       customSlashCommands: [],
       harness: {
-        session: { identity: { getResourceId: vi.fn(() => 'resource-1'), getThreadId: vi.fn(() => 'thread-1') } },
+        session: { identity: { getResourceId: vi.fn(() => 'resource-1') }, thread: { getId: vi.fn(() => 'thread-1') } },
         getCurrentModeId: vi.fn(() => 'build'),
       },
     } as any;
@@ -121,7 +121,7 @@ describe('dispatchSlashCommand models routing', () => {
     const state = {
       customSlashCommands: [],
       harness: {
-        session: { identity: { getResourceId: vi.fn(() => 'resource-1'), getThreadId: vi.fn(() => 'thread-1') } },
+        session: { identity: { getResourceId: vi.fn(() => 'resource-1') }, thread: { getId: vi.fn(() => 'thread-1') } },
         getCurrentModeId: vi.fn(() => 'build'),
       },
     } as any;
@@ -374,7 +374,7 @@ describe('dispatchSlashCommand models routing', () => {
     chatContainer.addChild(previousComponent);
     const state = {
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
-      session: { identity: { getThreadId: vi.fn(() => 'thread-1') } },
+      session: { thread: { getId: vi.fn(() => 'thread-1') } },
       pendingNewThread: false,
       allSlashCommandComponents: [],
       messageComponentsById: new Map(),
@@ -495,7 +495,7 @@ describe('dispatchSlashCommand models routing', () => {
     const state = {
       customSlashCommands: [{ name: 'new', description: 'Custom new', template: 'custom new', sourcePath: '' }],
       harness: {
-        session: { identity: { getResourceId: vi.fn(() => 'resource-1'), getThreadId: vi.fn(() => null) } },
+        session: { identity: { getResourceId: vi.fn(() => 'resource-1') }, thread: { getId: vi.fn(() => null) } },
         getCurrentModeId: vi.fn(() => 'build'),
       },
     } as any;
@@ -517,7 +517,7 @@ describe('dispatchSlashCommand models routing', () => {
   it('routes //new to the matching custom command even when a built-in exists', async () => {
     const state = {
       customSlashCommands: [{ name: 'new', description: 'Custom new', template: 'custom new', sourcePath: '' }],
-      session: { identity: { getThreadId: vi.fn(() => 'thread-1') } },
+      session: { thread: { getId: vi.fn(() => 'thread-1') } },
       allSlashCommandComponents: [],
       messageComponentsById: new Map(),
       chatContainer: new Container(),

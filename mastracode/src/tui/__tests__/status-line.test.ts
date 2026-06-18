@@ -86,7 +86,7 @@ function createState() {
       getFullModelId: vi.fn(() => 'anthropic/claude-sonnet-4-20250514'),
       session: {
         followUps: { count: vi.fn(() => 0) },
-        identity: { getResourceId: vi.fn(() => 'resource-1'), getThreadId: vi.fn(() => 'thread-1') },
+        identity: { getResourceId: vi.fn(() => 'resource-1') }, thread: { getId: vi.fn(() => 'thread-1') },
       },
     },
     statusLine: { setText },

@@ -332,7 +332,7 @@ async function startGoal(
     state.pendingNewThread = false;
   }
 
-  const shouldPersistToCreatedThread = !state.harness.session.identity.getThreadId();
+  const shouldPersistToCreatedThread = !state.harness.session.thread.getId();
   const goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
   if (!goal) {
     ctx.showError('Failed to set goal.');
