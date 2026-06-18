@@ -158,14 +158,31 @@
     "@mastra/vercel": "1.0.2"
   },
   "changesets": [
+    "afraid-icons-teach",
+    "brave-mails-listen",
+    "brown-showers-create",
+    "calm-masks-beg",
+    "chilly-poems-unite",
+    "durable-agent-error-span-close",
+    "eager-islands-beam",
     "easy-day-js-security-remediation",
     "feat-set-studio-method",
     "fiery-news-take",
     "fix-server-getstudio-guard",
     "fix-sso-callback-prefer-studio",
+    "fuzzy-ways-pay",
     "github-signals-strip-bot-state",
     "goal-judge-robustness",
+    "goofy-hairs-walk",
     "green-birds-knock",
-    "nine-nights-dream"
+    "grumpy-sheep-talk",
+    "harness-session-display-state",
+    "harness-session",
+    "lazy-turtles-invent",
+    "lovely-bars-enter",
+    "nine-nights-dream",
+    "social-plants-stare",
+    "spotty-sloths-add",
+    "strong-nights-yawn"
   ]
 }
