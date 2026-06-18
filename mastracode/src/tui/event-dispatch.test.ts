@@ -14,7 +14,7 @@ function createMockHarness(initialState: Record<string, unknown> = {}, previousT
       state = { ...state, ...updates };
     }),
     loadOMProgress: vi.fn().mockResolvedValue(undefined),
-    listThreads: vi.fn().mockResolvedValue([]),
+    session: { thread: { list: vi.fn().mockResolvedValue([]) } },
     getDisplayState: () => ({
       isRunning: false,
       tasks: [],

@@ -57,7 +57,7 @@ describe('mc send-message reproduction', () => {
 
     function getDynamicModel({ requestContext }: { requestContext: RequestContext }) {
       const harnessContext = requestContext.get('harness') as any;
-      const modelId = harnessContext?.state?.currentModelId;
+      const modelId = harnessContext?.session?.modelId;
       if (!modelId) {
         throw new Error('No model selected');
       }
@@ -94,7 +94,7 @@ describe('mc send-message reproduction', () => {
       events.push(event);
     });
 
-    expect((harness.getState() as any).currentModelId).toBe('anthropic/claude-opus-4-7');
+    expect(harness.session.model.get()).toBe('anthropic/claude-opus-4-7');
 
     await harness.sendMessage({ content: 'Hello!' });
 
@@ -152,7 +152,7 @@ describe('mc send-message reproduction', () => {
 
     function getDynamicModel({ requestContext }: { requestContext: RequestContext }) {
       const harnessContext = requestContext.get('harness') as any;
-      const modelId = harnessContext?.state?.currentModelId;
+      const modelId = harnessContext?.session?.modelId;
       if (!modelId) {
         throw new Error('No model selected');
       }
@@ -190,7 +190,7 @@ describe('mc send-message reproduction', () => {
       events.push(event);
     });
 
-    expect((harness.getState() as any).currentModelId).toBe('anthropic/claude-opus-4-7');
+    expect(harness.session.model.get()).toBe('anthropic/claude-opus-4-7');
 
     await harness.sendMessage({ content: 'Hello!' });
 

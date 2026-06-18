@@ -34,8 +34,8 @@ describe('Harness OM threshold persistence', () => {
 
     const threadA = await harness.createThread();
     await harness.setState({ observationThreshold: 12000, reflectionThreshold: 21000 } as any);
-    await harness.setThreadSetting({ key: 'observationThreshold', value: 12000 });
-    await harness.setThreadSetting({ key: 'reflectionThreshold', value: 21000 });
+    await harness.session.thread.setSetting({ key: 'observationThreshold', value: 12000 });
+    await harness.session.thread.setSetting({ key: 'reflectionThreshold', value: 21000 });
 
     await harness.createThread();
     await harness.setState({ observationThreshold: 33000, reflectionThreshold: 44000 } as any);

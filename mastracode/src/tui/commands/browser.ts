@@ -435,7 +435,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       return;
     }
 
-    const currentMode = ctx.harness.getCurrentMode();
+    const currentMode = ctx.harness.session.mode.resolve();
     const currentAgent = resolveModeAgent(currentMode, ctx.state.harness.getState());
     let browserInstance = currentAgent?.browser;
 
