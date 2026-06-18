@@ -119,6 +119,7 @@ export * from './hooks/use-copy-to-clipboard';
 export * from './hooks/use-in-view';
 export * from './hooks/use-autoscroll';
 export * from './hooks/use-is-mobile';
+export * from './hooks/use-keyboard-shortcut-label';
 
 // Pure lib utilities
 export { cn } from './lib/utils';

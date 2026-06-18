@@ -26,6 +26,36 @@ import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform';
+import { cn } from '@/lib/utils';
+
+type NavigationCommandItemProps = Omit<React.ComponentProps<typeof CommandItem>, 'children'> & {
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  shortcut?: React.ReactNode;
+};
+
+const NavigationCommandItem = ({
+  icon,
+  title,
+  subtitle,
+  shortcut,
+  className,
+  ...props
+}: NavigationCommandItemProps) => {
+  return (
+    <CommandItem className={cn('h-auto items-start gap-3 py-2', className)} {...props}>
+      <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center text-neutral3 [&>svg]:size-4">
+        {icon}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-ui-sm font-medium leading-ui-sm text-neutral6">{title}</span>
+        {subtitle && <span className="truncate text-ui-xs leading-ui-xs text-neutral3">{subtitle}</span>}
+      </span>
+      {shortcut}
+    </CommandItem>
+  );
+};
 
 export const NavigationCommand = () => {
   const { open, setOpen } = useNavigationCommand();
@@ -64,56 +94,83 @@ export const NavigationCommand = () => {
 
         <CommandGroup heading="Navigation">
           {sidebar && (
-            <CommandItem
-              value="toggle sidebar collapse expand"
+            <NavigationCommandItem
+              value="toggle sidebar collapse expand layout panel"
               onSelect={() => {
                 sidebar.toggleSidebar();
                 setOpen(false);
               }}
-            >
-              <PanelLeftIcon className="text-neutral3" />
-              <span>Toggle Sidebar</span>
-              <CommandShortcut>Ctrl+B</CommandShortcut>
-            </CommandItem>
+              icon={<PanelLeftIcon />}
+              title="Toggle Sidebar"
+              subtitle="Layout"
+              shortcut={<CommandShortcut>Ctrl+B</CommandShortcut>}
+            />
           )}
-          <CommandItem value="all agents" onSelect={() => handleSelect('/agents')}>
-            <AgentIcon className="text-neutral3" />
-            <span>All Agents</span>
-          </CommandItem>
-          <CommandItem value="all workflows" onSelect={() => handleSelect('/workflows')}>
-            <WorkflowIcon className="text-neutral3" />
-            <span>All Workflows</span>
-          </CommandItem>
-          <CommandItem value="all tools" onSelect={() => handleSelect('/tools')}>
-            <ToolsIcon className="text-neutral3" />
-            <span>All Tools</span>
-          </CommandItem>
-          <CommandItem value="all scorers" onSelect={() => handleSelect('/scorers')}>
-            <GaugeIcon className="text-neutral3" />
-            <span>All Scorers</span>
-          </CommandItem>
-          <CommandItem value="all processors" onSelect={() => handleSelect('/processors')}>
-            <Cpu className="text-neutral3" />
-            <span>All Processors</span>
-          </CommandItem>
-          <CommandItem value="all mcp servers" onSelect={() => handleSelect('/mcps')}>
-            <McpServerIcon className="text-neutral3" />
-            <span>All MCP Servers</span>
-          </CommandItem>
-          <CommandItem value="observability traces" onSelect={() => handleSelect('/observability')}>
-            <EyeIcon className="text-neutral3" />
-            <span>Observability</span>
-          </CommandItem>
+          <NavigationCommandItem
+            value="all agents agents chat /agents"
+            onSelect={() => handleSelect('/agents')}
+            icon={<AgentIcon />}
+            title="All Agents"
+            subtitle="Browse and chat with agents"
+          />
+          <NavigationCommandItem
+            value="all workflows workflows graph /workflows"
+            onSelect={() => handleSelect('/workflows')}
+            icon={<WorkflowIcon />}
+            title="All Workflows"
+            subtitle="Browse workflow graphs"
+          />
+          <NavigationCommandItem
+            value="all tools tools /tools"
+            onSelect={() => handleSelect('/tools')}
+            icon={<ToolsIcon />}
+            title="All Tools"
+            subtitle="Inspect available tools"
+          />
+          <NavigationCommandItem
+            value="all scorers scores evaluation /scorers"
+            onSelect={() => handleSelect('/scorers')}
+            icon={<GaugeIcon />}
+            title="All Scorers"
+            subtitle="Manage evaluation scorers"
+          />
+          <NavigationCommandItem
+            value="all processors processors /processors"
+            onSelect={() => handleSelect('/processors')}
+            icon={<Cpu />}
+            title="All Processors"
+            subtitle="Review input and output processors"
+          />
+          <NavigationCommandItem
+            value="all mcp servers mcp /mcps"
+            onSelect={() => handleSelect('/mcps')}
+            icon={<McpServerIcon />}
+            title="All MCP Servers"
+            subtitle="Browse connected MCP servers"
+          />
+          <NavigationCommandItem
+            value="observability traces telemetry /observability"
+            onSelect={() => handleSelect('/observability')}
+            icon={<EyeIcon />}
+            title="Observability"
+            subtitle="Inspect traces and telemetry"
+          />
           {!isMastraPlatform && (
             <>
-              <CommandItem value="settings" onSelect={() => handleSelect('/settings')}>
-                <SettingsIcon className="text-neutral3" />
-                <span>Settings</span>
-              </CommandItem>
-              <CommandItem value="templates" onSelect={() => handleSelect('/templates')}>
-                <PackageIcon className="text-neutral3" />
-                <span>Templates</span>
-              </CommandItem>
+              <NavigationCommandItem
+                value="settings configuration studio /settings"
+                onSelect={() => handleSelect('/settings')}
+                icon={<SettingsIcon />}
+                title="Settings"
+                subtitle="Configure Studio"
+              />
+              <NavigationCommandItem
+                value="templates starter projects examples /templates"
+                onSelect={() => handleSelect('/templates')}
+                icon={<PackageIcon />}
+                title="Templates"
+                subtitle="Create from a starter"
+              />
             </>
           )}
         </CommandGroup>
@@ -124,17 +181,20 @@ export const NavigationCommand = () => {
             <CommandGroup heading="Agents">
               {agentEntries.map(([id, agent]) => (
                 <React.Fragment key={id}>
-                  <CommandItem value={`${agent.name} chat agent`} onSelect={() => handleSelect(paths.agentLink(id))}>
-                    <AgentIcon className="text-neutral3" />
-                    <span>{agent.name}: Chat</span>
-                  </CommandItem>
-                  <CommandItem
-                    value={`${agent.name} traces agent observability`}
+                  <NavigationCommandItem
+                    value={`${agent.name} ${id} chat agent conversation ${paths.agentLink(id)}`}
+                    onSelect={() => handleSelect(paths.agentLink(id))}
+                    icon={<AgentIcon />}
+                    title={`${agent.name}: Chat`}
+                    subtitle="Agent conversation"
+                  />
+                  <NavigationCommandItem
+                    value={`${agent.name} ${id} traces agent observability telemetry`}
                     onSelect={() => handleSelect(`/observability?entity=${id}`)}
-                  >
-                    <EyeIcon className="text-neutral3" />
-                    <span>{agent.name}: Traces</span>
-                  </CommandItem>
+                    icon={<EyeIcon />}
+                    title={`${agent.name}: Traces`}
+                    subtitle="Agent observability"
+                  />
                 </React.Fragment>
               ))}
             </CommandGroup>
@@ -147,20 +207,20 @@ export const NavigationCommand = () => {
             <CommandGroup heading="Workflows">
               {workflowEntries.map(([id, workflow]) => (
                 <React.Fragment key={id}>
-                  <CommandItem
-                    value={`${workflow.name} graph workflow view`}
+                  <NavigationCommandItem
+                    value={`${workflow.name} ${id} graph workflow view ${paths.workflowLink(id)}`}
                     onSelect={() => handleSelect(paths.workflowLink(id))}
-                  >
-                    <WorkflowIcon className="text-neutral3" />
-                    <span>{workflow.name}: Graph</span>
-                  </CommandItem>
-                  <CommandItem
-                    value={`${workflow.name} traces workflow observability`}
+                    icon={<WorkflowIcon />}
+                    title={`${workflow.name}: Graph`}
+                    subtitle="Workflow view"
+                  />
+                  <NavigationCommandItem
+                    value={`${workflow.name} ${id} traces workflow observability telemetry`}
                     onSelect={() => handleSelect(`/observability?entity=${workflow.name}`)}
-                  >
-                    <EyeIcon className="text-neutral3" />
-                    <span>{workflow.name}: Traces</span>
-                  </CommandItem>
+                    icon={<EyeIcon />}
+                    title={`${workflow.name}: Traces`}
+                    subtitle="Workflow observability"
+                  />
                 </React.Fragment>
               ))}
             </CommandGroup>
@@ -172,10 +232,14 @@ export const NavigationCommand = () => {
             <CommandSeparator />
             <CommandGroup heading="Tools">
               {toolEntries.map(([id, tool]) => (
-                <CommandItem key={id} value={`tool ${tool.id}`} onSelect={() => handleSelect(paths.toolLink(id))}>
-                  <ToolsIcon className="text-neutral3" />
-                  <span>{tool.id}</span>
-                </CommandItem>
+                <NavigationCommandItem
+                  key={id}
+                  value={`tool ${tool.id} ${id} ${paths.toolLink(id)}`}
+                  onSelect={() => handleSelect(paths.toolLink(id))}
+                  icon={<ToolsIcon />}
+                  title={tool.id}
+                  subtitle="Tool"
+                />
               ))}
             </CommandGroup>
           </>
@@ -188,10 +252,14 @@ export const NavigationCommand = () => {
               {scorerEntries.map(([id, scorer]) => {
                 const name = scorer.scorer?.config?.name || scorer.scorer?.config?.id || id;
                 return (
-                  <CommandItem key={id} value={`scorer ${name}`} onSelect={() => handleSelect(paths.scorerLink(id))}>
-                    <GaugeIcon className="text-neutral3" />
-                    <span>{name}</span>
-                  </CommandItem>
+                  <NavigationCommandItem
+                    key={id}
+                    value={`scorer score evaluation ${name} ${id} ${paths.scorerLink(id)}`}
+                    onSelect={() => handleSelect(paths.scorerLink(id))}
+                    icon={<GaugeIcon />}
+                    title={name}
+                    subtitle="Scorer"
+                  />
                 );
               })}
             </CommandGroup>
@@ -208,14 +276,14 @@ export const NavigationCommand = () => {
                   ? paths.workflowLink(processor.id) + '/graph'
                   : paths.processorLink(processor.id);
                 return (
-                  <CommandItem
+                  <NavigationCommandItem
                     key={processor.id}
-                    value={`processor ${displayName}`}
+                    value={`processor ${displayName} ${processor.id} ${targetPath}`}
                     onSelect={() => handleSelect(targetPath)}
-                  >
-                    <Cpu className="text-neutral3" />
-                    <span>{displayName}</span>
-                  </CommandItem>
+                    icon={<Cpu />}
+                    title={displayName}
+                    subtitle={processor.isWorkflow ? 'Workflow processor' : 'Processor'}
+                  />
                 );
               })}
             </CommandGroup>
@@ -227,14 +295,14 @@ export const NavigationCommand = () => {
             <CommandSeparator />
             <CommandGroup heading="MCP Servers">
               {mcpServers.map(server => (
-                <CommandItem
+                <NavigationCommandItem
                   key={server.id}
-                  value={`mcp server ${server.name}`}
+                  value={`mcp server ${server.name} ${server.id} ${paths.mcpServerLink(server.id)}`}
                   onSelect={() => handleSelect(paths.mcpServerLink(server.id))}
-                >
-                  <McpServerIcon className="text-neutral3" />
-                  <span>{server.name}</span>
-                </CommandItem>
+                  icon={<McpServerIcon />}
+                  title={server.name}
+                  subtitle="MCP server"
+                />
               ))}
             </CommandGroup>
           </>
