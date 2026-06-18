@@ -352,6 +352,81 @@ export class DurableAgent<
   }
 
   // ===========================================================================
+  // Editor / fork delegation
+  //
+  // The base Agent serves tools/instructions/model from its own private fields,
+  // but a DurableAgent serves all of them from the wrapped agent (see the
+  // delegating getters above). The editor applies stored overrides per request
+  // by calling `__fork()` and then mutating the fork via `__updateInstructions`
+  // / `__updateModel` / `__setTools`, and inspecting it via `__getEditorConfig`
+  // / `__getOverridableFields`. If those operated on the DurableAgent's own
+  // (unused) base fields the served agent would silently lose its tools and
+  // ignore overrides, so forward them to the wrapped agent — it stays the single
+  // source of truth.
+  // ===========================================================================
+
+  override __getEditorConfig() {
+    return this.#wrappedAgent.__getEditorConfig();
+  }
+
+  override __getOverridableFields() {
+    return this.#wrappedAgent.__getOverridableFields();
+  }
+
+  override __updateInstructions(instructions: Parameters<Agent<TAgentId, TTools, TOutput>['__updateInstructions']>[0]) {
+    this.#wrappedAgent.__updateInstructions(instructions);
+  }
+
+  override __updateModel(config: Parameters<Agent<TAgentId, TTools, TOutput>['__updateModel']>[0]) {
+    this.#wrappedAgent.__updateModel(config);
+  }
+
+  override __setTools(tools: Parameters<Agent<TAgentId, TTools, TOutput>['__setTools']>[0]) {
+    this.#wrappedAgent.__setTools(tools);
+  }
+
+  /**
+   * Create a per-request clone for applying stored editor overrides.
+   *
+   * The base `Agent.__fork()` builds a bare `new Agent(...)`, which for a
+   * DurableAgent would drop the wrapped agent and every delegating override
+   * (tools, model, memory, voice, durable streaming) — the served fork ends up a
+   * plain `Agent` with no tools. Instead, fork the wrapped agent (so overrides
+   * applied to this fork don't mutate the singleton) and re-wrap it in the same
+   * durable subclass, preserving pubsub/cache/run configuration.
+   *
+   * @internal
+   */
+  override __fork(): Agent<TAgentId, TTools, TOutput> {
+    const innerFork = this.#wrappedAgent.__fork();
+
+    const Ctor = this.constructor as new (
+      config: DurableAgentConfig<TAgentId, TTools, TOutput>,
+    ) => DurableAgent<TAgentId, TTools, TOutput>;
+
+    const fork = new Ctor({
+      agent: innerFork,
+      id: this.id,
+      name: this.name,
+      pubsub: this.#hasCustomPubsub ? this.#innerPubsub : undefined,
+      cache: this.#cacheConfig,
+      maxSteps: this.#maxSteps,
+      cleanupTimeoutMs: this.#cleanupTimeoutMs,
+    });
+
+    // Preserve runtime state set after construction (mastra registration and the
+    // wired inner pubsub, e.g. mastra.pubsub) without re-triggering registration
+    // side effects — mirrors Agent.__fork().
+    if (this.#mastra) {
+      fork.#mastra = this.#mastra;
+    }
+    fork.#innerPubsub = this.#innerPubsub;
+    fork.source = this.source;
+
+    return fork;
+  }
+
+  // ===========================================================================
   // Protected methods for subclass overrides
   // ===========================================================================
 
