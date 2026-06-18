@@ -425,6 +425,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     }
   }
 
+  let createdStreamingComponent = false;
   if (!state.streamingComponent) {
     const trailingParts = getTrailingContentParts(message);
     const hasToolCalls = message.content.some(content => content.type === 'tool_call');
@@ -443,6 +444,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
 
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
+    createdStreamingComponent = true;
   }
 
   state.streamingMessage = message;
@@ -469,6 +471,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
           getMarkdownTheme(),
         );
         ctx.addChildBeforeFollowUps(state.streamingComponent);
+        createdStreamingComponent = true;
         continue;
       }
 
@@ -498,6 +501,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
           getMarkdownTheme(),
         );
         ctx.addChildBeforeFollowUps(state.streamingComponent);
+        createdStreamingComponent = true;
       } else {
         const component = state.pendingTools.get(content.id);
         if (component) {
@@ -512,11 +516,14 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   // Avoid replacing visible assistant text with an empty trailing segment
   // (commonly happens immediately after tool_result-only updates).
   if (trailingParts.length > 0) {
+    const wasSpacingParticipant = state.streamingComponent.getChatSpacingKind() !== undefined;
     state.streamingComponent.updateContent({
       ...message,
       content: trailingParts,
     });
-    reconcileChatBoundarySpacers(state.chatContainer);
+    if (createdStreamingComponent || (!wasSpacingParticipant && state.streamingComponent.getChatSpacingKind() !== undefined)) {
+      reconcileChatBoundarySpacers(state.chatContainer);
+    }
   }
 
   state.ui.requestRender();
@@ -536,7 +543,6 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
         ...message,
         content: trailingParts,
       });
-      reconcileChatBoundarySpacers(state.chatContainer);
     }
 
     if (message.stopReason === 'aborted' || message.stopReason === 'error') {
