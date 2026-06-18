@@ -56,6 +56,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:rw
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
@@ -81,6 +82,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
@@ -111,6 +113,7 @@ jobs:
     timeout-minutes: 30
     if: needs.changes.outputs.has_examples == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
@@ -136,6 +139,7 @@ jobs:
     timeout-minutes: 10
     if: github.repository == 'mastra-ai/mastra'
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
@@ -157,6 +161,7 @@ jobs:
     # Run on main repository or for trusted bot PRs
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
@@ -206,6 +211,7 @@ jobs:
     timeout-minutes: 10
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
+      contents: read
       pull-requests: read
 
     steps:

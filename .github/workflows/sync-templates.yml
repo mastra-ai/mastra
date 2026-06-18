@@ -13,6 +13,8 @@ jobs:
     name: Sync Template Repositories
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: starsling-ubuntu-24.04
+    permissions:
+      contents: read
 
     steps:
       - name: Initial checkout
