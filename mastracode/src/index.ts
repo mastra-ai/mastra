@@ -111,6 +111,8 @@ function hasAwsCredentials(): boolean {
   if (
     process.env.AWS_BEARER_TOKEN_BEDROCK ||
     (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
+    process.env.AWS_SHARED_CREDENTIALS_FILE ||
+    process.env.AWS_CONFIG_FILE ||
     process.env.AWS_PROFILE ||
     process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI ||
     process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI ||
@@ -121,7 +123,9 @@ function hasAwsCredentials(): boolean {
   const home = process.env.HOME || process.env.USERPROFILE;
   if (home) {
     const awsDir = path.join(home, '.aws');
-    if (existsSync(path.join(awsDir, 'credentials')) || existsSync(path.join(awsDir, 'config'))) {
+    const credentialsPath = process.env.AWS_SHARED_CREDENTIALS_FILE ?? path.join(awsDir, 'credentials');
+    const configPath = process.env.AWS_CONFIG_FILE ?? path.join(awsDir, 'config');
+    if (existsSync(credentialsPath) || existsSync(configPath)) {
       return true;
     }
   }
