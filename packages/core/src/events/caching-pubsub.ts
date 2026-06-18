@@ -1,6 +1,7 @@
 import type { MastraServerCache } from '../cache/base';
 import type { IMastraLogger } from '../logger';
-import { PubSub } from './pubsub';
+import { isLeaseProvider, PubSub } from './pubsub';
+import type { LeaseProvider } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 /**
@@ -268,33 +269,17 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
-   * Delegate lease acquisition to the inner PubSub so wrapping (e.g. with
-   * Redis) preserves real distributed lease semantics instead of falling
-   * back to the base no-op default.
+   * Expose the inner's {@link LeaseProvider} when it has one, otherwise
+   * `undefined`. Leasing is a capability of the underlying backend
+   * (e.g. Redis), not of the caching decorator itself — so rather than
+   * unconditionally declaring lease methods (which would make
+   * {@link isLeaseProvider} report `true` even when the inner can't
+   * coordinate a lock), we surface the inner's capability directly. The
+   * signals runtime unwraps this so wrapping with caching preserves real
+   * distributed lease semantics without faking them.
    */
-  acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
-    return this.inner.acquireLease(key, owner, ttlMs);
-  }
-
-  /**
-   * Delegate lease owner lookup to the inner PubSub.
-   */
-  getLeaseOwner(key: string): Promise<string | undefined> {
-    return this.inner.getLeaseOwner(key);
-  }
-
-  /**
-   * Delegate lease release to the inner PubSub.
-   */
-  releaseLease(key: string, owner: string): Promise<void> {
-    return this.inner.releaseLease(key, owner);
-  }
-
-  /**
-   * Delegate lease renewal to the inner PubSub.
-   */
-  renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
-    return this.inner.renewLease(key, owner, ttlMs);
+  getLeaseProvider(): LeaseProvider | undefined {
+    return isLeaseProvider(this.inner) ? this.inner : undefined;
   }
 
   /**

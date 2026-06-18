@@ -100,65 +100,95 @@ export abstract class PubSub {
   subscribeFromOffset(topic: string, _offset: number, cb: EventCallback): Promise<void> {
     return this.subscribeWithReplay(topic, cb);
   }
+}
 
+/**
+ * Distributed leasing capability, separate from event delivery (`PubSub`).
+ *
+ * Used by the signals layer to elect a single owner across multiple
+ * processes (e.g. serverless invocations) for a given resource — most
+ * commonly a thread-key, where the owner is the process that will wake
+ * and run the agent stream.
+ *
+ * Leasing is a distinct concern from pub/sub: a backend only implements
+ * this when it can genuinely coordinate a lock (Redis via SET-NX, an
+ * in-memory map for single-process). Backends that cannot lease simply do
+ * not implement `LeaseProvider`; the signals runtime feature-detects and
+ * falls back to {@link NoopLeaseProvider} (always-win / no-op), preserving
+ * single-process behavior.
+ */
+export interface LeaseProvider {
   /**
    * Atomically try to acquire a lease on a key.
-   *
-   * Used by the signals layer to elect a single owner across multiple
-   * processes (e.g. serverless invocations) for a given resource — most
-   * commonly a thread-key, where the owner is the process that will wake
-   * and run the agent stream.
    *
    * Returns `{ acquired: true, owner }` if the caller claimed the lease,
    * or `{ acquired: false, owner }` where `owner` is the current holder
    * (so the caller can route follow-up work to them). `owner` may be
    * `undefined` if the holder could not be read (rare).
    *
-   * Default implementation returns `acquired: true` — i.e. single-process
-   * pubsub implementations always "win" their own race, preserving
-   * today's behavior. Distributed implementations (Redis, etc.) override
-   * with atomic SET-NX semantics.
-   *
    * @param key - The lease key (e.g. thread key)
    * @param owner - Identifier for the owner (e.g. runId) — used so the
    *   same owner can call `acquireLease` idempotently and renew/release.
    * @param ttlMs - Time-to-live in milliseconds for the lease
    */
-  acquireLease(_key: string, owner: string, _ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
-    return Promise.resolve({ acquired: true, owner });
-  }
+  acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }>;
 
   /**
-   * Read the current owner of a lease, or `undefined` if no lease is
-   * held.
-   *
-   * Default implementation returns `undefined`.
+   * Read the current owner of a lease, or `undefined` if no lease is held.
    */
-  getLeaseOwner(_key: string): Promise<string | undefined> {
-    return Promise.resolve(undefined);
-  }
+  getLeaseOwner(key: string): Promise<string | undefined>;
 
   /**
    * Release a lease. No-op if the caller is not the current owner
    * (implementations should atomically check ownership before releasing
    * to avoid clobbering a renewal that happened concurrently).
-   *
-   * Default implementation is a no-op.
    */
-  releaseLease(_key: string, _owner: string): Promise<void> {
-    return Promise.resolve();
-  }
+  releaseLease(key: string, owner: string): Promise<void>;
 
   /**
    * Renew an existing lease owned by `owner`, extending its TTL.
    *
    * Returns `true` if the renewal succeeded (caller still owns it),
-   * `false` if the lease was lost (TTL expired or another owner took
-   * it).
-   *
-   * Default implementation returns `true`.
+   * `false` if the lease was lost (TTL expired or another owner took it).
    */
+  renewLease(key: string, owner: string, ttlMs: number): Promise<boolean>;
+}
+
+/**
+ * Duck-typed check for whether a value implements {@link LeaseProvider}.
+ *
+ * Uses structural detection rather than `instanceof` so it works across
+ * package boundaries (e.g. a separately-published pubsub backend resolving
+ * a different copy of `@mastra/core`).
+ */
+export function isLeaseProvider(value: unknown): value is LeaseProvider {
+  if (!value || (typeof value !== 'object' && typeof value !== 'function')) return false;
+  const candidate = value as Partial<LeaseProvider>;
+  return (
+    typeof candidate.acquireLease === 'function' &&
+    typeof candidate.getLeaseOwner === 'function' &&
+    typeof candidate.releaseLease === 'function' &&
+    typeof candidate.renewLease === 'function'
+  );
+}
+
+/**
+ * Always-win / no-op {@link LeaseProvider}. Used by the signals runtime
+ * when the configured pubsub does not implement `LeaseProvider` — this
+ * preserves single-process behavior where every caller "wins" its own
+ * lease race and release/renew are inert.
+ */
+export const NoopLeaseProvider: LeaseProvider = {
+  acquireLease(_key: string, owner: string, _ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+    return Promise.resolve({ acquired: true, owner });
+  },
+  getLeaseOwner(_key: string): Promise<string | undefined> {
+    return Promise.resolve(undefined);
+  },
+  releaseLease(_key: string, _owner: string): Promise<void> {
+    return Promise.resolve();
+  },
   renewLease(_key: string, _owner: string, _ttlMs: number): Promise<boolean> {
     return Promise.resolve(true);
-  }
-}
+  },
+};

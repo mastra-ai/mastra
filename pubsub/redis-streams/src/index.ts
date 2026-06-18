@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PubSub } from '@mastra/core/events';
-import type { Event, EventCallback, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
+import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
 import { createClient } from 'redis';
 import type { RedisClientOptions, RedisClientType } from 'redis';
 
@@ -57,7 +57,7 @@ export interface RedisStreamsPubSubConfig {
   logger?: { debug?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void };
 }
 
-export class RedisStreamsPubSub extends PubSub {
+export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // Redis Streams is a pull transport: consumers issue XREADGROUP to read
   // events. Mastra reads this to know an OrchestrationWorker is required.
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
@@ -318,11 +318,7 @@ export class RedisStreamsPubSub extends PubSub {
    * current value is already this owner, we refresh the TTL instead of
    * failing. Cross-process callers race here; Redis serializes them.
    */
-  override async acquireLease(
-    key: string,
-    owner: string,
-    ttlMs: number,
-  ): Promise<{ acquired: boolean; owner?: string }> {
+  async acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
     if (this.#closed) return { acquired: false };
     await this.#ensureWriterConnected();
     const redisKey = this.#leaseKey(key);
@@ -338,7 +334,7 @@ export class RedisStreamsPubSub extends PubSub {
     return { acquired: false, owner: current ?? undefined };
   }
 
-  override async getLeaseOwner(key: string): Promise<string | undefined> {
+  async getLeaseOwner(key: string): Promise<string | undefined> {
     if (this.#closed) return undefined;
     await this.#ensureWriterConnected();
     const current = await this.#writeClient.get(this.#leaseKey(key));
@@ -350,7 +346,7 @@ export class RedisStreamsPubSub extends PubSub {
    * script so the check-and-delete is atomic against concurrent renewals
    * from other processes.
    */
-  override async releaseLease(key: string, owner: string): Promise<void> {
+  async releaseLease(key: string, owner: string): Promise<void> {
     if (this.#closed) return;
     await this.#ensureWriterConnected();
     const script = `
@@ -370,7 +366,7 @@ export class RedisStreamsPubSub extends PubSub {
    * Extend the TTL only if we still own the lease. Returns false if the
    * lease was lost (expired or another owner took it).
    */
-  override async renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
+  async renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
     if (this.#closed) return false;
     await this.#ensureWriterConnected();
     const script = `
