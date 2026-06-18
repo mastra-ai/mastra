@@ -89,8 +89,9 @@ const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<Cor
 
   if (att.kind === 'video') {
     // URL attachments forward the raw URI so the model provider fetches it
-    // server-side (e.g. Vertex AI for gs://). Local files are inlined as a data URI.
-    const data = att.isUrl ? att.name : `data:${att.contentType};base64,${await fileToBase64(att.file)}`;
+    // server-side (e.g. Google Cloud for gs://). Local files are inlined as a
+    // data URI — `fileToBase64` already returns a full `data:*;base64,...` string.
+    const data = att.isUrl ? att.name : await fileToBase64(att.file);
     return {
       role: 'user' as const,
       content: [
