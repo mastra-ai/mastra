@@ -13,7 +13,6 @@ jobs:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: starsling-ubuntu-24.04
     permissions:
-      issues: write
       contents: read
 
     steps:
@@ -28,6 +27,8 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
 
       - name: Delete spam issues with GraphQL
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3

@@ -13,8 +13,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.run_id }}
@@ -44,6 +42,10 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-pull-requests: read
+          permission-members: read
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node
@@ -91,6 +93,9 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-pull-requests: read
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node
@@ -137,6 +142,8 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node
@@ -180,6 +187,10 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-pull-requests: write
+          permission-members: read
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node

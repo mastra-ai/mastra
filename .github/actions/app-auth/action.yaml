@@ -17,6 +17,27 @@ inputs:
     description: 'Do not revoke token at job end (optional)'
     required: false
     default: 'false'
+  permission-contents:
+    description: "Optional token permission for repository contents. Can be 'read' or 'write'."
+    required: false
+  permission-issues:
+    description: "Optional token permission for issues. Can be 'read' or 'write'."
+    required: false
+  permission-pull-requests:
+    description: "Optional token permission for pull requests. Can be 'read' or 'write'."
+    required: false
+  permission-checks:
+    description: "Optional token permission for checks. Can be 'read' or 'write'."
+    required: false
+  permission-statuses:
+    description: "Optional token permission for commit statuses. Can be 'read' or 'write'."
+    required: false
+  permission-members:
+    description: "Optional token permission for organization members. Can be 'read' or 'write'."
+    required: false
+  permission-administration:
+    description: "Optional token permission for repository administration. Can be 'read' or 'write'."
+    required: false
 
 outputs:
   token:
@@ -40,6 +61,13 @@ runs:
         owner: ${{ inputs.owner }}
         repositories: ${{ inputs.repositories }}
         skip-token-revoke: ${{ inputs['skip-token-revoke'] }}
+        permission-contents: ${{ inputs['permission-contents'] }}
+        permission-issues: ${{ inputs['permission-issues'] }}
+        permission-pull-requests: ${{ inputs['permission-pull-requests'] }}
+        permission-checks: ${{ inputs['permission-checks'] }}
+        permission-statuses: ${{ inputs['permission-statuses'] }}
+        permission-members: ${{ inputs['permission-members'] }}
+        permission-administration: ${{ inputs['permission-administration'] }}
 
     - name: Get GitHub App User ID
       id: get-user-id

@@ -8,9 +8,7 @@ on:
 
 permissions:
   contents: read
-  issues: read
   pull-requests: read
-  checks: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -108,6 +106,10 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+          permission-issues: read
+          permission-members: read
 
       - name: Check if major version bump is allowed
         if: steps.check_major.outputs.has_major_changeset == 'true'

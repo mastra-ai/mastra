@@ -45,9 +45,8 @@ jobs:
       )
     runs-on: starsling-ubuntu-24.04
     permissions:
-      contents: write
+      contents: read
       issues: write
-      pull-requests: write
       id-token: write
     steps:
       - name: Checkout repo
@@ -160,9 +159,7 @@ jobs:
       github.event.inputs.publish_type == 'stable'
     runs-on: starsling-ubuntu-24.04
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: read
       id-token: write
     steps:
       - name: Initial checkout
@@ -177,6 +174,9 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-issues: write
 
       - name: Re-checkout with app token
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -317,8 +317,7 @@ jobs:
       )
     runs-on: starsling-ubuntu-24.04
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - name: Initial checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -332,6 +331,8 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
 
       - name: Re-checkout with app token
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -387,8 +388,7 @@ jobs:
       github.ref != 'refs/heads/main'
     runs-on: starsling-ubuntu-24.04
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
       id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -407,6 +407,8 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
 
       - name: Re-checkout with app token
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
