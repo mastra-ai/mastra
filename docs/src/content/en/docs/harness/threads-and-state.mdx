@@ -79,6 +79,8 @@ const harness = new Harness({
 
 ## State
 
+Where a thread stores the conversation's messages, state stores structured values that describe the conversation but aren't messages — model preferences, feature flags, UI settings, or progress markers. Agents can read and update state during a run, and your UI can react to changes, so state is how the agent and the interface stay in sync on shared facts. You define its shape with a schema, and every update is validated against that schema before it's applied.
+
 ### Defining a state schema
 
 Pass a `stateSchema` (Standard JSON Schema) to validate state and extract defaults:
