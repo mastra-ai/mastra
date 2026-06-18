@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 34.1.0-alpha.3
+
+### Patch Changes
+
+- Improved workflow UI helper components. ([#18079](https://github.com/mastra-ai/mastra/pull/18079))
+
 ## 34.1.0-alpha.2
 
 ### Minor Changes
