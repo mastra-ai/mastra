@@ -1,10 +1,10 @@
-import { WorkflowStepFactory } from '@mastra/react';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { useState } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
+import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import type { WorkflowCardDisplayStatus, WorkflowConditionCodeCondition } from './components/types';
 import { WorkflowConditionCardView } from './components/workflow-condition-card-view';
@@ -35,12 +35,16 @@ const WorkflowStepCard = ({
   stepsFlow: Record<string, string[]>;
 }) => {
   const { steps } = useCurrentRun();
+  const { selectedStepId, hoverStepId, setHoverStepId } = useWorkflowSelectedStep();
   const { showNestedGraph } = useWorkflowStepDetail();
   const { label, stepId, description } = data;
-  const mapConfig = data.mapConfig ?? data.workflowStep.step?.mapConfig;
-  const stepGraph = data.stepGraph ?? data.workflowStep.step?.serializedStepFlow;
+  const mapConfig = data.mapConfig ?? ('step' in data.workflowStep ? data.workflowStep.step?.mapConfig : undefined);
+  const stepGraph =
+    data.stepGraph ?? ('step' in data.workflowStep ? data.workflowStep.step?.serializedStepFlow : undefined);
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
   const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
+  const isSelected = selectedStepId === stepKey;
+  const isHovered = hoverStepId === stepKey;
   const step = steps[stepKey];
   const { displayStatus, isTripwire } = getDisplayStatus(step);
 
@@ -51,6 +55,10 @@ const WorkflowStepCard = ({
       displayStatus={displayStatus}
       hasStep={Boolean(step)}
       isNestedWorkflowStep={data.workflowStep.kind === 'nested-workflow-step'}
+      stepKey={stepKey}
+      isSelected={isSelected}
+      isHovered={isHovered}
+      onHoverChange={isHovered => setHoverStepId(isHovered ? stepKey : null)}
       duration={data.duration}
       date={data.date}
       isForEach={data.isForEach}
@@ -123,32 +131,17 @@ export function WorkflowGraphNode({
   parentWorkflowName,
   stepsFlow,
 }: NodeProps<WorkflowStepNode> & WorkflowGraphNodeProps) {
+  const content =
+    data.workflowStep.kind === 'conditional' ? (
+      <WorkflowConditionCard data={data} />
+    ) : (
+      <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
+    );
+
   return (
     <>
       {!data.withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
-      <WorkflowStepFactory
-        step={data.workflowStep}
-        Step={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
-        MapStep={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
-        ForEachStep={() => (
-          <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
-        )}
-        ParallelStep={() => (
-          <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
-        )}
-        Conditional={() => <WorkflowConditionCard data={data} />}
-        LoopStep={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
-        SleepStep={() => <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />}
-        SleepUntilStep={() => (
-          <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
-        )}
-        NestedWorkflowStep={() => (
-          <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
-        )}
-        UnknownStep={() => (
-          <WorkflowStepCard data={data} parentWorkflowName={parentWorkflowName} stepsFlow={stepsFlow} />
-        )}
-      />
+      {content}
       {!data.withoutBottomHandle && (
         <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />
       )}
