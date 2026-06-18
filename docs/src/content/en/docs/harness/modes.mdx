@@ -113,6 +113,8 @@ await harness.switchMode({ modeId: 'build' })
 
 ## Querying modes
 
+The Harness exposes the full mode catalog, while the Session tracks which mode is active. Use `harness.listModes()` to read every configured mode, `harness.session.mode.get()` for the active mode ID, and `harness.session.mode.resolve()` for the active mode's full definition:
+
 ```typescript
 // List all configured modes
 const modes = harness.listModes()
