@@ -92,6 +92,11 @@ The session is organized into sub-objects, each owning one domain of per-convers
       type: 'SessionDisplayState',
       description: 'The canonical HarnessDisplayState snapshot a UI renders from. See display-state methods below.',
     },
+    {
+      name: 'state',
+      type: 'SessionState<TState>',
+      description: 'The schema-validated, session-owned Harness state. See state methods below.',
+    },
   ]}
 />
 
@@ -433,6 +438,37 @@ harness.session.displayState.restoreTasks(replayedTasks)
 ```
 
 After every event the harness emits `display_state_changed`, so high-frequency events such as `message_update`, `tool_update`, and `tool_input_delta` are coalesced into the next snapshot. Subscribe with [`harness.subscribe()`](/reference/harness/harness-class#subscribelistener) and read the latest snapshot from `session.displayState.get()`.
+
+## State
+
+`session.state` owns the schema-validated Harness state for the conversation. It holds the current snapshot, validates updates against the `stateSchema` passed to the Harness, serializes concurrent writes, and emits a `state_changed` event on every change.
+
+#### `session.state.get()`
+
+Return a readonly copy of the current state snapshot.
+
+```typescript
+const state = harness.session.state.get()
+```
+
+#### `session.state.set(updates)`
+
+Merge a partial update into the state. Updates are queued so concurrent calls apply in order, validated against the schema, and emit `state_changed` with the changed keys.
+
+```typescript
+await harness.session.state.set({ yolo: true })
+```
+
+#### `session.state.update(updater)`
+
+Run an updater against the current snapshot and apply its result atomically within the write queue. Use this for read-modify-write changes that must see the latest state. The updater returns `updates` to merge, optional `events` to emit, and a `result` value that `update()` resolves to.
+
+```typescript
+const added = await harness.session.state.update(current => ({
+  updates: { count: (current.count ?? 0) + 1 },
+  result: (current.count ?? 0) + 1,
+}))
+```
 
 ## Related
 

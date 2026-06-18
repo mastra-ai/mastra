@@ -107,12 +107,14 @@ const harness = new Harness({
 
 ### Reading and writing state
 
+State is owned by the [`Session`](/docs/harness/session) as `harness.session.state`:
+
 ```typescript
 // Read the current state snapshot
-const state = harness.getState()
+const state = harness.session.state.get()
 
 // Update state — validates against schema and emits state_changed
-await harness.setState({ theme: 'light' })
+await harness.session.state.set({ theme: 'light' })
 ```
 
 State changes emit a `state_changed` event with the new state and the set of changed keys.

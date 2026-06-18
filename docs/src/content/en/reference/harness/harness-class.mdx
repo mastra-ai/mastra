@@ -83,7 +83,7 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'stateSchema',
     type: 'StandardJSONSchemaV1',
     description:
-      'Standard JSON Schema defining the shape of harness state. Used for validation and extracting defaults.',
+      'Standard JSON Schema defining the shape of application state, accessed at runtime via session.state. Used for validation and extracting defaults.',
     isOptional: true,
   },
   {
@@ -485,26 +485,6 @@ Return the internal `Mastra` instance, or `undefined` before `init()`. Useful fo
 
 ```typescript
 const mastra = harness.getMastra()
-```
-
-### State
-
-#### `getState()`
-
-Return a read-only snapshot of the current harness state.
-
-```typescript
-const state = harness.getState()
-```
-
-For the per-conversation display-state snapshot a UI renders from, see [`session.displayState`](/reference/harness/session#display-state).
-
-#### `setState(updates)`
-
-Update the harness state. Validates against `stateSchema` if provided, and emits a `state_changed` event with the new state and changed keys. To change the active model, use [`switchModel`](#switchmodel-modelid-scope-modeid-) instead — model selection lives on the session, not in harness state.
-
-```typescript
-await harness.setState({ theme: 'light' })
 ```
 
 ### Modes
