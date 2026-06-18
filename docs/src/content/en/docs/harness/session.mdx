@@ -33,7 +33,7 @@ const resourceId = harness.session.identity.getResourceId()
 const threadId = harness.session.thread.getId()
 ```
 
-To change the resource a conversation operates under, use `harness.setResourceId()` — it lives on the Harness because it also clears the active thread and releases the shared lock.
+The resource ID is set on the Harness constructor and defaults to the harness `id`. See [Resource IDs](/docs/harness/threads-and-state#resource-ids) for how it scopes threads.
 
 ## Thread
 
