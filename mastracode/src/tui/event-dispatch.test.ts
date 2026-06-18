@@ -33,6 +33,7 @@ function createMockHarness(initialState: Record<string, unknown> = {}, previousT
 function createMockTUIState(harness: ReturnType<typeof createMockHarness>): TUIState {
   return {
     harness: harness as any,
+    session: harness.session as any,
     taskProgress: {
       updateTasks: vi.fn(),
       getTasks: () => [],
@@ -86,7 +87,7 @@ describe('dispatchEvent thread lifecycle', () => {
       state,
     );
 
-    expect(harness.session.state.set).toHaveBeenCalledWith(
+    expect(state.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
         tasks: [],
         activePlan: null,
@@ -102,7 +103,7 @@ describe('dispatchEvent thread lifecycle', () => {
       state,
     );
 
-    expect(harness.session.state.set).toHaveBeenCalledWith(
+    expect(state.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
         tasks: [],
         activePlan: null,
@@ -188,7 +189,7 @@ describe('dispatchEvent thread lifecycle', () => {
       state,
     );
 
-    const setStateCall = harness.session.state.set.mock.calls[0]![0];
+    const setStateCall = (state.session.state.set as any).mock.calls[0]![0];
     expect(setStateCall).not.toHaveProperty('currentModelId');
   });
 });

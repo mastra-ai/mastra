@@ -1044,9 +1044,7 @@ export type HarnessRequestStateUpdateResult<TState, TResult> = {
 
 export type HarnessRequestStateUpdater<TState, TResult> = (
   state: Readonly<TState>,
-) =>
-  | HarnessRequestStateUpdateResult<TState, TResult>
-  | Promise<HarnessRequestStateUpdateResult<TState, TResult>>;
+) => HarnessRequestStateUpdateResult<TState, TResult> | Promise<HarnessRequestStateUpdateResult<TState, TResult>>;
 
 export interface HarnessRequestState<TState = unknown> {
   /** Get the current session-owned harness state (live, not request-context snapshot). */

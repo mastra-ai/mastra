@@ -90,8 +90,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     case 'tool_approval_required':
       trackInteractivePrompt(ectx, 'tool_approval_required', {
         toolName: event.toolName,
-        threadId: state.harness.session.thread.getId(),
-        resourceId: state.harness.session.identity.getResourceId(),
+        threadId: state.session.thread.getId(),
+        resourceId: state.session.identity.getResourceId(),
       });
       handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
       break;
@@ -108,8 +108,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (event.toolName === 'ask_user' || event.toolName === 'request_access' || event.toolName === 'submit_plan') {
         trackInteractivePrompt(ectx, event.toolName, {
           toolName: event.toolName,
-          threadId: state.harness.session.thread.getId(),
-          resourceId: state.harness.session.identity.getResourceId(),
+          threadId: state.session.thread.getId(),
+          resourceId: state.session.identity.getResourceId(),
         });
       }
       handleToolInputStart(ectx, event.toolCallId, event.toolName);
@@ -147,7 +147,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
-      await state.harness.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
@@ -163,7 +163,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         }
       });
       // Update current thread title for status line display
-      const threads = await state.harness.session.thread.list();
+      const threads = await state.session.thread.list();
       const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
@@ -200,12 +200,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.goalManager?.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
       }
       // Sync inherited resource-level settings
-      const tState = state.harness.session.state.get() as any;
+      const tState = state.session.state.get() as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
       // Clear per-thread ephemeral state so new threads start clean.
-      await state.harness.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }

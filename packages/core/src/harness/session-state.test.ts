@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { Harness } from './harness';
 import type { HarnessConfig, HarnessEvent } from './types';
 
-function createHarness<TState extends Record<string, unknown>>(config: Partial<HarnessConfig<TState>> = {}): Harness<TState> {
+function createHarness<TState extends Record<string, unknown>>(
+  config: Partial<HarnessConfig<TState>> = {},
+): Harness<TState> {
   return new Harness<TState>({
     id: 'test-harness',
     modes: [{ id: 'build', defaultModelId: 'test-model' }],
@@ -104,9 +106,9 @@ describe('Harness session state', () => {
     const setSpy = vi.spyOn(harness.session.state, 'set');
 
     await harness.setState({ count: 2 });
-    const result = await (harness as unknown as { updateState: Harness<{ count: number }>['session']['state']['update'] }).updateState(
-      state => ({ updates: { count: state.count + 1 }, result: state.count }),
-    );
+    const result = await (
+      harness as unknown as { updateState: Harness<{ count: number }>['session']['state']['update'] }
+    ).updateState(state => ({ updates: { count: state.count + 1 }, result: state.count }));
 
     expect(setSpy).toHaveBeenCalledWith({ count: 2 });
     expect(result).toBe(2);
@@ -117,7 +119,9 @@ describe('Harness session state', () => {
   it('exposes session.state and deprecated flattened state accessors in request context', async () => {
     const harness = createHarness<{ count: number }>({ initialState: { count: 0 } });
 
-    const requestContext = await (harness as unknown as { buildRequestContext: () => Promise<{ get: (key: string) => unknown }> }).buildRequestContext();
+    const requestContext = await (
+      harness as unknown as { buildRequestContext: () => Promise<{ get: (key: string) => unknown }> }
+    ).buildRequestContext();
     const harnessContext = requestContext.get('harness') as {
       state: Readonly<{ count: number }>;
       getState: () => Readonly<{ count: number }>;
@@ -143,7 +147,10 @@ describe('Harness session state', () => {
     expect(harnessContext.getState()).toEqual({ count: 2 });
 
     await harnessContext.setState({ count: 3 });
-    const previous = await harnessContext.updateState(state => ({ updates: { count: state.count + 1 }, result: state.count }));
+    const previous = await harnessContext.updateState(state => ({
+      updates: { count: state.count + 1 },
+      result: state.count,
+    }));
 
     expect(previous).toBe(3);
     expect(harnessContext.session.state.get()).toEqual({ count: 4 });

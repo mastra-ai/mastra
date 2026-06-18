@@ -107,10 +107,10 @@ const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
 
 export async function syncInitialThreadState(state: TUIState): Promise<void> {
-  const initThreadId = state.harness.session.thread.getId();
+  const initThreadId = state.session.thread.getId();
   if (!initThreadId) return;
 
-  const initThreads = await state.harness.session.thread.list();
+  const initThreads = await state.session.thread.list();
   const initThread = initThreads.find(t => t.id === initThreadId);
   if (initThread?.title) {
     state.currentThreadTitle = initThread.title;
@@ -157,8 +157,8 @@ export class MastraTUI {
     this.state = createTUIState(options);
 
     options.githubSignals?.onSubscriptionsChanged(event => {
-      const currentThreadId = this.state.harness.session?.thread?.getId?.();
-      const currentResourceId = this.state.harness.session?.identity?.getResourceId?.();
+      const currentThreadId = this.state.session?.thread?.getId?.();
+      const currentResourceId = this.state.session?.identity?.getResourceId?.();
       if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
       this.state.activeGithubPrSubscriptions = event.subscriptions.map(subscription => ({
         owner: subscription.owner,
@@ -173,8 +173,8 @@ export class MastraTUI {
     });
 
     (options.githubSignals as GithubSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
-      const currentThreadId = this.state.harness.session?.thread?.getId?.();
-      const currentResourceId = this.state.harness.session?.identity?.getResourceId?.();
+      const currentThreadId = this.state.session?.thread?.getId?.();
+      const currentResourceId = this.state.session?.identity?.getResourceId?.();
       if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
       if (!this.state.githubPrGradientAnimator) {
         this.state.githubPrGradientAnimator = new GradientAnimator(() => {
@@ -267,7 +267,7 @@ export class MastraTUI {
     if (this.state.options.initialMessage) {
       const msg = this.state.options.initialMessage;
 
-      if (!this.state.harness.session.model.hasSelection()) {
+      if (!this.state.session.model.hasSelection()) {
         showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
       } else {
         const messageId = `user-${Date.now()}`;
@@ -325,7 +325,7 @@ export class MastraTUI {
         }
 
         // Check if a model is selected (sync — fast, no reason to defer)
-        if (!this.state.harness.session.model.hasSelection()) {
+        if (!this.state.session.model.hasSelection()) {
           showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
           continue;
         }
@@ -386,7 +386,7 @@ export class MastraTUI {
 
   private renderOptimisticUserMessage(content: string, images?: Array<{ data: string; mimeType: string }>): string {
     const messageId = `user-${Date.now()}`;
-    const isInterjection = this.state.harness.session.stream.isActive();
+    const isInterjection = this.state.session.stream.isActive();
     addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
       ...(isInterjection ? { label: 'steer' } : {}),
     });
@@ -425,9 +425,9 @@ export class MastraTUI {
     const send = () => {
       this.clearIdleCounter();
       this.state.analytics?.capture('mastracode_prompt_submitted', {
-        threadId: this.state.harness.session.thread.getId(),
-        resourceId: this.state.harness.session.identity.getResourceId(),
-        mode: this.state.harness.session.mode.get(),
+        threadId: this.state.session.thread.getId(),
+        resourceId: this.state.session.identity.getResourceId(),
+        mode: this.state.session.mode.get(),
         hasImages: Boolean(images?.length),
         isFirstPromptInThread: pendingNewThread,
         pendingNewThread,
@@ -457,7 +457,7 @@ export class MastraTUI {
   }
 
   private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
-    const hasActiveRun = this.state.harness.session.stream.isActive();
+    const hasActiveRun = this.state.session.stream.isActive();
 
     const send = () => {
       this.clearIdleCounter();
@@ -582,7 +582,7 @@ export class MastraTUI {
     // Subscribe to harness events
     subscribeToHarness(this.state, event => this.handleEvent(event));
     // Restore escape-as-cancel setting from persisted state
-    const escState = this.state.harness.session.state.get() as any;
+    const escState = this.state.session.state.get() as any;
     if (escState?.escapeAsCancel === false) {
       this.state.editor.escapeEnabled = false;
     }
@@ -662,7 +662,7 @@ export class MastraTUI {
   private async renderExistingMessagesAndSeedIdleCounter(): Promise<void> {
     await renderExistingMessages(this.state);
 
-    if (this.state.harness.session.run.isRunning()) {
+    if (this.state.session.run.isRunning()) {
       this.clearIdleCounter();
       return;
     }
@@ -753,7 +753,7 @@ export class MastraTUI {
         action: 'created',
         threadId: event.thread.id,
         resourceId: event.thread.resourceId,
-        mode: this.state.harness.session.mode.get(),
+        mode: this.state.session.mode.get(),
         hasTitle: Boolean(event.thread.title),
       });
       return;
@@ -764,8 +764,8 @@ export class MastraTUI {
         action: 'switched',
         threadId: event.threadId,
         previousThreadId: event.previousThreadId,
-        resourceId: this.state.harness.session.identity.getResourceId(),
-        mode: this.state.harness.session.mode.get(),
+        resourceId: this.state.session.identity.getResourceId(),
+        mode: this.state.session.mode.get(),
       });
       return;
     }
@@ -774,9 +774,9 @@ export class MastraTUI {
       analytics.capture('mastracode_model_changed', {
         modelId: event.modelId,
         scope: event.scope,
-        mode: event.modeId ?? this.state.harness.session.mode.get(),
-        threadId: this.state.harness.session.thread.getId(),
-        resourceId: this.state.harness.session.identity.getResourceId(),
+        mode: event.modeId ?? this.state.session.mode.get(),
+        threadId: this.state.session.thread.getId(),
+        resourceId: this.state.session.identity.getResourceId(),
       });
     }
   }
@@ -895,13 +895,13 @@ export class MastraTUI {
     metadata?: Record<string, unknown>;
   }): Promise<void> {
     const settings = loadSettings();
-    const currentThreadId = this.state.harness.session.thread.getId();
+    const currentThreadId = this.state.session.thread.getId();
     if (!currentThreadId) return;
 
     const resolvedThread =
       thread?.id === currentThreadId
         ? thread
-        : (await this.state.harness.session.thread.list()).find(t => t.id === currentThreadId);
+        : (await this.state.session.thread.list()).find(t => t.id === currentThreadId);
     const access = await this.buildProviderAccess();
     const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
     const resolvedPackId = resolveThreadActiveModelPackId(
@@ -1005,7 +1005,7 @@ export class MastraTUI {
         }
         this.state.editor.setText('');
 
-        if (this.state.harness.session.run.isRunning()) {
+        if (this.state.session.run.isRunning()) {
           if (text.startsWith('/')) {
             // Run slash commands immediately — they are either settings
             // commands (no agent interaction) or agent-facing commands the
@@ -1057,6 +1057,7 @@ export class MastraTUI {
     return {
       state: this.state,
       harness: this.state.harness,
+      session: this.state.session,
       hookManager: this.state.hookManager,
       mcpManager: this.state.mcpManager,
       analytics: this.state.analytics,
@@ -1307,8 +1308,8 @@ export class MastraTUI {
     }
 
     const omPack = result.omPack;
-    void harness.session.state.set({ observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
-    void harness.session.state.set({ yolo: result.yolo });
+    void this.state.session.state.set({ observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
+    void this.state.session.state.set({ yolo: result.yolo });
 
     const settings = loadSettings();
     settings.onboarding.completedAt = new Date().toISOString();

@@ -88,11 +88,11 @@ function createPlanApprovalCtx() {
     accepted: Promise.resolve({ accepted: true, runId: 'run-1' }),
   });
   const state = {
+    session: {
+      state: { set: vi.fn().mockResolvedValue(undefined) },
+      identity: { getResourceId: vi.fn(() => 'resource-1') },
+    },
     harness: {
-      session: {
-        state: { set: vi.fn().mockResolvedValue(undefined) },
-        identity: { getResourceId: vi.fn(() => 'resource-1') },
-      },
       respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
       sendSignal,
     },

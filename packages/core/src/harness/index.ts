@@ -1,6 +1,5 @@
 export { Harness } from './harness';
-export { Session, SessionState } from './session';
-export type { SessionStateOptions, SessionStateUpdater, SessionStateUpdateResult } from './session';
+export { Session } from './session';
 export {
   askUserTool,
   assignTaskIds,

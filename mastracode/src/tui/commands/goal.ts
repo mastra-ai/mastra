@@ -107,7 +107,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     // attempting the goal". Stop it immediately so clear means stop. Mirrors the
     // Esc/abort cleanup so a turn parked in a tool suspension (e.g. ask_user) is
     // also aborted cleanly.
-    if (state.harness.session.run.isRunning() || state.harness.session.suspensions.hasPending()) {
+    if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
@@ -261,7 +261,7 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
   }
 
   const settings = loadSettings();
-  const preselectedId = settings.models.goalJudgeModel ?? state.harness.session.model.get() ?? undefined;
+  const preselectedId = settings.models.goalJudgeModel ?? state.session.model.get() ?? undefined;
   const defaultMaxTurns =
     typeof settings.models.goalMaxTurns === 'number' && settings.models.goalMaxTurns > 0
       ? settings.models.goalMaxTurns
@@ -332,7 +332,7 @@ async function startGoal(
     state.pendingNewThread = false;
   }
 
-  const shouldPersistToCreatedThread = !state.harness.session.thread.getId();
+  const shouldPersistToCreatedThread = !state.session.thread.getId();
   const goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
   if (!goal) {
     ctx.showError('Failed to set goal.');

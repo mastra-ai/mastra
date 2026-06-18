@@ -4,7 +4,16 @@ import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import { createEmptyTokenUsage } from './types';
-import type { HarnessEvent, HarnessMessage, HarnessMode, HarnessThread, TokenUsage, ToolCategory } from './types';
+import type {
+  HarnessEvent,
+  HarnessMessage,
+  HarnessMode,
+  HarnessRequestState,
+  HarnessRequestStateUpdater,
+  HarnessThread,
+  TokenUsage,
+  ToolCategory,
+} from './types';
 
 /**
  * Minimal persistence surface the Session uses to read and write per-thread
@@ -785,17 +794,9 @@ export class SessionMode {
   }
 }
 
-export type SessionStateUpdateResult<TState, TResult> = {
-  updates?: Partial<TState>;
-  events?: HarnessEvent[];
-  result: TResult;
-};
+type SessionStateUpdater<TState, TResult> = HarnessRequestStateUpdater<TState, TResult>;
 
-export type SessionStateUpdater<TState, TResult> = (
-  state: Readonly<TState>,
-) => SessionStateUpdateResult<TState, TResult> | Promise<SessionStateUpdateResult<TState, TResult>>;
-
-export interface SessionStateOptions<TState> {
+interface SessionStateOptions<TState> {
   initialState?: Partial<TState>;
   stateSchema?: PublicSchema<TState, any>;
   emit?: (event: HarnessEvent) => void;
@@ -808,7 +809,7 @@ export interface SessionStateOptions<TState> {
  * and validated updates emit the same `state_changed` event the Harness used to
  * emit when it owned state directly.
  */
-export class SessionState<TState = unknown> {
+class SessionState<TState = unknown> {
   #state: TState;
   #updateQueue: Promise<void> = Promise.resolve();
   readonly #schema: StandardSchemaWithJSON | undefined;
@@ -975,7 +976,7 @@ export class Session<TState = unknown> {
   /** The session's thread domain: current binding + reads scoped to it. */
   readonly thread: SessionThread;
   /** The session-owned Harness state domain. */
-  readonly state: SessionState<TState>;
+  readonly state: HarnessRequestState<TState>;
 
   constructor({ resourceId, state }: { resourceId: string; state: SessionStateOptions<TState> }) {
     this.identity = new SessionIdentity({ resourceId });

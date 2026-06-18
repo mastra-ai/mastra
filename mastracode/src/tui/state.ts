@@ -6,7 +6,7 @@
  */
 import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
-import type { Harness, HarnessMessage } from '@mastra/core/harness';
+import type { Harness, HarnessMessage, Session } from '@mastra/core/harness';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
 import type { MastraCodeAnalytics } from '../analytics.js';
@@ -139,6 +139,7 @@ export interface MastraTUIOptions {
 export interface TUIState {
   // ── Core dependencies (set once) ──────────────────────────────────────
   harness: Harness<any>;
+  session: Session<any>;
   options: MastraTUIOptions;
   hookManager?: HookManager;
   analytics?: MastraCodeAnalytics;
@@ -307,6 +308,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const result: TUIState = {
     // Core dependencies
     harness: options.harness,
+    session: options.harness.session,
     options,
     hookManager: options.hookManager,
     analytics: options.analytics,
@@ -384,7 +386,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     if (result.activeGoalJudge) {
       return mastra.blue;
     }
-    const color = options.harness.session.mode.resolve()?.metadata?.color;
+    const color = result.session.mode.resolve()?.metadata?.color;
     return typeof color === 'string' ? color : undefined;
   };
   return result;

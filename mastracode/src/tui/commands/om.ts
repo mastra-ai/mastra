@@ -81,7 +81,7 @@ export function persistOmObserveAttachments(value: 'auto' | boolean): void {
 export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
   const availableModels = await ctx.state.harness.listAvailableModels();
 
-  const harnessState = ctx.state.harness.session.state.get() as Record<string, unknown> | undefined;
+  const harnessState = ctx.state.session.state.get() as Record<string, unknown> | undefined;
   const config = {
     observerModelId: ctx.state.harness.getObserverModelId() ?? '',
     reflectorModelId: ctx.state.harness.getReflectorModelId() ?? '',
@@ -110,24 +110,24 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
           ctx.showInfo(`Reflector model → ${model.id}`);
         },
         onObservationThresholdChange: async value => {
-          await ctx.state.harness.session.state.set({ observationThreshold: value } as any);
-          await ctx.state.harness.session.thread.setSetting({ key: 'observationThreshold', value });
+          await ctx.state.session.state.set({ observationThreshold: value } as any);
+          await ctx.state.session.thread.setSetting({ key: 'observationThreshold', value });
           persistOmThresholds({ observationThreshold: value });
         },
         onReflectionThresholdChange: async value => {
-          await ctx.state.harness.session.state.set({ reflectionThreshold: value } as any);
-          await ctx.state.harness.session.thread.setSetting({ key: 'reflectionThreshold', value });
+          await ctx.state.session.state.set({ reflectionThreshold: value } as any);
+          await ctx.state.session.thread.setSetting({ key: 'reflectionThreshold', value });
           persistOmThresholds({ reflectionThreshold: value });
         },
         onCavemanObservationsChange: async enabled => {
-          await ctx.state.harness.session.state.set({ cavemanObservations: enabled } as any);
-          await ctx.state.harness.session.thread.setSetting({ key: 'cavemanObservations', value: enabled });
+          await ctx.state.session.state.set({ cavemanObservations: enabled } as any);
+          await ctx.state.session.thread.setSetting({ key: 'cavemanObservations', value: enabled });
           persistOmCavemanObservations(enabled);
           ctx.showInfo(`Caveman observations → ${enabled ? 'on' : 'off'}`);
         },
         onObserveAttachmentsChange: async value => {
-          await ctx.state.harness.session.state.set({ observeAttachments: value } as any);
-          await ctx.state.harness.session.thread.setSetting({ key: 'observeAttachments', value });
+          await ctx.state.session.state.set({ observeAttachments: value } as any);
+          await ctx.state.session.thread.setSetting({ key: 'observeAttachments', value });
           persistOmObserveAttachments(value);
           const label = value === 'auto' ? 'auto' : value ? 'on' : 'off';
           ctx.showInfo(`Observe attachments → ${label}`);
