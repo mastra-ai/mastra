@@ -641,7 +641,7 @@ function applyTaskToolResult(
 // renderExistingMessages
 // =============================================================================
 
-const STARTUP_MESSAGE_WINDOW_SIZE = 40;
+const STARTUP_MESSAGE_WINDOW_SIZE = 200;
 
 function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefined {
   let latest: number | undefined;
