@@ -3,8 +3,8 @@
  */
 
 import { exec } from 'node:child_process';
-import { Box, Container, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, TUI } from '@mariozechner/pi-tui';
+import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import { getOAuthProviders } from '../../auth/index.js';
 import { theme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';

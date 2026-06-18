@@ -4,6 +4,7 @@ import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
+import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
 import type { AgentChannels } from '../channels/agent-channels';
@@ -50,7 +51,7 @@ import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
-import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
+import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -338,6 +339,51 @@ export type AgentEditorConfig =
       tools?: boolean | { description?: boolean };
     };
 
+/**
+ * Agent-level goal configuration. When set, the agent gains a native goal
+ * mechanism: an objective set via {@link Agent.setObjective} is judged in the
+ * execution loop (like `isTaskComplete`) and the agent keeps working until the
+ * objective is complete or the run budget is exhausted.
+ *
+ * These values are the defaults; the per-thread {@link GoalObjectiveRecord} in
+ * thread state overrides them when it carries a value. A judge model is required
+ * at runtime (resolved from the objective record or `judge` here) — without one
+ * the goal step is a no-op.
+ *
+ * @experimental Agent goals are experimental and may change in a future release.
+ */
+export interface GoalConfig {
+  /**
+   * Judge model used to evaluate goal completion. Required (here or per
+   * objective) for the goal to do anything. Defaults to `undefined` (no-op).
+   *
+   * May be a model id / model object, or a resolver function (so a consumer can
+   * inject provider credentials and read the current judge selection at runtime);
+   * the function may return `undefined` to keep the goal step a no-op.
+   */
+  judge?: DynamicArgument<MastraModelConfig | undefined>;
+  /** Max goal evaluations before the goal stops. Defaults to 50. */
+  maxRuns?: number;
+  /** Extra judge guidance. Defaults to the built-in goal judge prompt. */
+  prompt?: string;
+  /**
+   * Read-only verification tools the default goal judge may call before deciding
+   * (e.g. file read / search tools), letting it independently confirm the work
+   * was actually done rather than grading the assistant's text alone.
+   *
+   * May be a static toolset or a resolver function — use the function form when
+   * the tools depend on per-request state (e.g. the active workspace), mirroring
+   * `judge`. Ignored when a custom `scorer` is supplied (that scorer brings its
+   * own judging). When omitted, the default judge is text-only.
+   */
+  tools?: DynamicArgument<ToolsInput | undefined>;
+  /**
+   * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
+   * omitted, a default rubric scorer judges the objective with the judge model.
+   */
+  scorer?: MastraScorer | string;
+}
+
 interface AgentConfigBase<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -458,6 +504,12 @@ interface AgentConfigBase<
    * Tools that the agent can access. Can be provided statically or resolved dynamically.
    */
   tools?: DynamicArgument<TTools, TRequestContext>;
+  /**
+   * Hooks that run before and after any tool call made by this agent.
+   * Per-execution hooks passed to `generate`, `stream`, `generateLegacy`, or `streamLegacy` override matching hooks here.
+   * If a workspace also defines tool hooks, workspace hooks wrap the workspace tool first, then agent hooks wrap the exposed tool call.
+   */
+  hooks?: ToolHooks;
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
@@ -640,6 +692,14 @@ interface AgentConfigBase<
    */
   signals?: SignalProvider[];
   /**
+   * Native goal configuration. When set, an objective set via
+   * {@link Agent.setObjective} is judged in the execution loop and the agent
+   * keeps working until the objective is complete or the budget is exhausted.
+   *
+   * @experimental Agent goals are experimental and may change in a future release.
+   */
+  goal?: GoalConfig;
+  /**
    * Optional agent-level transform policy for tool payloads before they are
    * serialized into display streams or user-visible transcripts.
    */
@@ -707,6 +767,8 @@ export type AgentGenerateOptions<
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
+  hooks?: ToolHooks;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /** New memory options (preferred) */
@@ -725,6 +787,8 @@ export type AgentGenerateOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /** Trusted server-side signal for this agent FGA check. */
+  actor?: ActorSignal;
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.
@@ -798,6 +862,8 @@ export type AgentStreamOptions<
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
+  hooks?: ToolHooks;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /**
@@ -824,6 +890,8 @@ export type AgentStreamOptions<
   experimental_output?: EXPERIMENTAL_OUTPUT;
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /** Trusted server-side signal for this agent FGA check. */
+  actor?: ActorSignal;
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.

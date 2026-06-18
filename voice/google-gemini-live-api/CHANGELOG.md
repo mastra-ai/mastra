@@ -1,5 +1,58 @@
 # @mastra/voice-google-gemini-live
 
+## 0.12.4
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/schema-compat@1.2.14
+
+## 0.12.4-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/schema-compat@1.2.14-alpha.0
+
+## 0.12.2
+
+### Patch Changes
+
+- Updated dependencies [[`9b1adf7`](https://github.com/mastra-ai/mastra/commit/9b1adf7f39943c869182106bc4016e793b3304ac)]:
+  - @mastra/schema-compat@1.2.12
+
+## 0.12.1
+
+### Patch Changes
+
+- dependencies updates: ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+  - Updated dependency [`@google/genai@^1.52.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.52.0) (from `^1.45.0`, in `dependencies`)
+
+- dependencies updates: ([#17518](https://github.com/mastra-ai/mastra/pull/17518))
+  - Updated dependency [`google-auth-library@^10.6.2` ↗︎](https://www.npmjs.com/package/google-auth-library/v/10.6.2) (from `^10.6.1`, in `dependencies`)
+
+- Update ai-sdk deps ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+  - Updated dependency [`@google/genai@^1.52.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.52.0) (from `^1.45.0`, in `dependencies`)
+
+- Update ai-sdk deps ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#17518](https://github.com/mastra-ai/mastra/pull/17518))
+  - Updated dependency [`google-auth-library@^10.6.2` ↗︎](https://www.npmjs.com/package/google-auth-library/v/10.6.2) (from `^10.6.1`, in `dependencies`)
+
 ## 0.12.0
 
 ### Minor Changes

@@ -7,7 +7,7 @@ export interface AgentBuilderEditLayoutProps {
   chat: ReactNode;
   /**
    * Optional content rendered inside the chat column, below the chat itself.
-   * Used on mobile to surface CTAs while the chat composer stays in place.
+   * Mobile-only: hidden at lg+ so it never shifts the desktop composer.
    * Aligned to the same max-width as the chat composer.
    */
   chatFooter?: ReactNode;
@@ -56,16 +56,14 @@ export const AgentBuilderEditLayout = ({
           data-testid="agent-builder-panel-chat"
           style={{ viewTransitionName: 'agent-builder-chat-panel' }}
         >
-          {chatFooter ? (
-            <div className="min-h-0 min-w-0 h-full overflow-hidden md:max-w-[80ch] md:mx-auto w-full grid grid-rows-[1fr_auto]">
-              <div className="min-h-0 min-w-0 h-full overflow-hidden">{chat}</div>
-              <div data-testid="agent-builder-chat-footer" className="w-full pt-3">
+          <div className="min-h-0 min-w-0 h-full overflow-hidden md:max-w-[80ch] md:mx-auto w-full grid grid-rows-[1fr_auto]">
+            <div className="min-h-0 min-w-0 h-full overflow-hidden">{chat}</div>
+            {chatFooter ? (
+              <div data-testid="agent-builder-chat-footer" className="w-full pt-3 lg:hidden">
                 {chatFooter}
               </div>
-            </div>
-          ) : (
-            <div className="min-h-0 min-w-0 h-full overflow-hidden md:max-w-[80ch] md:mx-auto w-full">{chat}</div>
-          )}
+            ) : null}
+          </div>
         </div>
 
         {!isCentered && (

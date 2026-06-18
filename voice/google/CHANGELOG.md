@@ -1,5 +1,31 @@
 # @mastra/voice-google
 
+## 0.12.3
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 0.12.3-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 0.12.2
+
+### Patch Changes
+
+- dependencies updates: ([#17518](https://github.com/mastra-ai/mastra/pull/17518))
+  - Updated dependency [`@google-cloud/text-to-speech@^6.4.1` ↗︎](https://www.npmjs.com/package/@google-cloud/text-to-speech/v/6.4.1) (from `^6.4.0`, in `dependencies`)
+
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#17518](https://github.com/mastra-ai/mastra/pull/17518))
+  - Updated dependency [`@google-cloud/text-to-speech@^6.4.1` ↗︎](https://www.npmjs.com/package/@google-cloud/text-to-speech/v/6.4.1) (from `^6.4.0`, in `dependencies`)
+
 ## 0.12.1
 
 ### Patch Changes

@@ -11,10 +11,12 @@ import {
   GITHUB_SIGNALS_METADATA_KEY,
   GITHUB_SYNC_STATUS_TAG,
   normalizeGithubChecksForSnapshot,
+  sanitizeCommentText,
 } from './index.js';
 import type {
   GithubPullRequestSnapshot,
   GithubRepositoryResolver,
+  GithubSignalsOptions,
   GithubSignalsSyncClient,
   GithubSignalsThreadStore,
 } from './index.js';
@@ -395,6 +397,56 @@ describe('GithubSignals', () => {
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([
       expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 17439, lastSyncStatus: 'skipped' }),
     ]);
+    processor.stopAllPolling();
+  });
+
+  it('subscribe and unsubscribe tools use the explicit tool execution thread context when present', async () => {
+    let capturedThread: StorageThreadType = {
+      id: 'thread-from-request-context',
+      resourceId: 'resource-from-request-context',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const explicitThread: StorageThreadType = {
+      id: 'thread-from-tool-context',
+      resourceId: 'resource-from-tool-context',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const threadStore: GithubSignalsThreadStore = {
+      getThreadById: vi.fn(async ({ threadId }) => (threadId === explicitThread.id ? explicitThread : capturedThread)),
+      saveThread: vi.fn(async ({ thread: nextThread }) => {
+        if (nextThread.id === explicitThread.id) explicitThread.metadata = nextThread.metadata;
+        if (nextThread.id === capturedThread.id) capturedThread = nextThread;
+        return nextThread;
+      }),
+    };
+    const processor = new GithubSignals({ threadStore, syncOnSubscribe: false });
+
+    const result = await runGithubSignalsProcessor({
+      processor,
+      messageList: new MessageList({ threadId: capturedThread.id, resourceId: capturedThread.resourceId }),
+      requestContext: createRequestContext(capturedThread),
+    });
+    const tools = result.tools as Record<string, { execute: (input: unknown, context?: unknown) => Promise<unknown> }>;
+    const toolContext = { agent: { threadId: explicitThread.id, resourceId: explicitThread.resourceId } };
+
+    await tools.github_subscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }, toolContext);
+    await tools.github_unsubscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }, toolContext);
+
+    expect(threadStore.getThreadById).toHaveBeenCalledWith({
+      threadId: explicitThread.id,
+      resourceId: explicitThread.resourceId,
+    });
+    expect(threadStore.saveThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        thread: expect.objectContaining({ id: explicitThread.id, resourceId: explicitThread.resourceId }),
+      }),
+    );
+    expect((explicitThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([]);
+    expect((capturedThread.metadata?.mastra as any)?.[GITHUB_SIGNALS_METADATA_KEY]?.subscriptions).toBeUndefined();
     processor.stopAllPolling();
   });
 
@@ -917,10 +969,12 @@ describe('GithubSignals', () => {
         state: 'open',
         githubUpdatedAt: '2026-01-01T00:05:00.000Z',
         contentHash: 'sync-now-hash',
+        latestCommentAuthor: 'contributor',
       })),
     };
     const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
-    const processor = new GithubSignals({ threadStore, syncClient });
+    const permissionResolver = { getPermission: vi.fn(async () => 'write' as const) };
+    const processor = new GithubSignals({ threadStore, syncClient, permissionResolver });
     processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
 
     await expect(processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(1);
@@ -929,11 +983,13 @@ describe('GithubSignals', () => {
       expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123 }),
     );
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-activity',
-        summary: 'mastra-ai/mastra#123 has new activity: Add GitHub signals',
-      }),
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-activity',
+          summary: 'mastra-ai/mastra#123 has new activity: Add GitHub signals',
+        }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
@@ -941,6 +997,116 @@ describe('GithubSignals', () => {
       lastSyncStatus: 'success',
       lastObservedContentHash: 'sync-now-hash',
     });
+  });
+
+  it('expires cached author permissions and reloads them after the TTL', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+    const thread: StorageThreadType = {
+      id: 'thread-permission-cache-ttl',
+      resourceId: 'resource-permission-cache-ttl',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 123,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let snapshotIndex = 0;
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        snapshotIndex += 1;
+        return {
+          title: 'Add GitHub signals',
+          state: 'open',
+          githubUpdatedAt: `2026-01-01T00:0${snapshotIndex}:00.000Z`,
+          contentHash: `cache-ttl-hash-${snapshotIndex}`,
+          latestCommentAuthor: 'contributor',
+        };
+      }),
+    };
+    const permissionResolver = { getPermission: vi.fn(async () => 'write' as const) };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient, permissionResolver });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    await processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(permissionResolver.getPermission).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-01-01T00:05:01.000Z'));
+    await processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(permissionResolver.getPermission).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not cache transient author permission lookup failures', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-permission-cache-failure',
+      resourceId: 'resource-permission-cache-failure',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 123,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let snapshotIndex = 0;
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        snapshotIndex += 1;
+        return {
+          title: 'Add GitHub signals',
+          state: 'open',
+          githubUpdatedAt: `2026-01-01T00:0${snapshotIndex}:00.000Z`,
+          contentHash: `cache-failure-hash-${snapshotIndex}`,
+          latestCommentAuthor: 'contributor',
+        };
+      }),
+    };
+    const permissionResolver = {
+      getPermission: vi.fn(async () => {
+        if (permissionResolver.getPermission.mock.calls.length === 1) throw new Error('temporary failure');
+        return 'write' as const;
+      }),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient, permissionResolver });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+
+    await processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(permissionResolver.getPermission).toHaveBeenCalledTimes(2);
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
   });
 
   it('polls subscribed PRs on the configured interval and updates thread metadata', async () => {
@@ -982,11 +1148,21 @@ describe('GithubSignals', () => {
         githubUpdatedAt: '2026-01-01T00:05:00.000Z',
         contentHash: 'new-hash',
         threadContentHash: 'new-thread-hash',
+        latestCommentAuthor: 'contributor',
       })),
     };
-    const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000, agentId: 'code-agent' });
+    const permissionResolver = { getPermission: vi.fn(async () => 'write' as const) };
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient,
+      pollIntervalMs: 1_000,
+      agentId: 'code-agent',
+      permissionResolver,
+    });
     const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
     processor.__registerMastra({ getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })) } as any);
+    const onPollingChanged = vi.fn();
+    processor.onPollingChanged(onPollingChanged);
 
     await expect(processor.startPollingForThread({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toBe(
       true,
@@ -1014,32 +1190,44 @@ describe('GithubSignals', () => {
     expect(subscription.lastNotificationAt).toEqual(expect.any(String));
     expect(subscription.lastSyncError).toBeUndefined();
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-activity',
-        priority: 'medium',
-        summary: 'mastra-ai/mastra#123 has new activity: Add GitHub signals',
-        attributes: expect.objectContaining({
-          owner: 'mastra-ai',
-          repo: 'mastra',
-          number: 123,
-          previousGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
-          githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-activity',
+          priority: 'medium',
+          summary: 'mastra-ai/mastra#123 has new activity: Add GitHub signals',
+          attributes: expect.objectContaining({
+            owner: 'mastra-ai',
+            repo: 'mastra',
+            number: 123,
+            previousGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+            githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+          }),
         }),
-      }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
     expect(syncClient.syncPullRequest).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123, includeComments: true }),
     );
+    expect(onPollingChanged.mock.calls.map(([event]) => event)).toEqual([
+      { threadId: thread.id, resourceId: thread.resourceId, running: true },
+      { threadId: thread.id, resourceId: thread.resourceId, running: false },
+    ]);
 
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(syncClient.syncPullRequest).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123, includeComments: false }),
+      expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123, includeComments: true }),
     );
+    expect(onPollingChanged.mock.calls.map(([event]) => event)).toEqual([
+      { threadId: thread.id, resourceId: thread.resourceId, running: true },
+      { threadId: thread.id, resourceId: thread.resourceId, running: false },
+      { threadId: thread.id, resourceId: thread.resourceId, running: true },
+      { threadId: thread.id, resourceId: thread.resourceId, running: false },
+    ]);
     processor.stopAllPolling();
   });
 
@@ -1107,6 +1295,319 @@ describe('GithubSignals', () => {
       lastObservedReviewStateHash: 'reviews-0',
     });
     expect(subscription.lastNotificationKind).toBeUndefined();
+  });
+
+  it('notifies when the latest comment changes even if the thread content hash does not', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-comment-timestamp',
+      resourceId: 'resource-comment-timestamp',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 17590,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-06-05T19:43:21.000Z',
+                lastObservedContentHash: 'same-content-hash',
+                lastObservedThreadContentHash: 'same-thread-hash',
+                lastObservedHeadSha: 'same-head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'blocked',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(
+        async () =>
+          ({
+            title: 'fix(github-signals): gate notifications behind author permission checks',
+            state: 'open',
+            githubUpdatedAt: '2026-06-05T21:28:12.000Z',
+            contentHash: 'same-content-hash',
+            threadContentHash: 'same-thread-hash',
+            headSha: 'same-head-sha',
+            ciState: 'success',
+            mergeableState: 'blocked',
+            unresolvedReviewThreads: 0,
+            reviewStateHash: 'reviews-0',
+            latestCommentAuthor: 'devin-ai-integration[bot]',
+            latestCommentAuthorType: 'Bot',
+            latestCommentIsBot: true,
+            latestCommentBody:
+              'Acknowledged! Fourth test comment received. Rendered GitHub comment notifications with author and excerpt are working.',
+            latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635660157',
+            latestCommentUpdatedAt: '2026-06-05T21:28:12.000Z',
+          }) satisfies GithubPullRequestSnapshot,
+      ),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          kind: 'pull-request-activity',
+          priority: 'high',
+          summary:
+            'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Acknowledged! Fourth test comment received. Rendered GitHub comment notifications with author and excerpt are working.',
+          dedupeKey:
+            'github:mastra-ai/mastra#17590:comment:https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635660157:2026-06-05T21:28:12.000Z',
+        }),
+      ],
+      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
+    );
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription).toMatchObject({
+      lastObservedGithubUpdatedAt: '2026-06-05T21:28:12.000Z',
+      lastObservedContentHash: 'same-content-hash',
+      lastObservedThreadContentHash: 'same-thread-hash',
+      lastObservedHeadSha: 'same-head-sha',
+      lastNotificationKind: 'pull-request-activity',
+      lastNotificationPriority: 'high',
+      lastNotificationSummary:
+        'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Acknowledged! Fourth test comment received. Rendered GitHub comment notifications with author and excerpt are working.',
+    });
+  });
+
+  it('uses the latest authorized comment when a newer unauthorized bot comment exists', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-authorized-comment-fallback',
+      resourceId: 'resource-authorized-comment-fallback',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 17590,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-06-05T22:00:00.000Z',
+                lastObservedContentHash: 'same-content-hash',
+                lastObservedThreadContentHash: 'same-thread-hash',
+                lastObservedHeadSha: 'same-head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'blocked',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(
+        async () =>
+          ({
+            title: 'fix(github-signals): gate notifications behind author permission checks',
+            state: 'open',
+            githubUpdatedAt: '2026-06-05T22:06:00.000Z',
+            contentHash: 'same-content-hash',
+            threadContentHash: 'same-thread-hash',
+            headSha: 'same-head-sha',
+            ciState: 'success',
+            mergeableState: 'blocked',
+            unresolvedReviewThreads: 0,
+            reviewStateHash: 'reviews-0',
+            latestCommentAuthor: 'vercel[bot]',
+            latestCommentAuthorType: 'Bot',
+            latestCommentIsBot: true,
+            latestCommentBody: '[vc]: deployment status payload',
+            latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-vercel',
+            latestCommentUpdatedAt: '2026-06-05T22:06:00.000Z',
+            latestComments: [
+              {
+                author: 'vercel[bot]',
+                authorType: 'Bot',
+                isBot: true,
+                body: '[vc]: deployment status payload',
+                url: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-vercel',
+                updatedAt: '2026-06-05T22:06:00.000Z',
+              },
+              {
+                author: 'devin-ai-integration',
+                authorType: 'Bot',
+                isBot: true,
+                body: 'Acknowledged! The authorized comment should still be delivered.',
+                url: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-devin',
+                updatedAt: '2026-06-05T22:05:00.000Z',
+              },
+            ],
+          }) satisfies GithubPullRequestSnapshot,
+      ),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const permissionResolver = { getPermission: vi.fn(async () => 'none' as const) };
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient,
+      permissionResolver,
+      authorizedBots: ['devin-ai-integration'],
+    });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          kind: 'pull-request-activity',
+          priority: 'high',
+          summary:
+            'devin-ai-integration commented on mastra-ai/mastra#17590: Acknowledged! The authorized comment should still be delivered.',
+          dedupeKey:
+            'github:mastra-ai/mastra#17590:comment:https://github.com/mastra-ai/mastra/pull/17590#issuecomment-devin:2026-06-05T22:05:00.000Z',
+          attributes: expect.objectContaining({
+            latestCommentAuthor: 'devin-ai-integration',
+            latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-devin',
+            latestCommentUpdatedAt: '2026-06-05T22:05:00.000Z',
+          }),
+          metadata: expect.objectContaining({
+            github: expect.objectContaining({
+              latestCommentAuthor: 'devin-ai-integration',
+              // Full comment body is no longer persisted in notification metadata; only the excerpt.
+              latestCommentExcerpt: 'Acknowledged! The authorized comment should still be delivered.',
+              latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-devin',
+              latestCommentUpdatedAt: '2026-06-05T22:05:00.000Z',
+            }),
+          }),
+        }),
+      ],
+      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
+    );
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription).toMatchObject({
+      lastObservedGithubUpdatedAt: '2026-06-05T22:06:00.000Z',
+      lastNotificationKind: 'pull-request-activity',
+      lastNotificationPriority: 'high',
+    });
+    expect(permissionResolver.getPermission).not.toHaveBeenCalled();
+  });
+
+  it('emits separate notifications when a new comment and CI state change in the same poll', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-comment-and-ci',
+      resourceId: 'resource-comment-and-ci',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 17590,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-06-05T22:05:20.000Z',
+                lastObservedContentHash: 'previous-content-hash',
+                lastObservedThreadContentHash: 'previous-thread-hash',
+                lastObservedHeadSha: 'same-head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'blocked',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(
+        async () =>
+          ({
+            title: 'fix(github-signals): gate notifications behind author permission checks',
+            state: 'open',
+            githubUpdatedAt: '2026-06-05T22:13:47.000Z',
+            contentHash: 'new-content-hash',
+            threadContentHash: 'new-thread-hash',
+            headSha: 'same-head-sha',
+            ciState: 'failure',
+            mergeableState: 'blocked',
+            unresolvedReviewThreads: 0,
+            reviewStateHash: 'reviews-0',
+            checks: [
+              {
+                name: 'Lint',
+                status: 'completed',
+                conclusion: 'failure',
+                updatedAt: '2026-06-05T22:13:47.000Z',
+              },
+            ],
+            latestCommentAuthor: 'devin-ai-integration[bot]',
+            latestCommentAuthorType: 'Bot',
+            latestCommentIsBot: true,
+            latestCommentBody: 'Nice follow-up! Thanks for the summary — those are solid improvements.',
+            latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635974623',
+            latestCommentUpdatedAt: '2026-06-05T22:11:28.000Z',
+          }) satisfies GithubPullRequestSnapshot,
+      ),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          kind: 'pull-request-activity',
+          priority: 'high',
+          summary:
+            'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Nice follow-up! Thanks for the summary — those are solid improvements.',
+          dedupeKey:
+            'github:mastra-ai/mastra#17590:comment:https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635974623:2026-06-05T22:11:28.000Z',
+        }),
+        expect.objectContaining({
+          kind: 'pull-request-ci-failure',
+          summary: 'mastra-ai/mastra#17590 has failing CI: Lint',
+        }),
+      ],
+      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
+    );
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription).toMatchObject({
+      lastObservedGithubUpdatedAt: '2026-06-05T22:13:47.000Z',
+      lastObservedCiState: 'failure',
+      lastNotificationKind: 'pull-request-activity',
+      lastNotificationPriority: 'high',
+      lastNotificationSummary:
+        'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Nice follow-up! Thanks for the summary — those are solid improvements.',
+    });
   });
 
   it('updates the GitHub cursor without notifying when only pending check details change', async () => {
@@ -1177,6 +1678,125 @@ describe('GithubSignals', () => {
     expect(subscription.lastNotificationKind).toBeUndefined();
   });
 
+  it('includes comments on every scheduled PR poll', async () => {
+    vi.useFakeTimers();
+    const thread: StorageThreadType = {
+      id: 'thread-comment-refresh',
+      resourceId: 'resource-comment-refresh',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 123,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+                lastObservedThreadContentHash: 'old-thread-hash',
+                lastObservedHeadSha: 'head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'unstable',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+              },
+            ],
+          },
+        },
+      },
+    };
+    let snapshotCount = 0;
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        snapshotCount += 1;
+        if (snapshotCount === 1) {
+          return {
+            title: 'Add GitHub signals',
+            state: 'open',
+            githubUpdatedAt: '2026-01-01T00:00:00.000Z',
+            contentHash: 'old-hash',
+            threadContentHash: 'old-thread-hash',
+            headSha: 'head-sha',
+            mergeableState: 'unstable',
+            ciState: 'success' as const,
+            reviewStateHash: 'reviews-0',
+            latestCommentAuthor: 'previous-author',
+          };
+        }
+        return {
+          title: 'Add GitHub signals',
+          state: 'open',
+          githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+          contentHash: 'new-hash',
+          threadContentHash: 'new-thread-hash',
+          headSha: 'head-sha',
+          mergeableState: 'unstable',
+          ciState: 'success' as const,
+          reviewStateHash: 'reviews-0',
+          latestCommentAuthor: 'devin-ai-integration[bot]',
+          latestCommentAuthorType: 'Bot',
+          latestCommentIsBot: true,
+          latestCommentBody:
+            'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
+          latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+          latestCommentUpdatedAt: '2026-01-01T00:05:00.000Z',
+        };
+      }),
+    };
+    const threadStore = createThreadStore(thread);
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient, pollIntervalMs: 1_000 });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.startPollingForThread({ threadId: thread.id, resourceId: thread.resourceId });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(syncClient.syncPullRequest).toHaveBeenNthCalledWith(1, expect.objectContaining({ includeComments: true }));
+    expect(syncClient.syncPullRequest).toHaveBeenNthCalledWith(2, expect.objectContaining({ includeComments: true }));
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-activity',
+          priority: 'high',
+          summary:
+            'devin-ai-integration[bot] commented on mastra-ai/mastra#123: Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
+          attributes: expect.objectContaining({
+            latestCommentAuthor: 'devin-ai-integration[bot]',
+            latestCommentExcerpt:
+              'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
+            latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+            latestCommentUpdatedAt: '2026-01-01T00:05:00.000Z',
+          }),
+          metadata: expect.objectContaining({
+            github: expect.objectContaining({
+              latestCommentAuthor: 'devin-ai-integration[bot]',
+              // Full comment body is no longer persisted in notification metadata; only the excerpt.
+              latestCommentExcerpt:
+                'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
+              latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+              latestCommentUpdatedAt: '2026-01-01T00:05:00.000Z',
+            }),
+          }),
+        }),
+      ],
+      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
+    );
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription.lastObservedGithubUpdatedAt).toBe('2026-01-01T00:05:00.000Z');
+    processor.stopAllPolling();
+  });
+
   it('sends GitHub notifications through the registered agent with polling target stream options', async () => {
     const thread: StorageThreadType = {
       id: 'thread-sender',
@@ -1209,10 +1829,16 @@ describe('GithubSignals', () => {
         state: 'open',
         githubUpdatedAt: '2026-01-01T00:05:00.000Z',
         contentHash: 'new-hash',
+        latestCommentAuthor: 'contributor',
       })),
     };
     const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
-    const processor = new GithubSignals({ threadStore: createThreadStore(thread), syncClient });
+    const permissionResolver = { getPermission: vi.fn(async () => 'write' as const) };
+    const processor = new GithubSignals({
+      threadStore: createThreadStore(thread),
+      syncClient,
+      permissionResolver,
+    });
     processor.addAgent(
       { sendSignal: vi.fn(), sendNotificationSignal },
       {
@@ -1225,11 +1851,13 @@ describe('GithubSignals', () => {
     await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
 
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-activity',
-        coalesceKey: 'github:mastra-ai/mastra#123:pull-request-activity',
-      }),
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-activity',
+          coalesceKey: 'github:mastra-ai/mastra#123:pull-request-activity',
+        }),
+      ],
       expect.objectContaining({
         resourceId: thread.resourceId,
         threadId: thread.id,
@@ -1363,19 +1991,21 @@ describe('GithubSignals', () => {
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([]);
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-merged',
-        priority: 'high',
-        summary:
-          'mastra-ai/mastra#123: Fix duplicate reasoning IDs was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.',
-        attributes: expect.objectContaining({
-          state: 'merged',
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-merged',
+          priority: 'high',
+          summary:
+            'mastra-ai/mastra#123: Fix duplicate reasoning IDs was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.',
+          attributes: expect.objectContaining({
+            state: 'merged',
+          }),
+          metadata: expect.objectContaining({
+            github: expect.objectContaining({ mergedAt: '2026-06-02T18:42:32Z' }),
+          }),
         }),
-        metadata: expect.objectContaining({
-          github: expect.objectContaining({ mergedAt: '2026-06-02T18:42:32Z' }),
-        }),
-      }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
   });
@@ -1485,7 +2115,7 @@ describe('GithubSignals', () => {
       lastNotificationKind: 'pull-request-closed',
     });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-closed' }),
+      [expect.objectContaining({ kind: 'pull-request-closed' })],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
   });
@@ -1550,16 +2180,18 @@ describe('GithubSignals', () => {
     });
     expect(subscription.lastNotificationAt).toEqual(expect.any(String));
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-ci-failure',
-        priority: 'high',
-        summary: 'mastra-ai/mastra#123 has failing CI: Quality assurance',
-        attributes: expect.objectContaining({
-          ciState: 'failure',
-          failingChecks: 'Quality assurance',
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-ci-failure',
+          priority: 'high',
+          summary: 'mastra-ai/mastra#123 has failing CI: Quality assurance',
+          attributes: expect.objectContaining({
+            ciState: 'failure',
+            failingChecks: 'Quality assurance',
+          }),
         }),
-      }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
   });
@@ -1593,14 +2225,24 @@ describe('GithubSignals', () => {
         },
       },
     });
-    const runPoll = async (thread: StorageThreadType, snapshot: GithubPullRequestSnapshot) => {
+    const runPoll = async (
+      thread: StorageThreadType,
+      snapshot: GithubPullRequestSnapshot,
+      opts?: { permissionResolver?: GithubSignalsOptions['permissionResolver'] },
+    ) => {
       const threadStore = createThreadStore(thread);
       const syncClient: GithubSignalsSyncClient = {
         syncPullRequest: vi.fn(async () => ({ ok: true })),
         getPullRequestSnapshot: vi.fn(async () => snapshot),
       };
       const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
-      const processor = new GithubSignals({ threadStore, syncClient, agentId: 'code-agent' });
+      const permissionResolver = opts?.permissionResolver ?? { getPermission: vi.fn(async () => 'write' as const) };
+      const processor = new GithubSignals({
+        threadStore,
+        syncClient,
+        agentId: 'code-agent',
+        permissionResolver,
+      });
       processor.__registerMastra({
         getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
       } as any);
@@ -1615,7 +2257,7 @@ describe('GithubSignals', () => {
       ciState: 'success',
     });
     expect(ciRecovered).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-ci-recovered', priority: 'medium' }),
+      [expect.objectContaining({ kind: 'pull-request-ci-recovered', priority: 'medium' })],
       expect.anything(),
     );
     const conflictBeatsRecovery = await runPoll(
@@ -1629,7 +2271,7 @@ describe('GithubSignals', () => {
       },
     );
     expect(conflictBeatsRecovery).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-conflict', priority: 'high' }),
+      [expect.objectContaining({ kind: 'pull-request-conflict', priority: 'high' })],
       expect.anything(),
     );
     const dirtySuppressesCiPending = await runPoll(
@@ -1654,9 +2296,10 @@ describe('GithubSignals', () => {
       ciState: 'unknown',
       unresolvedReviewThreads: 2,
       reviewStateHash: 'reviews-2',
+      latestCommentAuthor: 'reviewer',
     });
     expect(reviewActivity).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-review-activity', priority: 'medium' }),
+      [expect.objectContaining({ kind: 'pull-request-review-activity', priority: 'medium' })],
       expect.anything(),
     );
     const conflictsResolved = await runPoll(createThreadWithCursor({ lastObservedMergeableState: 'dirty' }), {
@@ -1667,7 +2310,7 @@ describe('GithubSignals', () => {
       mergeableState: 'clean',
     });
     expect(conflictsResolved).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-conflict-resolved', priority: 'medium' }),
+      [expect.objectContaining({ kind: 'pull-request-conflict-resolved', priority: 'medium' })],
       expect.anything(),
     );
     const merged = await runPoll(createThreadWithCursor({ lastObservedState: 'open' }), {
@@ -1677,7 +2320,7 @@ describe('GithubSignals', () => {
       ciState: 'success',
     });
     expect(merged).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-merged', priority: 'high' }),
+      [expect.objectContaining({ kind: 'pull-request-merged', priority: 'high' })],
       expect.anything(),
     );
     const botNoise = await runPoll(createThreadWithCursor({ lastObservedContentHash: 'old-hash' }), {
@@ -1689,6 +2332,445 @@ describe('GithubSignals', () => {
       latestCommentIsBot: true,
     });
     expect(botNoise).not.toHaveBeenCalled();
+  });
+
+  it('suppresses activity notifications from unauthorized commenters', async () => {
+    const baseThread: StorageThreadType = {
+      id: 'thread-perm',
+      resourceId: 'resource-perm',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 42,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-perm',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+                lastObservedThreadContentHash: 'old-thread-hash',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const snapshot: GithubPullRequestSnapshot = {
+      title: 'Test PR',
+      state: 'open',
+      contentHash: 'new-hash',
+      threadContentHash: 'new-thread-hash',
+      ciState: 'unknown',
+      latestCommentAuthor: 'random-user',
+    };
+
+    const readPermission = { getPermission: vi.fn(async () => 'read' as const) };
+    const threadStore = createThreadStore(baseThread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => snapshot),
+    };
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient,
+      agentId: 'code-agent',
+      permissionResolver: readPermission,
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+    await processor.pollThreadNow({ threadId: baseThread.id, resourceId: baseThread.resourceId });
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect(readPermission.getPermission).toHaveBeenCalledWith('mastra-ai', 'mastra', 'random-user');
+  });
+
+  it('allows activity notifications from authorized commenters', async () => {
+    const baseThread: StorageThreadType = {
+      id: 'thread-perm-ok',
+      resourceId: 'resource-perm-ok',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 42,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-perm-ok',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+                lastObservedThreadContentHash: 'old-thread-hash',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const snapshot: GithubPullRequestSnapshot = {
+      title: 'Test PR',
+      state: 'open',
+      contentHash: 'new-hash',
+      threadContentHash: 'new-thread-hash',
+      ciState: 'unknown',
+      latestCommentAuthor: 'maintainer',
+    };
+
+    const writePermission = { getPermission: vi.fn(async () => 'write' as const) };
+    const threadStore = createThreadStore(baseThread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => snapshot),
+    };
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient,
+      agentId: 'code-agent',
+      permissionResolver: writePermission,
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+    await processor.pollThreadNow({ threadId: baseThread.id, resourceId: baseThread.resourceId });
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [expect.objectContaining({ kind: 'pull-request-activity' })],
+      expect.anything(),
+    );
+  });
+
+  it('allows configured bot notifications and blocks unlisted or ignored bots', async () => {
+    const baseThread: StorageThreadType = {
+      id: 'thread-bot',
+      resourceId: 'resource-bot',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 42,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-bot',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+                lastObservedThreadContentHash: 'old-thread-hash',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    // Allowed bot (not in ignoredBots list) — should notify
+    const allowedBotSnapshot: GithubPullRequestSnapshot = {
+      title: 'Test PR',
+      state: 'open',
+      contentHash: 'coderabbit-hash',
+      threadContentHash: 'new-thread-hash',
+      ciState: 'success',
+      latestCommentAuthor: 'coderabbitai[bot]',
+      latestCommentIsBot: true,
+    };
+    const allowedThreadStore = createThreadStore(baseThread);
+    const allowedSyncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => allowedBotSnapshot),
+    };
+    const allowedNotify = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const allowedProcessor = new GithubSignals({
+      threadStore: allowedThreadStore,
+      syncClient: allowedSyncClient,
+      agentId: 'code-agent',
+      permissionResolver: { getPermission: vi.fn(async () => 'read' as const) },
+    });
+    allowedProcessor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal: allowedNotify })),
+    } as any);
+    await allowedProcessor.pollThreadNow({ threadId: baseThread.id, resourceId: baseThread.resourceId });
+    expect(allowedNotify).toHaveBeenCalledWith(
+      [expect.objectContaining({ kind: 'pull-request-activity' })],
+      expect.anything(),
+    );
+
+    // Unlisted bot — should NOT notify
+    const unlistedBotSnapshot: GithubPullRequestSnapshot = {
+      title: 'Test PR',
+      state: 'open',
+      contentHash: 'vercel-hash',
+      threadContentHash: 'vercel-thread-hash',
+      ciState: 'success',
+      latestCommentAuthor: 'vercel[bot]',
+      latestCommentIsBot: true,
+    };
+    const unlistedThreadStore = createThreadStore({ ...baseThread, id: 'thread-bot-unlisted' });
+    const unlistedSyncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => unlistedBotSnapshot),
+    };
+    const unlistedNotify = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const unlistedProcessor = new GithubSignals({
+      threadStore: unlistedThreadStore,
+      syncClient: unlistedSyncClient,
+      agentId: 'code-agent',
+      permissionResolver: { getPermission: vi.fn(async () => 'read' as const) },
+    });
+    unlistedProcessor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal: unlistedNotify })),
+    } as any);
+    await unlistedProcessor.pollThreadNow({ threadId: 'thread-bot-unlisted', resourceId: baseThread.resourceId });
+    expect(unlistedNotify).not.toHaveBeenCalled();
+
+    // Ignored bot — should NOT notify even when authorized
+    const ignoredBotSnapshot: GithubPullRequestSnapshot = {
+      title: 'Test PR',
+      state: 'open',
+      contentHash: 'renovate-hash',
+      threadContentHash: 'renovate-thread-hash',
+      ciState: 'success',
+      latestCommentAuthor: 'renovate[bot]',
+      latestCommentIsBot: true,
+    };
+    const ignoredThreadStore = createThreadStore({ ...baseThread, id: 'thread-bot-ignored' });
+    const ignoredSyncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ignoredBotSnapshot),
+    };
+    const ignoredNotify = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const ignoredProcessor = new GithubSignals({
+      threadStore: ignoredThreadStore,
+      syncClient: ignoredSyncClient,
+      agentId: 'code-agent',
+      authorizedBots: ['renovate[bot]'],
+      ignoredBots: ['renovate[bot]'],
+      permissionResolver: { getPermission: vi.fn(async () => 'read' as const) },
+    });
+    ignoredProcessor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal: ignoredNotify })),
+    } as any);
+    await ignoredProcessor.pollThreadNow({ threadId: 'thread-bot-ignored', resourceId: baseThread.resourceId });
+    expect(ignoredNotify).not.toHaveBeenCalled();
+  });
+
+  it('always sends CI and state-change notifications regardless of author permission', async () => {
+    const baseThread: StorageThreadType = {
+      id: 'thread-ci',
+      resourceId: 'resource-ci',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 42,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-ci',
+                lastObservedGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+                lastObservedContentHash: 'old-hash',
+                lastObservedCiState: 'success',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const ciFailSnapshot: GithubPullRequestSnapshot = {
+      title: 'Test PR',
+      state: 'open',
+      contentHash: 'ci-fail-hash',
+      ciState: 'failure',
+      checks: [{ name: 'build', status: 'completed', conclusion: 'failure' }],
+      latestCommentAuthor: 'vercel[bot]',
+      latestCommentIsBot: true,
+      latestCommentBody: '[vc]: deployment status payload',
+      latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/42#issuecomment-vercel',
+      latestCommentUpdatedAt: '2026-01-01T00:01:00.000Z',
+    };
+    // Vercel is not in the default bot allowlist, but CI notifications should still fire
+    const noPermission = { getPermission: vi.fn(async () => 'none' as const) };
+    const threadStore = createThreadStore(baseThread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => ciFailSnapshot),
+    };
+    const sendNotificationSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient,
+      agentId: 'code-agent',
+      permissionResolver: noPermission,
+    });
+    processor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal })),
+    } as any);
+    await processor.pollThreadNow({ threadId: baseThread.id, resourceId: baseThread.resourceId });
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          kind: 'pull-request-ci-failure',
+          priority: 'high',
+          attributes: expect.not.objectContaining({
+            latestCommentAuthor: expect.any(String),
+            latestCommentExcerpt: expect.any(String),
+            latestCommentUrl: expect.any(String),
+          }),
+          metadata: expect.objectContaining({
+            github: expect.not.objectContaining({
+              latestCommentAuthor: expect.any(String),
+              latestCommentBody: expect.any(String),
+              latestCommentUrl: expect.any(String),
+            }),
+          }),
+        }),
+      ],
+      expect.anything(),
+    );
+  });
+
+  describe('sanitizeCommentText', () => {
+    it('removes large HTML-comment state blobs while keeping human-readable text', () => {
+      const body = [
+        'Nice work on the refactor!',
+        '',
+        '<!-- internal state start',
+        'eyJzdGF0ZSI6ImxhcmdlLWJhc2U2NC1ibG9iLXRoYXQtaXMtaHVnZSJ9',
+        'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'internal state end -->',
+      ].join('\n');
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('Nice work on the refactor!');
+      expect(sanitized).not.toContain('internal state');
+      expect(sanitized).not.toContain('eyJzdGF0ZSI');
+    });
+
+    it('removes <details> blocks including their collapsed inner content', () => {
+      const body = [
+        'Top-level walkthrough.',
+        '<details open>',
+        '<summary>Walkthrough</summary>',
+        'collapsed detail content',
+        '</details>',
+        'After the section.',
+      ].join('\n');
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('Top-level walkthrough.');
+      expect(sanitized).toContain('After the section.');
+      // The collapsed block content is dropped, not just its tags.
+      expect(sanitized).not.toContain('collapsed detail content');
+      expect(sanitized).not.toContain('Walkthrough');
+      expect(sanitized).not.toContain('<details');
+      expect(sanitized).not.toContain('<summary');
+    });
+
+    it('strips standalone tags while keeping surrounding prose', () => {
+      const body = 'Looks good.<br/> Ship it.';
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('Looks good.');
+      expect(sanitized).toContain('Ship it.');
+      expect(sanitized).not.toContain('<br');
+    });
+
+    it('removes an unterminated comment and its payload through end-of-string', () => {
+      const body = 'before <!-- large-hidden-state-payload-with-no-closing-marker';
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('before');
+      expect(sanitized).not.toContain('<!--');
+      expect(sanitized).not.toContain('large-hidden-state');
+    });
+
+    it('leaves no stray < behind so no partial markup can survive', () => {
+      const sanitized = sanitizeCommentText('before <unterminated tag payload');
+      expect(sanitized).toContain('before');
+      expect(sanitized).not.toContain('<');
+    });
+
+    it('handles adversarial repeated comment openers without catastrophic backtracking', () => {
+      const body = `${'<!-- internal state start -->'.repeat(5000)}tail`;
+      const start = Date.now();
+      const sanitized = sanitizeCommentText(body);
+      expect(Date.now() - start).toBeLessThan(1000);
+      expect(sanitized).toContain('tail');
+      expect(sanitized).not.toContain('<!--');
+    });
+
+    it('handles adversarial leading <!--- repetitions without catastrophic backtracking', () => {
+      const body = `${'<!---'.repeat(20000)}tail`;
+      const start = Date.now();
+      const sanitized = sanitizeCommentText(body);
+      expect(Date.now() - start).toBeLessThan(1000);
+      expect(sanitized).not.toContain('<!--');
+    });
+
+    it('leaves an ordinary comment untouched aside from whitespace normalization', () => {
+      const body = 'Thanks for the fix — looks good to me.';
+      expect(sanitizeCommentText(body)).toBe(body);
+    });
+
+    it('preserves angle-bracket code inside an inline code span', () => {
+      const sanitized = sanitizeCommentText('Use `<Component>` here');
+      expect(sanitized).toBe('Use `<Component>` here');
+    });
+
+    it('preserves JSX/TSX inside fenced code blocks while stripping markup outside', () => {
+      const body = ['Before <br/> the block.', '```tsx', 'const x = <Component prop="a" />;', '```', 'After.'].join(
+        '\n',
+      );
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('const x = <Component prop="a" />;');
+      expect(sanitized).toContain('```tsx');
+      expect(sanitized).toContain('Before  the block.');
+      expect(sanitized).toContain('After.');
+      expect(sanitized).not.toContain('<br');
+    });
+
+    it('still strips real markup that appears outside code spans', () => {
+      const body = 'See `<Component>` but not <details open>secret</details> here.';
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('`<Component>`');
+      expect(sanitized).not.toContain('secret');
+      expect(sanitized).not.toContain('<details');
+    });
+
+    it('preserves angle-bracket code inside a multi-backtick inline span', () => {
+      const sanitized = sanitizeCommentText('Use ``<Component prop="`a`" />`` here');
+      expect(sanitized).toBe('Use ``<Component prop="`a`" />`` here');
+    });
+
+    it('keeps ordinary prose containing a lone "<" (e.g. comparisons)', () => {
+      const sanitized = sanitizeCommentText('coverage < 80% but tests pass');
+      expect(sanitized).toBe('coverage  80% but tests pass');
+    });
+
+    it('leaves no "<script" or lone "<" in the output even when unterminated', () => {
+      const sanitized = sanitizeCommentText('hello <script>alert(1) and a dangling <scr');
+      expect(sanitized).not.toContain('<script');
+      expect(sanitized).not.toContain('<');
+      expect(sanitized).toContain('hello');
+    });
+
+    it('does not collapse blank lines inside a preserved fenced code block', () => {
+      const body = ['intro', '```ts', 'const a = 1;', '', '', '', 'const b = 2;', '```'].join('\n');
+      const sanitized = sanitizeCommentText(body);
+      // The 3+ blank lines inside the fence are restored verbatim, not normalized to one.
+      expect(sanitized).toContain('const a = 1;\n\n\n\nconst b = 2;');
+    });
   });
 
   it('starts polling after subscribe and stops after the last subscription is removed', async () => {

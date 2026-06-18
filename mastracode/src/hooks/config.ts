@@ -17,10 +17,11 @@ const VALID_EVENTS: HookEventName[] = [
   'UserPromptSubmit',
   'SessionStart',
   'SessionEnd',
+  'Notification',
 ];
 
-export function loadHooksConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): HooksConfig {
-  const globalPath = getGlobalHooksPath(configDirName);
+export function loadHooksConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR, homeDir?: string): HooksConfig {
+  const globalPath = getGlobalHooksPath(configDirName, homeDir);
   const projectPath = getProjectHooksPath(projectDir, configDirName);
 
   const globalConfig = loadSingleConfig(globalPath);
@@ -33,8 +34,8 @@ export function getProjectHooksPath(projectDir: string, configDirName = DEFAULT_
   return path.join(projectDir, configDirName, 'hooks.json');
 }
 
-export function getGlobalHooksPath(configDirName = DEFAULT_CONFIG_DIR): string {
-  return path.join(os.homedir(), configDirName, 'hooks.json');
+export function getGlobalHooksPath(configDirName = DEFAULT_CONFIG_DIR, homeDir = os.homedir()): string {
+  return path.join(homeDir, configDirName, 'hooks.json');
 }
 
 function loadSingleConfig(filePath: string): HooksConfig {

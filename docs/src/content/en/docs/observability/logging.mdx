@@ -36,7 +36,7 @@ Visit [PinoLogger](/reference/logging/pino-logger) for all available configurati
 
 ## Logging to observability storage
 
-When [observability](/docs/observability/overview) is configured, all logger calls are automatically forwarded to your observability storage. This means every `debug`, `info`, `warn`, `error`, and `trackException` call from your application and from Mastra's internal components appears alongside your traces.
+When [observability](/docs/observability/overview) is configured, all logger calls are automatically forwarded to your observability storage. This means every `debug`, `info`, `warn`, `error`, and `trackException` call from your application and from Mastra's internal components is stored alongside your traces.
 
 No code changes are required. Mastra wraps the configured logger so that it writes to both the original logger (console, file, or custom transport) and the observability system simultaneously.
 

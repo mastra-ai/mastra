@@ -15,7 +15,9 @@ import {
   deleteStoredAgentResponseSchema,
   getStoredAgentDependentsResponseSchema,
   exportStoredAgentBodySchema,
+  openStoredAgentChangeRequestBodySchema,
   exportStoredAgentResponseSchema,
+  openStoredAgentChangeRequestResponseSchema,
   previewInstructionsBodySchema,
   previewInstructionsResponseSchema,
 } from '../schemas/stored-agents';
@@ -23,6 +25,7 @@ import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
+import { attachAuthor, prepareAuthorEnrichment } from './author-enrichment';
 import {
   assertReadAccess,
   assertWriteAccess,
@@ -123,6 +126,35 @@ function getCodeAgentOwnership(editorConfig: unknown): {
   return { ownsInstructions, ownsTools, ownsToolDescriptionsOnly };
 }
 
+function hasNonEmptyInstructions(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  if (!Array.isArray(value)) {
+    return false;
+  }
+
+  return value.some(block => {
+    if (!block || typeof block !== 'object') {
+      return false;
+    }
+
+    const typedBlock = block as { type?: unknown; id?: unknown; content?: unknown };
+    if (typedBlock.type === 'prompt_block_ref') {
+      return typeof typedBlock.id === 'string' && typedBlock.id.length > 0;
+    }
+
+    return typeof typedBlock.content === 'string' && typedBlock.content.trim().length > 0;
+  });
+}
+
+function assertOwnedInstructionsNotEmpty(instructions: unknown) {
+  if (!hasNonEmptyInstructions(instructions)) {
+    throw new HTTPException(400, { message: 'Instructions are required' });
+  }
+}
+
 function sortForStableJson(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortForStableJson);
@@ -169,7 +201,19 @@ function buildExportConfig(
 }
 
 function agentExportFilename(agentId: string) {
-  return `${agentId}.json`;
+  return `agents/${encodeURIComponent(agentId)}.json`;
+}
+
+function sourceChangeRequestHeadRef(agentId: string) {
+  const safeAgentId = agentId.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'agent';
+  return `mastra/${safeAgentId}`;
+}
+
+function sourceChangeRequestMessage(agentId: string, userName?: string, changeMessage?: string) {
+  const normalizedUserName = userName?.replace(/\s+/g, ' ').trim();
+  const normalizedMessage = changeMessage?.replace(/\s+/g, ' ').trim();
+  const message = normalizedMessage || `Update ${agentId} agent override`;
+  return normalizedUserName ? `${message} by ${normalizedUserName}` : message;
 }
 
 // ============================================================================
@@ -260,8 +304,14 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         const endIdx = effectivePerPage === 0 ? 0 : startIdx + effectivePerPage;
         const sliced = effectivePerPage === 0 ? [] : visible.slice(startIdx, endIdx);
         const annotated = sliced.map(record => ({ ...record, isFavorited: true }));
+        const authors = await prepareAuthorEnrichment(
+          mastra,
+          requestContext,
+          annotated.map(a => a.authorId),
+        );
+        const withAuthors = authors ? annotated.map(record => attachAuthor(record, authors)) : annotated;
         const hasMore = effectivePerPage > 0 && endIdx < total;
-        return { agents: annotated, total, page, perPage: effectivePerPage, hasMore };
+        return { agents: withAuthors, total, page, perPage: effectivePerPage, hasMore };
       }
 
       const result = await agentsStore.listResolved({
@@ -282,8 +332,16 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       // filter as a view over the caller's scope — an approximation is OK.
       const visibleAgents = result.agents.filter(record => matchesAuthorFilter(record, filter));
 
+      const authors = await prepareAuthorEnrichment(
+        mastra,
+        requestContext,
+        visibleAgents.map(a => a.authorId),
+      );
+
       if (!favoritesEnabled) {
-        return { ...result, agents: visibleAgents.map(stripFavoriteFields) };
+        const stripped = visibleAgents.map(stripFavoriteFields);
+        const withAuthors = authors ? stripped.map(record => attachAuthor(record, authors)) : stripped;
+        return { ...result, agents: withAuthors };
       }
 
       const enrichment = await prepareFavoritesEnrichment(
@@ -295,13 +353,55 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       const annotated = enrichment
         ? visibleAgents.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
         : visibleAgents.map(stripFavoriteFields);
+      const withAuthors = authors ? annotated.map(record => attachAuthor(record, authors)) : annotated;
 
-      return { ...result, agents: annotated };
+      return { ...result, agents: withAuthors };
     } catch (error) {
       return handleError(error, 'Error listing stored agents');
     }
   },
 });
+
+async function buildStoredAgentExport({
+  mastra,
+  requestContext,
+  storedAgentId,
+  body,
+}: {
+  mastra: any;
+  requestContext: any;
+  storedAgentId: string;
+  body: Record<string, unknown>;
+}) {
+  const storage = mastra.getStorage();
+  const agentsStore = storage ? await storage.getStore('agents') : undefined;
+  const storedAgent = await agentsStore?.getByIdResolved(storedAgentId, { status: 'draft' });
+  if (storedAgent) {
+    assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
+    assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: storedAgent });
+  }
+
+  let codeAgent: { __getEditorConfig?: () => unknown; source?: string } | undefined;
+  try {
+    codeAgent = mastra.getAgentById?.(storedAgentId) as typeof codeAgent;
+  } catch {
+    codeAgent = undefined;
+  }
+
+  if (!storedAgent && !codeAgent) {
+    throw new HTTPException(404, { message: `Agent with id ${storedAgentId} not found` });
+  }
+
+  const config = buildExportConfig(body, codeAgent);
+  const content = `${JSON.stringify(config, null, 2)}\n`;
+
+  return {
+    agentId: storedAgentId,
+    fileName: agentExportFilename(storedAgentId),
+    content,
+    config,
+  };
+}
 
 export const EXPORT_STORED_AGENT_ROUTE = createRoute({
   method: 'POST',
@@ -316,36 +416,68 @@ export const EXPORT_STORED_AGENT_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, requestContext, storedAgentId, ...body }) => {
     try {
-      const storage = mastra.getStorage();
-      const agentsStore = storage ? await storage.getStore('agents') : undefined;
-      const storedAgent = await agentsStore?.getByIdResolved(storedAgentId, { status: 'draft' });
-      if (storedAgent) {
-        assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
-        assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: storedAgent });
-      }
-
-      let codeAgent: { __getEditorConfig?: () => unknown; source?: string } | undefined;
-      try {
-        codeAgent = mastra.getAgentById?.(storedAgentId) as typeof codeAgent;
-      } catch {
-        codeAgent = undefined;
-      }
-
-      if (!storedAgent && !codeAgent) {
-        throw new HTTPException(404, { message: `Agent with id ${storedAgentId} not found` });
-      }
-
-      const config = buildExportConfig(body, codeAgent);
-      const content = `${JSON.stringify(config, null, 2)}\n`;
-
-      return {
-        agentId: storedAgentId,
-        fileName: agentExportFilename(storedAgentId),
-        content,
-        config,
-      };
+      return await buildStoredAgentExport({ mastra, requestContext, storedAgentId, body });
     } catch (error) {
       return handleError(error, 'Error exporting stored agent');
+    }
+  },
+});
+
+export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
+  method: 'POST',
+  path: '/stored/agents/:storedAgentId/change-request',
+  responseType: 'json',
+  pathParamSchema: storedAgentIdPathParams,
+  bodySchema: openStoredAgentChangeRequestBodySchema,
+  responseSchema: openStoredAgentChangeRequestResponseSchema,
+  summary: 'Open stored agent source change request',
+  description: 'Opens a source-provider change request for deterministic agent override JSON without mutating storage',
+  tags: ['Stored Agents'],
+  requiresAuth: true,
+  handler: async ({ mastra, requestContext, storedAgentId, ...body }) => {
+    try {
+      const provider = mastra.getEditor?.()?.getSourceControlProvider?.();
+      if (!provider?.openChangeRequest) {
+        throw new HTTPException(400, { message: 'Source control provider cannot open change requests' });
+      }
+
+      const openChangeRequest = provider.openChangeRequest.bind(provider);
+      const { changeMessage, userName, inspectOnly, ...exportBody } = body;
+      const headRef = sourceChangeRequestHeadRef(storedAgentId);
+      const title = `Update ${storedAgentId} agent override`;
+      const result = inspectOnly
+        ? await openChangeRequest({
+            title,
+            headRef,
+            files: [],
+          })
+        : await (async () => {
+            const response = await buildStoredAgentExport({ mastra, requestContext, storedAgentId, body: exportBody });
+            const message = sourceChangeRequestMessage(storedAgentId, userName, changeMessage);
+            return openChangeRequest({
+              title,
+              body: `Updates ${response.fileName} from Mastra Studio.`,
+              headRef,
+              files: [
+                {
+                  path: response.fileName,
+                  content: response.content,
+                  message,
+                },
+              ],
+            });
+          })();
+
+      const storage = mastra.getStorage();
+      const agentsStore = storage ? await storage.getStore('agents') : undefined;
+      await (
+        agentsStore as { useProviderRef?: (agentId: string, ref: string) => Promise<void> } | undefined
+      )?.useProviderRef?.(storedAgentId, result.ref ?? headRef);
+      mastra.getEditor?.()?.agent?.clearCache?.(storedAgentId);
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error opening stored agent change request');
     }
   },
 });
@@ -389,7 +521,9 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       // holder, and the record isn't public/legacy-unowned.
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 
-      return enrichOrStripFavorites(mastra, requestContext, 'agent', agent);
+      const authors = await prepareAuthorEnrichment(mastra, requestContext, [agent.authorId]);
+      const withFavorite = await enrichOrStripFavorites(mastra, requestContext, 'agent', agent);
+      return attachAuthor(withFavorite, authors);
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
     }
@@ -486,6 +620,30 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
 
       const resolvedBrowser = await resolveBrowserField(browser, mastra);
 
+      let createInstructions: typeof instructions | undefined = instructions;
+      let createTools = tools;
+      let createIntegrationTools = integrationTools;
+      let createMcpClients = mcpClients;
+      let codeAgentForCreate: { __getEditorConfig?: () => unknown; source?: string } | undefined;
+      try {
+        codeAgentForCreate = mastra.getAgentById?.(id) as typeof codeAgentForCreate;
+      } catch {
+        codeAgentForCreate = undefined;
+      }
+      if (codeAgentForCreate?.source === 'code') {
+        const ownership = getCodeAgentOwnership(codeAgentForCreate.__getEditorConfig?.());
+        if (ownership.ownsInstructions) {
+          assertOwnedInstructionsNotEmpty(createInstructions);
+        } else {
+          createInstructions = undefined;
+        }
+        if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
+          createTools = undefined;
+          createIntegrationTools = undefined;
+          createMcpClients = undefined;
+        }
+      }
+
       const input = {
         id,
         authorId,
@@ -493,15 +651,15 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
         name,
         description,
-        instructions,
+        instructions: createInstructions,
         model,
-        tools,
+        tools: createTools,
         defaultOptions,
         workflows,
         agents,
-        integrationTools,
+        integrationTools: createIntegrationTools,
         toolProviders,
-        mcpClients,
+        mcpClients: createMcpClients,
         inputProcessors,
         outputProcessors,
         memory,
@@ -661,7 +819,11 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       }
       if (codeAgentForUpdate?.source === 'code') {
         const ownership = getCodeAgentOwnership(codeAgentForUpdate.__getEditorConfig?.());
-        if (!ownership.ownsInstructions) {
+        if (ownership.ownsInstructions) {
+          if (instructions !== undefined) {
+            assertOwnedInstructionsNotEmpty(instructions);
+          }
+        } else {
           instructions = undefined;
         }
         if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {

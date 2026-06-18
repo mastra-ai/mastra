@@ -58,6 +58,21 @@ export interface IUserProvider<TUser extends User = User> {
   getUser(userId: string): Promise<TUser | null>;
 
   /**
+   * Optional: Get multiple users by ID in a single call.
+   *
+   * Returns results positionally aligned to `userIds`, with `null` for any
+   * user that could not be resolved. Providers that can perform a single
+   * batched lookup (e.g. a DB-backed provider) should implement this to
+   * avoid N round trips when callers (such as author enrichment on list
+   * endpoints) need many users at once. If not implemented, callers should
+   * fall back to `Promise.all(userIds.map(id => getUser(id)))`.
+   *
+   * @param userIds - List of user identifiers
+   * @returns Array of user objects (or `null` per missing entry) in input order
+   */
+  getUsers?(userIds: string[]): Promise<Array<TUser | null>>;
+
+  /**
    * Optional: Get URL to user's profile page.
    *
    * @param user - User object

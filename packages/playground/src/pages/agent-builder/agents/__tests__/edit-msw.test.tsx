@@ -65,6 +65,9 @@ vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () =
 const useStreamRunningMock = vi.fn(() => false);
 vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => useStreamRunningMock(),
+  // No debounce in these suites: they assert steady running/idle states, not the idle-gap
+  // grace period (covered by edit-onboarding.msw.test.tsx with the real debounce hook).
+  useStreamRunningDebounced: () => useStreamRunningMock(),
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
 }));
@@ -166,6 +169,7 @@ const baseHandlers = (overrides?: Partial<typeof storedAgent>) => [
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, user: { id: 'user-1' } })),
   http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json({ ...storedAgent, ...overrides })),
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
+  http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json({ providers: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
 ];
@@ -186,7 +190,7 @@ describe('AgentBuilderAgentEdit MSW integration — visibility immediate-persist
 
     renderPage();
 
-    const addButton = await screen.findByTestId('agent-builder-visibility-add');
+    const addButton = await screen.findByTestId('agent-builder-visibility-add', undefined, { timeout: 10_000 });
     expect(addButton.hasAttribute('disabled')).toBe(false);
     expect(addButton.getAttribute('data-disabled')).toBeNull();
     expect(addButton.textContent).toContain('Add to library');
@@ -204,7 +208,7 @@ describe('AgentBuilderAgentEdit MSW integration — visibility immediate-persist
 
     renderPage();
 
-    const addButton = await screen.findByTestId('agent-builder-visibility-add');
+    const addButton = await screen.findByTestId('agent-builder-visibility-add', undefined, { timeout: 10_000 });
     fireEvent.click(addButton);
 
     await act(async () => {

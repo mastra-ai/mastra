@@ -6,6 +6,7 @@ import type { MastraAuthProvider } from './auth';
 import { CompositeAuth } from './composite-auth';
 import { SimpleAuth } from './simple-auth';
 import { registerApiRoute } from './index';
+import type { Middleware } from './index';
 
 /**
  * Type tests for registerApiRoute
@@ -50,14 +51,12 @@ describe('registerApiRoute Type Tests', () => {
       });
     });
 
-    it('should allow accessing requestContext in createHandler', () => {
+    it('should avoid leaking Hono context types from createHandler', () => {
       registerApiRoute('/user-profile', {
         method: 'GET',
         createHandler: async () => {
           return async c => {
-            // requestContext should also be typed in createHandler's returned handler
-            const requestContext = c.get('requestContext');
-            expectTypeOf(requestContext).toEqualTypeOf<RequestContext>();
+            expectTypeOf(c).toBeAny();
 
             return c.json({ ok: true });
           };
@@ -143,5 +142,19 @@ describe('CORS type tests', () => {
         credentials: true,
       },
     });
+  });
+});
+
+describe('Middleware type exports', () => {
+  it('supports middleware declared separately', () => {
+    const middleware: Middleware = {
+      path: '/api/*',
+      handler: async (c, next) => {
+        c.req.header('authorization');
+        await next();
+      },
+    };
+
+    expectTypeOf(middleware).toMatchTypeOf<Middleware>();
   });
 });

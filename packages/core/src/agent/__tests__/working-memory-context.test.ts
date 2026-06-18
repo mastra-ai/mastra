@@ -2,6 +2,7 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../memory/mock';
+import { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
 import { createTool, Tool } from '../../tools';
 import { createWorkflow, createStep } from '../../workflows';
@@ -325,6 +326,35 @@ describe('Working memory tool context propagation', () => {
     }
 
     expect(toolNames).not.toContain('updateWorkingMemory');
+  });
+
+  it('should use defaultOptions memory context when assembling tools for execution', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('testThreadId', 'default-thread');
+    requestContext.set('testResourceId', 'default-resource');
+
+    const mockMemory = new MockMemory({
+      enableWorkingMemory: true,
+      workingMemoryTemplate: `# Notes\n- **Key**:\n- **Value**:\n`,
+    });
+
+    const agent = new Agent({
+      id: 'default-tools-memory-test',
+      name: 'Default Tools Memory Test',
+      instructions: 'You are a helpful agent.',
+      model: createSimpleMockModel(),
+      memory: mockMemory,
+      defaultOptions: ({ requestContext }) => ({
+        memory: {
+          thread: requestContext.get('testThreadId') as string,
+          resource: requestContext.get('testResourceId') as string,
+        },
+      }),
+    });
+
+    const tools = await agent.getToolsForExecution({ requestContext });
+
+    expect(Object.keys(tools)).toContain('updateWorkingMemory');
   });
 
   it('should provide memory context when updateWorkingMemory is called inside a workflow step', async () => {

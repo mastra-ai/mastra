@@ -76,7 +76,7 @@ For hosted traces, logs, and metrics across projects and deploys, see [Observabi
 
 ## Metrics
 
-A dashboard that summarizes agent, workflow, and tool performance over a configurable time range (last 24 hours to 30 days). The top row shows total agent runs, model cost, token consumption, and average scorer performance. Below that, detailed cards break down model usage and cost per model, token usage per agent, trace volume with completed and error counts, latency percentiles (p50 and p95), and scorer trends over time.
+A dashboard that summarizes agent, workflow, and tool performance over a configurable time range (last 24 hours to 30 days). The top row shows total agent runs, model cost, token consumption, and average scorer performance. Below that, detailed cards break down model usage and cost per model, token usage per agent, token usage over time with estimated cost, trace volume with completed and error counts, latency percentiles (p50 and p95), and scorer trends over time.
 
 Visit the [metrics overview](/docs/observability/metrics/overview) for more details.
 
@@ -91,6 +91,8 @@ Metrics require a separate OLAP store for observability. Relational databases li
 When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. Follow these traces to see how data moves, where time is spent, and what's happening under the hood.
 
 Tracing filters out low-level framework details so your traces stay focused and readable. Visit the [tracing overview](/docs/observability/tracing/overview) for more details.
+
+To export a trace, select **Download trace JSON** in the trace panel header. This saves the entire trace as a `trace-<id>.json` file, with every span and its full input, output, metadata, and attributes. Use it to share a trace, attach it to a bug report, or build an evaluation dataset offline.
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1773668518/observability_qmwbao.mp4" />
 

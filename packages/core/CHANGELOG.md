@@ -1,5 +1,1498 @@
 # @mastra/core
 
+## 1.44.0
+
+### Minor Changes
+
+- Removed the legacy harness v1 entrypoint. ([#18131](https://github.com/mastra-ai/mastra/pull/18131))
+
+  **Breaking change**
+
+  Imports from `@mastra/core/harness/v1` no longer work. Use the stable harness entrypoint instead.
+
+  **Before**
+
+  ```ts
+  import { Harness } from '@mastra/core/harness/v1';
+  ```
+
+  **After**
+
+  ```ts
+  import { Harness } from '@mastra/core/harness';
+  ```
+
+- Add `setStudio()` method to Mastra class for runtime studio configuration. ([#18111](https://github.com/mastra-ai/mastra/pull/18111))
+
+  This enables deploy wrappers to configure studio auth/RBAC separately from server config, which is required for dual auth patterns where Studio UI uses platform auth while Server API remains open or uses user-configured auth.
+
+  ```typescript
+  // Set studio auth separately from server auth
+  mastra.setStudio({
+    auth: new MastraAuthStudio(),
+    rbac: new MastraRBACStudio({ roleMapping: { admin: ['*'] } }),
+  });
+  ```
+
+- Made the native Agent goal mechanism robust, restoring behavior that regressed when goal handling moved into core. ([#18016](https://github.com/mastra-ai/mastra/pull/18016))
+  - **Tool-capable judges.** Scorer judge configs accept optional `tools`, and the default goal scorer can use them to verify the agent's work against reality instead of grading prose alone. MastraCode wires its read-only workspace tools (`view`, `search_content`, `find_files`, `file_stat`, `lsp_inspect`) into `goal.tools`.
+  - **Judge memory restored.** Scorer judge configs accept optional `memory`; goal scoring uses the original MastraCode per-goal judge thread shape and prompt format so repeated evaluations retain prior facts, feedback, and user checkpoints through judge memory.
+  - **Tri-state waiting.** The default goal scorer emits `done`/`continue`/`waiting`; a `waiting` decision (only when the goal text explicitly asks to stop for the user) stops the auto-loop but keeps the objective `active` so the next agent turn is still judged — no `/goal resume` needed.
+  - **Budget-exhaustion pause.** Reaching `maxRuns` without completing now parks the objective as `paused` with a clear reason, resumable by raising `maxRuns` and reactivating, instead of silently leaving it `active`.
+  - **Judge-failure pause (no infinite loop).** Any failure while evaluating the goal — including judge-model/tools resolution, not just the scorer run — pauses the objective and stops the loop, surfacing the cause, rather than re-running the model against a broken judge every turn.
+  - **Structured-output retry.** `tryGenerateWithJsonFallback` now retries with `jsonPromptInjection` when the judge resolves without a parseable object (not only on a thrown error), matching the streaming path.
+  - **Signal-based feedback.** Goal judge feedback is now injected as a `goal-judge` system-reminder signal instead of an assistant-authored "Completion Check Results" transcript message, so reloads and subsequent model context match the original MastraCode goal loop. Continuation, waiting, paused, and done decisions all persist structured evaluation metadata for replay.
+  - **TUI activity/replay fixes.** Goal evaluation chunks close the current assistant message before rendering the judge UI, stream judge activity with useful tool targets, stream partial judge reason text while scoring, replay persisted judge results as judge display components instead of raw Goal reminder text, and correctly persist Esc/Ctrl+C pauses while the judge is running.
+
+  The goal evaluation chunk now carries `pausedReason`, `judgeFailed`, `waitingForUser`, `pending` (emitted before scoring starts so consumers can show a loading indicator), and judge `activity` entries including streamed `reason` updates.
+
+- Added session-owned Harness state. ([#18133](https://github.com/mastra-ai/mastra/pull/18133))
+
+  Harness state is now available through `harness.session.state`, so new integrations can read and write state from the same session object that owns mode, model, thread, and run data.
+
+  **Example**
+
+  ```ts
+  const state = harness.session.state.get();
+  await harness.session.state.set({ yolo: true });
+  ```
+
+  `Harness.getState()` and `Harness.setState()` still work and now delegate to `harness.session.state`.
+
+- Move the Harness display state onto `session.displayState` ([#18136](https://github.com/mastra-ai/mastra/pull/18136))
+
+  The canonical display state a UI renders — `isRunning`, active tools, tool-input
+  buffers, pending approval/suspensions, active subagents, current message,
+  queued follow-ups, modified files, tasks, OM progress, and token usage — now
+  lives on the Session as `session.displayState`, alongside the reducer that keeps
+  it in sync with every Harness event.
+
+  `SessionDisplayState` owns:
+  - `get()` — a read-only snapshot to render from (replaces `harness.getDisplayState()`)
+  - `apply(event)` — the centralized state machine that folds each event into the snapshot
+  - `resetThread()` — reset thread-scoped fields on thread switch/create
+  - `restoreTasks(tasks)` — restore replayed task history without emitting an event
+  - `clearPendingSuspensions()` / `deletePendingSuspension(toolCallId)` — display mirror upkeep on abort/resume
+
+  Display state is inherently per-conversation, so in a shared (multi-user) host
+  it can't hang off the Harness — `harness.getDisplayState()` has no single answer
+  when one host serves many sessions. It reads from `harness.session.displayState`
+  instead.
+
+  The Harness stays the **event-bus owner**: `emit()` folds the event into
+  `session.displayState` and then dispatches to listeners (including the
+  `display_state_changed` fan-out). The reducer needs a few read-only host facts it
+  doesn't own — the live token-usage tally, the subagent display-name lookup
+  (Harness config), and the active thread id — which are injected into the Session
+  at construction.
+
+  Removed from the Harness public API (read through `harness.session.displayState.*`):
+  - `getDisplayState()` → `session.displayState.get()`
+  - `restoreDisplayTasks(tasks)` → `session.displayState.restoreTasks(tasks)`
+
+  `restoreTasks` is now a pure session-state mutation (it no longer emits
+  `display_state_changed`); the UI re-renders explicitly after a replay.
+
+- Introduce the Harness `Session`: the Harness now exposes `harness.session`, a class that owns the per-conversation runtime state that previously lived flattened on the Harness instance. The Harness remains the shared host (storage, the thread lock, the agent registry, the event bus); the Session owns the state scoped to a single user's conversation. ([#18107](https://github.com/mastra-ai/mastra/pull/18107))
+
+  `harness.session` owns:
+  - **`session.identity`** — the session's `resourceId` / `defaultResourceId` (the stable "who").
+  - **`session.thread`** — the active thread binding (`getId` / `set` / `clear` / `isSet` / `requireId`) plus the thread data domain scoped to the session: `list`, `getById`, `listMessages`, `listActiveMessages`, `firstUserMessage(s)`, and thread settings (`getSetting` / `setSetting` / `deleteSetting`). It reaches shared-host storage through an injected gateway rather than calling back into Harness orchestration.
+  - **`session.mode`** / **`session.model`** — the currently-selected mode and model (source of truth), the mode-switch sequence, and per-mode model memory. The Harness still owns the mode _definitions_ (`config.modes`).
+  - **`session.run`** — transient per-run identity (run id, trace id, operation counter) and abort control (controller, `isRunning`, `requestAbort`, …). Never persisted.
+  - **`session.stream`** — the live agent-thread subscription handle and its dedup key. Adds `session.getCurrentRunId()` and `session.abortRun()`, which compose the subscription.
+  - **`session.suspensions`** — the parked-tool resume map (`toolCallId → { runId, toolName }`) for tools paused via the native suspension primitive (`ask_user` / `request_access` / `submit_plan`).
+  - **`session.followUps`** — the queue of messages to send after the active run finishes.
+  - **`session.approval`** — the interactive tool-approval gate; `session.respondToToolApproval({ decision, requestContext })` applies the user's approve / decline / always-allow choice and releases the run.
+  - session-scoped permission grants and the live token-usage counter (the Harness still persists usage to thread metadata, since usage is thread-scoped).
+
+  **Removed from the Harness public API** — read these through `harness.session.*` instead:
+  - `getSessionGrants()`, `getTokenUsage()` → `session.getGrants()` / `session.getTokenUsage()`
+  - `getCurrentModelId()`, `hasModelSelected()` → `session.model.get()` / `session.model.hasSelection()`
+  - `getCurrentRunId()`, `getCurrentTraceId()`, `isRunning()` → `session.getCurrentRunId()` / `session.run.getTraceId()` / `session.run.isRunning()`
+  - `getCurrentThreadId()`, `getThreads()`, `listThreads()`, `listMessages()`, `listMessagesForThread()`, `getFirstUserMessage(s)ForThread(s)()`, `getThreadSetting()`, `setThreadSetting()` → `session.thread.*`
+  - `getResourceId()`, `getDefaultResourceId()` → `session.identity.*`
+  - `getFollowUpCount()` → `session.followUps.count()`
+  - `respondToToolApproval()` → `session.respondToToolApproval()`
+  - `getCurrentModeId()` → `session.mode.get()`
+  - `getCurrentMode()` → `session.mode.resolve()` (resolves the selected mode id against the host's `config.modes` catalog, injected into the Session)
+  - `hasPendingSuspensions()` → `session.suspensions.hasPending()`
+  - `isCurrentThreadStreamActive()` → `session.stream.isActive()`
+
+  `Harness.abort()` and `setResourceId()` remain on the Harness with unchanged behavior — they orchestrate Harness-host state (the display-state mirror, the agent-stream subscription, thread teardown) before delegating the relevant reads/writes to the session.
+
+  `session.mode` exposes two complementary accessors: `get()` returns the selected mode **id** (a `string`, mirroring `session.model.get()`), while `resolve()` returns the full `HarnessMode` definition by looking the id up in the injected mode catalog.
+
+  The legacy `HarnessCompat` shim (v1-session/legacy-thread merge) has been removed; its thread-list merge now lives in the Session's thread-data store, so `session.thread.list()` returns the merged result directly.
+
+  `session.abortRun()` now also releases a parked tool-approval gate: a run awaiting `session.approval.arm()` is not actively streaming, so aborting resolves the gate as a decline (rejecting the gated tool) instead of leaving the await hung. Mirrors how abort already drops parked tool suspensions.
+
+### Patch Changes
+
+- Fixed the @mastra/editor build failing on native Windows by using POSIX separators for tsup entry globs. ([#18124](https://github.com/mastra-ai/mastra/pull/18124))
+
+- Fixed harness buildAgentMessageStreamOptions to combine the agent's own dynamic instructions with mode instructions instead of replacing them. Previously, when a shared backing agent had dynamic instructions (e.g. AGENTS.md, project context), passing mode instructions via options.instructions completely overrode them. ([#18127](https://github.com/mastra-ai/mastra/pull/18127))
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Fixed durable agents (`createDurableAgent` / `createEventedAgent`) producing no observability traces. ([#18083](https://github.com/mastra-ai/mastra/pull/18083))
+
+  Durable agent runs previously emitted no traces at all because the durable execution path never opened an `AGENT_RUN` root span and the internal workflow spans were marked internal, so the whole trace was dropped on export. Durable runs now produce the same `AGENT_RUN`-rooted trace as non-durable agents — the model call, tool calls, and token usage all appear in the trace UI, nested correctly under the agent run.
+
+  No API changes are required; existing durable agents start emitting traces automatically once observability is configured.
+
+- Fixed stream error display showing [object Object] instead of the actual error message. Errors from subscribed thread streams (e.g. context length exceeded) now properly extract the message from deserialized error objects using getErrorFromUnknown. ([#18087](https://github.com/mastra-ai/mastra/pull/18087))
+
+- Require approval before workspace agents run shell commands on unisolated local sandboxes. ([#18129](https://github.com/mastra-ai/mastra/pull/18129))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/schema-compat@1.2.14
+
+## 1.44.0-alpha.2
+
+### Minor Changes
+
+- Removed the legacy harness v1 entrypoint. ([#18131](https://github.com/mastra-ai/mastra/pull/18131))
+
+  **Breaking change**
+
+  Imports from `@mastra/core/harness/v1` no longer work. Use the stable harness entrypoint instead.
+
+  **Before**
+
+  ```ts
+  import { Harness } from '@mastra/core/harness/v1';
+  ```
+
+  **After**
+
+  ```ts
+  import { Harness } from '@mastra/core/harness';
+  ```
+
+- Added session-owned Harness state. ([#18133](https://github.com/mastra-ai/mastra/pull/18133))
+
+  Harness state is now available through `harness.session.state`, so new integrations can read and write state from the same session object that owns mode, model, thread, and run data.
+
+  **Example**
+
+  ```ts
+  const state = harness.session.state.get();
+  await harness.session.state.set({ yolo: true });
+  ```
+
+  `Harness.getState()` and `Harness.setState()` still work and now delegate to `harness.session.state`.
+
+- Move the Harness display state onto `session.displayState` ([#18136](https://github.com/mastra-ai/mastra/pull/18136))
+
+  The canonical display state a UI renders — `isRunning`, active tools, tool-input
+  buffers, pending approval/suspensions, active subagents, current message,
+  queued follow-ups, modified files, tasks, OM progress, and token usage — now
+  lives on the Session as `session.displayState`, alongside the reducer that keeps
+  it in sync with every Harness event.
+
+  `SessionDisplayState` owns:
+  - `get()` — a read-only snapshot to render from (replaces `harness.getDisplayState()`)
+  - `apply(event)` — the centralized state machine that folds each event into the snapshot
+  - `resetThread()` — reset thread-scoped fields on thread switch/create
+  - `restoreTasks(tasks)` — restore replayed task history without emitting an event
+  - `clearPendingSuspensions()` / `deletePendingSuspension(toolCallId)` — display mirror upkeep on abort/resume
+
+  Display state is inherently per-conversation, so in a shared (multi-user) host
+  it can't hang off the Harness — `harness.getDisplayState()` has no single answer
+  when one host serves many sessions. It reads from `harness.session.displayState`
+  instead.
+
+  The Harness stays the **event-bus owner**: `emit()` folds the event into
+  `session.displayState` and then dispatches to listeners (including the
+  `display_state_changed` fan-out). The reducer needs a few read-only host facts it
+  doesn't own — the live token-usage tally, the subagent display-name lookup
+  (Harness config), and the active thread id — which are injected into the Session
+  at construction.
+
+  Removed from the Harness public API (read through `harness.session.displayState.*`):
+  - `getDisplayState()` → `session.displayState.get()`
+  - `restoreDisplayTasks(tasks)` → `session.displayState.restoreTasks(tasks)`
+
+  `restoreTasks` is now a pure session-state mutation (it no longer emits
+  `display_state_changed`); the UI re-renders explicitly after a replay.
+
+- Introduce the Harness `Session`: the Harness now exposes `harness.session`, a class that owns the per-conversation runtime state that previously lived flattened on the Harness instance. The Harness remains the shared host (storage, the thread lock, the agent registry, the event bus); the Session owns the state scoped to a single user's conversation. ([#18107](https://github.com/mastra-ai/mastra/pull/18107))
+
+  `harness.session` owns:
+  - **`session.identity`** — the session's `resourceId` / `defaultResourceId` (the stable "who").
+  - **`session.thread`** — the active thread binding (`getId` / `set` / `clear` / `isSet` / `requireId`) plus the thread data domain scoped to the session: `list`, `getById`, `listMessages`, `listActiveMessages`, `firstUserMessage(s)`, and thread settings (`getSetting` / `setSetting` / `deleteSetting`). It reaches shared-host storage through an injected gateway rather than calling back into Harness orchestration.
+  - **`session.mode`** / **`session.model`** — the currently-selected mode and model (source of truth), the mode-switch sequence, and per-mode model memory. The Harness still owns the mode _definitions_ (`config.modes`).
+  - **`session.run`** — transient per-run identity (run id, trace id, operation counter) and abort control (controller, `isRunning`, `requestAbort`, …). Never persisted.
+  - **`session.stream`** — the live agent-thread subscription handle and its dedup key. Adds `session.getCurrentRunId()` and `session.abortRun()`, which compose the subscription.
+  - **`session.suspensions`** — the parked-tool resume map (`toolCallId → { runId, toolName }`) for tools paused via the native suspension primitive (`ask_user` / `request_access` / `submit_plan`).
+  - **`session.followUps`** — the queue of messages to send after the active run finishes.
+  - **`session.approval`** — the interactive tool-approval gate; `session.respondToToolApproval({ decision, requestContext })` applies the user's approve / decline / always-allow choice and releases the run.
+  - session-scoped permission grants and the live token-usage counter (the Harness still persists usage to thread metadata, since usage is thread-scoped).
+
+  **Removed from the Harness public API** — read these through `harness.session.*` instead:
+  - `getSessionGrants()`, `getTokenUsage()` → `session.getGrants()` / `session.getTokenUsage()`
+  - `getCurrentModelId()`, `hasModelSelected()` → `session.model.get()` / `session.model.hasSelection()`
+  - `getCurrentRunId()`, `getCurrentTraceId()`, `isRunning()` → `session.getCurrentRunId()` / `session.run.getTraceId()` / `session.run.isRunning()`
+  - `getCurrentThreadId()`, `getThreads()`, `listThreads()`, `listMessages()`, `listMessagesForThread()`, `getFirstUserMessage(s)ForThread(s)()`, `getThreadSetting()`, `setThreadSetting()` → `session.thread.*`
+  - `getResourceId()`, `getDefaultResourceId()` → `session.identity.*`
+  - `getFollowUpCount()` → `session.followUps.count()`
+  - `respondToToolApproval()` → `session.respondToToolApproval()`
+  - `getCurrentModeId()` → `session.mode.get()`
+  - `getCurrentMode()` → `session.mode.resolve()` (resolves the selected mode id against the host's `config.modes` catalog, injected into the Session)
+  - `hasPendingSuspensions()` → `session.suspensions.hasPending()`
+  - `isCurrentThreadStreamActive()` → `session.stream.isActive()`
+
+  `Harness.abort()` and `setResourceId()` remain on the Harness with unchanged behavior — they orchestrate Harness-host state (the display-state mirror, the agent-stream subscription, thread teardown) before delegating the relevant reads/writes to the session.
+
+  `session.mode` exposes two complementary accessors: `get()` returns the selected mode **id** (a `string`, mirroring `session.model.get()`), while `resolve()` returns the full `HarnessMode` definition by looking the id up in the injected mode catalog.
+
+  The legacy `HarnessCompat` shim (v1-session/legacy-thread merge) has been removed; its thread-list merge now lives in the Session's thread-data store, so `session.thread.list()` returns the merged result directly.
+
+  `session.abortRun()` now also releases a parked tool-approval gate: a run awaiting `session.approval.arm()` is not actively streaming, so aborting resolves the gate as a decline (rejecting the gated tool) instead of leaving the await hung. Mirrors how abort already drops parked tool suspensions.
+
+### Patch Changes
+
+- Fixed the @mastra/editor build failing on native Windows by using POSIX separators for tsup entry globs. ([#18124](https://github.com/mastra-ai/mastra/pull/18124))
+
+- Fixed harness buildAgentMessageStreamOptions to combine the agent's own dynamic instructions with mode instructions instead of replacing them. Previously, when a shared backing agent had dynamic instructions (e.g. AGENTS.md, project context), passing mode instructions via options.instructions completely overrode them. ([#18127](https://github.com/mastra-ai/mastra/pull/18127))
+
+- Fixed durable agents (`createDurableAgent` / `createEventedAgent`) producing no observability traces. ([#18083](https://github.com/mastra-ai/mastra/pull/18083))
+
+  Durable agent runs previously emitted no traces at all because the durable execution path never opened an `AGENT_RUN` root span and the internal workflow spans were marked internal, so the whole trace was dropped on export. Durable runs now produce the same `AGENT_RUN`-rooted trace as non-durable agents — the model call, tool calls, and token usage all appear in the trace UI, nested correctly under the agent run.
+
+  No API changes are required; existing durable agents start emitting traces automatically once observability is configured.
+
+## 1.44.0-alpha.1
+
+### Minor Changes
+
+- Add `setStudio()` method to Mastra class for runtime studio configuration. ([#18111](https://github.com/mastra-ai/mastra/pull/18111))
+
+  This enables deploy wrappers to configure studio auth/RBAC separately from server config, which is required for dual auth patterns where Studio UI uses platform auth while Server API remains open or uses user-configured auth.
+
+  ```typescript
+  // Set studio auth separately from server auth
+  mastra.setStudio({
+    auth: new MastraAuthStudio(),
+    rbac: new MastraRBACStudio({ roleMapping: { admin: ['*'] } }),
+  });
+  ```
+
+- Made the native Agent goal mechanism robust, restoring behavior that regressed when goal handling moved into core. ([#18016](https://github.com/mastra-ai/mastra/pull/18016))
+  - **Tool-capable judges.** Scorer judge configs accept optional `tools`, and the default goal scorer can use them to verify the agent's work against reality instead of grading prose alone. MastraCode wires its read-only workspace tools (`view`, `search_content`, `find_files`, `file_stat`, `lsp_inspect`) into `goal.tools`.
+  - **Judge memory restored.** Scorer judge configs accept optional `memory`; goal scoring uses the original MastraCode per-goal judge thread shape and prompt format so repeated evaluations retain prior facts, feedback, and user checkpoints through judge memory.
+  - **Tri-state waiting.** The default goal scorer emits `done`/`continue`/`waiting`; a `waiting` decision (only when the goal text explicitly asks to stop for the user) stops the auto-loop but keeps the objective `active` so the next agent turn is still judged — no `/goal resume` needed.
+  - **Budget-exhaustion pause.** Reaching `maxRuns` without completing now parks the objective as `paused` with a clear reason, resumable by raising `maxRuns` and reactivating, instead of silently leaving it `active`.
+  - **Judge-failure pause (no infinite loop).** Any failure while evaluating the goal — including judge-model/tools resolution, not just the scorer run — pauses the objective and stops the loop, surfacing the cause, rather than re-running the model against a broken judge every turn.
+  - **Structured-output retry.** `tryGenerateWithJsonFallback` now retries with `jsonPromptInjection` when the judge resolves without a parseable object (not only on a thrown error), matching the streaming path.
+  - **Signal-based feedback.** Goal judge feedback is now injected as a `goal-judge` system-reminder signal instead of an assistant-authored "Completion Check Results" transcript message, so reloads and subsequent model context match the original MastraCode goal loop. Continuation, waiting, paused, and done decisions all persist structured evaluation metadata for replay.
+  - **TUI activity/replay fixes.** Goal evaluation chunks close the current assistant message before rendering the judge UI, stream judge activity with useful tool targets, stream partial judge reason text while scoring, replay persisted judge results as judge display components instead of raw Goal reminder text, and correctly persist Esc/Ctrl+C pauses while the judge is running.
+
+  The goal evaluation chunk now carries `pausedReason`, `judgeFailed`, `waitingForUser`, `pending` (emitted before scoring starts so consumers can show a loading indicator), and judge `activity` entries including streamed `reason` updates.
+
+### Patch Changes
+
+- Fixed stream error display showing [object Object] instead of the actual error message. Errors from subscribed thread streams (e.g. context length exceeded) now properly extract the message from deserialized error objects using getErrorFromUnknown. ([#18087](https://github.com/mastra-ai/mastra/pull/18087))
+
+## 1.43.1-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/schema-compat@1.2.14-alpha.0
+
+## 1.43.0
+
+### Minor Changes
+
+- Added harness modes that share a backing agent while applying mode-specific instructions, tools, and approval transitions. ([#17892](https://github.com/mastra-ai/mastra/pull/17892))
+
+- Added source-backed storage primitives for code-mode agent editing. ([#17582](https://github.com/mastra-ai/mastra/pull/17582))
+
+  Mastra now exposes a `SourceControlProvider` interface for hosted source-control-backed editor storage, and `MastraEditor` can persist code-mode agent overrides through either local filesystem storage or a source provider.
+
+  ```ts
+  const editor = new MastraEditor({
+    source: 'code',
+    sourceControlProvider,
+  });
+  ```
+
+  Code-defined agents still respect their `editor` ownership config, while source-backed storage can read, write, list history, and open change requests through a provider implementation.
+
+- Removed the coalesced Harness display state subscription API. ([#17989](https://github.com/mastra-ai/mastra/pull/17989))
+
+  **Before**
+
+  ```ts
+  const unsubscribe = harness.subscribeDisplayState(displayState => {
+    render(displayState);
+  });
+  ```
+
+  **After**
+
+  ```ts
+  const unsubscribe = harness.subscribe(event => {
+    if (event.type === 'display_state_changed') {
+      render(event.displayState);
+    }
+  });
+
+  const currentDisplayState = harness.getDisplayState();
+  ```
+
+  Use `subscribe()` with `display_state_changed` events and `getDisplayState()` for UI rendering.
+
+- Added support for Gateway embedding routing with `mastra/provider/model` IDs: ([#17425](https://github.com/mastra-ai/mastra/pull/17425))
+
+  ```ts
+  const embedder = new ModelRouterEmbeddingModel('mastra/__GATEWAY_OPENAI_EMBEDDING_MODEL__');
+  ```
+
+- Add a native **goal** mechanism to the `Agent` — a durable, thread-scoped objective that is judged in-loop and gates the agentic execution loop, mirroring the `isTaskComplete` step. ([#17889](https://github.com/mastra-ai/mastra/pull/17889))
+
+  Previously a "goal / Ralph loop" had to be built on top of the agent by re-invoking `agent.stream()` between full turns and running a hand-rolled judge agent. That approach was consumer-specific and could not evaluate an objective mid-run (e.g. when a `sendMessage` signal was delivered into an already-running loop). Goals are now an Agent capability.
+
+  A new `goal` config is accepted on the `Agent`:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { GoalSignalProvider } from '@mastra/core/signals';
+
+  const agent = new Agent({
+    name,
+    instructions,
+    model,
+    memory,
+    goal: { judge: '__GATEWAY_OPENAI_MODEL__', maxRuns: 50 /* prompt? */ },
+  });
+  ```
+
+  The objective lives in the generic `threadState` storage domain under `type: "goal"` (reusing the domain introduced for task tools), so it persists across process restarts and is serializable mid-run. Programmatic control is via new `Agent` methods: `setObjective(objective, { threadId, resourceId?, judgeModelId?, maxRuns?, prompt? })`, `getObjective({ threadId })`, `clearObjective({ threadId })`, and `updateObjectiveOptions({ threadId, judgeModelId?, maxRuns?, prompt? })`. All no-op when the run is not memory-backed.
+
+  Behavior:
+  - A new **goal step** runs after `isTaskCompleteStep` in the agentic execution workflow, using the same gating as `isTaskComplete` (skips background-task / mid-tool-loop / working-memory-only iterations). On a candidate answer it scores the objective with an LLM-as-judge (the default `createGoalScorer`, a `createScorer` analyze → score → reason pipeline that returns `1` when the objective is achieved and `0` otherwise; a custom `goal.scorer` can be supplied instead), persists `runsUsed`, and gates the loop: pass → `status: "done"`, `isContinued = false`; not passed within budget → `isContinued = true` (the goal gate wins over `isTaskComplete`); `runsUsed >= maxRuns` → stop and keep `status: "active"`.
+  - **The judge model is required.** Settings resolve per evaluation as ThreadState record value → agent `goal` config → default (`maxRuns` `50`, a default judge prompt). If no judge model resolves from either the record or `goal.judge`, the goal step is a complete no-op: no scoring, no `runsUsed` increment, and no `goal` chunk.
+  - **`goal.judge` accepts a resolver function.** In addition to a model id or model object, `goal.judge` may be a `({ requestContext, mastra }) => model | undefined` function so a consumer can inject provider credentials and read the current judge selection at runtime (returning `undefined` keeps the step a no-op). A bare model id (from `goal.judge` or the per-objective `judgeModelId`) is resolved through the Mastra instance's model router/gateways when the default scorer is built, so provider credentials are applied rather than falling back to the default provider path.
+  - The current objective is projected onto the agent **state-signal** lane (`<current-objective>`) by the new `GoalStateProcessor`, so the model sees it in context without invalidating the prompt-cache prefix.
+  - A typed **`goal`** stream chunk is emitted on every evaluation (`GoalEvaluationPayload`: objective, iteration, maxRuns, passed, status, results, reason?, duration, timedOut, maxRunsReached, suppressFeedback) for consumers (TUI / `@mastra/client-js`).
+
+  For the simplest setup, register `GoalSignalProvider` via the agent's `signals` array — when `goal` config is present the Agent also auto-registers `GoalStateProcessor` if no goal provider is supplied.
+
+  The goal primitives are co-located under `agent/goal` (objective store, scorer, state processor, signal provider). The public export surface is unchanged: `@mastra/core/tools` re-exports `GoalStateProcessor`, `DEFAULT_GOAL_JUDGE_PROMPT`, `DEFAULT_GOAL_MAX_RUNS`, and the goal helpers/types (`AgentGoalConfigDefaults`, etc.); `@mastra/core/signals` re-exports `GoalSignalProvider`; `@mastra/core/stream` exports `GoalEvaluationPayload`. New type on the thread-state domain: `GoalObjectiveRecord`. The `goal` arm is added to the public `ChunkType` union. No breaking change to `isTaskComplete`.
+
+  Docs: a new **Goals** page under `docs/agents/goals`, and the `goal` chunk is documented in the streaming `ChunkType` reference.
+
+### Patch Changes
+
+- dependencies updates: ([#17838](https://github.com/mastra-ai/mastra/pull/17838))
+  - Updated dependency [`fastq@^1.20.1` ↗︎](https://www.npmjs.com/package/fastq/v/1.20.1) (from `^1.19.1`, in `dependencies`)
+
+- dependencies updates: ([#17846](https://github.com/mastra-ai/mastra/pull/17846))
+  - Updated dependency [`posthog-node@^5.37.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.37.0) (from `^5.30.6`, in `dependencies`)
+
+- dependencies updates: ([#17861](https://github.com/mastra-ai/mastra/pull/17861))
+  - Updated dependency [`fastq@^1.20.1` ↗︎](https://www.npmjs.com/package/fastq/v/1.20.1) (from `^1.19.1`, in `dependencies`)
+  - Added dependency [`jpeg-js@^0.4.4` ↗︎](https://www.npmjs.com/package/jpeg-js/v/0.4.4) (to `dependencies`)
+
+- dependencies updates: ([#17961](https://github.com/mastra-ai/mastra/pull/17961))
+  - Updated dependency [`ajv@^8.20.0` ↗︎](https://www.npmjs.com/package/ajv/v/8.20.0) (from `^8.18.0`, in `dependencies`)
+
+- Added full Studio authentication support for Auth0 users. ([#16658](https://github.com/mastra-ai/mastra/pull/16658))
+
+  **What's new:**
+  - **Studio SSO login** — your internal team can now sign in to Mastra Studio using their Auth0 accounts via OAuth 2.0/OIDC
+  - **JWT validation** — API requests with Auth0-issued JWTs are automatically validated
+  - **Session persistence** — Studio sessions are maintained with encrypted cookies (no need to log in repeatedly)
+  - **Secure logout** — proper RP-Initiated Logout support via Auth0's `/v2/logout` endpoint
+
+  **Setup:**
+  1. Create a Regular Web Application in your Auth0 Dashboard
+  2. Configure the auth provider with your Auth0 credentials
+
+  ```typescript
+  import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+
+  const auth = new MastraAuthAuth0({
+    domain: 'your-tenant.auth0.com',
+    audience: 'https://your-api',
+    // For Studio SSO login:
+    clientId: process.env.AUTH0_CLIENT_ID,
+    clientSecret: process.env.AUTH0_CLIENT_SECRET,
+    session: { cookiePassword: process.env.AUTH0_COOKIE_PASSWORD },
+  });
+  ```
+
+  **Note:** This release includes updates to `@mastra/core` (ISSOProvider interface now supports async getLoginUrl) and `@mastra/server` (handles async login URLs). All three packages should be updated together.
+
+- Export the `Middleware` type from `@mastra/core/server` so server middleware can be declared in separate modules with contextual handler types. ([#17882](https://github.com/mastra-ai/mastra/pull/17882))
+
+- Fixed signal providers losing memory access when harness forks agents per mode. Harness now propagates runtime services (memory, storage, etc.) to the base config agent during init so signal providers connected to it can deliver notifications. ([#18008](https://github.com/mastra-ai/mastra/pull/18008))
+
+- Added full Studio authentication support for Clerk users. ([#16659](https://github.com/mastra-ai/mastra/pull/16659))
+
+  **What's new:**
+  - **Studio SSO login** — your internal team can now sign in to Mastra Studio using their Clerk accounts via OAuth 2.0/OIDC
+  - **JWT validation** — API requests with Clerk-issued JWTs are automatically validated
+  - **Session persistence** — Studio sessions are maintained with encrypted cookies (no need to log in repeatedly)
+
+  **Setup:**
+  1. Create an OAuth Application in your Clerk Dashboard
+  2. Configure the auth provider with your Clerk credentials
+
+  ```typescript
+  import { MastraAuthClerk } from '@mastra/auth-clerk';
+
+  const auth = new MastraAuthClerk({
+    jwksUri: process.env.CLERK_JWKS_URI,
+    secretKey: process.env.CLERK_SECRET_KEY,
+    publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+    // For Studio SSO login:
+    oauthClientId: process.env.CLERK_OAUTH_CLIENT_ID,
+    oauthClientSecret: process.env.CLERK_OAUTH_CLIENT_SECRET,
+    session: { cookiePassword: process.env.CLERK_COOKIE_PASSWORD },
+  });
+  ```
+
+  **Note:** This release includes updates to `@mastra/core` (ISSOProvider interface now supports async getLoginUrl) and `@mastra/server` (handles async login URLs). All three packages should be updated together.
+
+- Multimodal content returned from `toModelOutput` (e.g. images via `type: 'image-url'`) is now correctly preserved as native provider content instead of being stringified into a JSON string. Previously, tools returning `{ type: 'content', value: [...] }` with image parts would cause providers like OpenRouter and Mistral to receive a plain text string instead of multimodal content. ([#17879](https://github.com/mastra-ai/mastra/pull/17879))
+
+- Fixed supervisor sub-agent tool preparation so memory tools are available when agents derive their thread and resource from default options. This prevents misleading "Skipping memory tools (no thread or resource context)" debug logs for correctly configured sub-agents. ([#17175](https://github.com/mastra-ai/mastra/pull/17175))
+
+- Republished clean patch versions after compromised npm releases were published outside of the trusted release workflow. ([#18049](https://github.com/mastra-ai/mastra/pull/18049))
+
+  These packages must be released as clean versions higher than the compromised versions currently present on npm so semver ranges resolve to trusted tarballs.
+
+- Fix multi-instance evented-mode hangs caused by transport edge cases. ([#17860](https://github.com/mastra-ai/mastra/pull/17860))
+
+  Four related fixes that stop `agent.generate()` from hanging silently when multiple processes share a Unix socket pubsub broker:
+  - **Broker election race (`EEXIST`)**: `UnixSocketPubSub#start()` now falls through to client mode when `listen()` throws `EEXIST` on macOS for a path that already exists as a regular file, matching the existing `EADDRINUSE` fallback.
+  - **Local nack redelivery**: `#deliverLocal` now passes real `ack`/`nack` callbacks; nacked events are re-queued via `setTimeout` so consumer-side retries (e.g. SQLITE_BUSY backoff) can drain instead of being silently dropped.
+  - **Broker-death retry (`EPIPE`)**: `#sendToBroker` retries up to 3 times with re-election between attempts so an in-flight publish survives a broker crash and re-election rotation.
+  - **Workflow retry exhaustion surfaces terminally**: `WorkflowEventProcessor.handle` now tracks per-event delivery attempts and, after exhausting transport-level retries, publishes `workflow.fail` instead of returning `{ retry: true }` forever. This unblocks any caller awaiting `workflows-finish` (e.g. `agent.generate()`) so the original error reaches the user rather than hanging.
+  - **Workflow-event push subscription propagates nack**: the `'workflows'` topic callback in `Mastra` now calls `nack()` when the processor returns `{ ok: false, retry: true }`, enabling the transport-level redelivery loop above.
+
+- Await `storage.init()` before workers start in `startWorkers()`. ([#17920](https://github.com/mastra-ai/mastra/pull/17920))
+
+  The scheduler worker runs an immediate warm-up tick on start, which can
+  dispatch an internal scheduled workflow (the notification dispatcher, enabled
+  by default) and persist a workflow snapshot. Without awaiting `storage.init()`
+  first, that write could race the lazy initialization that creates the
+  `mastra_workflow_snapshot` table, surfacing as repeated
+  `SQLITE_ERROR: no such table: mastra_workflow_snapshot` on SQL stores like
+  libSQL (#17905). `init()` is idempotent and a no-op when storage init is
+  disabled.
+
+- Keep the agent loop alive after a tool suspension (e.g. `ask_user`, `request_access`). ([#17990](https://github.com/mastra-ai/mastra/pull/17990))
+
+  Two related fixes that stop the agent from appearing to quit mid-task right after a suspended tool resumes:
+  - **Harness resume step budget**: `resumeStream()` was called without a step budget, so a resumed run merged over the agent's small default `maxSteps` and stopped after a single step. The harness now threads a shared set of run options (`maxSteps`, `savePerStep`, `modelSettings`, etc.) into both the initial stream and the resume via one helper, so the two paths can no longer drift.
+  - **LibSQL `busy_timeout` survival**: bump `@libsql/client` to `^0.17.4` and add a configurable connection timeout so `PRAGMA busy_timeout` survives connections created after `transaction()` (libsql-client-ts#288/#345). This reduces `SQLITE_BUSY` retry-exhaustion stalls under the evented engine's concurrent writes.
+
+- Moved MastraCode model catalog and gateway-backed model resolution out of the core harness and into a class-backed MastraCode gateway, with model IDs resolving directly to gateway-created provider instances. ([#17913](https://github.com/mastra-ai/mastra/pull/17913))
+
+- Fixed LSP diagnostics always returning empty arrays on Windows when using `lsp: true` in Workspace. ([#17816](https://github.com/mastra-ai/mastra/pull/17816))
+
+  Previously, `waitForDiagnostics` returned `[]` after the full timeout on Windows even when the language server published non-empty diagnostics. This affected any LSP server emitting VS Code-style URIs (e.g. lua-language-server). Now diagnostics are correctly returned regardless of how the language server encodes the file URI.
+
+  Fixes #17813
+
+- Added gateway support to harness v0 model resolution, auth checks, and model discovery. ([#17913](https://github.com/mastra-ai/mastra/pull/17913))
+
+- Fixed workflow snapshot records leaking in storage for every agent run. Completed agent runs left behind stale "pending" or "suspended" records indefinitely. These internal records are now removed when an agent run finishes, fails, or is declined. A "suspended" status in workflow snapshot storage now reliably means the run is actually resumable. ([#17858](https://github.com/mastra-ai/mastra/pull/17858))
+
+- Fixed agent runs hanging or stopping silently when a model refuses a turn. Anthropic models such as claude-fable-5 can block a turn server-side and return a refusal, which the AI SDK surfaces as a `content-filter` finish reason. ([#17893](https://github.com/mastra-ai/mastra/pull/17893))
+
+  **Fixed the hang:** the agentic loop treated `content-filter` as "keep going", so it re-sent the same request and re-triggered the refusal on every step — looping until `maxSteps`, or forever when `maxSteps` was unset. `content-filter` is now treated as a terminal finish reason (alongside `stop`, `error`, and `length`), so the run stops instead of hanging.
+
+  **Surfaced a clear terminal state:** when a run ends on `content-filter`, `error`, or `length`, it now finalizes into an explicit error state, emits an error event with diagnostic context (including the provider's stop details when available), and reports `agent_end` with reason `'error'` — instead of ending on an empty assistant message that looked like a silent stop.
+
+  **Avoided the refusal in the first place:** when the harness runs `claude-fable-5`, it now automatically enables Anthropic's server-side fallback to `claude-opus-4-8` (`providerOptions.anthropic.fallbacks`). If fable-5's safety classifiers block a turn, Anthropic transparently retries it on the fallback model and returns that answer. If the whole chain still refuses, the run ends on the terminal `content-filter` error state described above.
+
+  **Made the fallback visible:** when a turn is served by a fallback model (reported via `fallback_message` entries in `providerMetadata.anthropic.iterations`), the harness now emits an `info` event naming the model that actually generated the response, so users know the selected model declined the turn.
+
+  **Attributed tracing to the serving model:** the `MODEL_GENERATION` span's `responseModel` attribute now reports the fallback model when a server-side fallback served the turn, so tracing exporters (Langfuse, etc.) attribute usage and cost to the model that actually generated the response instead of the requested model.
+
+- Fixed harness modes so they can reuse configured agents and resolve their default models before running. ([#17892](https://github.com/mastra-ai/mastra/pull/17892))
+
+- Fixed base64-encoded images failing when sent to Gemini through withMastra. Images now reach the provider in the correct format, matching the behavior of calling generateText without withMastra. ([#17976](https://github.com/mastra-ai/mastra/pull/17976))
+
+- License validation for EE features (RBAC, ACL, FGA, SSO) now checks your license key against the Mastra license server instead of validating it locally. ([#17859](https://github.com/mastra-ai/mastra/pull/17859))
+
+  **What changes for you**
+  - Set `MASTRA_LICENSE_KEY` to your license key. `MASTRA_EE_LICENSE` continues to work as a supported legacy alias, so existing deployments are unaffected.
+  - RBAC, ACL, and FGA are now enabled per-feature based on the entitlements your license plan includes, rather than a single blanket license check.
+  - If the license server is briefly unreachable, previously validated licenses keep working (72-hour grace period), and validation never blocks startup — it runs in the background.
+  - Development environments (`NODE_ENV` not set to production) are unaffected and keep full EE access without a license.
+
+- Add alpha browser video recording primitives under `@mastra/core/browser`. The new recording helper exposes `browser_record` and `browser_record_caption`, captures browser screencast frames, burns in short captions, and saves Motion-JPEG AVI videos without requiring `ffmpeg`. ([#17028](https://github.com/mastra-ai/mastra/pull/17028))
+
+  Example:
+
+  ```ts
+  import { createBrowserRecordingTools } from '@mastra/core/browser';
+
+  const tools = createBrowserRecordingTools(browser, {
+    outputDir: './browser-recordings',
+  });
+  ```
+
+- Added validation for harness mode configuration so duplicate mode IDs, conflicting tool settings, and invalid transitions are rejected early. ([#17892](https://github.com/mastra-ai/mastra/pull/17892))
+
+- Fixed cross-instance output leaking between mastracode TUI tabs after /new. The /new command now fully unsubscribes from the old thread's PubSub topic instead of only aborting the current run, preventing another mc instance on the same thread from pushing events into the detached TUI. ([#17883](https://github.com/mastra-ai/mastra/pull/17883))
+
+- Fixed skill updates creating duplicate versions when a snapshot had not meaningfully changed. Comparison previously relied on `JSON.stringify`, so reordered object keys (common with PostgreSQL JSONB) or optional fields round-tripping between `undefined` and `null` looked like changes. Skill snapshots are now compared by value, so repeated no-op publish/update cycles no longer increment the version number. ([#16811](https://github.com/mastra-ai/mastra/pull/16811))
+
+- Updated dependencies [[`9b1adf7`](https://github.com/mastra-ai/mastra/commit/9b1adf7f39943c869182106bc4016e793b3304ac)]:
+  - @mastra/schema-compat@1.2.12
+
+## 1.42.0
+
+### Minor Changes
+
+- You can now execute workflows, tools, and memory thread checks as a trusted actor, such as a background job or scheduled task. Pass an `actor` object to identify the system process making the call while keeping fine-grained authorization checks tenant-scoped. ([#17484](https://github.com/mastra-ai/mastra/pull/17484))
+
+  ```ts
+  const actor = { actorKind: 'system', sourceWorkflow: 'nightly-sync' } as const;
+
+  await workflow.execute({ ...executeOptions, actor });
+  await tool.execute(input, { ...toolOptions, actor });
+  await MastraMemory.checkThreadFGA({ ...threadFGAOptions, actor });
+  ```
+
+- Added an actor signal to core FGA checks for trusted server-side membership bypasses. ([#17483](https://github.com/mastra-ai/mastra/pull/17483))
+
+  ```ts
+  const actor = { actorKind: 'system', sourceWorkflow: 'nightly-workflow' } as const;
+  await checkFGA({ ...fgaOptions, requestContext, actor });
+  await requireFGA({ ...fgaOptions, requestContext, actor });
+  ```
+
+- Enabled persistent storage for durable harness sessions across storage backends. Harness v1 can now resolve its session store from a configured storage adapter. ([#17712](https://github.com/mastra-ai/mastra/pull/17712))
+
+- Added the `actor` option to agent `generate()` and `stream()` invocations so trusted background work can run without a JWT or human membership. ([#17487](https://github.com/mastra-ai/mastra/pull/17487))
+
+  ```ts
+  const requestContext = new RequestContext();
+  requestContext.set('organizationId', 'org_123');
+
+  await agent.generate('Process daily report', {
+    requestContext,
+    actor: { actorKind: 'system', sourceWorkflow: 'daily-report-cron' },
+  });
+  ```
+
+  Mastra denies trusted actor FGA checks when the request context does not include an `organizationId`.
+
+- Added SignalProvider abstraction for building notification signal providers. Enables declarative signal wiring in Agent config with built-in subscription tracking, polling lifecycle, and webhook support. Includes WebhookSignalProvider as a proof-of-concept. ([#17577](https://github.com/mastra-ai/mastra/pull/17577))
+
+  **Writing a signal provider:**
+
+  ```ts
+  import { SignalProvider } from '@mastra/core/signals';
+  import type { SignalSubscription } from '@mastra/core/signals';
+
+  class SlackSignalProvider extends SignalProvider<'slack-signals'> {
+    readonly id = 'slack-signals' as const;
+    readonly pollInterval = 30_000; // poll every 30s
+
+    async poll(subscriptions: SignalSubscription[]) {
+      for (const sub of subscriptions) {
+        const messages = await fetchNewMessages(sub.externalResourceId);
+        if (messages.length > 0) {
+          await this.notify(
+            { source: 'slack', kind: 'new-message', summary: `${messages.length} new messages` },
+            { threadId: sub.threadId, resourceId: sub.resourceId },
+          );
+        }
+      }
+    }
+  }
+  ```
+
+  **Declarative wiring:**
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+
+  const agent = new Agent({
+    signals: [new SlackSignalProvider()],
+    // ... other config
+  });
+  ```
+
+- **Added** optional `getUsers(userIds)` batch lookup method to `IUserProvider`. Auth providers can implement it to resolve multiple users in a single call; providers that don't implement it continue to work via per-id `getUser` fallback. ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+  ```ts
+  // optional batch lookup, returns results positionally aligned to userIds
+  const users = await provider.getUsers?.(['u_1', 'u_2', 'u_3']);
+  ```
+
+- Added MCP server Fine-Grained Authorization mapping overrides for tool authorization. ([#17529](https://github.com/mastra-ai/mastra/pull/17529))
+
+  Use the new `fga` option on `MCPServer` to customize the resource and permission mappings used for `tools/list` and `tools/call` checks without changing the Mastra instance-level `tool` mapping used by internal agent and workflow tool execution.
+
+  ```ts
+  const server = new MCPServer({
+    name: 'My Server',
+    version: '1.0.0',
+    tools: { getData },
+    fga: {
+      resourceMapping: {
+        tool: {
+          fgaResourceType: 'user',
+          deriveId: ({ user }) => user.id,
+        },
+      },
+      permissionMapping: {
+        'tools:execute': 'read',
+      },
+    },
+  });
+  ```
+
+- Made the `ask_user` built-in tool agent-agnostic and removed the Harness question channel in favor of native tool suspension. ([#17806](https://github.com/mastra-ai/mastra/pull/17806))
+
+  `ask_user` now pauses through the same tool-suspension primitive used by every other interactive tool, so it works on any agent — not just inside a Harness. The Harness no longer has a separate question channel; instead it surfaces these pauses through the generic `tool_suspended` event and resumes them with `respondToToolSuspension`.
+
+  **Breaking changes**
+  - Removed `harness.respondToQuestion(...)`. Use `harness.respondToToolSuspension(...)` instead.
+  - Removed the `ask_question` event. Listen for `tool_suspended` and read the question from `event.suspendPayload`.
+  - Removed `registerQuestion` from `HarnessRequestContext`, the `HarnessDisplayState.pendingQuestion` field, and the `HarnessQuestionAnswer`, `HarnessQuestionOption`, and `HarnessQuestionSelectionMode` types.
+  - `HarnessDisplayState.pendingSuspension` (a single object or `null`) is now `HarnessDisplayState.pendingSuspensions`, a `Map` keyed by `toolCallId`. This lets the display state hold several parked prompts at once, so resuming one parallel `ask_user` no longer hides the others. Read a specific prompt with `displayState.pendingSuspensions.get(toolCallId)`.
+
+  `respondToToolSuspension` accepts an optional `toolCallId` so concurrently suspended tools (for example, parallel `ask_user` calls) can each be answered independently.
+
+  `harness.abort()` now clears any pending tool suspensions, so a run parked in a `suspend()` (e.g. an unanswered `ask_user`) can be aborted instead of staying parked forever. A new `harness.hasPendingSuspensions()` method reports whether the harness is awaiting a resume — useful because a suspended run nulls its internal abort controller, so `isRunning()` returns `false` while the run is still pending.
+
+  **Before**
+
+  ```typescript
+  harness.subscribe(event => {
+    if (event.type === 'ask_question') {
+      harness.respondToQuestion({ questionId: event.questionId, answer: 'Yes' });
+    }
+  });
+  ```
+
+  **After**
+
+  ```typescript
+  harness.subscribe(event => {
+    if (event.type === 'tool_suspended' && event.toolName === 'ask_user') {
+      const { question } = event.suspendPayload as { question: string };
+      harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: 'Yes' });
+    }
+  });
+  ```
+
+- Made the `submit_plan` built-in tool agent-agnostic and removed the Harness plan-approval channel in favor of native tool suspension. ([#17817](https://github.com/mastra-ai/mastra/pull/17817))
+
+  `submit_plan` now pauses through the same tool-suspension primitive used by every other interactive tool, so it works on any agent — not just inside a Harness. A plain Agent (e.g. in Studio or a customer app) can render the plan and resume the tool with `agent.resumeStream({ action, feedback })`. The Harness surfaces the pause through the generic `tool_suspended` event and resumes it with `respondToToolSuspension`; on approval it additionally switches to its default (execution) mode.
+
+  **Breaking changes**
+  - Removed `harness.respondToPlanApproval(...)`. Resume a submitted plan with `harness.respondToToolSuspension({ toolCallId, resumeData: { action, feedback } })`.
+  - Removed the `plan_approval_required` and `plan_approved` events. Listen for `tool_suspended` with `event.toolName === 'submit_plan'` and read `{ title, plan }` from `event.suspendPayload`.
+  - Removed `registerPlanApproval` from `HarnessRequestContext` and the `HarnessDisplayState.pendingPlanApproval` field. A suspended `submit_plan` now appears as `HarnessDisplayState.pendingSuspension` like any other suspended tool.
+
+  **Before**
+
+  ```typescript
+  harness.subscribe(event => {
+    if (event.type === 'plan_approval_required') {
+      harness.respondToPlanApproval({ planId: event.planId, response: { action: 'approved' } });
+    }
+  });
+  ```
+
+  **After**
+
+  ```typescript
+  harness.subscribe(event => {
+    if (event.type === 'tool_suspended' && event.toolName === 'submit_plan') {
+      const { title, plan } = event.suspendPayload as { title: string; plan: string };
+      harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: { action: 'approved' } });
+    }
+  });
+  ```
+
+- Add batching primitives to the PubSub abstraction. ([#16482](https://github.com/mastra-ai/mastra/pull/16482))
+
+  **New options**
+  - `SubscribeOptions.batch` (`SubscribeBatchOptions`): opt in to coalesced delivery on a per-subscriber basis. Fields: `maxSize`, `maxWaitMs`, `minIntervalMs`, `isImmediate`, `coalesce`, `maxBufferSize`, `overflow`.
+  - `EventEmitterPubSub` constructor accepts optional `EventEmitterPubSubOptions` with a `logger` for batched-delivery error diagnostics.
+
+  **Example**
+
+  ```ts
+  import { EventEmitterPubSub } from '@mastra/core/events';
+
+  const pubsub = new EventEmitterPubSub();
+
+  await pubsub.subscribe(
+    'agent-events',
+    event => {
+      // delivered in coalesced batches; the cb is still invoked once per event
+    },
+    {
+      batch: {
+        maxSize: 10, // flush once 10 events have queued
+        maxWaitMs: 500, // ...or after 500ms, whichever comes first
+      },
+    },
+  );
+  ```
+
+  **New exports**
+  - `SubscribeBatchOptions` type.
+  - `PubSub.supportsNativeBatching` — advertises whether an adapter honors `options.batch` internally.
+
+  **Behavior**
+  - `EventEmitterPubSub.supportsNativeBatching === true`. Batched subscribers receive coalesced delivery driven by an in-memory buffer governed by `maxSize` / `maxWaitMs` / `minIntervalMs` / `isImmediate` / `coalesce` / `overflow` / `maxBufferSize`.
+  - `EventEmitterPubSub.flush()` drains every batched subscriber buffer and waits for any pending nack redeliveries before resolving. Non-callback rejections surface through the configured `logger` instead of being swallowed.
+  - `CachingPubSub` is transparent to batching: it forwards `options` (including `batch`) to its inner PubSub and forwards `supportsNativeBatching` from the inner. Whether batching is honored depends entirely on the wrapped transport.
+
+  **Contract notes**
+  - `SubscribeBatchOptions.coalesce` must return a subset of its input array by reference identity. Returning freshly-constructed `Event` objects (even with matching `id`) is treated as a contract violation: the batching layer can't route `ack`/`nack` to original transport handles for manufactured events, so the entire batch is discarded and every original event is acked as dropped. If you need merged payloads, build them in the subscriber callback after delivery.
+  - `flush()` is best-effort: a successful resolution does not guarantee every subscriber callback succeeded. Per-event errors surface via the configured logger.
+
+- Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute. Mastra Code now uses agent hooks so hook handlers run for built-in workspace tools as well as dynamic tools. ([#17637](https://github.com/mastra-ai/mastra/pull/17637))
+
+  **Example**
+
+  ```ts
+  const agent = new Agent({
+    name: 'Support Agent',
+    instructions: 'Help users.',
+    model,
+    hooks: {
+      beforeToolCall: ({ toolName, input }) => {
+        console.log(`Running ${toolName}`, input);
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error });
+      },
+    },
+  });
+
+  const workspace = new Workspace({
+    tools: {
+      hooks: {
+        beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+          console.log(`Running ${toolName} from ${workspaceToolName}`, input);
+        },
+      },
+    },
+  });
+  ```
+
+- Added interface-first model gateways while keeping the existing `MastraModelGateway` base class backwards compatible. ([#17608](https://github.com/mastra-ai/mastra/pull/17608))
+
+  Added `MastraModelGatewayInterface` for plain object/custom gateway implementations and optional gateway `resolveAuth` hooks.
+
+  Moved MastraCode gateway-routed OAuth model construction into a custom Mastra gateway so `ModelRouterLanguageModel` can route through gateway `resolveAuth` and provider-specific `resolveLanguageModel` behavior.
+
+  **Usage:**
+
+  ```typescript
+  import { MastraModelGatewayInterface, ModelRouterLanguageModel } from '@mastra/core/llm';
+
+  const myGateway: MastraModelGatewayInterface = {
+    id: 'my-gateway',
+    name: 'My Gateway',
+    async fetchProviders() {
+      return {};
+    },
+    buildUrl() {
+      return 'https://api.example.com';
+    },
+    async getApiKey() {
+      return process.env.API_KEY ?? '';
+    },
+    // Optional: own authentication lookup
+    async resolveAuth(request) {
+      return { apiKey: process.env.API_KEY, source: 'gateway' };
+    },
+    async resolveLanguageModel({ modelId, providerId, apiKey }) {
+      // Return an AI SDK language model instance
+    },
+  };
+
+  // Register and route through the gateway
+  const router = new ModelRouterLanguageModel({ modelId: 'my-gateway/provider/model' }, [myGateway]);
+  ```
+
+  **Additional changes in this release:**
+  - Inline three-tier auth resolution (explicit → gateway.resolveAuth → legacy getApiKey) into `ModelRouterLanguageModel.resolveAuth` and deprecate the standalone `resolveModelAuth` helper.
+  - Fix `defaultGateways` deduplication in the `Mastra` class to use `getGatewayId(gateway)` instead of registry keys.
+  - Remove no-op `resolveModelId` identity function in mastracode in favor of direct usage.
+  - Fix `defaultNameGenerator` regex in `_llm-recorder` to anchor directory matches to path boundaries (prevents false matches like `-auth` suffixes).
+
+- Make the task tools (`task_write`, `task_update`, `task_complete`, `task_check`) agent-agnostic. ([#17820](https://github.com/mastra-ai/mastra/pull/17820))
+
+  The task tools no longer depend on the Harness request context. The task list is now held in a generic, thread-scoped **`threadState` storage domain** (`ThreadStateStorage`) — the source of truth — and projected onto the agent **state-signal** lane (`stateId: "tasks"`) by the new `TaskStateProcessor`, so they work on any `Agent` and not only inside the Harness.
+
+  A new storage domain `threadState` is registered on `MastraStorage` (accessible via `storage.getStore("threadState")`). It is keyed by `(threadId, type)` so it can hold any per-thread state; the task list lives under `type: "task"` and the domain is intentionally generic so other agent-scoped state (e.g. `"goal"`) can reuse it. The composite store always wires an `InMemoryThreadStateStorage` by default, so task tracking works out of the box without configuring a backend, and a durable backend (`@mastra/libsql`'s `ThreadStateLibSQL`) persists the list across process restarts. The tools read/write it within a run via `context.mastra.getStorage().getStore("threadState")`, scoped by the run's `threadId`.
+
+  The state-signal projection is delta-first (modelled on working memory), cache-aware, and observational-memory-aware:
+  - The first projection of a populated list (and every compaction) is a full `<current-task-list>` **snapshot**; each later mutation emits a small `<task-list-update>` **delta** carrying only that turn's add/remove/update ops, so a large task list is not re-sent in full on every change.
+  - The task list is carried on the state-signal lane instead of being injected into the cached system prompt, so task updates no longer invalidate the prompt-cache prefix.
+  - The base snapshot and its deltas accumulate in the window; the processor re-snapshots once enough deltas accumulate (compaction) to bound window growth, and whenever observational-memory truncation drops the base snapshot from the window (deltas are meaningless without their base), reading the `threadState` store so the agent never loses track of its tasks.
+
+  The task tools and the processor require a memory-backed thread. On a run that is not memory backed (no `threadId`/`resourceId`), the task tools no-op and return a result explaining that task tracking requires agent memory.
+
+  For the simplest setup, register `TaskSignalProvider` via the agent's `signals` array — it bundles the task tools and the `TaskStateProcessor` so they cannot get out of sync:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { TaskSignalProvider } from '@mastra/core/signals';
+
+  const agent = new Agent({ name, instructions, model, memory, signals: [new TaskSignalProvider()] });
+  ```
+
+  The Agent merges the tools into its toolset and registers the processor automatically.
+
+  New exports from `@mastra/core/storage`: `ThreadStateStorage`, `InMemoryThreadStateStorage`, and the `TaskRecord` type. New exports from `@mastra/core/tools`: `taskWriteTool`, `taskUpdateTool`, `taskCompleteTool`, `taskCheckTool`, `TaskStateProcessor`, and the task helpers/types (`assignTaskIds`, `summarizeTaskCheck`, `TaskItem`, `TaskItemSnapshot`, `TaskCheckSummary`, `TaskCheckResult`, etc.). New export from `@mastra/core/signals`: `TaskSignalProvider`, alongside the other signal providers. The Harness continues to re-export the task tools, so existing imports and toolset identity are unchanged.
+
+  Internal behavior change: the Harness no longer stores the task list in session state. Task mutations still emit the `task_updated` display event, so the Harness display snapshot and any pinned task UI are unaffected. To adopt the new behavior on a plain agent (with `Memory` and a Mastra `storage`), register `new TaskSignalProvider()` in `signals` — or, for manual control, add `new TaskStateProcessor()` to `inputProcessors` alongside the task tools.
+
+- Add workspace registry cleanup and shutdown destruction. ([#17661](https://github.com/mastra-ai/mastra/pull/17661))
+
+  Mastra now exposes `removeWorkspace(id, { destroy })` for removing runtime workspaces from the registry. When `destroy` is true, the workspace is destroyed before removal and remains registered if destruction fails.
+
+  `mastra.shutdown()` now destroys registered workspaces before closing storage and unregisters only the workspaces that clean up successfully. Workspace tool execution also updates `lastAccessedAt`, so runtime activity is tracked beyond search operations.
+
+  ```ts
+  await mastra.removeWorkspace('workspace-123', { destroy: true }); // destroys, then unregisters
+  await mastra.removeWorkspace('workspace-456'); // unregisters only; caller owns destroy
+  await mastra.shutdown(); // destroys registered workspaces, then closes storage
+  ```
+
+- Added two options to `ToolSearchProcessor` for cheaper, more cache-friendly tool discovery. ([#17691](https://github.com/mastra-ai/mastra/pull/17691))
+
+  **`autoLoad`: one-turn discovery**
+
+  Set `search.autoLoad` so that `search_tools` activates the matching tools immediately, removing the separate `load_tool` round-trip. The model searches once and can call a discovered tool on its next turn instead of searching, loading, then calling. This cuts one model turn (and a full prompt replay) per discovery.
+
+  ```typescript
+  import { ToolSearchProcessor } from '@mastra/core/processors';
+
+  const toolSearch = new ToolSearchProcessor({
+    tools: allTools,
+    search: { topK: 3, autoLoad: true },
+  });
+  ```
+
+  **`storage`: opt-in `'context'` mode**
+
+  Choose where loaded-tool state lives. The default `'in-memory'` keeps the original behavior. The new opt-in `'context'` mode derives loaded tools from the conversation messages, so it is restart-safe, needs no memory configuration, and de-loads a tool once its discovery result is no longer in the messages.
+
+  ```typescript
+  const toolSearch = new ToolSearchProcessor({
+    tools: allTools,
+    storage: 'context',
+  });
+  ```
+
+  Both modes are cache-friendly when loading tools, since loads are append-only and keep the cached prompt prefix stable. The default `'in-memory'` store still shares a single `'default'` entry across anonymous (no thread ID) requests; use `storage: 'context'` to keep anonymous requests isolated and derive loaded tools from the conversation messages.
+
+### Patch Changes
+
+- Fixed ConsoleLogger.warn() to correctly call console.warn() instead of console.info(), ensuring warn-level logs are routed to stderr and properly classified by log backends (e.g. Datadog) ([#17623](https://github.com/mastra-ai/mastra/pull/17623))
+
+- Fixed silent error swallowing when agent.stream() fails during idle-start, continuation, or pending-idle signal processing. Errors now propagate to the subscription stream via a new run-failed event, so harness consumers (like MastraCode) surface proper error events instead of silently completing with no response. ([#17727](https://github.com/mastra-ai/mastra/pull/17727))
+
+- **Added** author enrichment to the stored-agents list and get handlers. When an auth provider is configured, each agent record now includes a resolved `author` object alongside the existing `authorId`: ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+  ```ts
+  {
+    id: 'agent_…',
+    authorId: 'user_…',
+   id, name?, email?, avatarUrl? } // new, optional
+    // …
+  }
+  ```
+
+  Lookups are deduplicated per request and use the provider's `getUsers` batch method when available, falling back to per-id `getUser` calls otherwise. The field is omitted when no auth provider is configured or the ID can't be resolved, so existing clients keep working unchanged.
+
+- Fixed ingestion of client-side tool tracing from AI SDK v6 `toolMetadata` when messages return through chatRoute. ([#17202](https://github.com/mastra-ai/mastra/pull/17202))
+
+- Fixed durable and evented agent streams so tool-call steps continue to final text when maxSteps allows it. ([#16679](https://github.com/mastra-ai/mastra/pull/16679))
+
+- Clarified Studio config JSDoc to explain dual auth opt-in behavior. ([#17722](https://github.com/mastra-ai/mastra/pull/17722))
+
+- Fixed a multi-instance hang in evented execution mode. When two Mastra processes shared a UnixSocketPubSub broker, the agent's evented run could fail with `AGENT_GENERATE_MALFORMED_RESULT`, `condition is not a function`, or hang silently with ECANCELED errors during shutdown. ([#17788](https://github.com/mastra-ai/mastra/pull/17788))
+
+  **What changed**
+  - Internal workflow events (execution-workflow, agentic-loop, nested children walked via `parentWorkflow`), per-run watch streams (`workflow.events.v2.*`), and scheduler-spawned background runs (`sched_wf_*`) are now delivered only inside the publishing process and no longer cross the unix socket.
+  - Live class instances on event payloads (e.g. the `MastraModelOutput` returned by an agent run) are preserved instead of being stripped by JSON serialization on the broker round-trip.
+
+  **Why**
+
+  Follow-up to the broker-side filter shipped in #17727. That filter ran after the publish frame had already been serialized, which stripped functions/streams from payloads and still fanned out cumulative `stepResults` blobs (often 9 MB+) to every connected client. Short-circuiting these publishes in-process removes the serialization round-trip entirely and lets the agent's run result survive intact.
+
+- Added anonymous, aggregated model token usage telemetry. When a Mastra server starts and observability metrics are enabled, the input and output token totals per provider and model are sent to Mastra's telemetry. Only aggregate token counts are collected — never prompts, responses, or message content. Opt out by setting MASTRA_TELEMETRY_DISABLED=1. ([#17750](https://github.com/mastra-ai/mastra/pull/17750))
+
+- Plan due notification dispatches per thread from a single due snapshot so high-priority notifications that already emitted summaries are delivered in full before lower-priority notifications or summaries can wake the same thread. `Agent.sendNotificationSignal` also accepts an array of notification inputs so related notifications can be evaluated against the same initial thread state before any delivery wakes the thread. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- - Use evented-workflow engine in the internal agentic loop. ([#16796](https://github.com/mastra-ai/mastra/pull/16796))
+  - Fix nested workflow resume with resumeLabel in evented-workflow engine.
+  - Default to an in-memory store when no `storage` is configured on `Mastra`, and warn that it is not durable and a persistent storage adapter should be used in production.
+
+- Prevented user-created filesystem stored agents from being treated as code agents when they are not declared in the code Mastra instance. ([#17622](https://github.com/mastra-ai/mastra/pull/17622))
+
+- Fixed per-item request context being dropped for inline experiment data. When running an experiment with inline `data`, each item's `requestContext` is now passed to the agent or workflow and merged over the global request context (per-item values win on key collisions), matching the behavior of storage-backed datasets. ([#17597](https://github.com/mastra-ai/mastra/pull/17597))
+
+  ```ts
+  await dataset.startExperiment({
+    data: [{ input: { prompt: 'Hello' }, requestContext: { clinicId: 'clinic-1' } }],
+    targetType: 'agent',
+    targetId: 'support-agent',
+  });
+  // Tools can now read clinicId from requestContext during inline experiments
+  ```
+
+- Fixed thread subscribers so they can join an already-running remote stream and receive new output without waiting for the next run. ([#17635](https://github.com/mastra-ai/mastra/pull/17635))
+
+- Improved BM25 tokenization to support CJK (Japanese, Chinese, Korean) and other non-Latin languages. Added `TokenizeOptions.tokenizer` for plugging in custom tokenizers (e.g. n-gram, kuromoji). Workspace `bm25` config now accepts `tokenize` options for full control over how text is split into search tokens. ([#17640](https://github.com/mastra-ai/mastra/pull/17640))
+
+  **Before:** BM25 search returned no results for non-English content — CJK characters were silently stripped during tokenization.
+
+  **After:** Non-Latin characters are preserved by default. Users can also plug in a custom tokenizer:
+
+  ```ts
+  new Workspace({
+    bm25: {
+      tokenize: {
+        tokenizer: myCustomCjkTokenizer,
+      },
+    },
+  });
+  ```
+
+  Fixes #17636
+
+- Added OTel span instrumentation for the hardcoded 10-second rate-limit backpressure sleep, making it visible in traces as a 'rate-limit-sleep' span with remainingTokens and delayMs metadata ([#17623](https://github.com/mastra-ai/mastra/pull/17623))
+
+- Fixed medium-priority notification summaries so they wake idle agent threads when they are ready to deliver. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Fixed message part timestamps affecting transcript ordering by ensuring only message-level timestamps advance the ordering watermark. ([#17598](https://github.com/mastra-ai/mastra/pull/17598))
+
+- Added a local development warning when Enterprise features are used without a valid license. ([#17694](https://github.com/mastra-ai/mastra/pull/17694))
+
+- Fix `response.modelId` being overwritten with `undefined` in `step-finish` chunks when the upstream model stream omits `modelId` from `response-metadata`. The explicit empty-string fallback was placed before a `...otherMetadata` spread that could overwrite it with `undefined`. Moved the `modelId` assignment after the spread so the fallback always wins. ([#17795](https://github.com/mastra-ai/mastra/pull/17795))
+
+  This restores consistent `response.modelId === ''` behavior across both the direct and evented agentic-loop workflow paths.
+
+- Fix `Cannot get workflow run. Mastra storage is not initialized` debug log spam on agents that use memory or any input/output processors. ([#17571](https://github.com/mastra-ai/mastra/pull/17571))
+
+  #17344 fixed this for the internal `execution-workflow`, but agents with memory/processors also build an internal _processor_ workflow (`Agent.combineProcessorsIntoWorkflow`, run by `ProcessorRunner.executeWorkflowAsProcessor`) that never received the parent `Mastra` instance — so its `createRun()` → `getWorkflowRunById()` saw no storage and logged the noise on every run. The processor workflow now receives the parent `Mastra` instance and opts out of snapshot persistence (`shouldPersistSnapshot: () => false`), mirroring the execution-workflow fix. Follow-up to #17137 / #17344.
+
+- Fix `request_access` granting a path but the file staying unreadable with `EACCES`. After approving access, the very next tool (e.g. `view`) could still be rejected for the path that was just granted. The grant now reliably applies to the filesystem the agent's tools actually read from, and persists before the run resumes, so reads of an approved path succeed. ([#17806](https://github.com/mastra-ai/mastra/pull/17806))
+
+- Update ai-sdk deps ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+
+- Fixed browser state signals so they no longer show 'Browser is closed' before the browser is used. Added attribution for browser closes and active URL changes when the agent or user caused them. ([#17631](https://github.com/mastra-ai/mastra/pull/17631))
+
+- **Added** optional `author` field on `StoredAgentResponse` so consumers can render the resolved author (name, email, avatar) returned by stored-agent list and detail endpoints. ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+- Fixed Windows absolute paths breaking workspace skill discovery. `WorkspaceSkills` split paths on `/` only, so a skill referenced by an absolute Windows path loaded with the wrong name (the full path string or `unknown`) or failed to load, and skills under `node_modules` were misclassified as local instead of external. ([#17671](https://github.com/mastra-ai/mastra/pull/17671))
+
+  Skills passed by absolute path now resolve the same way on Windows and POSIX:
+
+  ```ts
+  new Workspace({
+    skills: ['C:\\Users\\me\\skills\\my-skill'],
+  });
+  ```
+
+## 1.42.0-alpha.4
+
+### Minor Changes
+
+- You can now execute workflows, tools, and memory thread checks as a trusted actor, such as a background job or scheduled task. Pass an `actor` object to identify the system process making the call while keeping fine-grained authorization checks tenant-scoped. ([#17484](https://github.com/mastra-ai/mastra/pull/17484))
+
+  ```ts
+  const actor = { actorKind: 'system', sourceWorkflow: 'nightly-sync' } as const;
+
+  await workflow.execute({ ...executeOptions, actor });
+  await tool.execute(input, { ...toolOptions, actor });
+  await MastraMemory.checkThreadFGA({ ...threadFGAOptions, actor });
+  ```
+
+- Added an actor signal to core FGA checks for trusted server-side membership bypasses. ([#17483](https://github.com/mastra-ai/mastra/pull/17483))
+
+  ```ts
+  const actor = { actorKind: 'system', sourceWorkflow: 'nightly-workflow' } as const;
+  await checkFGA({ ...fgaOptions, requestContext, actor });
+  await requireFGA({ ...fgaOptions, requestContext, actor });
+  ```
+
+- Enabled persistent storage for durable harness sessions across storage backends. Harness v1 can now resolve its session store from a configured storage adapter. ([#17712](https://github.com/mastra-ai/mastra/pull/17712))
+
+- Added the `actor` option to agent `generate()` and `stream()` invocations so trusted background work can run without a JWT or human membership. ([#17487](https://github.com/mastra-ai/mastra/pull/17487))
+
+  ```ts
+  const requestContext = new RequestContext();
+  requestContext.set('organizationId', 'org_123');
+
+  await agent.generate('Process daily report', {
+    requestContext,
+    actor: { actorKind: 'system', sourceWorkflow: 'daily-report-cron' },
+  });
+  ```
+
+  Mastra denies trusted actor FGA checks when the request context does not include an `organizationId`.
+
+- Added MCP server Fine-Grained Authorization mapping overrides for tool authorization. ([#17529](https://github.com/mastra-ai/mastra/pull/17529))
+
+  Use the new `fga` option on `MCPServer` to customize the resource and permission mappings used for `tools/list` and `tools/call` checks without changing the Mastra instance-level `tool` mapping used by internal agent and workflow tool execution.
+
+  ```ts
+  const server = new MCPServer({
+    name: 'My Server',
+    version: '1.0.0',
+    tools: { getData },
+    fga: {
+      resourceMapping: {
+        tool: {
+          fgaResourceType: 'user',
+          deriveId: ({ user }) => user.id,
+        },
+      },
+      permissionMapping: {
+        'tools:execute': 'read',
+      },
+    },
+  });
+  ```
+
+- Made the `ask_user` built-in tool agent-agnostic and removed the Harness question channel in favor of native tool suspension. ([#17806](https://github.com/mastra-ai/mastra/pull/17806))
+
+  `ask_user` now pauses through the same tool-suspension primitive used by every other interactive tool, so it works on any agent — not just inside a Harness. The Harness no longer has a separate question channel; instead it surfaces these pauses through the generic `tool_suspended` event and resumes them with `respondToToolSuspension`.
+
+  **Breaking changes**
+  - Removed `harness.respondToQuestion(...)`. Use `harness.respondToToolSuspension(...)` instead.
+  - Removed the `ask_question` event. Listen for `tool_suspended` and read the question from `event.suspendPayload`.
+  - Removed `registerQuestion` from `HarnessRequestContext`, the `HarnessDisplayState.pendingQuestion` field, and the `HarnessQuestionAnswer`, `HarnessQuestionOption`, and `HarnessQuestionSelectionMode` types.
+  - `HarnessDisplayState.pendingSuspension` (a single object or `null`) is now `HarnessDisplayState.pendingSuspensions`, a `Map` keyed by `toolCallId`. This lets the display state hold several parked prompts at once, so resuming one parallel `ask_user` no longer hides the others. Read a specific prompt with `displayState.pendingSuspensions.get(toolCallId)`.
+
+  `respondToToolSuspension` accepts an optional `toolCallId` so concurrently suspended tools (for example, parallel `ask_user` calls) can each be answered independently.
+
+  `harness.abort()` now clears any pending tool suspensions, so a run parked in a `suspend()` (e.g. an unanswered `ask_user`) can be aborted instead of staying parked forever. A new `harness.hasPendingSuspensions()` method reports whether the harness is awaiting a resume — useful because a suspended run nulls its internal abort controller, so `isRunning()` returns `false` while the run is still pending.
+
+  **Before**
+
+  ```typescript
+  harness.subscribe(event => {
+    if (event.type === 'ask_question') {
+      harness.respondToQuestion({ questionId: event.questionId, answer: 'Yes' });
+    }
+  });
+  ```
+
+  **After**
+
+  ```typescript
+  harness.subscribe(event => {
+    if (event.type === 'tool_suspended' && event.toolName === 'ask_user') {
+      const { question } = event.suspendPayload as { question: string };
+      harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: 'Yes' });
+    }
+  });
+  ```
+
+- Made the `submit_plan` built-in tool agent-agnostic and removed the Harness plan-approval channel in favor of native tool suspension. ([#17817](https://github.com/mastra-ai/mastra/pull/17817))
+
+  `submit_plan` now pauses through the same tool-suspension primitive used by every other interactive tool, so it works on any agent — not just inside a Harness. A plain Agent (e.g. in Studio or a customer app) can render the plan and resume the tool with `agent.resumeStream({ action, feedback })`. The Harness surfaces the pause through the generic `tool_suspended` event and resumes it with `respondToToolSuspension`; on approval it additionally switches to its default (execution) mode.
+
+  **Breaking changes**
+  - Removed `harness.respondToPlanApproval(...)`. Resume a submitted plan with `harness.respondToToolSuspension({ toolCallId, resumeData: { action, feedback } })`.
+  - Removed the `plan_approval_required` and `plan_approved` events. Listen for `tool_suspended` with `event.toolName === 'submit_plan'` and read `{ title, plan }` from `event.suspendPayload`.
+  - Removed `registerPlanApproval` from `HarnessRequestContext` and the `HarnessDisplayState.pendingPlanApproval` field. A suspended `submit_plan` now appears as `HarnessDisplayState.pendingSuspension` like any other suspended tool.
+
+  **Before**
+
+  ```typescript
+  harness.subscribe(event => {
+    if (event.type === 'plan_approval_required') {
+      harness.respondToPlanApproval({ planId: event.planId, response: { action: 'approved' } });
+    }
+  });
+  ```
+
+  **After**
+
+  ```typescript
+  harness.subscribe(event => {
+    if (event.type === 'tool_suspended' && event.toolName === 'submit_plan') {
+      const { title, plan } = event.suspendPayload as { title: string; plan: string };
+      harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: { action: 'approved' } });
+    }
+  });
+  ```
+
+- Make the task tools (`task_write`, `task_update`, `task_complete`, `task_check`) agent-agnostic. ([#17820](https://github.com/mastra-ai/mastra/pull/17820))
+
+  The task tools no longer depend on the Harness request context. The task list is now held in a generic, thread-scoped **`threadState` storage domain** (`ThreadStateStorage`) — the source of truth — and projected onto the agent **state-signal** lane (`stateId: "tasks"`) by the new `TaskStateProcessor`, so they work on any `Agent` and not only inside the Harness.
+
+  A new storage domain `threadState` is registered on `MastraStorage` (accessible via `storage.getStore("threadState")`). It is keyed by `(threadId, type)` so it can hold any per-thread state; the task list lives under `type: "task"` and the domain is intentionally generic so other agent-scoped state (e.g. `"goal"`) can reuse it. The composite store always wires an `InMemoryThreadStateStorage` by default, so task tracking works out of the box without configuring a backend, and a durable backend (`@mastra/libsql`'s `ThreadStateLibSQL`) persists the list across process restarts. The tools read/write it within a run via `context.mastra.getStorage().getStore("threadState")`, scoped by the run's `threadId`.
+
+  The state-signal projection is delta-first (modelled on working memory), cache-aware, and observational-memory-aware:
+  - The first projection of a populated list (and every compaction) is a full `<current-task-list>` **snapshot**; each later mutation emits a small `<task-list-update>` **delta** carrying only that turn's add/remove/update ops, so a large task list is not re-sent in full on every change.
+  - The task list is carried on the state-signal lane instead of being injected into the cached system prompt, so task updates no longer invalidate the prompt-cache prefix.
+  - The base snapshot and its deltas accumulate in the window; the processor re-snapshots once enough deltas accumulate (compaction) to bound window growth, and whenever observational-memory truncation drops the base snapshot from the window (deltas are meaningless without their base), reading the `threadState` store so the agent never loses track of its tasks.
+
+  The task tools and the processor require a memory-backed thread. On a run that is not memory backed (no `threadId`/`resourceId`), the task tools no-op and return a result explaining that task tracking requires agent memory.
+
+  For the simplest setup, register `TaskSignalProvider` via the agent's `signals` array — it bundles the task tools and the `TaskStateProcessor` so they cannot get out of sync:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { TaskSignalProvider } from '@mastra/core/signals';
+
+  const agent = new Agent({ name, instructions, model, memory, signals: [new TaskSignalProvider()] });
+  ```
+
+  The Agent merges the tools into its toolset and registers the processor automatically.
+
+  New exports from `@mastra/core/storage`: `ThreadStateStorage`, `InMemoryThreadStateStorage`, and the `TaskRecord` type. New exports from `@mastra/core/tools`: `taskWriteTool`, `taskUpdateTool`, `taskCompleteTool`, `taskCheckTool`, `TaskStateProcessor`, and the task helpers/types (`assignTaskIds`, `summarizeTaskCheck`, `TaskItem`, `TaskItemSnapshot`, `TaskCheckSummary`, `TaskCheckResult`, etc.). New export from `@mastra/core/signals`: `TaskSignalProvider`, alongside the other signal providers. The Harness continues to re-export the task tools, so existing imports and toolset identity are unchanged.
+
+  Internal behavior change: the Harness no longer stores the task list in session state. Task mutations still emit the `task_updated` display event, so the Harness display snapshot and any pinned task UI are unaffected. To adopt the new behavior on a plain agent (with `Memory` and a Mastra `storage`), register `new TaskSignalProvider()` in `signals` — or, for manual control, add `new TaskStateProcessor()` to `inputProcessors` alongside the task tools.
+
+- Add workspace registry cleanup and shutdown destruction. ([#17661](https://github.com/mastra-ai/mastra/pull/17661))
+
+  Mastra now exposes `removeWorkspace(id, { destroy })` for removing runtime workspaces from the registry. When `destroy` is true, the workspace is destroyed before removal and remains registered if destruction fails.
+
+  `mastra.shutdown()` now destroys registered workspaces before closing storage and unregisters only the workspaces that clean up successfully. Workspace tool execution also updates `lastAccessedAt`, so runtime activity is tracked beyond search operations.
+
+  ```ts
+  await mastra.removeWorkspace('workspace-123', { destroy: true }); // destroys, then unregisters
+  await mastra.removeWorkspace('workspace-456'); // unregisters only; caller owns destroy
+  await mastra.shutdown(); // destroys registered workspaces, then closes storage
+  ```
+
+- Added two options to `ToolSearchProcessor` for cheaper, more cache-friendly tool discovery. ([#17691](https://github.com/mastra-ai/mastra/pull/17691))
+
+  **`autoLoad`: one-turn discovery**
+
+  Set `search.autoLoad` so that `search_tools` activates the matching tools immediately, removing the separate `load_tool` round-trip. The model searches once and can call a discovered tool on its next turn instead of searching, loading, then calling. This cuts one model turn (and a full prompt replay) per discovery.
+
+  ```typescript
+  import { ToolSearchProcessor } from '@mastra/core/processors';
+
+  const toolSearch = new ToolSearchProcessor({
+    tools: allTools,
+    search: { topK: 3, autoLoad: true },
+  });
+  ```
+
+  **`storage`: opt-in `'context'` mode**
+
+  Choose where loaded-tool state lives. The default `'in-memory'` keeps the original behavior. The new opt-in `'context'` mode derives loaded tools from the conversation messages, so it is restart-safe, needs no memory configuration, and de-loads a tool once its discovery result is no longer in the messages.
+
+  ```typescript
+  const toolSearch = new ToolSearchProcessor({
+    tools: allTools,
+    storage: 'context',
+  });
+  ```
+
+  Both modes are cache-friendly when loading tools, since loads are append-only and keep the cached prompt prefix stable. The default `'in-memory'` store still shares a single `'default'` entry across anonymous (no thread ID) requests; use `storage: 'context'` to keep anonymous requests isolated and derive loaded tools from the conversation messages.
+
+### Patch Changes
+
+- Fixed silent error swallowing when agent.stream() fails during idle-start, continuation, or pending-idle signal processing. Errors now propagate to the subscription stream via a new run-failed event, so harness consumers (like MastraCode) surface proper error events instead of silently completing with no response. ([#17727](https://github.com/mastra-ai/mastra/pull/17727))
+
+- Fixed durable and evented agent streams so tool-call steps continue to final text when maxSteps allows it. ([#16679](https://github.com/mastra-ai/mastra/pull/16679))
+
+- Clarified Studio config JSDoc to explain dual auth opt-in behavior. ([#17722](https://github.com/mastra-ai/mastra/pull/17722))
+
+- Fixed a multi-instance hang in evented execution mode. When two Mastra processes shared a UnixSocketPubSub broker, the agent's evented run could fail with `AGENT_GENERATE_MALFORMED_RESULT`, `condition is not a function`, or hang silently with ECANCELED errors during shutdown. ([#17788](https://github.com/mastra-ai/mastra/pull/17788))
+
+  **What changed**
+  - Internal workflow events (execution-workflow, agentic-loop, nested children walked via `parentWorkflow`), per-run watch streams (`workflow.events.v2.*`), and scheduler-spawned background runs (`sched_wf_*`) are now delivered only inside the publishing process and no longer cross the unix socket.
+  - Live class instances on event payloads (e.g. the `MastraModelOutput` returned by an agent run) are preserved instead of being stripped by JSON serialization on the broker round-trip.
+
+  **Why**
+
+  Follow-up to the broker-side filter shipped in #17727. That filter ran after the publish frame had already been serialized, which stripped functions/streams from payloads and still fanned out cumulative `stepResults` blobs (often 9 MB+) to every connected client. Short-circuiting these publishes in-process removes the serialization round-trip entirely and lets the agent's run result survive intact.
+
+- Added anonymous, aggregated model token usage telemetry. When a Mastra server starts and observability metrics are enabled, the input and output token totals per provider and model are sent to Mastra's telemetry. Only aggregate token counts are collected — never prompts, responses, or message content. Opt out by setting MASTRA_TELEMETRY_DISABLED=1. ([#17750](https://github.com/mastra-ai/mastra/pull/17750))
+
+- - Use evented-workflow engine in the internal agentic loop. ([#16796](https://github.com/mastra-ai/mastra/pull/16796))
+  - Fix nested workflow resume with resumeLabel in evented-workflow engine.
+  - Default to an in-memory store when no `storage` is configured on `Mastra`, and warn that it is not durable and a persistent storage adapter should be used in production.
+
+- Added a local development warning when Enterprise features are used without a valid license. ([#17694](https://github.com/mastra-ai/mastra/pull/17694))
+
+- Fix `response.modelId` being overwritten with `undefined` in `step-finish` chunks when the upstream model stream omits `modelId` from `response-metadata`. The explicit empty-string fallback was placed before a `...otherMetadata` spread that could overwrite it with `undefined`. Moved the `modelId` assignment after the spread so the fallback always wins. ([#17795](https://github.com/mastra-ai/mastra/pull/17795))
+
+  This restores consistent `response.modelId === ''` behavior across both the direct and evented agentic-loop workflow paths.
+
+- Fix `request_access` granting a path but the file staying unreadable with `EACCES`. After approving access, the very next tool (e.g. `view`) could still be rejected for the path that was just granted. The grant now reliably applies to the filesystem the agent's tools actually read from, and persists before the run resumes, so reads of an approved path succeed. ([#17806](https://github.com/mastra-ai/mastra/pull/17806))
+
+- Update ai-sdk deps ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+
+- Fixed Windows absolute paths breaking workspace skill discovery. `WorkspaceSkills` split paths on `/` only, so a skill referenced by an absolute Windows path loaded with the wrong name (the full path string or `unknown`) or failed to load, and skills under `node_modules` were misclassified as local instead of external. ([#17671](https://github.com/mastra-ai/mastra/pull/17671))
+
+  Skills passed by absolute path now resolve the same way on Windows and POSIX:
+
+  ```ts
+  new Workspace({
+    skills: ['C:\\Users\\me\\skills\\my-skill'],
+  });
+  ```
+
+## 1.42.0-alpha.3
+
+### Minor Changes
+
+- **Added** optional `getUsers(userIds)` batch lookup method to `IUserProvider`. Auth providers can implement it to resolve multiple users in a single call; providers that don't implement it continue to work via per-id `getUser` fallback. ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+  ```ts
+  // optional batch lookup, returns results positionally aligned to userIds
+  const users = await provider.getUsers?.(['u_1', 'u_2', 'u_3']);
+  ```
+
+- Added interface-first model gateways while keeping the existing `MastraModelGateway` base class backwards compatible. ([#17608](https://github.com/mastra-ai/mastra/pull/17608))
+
+  Added `MastraModelGatewayInterface` for plain object/custom gateway implementations and optional gateway `resolveAuth` hooks.
+
+  Moved MastraCode gateway-routed OAuth model construction into a custom Mastra gateway so `ModelRouterLanguageModel` can route through gateway `resolveAuth` and provider-specific `resolveLanguageModel` behavior.
+
+  **Usage:**
+
+  ```typescript
+  import { MastraModelGatewayInterface, ModelRouterLanguageModel } from '@mastra/core/llm';
+
+  const myGateway: MastraModelGatewayInterface = {
+    id: 'my-gateway',
+    name: 'My Gateway',
+    async fetchProviders() {
+      return {};
+    },
+    buildUrl() {
+      return 'https://api.example.com';
+    },
+    async getApiKey() {
+      return process.env.API_KEY ?? '';
+    },
+    // Optional: own authentication lookup
+    async resolveAuth(request) {
+      return { apiKey: process.env.API_KEY, source: 'gateway' };
+    },
+    async resolveLanguageModel({ modelId, providerId, apiKey }) {
+      // Return an AI SDK language model instance
+    },
+  };
+
+  // Register and route through the gateway
+  const router = new ModelRouterLanguageModel({ modelId: 'my-gateway/provider/model' }, [myGateway]);
+  ```
+
+  **Additional changes in this release:**
+  - Inline three-tier auth resolution (explicit → gateway.resolveAuth → legacy getApiKey) into `ModelRouterLanguageModel.resolveAuth` and deprecate the standalone `resolveModelAuth` helper.
+  - Fix `defaultGateways` deduplication in the `Mastra` class to use `getGatewayId(gateway)` instead of registry keys.
+  - Remove no-op `resolveModelId` identity function in mastracode in favor of direct usage.
+  - Fix `defaultNameGenerator` regex in `_llm-recorder` to anchor directory matches to path boundaries (prevents false matches like `-auth` suffixes).
+
+### Patch Changes
+
+- **Added** author enrichment to the stored-agents list and get handlers. When an auth provider is configured, each agent record now includes a resolved `author` object alongside the existing `authorId`: ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+  ```ts
+  {
+    id: 'agent_…',
+    authorId: 'user_…',
+   id, name?, email?, avatarUrl? } // new, optional
+    // …
+  }
+  ```
+
+  Lookups are deduplicated per request and use the provider's `getUsers` batch method when available, falling back to per-id `getUser` calls otherwise. The field is omitted when no auth provider is configured or the ID can't be resolved, so existing clients keep working unchanged.
+
+- Fixed ingestion of client-side tool tracing from AI SDK v6 `toolMetadata` when messages return through chatRoute. ([#17202](https://github.com/mastra-ai/mastra/pull/17202))
+
+- **Added** optional `author` field on `StoredAgentResponse` so consumers can render the resolved author (name, email, avatar) returned by stored-agent list and detail endpoints. ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+## 1.42.0-alpha.2
+
+### Patch Changes
+
+- Improved BM25 tokenization to support CJK (Japanese, Chinese, Korean) and other non-Latin languages. Added `TokenizeOptions.tokenizer` for plugging in custom tokenizers (e.g. n-gram, kuromoji). Workspace `bm25` config now accepts `tokenize` options for full control over how text is split into search tokens. ([#17640](https://github.com/mastra-ai/mastra/pull/17640))
+
+  **Before:** BM25 search returned no results for non-English content — CJK characters were silently stripped during tokenization.
+
+  **After:** Non-Latin characters are preserved by default. Users can also plug in a custom tokenizer:
+
+  ```ts
+  new Workspace({
+    bm25: {
+      tokenize: {
+        tokenizer: myCustomCjkTokenizer,
+      },
+    },
+  });
+  ```
+
+  Fixes #17636
+
+## 1.42.0-alpha.1
+
+### Minor Changes
+
+- Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute. Mastra Code now uses agent hooks so hook handlers run for built-in workspace tools as well as dynamic tools. ([#17637](https://github.com/mastra-ai/mastra/pull/17637))
+
+  **Example**
+
+  ```ts
+  const agent = new Agent({
+    name: 'Support Agent',
+    instructions: 'Help users.',
+    model,
+    hooks: {
+      beforeToolCall: ({ toolName, input }) => {
+        console.log(`Running ${toolName}`, input);
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error });
+      },
+    },
+  });
+
+  const workspace = new Workspace({
+    tools: {
+      hooks: {
+        beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+          console.log(`Running ${toolName} from ${workspaceToolName}`, input);
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Plan due notification dispatches per thread from a single due snapshot so high-priority notifications that already emitted summaries are delivered in full before lower-priority notifications or summaries can wake the same thread. `Agent.sendNotificationSignal` also accepts an array of notification inputs so related notifications can be evaluated against the same initial thread state before any delivery wakes the thread. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Fixed medium-priority notification summaries so they wake idle agent threads when they are ready to deliver. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Fixed browser state signals so they no longer show 'Browser is closed' before the browser is used. Added attribution for browser closes and active URL changes when the agent or user caused them. ([#17631](https://github.com/mastra-ai/mastra/pull/17631))
+
+## 1.42.0-alpha.0
+
+### Minor Changes
+
+- Added SignalProvider abstraction for building notification signal providers. Enables declarative signal wiring in Agent config with built-in subscription tracking, polling lifecycle, and webhook support. Includes WebhookSignalProvider as a proof-of-concept. ([#17577](https://github.com/mastra-ai/mastra/pull/17577))
+
+  **Writing a signal provider:**
+
+  ```ts
+  import { SignalProvider } from '@mastra/core/signals';
+  import type { SignalSubscription } from '@mastra/core/signals';
+
+  class SlackSignalProvider extends SignalProvider<'slack-signals'> {
+    readonly id = 'slack-signals' as const;
+    readonly pollInterval = 30_000; // poll every 30s
+
+    async poll(subscriptions: SignalSubscription[]) {
+      for (const sub of subscriptions) {
+        const messages = await fetchNewMessages(sub.externalResourceId);
+        if (messages.length > 0) {
+          await this.notify(
+            { source: 'slack', kind: 'new-message', summary: `${messages.length} new messages` },
+            { threadId: sub.threadId, resourceId: sub.resourceId },
+          );
+        }
+      }
+    }
+  }
+  ```
+
+  **Declarative wiring:**
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+
+  const agent = new Agent({
+    signals: [new SlackSignalProvider()],
+    // ... other config
+  });
+  ```
+
+- Add batching primitives to the PubSub abstraction. ([#16482](https://github.com/mastra-ai/mastra/pull/16482))
+
+  **New options**
+  - `SubscribeOptions.batch` (`SubscribeBatchOptions`): opt in to coalesced delivery on a per-subscriber basis. Fields: `maxSize`, `maxWaitMs`, `minIntervalMs`, `isImmediate`, `coalesce`, `maxBufferSize`, `overflow`.
+  - `EventEmitterPubSub` constructor accepts optional `EventEmitterPubSubOptions` with a `logger` for batched-delivery error diagnostics.
+
+  **Example**
+
+  ```ts
+  import { EventEmitterPubSub } from '@mastra/core/events';
+
+  const pubsub = new EventEmitterPubSub();
+
+  await pubsub.subscribe(
+    'agent-events',
+    event => {
+      // delivered in coalesced batches; the cb is still invoked once per event
+    },
+    {
+      batch: {
+        maxSize: 10, // flush once 10 events have queued
+        maxWaitMs: 500, // ...or after 500ms, whichever comes first
+      },
+    },
+  );
+  ```
+
+  **New exports**
+  - `SubscribeBatchOptions` type.
+  - `PubSub.supportsNativeBatching` — advertises whether an adapter honors `options.batch` internally.
+
+  **Behavior**
+  - `EventEmitterPubSub.supportsNativeBatching === true`. Batched subscribers receive coalesced delivery driven by an in-memory buffer governed by `maxSize` / `maxWaitMs` / `minIntervalMs` / `isImmediate` / `coalesce` / `overflow` / `maxBufferSize`.
+  - `EventEmitterPubSub.flush()` drains every batched subscriber buffer and waits for any pending nack redeliveries before resolving. Non-callback rejections surface through the configured `logger` instead of being swallowed.
+  - `CachingPubSub` is transparent to batching: it forwards `options` (including `batch`) to its inner PubSub and forwards `supportsNativeBatching` from the inner. Whether batching is honored depends entirely on the wrapped transport.
+
+  **Contract notes**
+  - `SubscribeBatchOptions.coalesce` must return a subset of its input array by reference identity. Returning freshly-constructed `Event` objects (even with matching `id`) is treated as a contract violation: the batching layer can't route `ack`/`nack` to original transport handles for manufactured events, so the entire batch is discarded and every original event is acked as dropped. If you need merged payloads, build them in the subscriber callback after delivery.
+  - `flush()` is best-effort: a successful resolution does not guarantee every subscriber callback succeeded. Per-event errors surface via the configured logger.
+
+### Patch Changes
+
+- Fixed ConsoleLogger.warn() to correctly call console.warn() instead of console.info(), ensuring warn-level logs are routed to stderr and properly classified by log backends (e.g. Datadog) ([#17623](https://github.com/mastra-ai/mastra/pull/17623))
+
+- Prevented user-created filesystem stored agents from being treated as code agents when they are not declared in the code Mastra instance. ([#17622](https://github.com/mastra-ai/mastra/pull/17622))
+
+- Fixed per-item request context being dropped for inline experiment data. When running an experiment with inline `data`, each item's `requestContext` is now passed to the agent or workflow and merged over the global request context (per-item values win on key collisions), matching the behavior of storage-backed datasets. ([#17597](https://github.com/mastra-ai/mastra/pull/17597))
+
+  ```ts
+  await dataset.startExperiment({
+    data: [{ input: { prompt: 'Hello' }, requestContext: { clinicId: 'clinic-1' } }],
+    targetType: 'agent',
+    targetId: 'support-agent',
+  });
+  // Tools can now read clinicId from requestContext during inline experiments
+  ```
+
+- Fixed thread subscribers so they can join an already-running remote stream and receive new output without waiting for the next run. ([#17635](https://github.com/mastra-ai/mastra/pull/17635))
+
+- Added OTel span instrumentation for the hardcoded 10-second rate-limit backpressure sleep, making it visible in traces as a 'rate-limit-sleep' span with remainingTokens and delayMs metadata ([#17623](https://github.com/mastra-ai/mastra/pull/17623))
+
+- Fixed message part timestamps affecting transcript ordering by ensuring only message-level timestamps advance the ordering watermark. ([#17598](https://github.com/mastra-ai/mastra/pull/17598))
+
+- Fix `Cannot get workflow run. Mastra storage is not initialized` debug log spam on agents that use memory or any input/output processors. ([#17571](https://github.com/mastra-ai/mastra/pull/17571))
+
+  #17344 fixed this for the internal `execution-workflow`, but agents with memory/processors also build an internal _processor_ workflow (`Agent.combineProcessorsIntoWorkflow`, run by `ProcessorRunner.executeWorkflowAsProcessor`) that never received the parent `Mastra` instance — so its `createRun()` → `getWorkflowRunById()` saw no storage and logged the noise on every run. The processor workflow now receives the parent `Mastra` instance and opts out of snapshot persistence (`shouldPersistSnapshot: () => false`), mirroring the execution-workflow fix. Follow-up to #17137 / #17344.
+
 ## 1.41.0
 
 ### Minor Changes

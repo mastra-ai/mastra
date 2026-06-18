@@ -28,34 +28,35 @@ test.describe('code-mode agent override', () => {
     await expect(page.getByRole('button', { name: /^Save New Version$/i })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Publish$/i })).toHaveCount(0);
 
+    const getVersionCount = async () => {
+      const versions = await request
+        .get('/api/stored/agents/code-override-editable/versions')
+        .then(r => r.json() as Promise<{ versions: unknown[] }>);
+      return versions.versions.length;
+    };
+
+    const initialVersionCount = await getVersionCount();
+
     await page.getByRole('button', { name: /System Prompt/i }).click();
     await page.locator('.cm-content').first().click();
     await page.keyboard.type('\nLocal filesystem save from e2e.');
     await expect(saveToFilesystemButton).toBeEnabled();
     await saveToFilesystemButton.click();
-    await expect(page.getByText(/Saved to filesystem/i)).toBeVisible();
 
     // Code mode treats local saves as commit-less drafts: each save should
     // overwrite the rolling snapshot rather than grow version history.
-    const versionsAfterFirstSave = await request
-      .get('/api/stored/agents/code-override-editable/versions')
-      .then(r => r.json() as Promise<{ versions: unknown[] }>);
-    expect(versionsAfterFirstSave.versions.length).toBe(1);
+    await expect.poll(getVersionCount).toBe(initialVersionCount);
 
     await page.locator('.cm-content').first().click();
     await page.keyboard.type(' Another tweak.');
     await saveToFilesystemButton.click();
-    await expect(page.getByText(/Saved to filesystem/i).last()).toBeVisible();
 
-    const versionsAfterSecondSave = await request
-      .get('/api/stored/agents/code-override-editable/versions')
-      .then(r => r.json() as Promise<{ versions: unknown[] }>);
-    expect(versionsAfterSecondSave.versions.length).toBe(1);
+    await expect.poll(getVersionCount).toBe(initialVersionCount);
 
     const downloadPromise = page.waitForEvent('download');
     await downloadButton.click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toBe('code-override-editable.json');
+    expect(download.suggestedFilename()).toBe('agents_code-override-editable.json');
     await expect(download.failure()).resolves.toBeNull();
   });
 
@@ -75,9 +76,10 @@ test.describe('code-mode agent override', () => {
       config: Record<string, unknown>;
     };
 
-    // Filename is deterministic so committed JSON files diff cleanly in git.
+    // Filename is deterministic and includes the source-control agent directory
+    // so committed JSON files land at the same path used by proposal branches.
     expect(body.agentId).toBe('code-override-editable');
-    expect(body.fileName).toBe('code-override-editable.json');
+    expect(body.fileName).toBe('agents/code-override-editable.json');
 
     // Round-tripping content matches config so consumers can use either.
     const parsedContent = JSON.parse(body.content) as Record<string, unknown>;

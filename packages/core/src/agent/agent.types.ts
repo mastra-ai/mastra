@@ -1,4 +1,5 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
+import type { ActorSignal } from '../auth/ee';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
@@ -9,7 +10,7 @@ import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
+import type { RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
@@ -473,6 +474,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
 
+  /** Trusted server-side signal for this agent FGA check. */
+  actor?: ActorSignal;
+
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.
@@ -523,6 +527,8 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   toolsets?: ToolsetsInput;
   /** Client-side tools available during execution */
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
+  hooks?: ToolHooks;
   /** Tool selection strategy: 'auto', 'none', 'required', or specific tools */
   toolChoice?: ToolChoice<any>;
 

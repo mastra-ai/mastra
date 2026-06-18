@@ -1,11 +1,12 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-const { visibleWidthMock, chalkRgbMock } = vi.hoisted(() => ({
+const { visibleWidthMock, chalkRgbMock, applyGradientSweepMock } = vi.hoisted(() => ({
   visibleWidthMock: vi.fn((value: string) => value.length),
   chalkRgbMock: vi.fn(),
+  applyGradientSweepMock: vi.fn((value: string) => value),
 }));
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   visibleWidth: visibleWidthMock,
 }));
 
@@ -32,7 +33,7 @@ vi.mock('chalk', () => {
 });
 
 vi.mock('../components/obi-loader.js', () => ({
-  applyGradientSweep: (value: string) => value,
+  applyGradientSweep: applyGradientSweepMock,
 }));
 
 vi.mock('../components/om-progress.js', () => ({
@@ -61,6 +62,7 @@ vi.mock('../theme.js', () => ({
   getTermWidth: () => process.stdout.columns || 200,
 }));
 
+import { formatObservationStatus, formatReflectionStatus } from '../components/om-progress.js';
 import { updateStatusLine } from '../status-line.js';
 
 function createState() {
@@ -69,27 +71,44 @@ function createState() {
 
   return {
     options: {},
+    session: {
+      followUps: { count: vi.fn(() => 0) },
+      identity: { getResourceId: vi.fn(() => 'resource-1') },
+      thread: { getId: vi.fn(() => 'thread-1') },
+      mode: {
+        get: vi.fn(() => 'build'),
+        resolve: vi.fn(() => ({ id: 'build', name: 'build', metadata: { color: '#00ff00' } })),
+      },
+      state: { get: vi.fn(() => ({ yolo: false })) },
+    },
     harness: {
-      getDisplayState: vi.fn(() => ({
-        omProgress: { status: 'idle' },
-        bufferingMessages: false,
-        bufferingObservations: false,
-      })),
-      listModes: vi.fn(() => [{ id: 'build', name: 'build', color: '#00ff00' }]),
-      getCurrentMode: vi.fn(() => ({ id: 'build', name: 'build', color: '#00ff00' })),
-      getCurrentModeId: vi.fn(() => 'build'),
-      getCurrentThreadId: vi.fn(() => 'thread-1'),
-      getResourceId: vi.fn(() => 'resource-1'),
-      getState: vi.fn(() => ({ yolo: false })),
+      listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
       getObserverModelId: vi.fn(() => 'openai/gpt-4o'),
       getReflectorModelId: vi.fn(() => 'openai/gpt-4o-mini'),
       getFullModelId: vi.fn(() => 'anthropic/claude-sonnet-4-20250514'),
-      getFollowUpCount: vi.fn(() => 0),
+      session: {
+        displayState: {
+          get: vi.fn(() => ({
+            omProgress: { status: 'idle' },
+            bufferingMessages: false,
+            bufferingObservations: false,
+          })),
+        },
+        followUps: { count: vi.fn(() => 0) },
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: {
+          get: vi.fn(() => 'build'),
+          resolve: vi.fn(() => ({ id: 'build', name: 'build', metadata: { color: '#00ff00' } })),
+        },
+      },
     },
     statusLine: { setText },
     memoryStatusLine: { setText: memorySetText },
     editor: {},
     gradientAnimator: undefined,
+    githubPrGradientAnimator: undefined,
+    githubPrPollingActive: false,
     modelAuthStatus: { hasAuth: true, apiKeyEnvVar: undefined },
     projectInfo: {
       rootPath: '/Users/tylerbarnes/code/mastra-ai/mastra--feat-mc-queueing-ux',
@@ -108,6 +127,9 @@ describe('updateStatusLine', () => {
   beforeEach(() => {
     visibleWidthMock.mockClear();
     chalkRgbMock.mockClear();
+    vi.mocked(formatObservationStatus).mockReturnValue('');
+    vi.mocked(formatReflectionStatus).mockReturnValue('');
+    applyGradientSweepMock.mockClear();
     process.stdout.columns = 200;
   });
 
@@ -119,7 +141,7 @@ describe('updateStatusLine', () => {
   it('shows queued count in the status line', () => {
     const state = createState();
     state.pendingQueuedActions = ['message', 'slash'];
-    state.harness.getFollowUpCount.mockReturnValue(1);
+    state.session.followUps.count.mockReturnValue(1);
 
     updateStatusLine(state);
 
@@ -148,7 +170,6 @@ describe('updateStatusLine', () => {
         lastNotificationPriority: 'medium',
       },
     ];
-    state.options = { githubSignals: { isPollingThread: vi.fn(() => true) } };
 
     updateStatusLine(state);
 
@@ -156,6 +177,40 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('PR#17439');
     expect(rendered).not.toContain('polling');
     expect(rendered).not.toContain('updated');
+  });
+
+  it('does not animate the GitHub PR subscription during unrelated agent activity', () => {
+    const state = createState();
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
+    state.gradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.5),
+      getFadeProgress: vi.fn(() => 0),
+    };
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).not.toHaveBeenCalledWith(
+      'PR#17439',
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('animates the GitHub PR subscription while GitHub polling is running', () => {
+    const state = createState();
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
+    state.githubPrPollingActive = true;
+    state.githubPrGradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.5),
+      getFadeProgress: vi.fn(() => 0),
+    };
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('PR#17439', 0.5, '#0ea5e9', 0);
   });
 
   it('does not show GitHub PR status for unsubscribed threads', () => {
@@ -232,8 +287,8 @@ describe('updateStatusLine', () => {
   it('shows judge mode and judge model while goal judge is active', () => {
     const state = createState();
     state.harness.listModes.mockReturnValue([
-      { id: 'build', name: 'build', color: '#00ff00' },
-      { id: 'fast', name: 'Fast', color: '#f97316' },
+      { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
+      { id: 'fast', name: 'Fast', metadata: { color: '#f97316' } },
     ]);
     state.activeGoalJudge = { modelId: 'openrouter/openai/gpt-5.4-mini' };
 
@@ -245,6 +300,18 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('goal');
     expect(rendered).not.toContain('claude-sonnet-4-20250514');
     expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
+  });
+
+  it('uses abbreviated long branch before truncating path and dropping branch context', () => {
+    const state = createState();
+    state.projectInfo.gitBranch = 'feature/super-long-branch-name-for-status-footer-e2e-regression-shield-extra-long';
+    process.stdout.columns = 80;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('feature/supe..tra-long');
+    expect(rendered).not.toContain('mastra--feat-mc-queueing-ux…');
   });
 
   it('shows active goal duration instead of attempt count', () => {
@@ -316,5 +383,37 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('goal (2days3hr)');
     expect(rendered).not.toContain('pursuing goal');
     vi.useRealTimers();
+  });
+
+  it('keeps judge status ahead of OM and long model details on narrow screens', () => {
+    vi.mocked(formatObservationStatus).mockReturnValue('msg 100%');
+    vi.mocked(formatReflectionStatus).mockReturnValue('mem 100%');
+    const state = createState();
+    state.harness.session.displayState.get.mockReturnValue({
+      omProgress: { status: 'observing' },
+      bufferingMessages: true,
+      bufferingObservations: true,
+    });
+    state.activeGoalJudge = { modelId: 'openrouter/openai/gpt-5.4-mini' };
+    state.goalManager = {
+      getGoal: vi.fn(() => ({
+        status: 'active',
+        turnsUsed: 3,
+        maxTurns: 20,
+        startedAt: '2026-05-15T10:50:00.000Z',
+        activeDurationMs: 5 * 60_000,
+      })),
+    };
+    process.stdout.columns = 30;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('j');
+    expect(rendered).toContain('gpt-5.4-mini');
+    expect(rendered).not.toContain('observe');
+    expect(rendered).not.toContain('msg 100%');
+    expect(rendered).not.toContain('mem 100%');
+    expect(rendered).not.toContain('claude-sonnet-4-20250514');
   });
 });

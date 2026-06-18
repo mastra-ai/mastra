@@ -78,6 +78,7 @@ export class CompositeAuth
     if (!providers.some(isUserProvider)) {
       this.getCurrentUser = undefined as any;
       this.getUser = undefined as any;
+      this.getUsers = undefined as any;
     }
   }
 
@@ -178,7 +179,7 @@ export class CompositeAuth
     }
   }
 
-  getLoginUrl(redirectUri: string, state: string): string {
+  getLoginUrl(redirectUri: string, state: string): string | Promise<string> {
     const sso = this.findProvider(isSSOProvider);
     if (!sso) throw new Error('No SSO provider configured in CompositeAuth');
     return sso.getLoginUrl(redirectUri, state);
@@ -341,5 +342,16 @@ export class CompositeAuth
       }
     }
     return null;
+  }
+
+  /**
+   * Resolve multiple users by ID in one call. For each input ID, walks the
+   * providers in order and returns the first non-null match — preserving the
+   * existing "try each provider until one responds" semantics of `getUser`.
+   * Returns positionally-aligned results, with `null` for any ID no provider
+   * could resolve. Per-id lookups are performed in parallel.
+   */
+  async getUsers(userIds: string[]): Promise<Array<User | null>> {
+    return Promise.all(userIds.map(id => this.getUser(id)));
   }
 }
