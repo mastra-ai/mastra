@@ -19,20 +19,26 @@ For a conceptual introduction, see the [Harness overview](/docs/harness/overview
 
 ## Usage example
 
-```typescript
+```typescript title="src/mastra/harness.ts"
 import { Harness } from '@mastra/core/harness'
 import { LibSQLStore } from '@mastra/libsql'
 import { z } from 'zod'
 
 const harness = new Harness({
   id: 'my-coding-agent',
+  agent: myAgent,
   storage: new LibSQLStore({ url: 'file:./data.db' }),
   stateSchema: z.object({
     currentModelId: z.string().optional(),
   }),
   modes: [
-    { id: 'plan', name: 'Plan', default: true, agent: planAgent },
-    { id: 'build', name: 'Build', agent: buildAgent },
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      instructions: 'Reason about changes before making them.',
+    },
+    { id: 'build', name: 'Build', transitionsTo: 'plan' },
   ],
 })
 
@@ -93,7 +99,7 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'modes',
     type: 'HarnessMode[]',
     description:
-      'Available agent modes. At least one mode is required. Each mode defines an agent and optional defaults.',
+      'Available agent modes. At least one mode is required. When a top-level `agent` is provided, each mode layers its own instructions and tool overrides on top of the shared agent.',
     properties: [
       {
         type: 'HarnessMode',
@@ -400,6 +406,12 @@ await harness.sendMessage({ content: 'Hello!' })
     type: 'string',
     description: 'Harness identifier, set at construction.',
   },
+  {
+    name: 'session',
+    type: 'Session',
+    description:
+      'The per-conversation session object. Owns runtime state such as session-scoped permission grants, token usage, the active mode/model, follow-up queue, tool-approval gate, and the live agent stream subscription. Access session-level APIs through `harness.session` — for example, `harness.session.respondToToolApproval()` and `harness.session.getGrants()`.',
+  },
 ]}
 />
 
@@ -429,6 +441,46 @@ Stop all heartbeat handlers and clean up resources.
 
 ```typescript
 await harness.destroy()
+```
+
+#### `removeHeartbeat({ id })`
+
+Remove a specific heartbeat handler by ID. Calls the handler's `shutdown()` callback if defined.
+
+```typescript
+await harness.removeHeartbeat({ id: 'gateway-sync' })
+```
+
+#### `stopHeartbeats()`
+
+Stop and remove all heartbeat handlers.
+
+```typescript
+await harness.stopHeartbeats()
+```
+
+#### `getCurrentAgent()`
+
+Return the fully-configured Agent for the current mode with runtime services (storage, memory, workspace, pubsub, telemetry) propagated.
+
+```typescript
+const agent = harness.getCurrentAgent()
+```
+
+#### `getResolvedMemory()`
+
+Return the resolved memory instance, or `null` if no memory is configured.
+
+```typescript
+const memory = await harness.getResolvedMemory()
+```
+
+#### `getMastra()`
+
+Return the internal `Mastra` instance, or `undefined` before `init()`. Useful for scorer registration, observability access, and eval tooling.
+
+```typescript
+const mastra = harness.getMastra()
 ```
 
 ### State
@@ -651,6 +703,14 @@ Set the resource ID and clear the current thread.
 harness.setResourceId({ resourceId: 'project-xyz' })
 ```
 
+#### `getKnownResourceIds()`
+
+Return the distinct resource IDs that have threads in storage.
+
+```typescript
+const resourceIds = await harness.getKnownResourceIds()
+```
+
 #### `getSession()`
 
 Return current session information including thread ID, mode ID, and the list of threads.
@@ -737,13 +797,16 @@ harness.followUp({ content: 'Now apply those changes' })
 
 ### Tool approvals
 
-#### `respondToToolApproval({ decision, requestContext? })`
+#### `session.respondToToolApproval({ decision, requestContext? })`
 
-Respond to a pending tool approval request. Called when a `tool_approval_required` event is received.
+Respond to a pending tool approval request. Called when a `tool_approval_required` event is received. Accepts `'approve'`, `'decline'`, or `'always_allow_category'`. When `always_allow_category` is used, the tool's category is granted for the rest of the session — future tools in the same category are auto-approved without prompting.
 
 ```typescript
-harness.respondToToolApproval({ decision: 'approve' })
-harness.respondToToolApproval({ decision: 'decline' })
+harness.session.respondToToolApproval({ decision: 'approve' })
+harness.session.respondToToolApproval({ decision: 'decline' })
+
+// Grant the tool's entire category for this session
+harness.session.respondToToolApproval({ decision: 'always_allow_category' })
 ```
 
 ### Tool suspensions and plans
@@ -795,29 +858,31 @@ harness.respondToToolSuspension({
 
 ### Permissions
 
-#### `grantSessionCategory({ category })`
+Permission grants live on the `session` object. They control which tools and categories are auto-approved for the current session.
+
+#### `session.grantCategory(category)`
 
 Grant a tool category for the current session. Tools in this category are auto-approved without prompting.
 
 ```typescript
-harness.grantSessionCategory({ category: 'edit' })
+harness.session.grantCategory('edit')
 ```
 
-#### `grantSessionTool({ toolName })`
+#### `session.grantTool(toolName)`
 
 Grant a specific tool for the current session.
 
 ```typescript
-harness.grantSessionTool({ toolName: 'mastra_workspace_execute_command' })
+harness.session.grantTool('mastra_workspace_execute_command')
 ```
 
-#### `getSessionGrants()`
+#### `session.getGrants()`
 
 Return currently granted session categories and tools.
 
 ```typescript
-const grants = harness.getSessionGrants()
-// { categories: Set<string>, tools: Set<string> }
+const grants = harness.session.getGrants()
+// { categories: ['edit'], tools: ['mastra_workspace_execute_command'] }
 ```
 
 #### `setPermissionForCategory({ category, policy })`
@@ -1127,6 +1192,9 @@ The harness emits events through registered listeners. The following table lists
 | `subagent_end` | A subagent finished processing. |
 | `subagent_model_changed` | A subagent's model changed. |
 | `task_updated` | A task list was updated. |
+| `goal_evaluation` | A goal evaluation completed (when native agent goals are configured). |
+| `shell_output` | A tool emitted shell output (stdout or stderr). |
+| `display_state_changed` | The canonical `HarnessDisplayState` snapshot changed. Use [`subscribeDisplayState`](#subscribedisplaystatelistener-options) to receive coalesced snapshots. |
 
 ## Built-in tools
 

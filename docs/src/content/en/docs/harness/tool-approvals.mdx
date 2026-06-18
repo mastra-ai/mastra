@@ -53,31 +53,37 @@ Built-in categories are `read`, `edit`, `execute`, `mcp`, and `other`.
 
 ## Responding to approval requests
 
-When a tool's policy is `ask`, the harness emits a `tool_approval_required` event. Your UI should display a prompt and call `respondToToolApproval`:
+When a tool's policy is `ask`, the harness emits a `tool_approval_required` event. Your UI should display a prompt and call `session.respondToToolApproval`:
 
 ```typescript
 harness.subscribe(event => {
   if (event.type === 'tool_approval_required') {
     // Show approval UI...
-    harness.respondToToolApproval({ decision: 'approve' })
+    harness.session.respondToToolApproval({ decision: 'approve' })
   }
 })
 ```
 
+The `decision` field accepts `'approve'`, `'decline'`, or `'always_allow_category'`. When `always_allow_category` is used, the tool's category is granted for the rest of the session — future tools in the same category are auto-approved:
+
+```typescript
+harness.session.respondToToolApproval({ decision: 'always_allow_category' })
+```
+
 ## Session grants
 
-Grant a category or tool for the rest of the session so it runs without further prompting:
+Permission grants live on the `session` object. Grant a category or tool for the rest of the session so it runs without further prompting:
 
 ```typescript
 // Grant all edit tools for this session
-harness.grantSessionCategory({ category: 'edit' })
+harness.session.grantCategory('edit')
 
 // Grant a specific tool
-harness.grantSessionTool({ toolName: 'mastra_workspace_execute_command' })
+harness.session.grantTool('mastra_workspace_execute_command')
 
 // Check current grants
-const grants = harness.getSessionGrants()
-// { categories: Set<string>, tools: Set<string> }
+const grants = harness.session.getGrants()
+// { categories: ['edit'], tools: ['mastra_workspace_execute_command'] }
 ```
 
 ## Tool suspensions

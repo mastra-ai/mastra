@@ -7,7 +7,7 @@ packages:
 
 # Modes
 
-Modes define the different personalities or capability sets available within a Harness. Each mode has its own agent (or agent factory), optional tool overrides, and metadata. The Harness ensures only one mode is active at a time and handles transitions between them.
+Modes define the different personalities or capability sets available within a Harness. Each mode layers its own instructions and tool overrides on top of a shared backing agent. The Harness ensures only one mode is active at a time and handles transitions between them.
 
 ## When to use modes
 
@@ -17,13 +17,19 @@ Use modes when a single conversational session needs to switch between distinct 
 
 ```typescript title="src/mastra/harness.ts"
 import { Harness } from '@mastra/core/harness'
-import { planAgent, buildAgent } from './agents'
+import { myAgent } from './agents'
 
 const harness = new Harness({
   id: 'multi-mode',
+  agent: myAgent,
   modes: [
-    { id: 'plan', name: 'Plan', metadata: { default: true }, agent: planAgent },
-    { id: 'build', name: 'Build', agent: buildAgent },
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      instructions: 'Reason about the task before making changes.',
+    },
+    { id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
   ],
 })
 
@@ -32,26 +38,27 @@ await harness.init()
 
 ## Defining modes
 
-Each mode requires an `id` and an `agent`. The agent can be a static `Agent` instance or a factory function that receives the current harness state:
+Each mode requires an `id`. When a top-level `agent` is provided, modes layer instructions and tool overrides on the shared agent. Each mode can also specify a `defaultModelId` to bootstrap model selection:
 
 ```typescript title="src/mastra/harness.ts"
 import { Harness } from '@mastra/core/harness'
 
 const harness = new Harness({
-  id: 'dynamic-modes',
+  id: 'multi-mode',
+  agent: myAgent,
   modes: [
     {
       id: 'plan',
       name: 'Plan',
       metadata: { default: true },
       defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-      agent: planAgent,
+      instructions: 'Reason about the task before making changes.',
     },
     {
       id: 'build',
       name: 'Build',
       defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-      agent: buildAgent,
+      instructions: 'Implement the approved plan.',
     },
   ],
 })
@@ -63,10 +70,10 @@ Modes support two strategies for tool configuration. Use `tools` to replace the 
 
 ```typescript
 // Replace — agent sees only these tools in plan mode
-const planMode = { id: 'plan', agent: baseAgent, tools: { planTool } }
+const planMode = { id: 'plan', tools: { planTool } }
 
 // Augment — agent keeps its own tools plus these
-const buildMode = { id: 'build', agent: baseAgent, additionalTools: { deployTool } }
+const buildMode = { id: 'build', additionalTools: { deployTool } }
 ```
 
 You cannot set both `tools` and `additionalTools` on the same mode.
@@ -80,7 +87,7 @@ const planMode = {
   id: 'plan',
   name: 'Plan',
   transitionsTo: 'build',
-  agent: planAgent,
+  instructions: 'Reason about the task and submit a plan.',
 }
 ```
 

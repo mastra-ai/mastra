@@ -15,6 +15,8 @@ The `Harness` class is in alpha and subject to breaking changes in minor version
 
 The Harness is a session controller for building interactive agent applications. It handles the runtime concerns that sit between your UI and the agent loop: managing conversation threads, switching between agent modes, persisting state, gating tool execution with approvals, and coordinating subagents — so you can focus on what your agent does rather than how to wire it together.
 
+Each Harness manages a `Session` — the per-conversation runtime state that tracks the active mode, model, thread binding, permission grants, follow-up queue, and token usage. In a multi-user host one Harness can serve many sessions.
+
 [Mastra Code](https://code.mastra.ai/) is the flagship Harness implementation — a terminal-based coding agent with multi-model support, persistent conversations, and plan-then-execute workflows.
 
 ## What you can build
@@ -47,7 +49,8 @@ For single-shot agent calls or simple request-response patterns, use the [Agent 
 - **Subagents**: Spawn focused child agents with constrained tools for subtasks, optionally forking the parent conversation. See [Subagents](/docs/harness/subagents).
 - **Tool approvals and permissions**: Configure which tools require user confirmation, grant session-wide exceptions, and handle interactive tool suspension. See [Tool approvals](/docs/harness/tool-approvals).
 - **Model management**: Switch models per-mode at runtime, track usage, and resolve gateway-backed models.
-- **Event system**: Subscribe to typed events (message updates, mode changes, tool approvals) to drive your UI.
+- **Follow-ups and steering**: Queue messages while the agent is running, or inject mid-stream instructions to redirect the agent.
+- **Event system**: Subscribe to typed events (message updates, mode changes, tool approvals) or coalesced `HarnessDisplayState` snapshots to drive your UI.
 - **Observational memory**: Automatic summarization and reflection across threads for long-running agent sessions.
 
 ## Quickstart
@@ -58,10 +61,16 @@ import { LibSQLStore } from '@mastra/libsql'
 
 const harness = new Harness({
   id: 'my-agent',
+  agent: myAgent,
   storage: new LibSQLStore({ url: 'file:./data.db' }),
   modes: [
-    { id: 'plan', name: 'Plan', metadata: { default: true }, agent: planAgent },
-    { id: 'build', name: 'Build', agent: buildAgent },
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      instructions: 'Reason about changes before making them.',
+    },
+    { id: 'build', name: 'Build' },
   ],
 })
 
@@ -102,6 +111,7 @@ The Harness sits between your application layer and the underlying agent loop:
 │  │ Modes & Model Mgmt  │ │
 │  │ Threads & State     │ │
 │  │ Permissions & Grants│ │
+│  │ Session State       │ │
 │  │ Subagent Spawning   │ │
 │  │ Event Bus           │ │
 │  └─────────────────────┘ │
