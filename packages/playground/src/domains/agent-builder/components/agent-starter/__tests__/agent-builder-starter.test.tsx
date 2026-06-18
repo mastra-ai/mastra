@@ -64,8 +64,6 @@ describe('AgentBuilderStarter', () => {
         HttpResponse.json({ enabled: true, modelPolicy: { active: false } }),
       ),
       http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
-      // Auth enabled by default — the `user` request-context schema only makes
-      // sense when an authenticated user is populated.
       http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, login: null })),
     );
   });
@@ -121,10 +119,6 @@ describe('AgentBuilderStarter', () => {
     expect(capturedBody.instructions).toBe('');
     expect(capturedBody.model).toEqual({ provider: 'google', name: 'gemini-2.5-flash' });
     expect(capturedBody.visibility).toBe('private');
-    // When auth is enabled, the builder agent is born with a `user` request-context
-    // variable matching the authenticated user shape. The constant is asserted by
-    // reference so any shape drift in the source-of-truth constant is caught by its
-    // own test, not here.
     expect(capturedBody.requestContextSchema).toEqual(DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA);
 
     await waitFor(() => expect(navigateMock).toHaveBeenCalledTimes(1));
@@ -137,8 +131,6 @@ describe('AgentBuilderStarter', () => {
   });
 
   it('omits the request-context schema when auth is disabled', async () => {
-    // With auth off there is no authenticated `user`, so attaching a schema that
-    // requires one would make every created agent fail request-context validation.
     server.use(
       http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
     );

@@ -47,10 +47,6 @@ export const AgentBuilderStarter = () => {
         skills: {},
         visibility: defaultVisibility,
         model: resolveStarterModel(allowedModels, modelPolicy),
-        // The default schema requires a `user` request-context variable, which
-        // is only populated when auth is enabled. Skip it when auth is off so
-        // the created agent doesn't fail validation on a `user` that can never
-        // be provided.
         ...(authCapabilities?.enabled ? { requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } : {}),
       });
 
