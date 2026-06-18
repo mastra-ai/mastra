@@ -4,6 +4,7 @@
 import { Container, Text } from '@earendil-works/pi-tui';
 
 import { parseError } from '../utils/errors.js';
+import { readHarnessState } from '../utils/harness-state.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
@@ -98,7 +99,7 @@ function getErrorHint(errorType: string): string | null {
 }
 
 export function notify(state: TUIState, reason: NotificationReason, message?: string): void {
-  const mode = ((state.harness.session.state.get() as any)?.notifications ?? 'off') as NotificationMode;
+  const mode = ((readHarnessState(state.harness) as any)?.notifications ?? 'off') as NotificationMode;
   sendNotification(reason, {
     mode,
     message,

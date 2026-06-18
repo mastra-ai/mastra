@@ -8,6 +8,7 @@ import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-t
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import type { HarnessEventListener } from '@mastra/core/harness';
 
+import { readHarnessState, writeHarnessState } from '../utils/harness-state.js';
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
@@ -161,8 +162,8 @@ export function setupKeyboardShortcuts(
 
   // Ctrl+Y - toggle YOLO mode
   state.editor.onAction('toggleYolo', () => {
-    const current = (state.harness.session.state.get() as any).yolo === true;
-    state.harness.session.state.set({ yolo: !current } as any);
+    const current = (readHarnessState(state.harness) as any)?.yolo === true;
+    void writeHarnessState(state.harness, { yolo: !current } as any);
     showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
   });
 
@@ -438,7 +439,7 @@ export function setupAutocomplete(state: TUIState): void {
 
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
-    const configDir = state.harness.session.state.get().configDir;
+    const configDir = (readHarnessState(state.harness) as { configDir?: string } | undefined)?.configDir;
     // Load from all sources (global and local)
     const globalCommands = await loadCustomCommands(undefined, configDir);
     const localCommands = await loadCustomCommands(process.cwd(), configDir);

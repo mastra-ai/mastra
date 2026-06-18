@@ -3,6 +3,7 @@ import type { SelectItem } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 
 import { setClipboardText } from '../../clipboard/index.js';
+import { readHarnessState, writeHarnessState } from '../../utils/harness-state.js';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '../../onboarding/packs.js';
 import { getAvailableModePacks } from '../../onboarding/packs.js';
 import {
@@ -421,9 +422,9 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
   s.models.subagentModels = {};
 
   const hasOpenAI = Object.values(pack.models).some(m => m.startsWith('openai/'));
-  const currentThinking = ((harness.session.state.get() as any)?.thinkingLevel ?? 'off') as string;
+  const currentThinking = ((readHarnessState(harness) as any)?.thinkingLevel ?? 'off') as string;
   if (hasOpenAI && currentThinking === 'off') {
-    await harness.session.state.set({ thinkingLevel: 'low' } as any);
+    await writeHarnessState(harness, { thinkingLevel: 'low' } as any);
     s.preferences.thinkingLevel = 'low';
   }
 

@@ -11,6 +11,7 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
+import { writeHarnessState } from '../../utils/harness-state.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -25,7 +26,7 @@ import { getMarkdownTheme } from '../theme.js';
 import type { EventHandlerContext } from './types.js';
 
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
-  const color = ctx.state.harness.session.mode.resolve().metadata?.color;
+  const color = ctx.state.harness.session?.mode?.resolve?.()?.metadata?.color;
   return typeof color === 'string' ? color : undefined;
 }
 
@@ -149,7 +150,7 @@ export function handleToolApprovalRequired(
       } else if (action.type === 'always_allow_category') {
         state.harness.session.respondToToolApproval({ decision: 'always_allow_category' });
       } else if (action.type === 'yolo') {
-        state.harness.session.state.set({ yolo: true } as any);
+        void writeHarnessState(state.harness, { yolo: true } as any);
         state.harness.session.respondToToolApproval({ decision: 'approve' });
       } else {
         state.harness.session.respondToToolApproval({ decision: 'decline' });

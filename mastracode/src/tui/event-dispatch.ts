@@ -4,6 +4,7 @@
 import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
+import { readHarnessState, writeHarnessState } from '../utils/harness-state.js';
 import { getCurrentGitBranchAsync } from '../utils/project.js';
 import {
   handleAgentStart,
@@ -147,7 +148,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
-      await state.harness.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      await writeHarnessState(state.harness, { tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
@@ -200,12 +201,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.goalManager?.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
       }
       // Sync inherited resource-level settings
-      const tState = state.harness.session.state.get() as any;
+      const tState = readHarnessState(state.harness) as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
       // Clear per-thread ephemeral state so new threads start clean.
-      await state.harness.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      await writeHarnessState(state.harness, { tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }

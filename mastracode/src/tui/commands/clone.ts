@@ -1,3 +1,4 @@
+import { writeHarnessState } from '../../utils/harness-state.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { TUIState } from '../state.js';
 import type { SlashCommandContext } from './types.js';
@@ -53,7 +54,7 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   state.allShellComponents = [];
   state.harness.getDisplayState().modifiedFiles.clear();
   // Clear per-thread ephemeral state from the global harness state
-  await state.harness.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+  await writeHarnessState(state.harness, { tasks: [], activePlan: null, sandboxAllowedPaths: [] });
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }

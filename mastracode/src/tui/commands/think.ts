@@ -3,6 +3,7 @@ import type { SelectItem } from '@earendil-works/pi-tui';
 
 import type { ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
+import { readHarnessState, writeHarnessState } from '../../utils/harness-state.js';
 import {
   THINKING_LEVELS,
   getThinkingLevelForModel,
@@ -42,7 +43,7 @@ function getModelNote(ctx: SlashCommandContext): string | null {
 }
 
 export async function handleThinkCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
-  const currentLevel = ((ctx.harness.session.state.get() as any)?.thinkingLevel ?? 'off') as string;
+  const currentLevel = ((readHarnessState(ctx.harness) as any)?.thinkingLevel ?? 'off') as string;
   const modelId = ctx.state.harness.session.model.get() ?? '';
   const thinkingLevels = getThinkingLevelsForModel(modelId);
   const arg = args[0]?.toLowerCase();
@@ -62,7 +63,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
       return;
     }
     const note = getModelNote(ctx);
-    await ctx.harness.session.state.set({ thinkingLevel: selected.id } as any);
+    await writeHarnessState(ctx.harness, { thinkingLevel: selected.id } as any);
     persistGlobalThinkingLevel(selected.id);
     ctx.showInfo(getThinkingStatusLine(modelId, selected.id) + (note ? ` (${note})` : ''));
     return;
@@ -96,7 +97,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
       }
 
       try {
-        await ctx.harness.session.state.set({ thinkingLevel: selectedLevel } as any);
+        await writeHarnessState(ctx.harness, { thinkingLevel: selectedLevel } as any);
         persistGlobalThinkingLevel(selectedLevel);
         const selectedLabel = getThinkingLevelForModel(modelId, selectedLevel).label;
         ctx.showInfo(`Thinking → ${selectedLevel === currentLevel ? `${selectedLabel} (unchanged)` : selectedLabel}`);
