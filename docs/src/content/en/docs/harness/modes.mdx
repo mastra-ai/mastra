@@ -7,11 +7,17 @@ packages:
 
 # Modes
 
-Modes define the different personalities or capability sets available within a Harness. Each mode layers its own instructions and tool overrides on top of a shared backing agent. The Harness ensures only one mode is active at a time and handles transitions between them.
+Modes define the different behaviors a Harness can run. Each mode layers its own instructions and tool overrides on top of a shared backing agent, so the same agent can act as a planner in one mode and an executor in another. The Harness keeps exactly one mode active at a time, carries the thread and state across switches, and handles the transition between them.
 
-## When to use modes
+Every Harness needs at least one mode — the `modes` array is required, and the Harness throws at construction if it's empty. A single-purpose Harness still defines one mode; multiple modes are how you give a session more than one behavior to switch between.
 
-Use modes when a single conversational session needs to switch between distinct behaviors. For example, a planning mode that reasons about tasks and a build mode that executes them. Modes share the same thread and state, so the agent retains context across switches.
+A mode supplies three things that change how the agent behaves:
+
+- **Instructions**: layered on top of the backing agent's own instructions while the mode is active.
+- **Tools**: either replacing or adding to the backing agent's tools (see [Mode tool overrides](#mode-tool-overrides)).
+- **Model**: an optional `defaultModelId` to bootstrap model selection when the session enters the mode.
+
+Because every mode shares the same backing agent, thread, and state, switching modes changes how the agent behaves without losing conversation context.
 
 ## Quickstart
 
@@ -106,6 +112,8 @@ await harness.switchMode({ modeId: 'build' })
 ```
 
 ## Querying modes
+
+The Harness exposes the full mode catalog, while the Session tracks which mode is active. Use `harness.listModes()` to read every configured mode, `harness.session.mode.get()` for the active mode ID, and `harness.session.mode.resolve()` for the active mode's full definition:
 
 ```typescript
 // List all configured modes
