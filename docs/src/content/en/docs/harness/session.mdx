@@ -1,6 +1,6 @@
 ---
 title: "Session | Harness"
-description: "Understand the Session — the per-conversation state object on a Harness — and how it divides responsibility with the shared host."
+description: "Understand the Session — the per-conversation state object on a Harness — and the identity, thread, mode, grants, run, and display state it tracks."
 packages:
   - "@mastra/core"
 ---
@@ -14,6 +14,15 @@ A [`Session`](/reference/harness/session) holds the per-conversation state of a 
 The Session is the live state of one conversation. It answers "what is true about this conversation right now": who the conversation belongs to, which thread is bound, which mode and model are selected, what the user has approved, what's queued or running, the application state, and the snapshot to render. Anything that describes the current conversation lives here; the Harness owns the shared infrastructure that every conversation runs on.
 
 Because the Session is scoped to a single conversation, one Harness can serve many conversations at once — each backed by its own Session — without one conversation's mode, grants, or active thread leaking into another.
+
+The rest of this page walks through the Session's state in the order a conversation builds it up. Each part is a focused sub-object on `harness.session`:
+
+- **Where the conversation lives**: [Identity](#identity) sets the resource the conversation belongs to, and [Thread](#thread) binds it to a specific conversation thread.
+- **How the agent behaves**: [Mode and model](#mode-and-model) controls which agent profile and model are active, and [Permission grants](#permission-grants) records what the user has approved to run without prompting.
+- **What's happening right now**: [Run state](#run-state) reflects the in-flight generation, and [Follow-ups](#follow-ups) holds messages queued to send when it finishes.
+- **What you store and render**: [State](#state) holds your application's structured data, and [Display state](#display-state) is the single snapshot your UI renders from.
+
+The Harness performs actions that change this state — switching threads, modes, or models — because those operations coordinate shared infrastructure and emit events. The Session is where you read the result. The sections below note this split where it matters.
 
 ## Identity
 
@@ -87,11 +96,13 @@ harness.abort()
 
 ## Follow-ups
 
-While a run is in progress, queued follow-up messages live on `session.followUps`. They are sent when the current run finishes:
+A user may want to add to the conversation while the agent is still working. Instead of dropping or interrupting those messages, the Session queues them on `session.followUps` and sends them when the current run finishes:
 
 ```typescript
 const queued = harness.session.followUps.count()
 ```
+
+Queue a follow-up with `harness.followUp({ content })`. To redirect the agent mid-run instead of waiting, use `harness.steer({ content })`. Both build on [signals](/docs/agents/signals).
 
 ## State
 
