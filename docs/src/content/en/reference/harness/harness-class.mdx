@@ -683,7 +683,7 @@ harness.followUp({ content: 'Now apply those changes' })
 
 ### Tool approvals
 
-Responding to a pending tool approval is owned by the session — see [`session.respondToToolApproval()`](/reference/harness/session#tool-approvals). The harness owns the permission *policy* that decides when approval is required, documented under [Permissions](#permissions) below.
+Responding to a pending tool approval is owned by the session — see [`session.respondToToolApproval()`](/reference/harness/session#tool-approvals). The harness owns the permission _policy_ that decides when approval is required, documented under [Permissions](#permissions) below.
 
 ### Tool suspensions and plans
 
@@ -734,7 +734,7 @@ harness.respondToToolSuspension({
 
 ### Permissions
 
-The harness owns the permission *policy* — the rules that decide when a tool requires approval. Session-scoped *grants* (which tools and categories are auto-approved for the current conversation) live on the session: see [`session.grantCategory()`](/reference/harness/session#permissions), [`session.grantTool()`](/reference/harness/session#permissions), and [`session.getGrants()`](/reference/harness/session#permissions).
+The harness owns the permission _policy_ — the rules that decide when a tool requires approval. Session-scoped _grants_ (which tools and categories are auto-approved for the current conversation) live on the session: see [`session.grantCategory()`](/reference/harness/session#permissions), [`session.grantTool()`](/reference/harness/session#permissions), and [`session.getGrants()`](/reference/harness/session#permissions).
 
 #### `setPermissionForCategory({ category, policy })`
 

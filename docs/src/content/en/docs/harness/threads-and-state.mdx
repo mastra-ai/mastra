@@ -9,7 +9,7 @@ packages:
 
 The Harness manages conversation threads and shared state that persist across mode switches, model changes, and sessions. Threads hold messages while state holds structured data that agents and the UI can read and write.
 
-Thread *lifecycle* transitions (create, switch, clone, delete) live on the Harness because they coordinate the shared thread lock and emit events. The active thread binding and thread/message *reads* live on the [`Session`](/docs/harness/session) as `harness.session.thread`.
+Thread _lifecycle_ transitions (create, switch, clone, delete) live on the Harness because they coordinate the shared thread lock and emit events. The active thread binding and thread/message _reads_ live on the [`Session`](/docs/harness/session) as `harness.session.thread`.
 
 ## When to use threads and state
 

@@ -42,62 +42,62 @@ The session is organized into sub-objects, each owning one domain of per-convers
 
 <PropertiesTable
   content={[
-    {
-      name: 'identity',
-      type: 'SessionIdentity',
-      description: 'Resource identity for the conversation. See identity methods below.',
-    },
-    {
-      name: 'thread',
-      type: 'SessionThread',
-      description: 'Active thread binding and thread/message reads. See thread methods below.',
-    },
-    {
-      name: 'mode',
-      type: 'SessionMode',
-      description: 'Active mode selection. See mode methods below.',
-    },
-    {
-      name: 'model',
-      type: 'SessionModel',
-      description: 'Active model selection, including per-mode persistence. See model methods below.',
-    },
-    {
-      name: 'run',
-      type: 'SessionRun',
-      description: 'Run and trace identity plus abort state for the in-flight run. See run methods below.',
-    },
-    {
-      name: 'stream',
-      type: 'SessionStream',
-      description: 'The live subscription to the agent thread stream. See stream methods below.',
-    },
-    {
-      name: 'suspensions',
-      type: 'SessionSuspensions',
-      description: 'Parked interactive tool calls awaiting a resume. See suspensions methods below.',
-    },
-    {
-      name: 'followUps',
-      type: 'SessionFollowUps',
-      description: 'Queue of messages submitted while a run is in progress. See follow-up methods below.',
-    },
-    {
-      name: 'approval',
-      type: 'SessionApproval',
-      description: 'The pending tool-approval gate. See approval methods below.',
-    },
-    {
-      name: 'displayState',
-      type: 'SessionDisplayState',
-      description: 'The canonical HarnessDisplayState snapshot a UI renders from. See display-state methods below.',
-    },
-    {
-      name: 'state',
-      type: 'SessionState<TState>',
-      description: 'The schema-validated, session-owned Harness state. See state methods below.',
-    },
-  ]}
+  {
+    name: 'identity',
+    type: 'SessionIdentity',
+    description: 'Resource identity for the conversation. See identity methods below.',
+  },
+  {
+    name: 'thread',
+    type: 'SessionThread',
+    description: 'Active thread binding and thread/message reads. See thread methods below.',
+  },
+  {
+    name: 'mode',
+    type: 'SessionMode',
+    description: 'Active mode selection. See mode methods below.',
+  },
+  {
+    name: 'model',
+    type: 'SessionModel',
+    description: 'Active model selection, including per-mode persistence. See model methods below.',
+  },
+  {
+    name: 'run',
+    type: 'SessionRun',
+    description: 'Run and trace identity plus abort state for the in-flight run. See run methods below.',
+  },
+  {
+    name: 'stream',
+    type: 'SessionStream',
+    description: 'The live subscription to the agent thread stream. See stream methods below.',
+  },
+  {
+    name: 'suspensions',
+    type: 'SessionSuspensions',
+    description: 'Parked interactive tool calls awaiting a resume. See suspensions methods below.',
+  },
+  {
+    name: 'followUps',
+    type: 'SessionFollowUps',
+    description: 'Queue of messages submitted while a run is in progress. See follow-up methods below.',
+  },
+  {
+    name: 'approval',
+    type: 'SessionApproval',
+    description: 'The pending tool-approval gate. See approval methods below.',
+  },
+  {
+    name: 'displayState',
+    type: 'SessionDisplayState',
+    description: 'The canonical HarnessDisplayState snapshot a UI renders from. See display-state methods below.',
+  },
+  {
+    name: 'state',
+    type: 'SessionState<TState>',
+    description: 'The schema-validated, session-owned Harness state. See state methods below.',
+  },
+]}
 />
 
 ## Methods
@@ -176,7 +176,7 @@ const usage = harness.session.getTokenUsage()
 
 `session.identity` owns the resource ID for the conversation.
 
-#### `session.identity.getResourceId()`
+### `session.identity.getResourceId()`
 
 Return the current resource ID.
 
@@ -184,7 +184,7 @@ Return the current resource ID.
 const resourceId = harness.session.identity.getResourceId()
 ```
 
-#### `session.identity.getDefaultResourceId()`
+### `session.identity.getDefaultResourceId()`
 
 Return the resource ID the session was created with.
 
@@ -198,7 +198,7 @@ To change the resource ID, use [`harness.setResourceId()`](/reference/harness/ha
 
 `session.thread` owns the active thread binding plus thread and message reads. Thread lifecycle (create, switch, clone, delete, rename) lives on the [`Harness`](/reference/harness/harness-class) because it coordinates the shared thread lock and event bus.
 
-#### `session.thread.getId()`
+### `session.thread.getId()`
 
 Return the active thread ID, or `null` when no thread is bound.
 
@@ -206,7 +206,7 @@ Return the active thread ID, or `null` when no thread is bound.
 const threadId = harness.session.thread.getId()
 ```
 
-#### `session.thread.list(options?)`
+### `session.thread.list(options?)`
 
 List threads from storage. By default only threads for the current resource are returned, and transient forked subagent threads are hidden.
 
@@ -216,7 +216,7 @@ const allThreads = await harness.session.thread.list({ allResources: true })
 const everything = await harness.session.thread.list({ includeForkedSubagents: true })
 ```
 
-#### `session.thread.getById({ threadId })`
+### `session.thread.getById({ threadId })`
 
 Return a single thread by ID, or `null` if it doesn't exist.
 
@@ -224,7 +224,7 @@ Return a single thread by ID, or `null` if it doesn't exist.
 const thread = await harness.session.thread.getById({ threadId: 'thread-abc123' })
 ```
 
-#### `session.thread.listActiveMessages(options?)`
+### `session.thread.listActiveMessages(options?)`
 
 Retrieve messages for the active thread. Returns an empty array when no thread is bound.
 
@@ -232,7 +232,7 @@ Retrieve messages for the active thread. Returns an empty array when no thread i
 const messages = await harness.session.thread.listActiveMessages({ limit: 50 })
 ```
 
-#### `session.thread.listMessages({ threadId, limit? })`
+### `session.thread.listMessages({ threadId, limit? })`
 
 Retrieve messages for a specific thread.
 
@@ -240,7 +240,7 @@ Retrieve messages for a specific thread.
 const messages = await harness.session.thread.listMessages({ threadId: 'thread-abc123' })
 ```
 
-#### `session.thread.firstUserMessage({ threadId })`
+### `session.thread.firstUserMessage({ threadId })`
 
 Retrieve the first user message for a thread, or `null` if none.
 
@@ -248,7 +248,7 @@ Retrieve the first user message for a thread, or `null` if none.
 const firstMsg = await harness.session.thread.firstUserMessage({ threadId: 'thread-abc123' })
 ```
 
-#### `session.thread.firstUserMessages({ threadIds })`
+### `session.thread.firstUserMessages({ threadIds })`
 
 Retrieve the first user message for many threads at once, returned as a map.
 
@@ -258,7 +258,7 @@ const firstByThread = await harness.session.thread.firstUserMessages({
 })
 ```
 
-#### `session.thread.getSetting({ key })` / `setSetting({ key, value })` / `deleteSetting({ key })`
+### `session.thread.getSetting({ key })` / `setSetting({ key, value })` / `deleteSetting({ key })`
 
 Read, write, and remove per-thread settings stored on the active thread's metadata.
 
@@ -272,7 +272,7 @@ await harness.session.thread.deleteSetting({ key: 'omThreshold' })
 
 `session.mode` owns the active mode selection. Switching modes is performed on the [`Harness`](/reference/harness/harness-class#switchmode-modeid-) because it emits events and rebinds the stream.
 
-#### `session.mode.get()`
+### `session.mode.get()`
 
 Return the active mode ID.
 
@@ -280,7 +280,7 @@ Return the active mode ID.
 const modeId = harness.session.mode.get()
 ```
 
-#### `session.mode.resolve()`
+### `session.mode.resolve()`
 
 Return the full `HarnessMode` object for the active mode, resolved against the harness's configured modes.
 
@@ -292,7 +292,7 @@ const mode = harness.session.mode.resolve()
 
 `session.model` owns the active model selection, including per-mode model memory. Switching models is performed on the [`Harness`](/reference/harness/harness-class#switchmodel-modelid-scope-modeid-).
 
-#### `session.model.get()`
+### `session.model.get()`
 
 Return the active model ID.
 
@@ -300,7 +300,7 @@ Return the active model ID.
 const modelId = harness.session.model.get()
 ```
 
-#### `session.model.hasSelection()`
+### `session.model.hasSelection()`
 
 Check whether a model is currently selected.
 
@@ -314,7 +314,7 @@ if (harness.session.model.hasSelection()) {
 
 `session.run` owns run and trace identity plus abort state for the in-flight run.
 
-#### `session.run.getRunId()` / `getTraceId()`
+### `session.run.getRunId()` / `getTraceId()`
 
 Return the stored run ID and trace ID for the current run, or `null` when idle.
 
@@ -323,7 +323,7 @@ const runId = harness.session.run.getRunId()
 const traceId = harness.session.run.getTraceId()
 ```
 
-#### `session.run.isRunning()`
+### `session.run.isRunning()`
 
 Return whether a run is currently in progress.
 
@@ -337,7 +337,7 @@ if (harness.session.run.isRunning()) {
 
 `session.stream` owns the live subscription to the agent thread stream and its dedup key.
 
-#### `session.stream.activeRunId()`
+### `session.stream.activeRunId()`
 
 Return the run ID active on the live stream, or `null` when no stream is open.
 
@@ -345,7 +345,7 @@ Return the run ID active on the live stream, or `null` when no stream is open.
 const runId = harness.session.stream.activeRunId()
 ```
 
-#### `session.stream.isActive()`
+### `session.stream.isActive()`
 
 Return whether the stream currently has an active run.
 
@@ -359,7 +359,7 @@ if (harness.session.stream.isActive()) {
 
 `session.suspensions` owns parked interactive tool calls (such as `ask_user` and `request_access`) awaiting a resume.
 
-#### `session.suspensions.hasPending()`
+### `session.suspensions.hasPending()`
 
 Return whether any tool is currently suspended.
 
@@ -369,7 +369,7 @@ if (harness.session.suspensions.hasPending()) {
 }
 ```
 
-#### `session.suspensions.has({ toolCallId })`
+### `session.suspensions.has({ toolCallId })`
 
 Return whether a specific tool call is suspended.
 
@@ -383,7 +383,7 @@ Resume a suspended tool with [`harness.respondToToolSuspension()`](/reference/ha
 
 `session.followUps` owns the FIFO queue of messages submitted while a run is in progress.
 
-#### `session.followUps.count()`
+### `session.followUps.count()`
 
 Return the number of queued follow-ups.
 
@@ -391,7 +391,7 @@ Return the number of queued follow-ups.
 const queued = harness.session.followUps.count()
 ```
 
-#### `session.followUps.isEmpty()`
+### `session.followUps.isEmpty()`
 
 Return whether the follow-up queue is empty.
 
@@ -405,7 +405,7 @@ if (!harness.session.followUps.isEmpty()) {
 
 `session.approval` owns the pending tool-approval gate.
 
-#### `session.approval.isArmed()`
+### `session.approval.isArmed()`
 
 Return whether a tool is currently awaiting an approval decision.
 
@@ -421,7 +421,7 @@ Respond with [`session.respondToToolApproval()`](#respondtotoolapproval-decision
 
 `session.displayState` owns the canonical `HarnessDisplayState` snapshot a UI renders from, and the reducer that keeps it in sync with every harness event.
 
-#### `session.displayState.get()`
+### `session.displayState.get()`
 
 Return the current `HarnessDisplayState` snapshot for UI rendering.
 
@@ -429,7 +429,7 @@ Return the current `HarnessDisplayState` snapshot for UI rendering.
 const displayState = harness.session.displayState.get()
 ```
 
-#### `session.displayState.restoreTasks(tasks)`
+### `session.displayState.restoreTasks(tasks)`
 
 Restore the task portion of the snapshot after a UI replays persisted task tool history. This is a pure update of the snapshot and does not emit an event, so re-render explicitly after calling it.
 
@@ -443,7 +443,7 @@ After every event the harness emits `display_state_changed`, so high-frequency e
 
 `session.state` owns the schema-validated Harness state for the conversation. It holds the current snapshot, validates updates against the `stateSchema` passed to the Harness, serializes concurrent writes, and emits a `state_changed` event on every change.
 
-#### `session.state.get()`
+### `session.state.get()`
 
 Return a readonly copy of the current state snapshot.
 
@@ -451,7 +451,7 @@ Return a readonly copy of the current state snapshot.
 const state = harness.session.state.get()
 ```
 
-#### `session.state.set(updates)`
+### `session.state.set(updates)`
 
 Merge a partial update into the state. Updates are queued so concurrent calls apply in order, validated against the schema, and emit `state_changed` with the changed keys.
 
@@ -459,7 +459,7 @@ Merge a partial update into the state. Updates are queued so concurrent calls ap
 await harness.session.state.set({ yolo: true })
 ```
 
-#### `session.state.update(updater)`
+### `session.state.update(updater)`
 
 Run an updater against the current snapshot and apply its result atomically within the write queue. Use this for read-modify-write changes that must see the latest state. The updater returns `updates` to merge, optional `events` to emit, and a `result` value that `update()` resolves to.
 
