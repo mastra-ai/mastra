@@ -3358,10 +3358,6 @@ export class Harness<TState = {}> {
     }
   }
 
-  getFollowUpCount(): number {
-    return this.#session.followUps.count();
-  }
-
   /**
    * True when one or more tools are parked awaiting a resume (e.g. ask_user /
    * request_access suspensions). A suspended run nulls the AbortController, so

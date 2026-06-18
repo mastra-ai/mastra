@@ -86,7 +86,7 @@ function createState() {
       getObserverModelId: vi.fn(() => 'openai/gpt-4o'),
       getReflectorModelId: vi.fn(() => 'openai/gpt-4o-mini'),
       getFullModelId: vi.fn(() => 'anthropic/claude-sonnet-4-20250514'),
-      getFollowUpCount: vi.fn(() => 0),
+      session: { followUps: { count: vi.fn(() => 0) } },
     },
     statusLine: { setText },
     memoryStatusLine: { setText: memorySetText },
@@ -126,7 +126,7 @@ describe('updateStatusLine', () => {
   it('shows queued count in the status line', () => {
     const state = createState();
     state.pendingQueuedActions = ['message', 'slash'];
-    state.harness.getFollowUpCount.mockReturnValue(1);
+    state.harness.session.followUps.count.mockReturnValue(1);
 
     updateStatusLine(state);
 

@@ -178,7 +178,7 @@ export function updateStatusLine(state: TUIState): void {
     displayPath = '~' + displayPath.slice(homedir.length);
   }
   const branch = state.projectInfo.gitBranch;
-  const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
+  const queuedCount = state.pendingQueuedActions.length + state.harness.session.followUps.count();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
   const goalDuration = !isJudging && goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
