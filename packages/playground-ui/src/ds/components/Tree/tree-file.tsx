@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useTreeContext, useTreeDepth } from './tree-context';
-import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export interface TreeFileProps {
@@ -44,8 +44,7 @@ export const TreeFile = React.forwardRef<HTMLLIElement, TreeFileProps>(({ id, cl
       className={cn(
         'group flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-sm px-1',
         transitions.colors,
-        focusRing.visible,
-        'hover:bg-surface4',
+        'outline-hidden hover:bg-surface4 focus-visible:outline-hidden focus-visible:bg-surface4 focus-visible:text-neutral6',
         isSelected && 'bg-surface4 text-neutral6',
         className,
       )}

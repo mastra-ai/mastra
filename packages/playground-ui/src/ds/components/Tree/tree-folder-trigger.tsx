@@ -2,7 +2,7 @@ import { ChevronRight } from 'lucide-react';
 import * as React from 'react';
 import { useTreeContext, useTreeDepth } from './tree-context';
 import { CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export interface TreeFolderTriggerProps {
@@ -31,7 +31,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
         ref={ref}
         data-tree-folder-row="true"
         className={cn(
-          'group flex h-7 min-w-0 w-full items-center rounded-sm hover:bg-surface4 group-focus-visible/treeitem:outline-hidden group-focus-visible/treeitem:ring-1 group-focus-visible/treeitem:ring-accent1 group-focus-visible/treeitem:shadow-focus-ring',
+          'group flex h-7 min-w-0 w-full items-center rounded-sm hover:bg-surface4 group-focus-visible/treeitem:outline-hidden group-focus-visible/treeitem:bg-surface4 group-focus-visible/treeitem:text-neutral6',
           transitions.colors,
           className,
         )}
@@ -39,10 +39,7 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
         <CollapsibleTrigger
           data-tree-folder-trigger="true"
           tabIndex={-1}
-          className={cn(
-            'flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-sm px-1',
-            focusRing.visible,
-          )}
+          className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-sm px-1 outline-hidden focus-visible:outline-hidden focus-visible:ring-0"
           style={{ paddingLeft: depth * 12 }}
           onMouseDown={e => {
             e.preventDefault();

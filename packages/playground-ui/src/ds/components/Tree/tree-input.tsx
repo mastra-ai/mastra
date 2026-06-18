@@ -69,7 +69,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
         className={cn(
           'group flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-1',
           transitions.colors,
-          'focus-within:outline-hidden focus-within:ring-1 focus-within:ring-accent1 focus-within:shadow-focus-ring',
+          'focus-within:outline-hidden focus-within:bg-surface4 focus-within:text-neutral6',
           className,
         )}
         style={{ paddingLeft: depth * 12 + 18 }}

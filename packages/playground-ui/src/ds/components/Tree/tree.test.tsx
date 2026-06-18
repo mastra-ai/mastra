@@ -77,6 +77,40 @@ describe('Tree', () => {
     expect(packageJson.tabIndex).toBe(-1);
   });
 
+  it('uses neutral focus styles without accent rings', () => {
+    const { container } = render(
+      <Tree>
+        <Tree.Folder id="src" defaultOpen>
+          <Tree.FolderTrigger>
+            <Tree.Label>src</Tree.Label>
+          </Tree.FolderTrigger>
+          <Tree.FolderContent>
+            <Tree.File id="src/index.ts">
+              <Tree.Label>index.ts</Tree.Label>
+            </Tree.File>
+            <Tree.Input type="file" onSubmit={vi.fn()} />
+          </Tree.FolderContent>
+        </Tree.Folder>
+      </Tree>,
+    );
+
+    const folderRow = container.querySelector('[data-tree-folder-row="true"]');
+    const fileItem = getTreeItem('index.ts');
+    const inputItem = container.querySelector('[data-tree-item-kind="input"]');
+
+    expect(folderRow?.className).toContain('group-focus-visible/treeitem:bg-surface4');
+    expect(folderRow?.className).not.toContain('ring-accent1');
+    expect(folderRow?.className).not.toContain('shadow-focus-ring');
+
+    expect(fileItem.className).toContain('focus-visible:bg-surface4');
+    expect(fileItem.className).not.toContain('ring-accent1');
+    expect(fileItem.className).not.toContain('shadow-focus-ring');
+
+    expect(inputItem?.className).toContain('focus-within:bg-surface4');
+    expect(inputItem?.className).not.toContain('ring-accent1');
+    expect(inputItem?.className).not.toContain('shadow-focus-ring');
+  });
+
   it('moves focus through visible items with arrow, home, and end keys', () => {
     renderProjectTree();
 
