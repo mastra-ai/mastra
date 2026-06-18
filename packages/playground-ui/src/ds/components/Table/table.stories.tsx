@@ -15,6 +15,10 @@ const meta: Meta<typeof Table> = {
       control: { type: 'select' },
       options: ['default', 'small'],
     },
+    variant: {
+      control: { type: 'select' },
+      options: ['default', 'striped', 'lined'],
+    },
   },
 };
 
@@ -78,6 +82,80 @@ export const SmallSize: Story = {
             <Cell>
               <Badge variant="success">Active</Badge>
             </Cell>
+          </Row>
+        </Tbody>
+      </Table>
+    </div>
+  ),
+};
+
+export const Striped: Story = {
+  render: () => (
+    <div className="w-[600px]">
+      <Table variant="striped">
+        <Thead>
+          <Th>Name</Th>
+          <Th>Status</Th>
+          <Th>Created</Th>
+        </Thead>
+        <Tbody>
+          <Row>
+            <TxtCell>Item One</TxtCell>
+            <Cell>
+              <Badge variant="success">Active</Badge>
+            </Cell>
+            <TxtCell>Jan 14, 2026</TxtCell>
+          </Row>
+          <Row>
+            <TxtCell>Item Two</TxtCell>
+            <Cell>
+              <Badge variant="default">Pending</Badge>
+            </Cell>
+            <TxtCell>Jan 13, 2026</TxtCell>
+          </Row>
+          <Row>
+            <TxtCell>Item Three</TxtCell>
+            <Cell>
+              <Badge variant="error">Error</Badge>
+            </Cell>
+            <TxtCell>Jan 12, 2026</TxtCell>
+          </Row>
+        </Tbody>
+      </Table>
+    </div>
+  ),
+};
+
+export const Lined: Story = {
+  render: () => (
+    <div className="w-[600px]">
+      <Table variant="lined">
+        <Thead>
+          <Th>Name</Th>
+          <Th>Status</Th>
+          <Th>Created</Th>
+        </Thead>
+        <Tbody>
+          <Row>
+            <TxtCell>Item One</TxtCell>
+            <Cell>
+              <Badge variant="success">Active</Badge>
+            </Cell>
+            <TxtCell>Jan 14, 2026</TxtCell>
+          </Row>
+          <Row>
+            <TxtCell>Item Two</TxtCell>
+            <Cell>
+              <Badge variant="default">Pending</Badge>
+            </Cell>
+            <TxtCell>Jan 13, 2026</TxtCell>
+          </Row>
+          <Row>
+            <TxtCell>Item Three</TxtCell>
+            <Cell>
+              <Badge variant="error">Error</Badge>
+            </Cell>
+            <TxtCell>Jan 12, 2026</TxtCell>
           </Row>
         </Tbody>
       </Table>

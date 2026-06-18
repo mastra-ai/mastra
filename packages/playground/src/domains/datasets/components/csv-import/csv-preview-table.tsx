@@ -26,26 +26,24 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto rounded-lg border border-border1">
-        <Table size="small">
-          <Thead>
-            {headers.map((header: string) => (
-              <Th key={header}>{header}</Th>
-            ))}
-          </Thead>
-          <Tbody>
-            {displayData.map((row: Record<string, unknown>, rowIndex: number) => (
-              <Row key={rowIndex}>
-                {headers.map((header: string) => (
-                  <Cell key={header} className="text-sm max-w-[200px]">
-                    <span className="truncate block">{truncateValue(row[header])}</span>
-                  </Cell>
-                ))}
-              </Row>
-            ))}
-          </Tbody>
-        </Table>
-      </div>
+      <Table size="small">
+        <Thead>
+          {headers.map((header: string) => (
+            <Th key={header}>{header}</Th>
+          ))}
+        </Thead>
+        <Tbody>
+          {displayData.map((row: Record<string, unknown>, rowIndex: number) => (
+            <Row key={rowIndex}>
+              {headers.map((header: string) => (
+                <Cell key={header} className="text-sm max-w-[200px]">
+                  <span className="truncate block">{truncateValue(row[header])}</span>
+                </Cell>
+              ))}
+            </Row>
+          ))}
+        </Tbody>
+      </Table>
 
       {/* Row count indicator */}
       <div className="text-xs text-neutral4">

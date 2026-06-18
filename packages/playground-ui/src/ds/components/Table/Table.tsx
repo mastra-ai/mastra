@@ -1,11 +1,16 @@
-import type { CSSProperties, HTMLAttributes, ReactNode, ThHTMLAttributes } from 'react';
-import { forwardRef, useEffect, useRef } from 'react';
+import type { CSSProperties, HTMLAttributes, KeyboardEvent, ReactNode, ThHTMLAttributes } from 'react';
+import { createContext, forwardRef, useContext, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+
+export type TableVariant = 'default' | 'striped' | 'lined';
+export type TableSize = 'default' | 'small';
 
 export interface TableProps {
   className?: string;
+  containerClassName?: string;
   children: ReactNode;
-  size?: 'default' | 'small';
+  size?: TableSize;
+  variant?: TableVariant;
   style?: CSSProperties;
 }
 
@@ -14,11 +19,64 @@ const rowSize = {
   small: '[&>tbody>tr]:h-table-row-small',
 };
 
-export const Table = ({ className, children, size = 'default', style }: TableProps) => {
+const tableContainerStyles: Record<TableVariant, string> = {
+  default: 'max-w-full overflow-x-auto rounded-lg border border-border1 bg-surface2',
+  striped: 'max-w-full overflow-x-auto rounded-t-xl',
+  lined: 'max-w-full overflow-x-auto rounded-t-xl',
+};
+
+type TableContextValue = {
+  variant: TableVariant;
+};
+
+const tableContextValues = {
+  default: { variant: 'default' },
+  striped: { variant: 'striped' },
+  lined: { variant: 'lined' },
+} satisfies Record<TableVariant, TableContextValue>;
+
+const TableContext = createContext<TableContextValue>(tableContextValues.default);
+const TableSectionContext = createContext<'head' | 'body'>('body');
+
+function useTableContext() {
+  return useContext(TableContext);
+}
+
+function useTableSectionContext() {
+  return useContext(TableSectionContext);
+}
+
+export const Table = ({
+  className,
+  containerClassName,
+  children,
+  size = 'default',
+  variant = 'default',
+  style,
+}: TableProps) => {
   return (
-    <table className={cn('w-full', rowSize[size], className)} style={style}>
-      {children}
-    </table>
+    <TableContext.Provider value={tableContextValues[variant]}>
+      <div className={cn(tableContainerStyles[variant], containerClassName)}>
+        <table className={cn('w-full border-collapse', rowSize[size], className)} style={style}>
+          {children}
+        </table>
+      </div>
+    </TableContext.Provider>
+  );
+};
+
+export interface TableHeaderProps extends HTMLAttributes<HTMLTableSectionElement> {
+  className?: string;
+  children: ReactNode;
+}
+
+export const TableHeader = ({ className, children, ...props }: TableHeaderProps) => {
+  return (
+    <TableSectionContext.Provider value="head">
+      <thead className={className} {...props}>
+        {children}
+      </thead>
+    </TableSectionContext.Provider>
   );
 };
 
@@ -29,46 +87,51 @@ export interface TheadProps {
 
 export const Thead = ({ className, children }: TheadProps) => {
   return (
-    <thead>
-      <tr className={cn('h-table-header border-b border-border1 bg-surface2/80', className)}>{children}</tr>
-    </thead>
+    <TableHeader>
+      <Row className={className}>{children}</Row>
+    </TableHeader>
   );
 };
 
-export interface ThProps extends ThHTMLAttributes<HTMLTableCellElement> {
+export interface TableBodyProps extends HTMLAttributes<HTMLTableSectionElement> {
   className?: string;
-  style?: CSSProperties;
   children: ReactNode;
 }
 
-export const Th = ({ className, children, ...props }: ThProps) => {
+export const TableBody = ({ className, children, ...props }: TableBodyProps) => {
   return (
-    <th
-      className={cn(
-        'text-neutral2 text-ui-xs h-full whitespace-nowrap text-left font-medium uppercase tracking-wide first:pl-3 last:pr-3',
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </th>
+    <TableSectionContext.Provider value="body">
+      <tbody className={className} {...props}>
+        {children}
+      </tbody>
+    </TableSectionContext.Provider>
   );
 };
 
-export interface TbodyProps extends HTMLAttributes<HTMLTableSectionElement> {
-  className?: string;
-  children: ReactNode;
-}
+export interface TbodyProps extends TableBodyProps {}
 
 export const Tbody = ({ className, children, ...props }: TbodyProps) => {
   return (
-    <tbody className={cn('', className)} {...props}>
+    <TableBody className={className} {...props}>
       {children}
-    </tbody>
+    </TableBody>
   );
 };
 
-export interface RowProps {
+const headerRowStyles: Record<TableVariant, string> = {
+  default: 'h-table-header border-b border-border1 bg-surface2/80',
+  striped: 'h-table-header border-b border-transparent bg-surface4',
+  lined: 'h-table-header border-b border-border1 bg-surface4',
+};
+
+const bodyRowStyles: Record<TableVariant, string> = {
+  default: 'border-b border-border1 hover:bg-surface3 focus:bg-surface3',
+  striped:
+    'border-b border-transparent even:bg-surface-overlay-soft hover:bg-surface-overlay-strong focus:bg-surface-overlay-strong',
+  lined: 'border-b border-neutral6/10 hover:bg-surface-overlay-strong focus:bg-surface-overlay-strong',
+};
+
+export interface RowProps extends Omit<HTMLAttributes<HTMLTableRowElement>, 'onClick'> {
   className?: string;
   children: ReactNode;
   selected?: boolean;
@@ -80,7 +143,9 @@ export interface RowProps {
 }
 
 export const Row = forwardRef<HTMLTableRowElement, RowProps>(
-  ({ className, children, selected = false, style, onClick, isActive = false, ...props }, ref) => {
+  ({ className, children, selected = false, style, onClick, isActive = false, onKeyDown, ...props }, ref) => {
+    const { variant } = useTableContext();
+    const section = useTableSectionContext();
     const internalRef = useRef<HTMLTableRowElement>(null);
 
     // Merge forwarded ref with internal ref
@@ -101,21 +166,30 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
       }
     }, [isActive]);
 
-    const handleKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
-      if (event.key === 'Enter' && onClick) {
+    const handleKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
+      onKeyDown?.(event);
+      if (event.defaultPrevented) return;
+
+      if ((event.key === 'Enter' || event.key === ' ') && onClick) {
+        event.preventDefault();
         onClick();
       }
     };
 
+    if (section === 'head') {
+      return (
+        <tr ref={internalRef} className={cn(headerRowStyles[variant], className)} style={style} {...props}>
+          {children}
+        </tr>
+      );
+    }
+
     return (
       <tr
         className={cn(
-          'border-b border-border1',
-          // Smooth hover transition
+          bodyRowStyles[variant],
           'transition-colors duration-normal ease-out-custom',
-          'hover:bg-surface3',
-          // Focus state
-          'focus:bg-surface3 focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-accent1/50',
+          'focus:outline-hidden focus:ring-1 focus:ring-inset focus:ring-accent1/50',
           selected && 'bg-surface4',
           onClick && 'cursor-pointer',
           className,
@@ -125,6 +199,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
         ref={internalRef}
         tabIndex={onClick ? 0 : undefined}
         onKeyDown={handleKeyDown}
+        aria-selected={selected || undefined}
         data-active={isActive || undefined}
         {...props}
       >
@@ -133,3 +208,28 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
     );
   },
 );
+
+export const TableRow = Row;
+
+export interface ThProps extends ThHTMLAttributes<HTMLTableCellElement> {
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}
+
+export const Th = ({ className, children, scope = 'col', ...props }: ThProps) => {
+  return (
+    <th
+      scope={scope}
+      className={cn(
+        'text-neutral2 text-ui-xs h-full whitespace-nowrap text-left font-medium uppercase tracking-wide first:pl-3 last:pr-3',
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </th>
+  );
+};
+
+export const TableHead = Th;

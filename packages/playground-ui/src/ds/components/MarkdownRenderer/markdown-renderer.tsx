@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 
 import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { Cell as TableCell, Row as TableRow, Table, TableBody, TableHeader, Th } from '@/ds/components/Table';
 import { cn } from '@/lib/utils';
 
 export type MarkdownRendererProps = {
@@ -62,6 +63,12 @@ function childrenTakeAllStringContents(element: any): string {
   }
 
   return '';
+}
+
+function getMarkdownTableAlignClass(align?: string) {
+  if (align === 'center') return 'text-center [&>div]:justify-center';
+  if (align === 'right') return 'text-right [&>div]:justify-end';
+  return undefined;
 }
 
 // Create component wrappers with className
@@ -139,32 +146,20 @@ const COMPONENTS: Components = {
       {children}
     </li>
   ),
-  table: ({ children, ...props }) => (
-    <table className="w-full border-collapse overflow-y-auto rounded-md border border-neutral6/20" {...props}>
+  table: ({ children }) => <Table size="small">{children}</Table>,
+  thead: ({ children, node: _node, ...props }: any) => <TableHeader {...props}>{children}</TableHeader>,
+  tbody: ({ children, node: _node, ...props }: any) => <TableBody {...props}>{children}</TableBody>,
+  th: ({ children, align, node: _node, ...props }: any) => (
+    <Th className={cn('px-4 py-2 font-bold', getMarkdownTableAlignClass(align))} align={align} {...props}>
       {children}
-    </table>
+    </Th>
   ),
-  th: ({ children, ...props }) => (
-    <th
-      className="border border-neutral6/20 px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
-      {...props}
-    >
+  td: ({ children, align, node: _node, ...props }: any) => (
+    <TableCell className={cn('px-4 py-2', getMarkdownTableAlignClass(align))} align={align} {...props}>
       {children}
-    </th>
+    </TableCell>
   ),
-  td: ({ children, ...props }) => (
-    <td
-      className="border border-neutral6/20 px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
-      {...props}
-    >
-      {children}
-    </td>
-  ),
-  tr: ({ children, ...props }) => (
-    <tr className="m-0 border-t p-0 even:bg-surface4" {...props}>
-      {children}
-    </tr>
-  ),
+  tr: ({ children, node: _node, ...props }: any) => <TableRow {...props}>{children}</TableRow>,
   p: ({ children, ...props }) => (
     <p className="whitespace-pre-wrap leading-relaxed" {...props}>
       {children}

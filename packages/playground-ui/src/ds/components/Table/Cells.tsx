@@ -18,6 +18,8 @@ export const Cell = ({ className, children, ...props }: CellProps) => {
   );
 };
 
+export const TableCell = Cell;
+
 export const TxtCell = ({ className, children }: CellProps) => {
   return (
     <Cell className={className}>
