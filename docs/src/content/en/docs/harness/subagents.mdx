@@ -57,7 +57,11 @@ For the full list of subagent configuration options, see [`Harness` reference](/
 
 ## Forked subagents
 
-By default, a subagent runs with a fresh context and doesn't see the parent conversation. **Forked subagents** run on a clone of the parent thread and reuse the parent agent's configuration. This preserves prompt-cache prefixes and gives the subagent full conversation context.
+A default subagent starts with a fresh context: it can't see the parent conversation, so you pass everything it needs in the `task` description. That's the right model for self-contained work, but it has two costs. The subagent has no access to what's already happened, and it builds a brand-new request prefix — a different system prompt and tool schemas — so it can't reuse the parent's prompt cache.
+
+**Forked subagents** solve both. Instead of a fresh agent, a fork clones the parent thread and runs the parent agent itself, so it sees the full conversation history and keeps the same system prompt and tool schemas as the parent. The identical prefix means the model's prompt cache still hits, which makes context-heavy delegation cheaper and faster.
+
+Use a fork when the subtask depends on the conversation so far — prior messages, earlier tool results, or the parent's tool environment — and you want to run it without paying to rebuild that context. Use a default subagent when the task is self-contained and benefits from a narrower toolset, a tighter system prompt, or a cheaper model.
 
 Enable forked mode per-type:
 
@@ -71,19 +75,17 @@ const collaborator = {
 }
 ```
 
-Or per-invocation via the `subagent` tool's `forked` input parameter.
+Or per-invocation via the `subagent` tool's `forked` input parameter, which overrides the type's default.
 
 ### Forked mode semantics
 
-- Memory must be configured on the Harness (forking clones the thread)
-- The parent agent's instructions, tools, model, and `maxSteps` apply
-- The subagent definition's own `instructions`, `tools`, and `defaultModelId` are ignored
-- Fork threads are tagged with `metadata.forkedSubagent === true` and hidden from `session.thread.list()` by default
-- Recursive forks are blocked at runtime to prevent infinite nesting
+Because a fork reuses the parent agent to keep the prompt prefix stable, the subagent's own definition is mostly set aside:
 
-### When to prefer non-forked mode
-
-Use non-forked subagents when the child needs a strictly smaller toolset, a different system prompt, or a cheaper model. Pass any required context explicitly in the `task` description.
+- Memory must be configured on the Harness, since forking clones the parent thread. Without it, the fork call returns an error.
+- The fork runs with the parent agent's instructions, tools, and model. The subagent definition's own `instructions`, `tools`, and `defaultModelId` are ignored, and a per-invocation `modelId` is ignored too.
+- Only the subagent definition's `description` still matters — it's what the parent model reads to decide when to delegate.
+- Fork threads are tagged with `metadata.forkedSubagent === true` and hidden from `session.thread.list()` by default.
+- Recursive forks are blocked at runtime: the inherited `subagent` tool is disabled inside a fork to prevent infinite nesting.
 
 ## Subagent model management
 
