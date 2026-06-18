@@ -13,9 +13,7 @@ The `Harness` feature is in alpha stage and subject to breaking changes in minor
 
 :::
 
-An agent harness is the runtime that wraps a model and governs how it behaves in a real application. The model does the reasoning; the harness gives it the tools, memory, and safety limits it needs to act on that reasoning, and manages the agent's lifecycle, context, and interactions with the outside world.
-
-In practice, the Harness is a session controller for interactive agent applications. It handles the runtime concerns that sit between your UI and the agent loop: managing conversation threads, switching between agent modes, persisting state, gating tool execution with approvals, and coordinating subagents. You can focus on what your agent does rather than how to wire it together.
+The Harness is a session controller for building interactive agent applications. It handles the runtime concerns that sit between your UI and the agent loop: managing conversation threads, switching between agent modes, persisting state, gating tool execution with approvals, and coordinating subagents. You can focus on what your agent does rather than how to wire it together.
 
 A Harness exposes a [`Session`](/docs/harness/session) — the per-conversation runtime state that tracks the active mode, model, thread binding, permission grants, follow-up queue, and token usage. The Harness is the shared host; the Session is the conversation running inside it. In a multi-user host, the same Harness can back many Sessions at once.
 
