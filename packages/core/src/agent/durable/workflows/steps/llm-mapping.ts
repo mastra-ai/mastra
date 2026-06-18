@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { Mastra } from '../../../../mastra';
+import type { ExportedSpan, SpanType } from '../../../../observability';
 import { createStep } from '../../../../workflows';
 import { MessageList } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
@@ -57,7 +59,7 @@ export function createDurableLLMMappingStep() {
     id: DurableStepIds.LLM_MAPPING,
     inputSchema: durableLLMMappingInputSchema,
     outputSchema: durableLLMMappingOutputSchema,
-    execute: async ({ inputData }) => {
+    execute: async ({ inputData, mastra, requestContext }) => {
       const {
         llmOutput,
         toolResults,
@@ -152,6 +154,32 @@ export function createDurableLLMMappingStep() {
         processorRetryCount: llmOutput.processorRetryCount,
         processorRetryFeedback: llmOutput.processorRetryFeedback,
       };
+
+      // Close the MODEL_STEP span for tool-calling iterations: the LLM step defers it so
+      // tool calls can nest under it, and the tools have now run. No-ops without tool calls.
+      if (llmOutput.stepSpanData) {
+        try {
+          const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+          const stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
+          const pendingPayload = llmOutput.stepFinishPayload as any;
+          stepSpan?.end({
+            output: {
+              text: llmOutput.text,
+              toolCalls: llmOutput.toolCalls,
+            },
+            attributes: {
+              usage: pendingPayload?.output?.usage,
+              finishReason: pendingPayload?.stepResult?.reason,
+              isContinued: pendingPayload?.stepResult?.isContinued,
+            },
+          });
+        } catch (error) {
+          // Span bookkeeping must never break the merge step.
+          (mastra as Mastra | undefined)
+            ?.getLogger?.()
+            ?.warn?.(`[DurableAgent] Failed to close model_step span: ${error}`);
+        }
+      }
 
       return output;
     },

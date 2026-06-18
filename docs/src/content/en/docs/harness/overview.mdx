@@ -1,0 +1,138 @@
+---
+title: "Harness overview"
+description: "Build interactive AI agents with multiple modes, persistent threads, tool approval, and model switching using the Harness class."
+packages:
+  - "@mastra/core"
+---
+
+# Harness overview
+
+:::experimental
+
+The `Harness` feature is in alpha stage and subject to breaking changes in minor versions until it graduates from its alpha status.
+
+:::
+
+The Harness is a session controller for building interactive agent applications. It handles the runtime concerns that sit between your UI and the agent loop: managing conversation threads, switching between agent modes, persisting state, gating tool execution with approvals, and coordinating subagents. You can focus on what your agent does rather than how to wire it together.
+
+Each Harness manages one `Session`. It's the per-conversation runtime state that tracks the active mode, model, thread binding, permission grants, follow-up queue, and token usage. In a multi-user host, create a Harness for each active session or switch resource IDs and threads on the same Harness.
+
+[Mastra Code](https://code.mastra.ai/) is the flagship Harness implementation: A terminal-based coding agent with multi-model support, persistent conversations, and plan-then-execute workflows.
+
+## What you can build
+
+The Harness is designed for applications where a user has an ongoing, interactive session with one or more AI agents:
+
+| Application | How the Harness helps |
+| - | - |
+| **Coding agents** (TUI or IDE) | Plan mode reasons about changes, build mode executes them. Thread persistence resumes conversations across sessions. Tool approvals gate destructive operations like file writes. |
+| **Multi-step assistants** | A research mode gathers information, a drafting mode produces output. Shared state tracks progress. Subagents handle focused subtasks (e.g., web search, code review). |
+| **Copilot UIs** | Model switching lets users pick the right model for the job. Permission policies control which tools run automatically vs. requiring confirmation. Event subscriptions drive real-time UI updates. |
+| **Autonomous task runners** | Background agents with structured task lists, heartbeat handlers for health checks, and observational memory for learning across threads. |
+
+## When to use the Harness
+
+Use the Harness when your application needs:
+
+- Multiple agent modes that share one conversation thread (e.g., plan → build → review)
+- A control layer between your UI and the agent loop (model switching, state persistence, thread management)
+- Tool approval flows and permission policies for human-in-the-loop gating
+- Subagent orchestration to delegate focused subtasks with constrained tools
+- Session continuity with persistent threads, state, and observational memory across restarts
+
+For single-shot agent calls or basic request-response patterns, use the [Agent class](/docs/agents/overview) directly. The Harness adds value when you need session state, mode switching, or interactive approval flows.
+
+## Key capabilities
+
+- **Modes**: Define distinct agent personalities (instructions, tools, model) and switch between them without losing conversation context. See [Modes](/docs/harness/modes).
+- **Threads and state**: Persist conversations and structured state across sessions, users, and mode switches. See [Threads and state](/docs/harness/threads-and-state).
+- **Subagents**: Spawn focused child agents with constrained tools for subtasks, optionally forking the parent conversation. See [Subagents](/docs/harness/subagents).
+- **Tool approvals and permissions**: Configure which tools require user confirmation, grant session-wide exceptions, and handle interactive tool suspension. See [Tool approvals](/docs/harness/tool-approvals).
+- **Model management**: Switch models per-mode at runtime, track usage, and resolve gateway-backed models.
+- **Follow-ups and steering**: Queue messages while the agent is running, or inject mid-stream instructions to redirect the agent.
+- **Event system**: Subscribe to typed events (message updates, mode changes, tool approvals) or coalesced `HarnessDisplayState` snapshots to drive your UI.
+- **Observational memory**: Automatic summarization and reflection across threads for long-running agent sessions.
+
+## Quickstart
+
+Import the `Harness` class and create a new instance with an agent, storage backend, and modes:
+
+```typescript title="src/mastra/harness.ts"
+import { Agent } from '@mastra/core/agent'
+import { Harness } from '@mastra/core/harness'
+import { LibSQLStore } from '@mastra/libsql'
+
+const agent = new Agent({
+  name: 'assistant',
+  instructions: 'Help the user plan and complete tasks.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+const harness = new Harness({
+  id: 'my-agent',
+  agent,
+  storage: new LibSQLStore({ url: 'file:./data.db' }),
+  modes: [
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      instructions: 'Reason about changes before making them.',
+    },
+    { id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
+  ],
+})
+
+harness.subscribe(event => {
+  if (event.type === 'message_update') {
+    console.log(event.message)
+  }
+})
+
+await harness.init()
+await harness.selectOrCreateThread()
+await harness.sendMessage({ content: 'Hello!' })
+```
+
+:::note
+
+Visit the [Harness reference](/reference/harness/harness-class) for the full constructor parameters and method signatures.
+
+:::
+
+## Architecture
+
+The Harness sits between your application layer and the underlying agent loop:
+
+```
+┌──────────────────────────┐
+│   Your App (TUI/Web/API) │
+└────────────┬─────────────┘
+             │ commands (sendMessage, switchMode, approve)
+             │ events (message_update, tool_approval_required)
+┌────────────▼─────────────┐
+│         Harness          │
+│  ┌─────────────────────┐ │
+│  │ Modes & Model Mgmt  │ │
+│  │ Threads & State     │ │
+│  │ Permissions & Grants│ │
+│  │ Session State       │ │
+│  │ Subagent Spawning   │ │
+│  │ Event Bus           │ │
+│  └─────────────────────┘ │
+└────────────┬─────────────┘
+             │
+┌────────────▼──────────────┐
+│  Agent + Memory + Tools   │
+└───────────────────────────┘
+```
+
+Your app sends commands (send a message, switch mode, approve a tool call) and receives typed events. The Harness manages the lifecycle internally: persisting threads, routing to the correct mode agent, enforcing permissions, and emitting events as state changes.
+
+## Next steps
+
+- [Modes](/docs/harness/modes): Define and switch between agent personalities
+- [Threads and state](/docs/harness/threads-and-state): Manage persistent conversations
+- [Subagents](/docs/harness/subagents): Delegate focused subtasks
+- [Tool approvals and permissions](/docs/harness/tool-approvals): Human-in-the-loop gating
+- [API reference](/reference/harness/harness-class): Full constructor and method docs
