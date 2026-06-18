@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { NotificationSummaryComponent } from '../components/notification-summary.js';
 import { NotificationComponent } from '../components/notification.js';
 import { ReactiveSignalComponent } from '../components/reactive-signal.js';
@@ -374,6 +375,47 @@ describe('addUserMessage', () => {
     expect(rendered).toContain('Continue & handle <tags>');
   });
 
+  it('renders persisted goal-judge evaluations as judge display components', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createReminderMessage(
+        {
+          type: 'system_reminder',
+          reminderType: 'goal-judge',
+          message: '[Goal attempt 2/20] The goal is not yet complete. Judge feedback: Need another fact.',
+          goalEvaluation: {
+            objective: 'List whale facts',
+            iteration: 2,
+            maxRuns: 20,
+            passed: false,
+            status: 'active',
+            results: [],
+            reason: 'Need another fact.',
+            duration: 0,
+            timedOut: false,
+            maxRunsReached: false,
+            suppressFeedback: false,
+          },
+        } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>,
+        'goal-judge-1',
+      ),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(JudgeDisplayComponent);
+    expect(state.allSystemReminderComponents).toHaveLength(0);
+    expect(state.messageComponentsById.get('goal-judge-1')).toBe(state.chatContainer.children[0]);
+    const rendered = (state.chatContainer.children[0] as JudgeDisplayComponent)
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('continue');
+    expect(rendered).toContain('(2/20)');
+    expect(rendered).toContain('Need another fact.');
+  });
+
   it('renders canonical initial goal reminders as system reminders', () => {
     const state = createState();
 
@@ -528,11 +570,15 @@ describe('renderExistingMessages signals', () => {
     addPendingUserMessage(state, 'stale-signal', 'stale preview', undefined, { isInterjection: true });
 
     state.harness = {
-      listMessages: vi
-        .fn()
-        .mockResolvedValue([
-          createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
-        ]),
+      session: {
+        thread: {
+          listActiveMessages: vi
+            .fn()
+            .mockResolvedValue([
+              createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
+            ]),
+        },
+      },
       getDisplayState: () => ({ isRunning: false }),
     } as unknown as TUIState['harness'];
 
@@ -582,7 +628,7 @@ describe('renderExistingMessages subagents', () => {
     const state = createState();
     state.quietMode = true;
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue([message]),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) } },
       getDisplayState: () => ({ isRunning: false }),
       getFullModelId: () => 'openai/gpt-5.5',
     } as unknown as TUIState['harness'];

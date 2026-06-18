@@ -901,7 +901,7 @@ describe('usage_update', () => {
 
   it('updates tokenUsage from internal token counters', () => {
     // Set internal token counters via the private field
-    (harness as any).tokenUsage = { promptTokens: 100, completionTokens: 50, totalTokens: 150 };
+    harness.session.setTokenUsage({ promptTokens: 100, completionTokens: 50, totalTokens: 150 });
     emit(harness, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 } });
 
     const usage = harness.getDisplayState().tokenUsage;
@@ -911,7 +911,7 @@ describe('usage_update', () => {
   });
 
   it('preserves richer token usage fields from internal token counters', () => {
-    (harness as any).tokenUsage = {
+    harness.session.setTokenUsage({
       promptTokens: 100,
       completionTokens: 50,
       totalTokens: 220,
@@ -919,7 +919,7 @@ describe('usage_update', () => {
       cachedInputTokens: 25,
       cacheCreationInputTokens: 5,
       raw: { provider: 'test-provider' },
-    };
+    });
     emit(harness, {
       type: 'usage_update',
       usage: {
@@ -945,10 +945,10 @@ describe('usage_update', () => {
   });
 
   it('accumulates usage across multiple updates', () => {
-    (harness as any).tokenUsage = { promptTokens: 100, completionTokens: 50, totalTokens: 150 };
+    harness.session.setTokenUsage({ promptTokens: 100, completionTokens: 50, totalTokens: 150 });
     emit(harness, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 } });
 
-    (harness as any).tokenUsage = { promptTokens: 250, completionTokens: 120, totalTokens: 370 };
+    harness.session.setTokenUsage({ promptTokens: 250, completionTokens: 120, totalTokens: 370 });
     emit(harness, { type: 'usage_update', usage: { promptTokens: 250, completionTokens: 120, totalTokens: 370 } });
 
     const usage = harness.getDisplayState().tokenUsage;
@@ -1391,7 +1391,7 @@ describe('resetThreadDisplayState', () => {
   });
 
   it('resets tokenUsage to zero on thread_created', () => {
-    (harness as any).tokenUsage = { promptTokens: 100, completionTokens: 50, totalTokens: 150 };
+    harness.session.setTokenUsage({ promptTokens: 100, completionTokens: 50, totalTokens: 150 });
     emit(harness, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 } });
     expect(harness.getDisplayState().tokenUsage.totalTokens).toBe(150);
 
@@ -1418,7 +1418,7 @@ describe('resetThreadDisplayState', () => {
   });
 
   it('syncs tokenUsage from internal counters on thread_changed', () => {
-    (harness as any).tokenUsage = { promptTokens: 200, completionTokens: 100, totalTokens: 300 };
+    harness.session.setTokenUsage({ promptTokens: 200, completionTokens: 100, totalTokens: 300 });
     emit(harness, { type: 'thread_changed', threadId: 'other', previousThreadId: 'old' });
     expect(harness.getDisplayState().tokenUsage.totalTokens).toBe(300);
   });
@@ -1587,7 +1587,7 @@ describe('full lifecycle integration', () => {
     expect(ds.tasks).toHaveLength(1);
 
     // Usage update
-    (harness as any).tokenUsage = { promptTokens: 1000, completionTokens: 500, totalTokens: 1500 };
+    harness.session.setTokenUsage({ promptTokens: 1000, completionTokens: 500, totalTokens: 1500 });
     emit(harness, { type: 'usage_update', usage: { promptTokens: 1000, completionTokens: 500, totalTokens: 1500 } });
     expect(ds.tokenUsage.totalTokens).toBe(1500);
 

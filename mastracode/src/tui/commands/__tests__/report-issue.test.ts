@@ -14,7 +14,7 @@ function createCtx(options?: { hasModelSelected?: boolean; pendingNewThread?: bo
   const state = {
     pendingNewThread: options?.pendingNewThread ?? false,
     harness: {
-      hasModelSelected: vi.fn(() => options?.hasModelSelected ?? true),
+      session: { model: { hasSelection: vi.fn(() => options?.hasModelSelected ?? true) } },
       createThread: vi.fn().mockResolvedValue(undefined),
     },
   };

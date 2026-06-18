@@ -98,9 +98,11 @@ describe('dispatchSlashCommand models routing', () => {
     const state = {
       customSlashCommands: [],
       harness: {
-        getCurrentThreadId: vi.fn(() => 'thread-1'),
-        getResourceId: vi.fn(() => 'resource-1'),
-        getCurrentModeId: vi.fn(() => 'build'),
+        session: {
+          identity: { getResourceId: vi.fn(() => 'resource-1') },
+          thread: { getId: vi.fn(() => 'thread-1') },
+          mode: { get: vi.fn(() => 'build') },
+        },
       },
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
@@ -122,9 +124,11 @@ describe('dispatchSlashCommand models routing', () => {
     const state = {
       customSlashCommands: [],
       harness: {
-        getCurrentThreadId: vi.fn(() => 'thread-1'),
-        getResourceId: vi.fn(() => 'resource-1'),
-        getCurrentModeId: vi.fn(() => 'build'),
+        session: {
+          identity: { getResourceId: vi.fn(() => 'resource-1') },
+          thread: { getId: vi.fn(() => 'thread-1') },
+          mode: { get: vi.fn(() => 'build') },
+        },
       },
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
@@ -376,7 +380,7 @@ describe('dispatchSlashCommand models routing', () => {
     chatContainer.addChild(previousComponent);
     const state = {
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
-      getCurrentThreadId: vi.fn(() => 'thread-1'),
+      session: { thread: { getId: vi.fn(() => 'thread-1') } },
       pendingNewThread: false,
       allSlashCommandComponents: [],
       messageComponentsById: new Map(),
@@ -418,7 +422,7 @@ describe('dispatchSlashCommand models routing', () => {
       chatContainer: new Container(),
       ui: { requestRender: vi.fn() },
       harness: {
-        isCurrentThreadStreamActive: vi.fn(() => true),
+        session: { stream: { isActive: vi.fn(() => true) } },
         getDisplayState: vi.fn(() => ({ isRunning: true })),
         sendSignal,
         sendMessage: vi.fn().mockResolvedValue(undefined),
@@ -451,7 +455,7 @@ describe('dispatchSlashCommand models routing', () => {
       chatContainer: new Container(),
       ui: { requestRender: vi.fn() },
       harness: {
-        isCurrentThreadStreamActive: vi.fn(() => true),
+        session: { stream: { isActive: vi.fn(() => true) } },
         getDisplayState: vi.fn(() => ({ isRunning: true })),
         sendSignal,
         sendMessage: vi.fn().mockResolvedValue(undefined),
@@ -497,9 +501,11 @@ describe('dispatchSlashCommand models routing', () => {
     const state = {
       customSlashCommands: [{ name: 'new', description: 'Custom new', template: 'custom new', sourcePath: '' }],
       harness: {
-        getCurrentThreadId: vi.fn(() => null),
-        getResourceId: vi.fn(() => 'resource-1'),
-        getCurrentModeId: vi.fn(() => 'build'),
+        session: {
+          identity: { getResourceId: vi.fn(() => 'resource-1') },
+          thread: { getId: vi.fn(() => null) },
+          mode: { get: vi.fn(() => 'build') },
+        },
       },
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
@@ -520,7 +526,7 @@ describe('dispatchSlashCommand models routing', () => {
   it('routes //new to the matching custom command even when a built-in exists', async () => {
     const state = {
       customSlashCommands: [{ name: 'new', description: 'Custom new', template: 'custom new', sourcePath: '' }],
-      getCurrentThreadId: vi.fn(() => 'thread-1'),
+      session: { thread: { getId: vi.fn(() => 'thread-1') } },
       allSlashCommandComponents: [],
       messageComponentsById: new Map(),
       chatContainer: new Container(),
