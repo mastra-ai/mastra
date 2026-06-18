@@ -1,8 +1,22 @@
 import type { Agent } from '../agent';
 import type { AgentThreadSubscription } from '../agent/types';
 import type { RequestContext } from '../request-context';
-import { createEmptyTokenUsage } from './types';
-import type { HarnessMessage, HarnessMode, HarnessThread, TokenUsage, ToolCategory } from './types';
+import { toStandardSchema } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import { safeStringify } from '../utils';
+import type { TaskItemSnapshot } from './tools';
+import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
+import type {
+  HarnessDisplayState,
+  HarnessEvent,
+  HarnessMessage,
+  HarnessMode,
+  HarnessRequestState,
+  HarnessRequestStateUpdater,
+  HarnessThread,
+  TokenUsage,
+  ToolCategory,
+} from './types';
 
 /**
  * Minimal persistence surface the Session uses to read and write per-thread
@@ -783,6 +797,112 @@ export class SessionMode {
   }
 }
 
+type SessionStateUpdater<TState, TResult> = HarnessRequestStateUpdater<TState, TResult>;
+
+interface SessionStateOptions<TState> {
+  initialState?: Partial<TState>;
+  stateSchema?: PublicSchema<TState, any>;
+  emit?: (event: HarnessEvent) => void;
+}
+
+/**
+ * Owns the live Harness state for a single Session.
+ *
+ * Reads return shallow snapshots, writes are serialized through a promise queue,
+ * and validated updates emit the same `state_changed` event the Harness used to
+ * emit when it owned state directly.
+ */
+class SessionState<TState = unknown> {
+  #state: TState;
+  #updateQueue: Promise<void> = Promise.resolve();
+  readonly #schema: StandardSchemaWithJSON | undefined;
+  readonly #emit: ((event: HarnessEvent) => void) | undefined;
+
+  constructor({ initialState, stateSchema, emit }: SessionStateOptions<TState>) {
+    this.#schema = stateSchema ? toStandardSchema(stateSchema) : undefined;
+    this.#state = {
+      ...this.getSchemaDefaults(),
+      ...(initialState as Record<string, unknown> | undefined),
+    } as TState;
+    this.#emit = emit;
+  }
+
+  get(): Readonly<TState> {
+    return { ...(this.#state as Record<string, unknown>) } as TState;
+  }
+
+  private getSchemaDefaults(): Partial<TState> {
+    if (!this.#schema) return {};
+
+    const defaults: Record<string, unknown> = {};
+
+    try {
+      // Extract defaults from the JSON Schema representation.
+      const jsonSchema = this.#schema['~standard'].jsonSchema.output({ target: 'draft-07' }) as {
+        properties?: Record<string, { default?: unknown }>;
+      };
+      if (jsonSchema?.properties) {
+        for (const [key, prop] of Object.entries(jsonSchema.properties)) {
+          if (prop.default !== undefined) {
+            defaults[key] = prop.default;
+          }
+        }
+      }
+    } catch {
+      // Schema doesn't support JSON Schema extraction — skip defaults.
+    }
+
+    return defaults as Partial<TState>;
+  }
+
+  private async apply(updates: Partial<TState>): Promise<void> {
+    const changedKeys = Object.keys(updates as Record<string, unknown>);
+    const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
+
+    if (this.#schema) {
+      const result = await this.#schema['~standard'].validate(newState);
+      if (result.issues) {
+        const messages = result.issues.map(i => i.message).join('; ');
+        throw new Error(`Invalid state update: ${messages}`);
+      }
+      this.#state = result.value as TState;
+    } else {
+      this.#state = newState as TState;
+    }
+
+    this.#emit?.({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
+  }
+
+  set(updates: Partial<TState>): Promise<void> {
+    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
+    const run = this.#updateQueue.then(() => this.apply(updateSnapshot));
+    this.#updateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  update<TResult>(updater: SessionStateUpdater<TState, TResult>): Promise<TResult> {
+    const run = this.#updateQueue.then(async () => {
+      const update = await updater(this.get());
+      if (update.updates && Object.keys(update.updates as Record<string, unknown>).length > 0) {
+        await this.apply(update.updates);
+      }
+      for (const event of update.events ?? []) {
+        this.#emit?.(event);
+      }
+      return update.result;
+    });
+
+    this.#updateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+}
+
 /**
  * A Harness session owns the per-conversation runtime state that today lives
  * flattened on the {@link Harness} instance. This class is the seam we extract
@@ -790,6 +910,9 @@ export class SessionMode {
  * `Session` rather than the state itself.
  *
  * Currently owns:
+ * - the live Harness state (`session.state`): schema-validated snapshots and
+ *   serialized updates that emit `state_changed`. `Harness.getState()` /
+ *   `Harness.setState()` are compatibility wrappers over this domain.
  * - session-scoped permission grants — the "allow for this session" approvals a
  *   user makes when a tool or tool category is gated behind the permission check.
  * - the live token-usage counter for the active thread. The Session holds the
@@ -827,7 +950,483 @@ export class SessionMode {
  * {@link ThreadSettingsStore} the Harness backs with thread metadata; when no
  * storage is configured the store is absent and state stays in memory.
  */
-export class Session {
+/**
+ * Owns the session's canonical display state — the projection a UI renders from
+ * instead of folding raw events itself. The Session holds the snapshot and the
+ * reducer ({@link apply}) that keeps it in sync with every Harness event; the
+ * Harness still owns the event bus and dispatches `display_state_changed` to
+ * listeners after applying.
+ *
+ * The reducer needs a few read-only host/session facts it doesn't own: the live
+ * token-usage tally, a subagent display-name lookup (Harness config), and the
+ * active thread id (to decide whether a `thread_deleted` clears the view). Those
+ * are injected at construction so the reducer stays self-contained.
+ */
+export class SessionDisplayState {
+  #state: HarnessDisplayState = defaultDisplayState();
+
+  constructor(
+    private readonly deps: {
+      /** The session's live token-usage tally, mirrored into the view on usage/thread events. */
+      getTokenUsage: () => TokenUsage;
+      /** Resolve a subagent's display name from Harness config, or undefined when unnamed. */
+      getSubagentDisplayName: (agentType: string) => string | undefined;
+      /** The active thread id, used to gate `thread_deleted` resets. */
+      getThreadId: () => string | null;
+      /** Clear the session's follow-up queue when thread-scoped display state resets. */
+      clearFollowUps: () => void;
+    },
+  ) {}
+
+  /**
+   * A read-only snapshot of the canonical display state. UIs should render from
+   * this instead of building state up from raw events.
+   */
+  get(): Readonly<HarnessDisplayState> {
+    return this.#state;
+  }
+
+  /**
+   * Drop the display mirror of every parked tool suspension. Used on abort,
+   * which abandons the run's parked suspensions; the caller dispatches
+   * `display_state_changed`.
+   */
+  clearPendingSuspensions(): void {
+    this.#state.pendingSuspensions.clear();
+  }
+
+  /**
+   * Clear the modified-files tally without touching the rest of the snapshot.
+   * Used after a clone, which starts the cloned thread with a clean working set
+   * while the surrounding UI reset handles tasks/tools explicitly.
+   */
+  clearModifiedFiles(): void {
+    this.#state.modifiedFiles.clear();
+  }
+
+  /**
+   * Drop the display mirror of a single parked tool suspension once it has been
+   * resumed, so the UI stops rendering only the resolved prompt while any other
+   * parked suspensions stay visible.
+   */
+  deletePendingSuspension(toolCallId: string): void {
+    this.#state.pendingSuspensions.delete(toolCallId);
+  }
+
+  /**
+   * Restore task display state after a UI replays persisted task-tool history.
+   * Updates the snapshot without emitting a live `task_updated` event, since no
+   * task tool just ran. The caller dispatches `display_state_changed`.
+   */
+  restoreTasks(tasks: TaskItemSnapshot[]): void {
+    this.#state.previousTasks = [...this.#state.tasks];
+    this.#state.tasks = [...tasks];
+  }
+
+  /**
+   * Reset display fields scoped to a thread. Called on thread switch/creation.
+   * Also clears the session's follow-up queue (mirrored by `queuedFollowUps`).
+   */
+  resetThread(): void {
+    const ds = this.#state;
+    ds.activeTools = new Map();
+    ds.toolInputBuffers = new Map();
+    ds.pendingApproval = null;
+    ds.pendingSuspensions = new Map();
+    ds.activeSubagents = new Map();
+    ds.currentMessage = null;
+    this.deps.clearFollowUps();
+    ds.queuedFollowUps = 0;
+    ds.modifiedFiles = new Map();
+    ds.tasks = [];
+    ds.previousTasks = [];
+    ds.omProgress = defaultOMProgressState();
+    ds.bufferingMessages = false;
+    ds.bufferingObservations = false;
+  }
+
+  /**
+   * Apply a display-state update based on an incoming event. The centralized
+   * state machine that keeps {@link HarnessDisplayState} in sync with every
+   * event the Harness emits.
+   */
+  apply(event: HarnessEvent): void {
+    const ds = this.#state;
+
+    switch (event.type) {
+      // ── Agent lifecycle ────────────────────────────────────────────────
+      case 'agent_start':
+        ds.isRunning = true;
+        ds.activeTools = new Map();
+        ds.toolInputBuffers = new Map();
+        ds.currentMessage = null;
+        ds.pendingApproval = null;
+        // Parked tool suspensions are intentionally NOT cleared here: resuming
+        // one parked tool restarts the run (a fresh agent_start) and the other
+        // parallel prompts must stay rendered until they are resolved.
+        break;
+
+      case 'agent_end':
+        ds.isRunning = false;
+        ds.pendingApproval = null;
+        // A suspended run keeps its pending tool suspensions alive so the UI can
+        // still render the prompts (e.g. `ask_user`, which pauses via the native
+        // tool-suspension primitive). When the run ends for any other reason the
+        // parked suspensions are abandoned, so clear them all.
+        if (event.reason !== 'suspended') {
+          ds.pendingSuspensions.clear();
+        }
+        // Mark any still-running tools as errored (handles abort mid-run)
+        for (const [, tool] of ds.activeTools) {
+          if (tool.status === 'running' || tool.status === 'streaming_input') {
+            tool.status = 'error';
+          }
+        }
+        ds.activeSubagents = new Map();
+        break;
+
+      // ── Message streaming ──────────────────────────────────────────────
+      case 'message_start':
+        ds.currentMessage = event.message;
+        break;
+
+      case 'message_update':
+        ds.currentMessage = event.message;
+        break;
+
+      case 'message_end':
+        ds.currentMessage = event.message;
+        break;
+
+      // ── Tool lifecycle ─────────────────────────────────────────────────
+      case 'tool_input_start': {
+        ds.toolInputBuffers.set(event.toolCallId, { text: '', toolName: event.toolName });
+        const existing = ds.activeTools.get(event.toolCallId);
+        if (existing) {
+          existing.status = 'streaming_input';
+        } else {
+          ds.activeTools.set(event.toolCallId, {
+            name: event.toolName,
+            args: {},
+            status: 'streaming_input',
+          });
+        }
+        break;
+      }
+
+      case 'tool_input_delta': {
+        const buf = ds.toolInputBuffers.get(event.toolCallId);
+        if (buf) {
+          buf.text += event.argsTextDelta;
+        }
+        break;
+      }
+
+      case 'tool_input_end':
+        ds.toolInputBuffers.delete(event.toolCallId);
+        break;
+
+      case 'tool_start': {
+        const existingTool = ds.activeTools.get(event.toolCallId);
+        if (existingTool) {
+          existingTool.name = event.toolName;
+          existingTool.args = event.args;
+          existingTool.status = 'running';
+        } else {
+          ds.activeTools.set(event.toolCallId, {
+            name: event.toolName,
+            args: event.args,
+            status: 'running',
+          });
+        }
+        break;
+      }
+
+      case 'tool_update': {
+        const tool = ds.activeTools.get(event.toolCallId);
+        if (tool) {
+          tool.partialResult =
+            typeof event.partialResult === 'string' ? event.partialResult : safeStringify(event.partialResult);
+        }
+        break;
+      }
+
+      case 'tool_end': {
+        const endedTool = ds.activeTools.get(event.toolCallId);
+        if (endedTool) {
+          endedTool.status = event.isError ? 'error' : 'completed';
+          endedTool.result = event.result;
+          endedTool.isError = event.isError;
+        }
+        // Track file modifications
+        if (!event.isError) {
+          const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
+          const toolState = ds.activeTools.get(event.toolCallId);
+          if (toolState && FILE_TOOLS.includes(toolState.name)) {
+            const toolArgs = toolState.args as Record<string, unknown>;
+            const filePath = toolArgs?.path as string;
+            if (filePath) {
+              const existing = ds.modifiedFiles.get(filePath);
+              if (existing) {
+                existing.operations.push(toolState.name);
+              } else {
+                ds.modifiedFiles.set(filePath, {
+                  operations: [toolState.name],
+                  firstModified: new Date(),
+                });
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      case 'shell_output': {
+        const shellTool = ds.activeTools.get(event.toolCallId);
+        if (shellTool) {
+          shellTool.shellOutput = (shellTool.shellOutput ?? '') + event.output;
+        }
+        break;
+      }
+
+      case 'tool_approval_required':
+        ds.pendingApproval = {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: event.args,
+        };
+        break;
+
+      case 'tool_suspended':
+        ds.pendingSuspensions.set(event.toolCallId, {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: event.args,
+          suspendPayload: event.suspendPayload,
+          resumeSchema: event.resumeSchema,
+        });
+        break;
+
+      // ── Subagent tracking ──────────────────────────────────────────────
+      case 'subagent_start': {
+        const displayName = this.deps.getSubagentDisplayName(event.agentType);
+        ds.activeSubagents.set(event.toolCallId, {
+          agentType: event.agentType,
+          ...(displayName !== undefined ? { displayName } : {}),
+          task: event.task,
+          modelId: event.modelId,
+          forked: event.forked,
+          toolCalls: [],
+          textDelta: '',
+          status: 'running',
+        });
+        break;
+      }
+
+      case 'subagent_text_delta': {
+        const sub = ds.activeSubagents.get(event.toolCallId);
+        if (sub) {
+          sub.textDelta += event.textDelta;
+        }
+        break;
+      }
+
+      case 'subagent_tool_start': {
+        const subAgent = ds.activeSubagents.get(event.toolCallId);
+        if (subAgent) {
+          subAgent.toolCalls.push({ name: event.subToolName, isError: false });
+        }
+        break;
+      }
+
+      case 'subagent_tool_end': {
+        const subTool = ds.activeSubagents.get(event.toolCallId);
+        if (subTool) {
+          const tc = subTool.toolCalls.find(t => t.name === event.subToolName && !t.isError);
+          if (tc) {
+            tc.isError = event.isError;
+          }
+        }
+        break;
+      }
+
+      case 'subagent_end': {
+        const endedSub = ds.activeSubagents.get(event.toolCallId);
+        if (endedSub) {
+          endedSub.status = event.isError ? 'error' : 'completed';
+          endedSub.durationMs = event.durationMs;
+          endedSub.result = event.result;
+        }
+        break;
+      }
+
+      // ── Observational Memory ───────────────────────────────────────────
+      case 'om_status': {
+        const w = event.windows;
+        ds.omProgress.pendingTokens = w.active.messages.tokens;
+        ds.omProgress.threshold = w.active.messages.threshold;
+        ds.omProgress.thresholdPercent =
+          w.active.messages.threshold > 0 ? (w.active.messages.tokens / w.active.messages.threshold) * 100 : 0;
+        ds.omProgress.observationTokens = w.active.observations.tokens;
+        ds.omProgress.reflectionThreshold = w.active.observations.threshold;
+        ds.omProgress.reflectionThresholdPercent =
+          w.active.observations.threshold > 0
+            ? (w.active.observations.tokens / w.active.observations.threshold) * 100
+            : 0;
+        ds.omProgress.buffered = {
+          observations: { ...w.buffered.observations },
+          reflection: { ...w.buffered.reflection },
+        };
+        ds.omProgress.generationCount = event.generationCount;
+        ds.omProgress.stepNumber = event.stepNumber;
+        // Drive buffering animation flags from status fields
+        ds.bufferingMessages = w.buffered.observations.status === 'running';
+        ds.bufferingObservations = w.buffered.reflection.status === 'running';
+        break;
+      }
+
+      case 'om_observation_start':
+        ds.omProgress.status = 'observing';
+        ds.omProgress.cycleId = event.cycleId;
+        ds.omProgress.startTime = Date.now();
+        break;
+
+      case 'om_observation_end':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        ds.omProgress.observationTokens = event.observationTokens;
+        // Messages have been observed — reset pending tokens
+        ds.omProgress.pendingTokens = 0;
+        ds.omProgress.thresholdPercent = 0;
+        break;
+
+      case 'om_observation_failed':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        break;
+
+      case 'om_reflection_start':
+        ds.omProgress.status = 'reflecting';
+        ds.omProgress.cycleId = event.cycleId;
+        ds.omProgress.startTime = Date.now();
+        ds.omProgress.preReflectionTokens = ds.omProgress.observationTokens;
+        ds.omProgress.observationTokens = event.tokensToReflect;
+        ds.omProgress.reflectionThresholdPercent =
+          ds.omProgress.reflectionThreshold > 0 ? (event.tokensToReflect / ds.omProgress.reflectionThreshold) * 100 : 0;
+        break;
+
+      case 'om_reflection_end':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        ds.omProgress.observationTokens = event.compressedTokens;
+        ds.omProgress.reflectionThresholdPercent =
+          ds.omProgress.reflectionThreshold > 0
+            ? (event.compressedTokens / ds.omProgress.reflectionThreshold) * 100
+            : 0;
+        break;
+
+      case 'om_reflection_failed':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        break;
+
+      case 'om_buffering_start':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = true;
+        } else {
+          ds.bufferingObservations = true;
+        }
+        break;
+
+      case 'om_buffering_end':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      case 'om_buffering_failed':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      case 'om_activation':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      // ── Token usage ────────────────────────────────────────────────────
+      case 'usage_update':
+        ds.tokenUsage = this.deps.getTokenUsage();
+        break;
+
+      // ── Tasks ──────────────────────────────────────────────────────────
+      case 'task_updated':
+        ds.previousTasks = [...ds.tasks];
+        ds.tasks = event.tasks;
+        break;
+
+      // ── Follow-up queue ────────────────────────────────────────────────
+      case 'follow_up_queued':
+        ds.queuedFollowUps = event.count;
+        break;
+
+      // ── Thread lifecycle ───────────────────────────────────────────────
+      case 'thread_changed':
+        this.resetThread();
+        ds.tokenUsage = this.deps.getTokenUsage();
+        break;
+
+      case 'thread_created':
+        this.resetThread();
+        ds.tokenUsage = createEmptyTokenUsage();
+        break;
+
+      case 'thread_deleted':
+        if (!this.deps.getThreadId()) {
+          this.resetThread();
+          ds.tokenUsage = createEmptyTokenUsage();
+        }
+        break;
+
+      // ── State changes (for OM threshold overrides) ──────────────────────
+      case 'state_changed': {
+        const keys = event.changedKeys;
+        if (keys.includes('observationThreshold')) {
+          const value = (event.state as Record<string, unknown>).observationThreshold;
+          if (typeof value === 'number') {
+            ds.omProgress.threshold = value;
+            ds.omProgress.thresholdPercent = value > 0 ? (ds.omProgress.pendingTokens / value) * 100 : 0;
+          }
+        }
+        if (keys.includes('reflectionThreshold')) {
+          const value = (event.state as Record<string, unknown>).reflectionThreshold;
+          if (typeof value === 'number') {
+            ds.omProgress.reflectionThreshold = value;
+            ds.omProgress.reflectionThresholdPercent = value > 0 ? (ds.omProgress.observationTokens / value) * 100 : 0;
+          }
+        }
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+}
+
+export class Session<TState = unknown> {
   /** Tool categories the user has granted "allow" for the lifetime of this session. */
   readonly #grantedCategories = new Set<string>();
   /** Individual tool names the user has granted "allow" for the lifetime of this session. */
@@ -838,6 +1437,8 @@ export class Session {
   #store: ThreadSettingsStore | undefined;
   /** Resolves a tool name to its category, injected by the Harness via {@link setCategoryResolver} (the category map is Harness config). */
   #resolveCategory: ((toolName: string) => ToolCategory | null) | undefined;
+  /** Resolves a subagent's display name from Harness config, injected via {@link setSubagentNameResolver}. */
+  #resolveSubagentName: ((agentType: string) => string | undefined) | undefined;
   /** The session's currently-selected model (source of truth) + per-mode memory. */
   readonly model = new SessionModel(() => this.#store);
   /** The session's currently-selected mode and switch sequence. */
@@ -856,10 +1457,21 @@ export class Session {
   readonly identity: SessionIdentity;
   /** The session's thread domain: current binding + reads scoped to it. */
   readonly thread: SessionThread;
+  /** The canonical display state a UI renders, plus the reducer that maintains it. */
+  readonly displayState: SessionDisplayState;
+  /** The session-owned Harness state domain. */
+  readonly state: HarnessRequestState<TState>;
 
-  constructor({ resourceId }: { resourceId: string }) {
+  constructor({ resourceId, state }: { resourceId: string; state?: SessionStateOptions<TState> }) {
     this.identity = new SessionIdentity({ resourceId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
+    this.displayState = new SessionDisplayState({
+      getTokenUsage: () => this.getTokenUsage(),
+      getSubagentDisplayName: agentType => this.#resolveSubagentName?.(agentType),
+      getThreadId: () => this.thread.getId(),
+      clearFollowUps: () => this.followUps.clear(),
+    });
+    this.state = new SessionState(state ?? { initialState: {} as TState });
   }
 
   /**
@@ -878,6 +1490,15 @@ export class Session {
    */
   setCategoryResolver(resolveCategory: (toolName: string) => ToolCategory | null): void {
     this.#resolveCategory = resolveCategory;
+  }
+
+  /**
+   * Attach the subagent display-name resolver the display-state reducer uses to
+   * label active subagents. The subagent catalog is Harness config, so the
+   * Harness injects this once; without it, subagents render without a name.
+   */
+  setSubagentNameResolver(resolveSubagentName: (agentType: string) => string | undefined): void {
+    this.#resolveSubagentName = resolveSubagentName;
   }
 
   /**

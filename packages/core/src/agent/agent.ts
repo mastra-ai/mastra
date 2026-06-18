@@ -7192,7 +7192,7 @@ export class Agent<
           status: 'discarded',
           deliveryReason: decision.reason,
         });
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
@@ -7202,7 +7202,7 @@ export class Agent<
           threadId: record.threadId,
           deliveryReason: decision.reason,
         });
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
@@ -7244,7 +7244,7 @@ export class Agent<
               lastDeliveryAttemptAt: new Date(),
               lastDeliveryError: 'Notification summary signal was rejected',
             });
-            results.push({ accepted: false, record: failed, decision });
+            results.push({ record: failed, decision });
             continue;
           }
           const summarized = await notifications.updateNotification({
@@ -7253,18 +7253,17 @@ export class Agent<
             summarySignalId: result.signal.id,
           });
           results.push({
-            accepted: true,
             record: summarized,
             decision,
             runId: 'runId' in summaryAccepted ? summaryAccepted.runId : undefined,
             signal: result.signal,
             persisted: result.persisted,
-            outcome: result.accepted,
+            accepted: result.accepted,
           });
           continue;
         }
 
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
@@ -7287,7 +7286,7 @@ export class Agent<
           lastDeliveryError: 'Notification signal was rejected',
           deliveryReason: decision.reason,
         });
-        results.push({ accepted: false, record: failed, decision });
+        results.push({ record: failed, decision });
         continue;
       }
 
@@ -7300,13 +7299,12 @@ export class Agent<
       });
 
       results.push({
-        accepted: true,
         record: updated,
         decision,
         runId: 'runId' in delivered ? delivered.runId : undefined,
         signal: result.signal,
         persisted: result.persisted,
-        outcome: result.accepted,
+        accepted: result.accepted,
       });
     }
 

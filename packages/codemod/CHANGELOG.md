@@ -1,5 +1,11 @@
 # @mastra/codemod
 
+## 1.0.6
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
 ## 1.0.6-alpha.0
 
 ### Patch Changes

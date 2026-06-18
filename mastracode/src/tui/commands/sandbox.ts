@@ -5,10 +5,12 @@ import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
 async function sandboxAddPath(ctx: SlashCommandContext, rawPath: string): Promise<void> {
-  const harnessState = ctx.state.harness.getState() as {
-    sandboxAllowedPaths?: string[];
-  };
-  const currentPaths = harnessState.sandboxAllowedPaths ?? [];
+  const harnessState = ctx.state.session.state.get() as
+    | {
+        sandboxAllowedPaths?: string[];
+      }
+    | undefined;
+  const currentPaths = harnessState?.sandboxAllowedPaths ?? [];
   const resolved = path.resolve(rawPath);
 
   if (currentPaths.includes(resolved)) {
@@ -22,8 +24,8 @@ async function sandboxAddPath(ctx: SlashCommandContext, rawPath: string): Promis
     return;
   }
   const updated = [...currentPaths, resolved];
-  ctx.state.harness.setState({ sandboxAllowedPaths: updated } as any);
-  await ctx.state.harness.session.thread.setSetting({ key: 'sandboxAllowedPaths', value: updated });
+  await ctx.state.session.state.set({ sandboxAllowedPaths: updated } as any);
+  await ctx.state.session.thread.setSetting({ key: 'sandboxAllowedPaths', value: updated });
   ctx.showInfo(`Added to sandbox: ${resolved}`);
 }
 
@@ -35,8 +37,8 @@ async function sandboxRemovePath(ctx: SlashCommandContext, rawPath: string, curr
     return;
   }
   const updated = currentPaths.filter(p => p !== match);
-  ctx.state.harness.setState({ sandboxAllowedPaths: updated } as any);
-  await ctx.state.harness.session.thread.setSetting({ key: 'sandboxAllowedPaths', value: updated });
+  await ctx.state.session.state.set({ sandboxAllowedPaths: updated } as any);
+  await ctx.state.session.thread.setSetting({ key: 'sandboxAllowedPaths', value: updated });
   ctx.showInfo(`Removed from sandbox: ${match}`);
 }
 
@@ -62,10 +64,12 @@ async function showSandboxAddPrompt(ctx: SlashCommandContext): Promise<void> {
 }
 
 export async function handleSandboxCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  const harnessState = ctx.state.harness.getState() as {
-    sandboxAllowedPaths?: string[];
-  };
-  const currentPaths = harnessState.sandboxAllowedPaths ?? [];
+  const harnessState = ctx.state.session.state.get() as
+    | {
+        sandboxAllowedPaths?: string[];
+      }
+    | undefined;
+  const currentPaths = harnessState?.sandboxAllowedPaths ?? [];
 
   const subcommand = args[0]?.toLowerCase();
   if (subcommand === 'add' && args.length > 1) {

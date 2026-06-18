@@ -99,7 +99,7 @@ describe('step-finish token usage extraction', () => {
       raw: { provider: 'test-provider' },
     };
     expect(harness.session.getTokenUsage()).toEqual(expectedUsage);
-    expect(harness.getDisplayState().tokenUsage).toEqual(expectedUsage);
+    expect(harness.session.displayState.get().tokenUsage).toEqual(expectedUsage);
     expect(events.find(event => event.type === 'usage_update')).toEqual({
       type: 'usage_update',
       usage: expectedUsage,

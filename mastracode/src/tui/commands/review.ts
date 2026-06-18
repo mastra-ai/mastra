@@ -2,7 +2,7 @@ import { sendSlashCommandMessage } from './send-slash-command-message.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleReviewCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  if (!ctx.state.harness.session.model.hasSelection()) {
+  if (!ctx.state.session.model.hasSelection()) {
     ctx.showInfo('No model selected. Use /models to select a model, or /login to authenticate.');
     return;
   }

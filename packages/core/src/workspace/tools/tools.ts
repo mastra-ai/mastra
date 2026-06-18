@@ -90,6 +90,21 @@ function hasSandboxConfig(workspace: Workspace): boolean {
 }
 
 /**
+ * Whether a sandbox executes commands directly on the host without OS-level
+ * isolation. The built-in LocalSandbox exposes `isolation` and reports `'none'`
+ * when no seatbelt/bwrap backend is active; container/cloud sandboxes (E2B,
+ * Docker, Modal, …) don't expose this field and are isolated by construction.
+ *
+ * Used to make `execute_command` fail-safe (require approval by default) when a
+ * model tool call would otherwise reach an un-isolated host shell. Detection is
+ * duck-typed (no import of the Node-only LocalSandbox) so this stays
+ * browser-safe and applies to any provider that reports `isolation: 'none'`.
+ */
+function sandboxRunsUnisolatedOnHost(sandbox: WorkspaceSandbox | undefined): boolean {
+  return (sandbox as { isolation?: unknown } | undefined)?.isolation === 'none';
+}
+
+/**
  * Normalize a requestContext value to a plain Record.
  * Callers may pass a Map-like RequestContext (with `.entries()`) or a plain
  * object.  Dynamic config functions always receive a plain object so that
@@ -114,10 +129,25 @@ export interface ResolvedToolConfig {
 }
 
 /**
+ * Per-tool built-in defaults that override the global fail-open defaults.
+ * Used to make individual tools fail-safe based on the runtime environment
+ * (e.g. requiring approval for command execution on an un-isolated sandbox).
+ */
+export interface ToolConfigDefaults {
+  /**
+   * Built-in default for `requireApproval` when the host hasn't configured it
+   * (neither top-level nor per-tool). Host config always takes precedence, so
+   * this only raises the floor — it never overrides an explicit setting.
+   */
+  requireApproval?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
+}
+
+/**
  * Resolves the effective configuration for a specific tool.
  *
  * Resolution order (later overrides earlier):
- * 1. Built-in defaults (enabled: true, requireApproval: false)
+ * 1. Built-in defaults (enabled: true, requireApproval: false unless `defaults`
+ *    raises it for this tool/environment)
  * 2. Top-level config (tools.enabled, tools.requireApproval)
  * 3. Per-tool config (tools[toolName].enabled, tools[toolName].requireApproval)
  *
@@ -129,9 +159,10 @@ export async function resolveToolConfig(
   toolsConfig: WorkspaceToolsConfig | undefined,
   toolName: WorkspaceToolName,
   context?: ToolConfigContext,
+  defaults?: ToolConfigDefaults,
 ): Promise<ResolvedToolConfig> {
   let enabled: DynamicToolConfigValue = true;
-  let requireApproval: DynamicToolConfigValue<ToolConfigWithArgsContext> = false;
+  let requireApproval: DynamicToolConfigValue<ToolConfigWithArgsContext> = defaults?.requireApproval ?? false;
   let requireReadBeforeWrite: DynamicToolConfigValue<ToolConfigWithArgsContext> | undefined;
   let maxOutputTokens: number | undefined;
   let name: string | undefined;
@@ -404,9 +435,10 @@ export async function createWorkspaceTools(
       readTrackerMode?: 'read' | 'write';
       useWriteLock?: boolean;
       targets?: ResolveTargets;
+      defaults?: ToolConfigDefaults;
     },
   ) => {
-    const config = await resolveToolConfig(toolsConfig, name, effectiveConfigContext);
+    const config = await resolveToolConfig(toolsConfig, name, effectiveConfigContext, opts?.defaults);
     if (!config.enabled) return;
     if (opts?.requireWrite && isReadOnly) return;
 
@@ -529,11 +561,23 @@ export async function createWorkspaceTools(
     await addTool(WORKSPACE_TOOLS.SEARCH.INDEX, indexContentTool, { requireWrite: true });
   }
 
+  // When the sandbox runs commands directly on the host with no OS isolation,
+  // a single model/tool call (e.g. from prompt injection) can execute arbitrary
+  // shell commands. Default execute_command to requiring approval in that case;
+  // host config (top-level or per-tool requireApproval) still overrides this.
+  const sandboxIsUnisolated = sandboxRunsUnisolatedOnHost(workspace.sandbox);
+  const executeCommandDefaults: ToolConfigDefaults | undefined = sandboxIsUnisolated
+    ? { requireApproval: true }
+    : undefined;
+
   if (workspace.sandbox) {
     if (workspace.sandbox.executeCommand) {
       // Pick the right tool variant based on whether processes are available
       const baseTool = workspace.sandbox.processes ? executeCommandWithBackgroundTool : executeCommandTool;
-      await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, baseTool, { targets: { sandbox: true } });
+      await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, baseTool, {
+        targets: { sandbox: true },
+        defaults: executeCommandDefaults,
+      });
     }
 
     // Background process tools (only when process manager is available)

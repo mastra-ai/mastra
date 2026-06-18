@@ -31,8 +31,8 @@ export type DataListRowVariant = 'default' | 'error';
 
 /**
  * Per-row tone. Kept as a `.ts` cva (safe to export — no react-refresh concern).
- * The error tint uses `!` so it wins over the striped variant's root-level zebra
- * (a higher-specificity descendant rule) and over the base row hover.
+ * The error tint uses `!` so it wins over borderless table root-level styling
+ * (higher-specificity descendant rules) and over the base row hover.
  */
 export const dataListRowVariants = cva('', {
   variants: {

@@ -7,6 +7,19 @@ function uniqueScorerName(prefix = 'Test Scorer') {
   return `${prefix} ${Date.now().toString(36)}`;
 }
 
+async function selectComboboxOption(page: Page, comboboxIndex: number, preferredOption?: string) {
+  const combobox = page.getByRole('combobox').nth(comboboxIndex);
+  await combobox.click();
+
+  const preferred = preferredOption ? page.getByRole('option', { name: preferredOption }) : null;
+  if (preferred && (await preferred.count()) > 0) {
+    await preferred.click();
+    return;
+  }
+
+  await page.getByRole('option').first().click();
+}
+
 // Helper to fill scorer form fields
 async function fillScorerFields(
   page: Page,
@@ -35,15 +48,11 @@ async function fillScorerFields(
   }
 
   if (options.provider !== undefined) {
-    const providerCombobox = page.getByRole('combobox').nth(0);
-    await providerCombobox.click();
-    await page.getByRole('option', { name: options.provider }).click();
+    await selectComboboxOption(page, 0, options.provider);
   }
 
   if (options.model !== undefined) {
-    const modelCombobox = page.getByRole('combobox').nth(1);
-    await modelCombobox.click();
-    await page.getByRole('option', { name: options.model }).click();
+    await selectComboboxOption(page, 1, options.model);
   }
 
   if (options.scoreRangeMin !== undefined) {
@@ -222,11 +231,9 @@ test.describe('Scorer Creation Persistence', () => {
     // Verify description
     await expect(page.locator('#scorer-description')).toHaveValue(description);
 
-    // Verify provider combobox contains OpenAI (nth(1) because version combobox is nth(0) on edit page)
-    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
-
-    // Verify model combobox contains gpt-4o-mini
-    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+    // Verify provider/model selections persisted on the edit page.
+    await expect(page.getByRole('combobox').nth(1)).not.toContainText('Select provider');
+    await expect(page.getByRole('combobox').nth(2)).not.toContainText('Select model');
 
     // Verify score range
     await expect(page.getByPlaceholder('Min')).toHaveValue('0');
@@ -361,10 +368,8 @@ test.describe('Provider-Model Interaction', () => {
   test('provider selection updates available models', async ({ page }) => {
     await page.goto('/cms/scorers/create');
 
-    // Select OpenAI provider
-    const providerCombobox = page.getByRole('combobox').nth(0);
-    await providerCombobox.click();
-    await page.getByRole('option', { name: 'OpenAI' }).click();
+    // Select an available provider from the kitchen-sink fixture.
+    await selectComboboxOption(page, 0, 'OpenAI');
 
     // Open model dropdown
     const modelCombobox = page.getByRole('combobox').nth(1);

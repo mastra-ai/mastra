@@ -33,9 +33,9 @@ export async function handleFeedbackCommand(ctx: SlashCommandContext, args: stri
   // session.run.getTraceId() returns the actual observability traceId (OTel 32-hex-char ID)
   // captured from the stream response. session.getCurrentRunId() returns the agent's runId (UUID).
   // We pass both so the cloud endpoint can correlate feedback to the correct trace.
-  const traceId = ctx.harness.session.run.getTraceId() ?? undefined;
-  const runId = ctx.harness.session.getCurrentRunId() ?? undefined;
-  const threadId = ctx.harness.session.thread.getId() ?? undefined;
+  const traceId = ctx.state.session.run.getTraceId() ?? undefined;
+  const runId = ctx.state.session.getCurrentRunId() ?? undefined;
+  const threadId = ctx.state.session.thread.getId() ?? undefined;
 
   if (!traceId && !runId && !threadId) {
     ctx.showError('No active session to attach feedback to.');
