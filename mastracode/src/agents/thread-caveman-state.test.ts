@@ -15,7 +15,7 @@ function createHarness({
 }) {
   let activeThreadId: string | undefined = currentThreadId;
   const harness = {
-    getCurrentThreadId: vi.fn(() => activeThreadId),
+    session: { identity: { getThreadId: vi.fn(() => activeThreadId) } },
     getState: vi.fn(() => state),
     listThreads: vi.fn(async () => {
       onListThreads?.();

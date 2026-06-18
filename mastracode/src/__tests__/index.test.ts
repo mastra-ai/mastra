@@ -112,11 +112,13 @@ vi.mock('@mastra/core/harness', () => ({
     subscribe(eventHandler: unknown) {
       harnessSubscribeMock(eventHandler);
     }
-    getCurrentThreadId() {
-      return harnessGetCurrentThreadIdMock();
-    }
     get session() {
-      return { identity: { getResourceId: () => 'project-resource' } };
+      return {
+        identity: {
+          getResourceId: () => 'project-resource',
+          getThreadId: () => harnessGetCurrentThreadIdMock(),
+        },
+      };
     }
     getState() {
       return harnessStateMock;

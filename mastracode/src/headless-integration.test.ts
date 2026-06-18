@@ -595,7 +595,7 @@ describe('headless mode — --output-format contracts', () => {
         } as HarnessEvent);
         listener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
       }),
-      getCurrentThreadId: vi.fn(() => 'thread-state'),
+      session: { identity: { getThreadId: vi.fn(() => 'thread-state') } },
     } as unknown as Harness<Record<string, unknown>>;
 
     const {
@@ -1205,7 +1205,7 @@ describe('headless mode — thread control', () => {
 
     expect(exitCode).toBe(0);
     expect(harness.session.identity.getResourceId()).toBe('resource-b');
-    expect(harness.getCurrentThreadId()).toBe(betaThread.id);
+    expect(harness.session.identity.getThreadId()).toBe(betaThread.id);
 
     exitCode = await runHeadless(harness, {
       prompt: 'Hello alpha',
@@ -1217,8 +1217,8 @@ describe('headless mode — thread control', () => {
 
     expect(exitCode).toBe(0);
     expect(harness.session.identity.getResourceId()).toBe('resource-a');
-    expect(harness.getCurrentThreadId()).toBe(alphaThread.id);
-    expect(harness.getCurrentThreadId()).not.toBe(alphaOlderThread.id);
+    expect(harness.session.identity.getThreadId()).toBe(alphaThread.id);
+    expect(harness.session.identity.getThreadId()).not.toBe(alphaOlderThread.id);
   });
 
   it('resumes a Harness v1 prefilled thread by title in headless mode', async () => {
@@ -1281,7 +1281,7 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(harness.getCurrentThreadId()).toBe(thread.id);
+    expect(harness.session.identity.getThreadId()).toBe(thread.id);
     expect(harnessV1.session).toHaveBeenCalledWith({ threadId: thread.id, resourceId: thread.resourceId });
     // Main's #17558 carries the harness's current model onto the session at
     // switchThread, so the startup model overrides the prefilled session model.

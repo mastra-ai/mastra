@@ -349,7 +349,7 @@ function finalizeSummary<TState extends Record<string, unknown>>(
   harness: Harness<TState>,
 ): void {
   summary.finishReason = endEvent.reason;
-  summary.threadId = harness.getCurrentThreadId() ?? undefined;
+  summary.threadId = harness.session.identity.getThreadId() ?? undefined;
 }
 
 /** Resolve a thread by ID or title. Tries exact ID match first, then title. */

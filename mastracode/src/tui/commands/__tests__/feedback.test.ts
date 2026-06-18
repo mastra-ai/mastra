@@ -18,8 +18,10 @@ function createCtx(options?: {
       session: {
         run: { getTraceId: vi.fn(() => (options && 'traceId' in options ? options.traceId : 'trace-123')) },
         getCurrentRunId: vi.fn(() => (options && 'runId' in options ? options.runId : 'run-123')),
+        identity: {
+          getThreadId: vi.fn(() => (options && 'threadId' in options ? options.threadId : 'thread-123')),
+        },
       },
-      getCurrentThreadId: vi.fn(() => (options && 'threadId' in options ? options.threadId : 'thread-123')),
       getMastra: vi.fn(() => ({ observability: { addFeedback } })),
     },
     showInfo: vi.fn(),

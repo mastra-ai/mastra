@@ -73,8 +73,7 @@ function createContext(threads: HarnessThread[]) {
     pendingTools: new Map(),
     harness: {
       listThreads: vi.fn(async () => threads),
-      getCurrentThreadId: vi.fn(() => null),
-      session: { identity: { getResourceId: vi.fn(() => 'resource-1') } },
+      session: { identity: { getResourceId: vi.fn(() => 'resource-1'), getThreadId: vi.fn(() => null) } },
       getCurrentModeId: vi.fn(() => 'build'),
       getFirstUserMessagesForThreads: vi.fn(async () => new Map()),
       setResourceId: vi.fn(),

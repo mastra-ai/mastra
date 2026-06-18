@@ -177,7 +177,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     title?: string;
     resourceId?: string;
   } = {}): Promise<HarnessThread> {
-    const sourceId = sourceThreadId ?? this.getCurrentThreadId();
+    const sourceId = sourceThreadId ?? this.session.identity.getThreadId();
     if (!sourceId) {
       throw new Error('No source thread to clone');
     }

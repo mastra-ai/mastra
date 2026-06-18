@@ -32,21 +32,28 @@ const MODE_ID_KEY = 'currentModeId';
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
 /**
- * Owns the session's identity: which memory `resourceId` this session reads and
- * writes under. In a multi-user host one Harness serves many sessions, so the
- * resourceId — "whose session is this" — belongs to the Session, not the
- * Harness.
+ * Owns the session's identity: the memory `resourceId` and the active
+ * `threadId` this session reads and writes under. Together they form the memory
+ * binding (`{ thread, resource }`) every run uses. In a multi-user host one
+ * Harness serves many sessions, so this identity — "whose session is this, and
+ * which thread is it on" — belongs to the Session, not the Harness.
  *
  * `defaultResourceId` is the resourceId the session started with; switching to a
  * different resource (e.g. impersonation, or browsing another user's threads)
  * updates the current resourceId while the default is retained so the session
  * can return to its own identity.
+ *
+ * `threadId` is null until the session is bound to a thread (created, switched
+ * to, or reacquired); switching/deleting threads updates it, and the Harness
+ * owns the surrounding teardown (subscription, display state).
  */
 export class SessionIdentity {
   /** The memory resourceId the session currently reads/writes under. */
   #resourceId: string;
   /** The resourceId the session started with, retained across resource switches. */
   readonly #defaultResourceId: string;
+  /** The active thread id, or null when the session is not bound to a thread. */
+  #threadId: string | null = null;
 
   constructor({ resourceId }: { resourceId: string }) {
     this.#resourceId = resourceId;
@@ -66,6 +73,16 @@ export class SessionIdentity {
   /** Point the session at a different resourceId (the default is unchanged). */
   setResourceId({ resourceId }: { resourceId: string }): void {
     this.#resourceId = resourceId;
+  }
+
+  /** The active thread id, or null when the session is not bound to a thread. */
+  getThreadId(): string | null {
+    return this.#threadId;
+  }
+
+  /** Bind the session to a thread (or clear it with null). */
+  setThreadId({ threadId }: { threadId: string | null }): void {
+    this.#threadId = threadId;
   }
 }
 

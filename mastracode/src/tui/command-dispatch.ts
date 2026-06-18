@@ -70,7 +70,7 @@ export async function dispatchSlashCommand(
     if (!TRACKED_COMMANDS.has(command)) return;
     ctx.analytics?.trackCommand(command, {
       action: 'attempted',
-      threadId: state.harness.getCurrentThreadId(),
+      threadId: state.harness.session.identity.getThreadId(),
       resourceId: state.harness.session.identity.getResourceId(),
       mode: state.harness.getCurrentModeId(),
     });

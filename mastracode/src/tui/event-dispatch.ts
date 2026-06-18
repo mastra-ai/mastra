@@ -90,7 +90,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     case 'tool_approval_required':
       trackInteractivePrompt(ectx, 'tool_approval_required', {
         toolName: event.toolName,
-        threadId: state.harness.getCurrentThreadId(),
+        threadId: state.harness.session.identity.getThreadId(),
         resourceId: state.harness.session.identity.getResourceId(),
       });
       handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
@@ -108,7 +108,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (event.toolName === 'ask_user' || event.toolName === 'request_access' || event.toolName === 'submit_plan') {
         trackInteractivePrompt(ectx, event.toolName, {
           toolName: event.toolName,
-          threadId: state.harness.getCurrentThreadId(),
+          threadId: state.harness.session.identity.getThreadId(),
           resourceId: state.harness.session.identity.getResourceId(),
         });
       }

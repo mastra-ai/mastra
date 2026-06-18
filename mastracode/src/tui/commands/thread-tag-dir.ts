@@ -4,7 +4,7 @@ import type { SlashCommandContext } from './types.js';
 
 export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
-  const threadId = state.harness.getCurrentThreadId();
+  const threadId = state.harness.session.identity.getThreadId();
   if (!threadId && state.pendingNewThread) {
     ctx.showInfo('No active thread yet — send a message first.');
     return;

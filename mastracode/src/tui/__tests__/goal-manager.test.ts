@@ -35,8 +35,7 @@ function makeRecord(overrides: Record<string, unknown> = {}) {
 function createState(agent?: FakeAgent, threadId: string | undefined = 'parent-thread'): TUIState {
   return {
     harness: {
-      getCurrentThreadId: vi.fn(() => threadId),
-      session: { identity: { getResourceId: vi.fn(() => 'resource-1') } },
+      session: { identity: { getResourceId: vi.fn(() => 'resource-1'), getThreadId: vi.fn(() => threadId) } },
       setThreadSetting: vi.fn().mockResolvedValue(undefined),
       getCurrentAgent: vi.fn(() => agent),
     },
