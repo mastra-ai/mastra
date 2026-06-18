@@ -1,6 +1,6 @@
 import { ChevronRight } from 'lucide-react';
 import * as React from 'react';
-import { useTreeContext, useTreeDepth } from './tree-context';
+import { useTreeContext, useTreeDepth, useTreeFolderContext } from './tree-context';
 import { CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,7 @@ export interface TreeFolderTriggerProps {
 export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTriggerProps>(
   ({ className, children, actions }, ref) => {
     const treeCtx = useTreeContext();
+    const folderCtx = useTreeFolderContext();
     const depth = useTreeDepth();
 
     const focusFolderItem = React.useCallback(
@@ -31,8 +32,9 @@ export const TreeFolderTrigger = React.forwardRef<HTMLDivElement, TreeFolderTrig
         ref={ref}
         data-tree-folder-row="true"
         className={cn(
-          'group flex h-7 min-w-0 w-full items-center rounded-sm hover:bg-surface4 group-focus-visible/treeitem:outline-hidden group-focus-visible/treeitem:bg-surface4 group-focus-visible/treeitem:text-neutral6',
+          'group flex h-7 min-w-0 w-full items-center rounded-sm hover:bg-surface4',
           transitions.colors,
+          folderCtx?.isFocused && 'bg-surface4 text-neutral6',
           className,
         )}
       >
