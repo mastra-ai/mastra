@@ -48,7 +48,7 @@ describe('Harness signal history rendering', () => {
       ],
     });
 
-    const messages = await harness.listMessages();
+    const messages = await harness.session.thread.listActiveMessages();
 
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({
@@ -103,7 +103,7 @@ describe('Harness signal history rendering', () => {
       ],
     });
 
-    const messages = await harness.listMessages();
+    const messages = await harness.session.thread.listActiveMessages();
 
     expect(messages).toEqual([
       {
