@@ -5,6 +5,7 @@ import { comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
 import type { TextButtonSize } from '@/ds/components/Button/Button';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
+import { cn } from '@/lib/utils';
 
 export type { ComboboxVariant } from './combobox-styles';
 
@@ -16,10 +17,8 @@ export type ComboboxOption = {
   end?: React.ReactNode;
 };
 
-export type ComboboxProps = {
+type ComboboxSharedProps = {
   options: ComboboxOption[];
-  value?: string;
-  onValueChange?: (value: string) => void;
   placeholder?: string;
   searchPlaceholder?: string;
   emptyText?: string;
@@ -33,7 +32,31 @@ export type ComboboxProps = {
   error?: string;
 };
 
-export function Combobox({
+export type ComboboxSingleProps = ComboboxSharedProps & {
+  multiple?: false;
+  value?: string;
+  onValueChange?: (value: string) => void;
+};
+
+export type ComboboxMultipleProps = ComboboxSharedProps & {
+  multiple: true;
+  value?: string[];
+  onValueChange?: (value: string[]) => void;
+};
+
+export type ComboboxProps = ComboboxSingleProps | ComboboxMultipleProps;
+
+const EMPTY_VALUES: string[] = [];
+
+export function Combobox(props: ComboboxProps) {
+  if (props.multiple) {
+    return <ComboboxMultiple {...props} />;
+  }
+
+  return <ComboboxSingle {...props} />;
+}
+
+function ComboboxSingle({
   options,
   value,
   onValueChange,
@@ -48,7 +71,7 @@ export function Combobox({
   onOpenChange,
   container,
   error,
-}: ComboboxProps) {
+}: ComboboxSingleProps) {
   const selectedOption = options.find(option => option.value === value) ?? null;
 
   // Default to the nearest SideDialog/Drawer popup so the list stays
@@ -116,6 +139,102 @@ export function Combobox({
                     </span>
                   </BaseCombobox.Item>
                 )}
+              </BaseCombobox.List>
+            </BaseCombobox.Popup>
+          </BaseCombobox.Positioner>
+        </BaseCombobox.Portal>
+      </BaseCombobox.Root>
+      {error && <span className={comboboxStyles.error}>{error}</span>}
+    </div>
+  );
+}
+
+function ComboboxMultiple({
+  options,
+  value = EMPTY_VALUES,
+  onValueChange,
+  placeholder = 'Select options...',
+  searchPlaceholder = 'Search...',
+  emptyText = 'No option found.',
+  className,
+  disabled = false,
+  variant = 'default',
+  size = 'md',
+  open,
+  onOpenChange,
+  container,
+  error,
+}: ComboboxMultipleProps) {
+  const selectedOptions = options.filter(option => value.includes(option.value));
+
+  // Default to the nearest SideDialog/Drawer popup so the list stays
+  // interactive inside a modal drawer; an explicit `container` still wins.
+  const resolvedContainer = usePortalContainer(container);
+
+  const handleSelect = (items: ComboboxOption[] | null) => {
+    onValueChange?.((items ?? []).map(item => item.value));
+  };
+
+  const triggerText = selectedOptions.length === 0 ? placeholder : `${selectedOptions.length} selected`;
+
+  return (
+    <div className={comboboxStyles.root}>
+      <BaseCombobox.Root
+        multiple
+        autoHighlight
+        items={options}
+        value={selectedOptions}
+        onValueChange={handleSelect}
+        disabled={disabled}
+        open={open}
+        onOpenChange={onOpenChange}
+      >
+        <BaseCombobox.Trigger className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}>
+          <span className={cn('truncate', selectedOptions.length === 0 && comboboxStyles.placeholder)}>
+            {triggerText}
+          </span>
+          {/* Wrap the chevron in a `<span>` so the svg is one level deep and
+              escapes Button's `[&>svg]` adornments — mirrors Select's chevron wrap. */}
+          <span className="flex shrink-0 items-center">
+            <ChevronsUpDown className={comboboxStyles.chevron} />
+          </span>
+        </BaseCombobox.Trigger>
+
+        <BaseCombobox.Portal container={resolvedContainer}>
+          <BaseCombobox.Positioner align="start" sideOffset={4} className={comboboxStyles.positioner}>
+            <BaseCombobox.Popup className={comboboxStyles.popup}>
+              <div className={comboboxStyles.searchContainer}>
+                <Search className={comboboxStyles.searchIcon} />
+                <BaseCombobox.Input className={comboboxStyles.searchInput} placeholder={searchPlaceholder} />
+              </div>
+              <BaseCombobox.Empty className={comboboxStyles.empty}>{emptyText}</BaseCombobox.Empty>
+              <BaseCombobox.List className={comboboxStyles.list}>
+                {(option: ComboboxOption) => {
+                  const isSelected = value.includes(option.value);
+
+                  return (
+                    <BaseCombobox.Item key={option.value} value={option} className={comboboxStyles.itemMulti}>
+                      <span
+                        className={cn(
+                          comboboxStyles.checkbox,
+                          isSelected ? comboboxStyles.checkboxSelected : comboboxStyles.checkboxUnselected,
+                        )}
+                      >
+                        {isSelected && <Check className={comboboxStyles.checkboxIcon} />}
+                      </span>
+                      <span className={comboboxStyles.optionContent}>
+                        {option.start}
+                        <span className={comboboxStyles.optionText}>
+                          <span className={comboboxStyles.optionLabel}>{option.label}</span>
+                          {option.description && (
+                            <span className={comboboxStyles.optionDescription}>{option.description}</span>
+                          )}
+                        </span>
+                        {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                      </span>
+                    </BaseCombobox.Item>
+                  );
+                }}
               </BaseCombobox.List>
             </BaseCombobox.Popup>
           </BaseCombobox.Positioner>

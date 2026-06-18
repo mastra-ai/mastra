@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': patch
+'@mastra/playground-ui': minor
 ---
 
-Added Storybook examples for the multi-select combobox and cleaned up command item icon rendering.
+Added a multiple-selection mode to the Combobox component, plus Storybook examples for the single and multi-select flows. Cleaned up command item icon rendering.

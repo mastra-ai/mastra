@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Activity, BarChart3, Database, Gauge, GitBranch, ListChecks, ScrollText } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { Combobox } from './combobox';
-import { MultiCombobox } from './multi-combobox';
 
 const meta: Meta<typeof Combobox> = {
   title: 'Composite/Combobox',
@@ -22,7 +22,9 @@ const meta: Meta<typeof Combobox> = {
 
 export default meta;
 type Story = StoryObj<typeof Combobox>;
-type MultiStory = StoryObj<typeof MultiCombobox>;
+
+const iconClassName = 'h-4 w-4 shrink-0 text-neutral3';
+const badgeClassName = 'rounded-full border border-border1 px-2 py-0.5 text-ui-xs text-neutral3';
 
 const frameworkOptions = [
   { label: 'React', value: 'react' },
@@ -43,12 +45,55 @@ const modelOptions = [
 ];
 
 const capabilityOptions = [
-  { label: 'Logs', value: 'logs', description: 'Inspect application output' },
-  { label: 'Traces', value: 'traces', description: 'Follow request spans' },
-  { label: 'Metrics', value: 'metrics', description: 'Monitor service health' },
-  { label: 'Datasets', value: 'datasets', description: 'Review evaluation data' },
-  { label: 'Workflows', value: 'workflows', description: 'Run multi-step processes' },
-  { label: 'Scorers', value: 'scorers', description: 'Evaluate generated output' },
+  {
+    label: 'Logs',
+    value: 'logs',
+    description: 'Inspect application output',
+    start: <ScrollText className={iconClassName} />,
+    end: <span className={badgeClassName}>Live</span>,
+  },
+  {
+    label: 'Traces',
+    value: 'traces',
+    description: 'Follow request spans',
+    start: <GitBranch className={iconClassName} />,
+    end: <span className={badgeClassName}>8 services</span>,
+  },
+  {
+    label: 'Metrics',
+    value: 'metrics',
+    description: 'Monitor service health',
+    start: <Gauge className={iconClassName} />,
+    end: <span className={badgeClassName}>42 charts</span>,
+  },
+  {
+    label: 'Datasets',
+    value: 'datasets',
+    description: 'Review evaluation data',
+    start: <Database className={iconClassName} />,
+    end: <span className={badgeClassName}>12 sets</span>,
+  },
+  {
+    label: 'Workflows',
+    value: 'workflows',
+    description: 'Run multi-step processes',
+    start: <ListChecks className={iconClassName} />,
+    end: <span className={badgeClassName}>6 active</span>,
+  },
+  {
+    label: 'Scorers',
+    value: 'scorers',
+    description: 'Evaluate generated output',
+    start: <BarChart3 className={iconClassName} />,
+    end: <span className={badgeClassName}>Quality</span>,
+  },
+  {
+    label: 'Signals',
+    value: 'signals',
+    description: 'Watch runtime activity',
+    start: <Activity className={iconClassName} />,
+    end: <span className={badgeClassName}>Beta</span>,
+  },
 ];
 
 export const Default: Story = {
@@ -154,20 +199,34 @@ export const Sizes: Story = {
   ),
 };
 
-export const MultiSelect: MultiStory = {
-  render: function MultiSelectStory() {
-    const [value, setValue] = useState<string[]>(['logs', 'traces']);
+export const MultiCombobox: Story = {
+  render: function MultiComboboxStory() {
+    const [value, setValue] = useState<string[]>(['logs', 'traces', 'metrics']);
+    const selectedCapabilities = capabilityOptions.filter(option => value.includes(option.value));
 
     return (
-      <MultiCombobox
-        options={capabilityOptions}
-        value={value}
-        onValueChange={setValue}
-        placeholder="Select capabilities..."
-        searchPlaceholder="Search capabilities..."
-        emptyText="No capabilities found."
-        className="w-[280px]"
-      />
+      <div className="flex w-[360px] flex-col gap-3">
+        <Combobox
+          multiple
+          options={capabilityOptions}
+          value={value}
+          onValueChange={setValue}
+          placeholder="Select capabilities..."
+          searchPlaceholder="Search capabilities..."
+          emptyText="No capabilities found."
+          className="w-full"
+        />
+        <div className="flex flex-wrap gap-1.5">
+          {selectedCapabilities.map(option => (
+            <span
+              key={option.value}
+              className="rounded-full border border-border1 bg-surface3 px-2.5 py-1 text-ui-xs text-neutral4"
+            >
+              {option.label}
+            </span>
+          ))}
+        </div>
+      </div>
     );
   },
 };
