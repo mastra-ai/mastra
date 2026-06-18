@@ -64,6 +64,11 @@ describe('DataListRoot', () => {
       expect(grid).not.toBe(container.firstElementChild);
       // the ScrollArea viewport owns scrolling, so the grid doesn't
       expect(grid?.className).not.toContain('overflow-auto');
+      expect(grid?.className).toContain('gap-y-px');
+      expect(grid?.className).toContain('[&_.data-list-row]:after:hidden');
+      expect(grid?.className).toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
+      expect(grid?.className).not.toContain('[&_.data-list-row]:after:bg-neutral6/5');
+      expect(grid?.className).not.toContain('[&_.data-list-row]:after:-bottom-px');
     });
   });
 
@@ -100,7 +105,7 @@ describe('DataListRoot', () => {
       expect(grid?.className).toContain('gap-y-px');
       expect(grid?.className).toContain('[&_.data-list-row]:after:inset-x-4');
       expect(grid?.className).toContain('[&_.data-list-row]:after:-bottom-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:bg-border1');
+      expect(grid?.className).toContain('[&_.data-list-row]:after:bg-neutral6/5');
       expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
       expect(grid?.className).not.toContain('[&_.data-list-row]:after:hidden');
     });
