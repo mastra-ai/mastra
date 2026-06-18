@@ -7,27 +7,13 @@ packages:
 
 # Session
 
-A `Session` holds the per-conversation state of a Harness: who the conversation is for, which thread is active, the selected mode and model, permission grants, queued follow-ups, token usage, application state, and the display snapshot. You reach it through `harness.session`.
+A [`Session`](/reference/harness/session) holds the per-conversation state of a Harness: who the conversation is for, which thread is active, the selected mode and model, permission grants, queued follow-ups, token usage, application state, and the display snapshot. You reach it through `harness.session`.
 
-## Harness vs. Session
+## What the Session tracks
 
-The Harness is the shared host. It owns the machinery that doesn't change from one conversation to the next: configuration, storage, the agent registry, the thread lock, the event bus, and permission _policy_. The Session is the per-conversation state that sits on top of that machinery.
+The Session is the live state of one conversation. It answers "what is true about this conversation right now": who the conversation belongs to, which thread is bound, which mode and model are selected, what the user has approved, what's queued or running, the application state, and the snapshot to render. Anything that describes the current conversation lives here; the Harness owns the shared infrastructure that every conversation runs on.
 
-A useful way to remember the split: the **Harness** is the application, and the **Session** is the current conversation running inside it. Operations that mutate shared infrastructure or coordinate the event bus stay on the Harness; everything that describes "this conversation right now" lives on the Session.
-
-| Lives on the Harness (shared host) | Lives on the Session (per-conversation) |
-| - | - |
-| Configuration, storage, and memory | Resource ID and active thread binding ([`session.identity`](#identity), [`session.thread`](#thread)) |
-| Thread lifecycle: `createThread`, `switchThread`, `cloneThread`, `renameThread`, `deleteThread` | Thread and message reads ([`session.thread.list()`](#thread)) |
-| The event bus (`subscribe`, event emission) | Selected mode and model ([`session.mode`](#mode-and-model), [`session.model`](#mode-and-model)) |
-| Permission _policy_ (`setPermissionForCategory`, `getToolCategory`) | Permission _grants_ ([`session.grantCategory`](#permission-grants)) |
-| Mode and model _definitions_ (`config.modes`) | Run state, abort, follow-ups, suspensions ([`session.run`](#run-state), [`session.followUps`](#follow-ups)) |
-| The `stateSchema` definition | Application state and its updates ([`session.state`](#state)) |
-| The shared agent loop and subagent spawning | Token usage and the display snapshot ([`session.displayState`](#display-state)) |
-
-This is why thread _creation_ is `harness.createThread()` (it acquires the shared lock and emits an event) while thread _reads_ are `harness.session.thread.list()` (they describe the current conversation's view).
-
-In single-player apps there is one Harness and one Session, so the split is mostly organizational. In a multi-user host, the same Harness can serve many conversations — each backed by its own Session — without one conversation's mode, grants, or active thread leaking into another.
+Because the Session is scoped to a single conversation, one Harness can serve many conversations at once — each backed by its own Session — without one conversation's mode, grants, or active thread leaking into another.
 
 ## Identity
 
