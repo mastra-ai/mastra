@@ -485,7 +485,7 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]),
-          getCurrentModelId: vi.fn(() => 'anthropic/claude-sonnet-4-5'),
+          session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         },
         ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() },
       },
@@ -525,7 +525,7 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]),
-          getCurrentModelId: vi.fn(() => 'anthropic/claude-sonnet-4-5'),
+          session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         },
         ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() },
       },
@@ -589,7 +589,7 @@ describe('handleGoalCommand', () => {
       pendingInlineQuestions: [],
       pendingAskUserComponents: new Map(),
       harness: {
-        isRunning: vi.fn(() => false),
+        session: { run: { isRunning: vi.fn(() => false) } },
         hasPendingSuspensions: vi.fn(() => false),
         abort,
       },
@@ -624,7 +624,7 @@ describe('handleGoalCommand', () => {
       pendingInlineQuestions: [() => {}],
       pendingAskUserComponents: new Map([['t', {}]]),
       harness: {
-        isRunning: vi.fn(() => true),
+        session: { run: { isRunning: vi.fn(() => true) } },
         hasPendingSuspensions: vi.fn(() => false),
         abort,
       },

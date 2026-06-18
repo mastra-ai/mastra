@@ -97,7 +97,10 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
-    const currentModelId = (this.getState() as SessionStateFields).currentModelId;
+    // The harness's selected model now lives on the base Harness session; fall
+    // back to composed state where the base harness is stubbed (unit tests).
+    const currentModelId =
+      this.session?.model?.get() || (this.getState() as SessionStateFields).currentModelId;
 
     const session = await this.#harnessV1.session({
       threadId,

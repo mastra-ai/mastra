@@ -267,7 +267,7 @@ export class MastraTUI {
     if (this.state.options.initialMessage) {
       const msg = this.state.options.initialMessage;
 
-      if (!this.state.harness.hasModelSelected()) {
+      if (!this.state.harness.session.model.hasSelection()) {
         showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
       } else {
         const messageId = `user-${Date.now()}`;
@@ -325,7 +325,7 @@ export class MastraTUI {
         }
 
         // Check if a model is selected (sync — fast, no reason to defer)
-        if (!this.state.harness.hasModelSelected()) {
+        if (!this.state.harness.session.model.hasSelection()) {
           showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
           continue;
         }
@@ -662,7 +662,7 @@ export class MastraTUI {
   private async renderExistingMessagesAndSeedIdleCounter(): Promise<void> {
     await renderExistingMessages(this.state);
 
-    if (this.state.harness.isRunning()) {
+    if (this.state.harness.session.run.isRunning()) {
       this.clearIdleCounter();
       return;
     }
@@ -783,7 +783,7 @@ export class MastraTUI {
 
   private emitErrorFeedback(errorMessage: string): void {
     const harness = this.state.harness;
-    const traceId = harness.getCurrentTraceId() ?? undefined;
+    const traceId = harness.session.run.getTraceId() ?? undefined;
     const runId = harness.getCurrentRunId() ?? undefined;
     const threadId = harness.getCurrentThreadId() ?? undefined;
 
@@ -1005,7 +1005,7 @@ export class MastraTUI {
         }
         this.state.editor.setText('');
 
-        if (this.state.harness.isRunning()) {
+        if (this.state.harness.session.run.isRunning()) {
           if (text.startsWith('/')) {
             // Run slash commands immediately — they are either settings
             // commands (no agent interaction) or agent-facing commands the

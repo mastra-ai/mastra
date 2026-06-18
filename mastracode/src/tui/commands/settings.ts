@@ -196,7 +196,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     notifications: (state?.notifications ?? 'off') as NotificationMode,
     yolo: state?.yolo === true,
     thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
-    currentModelId: ctx.state.harness.getCurrentModelId() ?? '',
+    currentModelId: ctx.state.harness.session.model.get() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
     quietMode: globalSettings.preferences.quietMode,
     quietModeMaxToolPreviewLines: globalSettings.preferences.quietModeMaxToolPreviewLines,

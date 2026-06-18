@@ -55,7 +55,7 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
-    } else if (state.harness.isRunning() || state.harness.hasPendingSuspensions()) {
+    } else if (state.harness.session.run.isRunning() || state.harness.hasPendingSuspensions()) {
       // Clean up active inline components on abort. hasPendingSuspensions covers
       // the case where the run is parked in a tool suspend() (e.g. ask_user) —
       // isRunning() is false there because the AbortController was nulled, but the
@@ -141,7 +141,7 @@ export function setupKeyboardShortcuts(
   // Shift+Tab - cycle harness modes
   state.editor.onAction('cycleMode', async () => {
     // Block mode switching while the agent is active or plan approval is pending
-    if (state.harness.isRunning()) {
+    if (state.harness.session.run.isRunning()) {
       showInfo(state, 'Wait for the agent to finish first');
       return;
     }
@@ -191,7 +191,7 @@ export function setupKeyboardShortcuts(
     }
 
     const text = state.editor.getExpandedText();
-    if (!state.harness.isRunning()) {
+    if (!state.harness.session.run.isRunning()) {
       state.editor.onSubmit?.(text);
       return true;
     }

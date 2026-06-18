@@ -430,7 +430,7 @@ describe('Harness signal messages', () => {
     const thread = await harness.createThread();
 
     // Simulate an active run from the harness consumer's perspective
-    (harness as any).currentRunId = 'active-run-id';
+    harness.session.run.setRunId({ runId: 'active-run-id' });
 
     const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
     const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
@@ -460,7 +460,7 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    (harness as any).abortController = new AbortController();
+    harness.session.run.ensureAbortController();
 
     await harness.followUp({ content: 'queued follow-up' });
 
@@ -495,7 +495,7 @@ describe('Harness signal messages', () => {
     });
     const sendSignal = vi.spyOn(agent, 'sendSignal');
     const thread = await harness.createThread();
-    (harness as any).abortController = new AbortController();
+    harness.session.run.ensureAbortController();
 
     await harness.followUp({ content: 'queued follow-up' });
     await (harness as any).drainFollowUpQueue();
