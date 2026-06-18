@@ -161,8 +161,6 @@ export function getPgStorageTests(connectionString: string) {
   // Track all PG pools created during tests so they can be closed before Docker teardown
   const allStorages: PostgresStore[] = [];
   const allVectors: PgVector[] = [];
-  const storesToClose: PostgresStore[] = [];
-  const vectorsToClose: PgVector[] = [];
 
   afterAll(async () => {
     // Close every PG pool we opened so the container can shut down cleanly
@@ -182,8 +180,6 @@ export function getPgStorageTests(connectionString: string) {
         ...config,
         ...poolLimits,
       });
-      storesToClose.push(storage);
-
       // The stores.memory should be defined immediately after construction
       expect(storage.stores).toBeDefined();
       expect(storage.stores.memory).toBeDefined();
@@ -198,8 +194,9 @@ export function getPgStorageTests(connectionString: string) {
     const storage = new PostgresStore({
       id: randomUUID(),
       ...config,
+      ...poolLimits,
     });
-    const vector = new PgVector({ connectionString, id: 'test-vector' });
+    const vector = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
     allStorages.push(storage);
     allVectors.push(vector);
 
@@ -220,17 +217,13 @@ export function getPgStorageTests(connectionString: string) {
     };
   });
 
-  const integrationStorage = new PostgresStore({ id: randomUUID(), ...config, ...poolLimits });
-  const integrationVector = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
-  storesToClose.push(integrationStorage);
-  vectorsToClose.push(integrationVector);
-
   describe('Memory with PostgresStore Integration', () => {
     const integrationStorage = new PostgresStore({
       id: randomUUID(),
       ...config,
+      ...poolLimits,
     });
-    const integrationVector = new PgVector({ connectionString, id: 'test-vector' });
+    const integrationVector = new PgVector({ connectionString, id: 'test-vector', ...poolLimits });
     allStorages.push(integrationStorage);
     allVectors.push(integrationVector);
 
@@ -662,8 +655,8 @@ export function getPgStorageTests(connectionString: string) {
     describe('PostgreSQL Vector Index Configuration', () => {
       it('should support HNSW index configuration', async () => {
         const hnswMemory = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
             lastMessages: 5,
@@ -718,8 +711,8 @@ export function getPgStorageTests(connectionString: string) {
 
       it('should support IVFFlat index configuration with custom lists', async () => {
         const ivfflatMemory = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
             lastMessages: 5,
@@ -773,8 +766,8 @@ export function getPgStorageTests(connectionString: string) {
 
       it('should support flat (no index) configuration', async () => {
         const flatMemory = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
             lastMessages: 5,
@@ -826,8 +819,8 @@ export function getPgStorageTests(connectionString: string) {
       it('should handle index configuration changes', async () => {
         // Start with IVFFlat
         const memory1 = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
             semanticRecall: {
@@ -861,8 +854,8 @@ export function getPgStorageTests(connectionString: string) {
 
         // Now switch to HNSW - should trigger index recreation
         const memory2 = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
             semanticRecall: {
@@ -902,8 +895,8 @@ export function getPgStorageTests(connectionString: string) {
       it('should preserve existing index when no config provided', async () => {
         // First, create with HNSW
         const memory1 = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
             semanticRecall: {
@@ -938,8 +931,8 @@ export function getPgStorageTests(connectionString: string) {
 
         // Create another memory instance without index config - should preserve HNSW
         const memory2 = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
-          vector: new PgVector({ connectionString, id: 'test-vector' }),
+          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
+          vector: new PgVector({ connectionString, id: 'test-vector', ...poolLimits }),
           embedder: fastembed,
           options: {
             semanticRecall: {
@@ -1229,7 +1222,7 @@ CRITICAL RULES:
         // This breaks conversation history for any thread that exceeds lastMessages.
 
         const memoryWithLimit = createMemoryWithCleanup({
-          storage: new PostgresStore({ ...config, id: randomUUID() }),
+          storage: new PostgresStore({ ...config, id: randomUUID(), ...poolLimits }),
           options: {
             lastMessages: 3, // Limit to 3 messages
           },

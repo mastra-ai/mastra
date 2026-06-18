@@ -3,15 +3,32 @@ import { coreFeatures } from '@mastra/core/features';
 import { MastraReactProvider } from '@mastra/react';
 import { CalendarClockIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import type { RouteObject } from 'react-router';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import type { LoaderFunctionArgs, RouteObject } from 'react-router';
+import { AgentBuilderRootLayout } from './domains/agent-builder/layouts/agent-builder-root-layout';
+import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
+import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
+import { StudioIndexRedirect } from './lib/studio-index-redirect';
+import { AgentBuilderRoot } from './pages/agent-builder';
+import AgentBuilderAgents from './pages/agent-builder/agents';
+import AgentBuilderCreate from './pages/agent-builder/agents/create';
+import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
+import AgentBuilderAgentView from './pages/agent-builder/agents/view';
+import AgentBuilderFavorite from './pages/agent-builder/favorite';
+import AgentBuilderInfrastructure from './pages/agent-builder/infrastructure';
+import AgentBuilderLibrary from './pages/agent-builder/library';
+import AgentBuilderSkills from './pages/agent-builder/skills';
+import AgentBuilderSkillsCreate from './pages/agent-builder/skills/create';
+import AgentBuilderSkillsEdit from './pages/agent-builder/skills/edit';
+import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
+import AgentChannelsPage from './pages/agents/agent-channels';
 import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentReview from './pages/agents/agent-review';
@@ -42,14 +59,13 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import ExperimentPage from './pages/experiments/experiment';
+import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
-import ObservabilityOverview from './pages/observability-overview';
-import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
@@ -71,11 +87,15 @@ import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
+import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
 import { AgentCrumb, AgentToolCrumb } from '@/domains/agents/agent-crumb';
 import { AgentLayout } from '@/domains/agents/agent-layout';
+import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
+
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
-import { StudioConfigProvider, useStudioConfig } from '@/domains/configuration/context/studio-config-context';
+import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { McpServerCrumb, McpServerToolCrumb } from '@/domains/mcps/mcp-crumbs';
 import { ProcessorCrumb } from '@/domains/processors/processor-crumb';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
@@ -103,6 +123,7 @@ declare global {
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
+    MASTRA_PLATFORM_PROJECT_ID?: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
     MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
@@ -169,7 +190,9 @@ const RootLayout = () => {
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
       <Layout>
-        <Outlet />
+        <RoutePermissionGuard>
+          <Outlet />
+        </RoutePermissionGuard>
       </Layout>
     </LinkComponentProvider>
   );
@@ -227,6 +250,92 @@ export const routes: RouteObject[] = [
   { path: '/login', element: <Login /> },
   { path: '/signup', element: <SignUp /> },
   {
+    path: '/agent-builder',
+    element: <AgentBuilderRootLayout paths={paths} />,
+    children: [
+      {
+        index: true,
+        element: <AgentBuilderRoot />,
+      },
+      {
+        path: 'agents',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderAgents />,
+          },
+        ],
+      },
+      {
+        path: 'agents',
+        element: <AgentBuilderEditionLayout />,
+        children: [
+          { path: 'create', element: <AgentBuilderCreate /> },
+          {
+            path: ':id',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agent-builder/agents/${params.id}/view`),
+          },
+          { path: ':id/edit', element: <AgentBuilderAgentEdit /> },
+          { path: ':id/view', element: <AgentBuilderAgentView /> },
+        ],
+      },
+      {
+        path: 'skills',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderSkills />,
+          },
+        ],
+      },
+      {
+        path: 'skills',
+        element: <AgentBuilderEditionLayout />,
+        children: [
+          { path: 'create', element: <AgentBuilderSkillsCreate /> },
+          {
+            path: ':id',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agent-builder/skills/${params.id}/edit`),
+          },
+          { path: ':id/edit', element: <AgentBuilderSkillsEdit /> },
+          { path: ':id/view', element: <AgentBuilderSkillsView /> },
+        ],
+      },
+      {
+        path: 'infrastructure',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderInfrastructure />,
+          },
+        ],
+      },
+      {
+        path: 'favorite',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderFavorite />,
+          },
+        ],
+      },
+      {
+        path: 'library',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderLibrary />,
+          },
+        ],
+      },
+    ],
+  },
+  {
     element: <MinimalRootLayout />,
     children: [
       { path: '/agents/:agentId/session', element: <AgentSession /> },
@@ -259,7 +368,6 @@ export const routes: RouteObject[] = [
           ]),
 
       { path: '/logs', element: <Logs />, handle: navHandle('/logs') },
-      { path: '/primitives', element: <Primitives />, handle: navHandle('/primitives') },
       { path: '/evaluation', element: <Evaluation />, handle: navHandle('/evaluation') },
       { path: '/scorers', element: <Scorers />, handle: navHandle('/scorers') },
       {
@@ -268,11 +376,6 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
-      {
-        path: '/observability-overview',
-        element: <ObservabilityOverview />,
-        handle: navHandle('/observability-overview'),
-      },
       { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
       {
         path: '/traces/:traceId',
@@ -335,7 +438,7 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }) => redirect(`/agents/${params.agentId}/chat`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/chat`),
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
@@ -347,6 +450,7 @@ export const routes: RouteObject[] = [
               ]
             : []),
           { path: 'traces', element: <AgentTraces /> },
+          { path: 'channels', element: <AgentChannelsPage /> },
         ],
       },
 
@@ -355,6 +459,12 @@ export const routes: RouteObject[] = [
         path: '/tools/:toolId',
         element: <Tool />,
         handle: navHandleWithChildren('/tools', [{ id: 'tool', Component: ToolCrumb, heading: 'Tool' }]),
+      },
+
+      {
+        path: '/integrations',
+        element: <IntegrationsPage />,
+        handle: { crumbs: [{ id: 'integrations', label: 'Integrations' }] } satisfies RouteHeaderHandle,
       },
 
       { path: '/processors', element: <Processors />, handle: navHandle('/processors') },
@@ -431,7 +541,7 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }) => redirect(`/workflows/${params.workflowId}/graph`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/workflows/${params.workflowId}/graph`),
           },
           { path: 'graph', element: <Workflow /> },
           {
@@ -542,7 +652,11 @@ export const routes: RouteObject[] = [
           ]
         : []),
 
-      { index: true, loader: () => redirect('/agents') },
+      {
+        index: true,
+        element: <StudioIndexRedirect />,
+        handle: { crumbs: [{ id: 'home', label: 'Home' }] },
+      },
       { path: '/request-context', element: <RequestContext />, handle: navHandle('/request-context') },
     ],
   },
@@ -572,9 +686,13 @@ function App() {
 
   return (
     <MastraReactProvider baseUrl={baseUrl} headers={studioHeaders} apiPrefix={apiPrefix} customFetch={customFetch}>
-      <PostHogProvider>
-        <RouterProvider router={router} />
-      </PostHogProvider>
+      <RoleImpersonationProvider>
+        <PostHogProvider>
+          <RoutePermissionsGate baseUrl={baseUrl}>
+            <RouterProvider router={router} />
+          </RoutePermissionsGate>
+        </PostHogProvider>
+      </RoleImpersonationProvider>
     </MastraReactProvider>
   );
 }

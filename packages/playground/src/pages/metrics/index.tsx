@@ -1,4 +1,4 @@
-import type { DatePreset, PropertyFilterToken } from '@mastra/playground-ui';
+import type { DatePreset, DateRange, PropertyFilterToken } from '@mastra/playground-ui';
 import {
   Notice,
   Button,
@@ -46,21 +46,41 @@ import {
 import { MetricsToolbar } from '@/domains/metrics/components/metrics-toolbar';
 import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
 import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
+import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
 import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
 
 const ANALYTICS_OBSERVABILITY_TYPES = new Set([
   'ObservabilityStorageClickhouseVNext',
   'ObservabilityStorageDuckDB',
   'ObservabilityInMemory',
+  'ObservabilitySpanner',
 ]);
 
 const PERIOD_PARAM = 'period';
+const DATE_FROM_PARAM = 'dateFrom';
+const DATE_TO_PARAM = 'dateTo';
 
 export default function Metrics() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const urlPreset = searchParams.get(PERIOD_PARAM);
   const preset: DatePreset = isValidPreset(urlPreset) ? urlPreset : '24h';
+
+  // Concrete from/to bounds only apply to the 'custom' preset; relative presets
+  // derive their window from the preset alone.
+  const customRange = useMemo<DateRange | undefined>(() => {
+    if (preset !== 'custom') return undefined;
+    const parseBound = (raw: string | null) => {
+      if (!raw) return undefined;
+      const date = new Date(raw);
+      return Number.isNaN(date.getTime()) ? undefined : date;
+    };
+    const from = parseBound(searchParams.get(DATE_FROM_PARAM));
+    const to = parseBound(searchParams.get(DATE_TO_PARAM));
+    if (!from && !to) return undefined;
+    return { from, to };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset, searchParams.toString()]);
 
   // Derive tokens straight from the URL. Memoized on a stable digest so the
   // array identity only changes when the URL actually changes — this prevents
@@ -81,6 +101,33 @@ export default function Metrics() {
             params.delete(PERIOD_PARAM);
           } else {
             params.set(PERIOD_PARAM, next);
+          }
+          if (next !== 'custom') {
+            params.delete(DATE_FROM_PARAM);
+            params.delete(DATE_TO_PARAM);
+          }
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const handleCustomRangeChange = useCallback(
+    (range: DateRange | undefined) => {
+      setSearchParams(
+        prev => {
+          const params = new URLSearchParams(prev);
+          if (range?.from) {
+            params.set(DATE_FROM_PARAM, range.from.toISOString());
+          } else {
+            params.delete(DATE_FROM_PARAM);
+          }
+          if (range?.to) {
+            params.set(DATE_TO_PARAM, range.to.toISOString());
+          } else {
+            params.delete(DATE_TO_PARAM);
           }
           return params;
         },
@@ -131,6 +178,8 @@ export default function Metrics() {
       filterTokens={filterTokens}
       onPresetChange={handlePresetChange}
       onFilterTokensChange={handleFilterTokensChange}
+      customRange={customRange}
+      onCustomRangeChange={handleCustomRangeChange}
     >
       <MetricsContent />
     </MetricsProvider>
@@ -269,7 +318,7 @@ function MetricsContent() {
           <EmptyState
             iconSlot={<CircleSlashIcon />}
             titleSlot="Metrics are not available with your current storage"
-            descriptionSlot="Metrics require ClickHouse, DuckDB, or in-memory storage for observability. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
+            descriptionSlot="Metrics require ClickHouse, DuckDB, Spanner, or in-memory storage for observability. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
             actionSlot={
               <Button
                 variant="ghost"
@@ -289,7 +338,7 @@ function MetricsContent() {
             <Notice variant="info" title="Metrics are not persisted">
               <Notice.Message>
                 This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
-                persistent metrics, switch the observability storage to ClickHouse or DuckDB.
+                persistent metrics, switch the observability storage to ClickHouse, DuckDB, or Spanner.
               </Notice.Message>
             </Notice>
           )}
@@ -305,6 +354,7 @@ function MetricsContent() {
           <MetricsFlexGrid>
             <ModelUsageCostCard />
             <TokenUsageByAgentCard />
+            <TokenUsageTimelineCard />
             <MemoryCard />
             <TracesVolumeCard />
             <LatencyCard />

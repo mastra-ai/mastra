@@ -42,6 +42,16 @@ function Agent() {
     refetch: refreshThreads,
   } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
 
+  const sidebarThreads = useMemo(
+    () =>
+      (threads || []).map(thread => ({
+        ...thread,
+        createdAt: new Date(thread.createdAt),
+        updatedAt: new Date(thread.updatedAt),
+      })),
+    [threads],
+  );
+
   useEffect(() => {
     if (threadId) return;
 
@@ -141,23 +151,24 @@ function Agent() {
                       <AgentLayout
                         agentId={agentId!}
                         leftSlot={
-                          hasMemory && (
-                            <AgentSidebar
-                              agentId={agentId!}
-                              threadId={actualThreadId!}
-                              threads={threads || []}
-                              isLoading={isThreadsLoading}
-                            />
-                          )
+                          <AgentSidebar
+                            agentId={agentId!}
+                            threadId={actualThreadId!}
+                            threads={sidebarThreads}
+                            isLoading={isThreadsLoading}
+                            memoryType={memory?.memoryType}
+                            hasMemory={hasMemory}
+                          />
                         }
                         browserOverlay={<BrowserViewPanel />}
-                        rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                        rightSlot={<AgentInformation agentId={agentId!} />}
                       >
                         <AgentChat
                           key={actualThreadId!}
                           agentId={agentId!}
                           agentName={agent?.name}
                           modelVersion={agent?.modelVersion}
+                          supportsMemory={agent?.supportsMemory}
                           threadId={actualThreadId!}
                           memory={hasMemory}
                           refreshThreadList={handleRefreshThreadList}

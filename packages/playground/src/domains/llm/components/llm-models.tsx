@@ -3,6 +3,7 @@ import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui';
 import { useMemo } from 'react';
 import { useAllModels, useFilteredModels } from '../hooks/use-filtered-models';
 import { useLLMProviders } from '../hooks/use-llm-providers';
+import { useBuilderFilteredModels, useBuilderModelPolicy } from '@/domains/agent-builder';
 
 export interface LLMModelsProps {
   value: string;
@@ -14,27 +15,31 @@ export interface LLMModelsProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
+  disabled?: boolean;
 }
 
 export const LLMModels = ({
   value,
   onValueChange,
   llmId,
-  variant = 'default',
-  size = 'default',
+  variant,
+  size = 'md',
   className,
   open,
   onOpenChange,
   container,
+  disabled,
 }: LLMModelsProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const providers = dataProviders?.providers || [];
 
-  // Get all models flattened
+  // Get all models flattened, then drop any disallowed by admin policy
+  const policy = useBuilderModelPolicy();
   const allModels = useAllModels(providers);
+  const policyAllowedModels = useBuilderFilteredModels(allModels, policy);
 
   // Filter models by provider
-  const filteredModels = useFilteredModels(allModels, llmId, '', false);
+  const filteredModels = useFilteredModels(policyAllowedModels, llmId, '', false);
 
   // Create model options
   const modelOptions: ComboboxOption[] = useMemo(() => {
@@ -62,6 +67,7 @@ export const LLMModels = ({
       onOpenChange={onOpenChange}
       container={container}
       size={size}
+      disabled={disabled}
     />
   );
 };

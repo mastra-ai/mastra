@@ -52,6 +52,10 @@ export type TracesListViewProps = {
   /** Branches mode mixes root traces with subtraces — enables the Trace/Subtrace tooltip on the
    *  level icon in the Name column, which is meaningless when every row is a root. */
   isBranchesMode?: boolean;
+  /** Keys (`traceId:spanId`) of rows that just arrived via delta polling. Rows whose key is in
+   *  this set get a temporary tint to distinguish them from rows present since the last page-mode
+   *  fetch. Auto-expires upstream (in useTraces) after a short window. */
+  recentlyAddedKeys?: Set<string>;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
 };
@@ -70,6 +74,7 @@ export function TracesListView({
   featuredTraceId,
   featuredSpanId,
   isBranchesMode,
+  recentlyAddedKeys,
   onTraceClick,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -110,7 +115,7 @@ export function TracesListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <TracesDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
+    <TracesDataList columns={COLUMNS} variant="striped" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
         <TracesDataList.TopCell>Date</TracesDataList.TopCell>
         <TracesDataList.TopCell>Time</TracesDataList.TopCell>
@@ -133,17 +138,20 @@ export function TracesListView({
 
             const isFeatured =
               trace.traceId === featuredTraceId && (featuredSpanId == null || trace.spanId === featuredSpanId);
+            const rowKey = `${trace.traceId}:${trace.spanId ?? ''}`;
+            const isRecentlyAdded = recentlyAddedKeys?.has(rowKey) ?? false;
             const displayDate = trace.startedAt ?? trace.createdAt;
             const entityName =
               trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
 
             return (
               <TracesDataList.RowButton
-                key={`${trace.traceId}:${trace.spanId ?? ''}`}
+                key={rowKey}
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
                 onClick={() => onTraceClick(trace)}
-                className={cn(isFeatured && 'bg-surface4')}
+                featured={isFeatured}
+                className={cn(isRecentlyAdded && 'animate-row-highlight')}
               >
                 <TracesDataList.DateCell timestamp={displayDate} />
                 <TracesDataList.TimeCell timestamp={displayDate} />

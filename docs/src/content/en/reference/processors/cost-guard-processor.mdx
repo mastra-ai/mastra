@@ -63,7 +63,7 @@ costGuard.onViolation = ({ detail }) => {
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'openai/gpt-5-nano',
+  model: '__GATEWAY_OPENAI_MODEL_NANO__',
   processors: {
     input: [costGuard],
   },
@@ -166,10 +166,10 @@ When the `block` strategy is active (default), `CostGuardProcessor` calls `abort
 | `resource` | Yes | `resourceId` + time window | `resourceId` in `RequestContext` |
 | `thread` | Yes | `threadId` + time window | `threadId` in `RequestContext` |
 
-All scopes require observability storage with `getMetricAggregate` support. If the Mastra instance does not have observability storage configured, an error is thrown at registration time.
+All scopes require observability storage with `getMetricAggregate` support. If the Mastra instance doesn't have observability storage configured, an error is thrown at registration time.
 
 For `run` scope, the processor reads the trace ID from the current span's tracing context. If no tracing context is available, the check is skipped (fail-open).
 
 For `resource` and `thread` scopes, if the required context ID is missing at runtime, the check is skipped. Observability query failures are handled with a fail-open strategy: if a query fails, cost is treated as zero.
 
-> **Note on metric persistence delay.** The observability pipeline uses buffered exporters that flush metrics asynchronously. There is a short delay between when an LLM call completes and when its cost metrics are available for query. During high-frequency agent execution, the cost guard may not detect a limit breach until one or more steps after the actual cost exceeded the threshold.
+> **Note on metric persistence delay.** The observability pipeline uses buffered exporters that flush metrics asynchronously. A short delay exists between when an LLM call completes and when its cost metrics are available for query. During high-frequency agent execution, the cost guard may not detect a limit breach until one or more steps after the actual cost exceeded the threshold.

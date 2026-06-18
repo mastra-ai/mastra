@@ -118,4 +118,32 @@ describe('MCPClient tool discovery retries', () => {
     expect(connectSpy).toHaveBeenCalledTimes(1);
     expect(capabilities).toMatchObject(customCapabilities);
   });
+
+  it('returns cached server instructions for configured servers', async () => {
+    vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockImplementation(async function (this: any) {
+      this.serverInstructions = this.name === 'db' ? 'Validate schema before migrating.' : undefined;
+      return true;
+    });
+
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      servers: {
+        db: {
+          url: new URL('http://localhost:1234/sse'),
+        },
+        empty: {
+          url: new URL('http://localhost:5678/sse'),
+        },
+      },
+    });
+
+    clients.push(client);
+
+    await (client as any).getConnectedClientForServer('db');
+
+    expect(client.getServerInstructions()).toEqual({
+      db: 'Validate schema before migrating.',
+      empty: undefined,
+    });
+  });
 });

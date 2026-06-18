@@ -18,6 +18,9 @@ import type { SlashCommandContext } from './types.js';
  */
 const ACTIVE_BROWSER_KEY = 'activeBrowserSettings';
 
+type BrowserAgent = { browser?: MastraBrowser; setBrowser?: (browser?: MastraBrowser) => void };
+type StorageStateExportBrowser = MastraBrowser & { exportStorageState: (path: string) => Promise<void> };
+
 /**
  * /browser command - Configure browser automation for agents.
  *
@@ -82,16 +85,25 @@ async function checkAndConfirmProviderMismatch(
 /**
  * Apply browser settings to all mode agents and track the active settings.
  */
+function resolveModeAgent(mode: unknown, harnessState: unknown): BrowserAgent | undefined {
+  const modeAgent = (mode as { agent?: unknown }).agent;
+  return typeof modeAgent === 'function'
+    ? (modeAgent(harnessState) as BrowserAgent)
+    : (modeAgent as BrowserAgent | undefined);
+}
+
 function applyBrowserToAgents(
   ctx: SlashCommandContext,
   browser: MastraBrowser | undefined,
   browserSettings?: BrowserSettings,
 ): void {
   const modes = ctx.harness.listModes();
+  let harnessState: unknown;
   for (const mode of modes) {
-    const agent = typeof mode.agent === 'function' ? mode.agent(ctx.state.harness.getState()) : mode.agent;
-    agent.setBrowser(browser);
+    const agent = resolveModeAgent(mode, (harnessState ??= ctx.state.harness.getState()));
+    agent?.setBrowser?.(browser);
   }
+  ctx.harness.setBrowser?.(browser);
   // Track the active browser settings in harness state
   ctx.harness.setState({ [ACTIVE_BROWSER_KEY]: browserSettings } as any);
 }
@@ -423,11 +435,14 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       return;
     }
 
-    // Get browser instance from the current mode's agent
-    const currentMode = ctx.harness.getCurrentMode();
-    const agent =
-      typeof currentMode.agent === 'function' ? currentMode.agent(ctx.state.harness.getState()) : currentMode.agent;
-    const browserInstance = agent.browser;
+    const currentMode = ctx.harness.session.mode.resolve();
+    const currentAgent = resolveModeAgent(currentMode, ctx.state.harness.getState());
+    let browserInstance = currentAgent?.browser;
+
+    if (!browserInstance && browser.enabled) {
+      browserInstance = await createBrowserFromSettings(browser);
+      applyBrowserToAgents(ctx, browserInstance, browser);
+    }
 
     if (!browserInstance) {
       ctx.showError('Browser not enabled. Run /browser on first.');
@@ -439,11 +454,12 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       ctx.showError('Current browser instance does not support exporting storage state.');
       return;
     }
+    const exportableBrowser = browserInstance as StorageStateExportBrowser;
 
     const expandedPath = exportPath.replace(/^~/, process.env.HOME || '~');
 
     try {
-      await browserInstance.exportStorageState(expandedPath);
+      await exportableBrowser.exportStorageState(expandedPath);
       ctx.showInfo(`Storage state exported to: ${expandedPath}`);
     } catch (error) {
       ctx.showError(`Failed to export storage state: ${error instanceof Error ? error.message : String(error)}`);
@@ -554,6 +570,13 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   let executablePath = browser.executablePath;
   let storageState = browser.agentBrowser?.storageState;
   let cdpUrl = browser.cdpUrl;
+
+  if (isBrowserbase) {
+    cdpUrl = undefined;
+    profile = undefined;
+    executablePath = undefined;
+    storageState = undefined;
+  }
 
   // Only show launch mode options for local browsers (not Browserbase)
   if (!isBrowserbase) {

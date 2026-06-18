@@ -1,5 +1,77 @@
 # @internal/llm-recorder
 
+## 0.0.41
+
+### Minor Changes
+
+- Added binary artifact support for non-JSON request/response payloads (for example audio) in the LLM recorder. ([#14274](https://github.com/mastra-ai/mastra/pull/14274))
+
+  Binary bytes are now written as hash-based sidecar files in `__recordings__/` and referenced from JSON recordings with metadata (`contentType`, `size`, and artifact `path`). Replay restores the original binary payload and content-type headers from artifacts, while keeping JSON fixtures small and readable.
+
+## 0.0.40
+
+### Minor Changes
+
+- Added binary artifact support for non-JSON request/response payloads (for example audio) in the LLM recorder. ([#14274](https://github.com/mastra-ai/mastra/pull/14274))
+
+  Binary bytes are now written as hash-based sidecar files in `__recordings__/` and referenced from JSON recordings with metadata (`contentType`, `size`, and artifact `path`). Replay restores the original binary payload and content-type headers from artifacts, while keeping JSON fixtures small and readable.
+
+## 0.0.39
+
+### Minor Changes
+
+- Added binary artifact support for non-JSON request/response payloads (for example audio) in the LLM recorder. ([#14274](https://github.com/mastra-ai/mastra/pull/14274))
+
+  Binary bytes are now written as hash-based sidecar files in `__recordings__/` and referenced from JSON recordings with metadata (`contentType`, `size`, and artifact `path`). Replay restores the original binary payload and content-type headers from artifacts, while keeping JSON fixtures small and readable.
+
+## 0.0.38
+
+### Minor Changes
+
+- Added binary artifact support for non-JSON request/response payloads (for example audio) in the LLM recorder. ([#14274](https://github.com/mastra-ai/mastra/pull/14274))
+
+  Binary bytes are now written as hash-based sidecar files in `__recordings__/` and referenced from JSON recordings with metadata (`contentType`, `size`, and artifact `path`). Replay restores the original binary payload and content-type headers from artifacts, while keeping JSON fixtures small and readable.
+
+## 0.0.37
+
+### Minor Changes
+
+- Added binary artifact support for non-JSON request/response payloads (for example audio) in the LLM recorder. ([#14274](https://github.com/mastra-ai/mastra/pull/14274))
+
+  Binary bytes are now written as hash-based sidecar files in `__recordings__/` and referenced from JSON recordings with metadata (`contentType`, `size`, and artifact `path`). Replay restores the original binary payload and content-type headers from artifacts, while keeping JSON fixtures small and readable.
+
+## 0.0.36
+
+### Minor Changes
+
+- Added binary artifact support for non-JSON request/response payloads (for example audio) in the LLM recorder. ([#14274](https://github.com/mastra-ai/mastra/pull/14274))
+
+  Binary bytes are now written as hash-based sidecar files in `__recordings__/` and referenced from JSON recordings with metadata (`contentType`, `size`, and artifact `path`). Replay restores the original binary payload and content-type headers from artifacts, while keeping JSON fixtures small and readable.
+
+## 0.0.35
+
+### Minor Changes
+
+- Added binary artifact support for non-JSON request/response payloads (for example audio) in the LLM recorder. ([#14274](https://github.com/mastra-ai/mastra/pull/14274))
+
+  Binary bytes are now written as hash-based sidecar files in `__recordings__/` and referenced from JSON recordings with metadata (`contentType`, `size`, and artifact `path`). Replay restores the original binary payload and content-type headers from artifacts, while keeping JSON fixtures small and readable.
+
+## 0.0.34
+
+### Minor Changes
+
+- Added binary artifact support for non-JSON request/response payloads (for example audio) in the LLM recorder. ([#14274](https://github.com/mastra-ai/mastra/pull/14274))
+
+  Binary bytes are now written as hash-based sidecar files in `__recordings__/` and referenced from JSON recordings with metadata (`contentType`, `size`, and artifact `path`). Replay restores the original binary payload and content-type headers from artifacts, while keeping JSON fixtures small and readable.
+
+## 0.0.33
+
+### Minor Changes
+
+- Added binary artifact support for non-JSON request/response payloads (for example audio) in the LLM recorder. ([#14274](https://github.com/mastra-ai/mastra/pull/14274))
+
+  Binary bytes are now written as hash-based sidecar files in `__recordings__/` and referenced from JSON recordings with metadata (`contentType`, `size`, and artifact `path`). Replay restores the original binary payload and content-type headers from artifacts, while keeping JSON fixtures small and readable.
+
 ## 0.0.32
 
 ### Minor Changes

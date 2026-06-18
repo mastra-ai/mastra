@@ -1,10 +1,11 @@
+import { sendSlashCommandMessage } from './send-slash-command-message.js';
 import type { SlashCommandContext } from './types.js';
 
 const MASTRA_REPO = 'mastra-ai/mastra';
 const MASTRA_LABEL = 'mastracode';
 
 export async function handleReportIssueCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  if (!ctx.state.harness.hasModelSelected()) {
+  if (!ctx.state.harness.session.model.hasSelection()) {
     ctx.showInfo('No model selected. Use /models to select a model, or /login to authenticate.');
     return;
   }
@@ -61,20 +62,8 @@ export async function handleReportIssueCommand(ctx: SlashCommandContext, args: s
     '```\n\n' +
     `Report the created issue URL back to the user.`;
 
-  ctx.addUserMessage({
-    id: `user-${Date.now()}`,
-    role: 'user',
-    content: [
-      {
-        type: 'text',
-        text: extraContext ? `/report-issue ${extraContext}` : '/report-issue',
-      },
-    ],
-    createdAt: new Date(),
-  });
-  ctx.state.ui.requestRender();
-
-  ctx.state.harness.sendMessage({ content: prompt }).catch(error => {
+  const displayText = extraContext ? `/report-issue ${extraContext}` : '/report-issue';
+  sendSlashCommandMessage(ctx, displayText, prompt).catch(error => {
     ctx.showError(error instanceof Error ? error.message : 'Report issue command failed');
   });
 }

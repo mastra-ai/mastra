@@ -1,7 +1,7 @@
 {
   "name": "@mastra/voice-inworld",
-  "version": "0.2.0",
-  "description": "Mastra Inworld AI voice integration — streaming TTS and batch STT",
+  "version": "0.3.3-alpha.0",
+  "description": "Mastra Inworld AI voice integration — streaming TTS, batch STT, and realtime full-duplex voice",
   "type": "module",
   "files": [
     "dist",
@@ -24,27 +24,32 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
-  "dependencies": {},
+  "dependencies": {
+    "ws": "^8.20.0",
+    "zod-to-json-schema": "^3.25.1"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@internal/voice": "workspace:*",
+    "@types/node": "22.19.21",
+    "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "homepage": "https://mastra.ai",

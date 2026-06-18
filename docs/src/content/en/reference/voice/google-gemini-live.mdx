@@ -472,7 +472,13 @@ The GeminiLiveVoice class emits the following events:
     name: 'writing',
     type: 'event',
     description:
-      "Emitted when transcribed text is available. Callback receives { text: string, role: 'assistant' | 'user' }.",
+      "Emitted when transcribed text is available. Callback receives { text: string, role: 'assistant' | 'user' }. On native-audio models the assistant transcript is driven by the server's `output_audio_transcription` channel rather than `modelTurn.parts.text`.",
+  },
+  {
+    name: 'thinking',
+    type: 'event',
+    description:
+      "Emitted on native-audio models with the model's chain-of-thought / reasoning text from `modelTurn.parts.text`. Callback receives { text: string }. Does not fire on non-native-audio models, where `modelTurn.parts.text` is the spoken response and is emitted as `writing` instead.",
   },
   {
     name: 'session',
@@ -507,10 +513,22 @@ The GeminiLiveVoice class emits the following events:
   {
     name: 'interrupt',
     type: 'event',
-    description: "Interrupt events. Callback receives { type: 'user' | 'model', timestamp: number }.",
+    description:
+      "Emitted on barge-in when the user starts speaking over an in-flight model response. The server cancels any further audio for the current turn. Callback receives { type: 'user', timestamp: number }.",
   },
 ]}
 />
+
+## Native-audio behavior
+
+Native-audio Gemini Live models — any model whose ID contains `native-audio`, such as `gemini-2.5-flash-native-audio-preview-12-2025` — split text output across two channels:
+
+- The model's spoken reply is delivered as audio plus an `output_audio_transcription` transcript and surfaced as `writing` with `role: 'assistant'`.
+- The model's internal reasoning is delivered as `modelTurn.parts.text` and surfaced as `thinking`.
+
+On non-native-audio models there is no `output_audio_transcription` channel, so `modelTurn.parts.text` is the spoken response itself and is emitted as `writing`; the `thinking` event doesn't fire.
+
+Input transcription, output transcription, and barge-in detection (`realtime_input_config.activity_handling = 'START_OF_ACTIVITY_INTERRUPTS'`) are enabled automatically in the setup payload — no extra configuration is required.
 
 ## Available models
 

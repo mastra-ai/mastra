@@ -3,12 +3,19 @@
  */
 
 import type { MastraAuthProvider } from '../../server';
+import { captureEEEvent, getEETelemetryFallbackDistinctId } from '../../telemetry/posthog';
 import type { IUserProvider, ISSOProvider, ISessionProvider, ICredentialsProvider } from '../interfaces';
 import type { IACLProvider } from './interfaces/acl';
 import type { IFGAProvider } from './interfaces/fga';
 import type { IRBACProvider } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
-import { isLicenseValid, isDevEnvironment } from './license';
+import {
+  isLicenseValid,
+  isDevEnvironment,
+  isFeatureEnabled,
+  getSafeLicenseSummary,
+  warnIfDevEENeedsLicense,
+} from './license';
 
 /**
  * Public capabilities response (no authentication required).
@@ -139,6 +146,53 @@ function hasAdminBypassPermissions(permissions: string[]): boolean {
   return permissions.some(p => p === '*' || p === '*:*');
 }
 
+function getRequestIp(request: Request): string | undefined {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    return forwardedFor.split(',')[0]?.trim();
+  }
+
+  return request.headers.get('x-real-ip') ?? undefined;
+}
+
+function captureLicenseCheck({
+  request,
+  user,
+  hasLicense,
+  isDev,
+  isCloud,
+  isSimple,
+  capabilities,
+}: {
+  request: Request;
+  user?: EEUser | null;
+  hasLicense: boolean;
+  isDev: boolean;
+  isCloud: boolean;
+  isSimple: boolean;
+  capabilities?: CapabilityFlags;
+}): void {
+  const license = getSafeLicenseSummary();
+
+  try {
+    const ip = getRequestIp(request);
+    captureEEEvent('ee_license_check', user?.id || license.anonymousId || getEETelemetryFallbackDistinctId(), {
+      license_valid: hasLicense,
+      license_hash: license.licenseHash,
+      is_dev_environment: isDev,
+      is_cloud: isCloud,
+      is_simple_auth: isSimple,
+      capabilities,
+      user_id: user?.id,
+      $ip: ip,
+      license_features: license.features,
+      license_tier: license.tier,
+    });
+  } catch {
+    // Telemetry must never affect auth or EE feature behavior.
+  }
+}
+
 /**
  * Options for building capabilities.
  */
@@ -201,7 +255,15 @@ export async function buildCapabilities(
   const isCloud = isMastraCloudAuth(auth);
   const isSimple = isSimpleAuth(auth);
   const isDev = isDevEnvironment();
+  if (isDev && !hasLicense) {
+    warnIfDevEENeedsLicense();
+  }
   const isLicensedOrCloud = hasLicense || isCloud || isSimple || isDev;
+
+  // Per-feature license gating: rbac/acl/fga additionally require the license
+  // entitlement (e.g. enterprise tier). Cloud, SimpleAuth and dev are exempt.
+  const isFeatureLicensed = (feature: string) =>
+    isCloud || isSimple || isDev || (hasLicense && isFeatureEnabled(feature));
 
   // Build login configuration (always public)
   let login: PublicAuthCapabilities['login'] = null;
@@ -266,15 +328,16 @@ export async function buildCapabilities(
 
   // If no user, return public response only
   if (!user) {
+    captureLicenseCheck({ request, user, hasLicense, isDev, isCloud, isSimple });
     return { enabled: true, login };
   }
 
   // Get RBAC provider from options (if configured)
   const rbacProvider = options?.rbac;
-  const hasRBAC = !!rbacProvider && isLicensedOrCloud;
+  const hasRBAC = !!rbacProvider && isFeatureLicensed('rbac');
 
   // Get FGA provider from options (if configured)
-  const hasFGA = !!options?.fga && isLicensedOrCloud;
+  const hasFGA = !!options?.fga && isFeatureLicensed('fga');
 
   // Build capability flags
   const capabilities: CapabilityFlags = {
@@ -282,7 +345,7 @@ export async function buildCapabilities(
     session: implementsInterface<ISessionProvider>(auth, 'createSession') && isLicensedOrCloud,
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
     rbac: hasRBAC,
-    acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
+    acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isFeatureLicensed('acl'),
     fga: hasFGA,
   };
 
@@ -293,6 +356,23 @@ export async function buildCapabilities(
       const roles = await rbacProvider.getRoles(user);
       const permissions = await rbacProvider.getPermissions(user);
       access = { roles, permissions };
+      const license = getSafeLicenseSummary();
+      try {
+        const ip = getRequestIp(request);
+        captureEEEvent('ee_feature_used', user.id || license.anonymousId || getEETelemetryFallbackDistinctId(), {
+          feature: 'rbac',
+          user_id: user.id,
+          organization_membership_id: user.metadata?.['organizationMembershipId'],
+          role_count: roles.length,
+          permission_count: permissions.length,
+          $ip: ip,
+          license_valid: license.valid,
+          license_hash: license.licenseHash,
+          is_dev_environment: license.isDevEnvironment,
+        });
+      } catch {
+        // Telemetry must never affect auth or EE feature behavior.
+      }
     } catch {
       // RBAC failed, continue without access info
       access = null;
@@ -307,7 +387,7 @@ export async function buildCapabilities(
     if (hasAdminBypassPermissions(access.permissions)) {
       try {
         const allRoles = await rbacProvider.getAvailableRoles();
-        const getPermissionsForRole = rbacProvider.getPermissionsForRole;
+        const getPermissionsForRole = rbacProvider.getPermissionsForRole?.bind(rbacProvider);
         if (getPermissionsForRole) {
           // Use allSettled so one failing role lookup doesn't drop the whole picker.
           const rolePermissions = await Promise.allSettled(
@@ -333,6 +413,8 @@ export async function buildCapabilities(
       }
     }
   }
+
+  captureLicenseCheck({ request, user, hasLicense, isDev, isCloud, isSimple, capabilities });
 
   return {
     enabled: true,

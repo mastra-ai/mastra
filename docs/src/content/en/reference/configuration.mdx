@@ -37,7 +37,7 @@ export const mastra = new Mastra({
       id: 'weather-agent',
       name: 'Weather Agent',
       instructions: 'You help with weather information',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
     }),
   },
 })
@@ -77,7 +77,7 @@ export const mastra = new Mastra({
     type: 'boolean',
     defaultValue: 'false',
     description:
-      'Whether background tasks are enabled. The manager only initializes when this is true and a storage backend is configured.',
+      'Whether the background task manager is available. The manager only initializes when this is true and a storage backend is configured. This is a feature-availability switch — it does not opt any tool into background dispatch. Tools must opt in at the tool or agent layer (see the Background tasks guide).',
   },
   {
     name: 'globalConcurrency',
@@ -438,7 +438,7 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const mastra = new Mastra({
   processors: {
     moderation: new ModerationProcessor({
-      model: 'openai/gpt-5-mini',
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
       categories: ['hate', 'harassment', 'violence'],
     }),
   },
@@ -485,7 +485,7 @@ import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
 
 export const mastra = new Mastra({
   scorers: {
-    toxicity: createToxicityScorer({ model: 'openai/gpt-5-mini' }),
+    toxicity: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
   },
 })
 ```
@@ -775,7 +775,7 @@ export const mastra = new Mastra({
 **Type:** `object`\
 **Default:** `undefined`
 
-MCP transport options applied to all MCP HTTP and SSE routes. Use this to enable stateless mode for serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.) where persistent connections and in-memory session state are not available.
+MCP transport options applied to all MCP HTTP and SSE routes. Use this to enable stateless mode for serverless environments (Cloudflare Workers, Vercel Edge, AWS Lambda, etc.) where persistent connections and in-memory session state aren't available.
 
 | Property | Type | Default | Description |
 | - | - | - | - |

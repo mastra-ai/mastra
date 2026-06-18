@@ -52,11 +52,12 @@ The full set of options is listed in the [backgroundTasks configuration referenc
 
 ## Run a tool in the background
 
-Enabling the manager doesn't run anything in the background by itself as every tool defaults to foreground execution. You can run a tool in the background at one of three layers, in priority order:
+Enabling the manager doesn't run anything in the background by itself as every tool defaults to foreground execution. Tools opt in at one of two layers:
 
-1. **LLM per-call override**: the model decides it should run in the background and includes a `_background` field in the tool arguments.
-1. **Agent-level config**: the agent declares which of its tools are background-eligible.
 1. **Tool-level config**: the tool itself declares it as background-eligible.
+1. **Agent-level config**: the agent declares which of its tools are background-eligible.
+
+Once a tool has opted in, the LLM can optionally include a `_background` field in the tool arguments to override the resolved config for a specific call (timeout, retries, or to flip the call back to foreground).
 
 ### Tool-level
 
@@ -93,7 +94,7 @@ import { Agent } from '@mastra/core/agent'
 export const researcher = new Agent({
   id: 'researcher',
   instructions: 'You research topics and answer questions.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: { researchTool, summarizeTool },
   // highlight-start
   backgroundTasks: {
@@ -119,13 +120,15 @@ When a tool is registered on an agent that has background tasks enabled, the mod
 }
 ```
 
+The `_background` override is a _modifier_ on tools the developer has already opted in at the tool or agent layer — it's not a standalone opt-in. If a tool hasn't been opted in, `_background.enabled: true` from the model is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
+
 ### Resolution order
 
 When a tool call is dispatched, the resolved background config is computed in this priority order:
 
-1. LLM `_background` override (if present in the call's arguments).
 1. Agent-level `backgroundTasks.tools` entry for the tool.
 1. Tool-level `backgroundTasks` config.
+1. LLM `_background.enabled` override (only used to enable background dispatch when the tool was opted in at one of the layers above).
 1. Manager defaults (`defaultTimeoutMs`, `defaultRetries`).
 
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
@@ -192,7 +195,7 @@ import { Agent } from '@mastra/core/agent'
 const supervisor = new Agent({
   id: 'supervisor',
   instructions: 'Coordinate research and writing using the available agents.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   agents: { researchAgent, writingAgent },
   // highlight-start
   backgroundTasks: {
@@ -219,7 +222,7 @@ The background config used for the inherited dispatch (for example `waitTimeoutM
 const researchAgent = new Agent({
   id: 'research-agent',
   description: 'Gathers factual information.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: { deepResearchTool },
   // highlight-start
   backgroundTasks: {

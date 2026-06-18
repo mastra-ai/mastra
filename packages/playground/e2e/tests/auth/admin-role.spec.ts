@@ -113,7 +113,7 @@ test.describe('Admin Role', () => {
       await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page.locator('.entity-list-row').filter({ hasText: /workflow/i });
+      const workflowRow = page.locator('.data-list-row').filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 
@@ -123,7 +123,7 @@ test.describe('Admin Role', () => {
 
       // Click on a workflow
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /workflow/i })
         .first()
         .click();
@@ -168,7 +168,7 @@ test.describe('Admin Role', () => {
       await expectCurrentBreadcrumb(page, 'Tools');
 
       // Should see tools in the list
-      const toolRow = page.locator('.entity-list-row').filter({ hasText: /weatherInfo|simpleMcpTool/i });
+      const toolRow = page.locator('.data-list-row').filter({ hasText: /weatherInfo|simpleMcpTool/i });
       await expect(toolRow.first()).toBeVisible();
     });
 
@@ -178,7 +178,7 @@ test.describe('Admin Role', () => {
 
       // Click on weatherInfo tool
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /weatherInfo/i })
         .click();
 

@@ -17,9 +17,21 @@ import type { Event, EventCallback, SubscribeOptions } from './types';
 export type PubSubDeliveryMode = 'pull' | 'push';
 
 export abstract class PubSub {
-  abstract publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void>;
+  abstract publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void>;
   abstract subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void>;
   abstract unsubscribe(topic: string, cb: EventCallback): Promise<void>;
+  /**
+   * Drain any buffered or in-flight deliveries before resolving.
+   *
+   * Best-effort: a `flush()` that resolves successfully does not guarantee
+   * every subscriber callback succeeded — implementations surface per-event
+   * delivery errors via their configured logger rather than re-throwing,
+   * so a single failed callback does not mask later cleanup work.
+   */
   abstract flush(): Promise<void>;
 
   /**
@@ -35,6 +47,18 @@ export abstract class PubSub {
    */
   get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
     return ['pull'];
+  }
+
+  /**
+   * Whether this implementation honors `options.batch` on `subscribe()`
+   * natively. Defaults to `false`.
+   *
+   * Implementations that integrate batching internally (e.g. against their
+   * own broker retention or via an `AckHandleBuffer`) override this getter
+   * and return `true`.
+   */
+  get supportsNativeBatching(): boolean {
+    return false;
   }
 
   /**

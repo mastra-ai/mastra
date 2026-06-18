@@ -6,6 +6,7 @@ import type {
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_TRACES,
+  TABLE_HARNESS_SESSIONS,
   TABLE_RESOURCES,
   TABLE_NAMES,
   StorageResourceType,
@@ -34,6 +35,8 @@ import type {
   TABLE_FAVORITES,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
+  TABLE_TOOL_PROVIDER_CONNECTIONS,
+  TABLE_NOTIFICATIONS,
   SpanRecord,
   StorageAgentType,
   StoragePromptBlockType,
@@ -44,6 +47,8 @@ import type {
   StorageSkillType,
   StorageBlobEntry,
   StorageFavoriteType,
+  StorageToolProviderConnection,
+  SessionRecord,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { MCPClientVersion } from '@mastra/core/storage/domains/mcp-clients';
@@ -143,6 +148,7 @@ export type RecordTypes = {
   [TABLE_WORKFLOW_SNAPSHOT]: WorkflowRunState;
   [TABLE_SCORERS]: ScoreRowData;
   [TABLE_TRACES]: any;
+  [TABLE_HARNESS_SESSIONS]: SessionRecord;
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;
@@ -166,11 +172,14 @@ export type RecordTypes = {
   [TABLE_SKILL_VERSIONS]: SkillVersion;
   [TABLE_SKILL_BLOBS]: StorageBlobEntry;
   [TABLE_FAVORITES]: StorageFavoriteType;
+  [TABLE_TOOL_PROVIDER_CONNECTIONS]: StorageToolProviderConnection;
   mastra_background_tasks: Record<string, any>;
   [TABLE_SCHEDULES]: Record<string, any>;
   [TABLE_SCHEDULE_TRIGGERS]: Record<string, any>;
   mastra_channel_installations: Record<string, any>;
   mastra_channel_config: Record<string, any>;
+  [TABLE_NOTIFICATIONS]: Record<string, any>;
+  mastra_thread_state: Record<string, any>;
 };
 
 export type ListOptions = {

@@ -1,22 +1,12 @@
+import type { DatasetExperiment } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 
-interface AgentExperiment {
-  id: string;
+export type AgentExperiment = Omit<DatasetExperiment, 'datasetId'> & {
   datasetId: string;
   datasetName: string;
-  datasetVersion?: number | null;
-  agentVersion?: string | null;
-  targetType: string;
-  targetId: string;
-  status: string;
-  totalItems: number;
-  succeededCount: number;
-  failedCount: number;
-  startedAt: string | Date;
-  completedAt: string | Date | null;
-}
+};
 
 /**
  * Hook to fetch all experiments relevant to a specific agent across all datasets.
@@ -29,13 +19,13 @@ export const useAgentExperiments = (agentId: string, attachedScorerIds: string[]
 
   return useQuery({
     queryKey: ['agent-experiments', agentId, attachedScorerIds, datasets.map(d => d.id)],
-    queryFn: async () => {
-      if (datasets.length === 0) return [] as AgentExperiment[];
+    queryFn: async (): Promise<AgentExperiment[]> => {
+      if (datasets.length === 0) return [];
 
       const scorerIdSet = new Set(attachedScorerIds);
 
       const results = await Promise.all(
-        datasets.map(async dataset => {
+        datasets.map(async (dataset): Promise<AgentExperiment[]> => {
           try {
             const response = await client.listDatasetExperiments(dataset.id);
             return response.experiments
@@ -44,22 +34,25 @@ export const useAgentExperiments = (agentId: string, attachedScorerIds: string[]
                   (exp.targetType === 'agent' && exp.targetId === agentId) ||
                   (exp.targetType === 'scorer' && scorerIdSet.has(exp.targetId)),
               )
-              .map(exp => ({
-                ...exp,
-                datasetId: dataset.id,
-                datasetName: dataset.name,
-              }));
+              .map(
+                (exp): AgentExperiment => ({
+                  ...exp,
+                  datasetId: dataset.id,
+                  datasetName: dataset.name,
+                }),
+              );
           } catch {
             return [];
           }
         }),
       );
 
-      return results.flat().sort((a, b) => {
-        const dateA = a.startedAt ? new Date(a.startedAt).getTime() : 0;
-        const dateB = b.startedAt ? new Date(b.startedAt).getTime() : 0;
-        return dateB - dateA;
-      }) as AgentExperiment[];
+      const getStartedAtTime = (startedAt: AgentExperiment['startedAt']) => {
+        if (!startedAt) return 0;
+        return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
+      };
+
+      return results.flat().sort((a, b) => getStartedAtTime(b.startedAt) - getStartedAtTime(a.startedAt));
     },
     enabled: Boolean(agentId) && datasets.length > 0,
     refetchInterval: query => {
@@ -70,5 +63,3 @@ export const useAgentExperiments = (agentId: string, attachedScorerIds: string[]
     },
   });
 };
-
-export type { AgentExperiment };

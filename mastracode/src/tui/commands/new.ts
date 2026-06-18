@@ -3,6 +3,12 @@ import type { SlashCommandContext } from './types.js';
 export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
 
+  // Detach from the old thread's event stream so cross-process events
+  // don't leak into the new conversation. Unlike bare abort(), this also
+  // unsubscribes from the PubSub topic — preventing another mc instance
+  // on the same thread from pushing output into this TUI.
+  state.harness.detachFromCurrentThread();
+
   state.pendingNewThread = true;
   state.chatContainer.clear();
   state.pendingTools.clear();

@@ -13,24 +13,36 @@ function createAgent() {
   });
 }
 
-/**
- * Create a mock stream response that processStream can consume without errors.
- */
-function createMockStreamResponse() {
+function createMockStreamResponse(runId: string) {
   const chunks: any[] = [
-    { type: 'text-start', payload: { id: 'msg-1' } },
-    { type: 'text-delta', payload: { id: 'msg-1', text: 'Hello' } },
-    { type: 'text-end', payload: { id: 'msg-1' } },
-    { type: 'step-end', payload: {} },
-    { type: 'finish', payload: {} },
+    { type: 'start', runId },
+    { type: 'text-start', runId, payload: { id: 'msg-1' } },
+    { type: 'text-delta', runId, payload: { id: 'msg-1', text: 'Hello' } },
+    { type: 'text-end', runId, payload: { id: 'msg-1' } },
+    {
+      type: 'finish',
+      runId,
+      payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+    },
   ];
 
+  let finish!: () => void;
+  const finished = new Promise<void>(resolve => {
+    finish = resolve;
+  });
+  const fullStream = new ReadableStream({
+    start(controller) {
+      for (const part of chunks) controller.enqueue(part);
+      controller.close();
+      finish();
+    },
+  });
+
   return {
-    fullStream: (async function* () {
-      for (const chunk of chunks) {
-        yield chunk;
-      }
-    })(),
+    runId,
+    status: 'running' as const,
+    fullStream,
+    _waitUntilFinished: () => finished,
   };
 }
 
@@ -48,10 +60,12 @@ describe('Harness tracing propagation', () => {
       modes: [{ id: 'default', name: 'Default', default: true, agent }],
     });
 
-    // Spy on agent.stream to capture the options it receives
-    streamSpy = vi.spyOn(agent, 'stream').mockResolvedValue(createMockStreamResponse() as any);
+    streamSpy = vi.spyOn(agent, 'stream').mockImplementation(async (_signal: any, options: any) => {
+      const response = createMockStreamResponse(options?.runId ?? 'mock-run-id');
+      agentThreadStreamRuntime.registerRun(agent, response as any, options);
+      return response as any;
+    });
 
-    // Set up a thread so sendMessage doesn't try to create one via storage
     (harness as any).currentThreadId = 'test-thread-123';
   });
 
@@ -102,7 +116,7 @@ describe('Harness tracing propagation', () => {
     harness.subscribe(event => {
       events.push(event as { type: string; reason?: string });
     });
-    (harness as unknown as { abortRequested: boolean }).abortRequested = true;
+    harness.session.run.requestAbort();
 
     await harness.sendMessage({ content: 'hello' });
 

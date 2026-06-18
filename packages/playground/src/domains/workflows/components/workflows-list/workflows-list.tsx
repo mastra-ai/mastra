@@ -1,5 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { EntityList, EntityListSkeleton, truncateString } from '@mastra/playground-ui';
+import { DataList as EntityList, DataListSkeleton as EntityListSkeleton, truncateString } from '@mastra/playground-ui';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -33,7 +33,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
   }
 
   return (
-    <EntityList columns="auto 1fr auto">
+    <EntityList columns="auto 1fr auto" variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>

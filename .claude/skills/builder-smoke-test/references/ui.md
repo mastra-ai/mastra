@@ -87,21 +87,25 @@ You should be on `/agent-builder/agents/<id>/view`.
 
 - [ ] `View mode` pill badge near the header
 - [ ] Header: back arrow, agent name, `View mode` pill (no refresh button)
-- [ ] Top-right action group: `Switch to Edit mode`, `Add to library`, `Show configuration` buttons. (The avatar lives in the sidebar user menu, not in this header.)
+- [ ] Top-right action group contains exactly `Switch to Edit mode`. There is no `Add to library`, `Show configuration`, `Make public`, or `Share` button in the view-page header under either `--auth off` or `--auth on`. The library/visibility toggle for an agent (auth-on, owner) is exposed on the **edit page** right panel as `Add to library` (when private) ↔ `Remove from library` (when public) — clicking it flips `visibility` between `private` and `public`. There is no separate `Show configuration` button anywhere in the live build (May 28, 2026). The avatar lives in the sidebar user menu, not in this header.
 - [ ] Center: agent name + description and a row of starter prompt cards (e.g. What can you do? / Show available tools / Suggest a task / Run a self-check)
 - [ ] Bottom: `Message your agent...` chat input — agents are runnable from view
 
-### 7. Star Interaction (UI) _(Core)_
+### 7. Favorite Interaction (UI) _(Core)_
 
-On the skills list page:
+> Renamed from "Star" after the `stars → favorites` rename. The icon is still a star glyph, but the underlying state is the `favorited`/`favoriteCount` pair on the row.
 
-- [ ] Click a star icon on a skill
-- [ ] Star toggles to filled/active state
-- [ ] Click again to unstar; star toggles back to outline/inactive
+On the skills list page (under `--auth on`):
 
-On the agents list page:
+- [ ] Click the star icon on a skill row
+- [ ] Star toggles to filled/active state; `favoriteCount` increments by 1
+- [ ] Click again to unfavorite; star toggles back to outline/inactive and `favoriteCount` decrements
+
+On the agents list page (under `--auth on`):
 
 - [ ] Same toggle behavior
+
+Under `--auth off` the rows render the star button but it is a **deliberate no-op**: the aria-label is `Sign in to star this {agent|skill}`, clicking does nothing, and `favoriteCount` stays at `0`. Record this as expected — don't file it as a bug. The misleading "sign in" label exists because there is no sign-in flow when auth is off; if you see anything else (toast, state change, count change) log it as drift.
 
 ### 8. Role impersonation _(Core, admin/owner only)_
 
@@ -169,11 +173,12 @@ If no Advanced mode toggle exists in the running build, log it as drift and skip
 
 Navigate to `http://localhost:4111/agent-builder/library`.
 
-- [ ] Header: `Library / Agents shared with the team library`
+- [ ] Header: `Library` with subtext `Agents shared with the team library`
 - [ ] Agents/Skills tab toggle is present
 - [ ] On the Skills tab, the seeded public skill appears: `Seeded public skill` (id `smoke-seed-public-skill`, owner `user_seed_other`). The private companion (`smoke-seed-private-skill`) must **not** appear here for non-owners. See `scripts/seed-multi-user.sh` for the canonical fixtures.
 - [ ] Under `--auth on`, clicking a row you don't own should navigate to `/agent-builder/skills/<id>/view` (read-only). Under `--auth off` everyone is treated as owner so the navigation lands on `/edit` instead — log which path you observed.
-- [ ] Under `--auth on`, a `Copy to my skills` action is available on the view page; submitting it creates a private copy with origin badge `copied`
+- [ ] Under `--auth on`, a `Copy to my skills` action is available on the view page for any public skill owned by another user; submitting it creates a private copy with origin badge `copied`. As of May 28, 2026 this affordance is not yet wired into the Agents tab (private agents show `Mark an agent as Public to share it with the team library` instead of a Copy CTA, even when viewing somebody else's public agent) — log absence as known drift.
+- [ ] Under `--auth off`, the Library page lists every stored entity because visibility is coerced to public, but the `Copy to my skills` / `Copy to my agents` action is hidden (no caller to attribute the copy to). Don't assert on Copy behavior under auth off.
 
 ### 12. Registry Browse button gating _(Extended)_
 

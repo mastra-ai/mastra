@@ -1,5 +1,5 @@
-import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { SelectItem } from '@mariozechner/pi-tui';
+import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import type { SelectItem } from '@earendil-works/pi-tui';
 
 import type { ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
@@ -33,7 +33,7 @@ function persistGlobalThinkingLevel(level: ThinkingLevelSetting): void {
 }
 
 function getModelNote(ctx: SlashCommandContext): string | null {
-  const modelId = ctx.state.harness.getCurrentModelId() ?? '';
+  const modelId = ctx.state.harness.session.model.get() ?? '';
   if (!modelId) return 'No model selected.';
   if (!supportsThinking(modelId)) {
     return `Warning: current model (${modelId}) may not support reasoning effort. Setting will be saved but may not take effect.`;
@@ -43,7 +43,7 @@ function getModelNote(ctx: SlashCommandContext): string | null {
 
 export async function handleThinkCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
   const currentLevel = ((ctx.harness.getState() as any)?.thinkingLevel ?? 'off') as string;
-  const modelId = ctx.state.harness.getCurrentModelId() ?? '';
+  const modelId = ctx.state.harness.session.model.get() ?? '';
   const thinkingLevels = getThinkingLevelsForModel(modelId);
   const arg = args[0]?.toLowerCase();
 

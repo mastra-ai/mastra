@@ -205,28 +205,37 @@ function autoResolve<TState extends Record<string, unknown>>(
   event: HarnessEvent,
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
-    case 'sandbox_access_request': {
-      harness.respondToQuestion({ questionId: event.questionId, answer: 'Yes' });
-      return { resolved: true, label: `[auto-approved sandbox] ${event.path}`, json: { ...event, autoApproved: true } };
-    }
     case 'tool_approval_required': {
-      harness.respondToToolApproval({ decision: 'approve' });
+      harness.session.respondToToolApproval({ decision: 'approve' });
       return { resolved: true, label: `[auto-approved] ${event.toolName}`, json: { ...event, autoApproved: true } };
     }
-    case 'ask_question': {
-      harness.respondToQuestion({
-        questionId: event.questionId,
-        answer: 'Proceed with your best judgment. Do not ask further questions.',
+    case 'tool_suspended': {
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: 'Yes' });
+        return {
+          resolved: true,
+          label: `[auto-approved sandbox] ${String(payload.path ?? '')}`,
+          json: { ...event, autoApproved: true },
+        };
+      }
+      if (event.toolName === 'submit_plan') {
+        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: { action: 'approved' } });
+        return {
+          resolved: true,
+          label: `[auto-approved plan] ${String(payload.title ?? '')}`,
+          json: { ...event, autoApproved: true },
+        };
+      }
+      void harness.respondToToolSuspension({
+        toolCallId: event.toolCallId,
+        resumeData: 'Proceed with your best judgment. Do not ask further questions.',
       });
       return {
         resolved: true,
-        label: `[auto-answered] ${truncate(event.question, 100)}`,
+        label: `[auto-answered] ${truncate(String(payload.question ?? ''), 100)}`,
         json: { ...event, autoAnswered: true },
       };
-    }
-    case 'plan_approval_required': {
-      void harness.respondToPlanApproval({ planId: event.planId, response: { action: 'approved' } });
-      return { resolved: true, label: `[auto-approved plan] ${event.title}`, json: { ...event, autoApproved: true } };
     }
     default:
       return { resolved: false };
@@ -340,7 +349,7 @@ function finalizeSummary<TState extends Record<string, unknown>>(
   harness: Harness<TState>,
 ): void {
   summary.finishReason = endEvent.reason;
-  summary.threadId = harness.getCurrentThreadId() ?? undefined;
+  summary.threadId = harness.session.thread.getId() ?? undefined;
 }
 
 /** Resolve a thread by ID or title. Tries exact ID match first, then title. */
@@ -348,7 +357,7 @@ async function resolveThread<TState extends Record<string, unknown>>(
   harness: Harness<TState>,
   threadIdOrTitle: string,
 ): Promise<{ threadId: string; matchType: 'id' | 'title' } | { error: string }> {
-  const threads = await harness.listThreads();
+  const threads = await harness.session.thread.list();
 
   const byId = threads.find(t => t.id === threadIdOrTitle);
   if (byId) return { threadId: byId.id, matchType: 'id' };
@@ -517,7 +526,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
       await harness.switchThread({ threadId: result.threadId });
       if (!emit) process.stderr.write(`[thread] resumed ${result.threadId} (matched by ${result.matchType})\n`);
     } else if (args.continue_) {
-      const threads = await harness.listThreads();
+      const threads = await harness.session.thread.list();
       if (threads.length > 0) {
         const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         await harness.switchThread({ threadId: sorted[0]!.id });
@@ -616,19 +625,28 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   const { harness, mcpManager, effectiveDefaults } = result;
 
   if (mcpManager?.hasServers()) {
-    mcpManager.initInBackground().catch(err => {
+    try {
+      await mcpManager.initInBackground();
+    } catch (err) {
       process.stderr.write(`Warning: MCP server initialization failed: ${(err as Error).message ?? err}\n`);
-    });
+    }
   }
 
   setupDebugLogging();
   await harness.init();
+  await harness.getMastra()?.startWorkers();
 
   const exitCode = await runHeadless(harness, { ...args, prompt }, effectiveDefaults);
 
   // Cleanup
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
+  const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+  await Promise.allSettled([
+    mcpManager?.disconnect(),
+    harness.getMastra()?.stopWorkers(),
+    harness?.stopHeartbeats(),
+    closeSignalsPubSub?.(),
+  ]);
 
   process.exit(exitCode);
 }

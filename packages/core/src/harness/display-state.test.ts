@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
@@ -32,14 +32,13 @@ describe('defaultDisplayState', () => {
     const ds = defaultDisplayState();
     expect(ds.isRunning).toBe(false);
     expect(ds.currentMessage).toBeNull();
+    expect(ds.queuedFollowUps).toBe(0);
     expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools).toBeInstanceOf(Map);
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers).toBeInstanceOf(Map);
     expect(ds.toolInputBuffers.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingQuestion).toBeNull();
-    expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents).toBeInstanceOf(Map);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.omProgress.status).toBe('idle');
@@ -75,8 +74,6 @@ describe('Harness.getDisplayState()', () => {
     expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingQuestion).toBeNull();
-    expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.modifiedFiles.size).toBe(0);
     expect(ds.tasks).toEqual([]);
@@ -136,22 +133,6 @@ describe('agent lifecycle', () => {
 
     emit(harness, { type: 'agent_end', reason: 'complete' });
     expect(harness.getDisplayState().isRunning).toBe(false);
-  });
-
-  it('clears pendingQuestion on agent_end', () => {
-    emit(harness, { type: 'ask_question', questionId: 'q1', question: 'What?', options: [] });
-    expect(harness.getDisplayState().pendingQuestion).not.toBeNull();
-
-    emit(harness, { type: 'agent_end', reason: 'complete' });
-    expect(harness.getDisplayState().pendingQuestion).toBeNull();
-  });
-
-  it('clears pendingPlanApproval on agent_end', () => {
-    emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'Plan', plan: '# Plan' });
-    expect(harness.getDisplayState().pendingPlanApproval).not.toBeNull();
-
-    emit(harness, { type: 'agent_end', reason: 'complete' });
-    expect(harness.getDisplayState().pendingPlanApproval).toBeNull();
   });
 
   it('marks running tools as error on agent_end', () => {
@@ -529,7 +510,7 @@ describe('tool lifecycle', () => {
   });
 
   describe('tool_suspended', () => {
-    it('sets pendingSuspension', () => {
+    it('sets a pendingSuspensions entry', () => {
       emit(harness, {
         type: 'tool_suspended',
         toolCallId: 't1',
@@ -538,15 +519,15 @@ describe('tool lifecycle', () => {
         suspendPayload: { reason: 'Needs confirmation' },
         resumeSchema: undefined,
       });
-      const suspension = harness.getDisplayState().pendingSuspension;
-      expect(suspension).not.toBeNull();
+      const suspension = harness.getDisplayState().pendingSuspensions.get('t1');
+      expect(suspension).toBeDefined();
       expect(suspension!.toolCallId).toBe('t1');
       expect(suspension!.toolName).toBe('confirmAction');
       expect(suspension!.args).toEqual({ action: 'deploy' });
       expect(suspension!.suspendPayload).toEqual({ reason: 'Needs confirmation' });
     });
 
-    it('clears pendingSuspension on agent_start', () => {
+    it('preserves pendingSuspensions on agent_start so resuming one keeps the rest', () => {
       emit(harness, {
         type: 'tool_suspended',
         toolCallId: 't1',
@@ -555,13 +536,15 @@ describe('tool lifecycle', () => {
         suspendPayload: {},
         resumeSchema: undefined,
       });
-      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(1);
 
+      // Resuming a parked tool restarts the run (a fresh agent_start); the other
+      // parallel prompts must survive.
       emit(harness, { type: 'agent_start' });
-      expect(harness.getDisplayState().pendingSuspension).toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.has('t1')).toBe(true);
     });
 
-    it('preserves pendingSuspension on agent_end with reason suspended', () => {
+    it('preserves pendingSuspensions on agent_end with reason suspended', () => {
       emit(harness, {
         type: 'tool_suspended',
         toolCallId: 't1',
@@ -570,13 +553,13 @@ describe('tool lifecycle', () => {
         suspendPayload: {},
         resumeSchema: undefined,
       });
-      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(1);
 
       emit(harness, { type: 'agent_end', reason: 'suspended' });
-      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(1);
     });
 
-    it('clears pendingSuspension on agent_end with non-suspended reason', () => {
+    it('clears pendingSuspensions on agent_end with non-suspended reason', () => {
       emit(harness, {
         type: 'tool_suspended',
         toolCallId: 't1',
@@ -585,10 +568,35 @@ describe('tool lifecycle', () => {
         suspendPayload: {},
         resumeSchema: undefined,
       });
-      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(1);
 
       emit(harness, { type: 'agent_end', reason: 'complete' });
-      expect(harness.getDisplayState().pendingSuspension).toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(0);
+    });
+
+    it('keeps other parked suspensions when one resumes while another is pending', () => {
+      emit(harness, {
+        type: 'tool_suspended',
+        toolCallId: 't1',
+        toolName: 'ask_user',
+        args: {},
+        suspendPayload: { question: 'first?' },
+        resumeSchema: undefined,
+      });
+      emit(harness, {
+        type: 'tool_suspended',
+        toolCallId: 't2',
+        toolName: 'ask_user',
+        args: {},
+        suspendPayload: { question: 'second?' },
+        resumeSchema: undefined,
+      });
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(2);
+
+      // Simulate resuming only t1 (display-state side of handleToolResume).
+      harness.getDisplayState().pendingSuspensions.delete('t1');
+      expect(harness.getDisplayState().pendingSuspensions.has('t1')).toBe(false);
+      expect(harness.getDisplayState().pendingSuspensions.get('t2')?.suspendPayload).toEqual({ question: 'second?' });
     });
   });
 });
@@ -679,42 +687,34 @@ describe('interactive prompts', () => {
     harness = createHarness();
   });
 
-  it('sets pendingQuestion on ask_question', () => {
+  it('sets a pendingSuspensions entry on tool_suspended', () => {
     emit(harness, {
-      type: 'ask_question',
-      questionId: 'q1',
-      question: 'Which option?',
-      options: [{ label: 'A' }, { label: 'B' }],
-      selectionMode: 'multi_select',
+      type: 'tool_suspended',
+      toolCallId: 'call-1',
+      toolName: 'ask_user',
+      args: {},
+      suspendPayload: { question: 'Which option?' },
     });
-    const q = harness.getDisplayState().pendingQuestion;
-    expect(q).not.toBeNull();
-    expect(q!.questionId).toBe('q1');
-    expect(q!.question).toBe('Which option?');
-    expect(q!.options).toHaveLength(2);
-    expect(q!.selectionMode).toBe('multi_select');
+    const s = harness.getDisplayState().pendingSuspensions.get('call-1');
+    expect(s).toBeDefined();
+    expect(s!.toolCallId).toBe('call-1');
+    expect(s!.toolName).toBe('ask_user');
   });
 
-  it('sets pendingPlanApproval on plan_approval_required', () => {
+  it('sets a pendingSuspensions entry on tool_suspended for submit_plan', () => {
     emit(harness, {
-      type: 'plan_approval_required',
-      planId: 'p1',
-      title: 'Refactor Plan',
-      plan: '# Steps\n1. Do X',
+      type: 'tool_suspended',
+      toolCallId: 'call-plan',
+      toolName: 'submit_plan',
+      args: { title: 'Refactor Plan', plan: '# Steps\n1. Do X' },
+      suspendPayload: { title: 'Refactor Plan', plan: '# Steps\n1. Do X' },
+      resumeSchema: undefined,
     });
-    const p = harness.getDisplayState().pendingPlanApproval;
-    expect(p).not.toBeNull();
-    expect(p!.planId).toBe('p1');
-    expect(p!.title).toBe('Refactor Plan');
-    expect(p!.plan).toBe('# Steps\n1. Do X');
-  });
-
-  it('clears pendingPlanApproval on plan_approved', () => {
-    emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'Plan', plan: '...' });
-    expect(harness.getDisplayState().pendingPlanApproval).not.toBeNull();
-
-    emit(harness, { type: 'plan_approved' });
-    expect(harness.getDisplayState().pendingPlanApproval).toBeNull();
+    const s = harness.getDisplayState().pendingSuspensions.get('call-plan');
+    expect(s).toBeDefined();
+    expect(s!.toolCallId).toBe('call-plan');
+    expect(s!.toolName).toBe('submit_plan');
+    expect(s!.suspendPayload).toEqual({ title: 'Refactor Plan', plan: '# Steps\n1. Do X' });
   });
 });
 
@@ -901,7 +901,7 @@ describe('usage_update', () => {
 
   it('updates tokenUsage from internal token counters', () => {
     // Set internal token counters via the private field
-    (harness as any).tokenUsage = { promptTokens: 100, completionTokens: 50, totalTokens: 150 };
+    harness.session.setTokenUsage({ promptTokens: 100, completionTokens: 50, totalTokens: 150 });
     emit(harness, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 } });
 
     const usage = harness.getDisplayState().tokenUsage;
@@ -911,7 +911,7 @@ describe('usage_update', () => {
   });
 
   it('preserves richer token usage fields from internal token counters', () => {
-    (harness as any).tokenUsage = {
+    harness.session.setTokenUsage({
       promptTokens: 100,
       completionTokens: 50,
       totalTokens: 220,
@@ -919,7 +919,7 @@ describe('usage_update', () => {
       cachedInputTokens: 25,
       cacheCreationInputTokens: 5,
       raw: { provider: 'test-provider' },
-    };
+    });
     emit(harness, {
       type: 'usage_update',
       usage: {
@@ -945,10 +945,10 @@ describe('usage_update', () => {
   });
 
   it('accumulates usage across multiple updates', () => {
-    (harness as any).tokenUsage = { promptTokens: 100, completionTokens: 50, totalTokens: 150 };
+    harness.session.setTokenUsage({ promptTokens: 100, completionTokens: 50, totalTokens: 150 });
     emit(harness, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 } });
 
-    (harness as any).tokenUsage = { promptTokens: 250, completionTokens: 120, totalTokens: 370 };
+    harness.session.setTokenUsage({ promptTokens: 250, completionTokens: 120, totalTokens: 370 });
     emit(harness, { type: 'usage_update', usage: { promptTokens: 250, completionTokens: 120, totalTokens: 370 } });
 
     const usage = harness.getDisplayState().tokenUsage;
@@ -1355,8 +1355,14 @@ describe('resetThreadDisplayState', () => {
     // Populate various state
     emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
     emit(harness, { type: 'tool_input_start', toolCallId: 't2', toolName: 'write_file' });
-    emit(harness, { type: 'ask_question', questionId: 'q1', question: 'Q?', options: [] });
-    emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'P', plan: '#' });
+    emit(harness, {
+      type: 'tool_suspended',
+      toolCallId: 'p1',
+      toolName: 'submit_plan',
+      args: { title: 'P', plan: '#' },
+      suspendPayload: { title: 'P', plan: '#' },
+      resumeSchema: undefined,
+    });
     emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
     emit(harness, {
       type: 'task_updated',
@@ -1372,8 +1378,7 @@ describe('resetThreadDisplayState', () => {
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingQuestion).toBeNull();
-    expect(ds.pendingPlanApproval).toBeNull();
+    expect(ds.pendingSuspensions.size).toBe(0);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.currentMessage).toBeNull();
     expect(ds.modifiedFiles.size).toBe(0);
@@ -1386,7 +1391,7 @@ describe('resetThreadDisplayState', () => {
   });
 
   it('resets tokenUsage to zero on thread_created', () => {
-    (harness as any).tokenUsage = { promptTokens: 100, completionTokens: 50, totalTokens: 150 };
+    harness.session.setTokenUsage({ promptTokens: 100, completionTokens: 50, totalTokens: 150 });
     emit(harness, { type: 'usage_update', usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 } });
     expect(harness.getDisplayState().tokenUsage.totalTokens).toBe(150);
 
@@ -1413,7 +1418,7 @@ describe('resetThreadDisplayState', () => {
   });
 
   it('syncs tokenUsage from internal counters on thread_changed', () => {
-    (harness as any).tokenUsage = { promptTokens: 200, completionTokens: 100, totalTokens: 300 };
+    harness.session.setTokenUsage({ promptTokens: 200, completionTokens: 100, totalTokens: 300 });
     emit(harness, { type: 'thread_changed', threadId: 'other', previousThreadId: 'old' });
     expect(harness.getDisplayState().tokenUsage.totalTokens).toBe(300);
   });
@@ -1487,6 +1492,32 @@ describe('display_state_changed emission', () => {
     expect(dscEvents.length).toBe(4);
   });
 
+  it('raw subscribe receives every source event and every display_state_changed event', () => {
+    for (let i = 0; i < 5; i++) {
+      emit(harness, {
+        type: 'tool_input_delta',
+        toolCallId: 'missing',
+        argsTextDelta: String(i),
+      });
+    }
+
+    const eventTypes = events.map(event => event.type);
+    expect(eventTypes.filter(type => type === 'tool_input_delta')).toHaveLength(5);
+    expect(eventTypes.filter(type => type === 'display_state_changed')).toHaveLength(5);
+    expect(eventTypes).toEqual([
+      'tool_input_delta',
+      'display_state_changed',
+      'tool_input_delta',
+      'display_state_changed',
+      'tool_input_delta',
+      'display_state_changed',
+      'tool_input_delta',
+      'display_state_changed',
+      'tool_input_delta',
+      'display_state_changed',
+    ]);
+  });
+
   it('display_state_changed reflects state at time of each event', () => {
     const snapshots: boolean[] = [];
     harness.subscribe((event: HarnessEvent) => {
@@ -1502,273 +1533,6 @@ describe('display_state_changed emission', () => {
     // Just check the second subscriber's snapshots
     expect(snapshots[0]).toBe(true); // after agent_start
     expect(snapshots[1]).toBe(false); // after agent_end
-  });
-});
-
-describe('Harness.subscribeDisplayState()', () => {
-  let harness: Harness;
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-    harness = createHarness();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.restoreAllMocks();
-  });
-
-  it('coalesces rapid high-frequency display mutations', () => {
-    const listener = vi.fn();
-    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
-
-    emit(harness, { type: 'agent_start' });
-    expect(listener).toHaveBeenCalledTimes(1);
-    listener.mockClear();
-
-    emit(harness, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
-    for (let i = 0; i < 100; i++) {
-      emit(harness, {
-        type: 'tool_input_delta',
-        toolCallId: 't1',
-        argsTextDelta: String(i),
-        toolName: 'write_file',
-      });
-    }
-
-    expect(listener).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(249);
-    expect(listener).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(1);
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener.mock.calls[0]?.[0]).not.toBe(harness.getDisplayState());
-    expect(listener.mock.calls[0]?.[0].toolInputBuffers.get('t1')?.text).toContain('99');
-  });
-
-  it('uses maxWaitMs to prevent starvation during constant streams', () => {
-    const listener = vi.fn();
-    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
-
-    emit(harness, { type: 'agent_start' });
-    listener.mockClear();
-
-    emit(harness, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
-    for (let i = 0; i < 4; i++) {
-      vi.advanceTimersByTime(100);
-      emit(harness, {
-        type: 'tool_input_delta',
-        toolCallId: 't1',
-        argsTextDelta: 'x',
-        toolName: 'write_file',
-      });
-    }
-
-    expect(listener).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(100);
-    expect(listener).toHaveBeenCalledTimes(1);
-  });
-
-  it('flushes immediately for critical lifecycle events', () => {
-    const listener = vi.fn();
-    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
-
-    emit(harness, { type: 'agent_start' });
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener.mock.calls[0]?.[0].isRunning).toBe(true);
-
-    emit(harness, { type: 'agent_end', reason: 'complete' });
-    expect(listener).toHaveBeenCalledTimes(2);
-    expect(listener.mock.calls[1]?.[0].isRunning).toBe(false);
-  });
-
-  it('flushes immediately for approvals, suspensions, questions, plans, errors, and state changes', () => {
-    const listener = vi.fn();
-    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
-
-    emit(harness, {
-      type: 'tool_approval_required',
-      toolCallId: 't1',
-      toolName: 'write_file',
-      args: {},
-    });
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener.mock.calls[0]?.[0].pendingApproval?.toolCallId).toBe('t1');
-
-    emit(harness, {
-      type: 'tool_suspended',
-      toolCallId: 't2',
-      toolName: 'confirmAction',
-      args: {},
-      suspendPayload: {},
-    });
-    expect(listener).toHaveBeenCalledTimes(2);
-    expect(listener.mock.calls[1]?.[0].pendingSuspension?.toolCallId).toBe('t2');
-
-    emit(harness, {
-      type: 'ask_question',
-      questionId: 'q1',
-      question: 'Proceed?',
-    });
-    expect(listener).toHaveBeenCalledTimes(3);
-    expect(listener.mock.calls[2]?.[0].pendingQuestion?.questionId).toBe('q1');
-
-    emit(harness, {
-      type: 'plan_approval_required',
-      planId: 'p1',
-      title: 'Plan',
-      plan: '# Plan',
-    });
-    expect(listener).toHaveBeenCalledTimes(4);
-    expect(listener.mock.calls[3]?.[0].pendingPlanApproval?.planId).toBe('p1');
-
-    emit(harness, {
-      type: 'error',
-      error: new Error('boom'),
-    });
-    expect(listener).toHaveBeenCalledTimes(5);
-
-    emit(harness, {
-      type: 'state_changed',
-      state: { observationThreshold: 12_000 },
-      changedKeys: ['observationThreshold'],
-    });
-    expect(listener).toHaveBeenCalledTimes(6);
-    expect(listener.mock.calls[5]?.[0].omProgress.threshold).toBe(12_000);
-  });
-
-  it('critical events emit one latest post-critical snapshot when state is pending', () => {
-    const listener = vi.fn();
-    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
-
-    const message = { id: 'm1', role: 'assistant' as const, content: [], createdAt: new Date() };
-    emit(harness, { type: 'message_update', message: message as any });
-    expect(listener).not.toHaveBeenCalled();
-
-    emit(harness, { type: 'agent_end', reason: 'complete' });
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener.mock.calls[0]?.[0].isRunning).toBe(false);
-    expect(listener.mock.calls[0]?.[0].currentMessage?.id).toBe('m1');
-
-    vi.advanceTimersByTime(500);
-    expect(listener).toHaveBeenCalledTimes(1);
-  });
-
-  it('passes fresh snapshots to display state listeners', () => {
-    const listener = vi.fn();
-    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
-
-    emit(harness, { type: 'agent_start' });
-    emit(harness, { type: 'agent_end', reason: 'complete' });
-
-    expect(listener).toHaveBeenCalledTimes(2);
-    expect(listener.mock.calls[0]?.[0]).not.toBe(listener.mock.calls[1]?.[0]);
-    expect(listener.mock.calls[1]?.[0]).not.toBe(harness.getDisplayState());
-  });
-
-  it('isolates listener snapshot mutations from live display state', () => {
-    const listener = vi.fn();
-    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
-
-    const args = { path: 'original.ts', nested: { marker: 'original' } };
-    const firstModified = new Date('2026-01-01T00:00:00.000Z');
-    vi.setSystemTime(firstModified);
-
-    emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'write_file', args });
-    emit(harness, { type: 'tool_end', toolCallId: 't1', result: { ok: true }, isError: false });
-
-    const snapshot = listener.mock.calls.at(-1)?.[0];
-    expect(snapshot).toBeDefined();
-
-    (snapshot!.activeTools.get('t1')!.args as typeof args).nested.marker = 'mutated';
-    snapshot!.modifiedFiles.get('original.ts')!.firstModified.setUTCFullYear(2030);
-    snapshot!.modifiedFiles.get('original.ts')!.operations.push('extra');
-
-    const liveToolArgs = harness.getDisplayState().activeTools.get('t1')!.args as typeof args;
-    const liveModifiedFile = harness.getDisplayState().modifiedFiles.get('original.ts')!;
-    expect(liveToolArgs.nested.marker).toBe('original');
-    expect(liveModifiedFile.firstModified).toEqual(firstModified);
-    expect(liveModifiedFile.operations).toEqual(['write_file']);
-  });
-
-  it('unsubscribe cancels pending timers and prevents later callbacks', () => {
-    const listener = vi.fn();
-    const unsubscribe = harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
-
-    emit(harness, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
-    emit(harness, {
-      type: 'tool_input_delta',
-      toolCallId: 't1',
-      argsTextDelta: 'x',
-      toolName: 'write_file',
-    });
-
-    unsubscribe();
-    vi.advanceTimersByTime(1000);
-
-    expect(listener).not.toHaveBeenCalled();
-  });
-
-  it('destroy cancels pending display state callbacks', async () => {
-    const listener = vi.fn();
-    harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
-
-    emit(harness, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
-    await harness.destroy();
-    vi.advanceTimersByTime(1000);
-
-    expect(listener).not.toHaveBeenCalled();
-  });
-
-  it('honors custom coalescing options', () => {
-    const listener = vi.fn();
-    harness.subscribeDisplayState(listener, { windowMs: 50, maxWaitMs: 100 });
-
-    emit(harness, { type: 'tool_input_start', toolCallId: 't1', toolName: 'write_file' });
-    vi.advanceTimersByTime(49);
-    expect(listener).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(1);
-    expect(listener).toHaveBeenCalledTimes(1);
-  });
-
-  it('raw subscribe still receives every event and every display_state_changed', () => {
-    const raw = vi.fn();
-    const display = vi.fn();
-    harness.subscribe(raw);
-    harness.subscribeDisplayState(display, { windowMs: 250, maxWaitMs: 500 });
-
-    for (let i = 0; i < 5; i++) {
-      emit(harness, {
-        type: 'tool_input_delta',
-        toolCallId: 'missing',
-        argsTextDelta: String(i),
-      });
-    }
-
-    const rawEvents = raw.mock.calls.map(([event]) => event.type);
-    expect(rawEvents.filter(type => type === 'tool_input_delta')).toHaveLength(5);
-    expect(rawEvents.filter(type => type === 'display_state_changed')).toHaveLength(5);
-    expect(display).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(250);
-    expect(display).toHaveBeenCalledTimes(1);
-  });
-
-  it('listener errors do not break the harness or other display listeners', () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const healthyListener = vi.fn();
-
-    harness.subscribeDisplayState(() => {
-      throw new Error('listener failed');
-    });
-    harness.subscribeDisplayState(healthyListener);
-
-    expect(() => emit(harness, { type: 'agent_start' })).not.toThrow();
-    expect(consoleError).toHaveBeenCalledWith('Error in harness display state listener:', expect.any(Error));
-    expect(healthyListener).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1823,7 +1587,7 @@ describe('full lifecycle integration', () => {
     expect(ds.tasks).toHaveLength(1);
 
     // Usage update
-    (harness as any).tokenUsage = { promptTokens: 1000, completionTokens: 500, totalTokens: 1500 };
+    harness.session.setTokenUsage({ promptTokens: 1000, completionTokens: 500, totalTokens: 1500 });
     emit(harness, { type: 'usage_update', usage: { promptTokens: 1000, completionTokens: 500, totalTokens: 1500 } });
     expect(ds.tokenUsage.totalTokens).toBe(1500);
 

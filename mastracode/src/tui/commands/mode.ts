@@ -1,4 +1,14 @@
+import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
 import type { SlashCommandContext } from './types.js';
+
+function applyCurrentModeColorToRenderedTools(ctx: SlashCommandContext): void {
+  const color = ctx.harness.getCurrentMode?.()?.metadata?.color;
+  const modeColor = typeof color === 'string' ? color : undefined;
+  for (const tool of ctx.state.allToolComponents as IToolExecutionComponent[]) {
+    tool.setCompactToolModeColor?.(modeColor);
+  }
+  ctx.state.ui.requestRender();
+}
 
 export async function handleModeCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const modes = ctx.harness.listModes();
@@ -9,13 +19,14 @@ export async function handleModeCommand(ctx: SlashCommandContext, args: string[]
   if (args[0]) {
     try {
       await ctx.harness.switchMode({ modeId: args[0] });
+      applyCurrentModeColorToRenderedTools(ctx);
     } catch (err) {
       ctx.showError(`Failed to switch mode: ${err instanceof Error ? err.message : String(err)}`);
     }
   } else {
-    const currentMode = ctx.harness.getCurrentMode();
+    const currentMode = ctx.harness.session.mode.resolve();
     const modeList = modes
-      .map(m => `  ${m.id === currentMode?.id ? '* ' : '  '}${m.id}${m.name ? ` - ${m.name}` : ''}`)
+      .map(m => `  ${m.id === currentMode?.id ? '* ' : '  '}${m.name}${m.description ? ` - ${m.description}` : ''}`)
       .join('\n');
     ctx.showInfo(`Modes:\n${modeList}`);
   }

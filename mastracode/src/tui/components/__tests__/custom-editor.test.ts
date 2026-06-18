@@ -19,7 +19,7 @@ vi.mock('node:fs', () => ({
   statSync: mocks.statSync,
 }));
 
-vi.mock('@mariozechner/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', () => {
   class MockEditor {
     constructor(_tui: unknown, _theme: unknown) {}
 
@@ -168,6 +168,28 @@ describe('CustomEditor image paste handling', () => {
     expect(mocks.superHandleInput).toHaveBeenCalledWith('\t');
     expect(mocks.editorSetText).toHaveBeenCalledWith('/review ');
     expect(queueFollowUp).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes Ctrl+Z to suspend and Alt+Z to undo without falling through to the base editor', () => {
+    mocks.matchesKey.mockImplementation(
+      (data: string, key: string) => (data === '\x1a' && key === 'ctrl+z') || (data === '\u001bz' && key === 'alt+z'),
+    );
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const suspend = vi.fn();
+    const undo = vi.fn();
+    editor.onAction('suspend', suspend);
+    editor.onAction('undo', undo);
+
+    editor.handleInput('\x1a');
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expect(undo).not.toHaveBeenCalled();
+
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'alt+z');
+    editor.handleInput('\u001bz');
+
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(mocks.superHandleInput).not.toHaveBeenCalled();
   });
 
   it('renders a chevron prompt when no animator is active', () => {
@@ -395,6 +417,22 @@ describe('CustomEditor image paste handling', () => {
 
     expect(onImagePaste).toHaveBeenCalledWith(pastedImage);
     expect(mocks.superHandleInput).not.toHaveBeenCalled();
+  });
+
+  it('wraps Ctrl+V clipboard text in bracketed-paste markers before passing it to the editor', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'ctrl+v');
+    mocks.getClipboardText.mockReturnValue('pasted text\nsecond line');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const onImagePaste = vi.fn();
+    editor.onImagePaste = onImagePaste;
+
+    editor.handleInput('ignored');
+
+    expect(mocks.getClipboardImage).toHaveBeenCalledTimes(1);
+    expect(mocks.getClipboardText).toHaveBeenCalledTimes(1);
+    expect(onImagePaste).not.toHaveBeenCalled();
+    expect(mocks.superHandleInput).toHaveBeenCalledWith(`${PASTE_START}pasted text\nsecond line${PASTE_END}`);
   });
 
   it('supports alt+v as an explicit clipboard paste shortcut', () => {

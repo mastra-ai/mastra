@@ -1,9 +1,10 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  createBrowserFromSettings,
   getCustomProviderId,
   loadSettings,
   migrateLegacyVariedPack,
@@ -13,7 +14,7 @@ import {
   resolveThreadActiveModelPackId,
   saveSettings,
 } from '../settings.js';
-import type { GlobalSettings, StorageSettings } from '../settings.js';
+import type { BrowserSettings, GlobalSettings, StorageSettings } from '../settings.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };
@@ -24,6 +25,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       version: 0,
       modePackId: null,
       omPackId: null,
+      quietModePreferenceSelected: true,
     },
     models: {
       activeModelPackId: 'anthropic',
@@ -35,9 +37,12 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       omObservationThreshold: null,
       omReflectionThreshold: null,
       omCavemanObservations: null,
+      omObserveAttachments: null,
       subagentModels: {},
+      goalJudgeModel: null,
+      goalMaxTurns: null,
     },
-    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
+    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false, quietModeMaxToolPreviewLines: 2 },
     storage,
     customProviders: [],
     customModelPacks: [
@@ -61,6 +66,9 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       viewport: { width: 1280, height: 720 },
       stagehand: { env: 'LOCAL' },
     },
+    shellPassthrough: { mode: 'default' },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    observability: { resources: {}, localTracing: false },
     ...overrides,
   };
 }
@@ -103,6 +111,194 @@ describe('customProviders parsing/persistence', () => {
 
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
+      expect(settings.preferences.quietModeMaxToolPreviewLines).toBe(2);
+      expect(settings.shellPassthrough).toEqual({ mode: 'default' });
+    });
+  });
+
+  it('trims shell passthrough settings while preserving invalid values for runtime warnings', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          shellPassthrough: {
+            mode: ' profile ',
+            executable: ' /bin/zsh ',
+            family: ' zsh ',
+          },
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).shellPassthrough).toEqual({
+        mode: 'profile',
+        executable: '/bin/zsh',
+        family: 'zsh',
+      });
+    });
+  });
+
+  it('preserves omitted shell passthrough mode when an executable is configured', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: {},
+          models: {},
+          preferences: {},
+          storage: {},
+          shellPassthrough: {
+            executable: ' /bin/zsh ',
+          },
+        }),
+        'utf-8',
+      );
+
+      expect(loadSettings(filePath).shellPassthrough).toEqual({
+        executable: '/bin/zsh',
+      });
+    });
+  });
+
+  it('normalizes quiet mode preview line limits', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: 2.9 }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: -4 }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(0);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: 999 }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(8);
+
+      writeFileSync(filePath, '{}', 'utf-8');
+      vi.spyOn(JSON, 'parse').mockReturnValueOnce({
+        onboarding: { quietModePreferenceSelected: true },
+        models: {},
+        preferences: { quietModeMaxToolPreviewLines: Number.NaN },
+        storage: {},
+      });
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+      vi.mocked(JSON.parse).mockRestore();
+
+      vi.spyOn(JSON, 'parse').mockReturnValueOnce({
+        onboarding: { quietModePreferenceSelected: true },
+        models: {},
+        preferences: { quietModeMaxToolPreviewLines: Number.POSITIVE_INFINITY },
+        storage: {},
+      });
+      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+      vi.mocked(JSON.parse).mockRestore();
+    });
+  });
+
+  it('persists experimental GitHub signals enable and disable across reloads', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.signals.experimentalGithubSignals = true;
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
+
+      const reloaded = loadSettings(filePath);
+      reloaded.signals.experimentalGithubSignals = false;
+      saveSettings(reloaded, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(false);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(false);
+    });
+  });
+
+  it('does not clobber experimental GitHub signals from a stale settings object', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings(), filePath);
+      const staleSettings = loadSettings(filePath);
+
+      const currentSettings = loadSettings(filePath);
+      currentSettings.signals.experimentalGithubSignals = true;
+      saveSettings(currentSettings, filePath);
+
+      staleSettings.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(staleSettings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
+    });
+  });
+
+  it('defaults new installs to quiet mode with the preference selected', () => {
+    withTempSettingsFile(filePath => {
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(true);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
+    });
+  });
+
+  it('marks existing classic users as needing the quiet mode preference prompt', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: false }, storage: {} }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(false);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(false);
+    });
+  });
+
+  it('does not prompt existing users who already enabled quiet mode', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: true }, storage: {} }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(true);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
+    });
+  });
+
+  it('preserves existing quiet mode preference selections', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({
+          onboarding: { quietModePreferenceSelected: true },
+          models: {},
+          preferences: { quietMode: false },
+          storage: {},
+        }),
+        'utf-8',
+      );
+
+      const settings = loadSettings(filePath);
+
+      expect(settings.preferences.quietMode).toBe(false);
+      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
     });
   });
 
@@ -386,5 +582,57 @@ describe('migrateLegacyVariedPack', () => {
       build: 'anthropic/claude-sonnet-4-5',
       fast: 'anthropic/claude-haiku-4-5',
     });
+  });
+});
+
+describe('createBrowserFromSettings — recording tools gating', () => {
+  const RECORDING_TOOL_NAMES = ['browser_record', 'browser_record_caption'] as const;
+
+  function makeBrowserSettings(overrides: Partial<BrowserSettings> = {}): BrowserSettings {
+    return {
+      enabled: true,
+      provider: 'stagehand',
+      headless: true,
+      ...overrides,
+    } as BrowserSettings;
+  }
+
+  it('returns undefined when browser is disabled', async () => {
+    const result = await createBrowserFromSettings({ enabled: false } as BrowserSettings);
+    expect(result).toBeUndefined();
+  });
+
+  it.each([
+    ['stagehand', 'stagehand_navigate'],
+    ['agent-browser', 'browser_goto'],
+  ] as const)(
+    'exposes recording tools on a Mastra Code-constructed %s browser while keeping provider tools intact',
+    async (provider, providerToolName) => {
+      const browser = await createBrowserFromSettings(makeBrowserSettings({ provider }));
+      expect(browser).toBeDefined();
+      const tools = browser!.getTools();
+      for (const name of RECORDING_TOOL_NAMES) {
+        expect(tools[name], `expected tool ${name} to be present`).toBeDefined();
+      }
+      expect(tools[providerToolName], `expected provider tool ${providerToolName} to be present`).toBeDefined();
+    },
+  );
+
+  it('does NOT expose recording tools when StagehandBrowser is constructed directly', async () => {
+    const { StagehandBrowser } = await import('@mastra/stagehand');
+    const browser = new StagehandBrowser({ headless: true });
+    const tools = browser.getTools();
+    for (const name of RECORDING_TOOL_NAMES) {
+      expect(tools[name], `expected tool ${name} to be absent on direct StagehandBrowser`).toBeUndefined();
+    }
+  });
+
+  it('does NOT expose recording tools when AgentBrowser is constructed directly', async () => {
+    const { AgentBrowser } = await import('@mastra/agent-browser');
+    const browser = new AgentBrowser({ headless: true });
+    const tools = browser.getTools();
+    for (const name of RECORDING_TOOL_NAMES) {
+      expect(tools[name], `expected tool ${name} to be absent on direct AgentBrowser`).toBeUndefined();
+    }
   });
 });

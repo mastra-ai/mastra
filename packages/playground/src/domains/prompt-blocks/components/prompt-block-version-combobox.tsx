@@ -29,12 +29,12 @@ export function PromptBlockVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'default',
+  variant,
   activeVersionId,
 }: PromptBlockVersionComboboxProps) {
   const { data, isLoading } = usePromptBlockVersions({
     blockId,
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const versions = data?.versions ?? [];

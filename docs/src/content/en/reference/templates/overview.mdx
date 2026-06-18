@@ -16,6 +16,16 @@ Mastra templates are pre-built project structures that demonstrate specific use 
 - **Educational resources**: Learn Mastra patterns through real implementations
 - **Quickstarts**: Bootstrap projects faster than building from scratch
 
+## Available templates
+
+The following templates demonstrate Gateway-first Mastra applications:
+
+- `template-docs-expert`: Answers documentation questions with Mastra Gateway web search, citations, memory, and structured responses.
+- `template-browser-agent`: Uses AgentBrowser to browse, inspect, and interact with web pages.
+- `template-meeting-notes`: Turns Zoom transcripts or uploaded transcripts into structured notes with decisions and action items.
+- `template-company-knowledge`: Indexes Linear and Notion content into pgvector and answers internal knowledge questions.
+- `template-claw-assistant`: Operates a workspace with filesystem, sandbox, browser, and web-search tools.
+
 ## Using templates
 
 ### Installation
@@ -120,7 +130,7 @@ Include a `.env.example` file with all required environment variables:
 # LLM provider API keys (choose one or more)
 OPENAI_API_KEY=your_openai_api_key_here
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
-GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key_here
+GOOGLE_API_KEY=your_google_api_key_here
 
 # Other service API keys as needed
 OTHER_SERVICE_API_KEY=your_api_key_here
@@ -137,7 +147,7 @@ import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
   name: 'example-agent',
-  model: 'openai/gpt-5.4', // or other provider strings
+  model: '__GATEWAY_OPENAI_MODEL__', // or other provider strings
   instructions: 'Your agent instructions here',
 })
 ```
@@ -178,7 +188,7 @@ Detailed explanation of the template's functionality and use case.
 
 - `OPENAI_API_KEY`: Your OpenAI API key. Get one at [OpenAI Platform](https://platform.openai.com/api-keys)
 - `ANTHROPIC_API_KEY`: Your Anthropic API key. Get one at [Anthropic Console](https://console.anthropic.com/settings/keys)
-- `GOOGLE_GENERATIVE_AI_API_KEY`: Your Google AI API key. Get one at [Google AI Studio](https://makersuite.google.com/app/apikey)
+- `GOOGLE_API_KEY`: Your Google AI API key. Get one at [Google AI Studio](https://makersuite.google.com/app/apikey)
 - `OTHER_API_KEY`: Description of what this key is for
 
 ## Usage

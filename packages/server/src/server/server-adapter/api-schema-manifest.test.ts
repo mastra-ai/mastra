@@ -54,8 +54,10 @@ describe('apiSchemaManifest', () => {
     );
   });
 
-  it('derives the manifest from registered JSON route contracts', () => {
+  it('derives the manifest from registered non-deprecated JSON route contracts', () => {
     expect(routeKeys).toContain('GET /agents/:agentId/voice/speakers');
+    expect(routeKeys).not.toContain('GET /agents/:agentId/speakers');
+    expect(routeKeys).not.toContain('POST /agents/:agentId/listen');
     expect(routeKeys).toContain('GET /auth/me');
     expect(apiSchemaManifest.routes.every(route => route.responseType === 'json')).toBe(true);
     expect(routeKeys.some(key => key.includes('/stream'))).toBe(false);

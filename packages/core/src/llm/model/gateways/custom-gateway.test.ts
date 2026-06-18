@@ -1,11 +1,11 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../../../agent';
 import { Mastra } from '../../../mastra';
 import { ModelRouterLanguageModel } from '../router';
 import { MastraModelGateway } from './base';
-import type { ProviderConfig } from './base';
+import type { MastraModelGatewayInterface, ProviderConfig } from './base';
 
 // Mock custom gateway implementation for testing
 class TestCustomGateway extends MastraModelGateway {
@@ -109,11 +109,41 @@ class AnotherCustomGateway extends MastraModelGateway {
   }
 }
 
+function createPlainObjectGateway(): MastraModelGatewayInterface {
+  return {
+    id: 'plain',
+    name: 'plain-object-gateway',
+    fetchProviders: vi.fn(async () => ({
+      provider: {
+        name: 'Plain Provider',
+        models: ['model-1'],
+        apiKeyEnvVar: 'PLAIN_API_KEY',
+        gateway: 'plain',
+        url: 'https://api.plain.example/v1',
+      },
+    })),
+    buildUrl: vi.fn(() => 'https://api.plain.example/v1'),
+    getApiKey: vi.fn(async () => 'plain-key'),
+    resolveLanguageModel: vi.fn(
+      ({ providerId, modelId }) =>
+        ({
+          specificationVersion: 'v2',
+          provider: providerId,
+          modelId,
+          supportedUrls: {},
+          doGenerate: vi.fn(),
+          doStream: vi.fn(async () => ({ stream: new ReadableStream() })),
+        }) as unknown as LanguageModelV2,
+    ),
+  };
+}
+
 describe('Custom Gateway Integration', () => {
   beforeEach(() => {
     // Set up test environment variables
     process.env.CUSTOM_API_KEY = 'test-custom-key';
     process.env.ANOTHER_API_KEY = 'test-another-key';
+    (ModelRouterLanguageModel as unknown as { _clearCachesForTests: () => void })._clearCachesForTests();
   });
 
   describe('Mastra Gateway Configuration', () => {
@@ -128,6 +158,18 @@ describe('Custom Gateway Integration', () => {
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
       expect(gateways?.custom).toBe(customGateway);
+    });
+
+    it('should accept plain object gateways in Mastra config', () => {
+      const plainGateway = createPlainObjectGateway();
+      const mastra = new Mastra({
+        gateways: {
+          plain: plainGateway,
+        },
+      });
+
+      expect(mastra.listGateways()?.plain).toBe(plainGateway);
+      expect(mastra.getGatewayById('plain')).toBe(plainGateway);
     });
 
     it('should accept multiple custom gateways', () => {
@@ -188,6 +230,36 @@ describe('Custom Gateway Integration', () => {
       expect(model.provider).toBe('my-provider');
     });
 
+    it('should use plain object gateways without extending MastraModelGateway', async () => {
+      const plainGateway = createPlainObjectGateway();
+      const model = new ModelRouterLanguageModel('plain/provider/model-1', [plainGateway]);
+
+      expect(model.modelId).toBe('model-1');
+      expect(model.provider).toBe('provider');
+
+      await model.doStream({} as any);
+      expect(plainGateway.getApiKey).toHaveBeenCalledWith('plain/provider/model-1');
+      expect(plainGateway.resolveLanguageModel).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'plain-key', providerId: 'provider', modelId: 'model-1' }),
+      );
+    });
+
+    it('should call plain object gateway resolveAuth before resolveLanguageModel', async () => {
+      const plainGateway = createPlainObjectGateway();
+      plainGateway.resolveAuth = vi.fn(() => ({ apiKey: 'hook-key', source: 'gateway' as const }));
+      const model = new ModelRouterLanguageModel('plain/provider/model-1', [plainGateway]);
+
+      await model.doStream({} as any);
+
+      expect(plainGateway.resolveAuth).toHaveBeenCalledWith(
+        expect.objectContaining({ gatewayId: 'plain', providerId: 'provider', modelId: 'model-1' }),
+      );
+      expect(plainGateway.getApiKey).not.toHaveBeenCalled();
+      expect(plainGateway.resolveLanguageModel).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'hook-key', providerId: 'provider', modelId: 'model-1' }),
+      );
+    });
+
     it('should fall back to default gateways when custom gateways array is empty', () => {
       // This should use default gateways (netlify, models.dev)
       const model = new ModelRouterLanguageModel('openai/gpt-4o', []);
@@ -227,6 +299,7 @@ describe('Custom Gateway Integration', () => {
       });
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a test agent',
         model: 'custom/my-provider/model-1',
@@ -250,12 +323,14 @@ describe('Custom Gateway Integration', () => {
       });
 
       const agent1 = new Agent({
+        id: 'agent-1',
         name: 'agent-1',
         instructions: 'Agent using custom gateway',
         model: 'custom/my-provider/model-1',
       });
 
       const agent2 = new Agent({
+        id: 'agent-2',
         name: 'agent-2',
         instructions: 'Agent using another gateway',
         model: 'another/another-provider/model-a',

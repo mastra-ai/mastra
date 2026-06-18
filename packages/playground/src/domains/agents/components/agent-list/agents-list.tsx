@@ -1,7 +1,7 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import {
-  EntityList,
-  EntityListSkeleton,
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
   TextAndIcon,
   WorkflowIcon,
   AgentIcon,
@@ -37,7 +37,7 @@ export function AgentsList({ agents, isLoading, search = '' }: AgentsListProps) 
   }
 
   return (
-    <EntityList columns={'auto 1fr auto auto auto auto'}>
+    <EntityList columns={'auto 1fr auto auto auto auto'} variant="striped">
       <EntityList.Top>
         <EntityList.TopCell className="">Name</EntityList.TopCell>
         <EntityList.TopCell className="">Instructions</EntityList.TopCell>

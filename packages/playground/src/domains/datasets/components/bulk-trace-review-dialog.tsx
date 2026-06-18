@@ -1,6 +1,7 @@
 'use client';
 
-import { Button, CodeEditor, Label, SideDialog, Txt, toast } from '@mastra/playground-ui';
+import { Button, CodeEditor, Label, Txt, toast } from '@mastra/playground-ui';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -163,7 +164,7 @@ export function BulkTraceReviewDialog({
             <Label>Input (JSON) *</Label>
             <CodeEditor
               value={currentItem.input}
-              onChange={v => updateCurrentItem('input', v ?? '')}
+              onChange={(v: string | undefined) => updateCurrentItem('input', v ?? '')}
               showCopyButton={false}
               className="min-h-[120px]"
             />
@@ -173,7 +174,7 @@ export function BulkTraceReviewDialog({
             <Label>Ground Truth (JSON, optional)</Label>
             <CodeEditor
               value={currentItem.groundTruth}
-              onChange={v => updateCurrentItem('groundTruth', v ?? '')}
+              onChange={(v: string | undefined) => updateCurrentItem('groundTruth', v ?? '')}
               showCopyButton={false}
               className="min-h-[80px]"
             />
@@ -183,7 +184,7 @@ export function BulkTraceReviewDialog({
             <Label>Expected Trajectory (JSON, optional)</Label>
             <CodeEditor
               value={currentItem.expectedTrajectory}
-              onChange={v => updateCurrentItem('expectedTrajectory', v ?? '')}
+              onChange={(v: string | undefined) => updateCurrentItem('expectedTrajectory', v ?? '')}
               showCopyButton={false}
               className="min-h-[80px]"
             />

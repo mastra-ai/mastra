@@ -11,6 +11,12 @@ export function showThreadLockPrompt(
   ownerPid: number,
   lockedThreadId?: string,
 ): void {
+  ctx.analytics?.trackInteractivePrompt('thread_lock_prompt', {
+    threadId: lockedThreadId ?? ctx.state.harness.session.thread.getId(),
+    resourceId: ctx.state.harness.session.identity.getResourceId(),
+    mode: ctx.state.harness.session.mode.get(),
+  });
+
   void (async () => {
     const answer = await askModalQuestion(ctx.state.ui, {
       question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. What would you like to do?`,
@@ -46,9 +52,9 @@ export function showThreadLockPrompt(
 
 export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
-  const threads = await state.harness.listThreads({ allResources: true });
-  const currentId = state.pendingNewThread ? null : state.harness.getCurrentThreadId();
-  const currentResourceId = state.harness.getResourceId();
+  const threads = await state.harness.session.thread.list({ allResources: true });
+  const currentId = state.pendingNewThread ? null : state.harness.session.thread.getId();
+  const currentResourceId = state.harness.session.identity.getResourceId();
   const threadById = new Map(threads.map(thread => [thread.id, thread] as const));
 
   for (const [threadId, cachedPreview] of [...state.threadPreviewCache.entries()]) {
@@ -69,6 +75,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
     ctx.showInfo('No threads yet. Send a message to create one.');
     return;
   }
+  // console.log(cachedPreview);
 
   return new Promise(resolve => {
     const selector = new ThreadSelectorComponent({

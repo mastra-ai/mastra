@@ -2,6 +2,7 @@ import { HTTPException } from '../http-exception';
 import { favoriteToggleResponseSchema } from '../schemas/favorites';
 import { storedSkillIdPathParams } from '../schemas/stored-skills';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { assertStoredResourceScope, getStoredResourceScope } from '../utils';
 
 import { assertReadAccess, getCallerAuthorId } from './authorship';
 import { requireBuilderFeature } from './editor-builder';
@@ -51,10 +52,11 @@ export const FAVORITE_STORED_SKILL_ROUTE = createRoute({
 
       const { skillStore, favoritesStore } = await getFavoritesContext(mastra);
 
-      const skill = await skillStore.getById(storedSkillId);
+      const skill = await skillStore.getByIdResolved(storedSkillId);
       if (!skill) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
+      assertStoredResourceScope(skill, await getStoredResourceScope(mastra, requestContext));
 
       // Throws 404 if the caller cannot read the skill (private + not owner/admin).
       assertReadAccess({ requestContext, resource: 'stored-skills', resourceId: storedSkillId, record: skill });
@@ -96,10 +98,11 @@ export const UNFAVORITE_STORED_SKILL_ROUTE = createRoute({
 
       const { skillStore, favoritesStore } = await getFavoritesContext(mastra);
 
-      const skill = await skillStore.getById(storedSkillId);
+      const skill = await skillStore.getByIdResolved(storedSkillId);
       if (!skill) {
         throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
       }
+      assertStoredResourceScope(skill, await getStoredResourceScope(mastra, requestContext));
 
       assertReadAccess({ requestContext, resource: 'stored-skills', resourceId: storedSkillId, record: skill });
 

@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
-import type { IAgentBuilder } from '../agent-builder/ee';
+import type { AgentBuilderOptions, IAgentBuilder } from '../agent-builder/ee';
+import type { MastraBrowser } from '../browser/browser';
 import type { MastraScorer } from '../evals';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -7,6 +8,7 @@ import type { MCPServerBase } from '../mcp';
 import type { ProcessorProvider } from '../processor-provider';
 import type { RequestContext } from '../request-context';
 import type { BlobStore } from '../storage/domains/blobs/base';
+import type { SourceControlProvider } from '../storage/source-control';
 import type {
   AgentInstructionBlock,
   StorageCreateAgentInput,
@@ -119,6 +121,27 @@ export interface BlobStoreProvider<TConfig = Record<string, unknown>> {
   createBlobStore(config: TConfig): BlobStore | Promise<BlobStore>;
 }
 
+/**
+ * A registered browser provider that the editor can use to hydrate
+ * stored browser configs into runtime MastraBrowser instances.
+ *
+ * Unlike filesystems/sandboxes, there are no built-in browser providers.
+ * Browser providers (e.g., @mastra/stagehand, @mastra/agent-browser) must be
+ * supplied via `MastraEditorConfig.browsers`.
+ */
+export interface BrowserProvider<TConfig = Record<string, unknown>> {
+  /** Unique provider identifier (e.g., 'stagehand', 'agent-browser') — matches `StorageBrowserConfig.provider` */
+  id: string;
+  /** Human-readable name for UI display */
+  name: string;
+  /** Short description for UI display */
+  description?: string;
+  /** JSON Schema describing the provider-specific configuration. Used by UI to render config forms. */
+  configSchema?: Record<string, unknown>;
+  /** Create a browser instance from the stored config */
+  createBrowser(config: TConfig): MastraBrowser | Promise<MastraBrowser>;
+}
+
 export interface MastraEditorConfig {
   logger?: IMastraLogger;
   /** Tool providers for integration tools (e.g., Composio) */
@@ -144,6 +167,44 @@ export interface MastraEditorConfig {
    * @example { [s3BlobStoreProvider.id]: s3BlobStoreProvider }
    */
   blobStores?: Record<string, BlobStoreProvider>;
+  /**
+   * Browser providers for hydrating stored browser configs into runtime instances.
+   * No built-in providers exist — browser packages (e.g., @mastra/stagehand,
+   * @mastra/agent-browser) must be registered here.
+   * @example { [stagehandBrowserProvider.id]: stagehandBrowserProvider }
+   */
+  browsers?: Record<string, BrowserProvider>;
+  /**
+   * Configuration for the Agent Builder EE feature.
+   * When present and enabled, the editor provides agent building capabilities.
+   */
+  builder?: AgentBuilderOptions;
+  /**
+   * Source of truth for agent overrides — controls how they are persisted and
+   * surfaced in Studio.
+   *
+   * - `'code'` — overrides live as deterministic per-agent JSON files on disk
+   *   (default `./mastra/editor/`). Studio replaces Save/Publish with
+   *   filesystem/PR actions and routes editor storage domains through a local
+   *   `FilesystemStore` at `codePath`.
+   * - `'db'` — overrides live in the configured storage backend. Studio shows
+   *   the standard Save/Publish flow.
+   */
+  source?: 'code' | 'db';
+  /**
+   * Filesystem path used by the `'code'` source for per-agent JSON files.
+   * Defaults to `./mastra/editor/`. Ignored when `source` is not `'code'`.
+   */
+  codePath?: string;
+  /**
+   * Optional provider used by the `'code'` source to persist overrides in a
+   * source-control backed system instead of the local filesystem.
+   *
+   * Local development can omit this and use `codePath`. Hosted deployments
+   * should provide a source provider or expose code-source editing as
+   * unavailable.
+   */
+  sourceControlProvider?: SourceControlProvider;
 }
 
 export interface GetByIdOptions {
@@ -177,6 +238,7 @@ export interface IEditorAgentNamespace {
       newName?: string;
       metadata?: Record<string, unknown>;
       authorId?: string;
+      visibility?: 'private' | 'public';
       requestContext?: RequestContext;
     },
   ): Promise<StorageResolvedAgentType>;
@@ -274,6 +336,63 @@ export interface IEditorSkillNamespace {
 }
 
 // ============================================================================
+// Favorites Namespace Interface
+// ============================================================================
+
+/** Entity kinds that can be favorited. Mirrors `STORAGE_FAVORITE_ENTITY_TYPES`. */
+export type EditorFavoriteEntityType = 'agent' | 'skill';
+
+export interface EditorFavoriteToggleResult {
+  /** Whether the entity is favorited by the caller after the operation. */
+  favorited: boolean;
+  /** Aggregate favorite count on the entity post-mutation. */
+  favoriteCount: number;
+}
+
+export interface EditorFavoriteTargetInput {
+  entityType: EditorFavoriteEntityType;
+  entityId: string;
+  /** Caller author id (resolved by the route handler from `RequestContext`). */
+  userId: string;
+}
+
+export interface EditorListFavoritedIdsInput {
+  entityType: EditorFavoriteEntityType;
+  /** Caller author id (resolved by the route handler from `RequestContext`). */
+  userId: string;
+}
+
+export interface EditorIsFavoritedBatchInput {
+  entityType: EditorFavoriteEntityType;
+  entityIds: string[];
+  /** Caller author id (resolved by the route handler from `RequestContext`). */
+  userId: string;
+}
+
+/**
+ * Favorites namespace. Optional: only present on EE-enabled builds
+ * with `features.agent.favorites === true`.
+ *
+ * **Authorization layering**: the namespace verifies the target entity exists
+ * (404 if missing) and performs the storage mutation. Visibility / ownership
+ * checks (`assertReadAccess`) are performed by the route handler at the
+ * server boundary. Direct namespace callers must run their own visibility
+ * check before invoking these methods.
+ */
+export interface IEditorFavoritesNamespace {
+  favorite(input: EditorFavoriteTargetInput): Promise<EditorFavoriteToggleResult>;
+  unfavorite(input: EditorFavoriteTargetInput): Promise<EditorFavoriteToggleResult>;
+  isFavorited(input: EditorFavoriteTargetInput): Promise<boolean>;
+  /**
+   * Look up which entity IDs in the candidate set are favorited by the caller.
+   * Used for one-shot annotation of list responses (avoids N+1 queries).
+   * Returns a `Set<string>` of favorited entity IDs; order is irrelevant.
+   */
+  isFavoritedBatch(input: EditorIsFavoritedBatchInput): Promise<Set<string>>;
+  listFavoritedIds(input: EditorListFavoritedIdsInput): Promise<string[]>;
+}
+
+// ============================================================================
 // Main Editor Interface
 // ============================================================================
 
@@ -309,8 +428,21 @@ export interface IMastraEditor {
   /** Skill management namespace */
   readonly skill: IEditorSkillNamespace;
 
+  /**
+   * Favorites namespace. Present only when the EE favorites feature is
+   * enabled. Route handlers must hard-gate with `requireBuilderFeature`
+   * before calling this namespace.
+   */
+  readonly favorites?: IEditorFavoritesNamespace;
+
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined;
+  /**
+   * Like {@link getToolProvider}, but throws {@link UnknownToolProviderError}
+   * when the id is unknown. Useful in HTTP handlers that want to translate
+   * a missing provider into a 404.
+   */
+  getToolProviderOrThrow(id: string): ToolProvider;
   /** List all registered tool providers */
   getToolProviders(): Record<string, ToolProvider>;
 
@@ -333,4 +465,14 @@ export interface IMastraEditor {
    * Optional for backwards compatibility.
    */
   resolveBuilder?(): Promise<IAgentBuilder | undefined>;
+
+  /**
+   * Returns the editor's configured source (`'code'` | `'db'`), or `undefined`
+   * if the editor was constructed without an explicit source. Optional for
+   * backwards compatibility.
+   */
+  getSource?(): 'code' | 'db' | undefined;
+
+  /** Returns the source control provider configured for code source, if any. */
+  getSourceControlProvider?(): SourceControlProvider | undefined;
 }

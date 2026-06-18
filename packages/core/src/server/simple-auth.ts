@@ -1,7 +1,8 @@
-import type { HonoRequest } from 'hono';
 import type { CredentialsResult } from '../auth';
 import type { MastraAuthProviderOptions } from './auth';
 import { MastraAuthProvider } from './auth';
+import type { MastraAuthRequest } from './request-types';
+import { getRequestHeader } from './request-types';
 
 const DEFAULT_HEADERS = ['Authorization', 'X-Playground-Access'];
 
@@ -39,7 +40,7 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
     this.userById = new Map(this.users.map(u => [String((u as any)?.id), u]));
   }
 
-  async authenticateToken(token: string, request: HonoRequest): Promise<TUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<TUser | null> {
     const requestTokens = this.getTokensFromHeaders(token, request);
 
     for (const requestToken of requestTokens) {
@@ -49,10 +50,10 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
       }
     }
 
-    return this.getUserFromCookie(this.getRequestHeader(request, 'Cookie'));
+    return this.getUserFromCookie(getRequestHeader(request, 'Cookie'));
   }
 
-  async authorizeUser(user: TUser, _request: HonoRequest): Promise<boolean> {
+  async authorizeUser(user: TUser, _request: MastraAuthRequest): Promise<boolean> {
     return this.users.includes(user);
   }
 
@@ -92,6 +93,14 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
   /** Get user by ID. */
   async getUser(userId: string): Promise<TUser | null> {
     return this.userById.get(userId) ?? null;
+  }
+
+  /**
+   * Get multiple users by ID in one call. Returns positionally-aligned
+   * results, with `null` for any unknown ID.
+   */
+  async getUsers(userIds: string[]): Promise<Array<TUser | null>> {
+    return userIds.map(id => this.userById.get(id) ?? null);
   }
 
   /**
@@ -138,22 +147,10 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
     return token.startsWith('Bearer ') ? token.slice(7) : token;
   }
 
-  /**
-   * Get a header value from either a HonoRequest or standard Request.
-   * The auth middleware passes a raw Request (c.req.raw), not a HonoRequest,
-   * so we need to handle both APIs.
-   */
-  private getRequestHeader(request: HonoRequest | Request, name: string): string | undefined {
-    if (typeof (request as any).header === 'function') {
-      return (request as HonoRequest).header(name);
-    }
-    return (request as Request).headers?.get(name) ?? undefined;
-  }
-
-  private getTokensFromHeaders(token: string, request: HonoRequest): string[] {
+  private getTokensFromHeaders(token: string, request: MastraAuthRequest): string[] {
     const tokens = [token];
     for (const headerName of this.headers) {
-      const headerValue = this.getRequestHeader(request, headerName);
+      const headerValue = getRequestHeader(request, headerName);
       if (headerValue) {
         tokens.push(this.stripBearerPrefix(headerValue));
       }

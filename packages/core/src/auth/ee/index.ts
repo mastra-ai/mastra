@@ -17,16 +17,31 @@ export * from './capabilities';
 // License
 export {
   validateLicense,
+  startLicenseValidation,
   isLicenseValid,
   isEELicenseValid,
   isFeatureEnabled,
   isDevEnvironment,
   isEEEnabled,
+  warnIfDevEENeedsLicense,
+  clearLicenseCache,
   type LicenseInfo,
 } from './license';
 
 // FGA check utility
-export { checkFGA, requireFGA, FGADeniedError, type CheckFGAOptions, type RequireFGAOptions } from './fga-check';
+export {
+  checkFGA,
+  requireFGA,
+  FGADeniedError,
+  getAgentFGAResourceId,
+  getWorkflowFGAResourceId,
+  getStandaloneToolFGAResourceId,
+  getAgentToolFGAResourceId,
+  getMCPToolFGAResourceId,
+  type CheckFGAOptions,
+  type RequireFGAOptions,
+  type ActorSignal,
+} from './fga-check';
 
 // Default implementations
 export * from './defaults';

@@ -8,11 +8,11 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  isZodError,
   normalizeQueryParams,
   redactStreamChunk,
 } from '@mastra/server/server-adapter';
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
-import { ZodError } from 'zod';
 export { createAuthMiddleware } from './auth-middleware';
 export type { FastifyAuthMiddlewareOptions } from './auth-middleware';
 
@@ -200,6 +200,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       'Transfer-Encoding': 'chunked',
     });
 
+    if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+      reply.raw.write(': connected\n\n');
+    }
+
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
 
@@ -224,6 +228,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         if (done) break;
 
         if (value) {
+          if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+            reply.raw.write(value);
+            continue;
+          }
+
           // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
           const shouldRedact = this.streamOptions?.redact ?? true;
           const outputValue = shouldRedact ? redactStreamChunk(value) : value;
@@ -561,7 +570,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           this.mastra.getLogger()?.error('Error parsing query params', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          if (error instanceof ZodError) {
+          if (isZodError(error)) {
             const { status, body } = this.resolveValidationError(route, error, 'query');
             return reply.status(status).send(body);
           }
@@ -579,7 +588,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           this.mastra.getLogger()?.error('Error parsing body', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          if (error instanceof ZodError) {
+          if (isZodError(error)) {
             const { status, body } = this.resolveValidationError(route, error, 'body');
             return reply.status(status).send(body);
           }
@@ -598,7 +607,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           this.mastra.getLogger()?.error('Error parsing path params', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          if (error instanceof ZodError) {
+          if (isZodError(error)) {
             const { status, body } = this.resolveValidationError(route, error, 'path');
             return reply.status(status).send(body);
           }
@@ -619,17 +628,20 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
         routePrefix: prefix,
+        request: toWebRequest(request),
       };
 
       // Check route permission requirement (EE feature)
       // Uses convention-based permission derivation: permissions are auto-derived
       // from route path/method unless explicitly set or route is public
-      const authConfig = this.mastra.getServer()?.auth;
-      if (authConfig) {
+      const requestContext = request.requestContext;
+      // Check if any auth is configured (studio or server) for RBAC
+      const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+      if (hasAuth) {
         const hasPermission = await loadHasPermission();
         if (hasPermission) {
-          const userPermissions = request.requestContext.get('mastra__userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+          const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
           if (permissionError) {
             return reply.status(permissionError.status).send({
@@ -641,7 +653,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       }
 
       // Check FGA authorization (EE feature)
-      const fgaError = await checkRouteFGA(this.mastra, route, request.requestContext, {
+      const fgaError = await checkRouteFGA(this.mastra, route, requestContext, {
         ...params.urlParams,
         ...params.queryParams,
         ...(typeof params.body === 'object' ? params.body : {}),
@@ -758,8 +770,10 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
         }
 
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
+        const requestContext = request.requestContext;
+        // Check if any auth is configured (studio or server) for RBAC
+        const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+        if (hasAuth) {
           let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
           try {
             ({ hasPermission } = await import('@mastra/core/auth/ee'));
@@ -770,8 +784,13 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           }
 
           if (hasPermission) {
-            const userPermissions = request.requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(
+              serverRoute,
+              userPermissions,
+              hasPermission,
+              requestContext,
+            );
             if (permissionError) {
               return reply.status(permissionError.status).send({
                 error: permissionError.error,
@@ -782,7 +801,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         // Check FGA authorization (EE feature)
-        const fgaError = await checkRouteFGA(this.mastra, serverRoute, request.requestContext, {
+        const fgaError = await checkRouteFGA(this.mastra, serverRoute, requestContext, {
           ...(request.params as Record<string, string>),
           ...(request.query as Record<string, string>),
           ...(typeof request.body === 'object' && request.body !== null
@@ -799,13 +818,38 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           request.headers as Record<string, string | string[] | undefined>,
           request.body,
           request.requestContext,
+          request.abortSignal,
         );
         if (!response) {
           reply.status(404).send({ error: 'Not Found' });
           return;
         }
+        // Merge headers set by Fastify hooks/plugins (e.g. @fastify/cors) into
+        // the Fetch Response before hijacking. Otherwise writeCustomRouteResponse's
+        // nodeRes.writeHead() overwrites them with only the response.headers set
+        // by the custom route handler. Route-set headers win on conflict, except
+        // for set-cookie which is always appended so plugin cookies survive
+        // alongside handler cookies (distinct cookies, not a collision).
+        // Skip framing headers (RFC 7230) — writeCustomRouteResponse /
+        // Node's writeHead owns content-length and transfer-encoding.
+        const existingHeaders = reply.getHeaders();
+        for (const [key, value] of Object.entries(existingHeaders)) {
+          if (value === undefined) continue;
+          const lowerKey = key.toLowerCase();
+          if (lowerKey === 'content-length' || lowerKey === 'transfer-encoding') continue;
+          const isSetCookie = lowerKey === 'set-cookie';
+          if (!isSetCookie && response.headers.has(key)) continue;
+          if (Array.isArray(value)) {
+            for (const item of value) response.headers.append(key, String(item));
+          } else if (isSetCookie) {
+            // set-cookie must always append so plugin cookies coexist with handler cookies.
+            response.headers.append(key, String(value));
+          } else {
+            response.headers.set(key, String(value));
+          }
+        }
         reply.hijack();
-        await this.writeCustomRouteResponse(response, reply.raw);
+        await this.writeCustomRouteResponse(response, reply.raw, request.abortSignal);
       };
 
       if (route.method === 'ALL') {

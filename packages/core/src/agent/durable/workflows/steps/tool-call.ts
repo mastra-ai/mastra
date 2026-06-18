@@ -6,6 +6,7 @@ import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
+import type { ExportedSpan, SpanType } from '../../../../observability';
 import { ChunkFrom } from '../../../../stream/types';
 import { createStep } from '../../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
@@ -30,6 +31,9 @@ const durableToolCallInputSchema = z.object({
   providerMetadata: z.record(z.string(), z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
+  activeTools: z.array(z.string()).nullable().optional(),
+  // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
+  stepSpanData: z.any().optional(),
 });
 
 /**
@@ -123,7 +127,7 @@ export function createDurableToolCallStep() {
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
       const typedInput = inputData as DurableToolCallInput;
-      const { toolCallId, toolName, args, providerExecuted, output } = typedInput;
+      const { toolCallId, toolName, args, providerExecuted, output, activeTools } = typedInput;
 
       // Get context from init data (the parent workflow input)
       const initData = getInitData<{
@@ -136,10 +140,45 @@ export function createDurableToolCallStep() {
           memoryConfig?: MemoryConfig;
           threadExists?: boolean;
         };
+        agentSpanData?: unknown;
+        modelSpanData?: unknown;
       }>();
 
       const { runId, options: agentOptions, state } = initData;
       const logger = (mastra as any)?.getLogger?.();
+
+      // End the open MODEL_STEP + MODEL_GENERATION + AGENT_RUN as `suspended` before
+      // pausing — stores persist only span-end events, so an un-ended root is dropped if
+      // the run is never resumed. On resume a fresh root is opened (see DurableAgent.resume).
+      const endSpansAsSuspended = (info: { toolCallId?: string; toolName?: string; reason?: string }) => {
+        try {
+          const obs = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+          if (!obs) return;
+          const output = {
+            status: 'suspended' as const,
+            reason: info.reason,
+            toolName: info.toolName,
+            toolCallId: info.toolCallId,
+          };
+          // After a prior resume, end the resume spans (registry override) — they are the
+          // active root for this segment. Otherwise end the threaded originals.
+          const reg = globalRunRegistry.get(runId);
+          const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+          const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
+          if (typedInput.stepSpanData) {
+            obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({ output });
+          }
+          if (modelSpanData) {
+            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({ output });
+          }
+          if (agentSpanData) {
+            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({ output });
+          }
+        } catch (error) {
+          // Span bookkeeping must never break suspension.
+          logger?.warn?.(`[DurableAgent] Failed to end spans on suspend: ${error}`);
+        }
+      };
 
       // If the tool was already executed by the provider, return the output
       if (providerExecuted && output !== undefined) {
@@ -157,10 +196,20 @@ export function createDurableToolCallStep() {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
-      if (!tool) {
+      const toolKey = registryEntry?.tools?.[toolName]
+        ? toolName
+        : Object.entries(registryEntry?.tools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0];
+      const effectiveActiveTools = activeTools === null ? undefined : (activeTools ?? agentOptions.activeTools);
+      const activeToolKey = toolKey ?? toolName;
+      const isHiddenByActiveTools = effectiveActiveTools !== undefined && !effectiveActiveTools.includes(activeToolKey);
+
+      if (!tool || isHiddenByActiveTools) {
+        const availableToolNames = effectiveActiveTools ?? Object.keys(registryEntry?.tools ?? {});
+        const availableToolsStr =
+          availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         const error = {
           name: 'ToolNotFoundError',
-          message: `Tool ${toolName} not found`,
+          message: `Tool "${toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
         };
         if (pubsub) {
           await emitChunkEvent(pubsub, runId, {
@@ -243,6 +292,9 @@ export function createDurableToolCallStep() {
         // Flush messages before suspension
         await doFlush();
 
+        // End the trace's open spans as suspended before pausing.
+        endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
+
         // Suspend and wait for approval
         return suspend(
           {
@@ -293,11 +345,21 @@ export function createDurableToolCallStep() {
         };
       }
 
+      // Rebuild the forwarded model_step span and pass it as the tool's tracing context so
+      // the TOOL_CALL span nests under the LLM call (matches the non-durable path).
+      const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+      const stepSpan =
+        typedInput.stepSpanData && observability
+          ? observability.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)
+          : undefined;
+      const toolTracingContext = stepSpan ? { currentSpan: stepSpan } : undefined;
+
       const toolOptions = {
         toolCallId,
         messages: [],
         workspace,
         requestContext,
+        tracingContext: toolTracingContext,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
 
         // In-execution suspend callback — allows tools to suspend mid-execution
@@ -332,6 +394,8 @@ export function createDurableToolCallStep() {
             }
 
             await doFlush();
+
+            endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
 
             return suspend(
               {
@@ -369,6 +433,8 @@ export function createDurableToolCallStep() {
             }
 
             await doFlush();
+
+            endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
 
             return suspend(
               {

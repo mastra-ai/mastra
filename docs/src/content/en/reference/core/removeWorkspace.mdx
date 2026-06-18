@@ -1,0 +1,54 @@
+---
+title: "Reference: Mastra.removeWorkspace() | Core"
+description: "Documentation for the `Mastra.removeWorkspace()` method in Mastra, which removes a workspace from the runtime registry."
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.removeWorkspace()
+
+The `.removeWorkspace()` method removes a workspace from the Mastra runtime registry. Pass `{ destroy: true }` to destroy the workspace before it's removed.
+
+## Usage example
+
+```typescript
+await mastra.removeWorkspace('workspace-123', { destroy: true })
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'The ID of the workspace to remove.',
+  },
+  {
+    name: 'options',
+    type: '{ destroy?: boolean }',
+    description:
+      'Optional cleanup behavior. Set `destroy` to `true` to call `workspace.destroy()` before removing the workspace.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'removed',
+    type: 'Promise<boolean>',
+    description: '`true` when a workspace was removed. `false` when no workspace exists for the ID.',
+  },
+]}
+/>
+
+When `destroy` is `true` and `workspace.destroy()` throws, the call rejects with that error and the workspace remains registered so the caller can retry cleanup.
+
+## Related
+
+- [Workspace overview](/docs/workspace/overview)
+- [Workspace class](/reference/workspace/workspace-class)

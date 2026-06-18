@@ -2,6 +2,7 @@ import { HTTPException } from '../http-exception';
 import { favoriteToggleResponseSchema } from '../schemas/favorites';
 import { storedAgentIdPathParams } from '../schemas/stored-agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { assertStoredResourceScope, getStoredResourceScope } from '../utils';
 
 import { assertReadAccess, getCallerAuthorId } from './authorship';
 import { requireBuilderFeature } from './editor-builder';
@@ -55,6 +56,7 @@ export const FAVORITE_STORED_AGENT_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+      assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
 
       // Throws 404 if the caller cannot read the agent (private + not owner/admin).
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
@@ -100,6 +102,7 @@ export const UNFAVORITE_STORED_AGENT_ROUTE = createRoute({
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
+      assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
 
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 

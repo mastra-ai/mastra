@@ -21,7 +21,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory: new Memory({
     options: {
       observationalMemory: true,
@@ -66,9 +66,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'activateAfterIdle',
-    type: 'number | string | false',
+    type: 'number | string | false | "auto"',
     description:
-      'Time before buffered observations are forced to activate after inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, or `false` to disable inherited observation idle activation. Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to opt reflections into idle activation.',
+      'Time before buffered observations are forced to activate after inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, `"auto"` for a provider-aware prompt cache TTL, or `false` to disable inherited observation idle activation. Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to opt reflections into idle activation.',
     isOptional: true,
   },
   {
@@ -135,6 +135,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: 'false',
           },
           {
+            name: 'observeAttachments',
+            type: 'boolean | string[]',
+            description:
+              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. `true` (default) forwards all attachments. `false` drops all attachments while keeping placeholders visible. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model. Tool-result attachments are filtered using the same rule.",
+            isOptional: true,
+            defaultValue: 'true',
+          },
+          {
             name: 'messageTokens',
             type: 'number',
             description:
@@ -187,6 +195,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: '0.2',
           },
           {
+            name: 'bufferOnIdle',
+            type: 'boolean',
+            description:
+              'Run background observation buffering when an agent turn ends and the agent becomes idle. This is separate from `bufferTokens`, which controls step-time async buffering. Set this to `true` to buffer short idle turns without waiting for the next turn or the `messageTokens` threshold.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
             name: 'bufferActivation',
             type: 'number',
             description:
@@ -196,9 +212,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
           },
           {
             name: 'activateAfterIdle',
-            type: 'number | string | false',
+            type: 'number | string | false | "auto"',
             description:
-              'Time before buffered observations are forced to activate after inactivity. Accepts milliseconds, a duration string, or `false`. If unset, the top-level `activateAfterIdle` value is used for observations. Set `false` to disable the top-level idle setting for observations.',
+              'Time before buffered observations are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, or `false`. If unset, the top-level `activateAfterIdle` value is used for observations. Set `false` to disable the top-level idle setting for observations.',
             isOptional: true,
           },
           {
@@ -297,9 +313,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
           },
           {
             name: 'activateAfterIdle',
-            type: 'number | string | false',
+            type: 'number | string | false | "auto"',
             description:
-              'Time before buffered reflections are forced to activate after inactivity. Accepts milliseconds, a duration string, or `false`. Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to opt reflections into idle activation.',
+              'Time before buffered reflections are forced to activate after inactivity. Accepts milliseconds, a duration string, `"auto"` for a provider-aware prompt cache TTL, or `false`. Reflections do not inherit top-level `activateAfterIdle`; set this explicitly to opt reflections into idle activation.',
             isOptional: true,
           },
           {
@@ -346,7 +362,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -375,7 +391,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -404,12 +420,12 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     options: {
       observationalMemory: {
         // highlight-next-line
-        model: 'openai/gpt-5-mini',
+        model: '__GATEWAY_OPENAI_MODEL_MINI__',
       },
     },
   }),
@@ -425,7 +441,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -434,7 +450,7 @@ export const agent = new Agent({
           model: 'google/gemini-2.5-flash',
         },
         reflection: {
-          model: 'openai/gpt-5-mini',
+          model: '__GATEWAY_OPENAI_MODEL_MINI__',
         },
         // highlight-end
       },
@@ -454,7 +470,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'health-assistant',
   instructions: 'You are a health and wellness assistant.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -497,7 +513,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -807,7 +823,7 @@ const om = new ObservationalMemory({
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   inputProcessors: [om],
   outputProcessors: [om],
 })
@@ -1049,8 +1065,8 @@ import { ModelByInputTokens } from '@mastra/memory'
 const selector = new ModelByInputTokens({
   upTo: {
     10_000: 'google/gemini-2.5-flash', // Fast for small inputs
-    40_000: 'openai/gpt-5.4-mini', // Stronger for medium inputs
-    1_000_000: 'openai/gpt-5.4', // Most capable for large inputs
+    40_000: '__GATEWAY_OPENAI_MODEL_MINI__', // Stronger for medium inputs
+    1_000_000: '__GATEWAY_OPENAI_MODEL__', // Most capable for large inputs
   },
 })
 ```

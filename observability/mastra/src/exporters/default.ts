@@ -347,8 +347,14 @@ export class DefaultExporter extends BaseExporter {
         deferredUpdates.length = 0;
         this.emitDrop('tracing', 'unsupported-storage', events.length + deferredCountAtEntry, error);
       } else {
-        // Clear deferred to avoid double-adding — re-add all original events instead
-        deferredUpdates.length = 0;
+        // `events` includes both partials-bound and newly-deferred entries, so
+        // re-adding it would double-add the newly-deferred ones if they stayed
+        // in deferredUpdates. Splice off only what this call appended — entries
+        // from a prior flushSpanUpdates call must survive.
+        const newlyDeferred = deferredUpdates.length - deferredCountAtEntry;
+        if (newlyDeferred > 0) {
+          deferredUpdates.splice(deferredUpdates.length - newlyDeferred, newlyDeferred);
+        }
         const dropped = this.#eventBuffer.reAddUpdates(events);
         this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
       }

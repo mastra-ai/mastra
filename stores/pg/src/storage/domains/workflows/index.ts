@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  mergeWorkflowStepResult,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
@@ -212,9 +213,9 @@ export class WorkflowsPG extends WorkflowsStorage {
           snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
         }
 
-        // Merge the new step result and request context
-        snapshot.context[stepId] = result;
-        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+        // Merge the new step result using element-wise array merging
+        // (critical for concurrent foreach iteration results)
+        mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
         // Upsert the snapshot within the same transaction
         const now = new Date();

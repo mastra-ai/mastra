@@ -1,11 +1,16 @@
 import { Readable } from 'node:stream';
-import type { ToolsInput } from '@mastra/core/agent';
-import type { MastraToolInvocationOptions } from '@mastra/core/tools';
+import type { ToolsInput } from '@internal/voice';
 import { isZodType, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type { XAIFunctionTool } from './types';
 
-type ToolExecute = (args: unknown, options: MastraToolInvocationOptions) => unknown;
+type ToolInvocationOptions = {
+  toolCallId: string;
+  messages: unknown[];
+  requestContext?: unknown;
+};
+
+type ToolExecute = (args: unknown, options: ToolInvocationOptions) => unknown;
 
 export type XAIExecuteFunction = (
   args: unknown,
@@ -94,7 +99,7 @@ export const transformTools = (tools?: ToolsInput, logger: XAITransformToolsLogg
           toolCallId: options.toolCallId,
           messages: [],
           requestContext: options.requestContext,
-        } as MastraToolInvocationOptions;
+        } satisfies ToolInvocationOptions;
 
         return execute(args, callOptions);
       },
