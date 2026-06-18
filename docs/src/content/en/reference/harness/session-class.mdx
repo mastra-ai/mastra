@@ -1,0 +1,895 @@
+---
+title: "Reference: Session class | Harness"
+description: "API reference for the Session class, the per-conversation runtime state owner for a Harness session."
+packages:
+  - "@mastra/core"
+---
+
+# Session class
+
+:::experimental
+
+The `Session` class is part of the Harness feature (alpha) and subject to breaking changes in minor versions.
+
+:::
+
+The `Session` class owns per-conversation runtime state for a Harness instance. It tracks the active mode and model, thread binding, permission grants, follow-up queue, token usage, tool-approval gate, and live agent stream subscription.
+
+Access it via `harness.session` after constructing a `Harness`.
+
+## Usage example
+
+The Session is created internally by the Harness. You interact with it through `harness.session`:
+
+```typescript title="src/mastra/harness.ts"
+import { Harness } from '@mastra/core/harness'
+
+const harness = new Harness({
+  id: 'my-agent',
+  agent: myAgent,
+  resourceId: 'user-123',
+  modes: [
+    { id: 'plan', name: 'Plan', metadata: { default: true } },
+    { id: 'build', name: 'Build' },
+  ],
+})
+
+// Respond to a tool approval
+harness.session.respondToToolApproval({ decision: 'approve' })
+
+// Grant a category for the session
+harness.session.grantCategory('read')
+
+// Check current grants
+const grants = harness.session.getGrants()
+// { categories: ['read'], tools: [] }
+
+// Get token usage
+const usage = harness.session.getTokenUsage()
+
+// Abort the active run
+harness.session.abortRun()
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'The memory resourceId the session reads/writes under. Identifies whose session this is.',
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'identity',
+    type: 'SessionIdentity',
+    description:
+      "The session's identity: the memory resourceId it reads/writes under. Supports switching between resources while retaining the original default.",
+  },
+  {
+    name: 'thread',
+    type: 'SessionThread',
+    description:
+      "The session's thread domain: current thread binding plus scoped data reads (list threads, list messages, settings).",
+  },
+  {
+    name: 'mode',
+    type: 'SessionMode',
+    description: "The session's currently-selected mode and the version-guarded switch sequence.",
+  },
+  {
+    name: 'model',
+    type: 'SessionModel',
+    description: "The session's currently-selected model (source of truth) plus per-mode model memory.",
+  },
+  {
+    name: 'run',
+    type: 'SessionRun',
+    description:
+      'Transient run identity: the current run id, trace id, monotonic operation counter, and abort control.',
+  },
+  {
+    name: 'stream',
+    type: 'SessionStream',
+    description:
+      "Live subscription to the active thread's agent event stream, with dedup key and lifecycle management.",
+  },
+  {
+    name: 'suspensions',
+    type: 'SessionSuspensions',
+    description: 'Tool calls parked awaiting a resume (e.g. ask_user, request_access), keyed by toolCallId.',
+  },
+  {
+    name: 'followUps',
+    type: 'SessionFollowUps',
+    description: 'Messages queued to send after the active run finishes (FIFO queue).',
+  },
+  {
+    name: 'approval',
+    type: 'SessionApproval',
+    description: 'The interactive tool-approval gate the current run parks on while awaiting a user decision.',
+  },
+]}
+/>
+
+## Methods
+
+### Permission grants
+
+#### `grantCategory(category)`
+
+Grant a tool category for the remainder of the session. Tools in this category skip the approval gate.
+
+```typescript
+harness.session.grantCategory('edit')
+```
+
+| Parameter | Type | Description |
+| - | - | - |
+| `category` | `ToolCategory` | One of `'read'`, `'edit'`, `'execute'`, `'mcp'`, or `'other'`. |
+
+#### `grantTool(toolName)`
+
+Grant an individual tool for the remainder of the session.
+
+```typescript
+harness.session.grantTool('file_write')
+```
+
+| Parameter | Type | Description |
+| - | - | - |
+| `toolName` | `string` | The tool name to grant. |
+
+#### `hasCategoryGrant(category)`
+
+Check whether a tool category has been granted for this session.
+
+```typescript
+if (harness.session.hasCategoryGrant('edit')) {
+  // skip approval UI
+}
+```
+
+Returns: `boolean`
+
+#### `hasToolGrant(toolName)`
+
+Check whether an individual tool has been granted for this session.
+
+```typescript
+if (harness.session.hasToolGrant('file_write')) {
+  // skip approval UI
+}
+```
+
+Returns: `boolean`
+
+#### `getGrants()`
+
+Snapshot of all session-scoped grants.
+
+```typescript
+const grants = harness.session.getGrants()
+// { categories: ['edit', 'read'], tools: ['file_write'] }
+```
+
+Returns: `{ categories: ToolCategory[]; tools: string[] }`
+
+### Tool approval
+
+#### `respondToToolApproval({ decision, requestContext? })`
+
+Respond to the parked tool-approval gate with the user's decision. A no-op when nothing is awaiting approval.
+
+- `'approve'` — run the gated tool.
+- `'decline'` — reject the gated tool.
+- `'always_allow_category'` — approve and grant the tool's category for the rest of the session.
+
+```typescript
+harness.session.respondToToolApproval({
+  decision: 'always_allow_category',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'decision',
+    type: "'approve' | 'decline' | 'always_allow_category'",
+    description: "Whether to approve, decline, or approve-and-grant the tool's category.",
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'Optional request context to apply when the gated tool resumes.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Run control
+
+#### `getCurrentRunId()`
+
+The id of the run currently active on this session. Prefers the live subscription's active run id, falling back to the last observed run id. Null when idle.
+
+```typescript
+const runId = harness.session.getCurrentRunId()
+```
+
+Returns: `string | null`
+
+#### `abortRun()`
+
+Abort the session's active run. Drops parked tool suspensions, cancels any pending approval gate, aborts the live subscription's in-flight run, and marks the run as aborting.
+
+```typescript
+harness.session.abortRun()
+```
+
+### Token usage
+
+#### `getTokenUsage()`
+
+A copy of the running token-usage tally for the active thread.
+
+```typescript
+const usage = harness.session.getTokenUsage()
+console.log(usage.totalTokens)
+```
+
+Returns: `TokenUsage`
+
+```typescript
+interface TokenUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  reasoningTokens?: number
+  cachedInputTokens?: number
+  cacheCreationInputTokens?: number
+  raw?: unknown
+}
+```
+
+#### `setTokenUsage(usage)`
+
+Replace the running tally (e.g. when hydrating from persisted thread metadata on thread switch).
+
+```typescript
+harness.session.setTokenUsage({
+  promptTokens: 100,
+  completionTokens: 50,
+  totalTokens: 150,
+})
+```
+
+#### `resetTokenUsage()`
+
+Reset the running tally to zero (e.g. on a new or empty thread).
+
+```typescript
+harness.session.resetTokenUsage()
+```
+
+#### `addUsage(stepUsage)`
+
+Fold a single step's usage into the running tally.
+
+```typescript
+harness.session.addUsage({
+  promptTokens: 200,
+  completionTokens: 80,
+  totalTokens: 280,
+})
+```
+
+### Configuration
+
+#### `setStore(store)`
+
+Attach the thread-settings store the Session persists mode/model through. Called by the Harness once storage is available. Without it, mode/model state lives purely in memory.
+
+```typescript
+harness.session.setStore(threadSettingsStore)
+```
+
+#### `setCategoryResolver(resolveCategory)`
+
+Attach the tool-to-category resolver used when a user picks "always allow category". The Harness injects this; without it, an `always_allow_category` decision simply approves.
+
+```typescript
+harness.session.setCategoryResolver(toolName => {
+  return toolCategoryMap[toolName] ?? null
+})
+```
+
+## Sub-classes
+
+The Session composes several focused sub-classes, each owning a single concern. They are accessible as properties on the Session instance.
+
+### SessionIdentity
+
+Owns the session's resource identity: the memory `resourceId` this session reads/writes under.
+
+#### `getResourceId()`
+
+The resourceId the session currently reads/writes under.
+
+```typescript
+const id = harness.session.identity.getResourceId()
+```
+
+Returns: `string`
+
+#### `getDefaultResourceId()`
+
+The resourceId the session started with (retained across resource switches).
+
+```typescript
+const defaultId = harness.session.identity.getDefaultResourceId()
+```
+
+Returns: `string`
+
+#### `setResourceId({ resourceId })`
+
+Point the session at a different resourceId. The default is unchanged.
+
+```typescript
+harness.session.identity.setResourceId({ resourceId: 'other-user' })
+```
+
+### SessionThread
+
+Owns the session's thread domain: which thread the session is currently on, plus data reads scoped to it.
+
+#### `getId()`
+
+The active thread id, or null when the session is not bound to a thread.
+
+```typescript
+const threadId = harness.session.thread.getId()
+```
+
+Returns: `string | null`
+
+#### `isSet()`
+
+Whether the session is currently bound to a thread.
+
+```typescript
+if (harness.session.thread.isSet()) {
+  // safe to send messages
+}
+```
+
+Returns: `boolean`
+
+#### `requireId()`
+
+The active thread id, throwing when not bound. Use when you need a guaranteed thread id.
+
+```typescript
+const threadId = harness.session.thread.requireId()
+```
+
+Returns: `string`
+
+#### `set({ threadId })`
+
+Bind the session to a thread.
+
+```typescript
+harness.session.thread.set({ threadId: 'thread-abc' })
+```
+
+#### `clear()`
+
+Clear the session's thread binding.
+
+```typescript
+harness.session.thread.clear()
+```
+
+#### `list(options?)`
+
+List threads for this session's resource (or all resources).
+
+```typescript
+const threads = await harness.session.thread.list()
+const allThreads = await harness.session.thread.list({ allResources: true })
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'allResources',
+    type: 'boolean',
+    description: "List threads across all resources (not just the session's own).",
+    isOptional: true,
+  },
+  {
+    name: 'includeForkedSubagents',
+    type: 'boolean',
+    description: 'Include threads forked by subagents.',
+    isOptional: true,
+  },
+]}
+/>
+
+Returns: `Promise<HarnessThread[]>`
+
+#### `getById({ threadId })`
+
+Fetch a single thread by id.
+
+```typescript
+const thread = await harness.session.thread.getById({
+  threadId: 'thread-abc',
+})
+```
+
+Returns: `Promise<HarnessThread | null>`
+
+#### `listMessages({ threadId, limit? })`
+
+List messages for a thread (newest-`limit`, returned oldest-first).
+
+```typescript
+const messages = await harness.session.thread.listMessages({
+  threadId: 'thread-abc',
+  limit: 50,
+})
+```
+
+Returns: `Promise<HarnessMessage[]>`
+
+#### `listActiveMessages({ limit? })`
+
+List messages for the session's currently-bound thread.
+
+```typescript
+const messages = await harness.session.thread.listActiveMessages({
+  limit: 20,
+})
+```
+
+Returns: `Promise<HarnessMessage[]>`
+
+#### `firstUserMessage({ threadId })`
+
+The first user message for a thread, or null.
+
+```typescript
+const msg = await harness.session.thread.firstUserMessage({
+  threadId: 'thread-abc',
+})
+```
+
+Returns: `Promise<HarnessMessage | null>`
+
+#### `firstUserMessages({ threadIds })`
+
+The first user message for each given thread id.
+
+```typescript
+const map = await harness.session.thread.firstUserMessages({
+  threadIds: ['thread-abc', 'thread-def'],
+})
+```
+
+Returns: `Promise<Map<string, HarnessMessage>>`
+
+#### `getSetting({ key })`
+
+Read a setting (metadata value) for the active thread.
+
+```typescript
+const value = await harness.session.thread.getSetting({ key: 'theme' })
+```
+
+Returns: `Promise<unknown>`
+
+#### `setSetting({ key, value })`
+
+Persist a setting for the active thread.
+
+```typescript
+await harness.session.thread.setSetting({
+  key: 'theme',
+  value: 'dark',
+})
+```
+
+#### `deleteSetting({ key })`
+
+Delete a setting for the active thread.
+
+```typescript
+await harness.session.thread.deleteSetting({ key: 'theme' })
+```
+
+### SessionMode
+
+Owns the currently-selected mode and the version-guarded switch sequence.
+
+#### `get()`
+
+The currently-selected mode id.
+
+```typescript
+const modeId = harness.session.mode.get()
+```
+
+Returns: `string`
+
+#### `resolve()`
+
+Resolve the current mode id to its full `HarnessMode` definition. Throws if the mode id isn't in the catalog.
+
+```typescript
+const mode = harness.session.mode.resolve()
+console.log(mode.name, mode.instructions)
+```
+
+Returns: `HarnessMode`
+
+#### `set({ modeId })`
+
+Set the mode id directly (used on default resolution or hydration).
+
+```typescript
+harness.session.mode.set({ modeId: 'build' })
+```
+
+#### `switch({ modeId, defaultModelId? })`
+
+Switch to a new mode, coordinating model memory and persistence. Returns the resolved model id for the new mode.
+
+```typescript
+const { modelId } = await harness.session.mode.switch({
+  modeId: 'build',
+  defaultModelId: 'gpt-4o',
+})
+```
+
+Returns: `Promise<{ modelId: string | null }>`
+
+### SessionModel
+
+Owns the currently-selected model and per-mode model memory.
+
+#### `get()`
+
+The currently-selected model id (empty string when none selected).
+
+```typescript
+const modelId = harness.session.model.get()
+```
+
+Returns: `string`
+
+#### `hasSelection()`
+
+Whether a model is currently selected.
+
+```typescript
+if (harness.session.model.hasSelection()) {
+  // model is set
+}
+```
+
+Returns: `boolean`
+
+#### `set({ modelId })`
+
+Set the in-memory selected model id (no persistence).
+
+```typescript
+harness.session.model.set({ modelId: 'gpt-4o' })
+```
+
+#### `saveForMode({ modeId, modelId })`
+
+Persist a model id as the last-used model for a mode.
+
+```typescript
+await harness.session.model.saveForMode({
+  modeId: 'plan',
+  modelId: 'gpt-4o',
+})
+```
+
+#### `resolveForMode({ modeId, defaultModelId? })`
+
+Resolve the model for a mode: persisted per-mode model if present, else `defaultModelId`, else null.
+
+```typescript
+const modelId = await harness.session.model.resolveForMode({
+  modeId: 'plan',
+  defaultModelId: 'gpt-4o',
+})
+```
+
+Returns: `Promise<string | null>`
+
+### SessionRun
+
+Transient run identity and abort control for the active run.
+
+#### `getRunId()`
+
+The current run id (null when idle).
+
+```typescript
+const runId = harness.session.run.getRunId()
+```
+
+Returns: `string | null`
+
+#### `isRunning()`
+
+Whether a run is currently in progress.
+
+```typescript
+if (harness.session.run.isRunning()) {
+  // show loading indicator
+}
+```
+
+Returns: `boolean`
+
+#### `isAbortRequested()`
+
+Whether an abort has been requested for the current run.
+
+```typescript
+if (harness.session.run.isAbortRequested()) {
+  // run is being cancelled
+}
+```
+
+Returns: `boolean`
+
+#### `requestAbort()`
+
+Request an abort: mark the run as aborting and fire the AbortController.
+
+```typescript
+harness.session.run.requestAbort()
+```
+
+### SessionStream
+
+Live subscription to the active thread's agent event stream.
+
+#### `isOpen()`
+
+Whether a subscription is currently open.
+
+```typescript
+if (harness.session.stream.isOpen()) {
+  // receiving events
+}
+```
+
+Returns: `boolean`
+
+#### `isActive()`
+
+Whether the live subscription currently has a run in flight.
+
+```typescript
+if (harness.session.stream.isActive()) {
+  // agent is generating
+}
+```
+
+Returns: `boolean`
+
+#### `activeRunId()`
+
+The run id the live subscription reports as active, or null.
+
+```typescript
+const runId = harness.session.stream.activeRunId()
+```
+
+Returns: `string | null`
+
+#### `abort()`
+
+Abort the live subscription's in-flight run. Swallows errors.
+
+```typescript
+harness.session.stream.abort()
+```
+
+#### `cleanup()`
+
+Fully tear down the live subscription: abort, unsubscribe, and clear.
+
+```typescript
+harness.session.stream.cleanup()
+```
+
+### SessionSuspensions
+
+Tool calls parked awaiting a resume, keyed by `toolCallId`.
+
+#### `register({ toolCallId, runId, toolName })`
+
+Park a tool call as awaiting a resume.
+
+```typescript
+harness.session.suspensions.register({
+  toolCallId: 'tc-123',
+  runId: 'run-abc',
+  toolName: 'ask_user',
+})
+```
+
+#### `get({ toolCallId })`
+
+The parked suspension for a tool call id, or undefined.
+
+```typescript
+const suspension = harness.session.suspensions.get({
+  toolCallId: 'tc-123',
+})
+// { runId: 'run-abc', toolName: 'ask_user' }
+```
+
+Returns: `PendingSuspension | undefined`
+
+```typescript
+interface PendingSuspension {
+  runId: string
+  toolName: string
+}
+```
+
+#### `has({ toolCallId })`
+
+Whether a tool call id is currently parked.
+
+```typescript
+if (harness.session.suspensions.has({ toolCallId: 'tc-123' })) {
+  // show resume UI
+}
+```
+
+Returns: `boolean`
+
+#### `hasPending()`
+
+Whether any tool calls are parked awaiting a resume.
+
+```typescript
+if (harness.session.suspensions.hasPending()) {
+  // show pending suspensions UI
+}
+```
+
+Returns: `boolean`
+
+#### `delete({ toolCallId })`
+
+Drop a tool call from the parked set (e.g. once resumed).
+
+```typescript
+harness.session.suspensions.delete({ toolCallId: 'tc-123' })
+```
+
+#### `clear()`
+
+Drop all parked suspensions (e.g. on abort or thread switch).
+
+```typescript
+harness.session.suspensions.clear()
+```
+
+### SessionFollowUps
+
+Messages queued to send after the active run finishes (FIFO).
+
+#### `count()`
+
+Number of messages currently queued.
+
+```typescript
+const pending = harness.session.followUps.count()
+```
+
+Returns: `number`
+
+#### `isEmpty()`
+
+Whether the queue is empty.
+
+```typescript
+if (harness.session.followUps.isEmpty()) {
+  // no queued messages
+}
+```
+
+Returns: `boolean`
+
+#### `enqueue(followUp)`
+
+Append a follow-up to the back of the queue.
+
+```typescript
+harness.session.followUps.enqueue({
+  content: 'Also, check the tests.',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'content',
+    type: 'string',
+    description: 'The message text to send.',
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'Optional request context to apply when the queued message is sent.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### `dequeue()`
+
+Remove and return the next follow-up, or undefined when empty.
+
+```typescript
+const next = harness.session.followUps.dequeue()
+if (next) {
+  await harness.sendMessage({ content: next.content })
+}
+```
+
+Returns: `FollowUp | undefined`
+
+#### `clear()`
+
+Drop all queued follow-ups (e.g. on steer or thread switch).
+
+```typescript
+harness.session.followUps.clear()
+```
+
+### SessionApproval
+
+The interactive tool-approval gate.
+
+#### `isArmed()`
+
+Whether an approval is currently parked awaiting a decision.
+
+```typescript
+if (harness.session.approval.isArmed()) {
+  // show approval UI
+}
+```
+
+Returns: `boolean`
+
+#### `cancel()`
+
+Release a parked gate without a user decision (e.g. on abort). Resolves as a decline.
+
+```typescript
+harness.session.approval.cancel()
+```
