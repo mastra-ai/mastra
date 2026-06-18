@@ -45,7 +45,7 @@ class RecordingDbClient implements DbClient {
     throw new Error('not implemented');
   }
 
-  async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
+  async tx<T>(_callback: (t: TxClient) => Promise<T>): Promise<T> {
     throw new Error('not implemented');
   }
 }
