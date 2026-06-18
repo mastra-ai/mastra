@@ -452,11 +452,6 @@ export class Harness<TState = {}> {
   private resourceId: string;
   private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
-  private abortController: AbortController | null = null;
-  private abortRequested: boolean = false;
-  private currentRunId: string | null = null;
-  private currentTraceId: string | null = null;
-  private currentOperationId: number = 0;
   private agentThreadSubscription: AgentThreadSubscription<any> | null = null;
   private agentThreadSubscriptionKey: string | null = null;
   private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
@@ -1819,10 +1814,7 @@ export class Harness<TState = {}> {
     this.agentThreadSubscription?.unsubscribe();
     this.agentThreadSubscription = null;
     this.agentThreadSubscriptionKey = null;
-    this.currentRunId = null;
-    this.currentTraceId = null;
-    this.abortController = null;
-    this.abortRequested = false;
+    this.#session.run.reset();
   }
 
   private getAgentThreadSubscriptionKey(agent: Agent, threadId: string): string {
@@ -1895,8 +1887,7 @@ export class Harness<TState = {}> {
       throw new Error('Cannot build stream options without a current thread');
     }
 
-    this.abortRequested = false;
-    this.abortController ??= new AbortController();
+    this.#session.run.clearAbortRequested();
     const requestContext = await this.buildRequestContext(requestContextInput);
     // Resolve mode-aware instructions at call time so the agent's own
     // instructions are never mutated by the harness.
@@ -1905,7 +1896,7 @@ export class Harness<TState = {}> {
     const streamOptions: Record<string, unknown> = {
       ...this.buildSharedRunOptions(),
       memory: { thread: this.currentThreadId, resource: this.resourceId },
-      abortSignal: this.abortController.signal,
+      abortSignal: this.#session.run.ensureAbortController().signal,
       requestContext,
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
@@ -1992,12 +1983,15 @@ export class Harness<TState = {}> {
     error?: boolean;
     aborted?: boolean;
   }): Promise<void> {
-    const reason = error ? 'error' : suspended ? 'suspended' : aborted || this.abortRequested ? 'aborted' : 'complete';
+    const reason = error
+      ? 'error'
+      : suspended
+        ? 'suspended'
+        : aborted || this.#session.run.isAbortRequested()
+          ? 'aborted'
+          : 'complete';
     this.emit({ type: 'agent_end', reason });
-    this.currentRunId = null;
-    this.currentTraceId = null;
-    this.abortController = null;
-    this.abortRequested = false;
+    this.#session.run.reset();
     await this.drainFollowUpQueue();
   }
 
@@ -2011,10 +2005,7 @@ export class Harness<TState = {}> {
     this.agentThreadSubscription?.unsubscribe();
     this.agentThreadSubscription = null;
     this.agentThreadSubscriptionKey = null;
-    this.currentRunId = null;
-    this.currentTraceId = null;
-    this.abortController = null;
-    this.abortRequested = false;
+    this.#session.run.reset();
     await this.drainFollowUpQueue();
   }
 
@@ -2037,10 +2028,10 @@ export class Harness<TState = {}> {
 
         if (!currentRun) {
           currentRun = this.createStreamState();
-          this.currentOperationId += 1;
-          this.abortController ??= new AbortController();
-          this.currentRunId = subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null);
-          this.currentTraceId = null;
+          this.#session.run.nextOperation();
+          this.#session.run.ensureAbortController();
+          this.#session.run.setRunId({ runId: subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null) });
+          this.#session.run.setTraceId({ traceId: null });
           this.emit({ type: 'agent_start' });
         }
 
@@ -2057,7 +2048,7 @@ export class Harness<TState = {}> {
             chunk.type === 'abort' ||
             chunk.type === 'tool-call-suspended'
           ) {
-            const finishedRunId: string | null = chunkRunId ?? this.currentRunId;
+            const finishedRunId: string | null = chunkRunId ?? this.#session.run.getRunId();
             const suspended =
               chunk.type === 'tool-call-suspended' ||
               (streamResult ?? this.finishStreamState(currentRun)).suspended ||
@@ -2067,7 +2058,13 @@ export class Harness<TState = {}> {
             // content-filter refusal) is surfaced as an explicit error so the
             // run never silently stops without a visible terminal state.
             let isError = chunk.type === 'error';
-            if (currentRun.terminalError && !isError && !aborted && !this.abortRequested && !suspended) {
+            if (
+              currentRun.terminalError &&
+              !isError &&
+              !aborted &&
+              !this.#session.run.isAbortRequested() &&
+              !suspended
+            ) {
               isError = true;
               this.emit({ type: 'error', error: new Error(currentRun.terminalError) });
             }
@@ -2121,7 +2118,7 @@ export class Harness<TState = {}> {
       const agent = this.getCurrentAgent();
       await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
 
-      if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
+      if (this.#session.run.getRunId() && this.agentThreadSubscription?.activeRunId()) {
         const result = agent.sendSignal(signal, {
           resourceId: this.resourceId,
           threadId: this.currentThreadId,
@@ -2165,7 +2162,7 @@ export class Harness<TState = {}> {
     const agent = this.getCurrentAgent();
     await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
 
-    if (this.currentRunId && this.agentThreadSubscription?.activeRunId()) {
+    if (this.#session.run.getRunId() && this.agentThreadSubscription?.activeRunId()) {
       return agent.sendNotificationSignal(input, {
         resourceId: this.resourceId,
         threadId: this.currentThreadId,
@@ -2703,7 +2700,7 @@ export class Harness<TState = {}> {
   ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
     const state = this.createStreamState();
     const requestContext = await this.buildRequestContext(requestContextInput);
-    this.currentOperationId += 1;
+    this.#session.run.nextOperation();
     this.emit({ type: 'agent_start' });
 
     let result: { message: HarnessMessage; suspended?: boolean } | undefined;
@@ -2724,7 +2721,7 @@ export class Harness<TState = {}> {
         chunk.type === 'error' ||
         chunk.type === 'abort' ||
         chunk.type === 'tool-call-suspended' ||
-        this.abortRequested
+        this.#session.run.isAbortRequested()
       ) {
         result ??= this.finishStreamState(state);
         break;
@@ -2736,7 +2733,7 @@ export class Harness<TState = {}> {
     // A non-success terminal finish reason (e.g. a `claude-fable-5`
     // content-filter refusal) is surfaced as an explicit error so the run never
     // silently stops without a visible terminal state.
-    if (state.terminalError && !error && !aborted && !this.abortRequested && !result.suspended) {
+    if (state.terminalError && !error && !aborted && !this.#session.run.isAbortRequested() && !result.suspended) {
       error = true;
       this.emit({ type: 'error', error: new Error(state.terminalError) });
     }
@@ -2747,15 +2744,12 @@ export class Harness<TState = {}> {
         ? 'error'
         : result.suspended
           ? 'suspended'
-          : aborted || this.abortRequested
+          : aborted || this.#session.run.isAbortRequested()
             ? 'aborted'
             : 'complete',
     });
 
-    this.currentRunId = null;
-    this.currentTraceId = null;
-    this.abortController = null;
-    this.abortRequested = false;
+    this.#session.run.reset();
     await this.drainFollowUpQueue();
 
     return result;
@@ -2767,7 +2761,7 @@ export class Harness<TState = {}> {
     requestContext: RequestContext,
   ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
     if ('runId' in chunk && chunk.runId) {
-      this.currentRunId = chunk.runId;
+      this.#session.run.setRunId({ runId: chunk.runId });
     }
 
     switch (chunk.type) {
@@ -2937,8 +2931,9 @@ export class Harness<TState = {}> {
         const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', chunk.payload.suspendPayload);
         const suspResumeSchema = chunk.payload.resumeSchema;
 
-        if (this.currentRunId) {
-          this.pendingSuspensions.set(suspToolCallId, { runId: this.currentRunId, toolName: suspToolName });
+        const suspRunId = this.#session.run.getRunId();
+        if (suspRunId) {
+          this.pendingSuspensions.set(suspToolCallId, { runId: suspRunId, toolName: suspToolName });
         }
         state.isSuspended = true;
 
@@ -3339,7 +3334,6 @@ export class Harness<TState = {}> {
    * Abort the current operation.
    */
   abort(): void {
-    this.abortRequested = true;
     // Drop any tool suspensions parked awaiting a resume. A run sitting in a
     // tool suspend() (e.g. ask_user / request_access) is not actively streaming,
     // so aborting the AbortController alone leaves it orphaned. Clearing the map
@@ -3350,12 +3344,7 @@ export class Harness<TState = {}> {
     try {
       this.agentThreadSubscription?.abort();
     } catch {}
-    if (this.abortController) {
-      try {
-        this.abortController.abort();
-      } catch {}
-      this.abortController = null;
-    }
+    this.#session.run.requestAbort();
   }
 
   /**
@@ -3386,7 +3375,7 @@ export class Harness<TState = {}> {
    * Queue a follow-up message to be processed after the current operation completes.
    */
   async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    if (this.isRunning()) {
+    if (this.#session.run.isRunning()) {
       this.followUpQueue.push({ content, requestContext });
       this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
     } else {
@@ -3396,10 +3385,6 @@ export class Harness<TState = {}> {
 
   getFollowUpCount(): number {
     return this.followUpQueue.length;
-  }
-
-  isRunning(): boolean {
-    return this.abortController !== null;
   }
 
   /**
@@ -3414,7 +3399,7 @@ export class Harness<TState = {}> {
   }
 
   getCurrentRunId(): string | null {
-    return this.agentThreadSubscription?.activeRunId() ?? this.currentRunId;
+    return this.agentThreadSubscription?.activeRunId() ?? this.#session.run.getRunId();
   }
 
   isCurrentThreadStreamActive(): boolean {
@@ -3434,13 +3419,9 @@ export class Harness<TState = {}> {
    * be drained with the previous run's already-aborted abortSignal.
    */
   private async waitForCurrentThreadStreamIdle(): Promise<void> {
-    while (this.isCurrentThreadStreamActive() || this.currentRunId !== null) {
+    while (this.isCurrentThreadStreamActive() || this.#session.run.getRunId() !== null) {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
-  }
-
-  getCurrentTraceId(): string | null {
-    return this.currentTraceId;
   }
 
   private getSubagentDisplayName(agentType: string): string | undefined {
@@ -3651,24 +3632,21 @@ export class Harness<TState = {}> {
     toolCallId?: string;
     requestContext?: RequestContext;
   }): Promise<void> {
-    if (!this.currentRunId) {
+    const runId = this.#session.run.getRunId();
+    if (!runId) {
       throw new Error('No active run to approve tool call for');
     }
 
     const agent = this.getCurrentAgent();
 
-    if (!this.abortController) {
-      this.abortController = new AbortController();
-    }
-
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
     await agent.approveToolCall({
-      runId: this.currentRunId,
+      runId,
       toolCallId,
       requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
-      abortSignal: this.abortController.signal,
+      abortSignal: this.#session.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
@@ -3681,23 +3659,21 @@ export class Harness<TState = {}> {
     toolCallId?: string;
     requestContext?: RequestContext;
   }): Promise<void> {
-    if (!this.currentRunId) {
+    const runId = this.#session.run.getRunId();
+    if (!runId) {
       throw new Error('No active run to decline tool call for');
     }
 
     const agent = this.getCurrentAgent();
-    if (!this.abortController) {
-      this.abortController = new AbortController();
-    }
 
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
     await agent.declineToolCall({
-      runId: this.currentRunId,
+      runId,
       toolCallId,
       requireToolApproval: !isYolo,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
-      abortSignal: this.abortController.signal,
+      abortSignal: this.#session.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
@@ -3719,10 +3695,6 @@ export class Harness<TState = {}> {
 
     const agent = this.getCurrentAgent();
 
-    if (!this.abortController) {
-      this.abortController = new AbortController();
-    }
-
     // Remove before resuming so a re-suspend during the resumed run can re-register
     // the same toolCallId without being clobbered by this cleanup. Drop the matching
     // display-state entry too so the UI stops rendering only the resolved prompt
@@ -3739,7 +3711,7 @@ export class Harness<TState = {}> {
       runId: suspension.runId,
       toolCallId,
       memory: this.currentThreadId ? { thread: this.currentThreadId, resource: this.resourceId } : undefined,
-      abortSignal: this.abortController.signal,
+      abortSignal: this.#session.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
@@ -4317,7 +4289,7 @@ export class Harness<TState = {}> {
         modeId: this.#session.mode.get(),
         modelId: this.#session.model.get(),
       },
-      abortSignal: this.abortController?.signal,
+      abortSignal: this.#session.run.getAbortSignal(),
       workspace: this.workspace,
       emitEvent: event => this.emit(event),
       getSubagentModelId: params => this.getSubagentModelId(params),

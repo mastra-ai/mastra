@@ -29,6 +29,124 @@ const MODE_ID_KEY = 'currentModeId';
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
 /**
+ * Owns the session's transient run identity and abort control: the id of the
+ * run currently streaming on the active thread, its trace id, a monotonic
+ * operation counter bumped each time a new operation starts, and the
+ * AbortController/abort-requested flag governing cancellation. All of this is
+ * per-run scratch state — it is never persisted and resets between runs.
+ *
+ * The Harness still owns the live agent subscription (`activeRunId()`); this
+ * holds the last run id observed on a chunk so callers have a stable value once
+ * the subscription has settled.
+ */
+export class SessionRun {
+  /** Id of the run currently streaming on the active thread, or null when idle. */
+  #runId: string | null = null;
+  /** Trace id for the current run, or null when unset. */
+  #traceId: string | null = null;
+  /** Monotonic counter bumped at the start of each operation. */
+  #operationId = 0;
+  /** Controller whose signal cancels the active run; null when no run is armed. */
+  #abortController: AbortController | null = null;
+  /** Whether an abort has been requested for the current run. */
+  #abortRequested = false;
+
+  /** The current run id (null when idle). */
+  getRunId(): string | null {
+    return this.#runId;
+  }
+
+  /** Set the current run id. */
+  setRunId({ runId }: { runId: string | null }): void {
+    this.#runId = runId;
+  }
+
+  /** The current trace id (null when unset). */
+  getTraceId(): string | null {
+    return this.#traceId;
+  }
+
+  /** Set the current trace id. */
+  setTraceId({ traceId }: { traceId: string | null }): void {
+    this.#traceId = traceId;
+  }
+
+  /**
+   * Clear all run state (run id, trace id, abort controller + requested flag)
+   * when a run ends or is reset. Does not touch the operation counter.
+   */
+  reset(): void {
+    this.#runId = null;
+    this.#traceId = null;
+    this.#abortController = null;
+    this.#abortRequested = false;
+  }
+
+  /** Bump and return the operation counter at the start of a new operation. */
+  nextOperation(): number {
+    this.#operationId += 1;
+    return this.#operationId;
+  }
+
+  /**
+   * Lazily create (if needed) and return the AbortController for the current
+   * run. Callers pass its `.signal` into the underlying stream.
+   */
+  ensureAbortController(): AbortController {
+    this.#abortController ??= new AbortController();
+    return this.#abortController;
+  }
+
+  /** Signal for the current run's AbortController, or undefined when none is armed. */
+  getAbortSignal(): AbortSignal | undefined {
+    return this.#abortController?.signal;
+  }
+
+  /**
+   * Whether a run is currently in progress. A run is armed with an
+   * AbortController for its duration, so the presence of one is what "running"
+   * means; this is the semantic accessor callers should use.
+   */
+  isRunning(): boolean {
+    return this.#abortController !== null;
+  }
+
+  /**
+   * Whether an AbortController is currently armed. Equivalent to
+   * {@link isRunning} today; kept for callers that assert on the controller's
+   * lifecycle specifically (e.g. that it was cleared after an abort).
+   */
+  hasAbortController(): boolean {
+    return this.#abortController !== null;
+  }
+
+  /** Clear the abort-requested flag at the start of a fresh run. */
+  clearAbortRequested(): void {
+    this.#abortRequested = false;
+  }
+
+  /** Whether an abort has been requested for the current run. */
+  isAbortRequested(): boolean {
+    return this.#abortRequested;
+  }
+
+  /**
+   * Request an abort: mark the run as aborting and fire the AbortController (if
+   * armed), then drop the controller. Leaves the requested flag set so the
+   * run-end path can resolve its reason as 'aborted'; {@link reset} clears it.
+   */
+  requestAbort(): void {
+    this.#abortRequested = true;
+    if (this.#abortController) {
+      try {
+        this.#abortController.abort();
+      } catch {}
+      this.#abortController = null;
+    }
+  }
+}
+
+/**
  * Owns the session's currently-selected model. Source of truth for "which model
  * is active", plus the per-mode model memory persisted to the thread-settings
  * store (so each mode remembers the model it was last used with).
@@ -168,6 +286,9 @@ export class SessionMode {
  *   The Session is the source of truth for which mode/model is active and owns
  *   the mode-switch sequence and per-mode model memory. The Harness still owns
  *   the mode *definitions* (`config.modes`).
+ * - transient run identity and abort control (`session.run`): the current run
+ *   id, trace id, monotonic operation counter, and the AbortController/
+ *   abort-requested flag. This is per-run scratch state and is never persisted.
  *
  * Mode/model persistence is thread-scoped, so the Session writes through a
  * {@link ThreadSettingsStore} the Harness backs with thread metadata; when no
@@ -186,6 +307,8 @@ export class Session {
   readonly model = new SessionModel(() => this.#store);
   /** The session's currently-selected mode and switch sequence. */
   readonly mode = new SessionMode(() => this.#store, this.model);
+  /** Transient run identity (run id, trace id, operation counter) for the active run. */
+  readonly run = new SessionRun();
 
   /**
    * Attach the thread-settings store the Session persists mode/model through.
