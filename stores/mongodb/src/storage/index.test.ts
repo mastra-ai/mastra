@@ -896,3 +896,56 @@ createDomainIndexTests({
     columns: ['id'],
   },
 });
+
+// ─── Hardening: NODE-7556 ────────────────────────────────────────────────────
+describe('Hardening: NODE-7556', () => {
+  let store: MongoDBStore;
+
+  beforeAll(async () => {
+    store = new MongoDBStore(TEST_CONFIG);
+    await store.init();
+  });
+
+  afterAll(async () => {
+    try {
+      await store.close();
+    } catch {}
+  });
+
+  test('F5: batchCreateSpans with a duplicate span must not drop subsequent spans', async () => {
+    const observabilityStore = await store.getStore('observability');
+    expect(observabilityStore).toBeDefined();
+    await observabilityStore!.dangerouslyClearAll();
+
+    const traceId = `f5-trace-${Date.now()}`;
+    const baseSpan = {
+      spanId: 'f5-span-existing',
+      traceId,
+      name: 'existing span',
+      spanType: SpanType.AGENT_RUN,
+      startedAt: new Date(),
+      endedAt: new Date(),
+    };
+
+    // Write the span so it already exists in the DB
+    await observabilityStore!.createSpan({ span: baseSpan as any });
+
+    // Batch: duplicate first, then two new spans that must survive
+    await expect(
+      observabilityStore!.batchCreateSpans({
+        records: [
+          baseSpan as any,
+          { ...baseSpan, spanId: 'f5-span-new-1', name: 'new span 1' } as any,
+          { ...baseSpan, spanId: 'f5-span-new-2', name: 'new span 2' } as any,
+        ],
+      }),
+    ).resolves.not.toThrow();
+
+    // Both new spans must be persisted despite the leading duplicate
+    const span1 = await observabilityStore!.getSpan({ spanId: 'f5-span-new-1', traceId });
+    const span2 = await observabilityStore!.getSpan({ spanId: 'f5-span-new-2', traceId });
+    expect(span1).not.toBeNull();
+    expect(span2).not.toBeNull();
+  });
+});
+// ─────────────────────────────────────────────────────────────────────────────
