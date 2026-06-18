@@ -24,7 +24,7 @@ export async function handleModeCommand(ctx: SlashCommandContext, args: string[]
       ctx.showError(`Failed to switch mode: ${err instanceof Error ? err.message : String(err)}`);
     }
   } else {
-    const currentMode = ctx.harness.getCurrentMode();
+    const currentMode = ctx.harness.session.mode.resolve();
     const modeList = modes
       .map(m => `  ${m.id === currentMode?.id ? '* ' : '  '}${m.name}${m.description ? ` - ${m.description}` : ''}`)
       .join('\n');

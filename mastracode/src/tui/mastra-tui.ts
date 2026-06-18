@@ -107,10 +107,10 @@ const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
 
 export async function syncInitialThreadState(state: TUIState): Promise<void> {
-  const initThreadId = state.harness.getCurrentThreadId();
+  const initThreadId = state.harness.session.thread.getId();
   if (!initThreadId) return;
 
-  const initThreads = await state.harness.listThreads();
+  const initThreads = await state.harness.session.thread.list();
   const initThread = initThreads.find(t => t.id === initThreadId);
   if (initThread?.title) {
     state.currentThreadTitle = initThread.title;
@@ -148,6 +148,7 @@ export class MastraTUI {
   private idleCounterTimer: ReturnType<typeof setInterval> | null = null;
   private hasShownUpdateBanner = false;
   private caffeinateProcess: ChildProcess | null = null;
+  private cleanupKeyHandlers?: () => void;
   private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
@@ -156,8 +157,8 @@ export class MastraTUI {
     this.state = createTUIState(options);
 
     options.githubSignals?.onSubscriptionsChanged(event => {
-      const currentThreadId = this.state.harness.getCurrentThreadId?.();
-      const currentResourceId = this.state.harness.getResourceId?.();
+      const currentThreadId = this.state.harness.session?.thread?.getId?.();
+      const currentResourceId = this.state.harness.session?.identity?.getResourceId?.();
       if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
       this.state.activeGithubPrSubscriptions = event.subscriptions.map(subscription => ({
         owner: subscription.owner,
@@ -172,8 +173,8 @@ export class MastraTUI {
     });
 
     (options.githubSignals as GithubSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
-      const currentThreadId = this.state.harness.getCurrentThreadId?.();
-      const currentResourceId = this.state.harness.getResourceId?.();
+      const currentThreadId = this.state.harness.session?.thread?.getId?.();
+      const currentResourceId = this.state.harness.session?.identity?.getResourceId?.();
       if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
       if (!this.state.githubPrGradientAnimator) {
         this.state.githubPrGradientAnimator = new GradientAnimator(() => {
@@ -266,7 +267,7 @@ export class MastraTUI {
     if (this.state.options.initialMessage) {
       const msg = this.state.options.initialMessage;
 
-      if (!this.state.harness.hasModelSelected()) {
+      if (!this.state.harness.session.model.hasSelection()) {
         showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
       } else {
         const messageId = `user-${Date.now()}`;
@@ -324,7 +325,7 @@ export class MastraTUI {
         }
 
         // Check if a model is selected (sync — fast, no reason to defer)
-        if (!this.state.harness.hasModelSelected()) {
+        if (!this.state.harness.session.model.hasSelection()) {
           showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
           continue;
         }
@@ -385,7 +386,7 @@ export class MastraTUI {
 
   private renderOptimisticUserMessage(content: string, images?: Array<{ data: string; mimeType: string }>): string {
     const messageId = `user-${Date.now()}`;
-    const isInterjection = this.state.harness.isCurrentThreadStreamActive();
+    const isInterjection = this.state.harness.session.stream.isActive();
     addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
       ...(isInterjection ? { label: 'steer' } : {}),
     });
@@ -424,9 +425,9 @@ export class MastraTUI {
     const send = () => {
       this.clearIdleCounter();
       this.state.analytics?.capture('mastracode_prompt_submitted', {
-        threadId: this.state.harness.getCurrentThreadId(),
-        resourceId: this.state.harness.getResourceId(),
-        mode: this.state.harness.getCurrentModeId(),
+        threadId: this.state.harness.session.thread.getId(),
+        resourceId: this.state.harness.session.identity.getResourceId(),
+        mode: this.state.harness.session.mode.get(),
         hasImages: Boolean(images?.length),
         isFirstPromptInThread: pendingNewThread,
         pendingNewThread,
@@ -456,7 +457,7 @@ export class MastraTUI {
   }
 
   private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
-    const hasActiveRun = this.state.harness.isCurrentThreadStreamActive();
+    const hasActiveRun = this.state.harness.session.stream.isActive();
 
     const send = () => {
       this.clearIdleCounter();
@@ -534,6 +535,11 @@ export class MastraTUI {
       this.idleCounterTimer = null;
     }
 
+    if (this.cleanupKeyHandlers) {
+      this.cleanupKeyHandlers();
+      this.cleanupKeyHandlers = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -568,7 +574,7 @@ export class MastraTUI {
     buildLayout(this.state, () => this.refreshModelAuthStatus());
 
     // Setup key handlers
-    setupKeyHandlers(this.state, {
+    this.cleanupKeyHandlers = setupKeyHandlers(this.state, {
       stop: () => this.stop(),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
     });
@@ -656,7 +662,7 @@ export class MastraTUI {
   private async renderExistingMessagesAndSeedIdleCounter(): Promise<void> {
     await renderExistingMessages(this.state);
 
-    if (this.state.harness.isRunning()) {
+    if (this.state.harness.session.run.isRunning()) {
       this.clearIdleCounter();
       return;
     }
@@ -747,7 +753,7 @@ export class MastraTUI {
         action: 'created',
         threadId: event.thread.id,
         resourceId: event.thread.resourceId,
-        mode: this.state.harness.getCurrentModeId(),
+        mode: this.state.harness.session.mode.get(),
         hasTitle: Boolean(event.thread.title),
       });
       return;
@@ -758,8 +764,8 @@ export class MastraTUI {
         action: 'switched',
         threadId: event.threadId,
         previousThreadId: event.previousThreadId,
-        resourceId: this.state.harness.getResourceId(),
-        mode: this.state.harness.getCurrentModeId(),
+        resourceId: this.state.harness.session.identity.getResourceId(),
+        mode: this.state.harness.session.mode.get(),
       });
       return;
     }
@@ -768,18 +774,18 @@ export class MastraTUI {
       analytics.capture('mastracode_model_changed', {
         modelId: event.modelId,
         scope: event.scope,
-        mode: event.modeId ?? this.state.harness.getCurrentModeId(),
-        threadId: this.state.harness.getCurrentThreadId(),
-        resourceId: this.state.harness.getResourceId(),
+        mode: event.modeId ?? this.state.harness.session.mode.get(),
+        threadId: this.state.harness.session.thread.getId(),
+        resourceId: this.state.harness.session.identity.getResourceId(),
       });
     }
   }
 
   private emitErrorFeedback(errorMessage: string): void {
     const harness = this.state.harness;
-    const traceId = harness.getCurrentTraceId() ?? undefined;
-    const runId = harness.getCurrentRunId() ?? undefined;
-    const threadId = harness.getCurrentThreadId() ?? undefined;
+    const traceId = harness.session.run.getTraceId() ?? undefined;
+    const runId = harness.session.getCurrentRunId() ?? undefined;
+    const threadId = harness.session.thread.getId() ?? undefined;
 
     if (!traceId && !runId && !threadId) return;
 
@@ -889,13 +895,13 @@ export class MastraTUI {
     metadata?: Record<string, unknown>;
   }): Promise<void> {
     const settings = loadSettings();
-    const currentThreadId = this.state.harness.getCurrentThreadId();
+    const currentThreadId = this.state.harness.session.thread.getId();
     if (!currentThreadId) return;
 
     const resolvedThread =
       thread?.id === currentThreadId
         ? thread
-        : (await this.state.harness.listThreads()).find(t => t.id === currentThreadId);
+        : (await this.state.harness.session.thread.list()).find(t => t.id === currentThreadId);
     const access = await this.buildProviderAccess();
     const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
     const resolvedPackId = resolveThreadActiveModelPackId(
@@ -999,7 +1005,7 @@ export class MastraTUI {
         }
         this.state.editor.setText('');
 
-        if (this.state.harness.isRunning()) {
+        if (this.state.harness.session.run.isRunning()) {
           if (text.startsWith('/')) {
             // Run slash commands immediately — they are either settings
             // commands (no agent interaction) or agent-facing commands the
@@ -1279,14 +1285,14 @@ export class MastraTUI {
       const modelId = (modePack.models as Record<string, string>)[mode.id];
       if (modelId) {
         (mode as any).defaultModelId = modelId;
-        await harness.setThreadSetting({
+        await harness.session.thread.setSetting({
           key: `modeModelId_${mode.id}`,
           value: modelId,
         });
       }
     }
 
-    const currentModeId = harness.getCurrentModeId();
+    const currentModeId = harness.session.mode.get();
     const currentModeModel = (modePack.models as Record<string, string>)[currentModeId];
     if (currentModeModel) {
       await harness.switchModel({ modelId: currentModeModel });
@@ -1335,8 +1341,8 @@ export class MastraTUI {
 
     settings.onboarding.modePackId = activeModePackId;
     settings.models.activeModelPackId = activeModePackId;
-    if (harness.getCurrentThreadId()) {
-      await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
+    if (harness.session.thread.getId()) {
+      await harness.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
 
     settings.models.activeOmPackId = omPack.id;
@@ -1444,6 +1450,8 @@ export class MastraTUI {
    * @param passive When true, only show an info message (used for periodic rechecks).
    */
   private async checkForUpdate(passive = false): Promise<void> {
+    if (process.env.MASTRACODE_DISABLE_UPDATE_CHECK === '1') return;
+
     const currentVersion = this.state.options.version;
     if (!currentVersion) return;
 

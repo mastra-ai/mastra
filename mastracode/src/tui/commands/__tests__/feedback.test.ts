@@ -15,9 +15,13 @@ function createCtx(options?: {
   const addFeedback = options?.addFeedback ?? vi.fn().mockResolvedValue(undefined);
   return {
     harness: {
-      getCurrentTraceId: vi.fn(() => (options && 'traceId' in options ? options.traceId : 'trace-123')),
-      getCurrentRunId: vi.fn(() => (options && 'runId' in options ? options.runId : 'run-123')),
-      getCurrentThreadId: vi.fn(() => (options && 'threadId' in options ? options.threadId : 'thread-123')),
+      session: {
+        run: { getTraceId: vi.fn(() => (options && 'traceId' in options ? options.traceId : 'trace-123')) },
+        getCurrentRunId: vi.fn(() => (options && 'runId' in options ? options.runId : 'run-123')),
+        thread: {
+          getId: vi.fn(() => (options && 'threadId' in options ? options.threadId : 'thread-123')),
+        },
+      },
       getMastra: vi.fn(() => ({ observability: { addFeedback } })),
     },
     showInfo: vi.fn(),

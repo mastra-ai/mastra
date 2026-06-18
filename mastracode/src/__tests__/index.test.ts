@@ -112,23 +112,23 @@ vi.mock('@mastra/core/harness', () => ({
     subscribe(eventHandler: unknown) {
       harnessSubscribeMock(eventHandler);
     }
-    getCurrentThreadId() {
-      return harnessGetCurrentThreadIdMock();
-    }
-    getResourceId() {
-      return 'project-resource';
+    get session() {
+      return {
+        identity: {
+          getResourceId: () => 'project-resource',
+        },
+        thread: {
+          getId: () => harnessGetCurrentThreadIdMock(),
+          list: (options: unknown) => harnessListThreadsMock(options),
+          setSetting: (setting: unknown) => harnessSetThreadSettingMock(setting),
+        },
+      };
     }
     getState() {
       return harnessStateMock;
     }
-    listThreads(options: unknown) {
-      return harnessListThreadsMock(options);
-    }
     setState(state: unknown) {
       return harnessSetStateMock(state);
-    }
-    setThreadSetting(setting: unknown) {
-      return harnessSetThreadSettingMock(setting);
     }
   },
   taskWriteTool: {},
@@ -187,6 +187,7 @@ vi.mock('../agents/tools.js', () => ({
 
 vi.mock('../agents/workspace.js', () => ({
   getDynamicWorkspace: getDynamicWorkspaceMock,
+  getGoalJudgeTools: vi.fn(),
 }));
 
 vi.mock('../auth/storage.js', () => ({
@@ -443,7 +444,7 @@ describe('createMastraCode', () => {
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
-    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
   });
 
   it('passes custom workspace config through to Harness without using the default factory', async () => {
@@ -555,7 +556,7 @@ describe('createMastraCode', () => {
     expect(getResourceIdOverrideMock).toHaveBeenCalledWith(projectPath, '.acme-code');
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
-    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;

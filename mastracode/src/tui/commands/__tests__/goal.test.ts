@@ -169,6 +169,7 @@ describe('handleGoalCommand', () => {
         ui: { hideOverlay: vi.fn() },
       },
       showInfo: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     const result = handleGoalCommand(ctx, []);
@@ -180,11 +181,11 @@ describe('handleGoalCommand', () => {
     void result;
   });
 
-  it('resumes a paused goal without resetting the turn counter', async () => {
+  it('resumes a paused goal via a goal-reminder signal without resetting the turn counter', async () => {
     const goal = {
       id: 'goal-1',
       objective: 'finish the task',
-      status: 'paused',
+      status: 'paused' as string,
       turnsUsed: 3,
       maxTurns: DEFAULT_MAX_TURNS,
       judgeModelId: '__GATEWAY_OPENAI_MODEL__',
@@ -197,25 +198,67 @@ describe('handleGoalCommand', () => {
       }),
       saveToThread: vi.fn().mockResolvedValue(undefined),
     };
-    const sendMessage = vi.fn().mockResolvedValue(undefined);
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
     const showInfo = vi.fn();
     const ctx = {
       state: {
         goalManager,
-        harness: { sendMessage },
+        harness: { sendSignal },
       },
       showInfo,
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     await handleGoalCommand(ctx, ['resume']);
 
     expect(goalManager.resume).toHaveBeenCalledTimes(1);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
-    expect(showInfo).toHaveBeenCalledWith(
-      `Goal resumed: "finish the task" — 3/${DEFAULT_MAX_TURNS} turns used. Sending continuation...`,
-    );
-    expect(sendMessage).toHaveBeenCalledWith({ content: 'Continue working toward the goal: finish the task' });
+    // No showInfo — only the signal renders the goal box (avoids duplicate).
+    expect(showInfo).not.toHaveBeenCalled();
+    expect(sendSignal).toHaveBeenCalledWith({
+      type: 'system-reminder',
+      contents: 'finish the task',
+      attributes: { type: 'goal' },
+      metadata: {
+        goalId: 'goal-1',
+        maxTurns: DEFAULT_MAX_TURNS,
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+      },
+    });
+  });
+
+  it('reports already active when trying to resume an active (waiting-for-user) goal', async () => {
+    const goal = {
+      id: 'goal-2',
+      objective: 'implement feature then wait for review',
+      status: 'active' as string,
+      turnsUsed: 5,
+      maxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+    };
+    const goalManager = {
+      getGoal: vi.fn(() => goal),
+      resume: vi.fn(),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+    };
+    const showInfo = vi.fn();
+    const ctx = {
+      state: {
+        goalManager,
+        harness: { sendSignal: vi.fn() },
+      },
+      showInfo,
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['resume']);
+
+    // The goal is active (waiting for user input is still active), so resume
+    // should report "already active" and NOT call resume() or sendSignal.
+    expect(goalManager.resume).not.toHaveBeenCalled();
+    expect(showInfo).toHaveBeenCalledWith('Goal is already active.');
   });
 
   it('creates the pending new thread before saving a new goal', async () => {
@@ -243,12 +286,13 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           createThread,
-          getCurrentThreadId: vi.fn(() => currentThreadId),
+          session: { thread: { getId: vi.fn(() => currentThreadId) } },
           sendSignal,
         },
       },
       addUserMessage: vi.fn(),
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     await handleGoalCommand(ctx, ['finish', 'the', 'task']);
@@ -293,12 +337,13 @@ describe('handleGoalCommand', () => {
         pendingNewThread: false,
         goalManager,
         harness: {
-          getCurrentThreadId: vi.fn(() => 'thread-1'),
+          session: { thread: { getId: vi.fn(() => 'thread-1') } },
           sendSignal,
         },
       },
       addUserMessage: vi.fn(),
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     await startGoalWithDefaults(ctx, objective, 'Goal cancelled.');
@@ -365,12 +410,13 @@ describe('handleGoalCommand', () => {
         pendingNewThread: false,
         goalManager,
         harness: {
-          getCurrentThreadId: vi.fn(() => 'thread-1'),
+          session: { thread: { getId: vi.fn(() => 'thread-1') } },
           sendSignal,
         },
       },
       addUserMessage: vi.fn(),
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     await startGoalWithDefaults(ctx, objective, 'Goal cancelled.');
@@ -396,13 +442,13 @@ describe('handleGoalCommand', () => {
         pendingNewThread: false,
         goalManager,
         harness: {
-          getCurrentThreadId: vi.fn(() => 'thread-1'),
-          setThreadSetting: vi.fn().mockResolvedValue(undefined),
+          session: { thread: { getId: vi.fn(() => 'thread-1'), setSetting: vi.fn().mockResolvedValue(undefined) } },
           sendMessage,
         },
       },
       addUserMessage: vi.fn(),
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     await startGoalWithDefaults(ctx, '# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', { trigger: 'none' });
@@ -438,13 +484,14 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]),
-          getCurrentModelId: vi.fn(() => 'anthropic/claude-sonnet-4-5'),
+          session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         },
         ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() },
       },
       authStorage: {},
       showInfo,
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     const promise = handleJudgeCommand(ctx);
@@ -477,13 +524,14 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]),
-          getCurrentModelId: vi.fn(() => 'anthropic/claude-sonnet-4-5'),
+          session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         },
         ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() },
       },
       authStorage: {},
       showInfo,
       showError: vi.fn(),
+      updateStatusLine: vi.fn(),
     } as any;
 
     const promise = handleGoalCommand(ctx, ['judge']);
@@ -509,14 +557,15 @@ describe('handleGoalCommand', () => {
       resume: vi.fn(),
       saveToThread: vi.fn(),
     };
-    const sendMessage = vi.fn();
+    const sendSignal = vi.fn();
     const showInfo = vi.fn();
     const ctx = {
       state: {
         goalManager,
-        harness: { sendMessage },
+        harness: { sendSignal },
       },
       showInfo,
+      updateStatusLine: vi.fn(),
     } as any;
 
     await handleGoalCommand(ctx, ['resume']);
@@ -524,7 +573,7 @@ describe('handleGoalCommand', () => {
     expect(showInfo).toHaveBeenCalledWith('Goal is already done. Use /goal <text> to set a new goal.');
     expect(goalManager.resume).not.toHaveBeenCalled();
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
-    expect(sendMessage).not.toHaveBeenCalled();
+    expect(sendSignal).not.toHaveBeenCalled();
   });
 
   it('clears planStartedGoalId when /goal clear is called', async () => {
@@ -532,14 +581,22 @@ describe('handleGoalCommand', () => {
       clear: vi.fn(),
       saveToThread: vi.fn(),
     };
+    const abort = vi.fn();
     const state = {
       goalManager,
       planStartedGoalId: 'plan-goal-123',
+      pendingInlineQuestions: [],
+      pendingAskUserComponents: new Map(),
+      harness: {
+        session: { run: { isRunning: vi.fn(() => false) }, suspensions: { hasPending: vi.fn(() => false) } },
+        abort,
+      },
     };
     const showInfo = vi.fn();
     const ctx = {
       state,
       showInfo,
+      updateStatusLine: vi.fn(),
     } as any;
 
     await handleGoalCommand(ctx, ['clear']);
@@ -548,6 +605,41 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledWith(state);
     expect(state.planStartedGoalId).toBeUndefined();
     expect(showInfo).toHaveBeenCalledWith('Goal cleared.');
+    // Not running → must not abort.
+    expect(abort).not.toHaveBeenCalled();
+  });
+
+  it('aborts the in-flight turn when /goal clear is called while running', async () => {
+    const goalManager = {
+      clear: vi.fn(),
+      saveToThread: vi.fn(),
+    };
+    const abort = vi.fn();
+    const state = {
+      goalManager,
+      planStartedGoalId: undefined,
+      activeInlineQuestion: {},
+      pendingInlineQuestions: [() => {}],
+      pendingAskUserComponents: new Map([['t', {}]]),
+      harness: {
+        session: { run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
+        abort,
+      },
+    };
+    const ctx = {
+      state,
+      showInfo: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['clear']);
+
+    expect(goalManager.clear).toHaveBeenCalled();
+    expect(abort).toHaveBeenCalledTimes(1);
+    expect((state as any).userInitiatedAbort).toBe(true);
+    expect(state.activeInlineQuestion).toBeUndefined();
+    expect(state.pendingInlineQuestions).toHaveLength(0);
+    expect((state.pendingAskUserComponents as Map<string, unknown>).size).toBe(0);
   });
 
   it('clears planStartedGoalId when starting a new manual goal', async () => {
@@ -570,7 +662,7 @@ describe('handleGoalCommand', () => {
     const state = {
       goalManager,
       harness: {
-        getCurrentThreadId: vi.fn(() => 'thread-1'),
+        session: { thread: { getId: vi.fn(() => 'thread-1') } },
         sendSignal,
       },
       planStartedGoalId: 'plan-goal-xyz',
@@ -581,6 +673,7 @@ describe('handleGoalCommand', () => {
       state,
       showInfo,
       showError,
+      updateStatusLine: vi.fn(),
     } as any;
 
     await handleGoalCommand(ctx, ['new', 'manual', 'objective']);
