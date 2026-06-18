@@ -13,7 +13,7 @@ The `Harness` feature is in alpha stage and subject to breaking changes in minor
 
 :::
 
-An agent harness is the runtime that wraps a model and governs how it behaves in a real application. The model does the reasoning; the harness gives it the tools, memory, and safety limits it needs to act on that reasoning. This is the line between a framework and a harness: the [Agent class](/docs/agents/overview) and the rest of Mastra are the libraries you build an agent from, while the Harness is the running system that manages that agent's lifecycle, context, and interactions with the outside world.
+An agent harness is the runtime that wraps a model and governs how it behaves in a real application. The model does the reasoning; the harness gives it the tools, memory, and safety limits it needs to act on that reasoning, and manages the agent's lifecycle, context, and interactions with the outside world.
 
 In practice, the Harness is a session controller for interactive agent applications. It handles the runtime concerns that sit between your UI and the agent loop: managing conversation threads, switching between agent modes, persisting state, gating tool execution with approvals, and coordinating subagents. You can focus on what your agent does rather than how to wire it together.
 
