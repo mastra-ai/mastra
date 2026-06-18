@@ -117,18 +117,33 @@ See [Threads and state](/docs/harness/threads-and-state) for defining a schema.
 
 ## Display state
 
-`session.displayState` is the coalesced `HarnessDisplayState` snapshot — the single object a UI renders from. It folds run status, streaming messages, active tools, tasks, token usage, and pending approvals into one place:
+A conversation emits many fine-grained events: tokens streaming in, tools starting and finishing, approvals pending, tasks updating, token usage climbing. Subscribing to each event type and reassembling the current picture yourself is tedious and error-prone. `session.displayState` does that work for you.
+
+It's a reducer-maintained snapshot. The Session keeps one `HarnessDisplayState` object and folds every harness event into it as it happens, so the snapshot always reflects the latest state of the whole conversation. A single `HarnessDisplayState` includes:
+
+- `isRunning`: whether an agent operation is in progress
+- `currentMessage`: the message currently streaming in, or `null` when idle
+- `activeTools` and `toolInputBuffers`: tools executing now and their streaming inputs
+- `pendingApproval` and `pendingSuspensions`: tool calls waiting on the user
+- `activeSubagents`: subagents running under the current run
+- `tasks`: the current task list from task tools
+- `tokenUsage`: cumulative token usage for the thread
+- `queuedFollowUps`: how many follow-ups are waiting
+
+Because it's a single object, you can drive an entire UI from one place: read the current snapshot with `get()`, and re-render whenever the Harness emits `display_state_changed` (fired after every other event):
 
 ```typescript
 const snapshot = harness.session.displayState.get()
 
-// React to changes
+// Re-render from the snapshot on every change
 harness.subscribe(event => {
   if (event.type === 'display_state_changed') {
     render(harness.session.displayState.get())
   }
 })
 ```
+
+This is the recommended pattern for most UIs. Subscribe to individual typed events only when you need to react to a specific transition rather than re-render the whole view.
 
 :::note
 
