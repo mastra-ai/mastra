@@ -1,0 +1,136 @@
+---
+title: "Threads and state | Harness"
+description: "Manage persistent conversation threads and shared state across agent modes in a Harness."
+packages:
+  - "@mastra/core"
+---
+
+# Threads and state
+
+The Harness manages conversation threads and shared state that persist across mode switches, model changes, and sessions. Threads hold messages while state holds structured data that agents and the UI can read and write.
+
+## When to use threads and state
+
+Use threads when your application needs persistent conversation history, multi-session continuity, or when users switch between threads. Use state for structured values (model preferences, feature flags, UI settings) that agents and the UI layer share.
+
+## Threads
+
+### Creating and selecting threads
+
+On startup, call `selectOrCreateThread()` to resume the most recent thread or create a new one:
+
+```typescript title="src/mastra/harness.ts"
+await harness.init()
+const thread = await harness.selectOrCreateThread()
+```
+
+Create a thread explicitly with a title:
+
+```typescript
+const thread = await harness.createThread({ title: 'New conversation' })
+```
+
+### Switching threads
+
+Switch to an existing thread. The harness aborts any in-progress generation, acquires a lock on the new thread, and emits a `thread_changed` event:
+
+```typescript
+await harness.switchThread({ threadId: 'thread-abc123' })
+```
+
+### Listing threads
+
+List threads for the current resource. Forked subagent threads are hidden by default:
+
+```typescript
+const threads = await harness.listThreads()
+
+// Include all resources
+const allThreads = await harness.listThreads({ allResources: true })
+```
+
+### Cloning threads
+
+Clone a thread to create a branch of the conversation. The harness copies all messages and switches to the clone:
+
+```typescript
+const cloned = await harness.cloneThread({ title: 'Alternative approach' })
+```
+
+### Thread locking
+
+Pass a `threadLock` to the Harness constructor to prevent concurrent access from multiple processes. The lock is acquired before any thread operation and released on switch or delete:
+
+```typescript title="src/mastra/harness.ts"
+const harness = new Harness({
+  id: 'my-agent',
+  threadLock: {
+    acquire: async threadId => {
+      /* acquire lock or throw */
+    },
+    release: async threadId => {
+      /* release lock */
+    },
+  },
+})
+```
+
+## State
+
+### Defining a state schema
+
+Pass a `stateSchema` (Standard JSON Schema) to validate state and extract defaults:
+
+```typescript title="src/mastra/harness.ts"
+import { Agent } from '@mastra/core/agent'
+import { Harness } from '@mastra/core/harness'
+import { z } from 'zod'
+
+const agent = new Agent({
+  name: 'assistant',
+  instructions: 'Help the user manage a stateful session.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+const harness = new Harness({
+  id: 'stateful-agent',
+  agent,
+  modes: [{ id: 'default', name: 'Default', metadata: { default: true } }],
+  stateSchema: z.object({
+    currentModelId: z.string().optional(),
+    theme: z.enum(['light', 'dark']).default('dark'),
+  }),
+})
+```
+
+### Reading and writing state
+
+```typescript
+// Read the current state snapshot
+const state = harness.getState()
+
+// Update state — validates against schema and emits state_changed
+await harness.setState({ theme: 'light' })
+```
+
+State changes emit a `state_changed` event with the new state and the set of changed keys.
+
+## Resource IDs
+
+Threads are scoped to a resource ID. The resource ID defaults to the harness `id` but can be set explicitly to group threads by project, user, or workspace:
+
+```typescript
+const harness = new Harness({
+  id: 'my-agent',
+  resourceId: 'project-xyz',
+})
+
+// Change resource ID at runtime (clears the current thread)
+harness.setResourceId({ resourceId: 'project-abc' })
+```
+
+## Related
+
+- [Harness overview](/docs/harness/overview)
+- [Modes](/docs/harness/modes)
+- [API reference](/reference/harness/harness-class)
