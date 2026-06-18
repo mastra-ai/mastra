@@ -651,10 +651,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         };
       });
 
-      // Execute message inserts and thread update in parallel
+      // Collect every distinct thread touched by this batch (mirrors pg behaviour)
+      const allThreadIds = new Set(messages.map(m => m.threadId!));
+      const now = new Date();
+
       await Promise.all([
         collection.bulkWrite(messagesToInsert),
-        threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date() } }),
+        ...Array.from(allThreadIds).map(tid =>
+          threadsCollection.updateOne({ id: tid }, { $set: { updatedAt: now } }),
+        ),
       ]);
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');

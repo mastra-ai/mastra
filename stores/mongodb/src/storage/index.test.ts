@@ -9,7 +9,7 @@ import {
 import { SpanType } from '@mastra/core/observability';
 import { TABLE_THREADS } from '@mastra/core/storage';
 import { MongoClient } from 'mongodb';
-import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, expect, it, test, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 
 import type { ConnectorHandler } from './connectors/base';
 import { MemoryStorageMongoDB } from './domains/memory';
@@ -946,6 +946,66 @@ describe('Hardening: NODE-7556', () => {
     const span2 = await observabilityStore!.getSpan({ spanId: 'f5-span-new-2', traceId });
     expect(span1).not.toBeNull();
     expect(span2).not.toBeNull();
+  });
+
+  test('F10: saveMessages with messages from two threads must update both threads updatedAt', async () => {
+    const memoryStore = await store.getStore('memory');
+    expect(memoryStore).toBeDefined();
+
+    const past = new Date(Date.now() - 60_000);
+
+    // Create two threads with a known-old updatedAt
+    const threadA = {
+      id: `f10-thread-a-${Date.now()}`,
+      title: 'Thread A',
+      resourceId: 'f10-resource',
+      metadata: {},
+      createdAt: past,
+      updatedAt: past,
+    };
+    const threadB = {
+      id: `f10-thread-b-${Date.now()}`,
+      title: 'Thread B',
+      resourceId: 'f10-resource',
+      metadata: {},
+      createdAt: past,
+      updatedAt: past,
+    };
+    await memoryStore!.saveThread({ thread: threadA as any });
+    await memoryStore!.saveThread({ thread: threadB as any });
+
+    const before = new Date();
+
+    // Batch contains messages from both threads
+    await memoryStore!.saveMessages({
+      messages: [
+        {
+          id: `f10-msg-a-${Date.now()}`,
+          threadId: threadA.id,
+          resourceId: 'f10-resource',
+          role: 'user',
+          type: 'v2',
+          content: [{ type: 'text', text: 'hello from A' }],
+          createdAt: new Date(),
+        } as any,
+        {
+          id: `f10-msg-b-${Date.now()}`,
+          threadId: threadB.id,
+          resourceId: 'f10-resource',
+          role: 'user',
+          type: 'v2',
+          content: [{ type: 'text', text: 'hello from B' }],
+          createdAt: new Date(),
+        } as any,
+      ],
+    });
+
+    const updatedA = await memoryStore!.getThreadById({ threadId: threadA.id });
+    const updatedB = await memoryStore!.getThreadById({ threadId: threadB.id });
+
+    // Both threads must have their updatedAt refreshed by the saveMessages call
+    expect(updatedA!.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(updatedB!.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
   });
 });
 // ─────────────────────────────────────────────────────────────────────────────
