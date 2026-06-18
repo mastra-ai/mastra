@@ -144,14 +144,18 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    const threadsCollection = await this.getCollection(TABLE_THREADS);
-    const messagesCollection = await this.getCollection(TABLE_MESSAGES);
-    const resourcesCollection = await this.getCollection(TABLE_RESOURCES);
+    const [threadsCollection, messagesCollection, resourcesCollection, omCollection] = await Promise.all([
+      this.getCollection(TABLE_THREADS),
+      this.getCollection(TABLE_MESSAGES),
+      this.getCollection(TABLE_RESOURCES),
+      this.getCollection(OM_TABLE),
+    ]);
 
     await Promise.all([
       threadsCollection.deleteMany({}),
       messagesCollection.deleteMany({}),
       resourcesCollection.deleteMany({}),
+      omCollection.deleteMany({}),
     ]);
   }
 

@@ -1007,5 +1007,29 @@ describe('Hardening: NODE-7556', () => {
     expect(updatedA!.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
     expect(updatedB!.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
   });
+
+  test('F13: dangerouslyClearAll must also clear observational memory records', async () => {
+    const memoryStore = await store.getStore('memory');
+    expect(memoryStore).toBeDefined();
+
+    const resourceId = `f13-resource-${Date.now()}`;
+
+    await memoryStore!.initializeObservationalMemory({
+      threadId: null,
+      resourceId,
+      scope: 'resource',
+      config: {},
+    });
+
+    const before = await memoryStore!.getObservationalMemory(null, resourceId);
+    expect(before).not.toBeNull();
+
+    await memoryStore!.dangerouslyClearAll();
+
+    // Currently: OM record survives the clear
+    // After fix: getObservationalMemory returns null
+    const after = await memoryStore!.getObservationalMemory(null, resourceId);
+    expect(after).toBeNull();
+  });
 });
 // ─────────────────────────────────────────────────────────────────────────────
