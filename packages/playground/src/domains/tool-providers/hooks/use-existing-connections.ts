@@ -1,7 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+import { isUnauthenticatedError, useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 export interface UseExistingConnectionsOptions {
   /**
@@ -36,12 +36,8 @@ export const useExistingConnections = (
   const currentUserQuery = useCurrentUser();
   const callerAuthorId = currentUserQuery.data?.id;
 
-  // When self-scoping, wait until the current-user query has settled before
-  // firing so admins get the explicit `authorId` filter. If auth is disabled
-  // the query still settles (with no user); we then omit the filter and let
-  // the server scope by request context — otherwise the query would never run
-  // and the connection control would hang on its loading skeleton.
-  const callerReady = !scopeToSelf || !currentUserQuery.isPending;
+  const callerReady =
+    !scopeToSelf || currentUserQuery.isSuccess || isUnauthenticatedError(currentUserQuery.error);
 
   const enabled = !!providerId && !!toolkit && callerReady;
 

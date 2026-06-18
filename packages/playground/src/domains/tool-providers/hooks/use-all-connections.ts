@@ -3,7 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 import { useToolProviders } from './use-tool-providers';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+import { isUnauthenticatedError, useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 /**
  * Stale time long enough to avoid refetching on every picker re-render but
@@ -45,11 +45,8 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
   const scopeToSelf = options?.scopeToSelf ?? false;
   const currentUserQuery = useCurrentUser();
   const callerAuthorId = currentUserQuery.data?.id;
-  // When self-scoping, wait until the current-user query has settled rather
-  // than requiring an id. If auth is disabled the query settles with no user;
-  // we then omit the `authorId` filter and let the server scope by request
-  // context, so the picker still gates correctly instead of stalling.
-  const callerReady = !scopeToSelf || !currentUserQuery.isPending;
+  const callerReady =
+    !scopeToSelf || currentUserQuery.isSuccess || isUnauthenticatedError(currentUserQuery.error);
 
   // 1. For every provider, list its toolkits.
   const toolkitsQueries = useQueries({

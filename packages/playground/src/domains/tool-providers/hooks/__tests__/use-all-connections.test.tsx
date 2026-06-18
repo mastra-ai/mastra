@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { PropsWithChildren } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { useAllConnections } from '../use-all-connections';
 
@@ -84,12 +84,10 @@ describe('useAllConnections — hasConnection', () => {
     await waitFor(() => expect(result.current.hasConnection('composio', 'gmail')).toBe(true));
   });
 
-  // Regression: when auth is disabled `/api/auth/me` has no user, so there is
-  // no caller authorId. The hook must still run the connection queries (server
-  // scopes by request context) instead of stalling on `scopeToSelf`.
-  it('still resolves connections when auth is disabled (no current user)', async () => {
+  it('still resolves connections when auth is disabled (401, no current user)', async () => {
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => new HttpResponse(null, { status: 401 })),
+      http.post(`${BASE_URL}/api/auth/refresh`, () => new HttpResponse(null, { status: 401 })),
       http.get(`${BASE_URL}/api/tool-providers`, () =>
         HttpResponse.json({ providers: [{ id: 'composio', name: 'Composio' }] }),
       ),
@@ -105,5 +103,29 @@ describe('useAllConnections — hasConnection', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await waitFor(() => expect(result.current.hasConnection('composio', 'gmail')).toBe(true));
+  });
+
+  it('stays blocked on a non-401 user lookup failure (fail closed)', async () => {
+    const onConnections = vi.fn<() => void>();
+    server.use(
+      http.get(`${BASE_URL}/api/auth/me`, () => new HttpResponse(null, { status: 500 })),
+      http.get(`${BASE_URL}/api/tool-providers`, () =>
+        HttpResponse.json({ providers: [{ id: 'composio', name: 'Composio' }] }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () =>
+        HttpResponse.json({ data: [{ slug: 'gmail', name: 'Gmail' }] }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => {
+        onConnections();
+        return HttpResponse.json({ items: [] });
+      }),
+    );
+
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(onConnections).not.toHaveBeenCalled();
+    expect(result.current.hasConnection('composio', 'gmail')).toBe(false);
   });
 });
