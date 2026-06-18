@@ -38,6 +38,9 @@ inputs:
   permission-administration:
     description: "Optional token permission for repository administration. Can be 'read' or 'write'."
     required: false
+  permission-organization-administration:
+    description: "Optional token permission for organization administration. Can be 'read' or 'write'."
+    required: false
 
 outputs:
   token:
@@ -68,6 +71,7 @@ runs:
         permission-statuses: ${{ inputs['permission-statuses'] }}
         permission-members: ${{ inputs['permission-members'] }}
         permission-administration: ${{ inputs['permission-administration'] }}
+        permission-organization-administration: ${{ inputs['permission-organization-administration'] }}
 
     - name: Get GitHub App User ID
       id: get-user-id
