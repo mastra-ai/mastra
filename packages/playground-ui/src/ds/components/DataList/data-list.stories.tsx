@@ -2,20 +2,36 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Pencil, Trash2 } from 'lucide-react';
 import { forwardRef, useState } from 'react';
 import { DataList } from './data-list';
+import type { DataListVariant } from './data-list-root';
 import { DataListSkeleton } from './data-list-skeleton';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import type { LinkComponent } from '@/ds/types/link-component';
 
-const meta: Meta = {
+type DataListStoryArgs = {
+  variant: DataListVariant;
+};
+
+const VARIANT_OPTIONS: DataListVariant[] = ['default', 'striped', 'lined'];
+
+const meta: Meta<DataListStoryArgs> = {
   title: 'DataDisplay/DataList',
   parameters: {
     layout: 'padded',
   },
+  args: {
+    variant: 'default',
+  },
+  argTypes: {
+    variant: {
+      control: 'select',
+      options: VARIANT_OPTIONS,
+    },
+  },
 };
 
 export default meta;
-type Story = StoryObj;
+type Story = StoryObj<DataListStoryArgs>;
 
 /* Sample data — looks like a list of recent agent runs. */
 const SAMPLE_RUNS = [
@@ -55,8 +71,8 @@ const MODEL_TOKEN_PLACEHOLDERS = ['__GATEWAY_OPENAI_MODEL_BASE__', '__GATEWAY_AN
 
 /** The standard condensed look used by Traces, Logs, Scores, Dataset Items, and Skills. */
 export const Compact: Story = {
-  render: () => (
-    <DataList columns={COMPACT_COLUMNS}>
+  render: ({ variant }) => (
+    <DataList columns={COMPACT_COLUMNS} variant={variant}>
       <DataList.Top>
         <DataList.TopCell>ID</DataList.TopCell>
         <DataList.TopCell>Input</DataList.TopCell>
@@ -79,8 +95,8 @@ export const Compact: Story = {
 
 /** Taller rows — better for prose-heavy content where each row needs more breathing room. */
 export const Default: Story = {
-  render: () => (
-    <DataList columns={DEFAULT_COLUMNS}>
+  render: ({ variant }) => (
+    <DataList columns={DEFAULT_COLUMNS} variant={variant}>
       <DataList.Top>
         <DataList.TopCell>Name</DataList.TopCell>
         <DataList.TopCell>Description</DataList.TopCell>
@@ -109,17 +125,17 @@ export const Default: Story = {
 };
 
 /**
- * Borderless, zebra-striped table. The stripes and header band are translucent
- * neutral overlays (theme-aware), so the list composites cleanly over any
- * background — no card fill of its own. The header owns the card radius via
- * `rounded-t-xl`, rows are `rounded-md` with a 1px gap, and anything trailing
- * (e.g. `Pagination`) sits at the end instead of inside a bordered box.
+ * Starts on the borderless zebra-striped variant. Use the `variant` control to
+ * compare the same pagination example against default and lined treatments.
  */
 export const Striped: Story = {
-  render: function StripedStory() {
+  args: {
+    variant: 'striped',
+  },
+  render: function StripedStory({ variant }) {
     const [page, setPage] = useState(0);
     return (
-      <DataList columns={COMPACT_COLUMNS} variant="striped" className="max-h-[320px]">
+      <DataList columns={COMPACT_COLUMNS} variant={variant} className="max-h-[320px]">
         <DataList.Top>
           <DataList.TopCell>ID</DataList.TopCell>
           <DataList.TopCell>Input</DataList.TopCell>
@@ -151,14 +167,15 @@ export const Striped: Story = {
 };
 
 /**
- * Borderless table with the same sticky header, rounded rows, overlay scrollbar,
- * and edge fades as `Striped`, but default rows stay transparent and use subtle
- * separators instead of zebra backgrounds. Error rows still receive their
- * destructive tint.
+ * Starts on the lined variant. Use the `variant` control to compare the same
+ * error-row example against default and striped treatments.
  */
 export const Lined: Story = {
-  render: () => (
-    <DataList columns={COMPACT_COLUMNS} variant="lined" className="max-h-[320px]">
+  args: {
+    variant: 'lined',
+  },
+  render: ({ variant }) => (
+    <DataList columns={COMPACT_COLUMNS} variant={variant} className="max-h-[320px]">
       <DataList.Top>
         <DataList.TopCell>ID</DataList.TopCell>
         <DataList.TopCell>Input</DataList.TopCell>
@@ -185,12 +202,15 @@ export const Lined: Story = {
 
 /**
  * Per-row `variant="error"` lays a subtle, theme-aware destructive tint over the
- * row — it wins over the zebra background, so error rows read clearly while the
- * rest keep striping. Useful for log/run lists where some rows failed.
+ * row. Starts on striped so the tint can be checked against zebra rows, but the
+ * list-level `variant` control stays available.
  */
 export const StripedWithErrorRows: Story = {
-  render: () => (
-    <DataList columns={COMPACT_COLUMNS} variant="striped" className="max-h-[320px]">
+  args: {
+    variant: 'striped',
+  },
+  render: ({ variant }) => (
+    <DataList columns={COMPACT_COLUMNS} variant={variant} className="max-h-[320px]">
       <DataList.Top>
         <DataList.TopCell>ID</DataList.TopCell>
         <DataList.TopCell>Input</DataList.TopCell>
@@ -235,8 +255,8 @@ StoryLink.displayName = 'StoryLink';
 
 /** Use `RowLink` when each row should navigate to a detail page (preserves middle-click + open-in-new-tab). */
 export const WithRowLink: Story = {
-  render: () => (
-    <DataList columns={COMPACT_COLUMNS}>
+  render: ({ variant }) => (
+    <DataList columns={COMPACT_COLUMNS} variant={variant}>
       <DataList.Top>
         <DataList.TopCell>ID</DataList.TopCell>
         <DataList.TopCell>Input</DataList.TopCell>
@@ -259,7 +279,7 @@ export const WithRowLink: Story = {
 
 /** Multi-select with a leading checkbox column. Click the header checkbox to toggle all rows. */
 export const WithSelection: Story = {
-  render: function WithSelectionStory() {
+  render: function WithSelectionStory({ variant }) {
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const allIds = SAMPLE_RUNS.map(r => r.id);
     const allSelected = selected.size === allIds.length;
@@ -279,7 +299,7 @@ export const WithSelection: Story = {
     };
 
     return (
-      <DataList columns={`auto ${COMPACT_COLUMNS}`}>
+      <DataList columns={`auto ${COMPACT_COLUMNS}`} variant={variant}>
         <DataList.Top hasLeadingCell>
           <DataList.TopSelectCell
             checked={someSelected ? 'indeterminate' : allSelected}
@@ -317,8 +337,8 @@ export const WithSelection: Story = {
 
 /** Trailing actions column: the row click area is bounded by `colEnd={-2}` + `flushRight`, and the last cell hosts per-row controls. */
 export const WithTrailingCell: Story = {
-  render: () => (
-    <DataList columns="minmax(8rem,auto) minmax(8rem,1fr) minmax(0,2fr) auto">
+  render: ({ variant }) => (
+    <DataList columns="minmax(8rem,auto) minmax(8rem,1fr) minmax(0,2fr) auto" variant={variant}>
       <DataList.Top>
         <DataList.TopCell>Name</DataList.TopCell>
         <DataList.TopCell>Path</DataList.TopCell>
@@ -370,8 +390,8 @@ export const WithTrailingCell: Story = {
 
 /** Use `featured` to highlight the row whose detail panel is currently open. */
 export const Featured: Story = {
-  render: () => (
-    <DataList columns={COMPACT_COLUMNS}>
+  render: ({ variant }) => (
+    <DataList columns={COMPACT_COLUMNS} variant={variant}>
       <DataList.Top>
         <DataList.TopCell>ID</DataList.TopCell>
         <DataList.TopCell>Input</DataList.TopCell>
@@ -394,8 +414,8 @@ export const Featured: Story = {
 
 /** `DateCell` shows `Today` or `MMM dd`; `TimeCell` shows `HH:mm:ss.SSS` with monospaced glyphs. */
 export const WithDateAndTimeCells: Story = {
-  render: () => (
-    <DataList columns="auto auto auto">
+  render: ({ variant }) => (
+    <DataList columns="auto auto auto" variant={variant}>
       <DataList.Top>
         <DataList.TopCell>Event</DataList.TopCell>
         <DataList.TopCell>Date</DataList.TopCell>
@@ -418,8 +438,8 @@ export const WithDateAndTimeCells: Story = {
 
 /** Empty / no-match state — usually shown when a search filter yields zero rows. */
 export const Empty: Story = {
-  render: () => (
-    <DataList columns={COMPACT_COLUMNS}>
+  render: ({ variant }) => (
+    <DataList columns={COMPACT_COLUMNS} variant={variant}>
       <DataList.Top>
         <DataList.TopCell>ID</DataList.TopCell>
         <DataList.TopCell>Input</DataList.TopCell>
@@ -434,9 +454,9 @@ export const Empty: Story = {
 
 /** Wide grid with constrained columns, horizontal scrolling, and a long badge that must stay inside its cell. */
 export const WideColumnsOverflow: Story = {
-  render: () => (
+  render: ({ variant }) => (
     <div className="max-w-[760px]">
-      <DataList columns={WIDE_COLUMNS} className="max-h-[360px]">
+      <DataList columns={WIDE_COLUMNS} variant={variant} className="max-h-[360px]">
         <DataList.Top>
           <DataList.TopCell>Run</DataList.TopCell>
           <DataList.TopCell>Input</DataList.TopCell>
@@ -479,16 +499,21 @@ export const WideColumnsOverflow: Story = {
 
 /** Loading placeholder for any column layout. Pass the same `columns` string the real list uses. */
 export const Loading: Story = {
+  parameters: {
+    controls: {
+      exclude: ['variant'],
+    },
+  },
   render: () => <DataListSkeleton columns={COMPACT_COLUMNS} numberOfRows={5} />,
 };
 
 /** Page-based pagination footer — `Previous` shows when `currentPage > 0`, `Next` shows when `hasMore`.
  *  `currentPage` is zero-based: the footer renders it as `currentPage + 1`, so page `0` reads as "Page 1". */
 export const WithPagination: Story = {
-  render: function WithPaginationStory() {
+  render: function WithPaginationStory({ variant }) {
     const [page, setPage] = useState(0);
     return (
-      <DataList columns={COMPACT_COLUMNS}>
+      <DataList columns={COMPACT_COLUMNS} variant={variant}>
         <DataList.Top>
           <DataList.TopCell>ID</DataList.TopCell>
           <DataList.TopCell>Input</DataList.TopCell>
@@ -518,8 +543,8 @@ export const WithPagination: Story = {
 
 /** Group rows under labelled sections using `Subheader` (and an optional `SubHeading` for a quieter sub-label). */
 export const WithSubheader: Story = {
-  render: () => (
-    <DataList columns={COMPACT_COLUMNS}>
+  render: ({ variant }) => (
+    <DataList columns={COMPACT_COLUMNS} variant={variant}>
       <DataList.Top>
         <DataList.TopCell>ID</DataList.TopCell>
         <DataList.TopCell>Input</DataList.TopCell>
