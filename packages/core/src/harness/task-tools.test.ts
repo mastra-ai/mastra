@@ -316,7 +316,7 @@ describe('task tool display bridge', () => {
 
     // The harness display snapshot tracks the emitted task list (display-only;
     // the task list itself lives on the agent state-signal lane, not in state).
-    expect(harness.getDisplayState().tasks).toEqual([
+    expect(harness.session.displayState.get().tasks).toEqual([
       { id: 'task_write_tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
     ]);
 

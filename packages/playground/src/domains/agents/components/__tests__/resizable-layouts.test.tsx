@@ -36,13 +36,17 @@ vi.mock('@mastra/playground-ui', async () => {
 
 afterEach(cleanup);
 
-function expectPanelGroupContract() {
-  const panelGroup = screen.getByTestId('panel-group');
-  expect(panelGroup.className).toContain('h-full');
-  expect(panelGroup.className).toContain('min-h-0');
-  expect(panelGroup.className).toContain('w-full');
-  expect(panelGroup.className).toContain('min-w-0');
-  expect(panelGroup.className).not.toContain('min-w-min');
+function expectPanelGroupsShrinkable() {
+  const panelGroups = screen.getAllByTestId('panel-group');
+  expect(panelGroups.length).toBeGreaterThan(0);
+
+  for (const panelGroup of panelGroups) {
+    expect(panelGroup.className).toContain('h-full');
+    expect(panelGroup.className).toContain('min-h-0');
+    expect(panelGroup.className).toContain('w-full');
+    expect(panelGroup.className).toContain('min-w-0');
+    expect(panelGroup.className).not.toContain('min-w-min');
+  }
 }
 
 function expectMainPanelContract(mainPanelClassNames: string[]) {
@@ -61,7 +65,7 @@ describe('resizable service layouts', () => {
       </AgentLayout>,
     );
 
-    expectPanelGroupContract();
+    expectPanelGroupsShrinkable();
     expectMainPanelContract(['grid', 'overflow-y-auto']);
 
     // The left slot is a plain resizable panel (no collapse affordance) …
@@ -80,9 +84,9 @@ describe('resizable service layouts', () => {
       </WorkflowLayout>,
     );
 
-    expectPanelGroupContract();
-    expectMainPanelContract(['overflow-y-auto']);
+    expectPanelGroupsShrinkable();
     expect(screen.getByTestId('collapsible-left-slot').className).toContain('min-w-0');
     expect(screen.getByTestId('collapsible-right-slot').className).toContain('min-w-0');
+    expect(screen.getByText('workflow run').parentElement?.className).toContain('overflow-y-auto');
   });
 });

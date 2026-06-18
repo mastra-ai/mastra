@@ -133,9 +133,9 @@ describe('tool approval with LibSQLStore via Harness', () => {
     const approvalPromise = new Promise<void>(resolve => {
       harness.subscribe(event => {
         if (event.type === 'tool_approval_required') {
-          // Must be async — pendingApprovalResolve is set after emit returns
+          // Must be async — the approval gate is armed after emit returns
           queueMicrotask(() => {
-            harness.respondToToolApproval({ decision: 'approve' });
+            harness.session.respondToToolApproval({ decision: 'approve' });
             resolve();
           });
         }

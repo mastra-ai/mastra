@@ -363,7 +363,7 @@ describe('Workspace Safety Features', () => {
       await workspace.destroy();
     });
 
-    it('should default to all tools enabled and no approval required', async () => {
+    it('should default to all tools enabled and no approval required (except un-isolated execute_command)', async () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         sandbox: new LocalSandbox({ workingDirectory: tempDir }),
@@ -384,10 +384,14 @@ describe('Workspace Safety Features', () => {
       expect(tools[WORKSPACE_TOOLS.SEARCH.INDEX]).toBeDefined();
       expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]).toBeDefined();
 
-      // No approval required by default
+      // No approval required by default for non-command tools
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].requireApproval).toBe(false);
       expect(tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].requireApproval).toBe(false);
-      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(false);
+
+      // execute_command on an un-isolated LocalSandbox (isolation: 'none', the
+      // default) runs on the host shell with no OS isolation, so it is gated
+      // behind approval by default. Hosts can opt out via tools.requireApproval.
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
 
       await workspace.destroy();
     });
@@ -515,6 +519,109 @@ describe('Workspace Safety Features', () => {
       const tools = await createWorkspaceTools(workspace);
 
       expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
+
+      await workspace.destroy();
+    });
+  });
+
+  // ===========================================================================
+  // execute_command approval default for un-isolated sandboxes
+  //
+  // A model/tool call (e.g. from prompt injection) that reaches an un-isolated
+  // LocalSandbox runs arbitrary shell commands on the host. execute_command must
+  // therefore default to requiring approval when isolation is 'none', while
+  // staying backward-compatible: hosts can opt out, and isolated/cloud sandboxes
+  // are unaffected.
+  // ===========================================================================
+  describe('execute_command host-isolation approval default', () => {
+    it('requires approval by default for an un-isolated LocalSandbox (isolation: none)', async () => {
+      const sandbox = new LocalSandbox({ workingDirectory: tempDir });
+      expect(sandbox.isolation).toBe('none');
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox,
+      });
+      await workspace.init();
+
+      const tools = await createWorkspaceTools(workspace);
+
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]).toBeDefined();
+      // Without this default, a model tool call would reach LocalProcessManager
+      // .spawn/execa on the host shell with no human-in-the-loop gate.
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(true);
+
+      await workspace.destroy();
+    });
+
+    it('preserves the host opt-out (tools.requireApproval: false) for an un-isolated LocalSandbox', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        tools: {
+          requireApproval: false,
+        },
+      });
+      await workspace.init();
+
+      const tools = await createWorkspaceTools(workspace);
+
+      // Explicit host config wins over the safe default (backward compatible).
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(false);
+
+      await workspace.destroy();
+    });
+
+    it('preserves the per-tool opt-out for an un-isolated LocalSandbox', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            requireApproval: false,
+          },
+        },
+      });
+      await workspace.init();
+
+      const tools = await createWorkspaceTools(workspace);
+
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(false);
+
+      await workspace.destroy();
+    });
+
+    it('does NOT change the default for an isolated sandbox (isolation !== none)', async () => {
+      // A sandbox that reports OS-level isolation (e.g. seatbelt/bwrap, or a
+      // cloud/container provider) is safe by construction, so the command tool
+      // keeps its original non-gated default. Modelled here with a duck-typed
+      // sandbox so the test doesn't depend on a host seatbelt/bwrap backend.
+      const isolatedSandbox: any = {
+        id: 'isolated-test',
+        name: 'IsolatedTestSandbox',
+        provider: 'test',
+        status: 'pending',
+        isolation: 'seatbelt',
+        async start() {
+          this.status = 'running';
+        },
+        async stop() {},
+        async destroy() {},
+        async executeCommand() {
+          return { exitCode: 0, stdout: '', stderr: '', success: true, executionTimeMs: 0, command: '' };
+        },
+      };
+
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        sandbox: isolatedSandbox,
+      });
+      await workspace.init();
+
+      const tools = await createWorkspaceTools(workspace);
+
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]).toBeDefined();
+      expect(tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].requireApproval).toBe(false);
 
       await workspace.destroy();
     });
