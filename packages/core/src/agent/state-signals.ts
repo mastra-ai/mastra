@@ -150,14 +150,12 @@ export async function resolveStateSignalHistory({
   messageList,
   memory,
   threadId,
-  resourceId,
   stateId,
   tracking,
 }: {
   messageList: MessageList;
   memory: MastraMemory;
   threadId: string;
-  resourceId: string;
   stateId: string;
   tracking?: StateSignalTracking;
 }): Promise<StateSignalHistory> {
@@ -178,23 +176,11 @@ export async function resolveStateSignalHistory({
   }
   trackedSignalIds.add(tracking.lastSnapshotSignalId);
 
-  if (trackedSignalIds.size > 0 && typeof memoryStore.listMessagesById === 'function') {
-    const storedMessages = await memoryStore.listMessagesById({ messageIds: [...trackedSignalIds] });
-    const storedStateSignals = dbMessagesToStateSignals(storedMessages.messages, stateId, threadId);
-    const resolvedStateSignals = mergeStateSignals(storedStateSignals, localStateSignals);
-
-    return {
-      ...deriveStateSignalHistory(resolvedStateSignals.length > 0 ? resolvedStateSignals : localStateSignals),
-      contextWindow,
-    };
+  if (trackedSignalIds.size === 0 || typeof memoryStore.listMessagesById !== 'function') {
+    return { ...localHistory, contextWindow };
   }
 
-  const storedMessages = await memoryStore.listMessages({
-    threadId,
-    resourceId,
-    perPage: false,
-    orderBy: { field: 'createdAt', direction: 'ASC' },
-  });
+  const storedMessages = await memoryStore.listMessagesById({ messageIds: [...trackedSignalIds] });
   const storedStateSignals = dbMessagesToStateSignals(storedMessages.messages, stateId, threadId);
   const resolvedStateSignals = mergeStateSignals(storedStateSignals, localStateSignals);
 
