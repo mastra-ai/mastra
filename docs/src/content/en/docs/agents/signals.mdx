@@ -130,7 +130,7 @@ Visit [`Agent.sendSignal()` reference](/reference/agents/agent#sendsignalsignal-
 
 Signals have a semantic `type` and an LLM-facing `tagName`. Use `type` to describe the signal category. Use `tagName` to control the XML tag the model sees.
 
-For external events, use `type: 'notification'`. Reactive signals are reserved for processor- or runtime-generated context, such as policy guidance, background task results, and auto-loaded instructions.
+For external events, use `type: 'notification'`. Notification signals fit events such as GitHub review activity, issue updates, CI results, or deployment status changes. Reactive signals are reserved for processor- or runtime-generated context, such as policy guidance, background task results, and auto-loaded instructions.
 
 ```typescript title="src/mastra/signals.ts"
 agent.sendSignal(
