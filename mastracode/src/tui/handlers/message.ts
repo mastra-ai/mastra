@@ -521,7 +521,10 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
       ...message,
       content: trailingParts,
     });
-    if (createdStreamingComponent || (!wasSpacingParticipant && state.streamingComponent.getChatSpacingKind() !== undefined)) {
+    if (
+      createdStreamingComponent ||
+      (!wasSpacingParticipant && state.streamingComponent.getChatSpacingKind() !== undefined)
+    ) {
       reconcileChatBoundarySpacers(state.chatContainer);
     }
   }
