@@ -45,6 +45,28 @@ describe('Dialog', () => {
     expect(screen.getByText('Body content')).toBeDefined();
   });
 
+  it('renders the overlay by default and allows it to be disabled', () => {
+    const { rerender } = render(
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogTitle>With overlay</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(document.querySelector('.dialog-overlay-anim')).not.toBeNull();
+
+    rerender(
+      <Dialog defaultOpen>
+        <DialogContent showOverlay={false}>
+          <DialogTitle>No overlay</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(document.querySelector('.dialog-overlay-anim')).toBeNull();
+  });
+
   it('renders an asChild Trigger as the child element without nesting buttons', () => {
     render(
       <Dialog>

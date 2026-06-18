@@ -71,6 +71,17 @@ describe('Command', () => {
     expect(onParentKeyDown).not.toHaveBeenCalled();
   });
 
+  it('renders CommandDialog without the standard dialog overlay', () => {
+    render(
+      <CommandDialog open onOpenChange={() => {}}>
+        <CommandInput placeholder="Search commands" />
+      </CommandDialog>,
+    );
+
+    expect(screen.getByPlaceholderText('Search commands')).toBeDefined();
+    expect(document.querySelector('.dialog-overlay-anim')).toBeNull();
+  });
+
   it('renders CommandInput rightSlot without replacing the input', () => {
     render(
       <Command>
