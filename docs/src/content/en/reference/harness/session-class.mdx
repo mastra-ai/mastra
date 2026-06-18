@@ -557,7 +557,7 @@ Switch to a new mode, coordinating model memory and persistence. Returns the res
 ```typescript
 const { modelId } = await harness.session.mode.switch({
   modeId: 'build',
-  defaultModelId: 'gpt-4o',
+  defaultModelId: '__AI_SDK_OPENAI_MODEL_BASE__',
 })
 ```
 
@@ -594,7 +594,7 @@ Returns: `boolean`
 Set the in-memory selected model id (no persistence).
 
 ```typescript
-harness.session.model.set({ modelId: 'gpt-4o' })
+harness.session.model.set({ modelId: '__AI_SDK_OPENAI_MODEL_BASE__' })
 ```
 
 #### `saveForMode({ modeId, modelId })`
@@ -604,7 +604,7 @@ Persist a model id as the last-used model for a mode.
 ```typescript
 await harness.session.model.saveForMode({
   modeId: 'plan',
-  modelId: 'gpt-4o',
+  modelId: '__AI_SDK_OPENAI_MODEL_BASE__',
 })
 ```
 
@@ -615,7 +615,7 @@ Resolve the model for a mode: persisted per-mode model if present, else `default
 ```typescript
 const modelId = await harness.session.model.resolveForMode({
   modeId: 'plan',
-  defaultModelId: 'gpt-4o',
+  defaultModelId: '__AI_SDK_OPENAI_MODEL_BASE__',
 })
 ```
 
