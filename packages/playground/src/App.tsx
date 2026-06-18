@@ -77,8 +77,8 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
-import TopicsOverviewPage, { TopicDetailsPage } from './pages/topics';
-import { TopicCrumb } from './pages/topics/topic-crumb';
+import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from './pages/signals';
+import { SignalCrumb } from './pages/signals/signal-crumb';
 import Traces from './pages/traces';
 import TraceDetails from './pages/traces/trace';
 import Workflows from './pages/workflows';
@@ -379,30 +379,30 @@ export const routes: RouteObject[] = [
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
       {
-        path: '/topics',
+        path: '/signals',
         handle: {
-          ...navHandle('/topics'),
-          crumbs: [navCrumb('/topics')],
+          ...navHandle('/signals'),
+          crumbs: [navCrumb('/signals')],
         },
         children: [
-          { index: true, element: <TopicsOverviewPage /> },
+          { index: true, element: <SignalsOverviewPage /> },
           {
-            path: ':topicId',
-            element: <TopicDetailsPage />,
+            path: ':signalId',
+            element: <SignalDetailsPage />,
             handle: {
-              crumbs: [{ id: 'topic', Component: TopicCrumb, heading: 'Topic' }],
+              crumbs: [{ id: 'signal', Component: SignalCrumb, heading: 'Signal' }],
             } satisfies RouteHeaderHandle,
           },
           {
-            path: ':topicId/traces/:traceId',
-            element: <TopicDetailsPage />,
+            path: ':signalId/traces/:traceId',
+            element: <SignalTraceIdPage />,
             handle: {
               crumbs: ({ params }) => [
                 {
-                  id: 'topic',
-                  Component: TopicCrumb,
-                  heading: 'Topic',
-                  to: params.topicId ? `/topics/${encodeURIComponent(params.topicId)}` : '/topics',
+                  id: 'signal',
+                  Component: SignalCrumb,
+                  heading: 'Signal',
+                  to: params.signalId ? `/signals/${encodeURIComponent(params.signalId)}` : '/signals',
                 },
                 { id: 'trace', Component: TraceCrumb, heading: 'Trace' },
               ],

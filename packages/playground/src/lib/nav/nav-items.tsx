@@ -158,11 +158,11 @@ export const mainNav: NavSection[] = [
         isOnMastraPlatform: true,
       },
       {
-        name: 'Topics',
-        url: '/topics',
-        activePaths: ['/topics'],
+        name: 'Signals',
+        url: '/signals',
+        activePaths: ['/signals'],
         Icon: LayoutGrid,
-        docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Topics documentation' },
+        docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Signals documentation' },
         isOnMastraPlatform: true,
       },
       {
