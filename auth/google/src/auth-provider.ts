@@ -291,7 +291,9 @@ export class MastraAuthGoogle extends MastraAuthProvider<GoogleUser> implements 
         if (process.env.NODE_ENV === 'production') {
           throw new Error(message);
         }
-        console.warn(`${message} Using an auto-generated value for development only; sessions will not survive restarts.`);
+        console.warn(
+          `${message} Using an auto-generated value for development only; sessions will not survive restarts.`,
+        );
       }
 
       this.attachSSOProvider();

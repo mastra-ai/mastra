@@ -150,16 +150,11 @@ describe('MastraAuthGoogle', () => {
 
     it('rejects a callback when the visible redirect state suffix was changed', async () => {
       const auth = createSsoAuth();
-      const url = await auth.getLoginUrl(
-        'http://localhost:4111/api/auth/sso/callback',
-        'server-state-id|%2Fstudio',
-      );
+      const url = await auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'server-state-id|%2Fstudio');
       const parsed = new URL(url);
       const stateId = parsed.searchParams.get('state')!.split('|', 1)[0]!;
 
-      await expect(auth.handleCallback('code', `${stateId}|%2Fadmin`)).rejects.toThrow(
-        'Invalid state redirect suffix',
-      );
+      await expect(auth.handleCallback('code', `${stateId}|%2Fadmin`)).rejects.toThrow('Invalid state redirect suffix');
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
