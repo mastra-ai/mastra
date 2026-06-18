@@ -33,36 +33,37 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
       left: 'items-stretch justify-start',
       right: 'items-stretch justify-end',
     },
-    variant: {
+    layout: {
       default: 'inset-0',
       floating: 'p-3 sm:p-4',
+      floatingOverlay: 'inset-0 p-3 sm:p-4',
     },
   },
   compoundVariants: [
     {
       side: 'right',
-      variant: 'floating',
+      layout: 'floating',
       className: 'inset-y-0 right-0 w-[calc(32rem+1.5rem)] max-w-full sm:w-[calc(32rem+2rem)]',
     },
     {
       side: 'left',
-      variant: 'floating',
+      layout: 'floating',
       className: 'inset-y-0 left-0 w-[calc(32rem+1.5rem)] max-w-full sm:w-[calc(32rem+2rem)]',
     },
     {
       side: 'bottom',
-      variant: 'floating',
+      layout: 'floating',
       className: 'inset-x-0 bottom-0 h-[calc(85dvh+1.5rem)] max-h-full sm:h-[calc(85dvh+2rem)]',
     },
     {
       side: 'top',
-      variant: 'floating',
+      layout: 'floating',
       className: 'inset-x-0 top-0 h-[calc(85dvh+1.5rem)] max-h-full sm:h-[calc(85dvh+2rem)]',
     },
   ],
   defaultVariants: {
     side: 'bottom',
-    variant: 'default',
+    layout: 'default',
   },
 });
 
@@ -132,9 +133,13 @@ const drawerPopupVariants = cva(
 );
 
 type DrawerBackdropVariantsProps = VariantProps<typeof drawerBackdropVariants>;
-type DrawerViewportVariantsProps = VariantProps<typeof drawerViewportVariants>;
+type DrawerViewportClassVariantsProps = VariantProps<typeof drawerViewportVariants>;
 type DrawerPopupVariantsProps = VariantProps<typeof drawerPopupVariants>;
 export type DrawerVariant = NonNullable<DrawerPopupVariantsProps['variant']>;
+type DrawerViewportLayout = NonNullable<DrawerViewportClassVariantsProps['layout']>;
+type DrawerViewportVariantsProps = Pick<DrawerViewportClassVariantsProps, 'side'> & {
+  variant?: DrawerVariant;
+};
 export type DrawerOverlay = 'auto' | NonNullable<DrawerBackdropVariantsProps['overlay']>;
 
 // `side` = anchor edge; Base UI's `swipeDirection` = dismissal gesture (bottom sheet swipes `down`).
@@ -144,8 +149,6 @@ const sideToSwipeDirection: Record<DrawerSide, 'up' | 'down' | 'left' | 'right'>
   left: 'left',
   right: 'right',
 };
-
-const OVERLAY_DISMISS_DRAG_THRESHOLD = 40;
 
 type DrawerContextValue = {
   side: DrawerSide;
@@ -174,6 +177,17 @@ const useDrawerContext = () => React.useContext(DrawerContext);
 
 export const useDrawerSide = () => useDrawerContext().side;
 
+const resolveDrawerViewportLayout = (
+  variant: DrawerVariant,
+  overlay: NonNullable<DrawerBackdropVariantsProps['overlay']>,
+): DrawerViewportLayout => {
+  if (variant !== 'floating') {
+    return 'default';
+  }
+
+  return overlay === 'none' ? 'floating' : 'floatingOverlay';
+};
+
 export type DrawerProps<Payload = unknown> = Omit<DrawerPrimitive.Root.Props<Payload>, 'swipeDirection'> & {
   /** Edge the drawer is anchored to. Defaults to `bottom`. */
   side?: DrawerSide;
@@ -193,10 +207,8 @@ function Drawer<Payload = unknown>({
   ...props
 }: DrawerProps<Payload>) {
   const resolvedOverlay = resolveDrawerOverlay(overlay, variant);
-  const hasFloatingOverlayDismissLayer = variant === 'floating' && resolvedOverlay !== 'none';
   const resolvedModal = modal ?? (resolvedOverlay === 'none' ? false : undefined);
-  const resolvedDisablePointerDismissal =
-    disablePointerDismissal ?? (resolvedOverlay === 'none' || hasFloatingOverlayDismissLayer ? true : undefined);
+  const resolvedDisablePointerDismissal = disablePointerDismissal ?? (resolvedOverlay === 'none' ? true : undefined);
   const contextValue = React.useMemo<DrawerContextValue>(
     () => ({ side, variant, resolvedOverlay }),
     [side, variant, resolvedOverlay],
@@ -285,19 +297,21 @@ type DrawerViewportProps = Omit<DrawerPrimitive.Viewport.Props, 'className'> & {
 } & DrawerViewportVariantsProps;
 
 // Keep the viewport pointer-interactive: Base UI wires native drag-to-dismiss to it.
-// Floating drawers avoid blocking the page by constraining the viewport to the panel edge.
+// Floating drawers without an overlay constrain the viewport so the page behind stays interactive.
+// Floating drawers with an overlay keep a full-screen viewport so overlay-start drags stay native.
 const DrawerViewport = React.forwardRef<HTMLDivElement, DrawerViewportProps>(
   ({ className, side, variant, ...props }, ref) => {
     const context = useDrawerContext();
     const resolvedSide = side ?? context.side;
     const resolvedVariant = variant ?? context.variant;
+    const layout = resolveDrawerViewportLayout(resolvedVariant, context.resolvedOverlay);
 
     return (
       <DrawerPrimitive.Viewport
         ref={ref}
         data-slot="drawer-viewport"
         data-variant={resolvedVariant}
-        className={cn(drawerViewportVariants({ side: resolvedSide, variant: resolvedVariant }), className)}
+        className={cn(drawerViewportVariants({ side: resolvedSide, layout }), className)}
         {...props}
       />
     );
@@ -368,123 +382,6 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
 };
 DrawerFloatingSideHandle.displayName = 'DrawerFloatingSideHandle';
 
-type OverlayGestureState = {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  hasDragged: boolean;
-} | null;
-
-const getOverlayDragDisplacement = (side: DrawerSide, deltaX: number, deltaY: number) => {
-  switch (side) {
-    case 'top':
-      return -deltaY;
-    case 'right':
-      return deltaX;
-    case 'bottom':
-      return deltaY;
-    case 'left':
-      return -deltaX;
-    default:
-      return 0;
-  }
-};
-
-type DrawerOverlayDismissLayerProps = {
-  side: DrawerSide;
-};
-
-// Base UI's backdrop is visual only; floating overlays need their own outside gesture target.
-const DrawerOverlayDismissLayer = ({ side }: DrawerOverlayDismissLayerProps) => {
-  const closeRef = React.useRef<HTMLButtonElement>(null);
-  const gestureRef = React.useRef<OverlayGestureState>(null);
-  const suppressNextClickRef = React.useRef(false);
-
-  const closeDrawer = React.useCallback(() => {
-    closeRef.current?.click();
-  }, []);
-
-  const resetGesture = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    const gesture = gestureRef.current;
-    if (gesture && event.currentTarget.hasPointerCapture?.(gesture.pointerId)) {
-      event.currentTarget.releasePointerCapture(gesture.pointerId);
-    }
-
-    gestureRef.current = null;
-  }, []);
-
-  return (
-    <>
-      <DrawerClose asChild>
-        <button ref={closeRef} type="button" aria-hidden tabIndex={-1} className="hidden" />
-      </DrawerClose>
-      <div
-        aria-hidden
-        data-slot="drawer-overlay-dismiss-layer"
-        className="fixed inset-0 z-50 touch-none select-none"
-        onPointerDown={event => {
-          event.stopPropagation();
-
-          if (event.button > 0) {
-            return;
-          }
-
-          gestureRef.current = {
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startY: event.clientY,
-            hasDragged: false,
-          };
-          event.currentTarget.setPointerCapture?.(event.pointerId);
-        }}
-        onPointerMove={event => {
-          const gesture = gestureRef.current;
-          if (!gesture || gesture.pointerId !== event.pointerId) {
-            return;
-          }
-
-          const deltaX = event.clientX - gesture.startX;
-          const deltaY = event.clientY - gesture.startY;
-          gesture.hasDragged = gesture.hasDragged || Math.hypot(deltaX, deltaY) > 3;
-        }}
-        onPointerUp={event => {
-          const gesture = gestureRef.current;
-          if (!gesture || gesture.pointerId !== event.pointerId) {
-            return;
-          }
-
-          event.stopPropagation();
-          const deltaX = event.clientX - gesture.startX;
-          const deltaY = event.clientY - gesture.startY;
-          const shouldClose = getOverlayDragDisplacement(side, deltaX, deltaY) >= OVERLAY_DISMISS_DRAG_THRESHOLD;
-          suppressNextClickRef.current = gesture.hasDragged || shouldClose;
-          resetGesture(event);
-
-          if (shouldClose) {
-            closeDrawer();
-          }
-        }}
-        onPointerCancel={event => {
-          event.stopPropagation();
-          resetGesture(event);
-        }}
-        onClick={event => {
-          event.stopPropagation();
-
-          if (suppressNextClickRef.current) {
-            suppressNextClickRef.current = false;
-            event.preventDefault();
-            return;
-          }
-
-          closeDrawer();
-        }}
-      />
-    </>
-  );
-};
-DrawerOverlayDismissLayer.displayName = 'DrawerOverlayDismissLayer';
-
 type DrawerContentProps = Omit<DrawerPrimitive.Popup.Props, 'className' | 'children'> & {
   className?: string;
   children?: React.ReactNode;
@@ -499,13 +396,10 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
     const { side, variant: contextVariant, resolvedOverlay } = useDrawerContext();
     const resolvedVariant = variant ?? contextVariant;
     const showHandle = side === 'top' || side === 'bottom';
-    const showOverlayDismissLayer =
-      contextVariant === 'floating' && resolvedVariant === 'floating' && resolvedOverlay !== 'none';
 
     return (
       <DrawerPortal>
         {resolvedOverlay !== 'none' && <DrawerBackdrop />}
-        {showOverlayDismissLayer && <DrawerOverlayDismissLayer side={side} />}
         <DrawerViewport variant={resolvedVariant}>
           <DrawerPopup ref={ref} variant={resolvedVariant} className={className} {...props}>
             {showHandle && side === 'bottom' && <DrawerHandleBar />}
