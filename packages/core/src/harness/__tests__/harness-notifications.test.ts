@@ -39,7 +39,7 @@ describe('Harness notification signals', () => {
       summary: 'Check this notification',
     });
 
-    const threadId = harness.getCurrentThreadId();
+    const threadId = harness.session.thread.getId();
     expect(threadId).toBeTruthy();
     expect(result).toMatchObject({ accepted: true, record: { id: 'notification-1', threadId } });
     expect(agent.subscribeToThread).toHaveBeenCalledTimes(1);

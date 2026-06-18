@@ -17,6 +17,7 @@ export interface MastraCodeState {
   projectPath?: string;
   projectName?: string;
   configDir: string;
+  homeDir?: string;
   gitBranch?: string;
   lastCommand?: string;
   observerModelId: string;
@@ -74,6 +75,7 @@ export const stateSchema = z.object({
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
+  homeDir: z.string().optional(),
   gitBranch: z.string().optional(),
   lastCommand: z.string().optional(),
   // Observational Memory model settings

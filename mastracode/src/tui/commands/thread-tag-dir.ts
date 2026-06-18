@@ -4,7 +4,7 @@ import type { SlashCommandContext } from './types.js';
 
 export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
-  const threadId = state.harness.getCurrentThreadId();
+  const threadId = state.session.thread.getId();
   if (!threadId && state.pendingNewThread) {
     ctx.showInfo('No active thread yet — send a message first.');
     return;
@@ -14,7 +14,7 @@ export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promi
     return;
   }
 
-  const projectPath = (state.harness.getState() as any)?.projectPath as string | undefined;
+  const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
   if (!projectPath) {
     ctx.showInfo('Could not detect current project path.');
     return;
@@ -27,6 +27,6 @@ export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promi
     options: [{ label: 'Yes' }, { label: 'No' }],
   });
   if (answer?.toLowerCase().startsWith('y')) {
-    await state.harness.setThreadSetting({ key: 'projectPath', value: projectPath });
+    await state.session.thread.setSetting({ key: 'projectPath', value: projectPath });
   }
 }
