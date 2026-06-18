@@ -284,9 +284,9 @@ describe('handleGoalCommand', () => {
       state: {
         pendingNewThread: true,
         goalManager,
+        session: { thread: { getId: vi.fn(() => currentThreadId) } },
         harness: {
           createThread,
-          session: { thread: { getId: vi.fn(() => currentThreadId) } },
           sendSignal,
         },
       },
@@ -336,8 +336,8 @@ describe('handleGoalCommand', () => {
       state: {
         pendingNewThread: false,
         goalManager,
+        session: { thread: { getId: vi.fn(() => 'thread-1') } },
         harness: {
-          session: { thread: { getId: vi.fn(() => 'thread-1') } },
           sendSignal,
         },
       },
@@ -409,8 +409,8 @@ describe('handleGoalCommand', () => {
       state: {
         pendingNewThread: false,
         goalManager,
+        session: { thread: { getId: vi.fn(() => 'thread-1') } },
         harness: {
-          session: { thread: { getId: vi.fn(() => 'thread-1') } },
           sendSignal,
         },
       },
@@ -441,8 +441,8 @@ describe('handleGoalCommand', () => {
       state: {
         pendingNewThread: false,
         goalManager,
+        session: { thread: { getId: vi.fn(() => 'thread-1'), setSetting: vi.fn().mockResolvedValue(undefined) } },
         harness: {
-          session: { thread: { getId: vi.fn(() => 'thread-1'), setSetting: vi.fn().mockResolvedValue(undefined) } },
           sendMessage,
         },
       },
@@ -482,9 +482,9 @@ describe('handleGoalCommand', () => {
     const ctx = {
       state: {
         goalManager,
+        session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         harness: {
           listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]),
-          session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         },
         ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() },
       },
@@ -522,9 +522,9 @@ describe('handleGoalCommand', () => {
     const ctx = {
       state: {
         goalManager,
+        session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         harness: {
           listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]),
-          session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         },
         ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() },
       },
@@ -587,8 +587,8 @@ describe('handleGoalCommand', () => {
       planStartedGoalId: 'plan-goal-123',
       pendingInlineQuestions: [],
       pendingAskUserComponents: new Map(),
+      session: { run: { isRunning: vi.fn(() => false) }, suspensions: { hasPending: vi.fn(() => false) } },
       harness: {
-        session: { run: { isRunning: vi.fn(() => false) }, suspensions: { hasPending: vi.fn(() => false) } },
         abort,
       },
     };
@@ -621,8 +621,8 @@ describe('handleGoalCommand', () => {
       activeInlineQuestion: {},
       pendingInlineQuestions: [() => {}],
       pendingAskUserComponents: new Map([['t', {}]]),
+      session: { run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
       harness: {
-        session: { run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
         abort,
       },
     };
@@ -661,8 +661,12 @@ describe('handleGoalCommand', () => {
     const sendSignal = vi.fn().mockResolvedValue({ accepted: Promise.resolve() });
     const state = {
       goalManager,
+      session: {
+        thread: { getId: vi.fn(() => 'thread-1') },
+        model: { get: vi.fn(() => '__GATEWAY_OPENAI_MODEL__') },
+      },
       harness: {
-        session: { thread: { getId: vi.fn(() => 'thread-1') } },
+        listAvailableModels: vi.fn().mockResolvedValue([{ id: '__GATEWAY_OPENAI_MODEL__' }]),
         sendSignal,
       },
       planStartedGoalId: 'plan-goal-xyz',

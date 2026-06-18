@@ -2,7 +2,7 @@ import { addPendingUserMessage, removePendingUserMessage } from '../render-messa
 import type { SlashCommandContext } from './types.js';
 
 export function isCurrentThreadActive(ctx: SlashCommandContext): boolean {
-  return ctx.harness.session?.stream?.isActive?.() ?? ctx.harness.getDisplayState?.().isRunning ?? false;
+  return ctx.state.session?.stream?.isActive?.() ?? ctx.harness.getDisplayState?.().isRunning ?? false;
 }
 
 export async function sendSlashCommandMessage(

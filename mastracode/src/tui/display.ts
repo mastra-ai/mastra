@@ -98,7 +98,7 @@ function getErrorHint(errorType: string): string | null {
 }
 
 export function notify(state: TUIState, reason: NotificationReason, message?: string): void {
-  const mode = ((state.harness.getState() as any)?.notifications ?? 'off') as NotificationMode;
+  const mode = ((state.session.state.get() as any)?.notifications ?? 'off') as NotificationMode;
   sendNotification(reason, {
     mode,
     message,

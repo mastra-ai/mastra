@@ -215,7 +215,7 @@ async function extractSessionTrajectory(
  * Build request context from Harness state for scorer evaluation.
  */
 function buildRequestContext(harness: Harness<any>, threadId: string): Record<string, unknown> {
-  const state = harness.getState() as Record<string, unknown>;
+  const state = harness.session.state.get() as Record<string, unknown>;
 
   return {
     threadId,

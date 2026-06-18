@@ -17,7 +17,7 @@ const THREAD_STATE_SETTINGS: ThreadStateSetting[] = [
 ];
 
 function getStateValue(harness: Harness<Record<string, unknown>>, setting: ThreadStateSetting): unknown {
-  const value = (harness.getState() as Record<string, unknown>)[setting.key];
+  const value = harness.session.state.get()[setting.key];
   return setting.isValid(value) ? value : undefined;
 }
 
@@ -32,7 +32,7 @@ async function findThread(
 /**
  * Restores MastraCode-owned per-thread OM settings for the given thread:
  * - If the thread already has a valid value in metadata, mirror it into harness state.
- * - Otherwise, persist the current harness-state value to the thread so future
+ * - Otherwise, persist the current session.state value to the thread so future
  *   sessions see the user's last-selected setting.
  */
 async function restoreSettingsForThread(harness: Harness<Record<string, unknown>>, threadId: string): Promise<void> {
@@ -59,7 +59,7 @@ async function restoreSettingsForThread(harness: Harness<Record<string, unknown>
   }
 
   if (Object.keys(updates).length > 0) {
-    await harness.setState(updates);
+    await harness.session.state.set(updates);
   }
 
   for (const setting of settingsToSeed) {
