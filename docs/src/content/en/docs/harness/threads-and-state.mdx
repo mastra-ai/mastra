@@ -43,10 +43,10 @@ await harness.switchThread({ threadId: 'thread-abc123' })
 List threads for the current resource. Forked subagent threads are hidden by default:
 
 ```typescript
-const threads = await harness.listThreads()
+const threads = await harness.session.thread.list()
 
 // Include all resources
-const allThreads = await harness.listThreads({ allResources: true })
+const allThreads = await harness.session.thread.list({ allResources: true })
 ```
 
 ### Cloning threads

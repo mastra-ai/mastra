@@ -112,10 +112,10 @@ await harness.switchMode({ modeId: 'build' })
 const modes = harness.listModes()
 
 // Get the current mode ID
-const modeId = harness.getCurrentModeId()
+const modeId = harness.session.mode.get()
 
 // Get the full mode object
-const mode = harness.getCurrentMode()
+const mode = harness.session.mode.resolve()
 ```
 
 ## Related
