@@ -14,7 +14,7 @@ export function showThreadLockPrompt(
   ctx.analytics?.trackInteractivePrompt('thread_lock_prompt', {
     threadId: lockedThreadId ?? ctx.state.harness.session.thread.getId(),
     resourceId: ctx.state.harness.session.identity.getResourceId(),
-    mode: ctx.state.harness.getCurrentModeId(),
+    mode: ctx.state.harness.session.mode.get(),
   });
 
   void (async () => {

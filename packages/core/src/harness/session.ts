@@ -2,7 +2,7 @@ import type { Agent } from '../agent';
 import type { AgentThreadSubscription } from '../agent/types';
 import type { RequestContext } from '../request-context';
 import { createEmptyTokenUsage } from './types';
-import type { HarnessMessage, HarnessThread, TokenUsage, ToolCategory } from './types';
+import type { HarnessMessage, HarnessMode, HarnessThread, TokenUsage, ToolCategory } from './types';
 
 /**
  * Minimal persistence surface the Session uses to read and write per-thread
@@ -271,6 +271,11 @@ export class SessionStream {
   /** The run id the live subscription reports as active, or null when none/idle. */
   activeRunId(): string | null {
     return this.#subscription?.activeRunId() ?? null;
+  }
+
+  /** Whether the live subscription currently has a run in flight. */
+  isActive(): boolean {
+    return this.activeRunId() !== null;
   }
 
   /** Abort the live subscription's in-flight run, if any. Swallows errors. */
@@ -684,15 +689,40 @@ export class SessionMode {
   #switchVersion = 0;
   readonly #store: () => ThreadSettingsStore | undefined;
   readonly #model: SessionModel;
+  /**
+   * Resolves a mode id to its full definition. Injected by the Harness via
+   * {@link setResolver}, since the mode *catalog* (`config.modes`) is host config.
+   */
+  #resolveMode: ((modeId: string) => HarnessMode | null) | undefined;
 
   constructor(store: () => ThreadSettingsStore | undefined, model: SessionModel) {
     this.#store = store;
     this.#model = model;
   }
 
+  /**
+   * Attach the resolver that maps a mode id to its definition. The Harness owns
+   * the mode catalog (`config.modes`) and injects this once.
+   */
+  setResolver(resolve: (modeId: string) => HarnessMode | null): void {
+    this.#resolveMode = resolve;
+  }
+
   /** The currently-selected mode id. */
   get(): string {
     return this.#id;
+  }
+
+  /**
+   * Resolve the currently-selected mode id to its full definition against the
+   * host's mode catalog. Throws if the selected mode id isn't in the catalog.
+   */
+  resolve(): HarnessMode {
+    const mode = this.#resolveMode?.(this.#id) ?? null;
+    if (!mode) {
+      throw new Error(`Mode not found: ${this.#id}`);
+    }
+    return mode;
   }
 
   /** Set the currently-selected mode id (on default resolution or hydration). */

@@ -588,8 +588,7 @@ describe('handleGoalCommand', () => {
       pendingInlineQuestions: [],
       pendingAskUserComponents: new Map(),
       harness: {
-        session: { run: { isRunning: vi.fn(() => false) } },
-        hasPendingSuspensions: vi.fn(() => false),
+        session: { run: { isRunning: vi.fn(() => false) }, suspensions: { hasPending: vi.fn(() => false) } },
         abort,
       },
     };
@@ -623,8 +622,7 @@ describe('handleGoalCommand', () => {
       pendingInlineQuestions: [() => {}],
       pendingAskUserComponents: new Map([['t', {}]]),
       harness: {
-        session: { run: { isRunning: vi.fn(() => true) } },
-        hasPendingSuspensions: vi.fn(() => false),
+        session: { run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
         abort,
       },
     };

@@ -55,10 +55,10 @@ describe('Harness mode-model persistence across restarts', () => {
     const session1 = createHarness(storage);
     await session1.init();
     const thread = await session1.createThread();
-    expect(session1.getCurrentModeId()).toBe('build');
+    expect(session1.session.mode.get()).toBe('build');
 
     await session1.switchMode({ modeId: 'fast' });
-    expect(session1.getCurrentModeId()).toBe('fast');
+    expect(session1.session.mode.get()).toBe('fast');
     expect(session1.session.model.get()).toBe('cerebras/zai-glm-4.7');
 
     // Session 2: reopen and resume the same thread.
@@ -66,7 +66,7 @@ describe('Harness mode-model persistence across restarts', () => {
     await session2.init();
     await session2.switchThread({ threadId: thread.id });
 
-    expect(session2.getCurrentModeId()).toBe('fast');
+    expect(session2.session.mode.get()).toBe('fast');
     expect(session2.session.model.get()).toBe('cerebras/zai-glm-4.7');
   });
 
@@ -83,7 +83,7 @@ describe('Harness mode-model persistence across restarts', () => {
     await session2.init();
     await session2.switchThread({ threadId: thread.id });
 
-    expect(session2.getCurrentModeId()).toBe('fast');
+    expect(session2.session.mode.get()).toBe('fast');
     expect(session2.session.model.get()).toBe('cerebras/qwen-3-coder-480b');
   });
 
@@ -97,7 +97,7 @@ describe('Harness mode-model persistence across restarts', () => {
     await session2.init();
     await session2.switchThread({ threadId: thread.id });
 
-    expect(session2.getCurrentModeId()).toBe('build');
+    expect(session2.session.mode.get()).toBe('build');
     expect(session2.session.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
@@ -145,6 +145,6 @@ describe('Harness mode-model persistence across restarts', () => {
     // (execution) mode, aborting the plan-mode run.
     expect(session.session.suspensions.has({ toolCallId: 'plan-call-1' })).toBe(false);
     expect(controller.signal.aborted).toBe(true);
-    expect(session.getCurrentModeId()).toBe('build');
+    expect(session.session.mode.get()).toBe('build');
   });
 });

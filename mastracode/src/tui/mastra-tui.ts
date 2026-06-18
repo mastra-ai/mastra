@@ -386,7 +386,7 @@ export class MastraTUI {
 
   private renderOptimisticUserMessage(content: string, images?: Array<{ data: string; mimeType: string }>): string {
     const messageId = `user-${Date.now()}`;
-    const isInterjection = this.state.harness.isCurrentThreadStreamActive();
+    const isInterjection = this.state.harness.session.stream.isActive();
     addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
       ...(isInterjection ? { label: 'steer' } : {}),
     });
@@ -427,7 +427,7 @@ export class MastraTUI {
       this.state.analytics?.capture('mastracode_prompt_submitted', {
         threadId: this.state.harness.session.thread.getId(),
         resourceId: this.state.harness.session.identity.getResourceId(),
-        mode: this.state.harness.getCurrentModeId(),
+        mode: this.state.harness.session.mode.get(),
         hasImages: Boolean(images?.length),
         isFirstPromptInThread: pendingNewThread,
         pendingNewThread,
@@ -457,7 +457,7 @@ export class MastraTUI {
   }
 
   private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
-    const hasActiveRun = this.state.harness.isCurrentThreadStreamActive();
+    const hasActiveRun = this.state.harness.session.stream.isActive();
 
     const send = () => {
       this.clearIdleCounter();
@@ -753,7 +753,7 @@ export class MastraTUI {
         action: 'created',
         threadId: event.thread.id,
         resourceId: event.thread.resourceId,
-        mode: this.state.harness.getCurrentModeId(),
+        mode: this.state.harness.session.mode.get(),
         hasTitle: Boolean(event.thread.title),
       });
       return;
@@ -765,7 +765,7 @@ export class MastraTUI {
         threadId: event.threadId,
         previousThreadId: event.previousThreadId,
         resourceId: this.state.harness.session.identity.getResourceId(),
-        mode: this.state.harness.getCurrentModeId(),
+        mode: this.state.harness.session.mode.get(),
       });
       return;
     }
@@ -774,7 +774,7 @@ export class MastraTUI {
       analytics.capture('mastracode_model_changed', {
         modelId: event.modelId,
         scope: event.scope,
-        mode: event.modeId ?? this.state.harness.getCurrentModeId(),
+        mode: event.modeId ?? this.state.harness.session.mode.get(),
         threadId: this.state.harness.session.thread.getId(),
         resourceId: this.state.harness.session.identity.getResourceId(),
       });
@@ -1292,7 +1292,7 @@ export class MastraTUI {
       }
     }
 
-    const currentModeId = harness.getCurrentModeId();
+    const currentModeId = harness.session.mode.get();
     const currentModeModel = (modePack.models as Record<string, string>)[currentModeId];
     if (currentModeModel) {
       await harness.switchModel({ modelId: currentModeModel });

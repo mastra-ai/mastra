@@ -250,8 +250,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       harness: {
         sendSignal,
-        isCurrentThreadStreamActive: () => true,
-        session: { getCurrentRunId: () => null },
+        session: { getCurrentRunId: () => null, stream: { isActive: () => true } },
         getDisplayState: () => ({ isRunning: true }),
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),
@@ -284,7 +283,7 @@ describe('MastraTUI queueing', () => {
       harness: {
         createThread,
         sendSignal,
-        isCurrentThreadStreamActive: () => false,
+        session: { stream: { isActive: () => false } },
         getDisplayState: () => ({ isRunning: false }),
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),
@@ -318,8 +317,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       harness: {
         sendSignal,
-        isCurrentThreadStreamActive: () => false,
-        session: { getCurrentRunId: () => null },
+        session: { getCurrentRunId: () => null, stream: { isActive: () => false } },
         getDisplayState: () => ({ isRunning: false }),
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),
@@ -352,7 +350,7 @@ describe('MastraTUI queueing', () => {
       harness: {
         createThread,
         sendSignal,
-        isCurrentThreadStreamActive: () => false,
+        session: { stream: { isActive: () => false } },
         getDisplayState: () => ({ isRunning: false }),
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),
@@ -391,8 +389,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       harness: {
         sendSignal,
-        isCurrentThreadStreamActive: () => false,
-        session: { getCurrentRunId: () => null },
+        session: { getCurrentRunId: () => null, stream: { isActive: () => false } },
         getDisplayState: () => ({ isRunning: false }),
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),
@@ -427,8 +424,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       harness: {
         sendSignal,
-        isCurrentThreadStreamActive: () => false,
-        session: { getCurrentRunId: () => null },
+        session: { getCurrentRunId: () => null, stream: { isActive: () => false } },
         getDisplayState: () => ({ isRunning: false }),
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),

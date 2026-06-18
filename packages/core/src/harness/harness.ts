@@ -505,6 +505,7 @@ export class Harness<TState = {}> {
       set: (key, value) => this.#session.thread.setSetting({ key, value }),
     });
     this.#session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
+    this.#session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
     this.#session.thread.connect(this.createThreadDataStore());
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
@@ -691,7 +692,7 @@ export class Harness<TState = {}> {
    * through. The Session owns the thread-domain logic; this adapter just maps
    * raw storage rows to Harness types — it does not call back into Session.
    */
-  protected createThreadDataStore(): ThreadDataStore {
+  private createThreadDataStore(): ThreadDataStore {
     return {
       listThreads: ({ resourceId, includeForkedSubagents }) =>
         this.queryThreads({ resourceId, includeForkedSubagents }),
@@ -954,19 +955,6 @@ export class Harness<TState = {}> {
     return this.config.modes;
   }
 
-  getCurrentModeId(): string {
-    return this.#session.mode.get();
-  }
-
-  getCurrentMode(): HarnessMode {
-    const modeId = this.#session.mode.get();
-    const mode = this.config.modes.find(m => m.id === modeId);
-    if (!mode) {
-      throw new Error(`Mode not found: ${modeId}`);
-    }
-    return mode;
-  }
-
   /**
    * Switch to a different mode.
    * Aborts any in-progress generation and switches to the mode's default model.
@@ -1068,7 +1056,7 @@ export class Harness<TState = {}> {
    * never mutated.
    */
   private resolveCurrentModeInstructions(): string | undefined {
-    const mode = this.getCurrentMode();
+    const mode = this.#session.mode.resolve();
     const combined = [this.#instructions ?? '', mode?.instructions ?? ''].filter(Boolean).join('\n');
     return combined || undefined;
   }
@@ -1084,7 +1072,7 @@ export class Harness<TState = {}> {
    * which read/write the durable `threadState` `'goal'` slot.
    */
   getCurrentAgent(): Agent {
-    const mode = this.getCurrentMode();
+    const mode = this.#session.mode.resolve();
 
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
   }
@@ -1254,7 +1242,7 @@ export class Harness<TState = {}> {
     };
 
     const currentStateModel = this.#session.model.get();
-    const currentMode = this.getCurrentMode();
+    const currentMode = this.#session.mode.resolve();
     const modelId = currentStateModel || currentMode.defaultModelId;
 
     const metadata: Record<string, unknown> = {};
@@ -2264,7 +2252,7 @@ export class Harness<TState = {}> {
   }): Promise<void> {
     const messageInput = this.createMessageInput({ content, files });
 
-    const wasActive = this.isCurrentThreadStreamActive();
+    const wasActive = this.#session.stream.isActive();
     let emittedAgentEnd = false;
     const unsubscribeAgentEnd = wasActive
       ? undefined
@@ -3394,14 +3382,6 @@ export class Harness<TState = {}> {
    * need to know whether the harness is awaiting user input (e.g. to allow abort)
    * should check this too.
    */
-  hasPendingSuspensions(): boolean {
-    return this.#session.suspensions.hasPending();
-  }
-
-  isCurrentThreadStreamActive(): boolean {
-    return this.#session.stream.activeRunId() !== null;
-  }
-
   /**
    * Resolve once the current thread's stream is fully idle.
    *
@@ -3413,7 +3393,7 @@ export class Harness<TState = {}> {
    * be drained with the previous run's already-aborted abortSignal.
    */
   private async waitForCurrentThreadStreamIdle(): Promise<void> {
-    while (this.isCurrentThreadStreamActive() || this.#session.run.getRunId() !== null) {
+    while (this.#session.stream.isActive() || this.#session.run.getRunId() !== null) {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
   }
@@ -3553,7 +3533,7 @@ export class Harness<TState = {}> {
     // switch) and move to the default execution mode.
     this.#session.suspensions.delete({ toolCallId });
 
-    const currentMode = this.getCurrentMode();
+    const currentMode = this.#session.mode.resolve();
     const transitionModeId =
       currentMode.transitionsTo ??
       this.config.defaultModeId ??
@@ -4135,7 +4115,7 @@ export class Harness<TState = {}> {
 
     // Auto-create subagent tool if subagent definitions are configured
     if (this.config.subagents?.length && this.config.resolveModel) {
-      const currentMode = this.getCurrentMode();
+      const currentMode = this.#session.mode.resolve();
       const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
@@ -4215,7 +4195,7 @@ export class Harness<TState = {}> {
     // supported yet.  validateModes() already prevents setting both on the
     // same mode.
     if (this.config.agent) {
-      const currentMode = this.getCurrentMode();
+      const currentMode = this.#session.mode.resolve();
       const modeTools = currentMode.tools ?? currentMode.additionalTools;
       if (modeTools) {
         result.modeTools = modeTools;

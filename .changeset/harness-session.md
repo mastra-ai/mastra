@@ -26,5 +26,13 @@ Introduce the Harness `Session`: the Harness now exposes `harness.session`, a cl
 - `getResourceId()`, `getDefaultResourceId()` → `session.identity.*`
 - `getFollowUpCount()` → `session.followUps.count()`
 - `respondToToolApproval()` → `session.respondToToolApproval()`
+- `getCurrentModeId()` → `session.mode.get()`
+- `getCurrentMode()` → `session.mode.resolve()` (resolves the selected mode id against the host's `config.modes` catalog, injected into the Session)
+- `hasPendingSuspensions()` → `session.suspensions.hasPending()`
+- `isCurrentThreadStreamActive()` → `session.stream.isActive()`
 
-`Harness.abort()`, `setResourceId()`, `getCurrentMode()`, `getCurrentModeId()`, `hasPendingSuspensions()`, and `isCurrentThreadStreamActive()` remain on the Harness with unchanged behavior (they orchestrate or compose Harness-host state and delegate the relevant reads/writes to the session).
+`Harness.abort()` and `setResourceId()` remain on the Harness with unchanged behavior — they orchestrate Harness-host state (the display-state mirror, the agent-stream subscription, thread teardown) before delegating the relevant reads/writes to the session.
+
+`session.mode` exposes two complementary accessors: `get()` returns the selected mode **id** (a `string`, mirroring `session.model.get()`), while `resolve()` returns the full `HarnessMode` definition by looking the id up in the injected mode catalog.
+
+The legacy `HarnessCompat` shim (v1-session/legacy-thread merge) has been removed; its thread-list merge now lives in the Session's thread-data store, so `session.thread.list()` returns the merged result directly.

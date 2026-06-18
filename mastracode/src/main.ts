@@ -105,7 +105,7 @@ async function tuiMain(pipedInput?: string | null) {
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
   analytics.capture('mastracode_session_started', {
-    mode: harness.getCurrentModeId(),
+    mode: harness.session.mode.get(),
     resourceId: harness.session.identity.getResourceId(),
     hasAuthStorage: Boolean(authStorage),
     hasMcp: Boolean(mcpManager),

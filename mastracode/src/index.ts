@@ -423,7 +423,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
             threadId,
             resourceId,
             session: {
-              modeId: harness.getCurrentModeId(),
+              modeId: harness.session.mode.get(),
               modelId: harness.session.model.get(),
             },
             workspace: harness.getWorkspace(),

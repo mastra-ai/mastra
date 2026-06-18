@@ -388,7 +388,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     }
   }
 
-  const currentModeId = harness.getCurrentModeId();
+  const currentModeId = harness.session.mode.get();
   const currentModeModel = (pack.models as Record<string, string>)[currentModeId];
   if (currentModeModel) {
     await harness.switchModel({ modelId: currentModeModel });

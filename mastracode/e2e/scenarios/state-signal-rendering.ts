@@ -22,7 +22,7 @@ export const stateSignalRenderingScenario: McE2eScenario = {
         timer = setInterval(async () => {
           try {
             const threadId = result.harness.session.thread.getId();
-            if (sent || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
+            if (sent || !threadId || !result.harness.session.stream.isActive()) return;
             sent = true;
             if (timer) clearInterval(timer);
             const agent = result.harness.getMastra()?.getAgentById('code-agent');

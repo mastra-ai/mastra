@@ -81,7 +81,7 @@ export function updateStatusLine(state: TUIState): void {
   let modeBadge = '';
   let modeBadgeWidth = 0;
   const modes = state.harness.listModes();
-  const currentMode = modes.length > 1 ? state.harness.getCurrentMode() : undefined;
+  const currentMode = modes.length > 1 ? state.harness.session.mode.resolve() : undefined;
   const judgeModeColor = mastra.blue;
   // Use judge color for goal judge activity, OM color for OM activity, otherwise mode color
   const currentModeColor = currentMode?.metadata?.color;

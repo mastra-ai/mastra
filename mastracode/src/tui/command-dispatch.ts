@@ -72,7 +72,7 @@ export async function dispatchSlashCommand(
       action: 'attempted',
       threadId: state.harness.session.thread.getId(),
       resourceId: state.harness.session.identity.getResourceId(),
-      mode: state.harness.getCurrentModeId(),
+      mode: state.harness.session.mode.get(),
     });
   };
   const trimmedInput = input.trim();

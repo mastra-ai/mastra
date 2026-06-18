@@ -229,11 +229,11 @@ describe('Harness: ask_user native suspension', () => {
     const pending = harness.session.suspensions;
     pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user' });
     pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user' });
-    expect(harness.hasPendingSuspensions()).toBe(true);
+    expect(harness.session.suspensions.hasPending()).toBe(true);
 
     harness.abort();
 
-    expect(harness.hasPendingSuspensions()).toBe(false);
+    expect(harness.session.suspensions.hasPending()).toBe(false);
     expect(pending.hasPending()).toBe(false);
 
     // Resuming a suspension that abort already dropped is a safe no-op.
