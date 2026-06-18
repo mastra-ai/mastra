@@ -51,6 +51,8 @@ const harness = new Harness({
 
 The parent agent can then call the auto-generated `subagent` tool with a `task` description and optional `agentType`.
 
+When you define a subagent, write its `description` and `instructions` to be clear and narrow. The `description` is what the parent model reads to decide _when_ to delegate, so state the single job the subagent is for and, by implication, what it's not for — "Reads files and gathers context without making changes" tells the parent to reach for it during exploration and to handle edits elsewhere. The `instructions` then keep the child agent inside that job. A subagent scoped to one task with a focused toolset stays predictable and is easier for the parent to route to; a broadly described subagent invites the parent to over-delegate and blurs the boundary between types. Pair the narrow scope with `allowedWorkspaceTools` so the subagent can only do what its description promises.
+
 For the full list of subagent configuration options, see [`Harness` reference](/reference/harness/harness-class#subagents).
 
 ## Forked subagents
