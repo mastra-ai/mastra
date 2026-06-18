@@ -1,0 +1,179 @@
+---
+title: "Google | Auth"
+description: Authenticate your Mastra server and Studio using Google Workspace with hosted-domain checks and group-based RBAC.
+packages:
+  - "@mastra/auth-google"
+---
+
+# Google
+
+The `@mastra/auth-google` package provides Google OpenID Connect authentication and Google Workspace group-based role-based access control (RBAC) for Mastra.
+
+Use it when your Studio users sign in with Google and access should be limited to one or more Google Workspace domains.
+
+## Prerequisites
+
+Set up a Google Cloud OAuth client for web applications and add your Mastra callback URL to the authorized redirect URIs.
+
+For Google Groups RBAC, also configure a Google Workspace service account with domain-wide delegation and grant it the Directory API read-only group scope:
+
+```text
+https://www.googleapis.com/auth/admin.directory.group.readonly
+```
+
+Set the following environment variables:
+
+```env title=".env"
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:4111/api/auth/callback
+GOOGLE_COOKIE_PASSWORD=a-random-string-at-least-32-characters-long
+GOOGLE_ALLOWED_DOMAINS=example.com
+
+GOOGLE_SERVICE_ACCOUNT_EMAIL=service-account@project.iam.gserviceaccount.com
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_WORKSPACE_ADMIN_EMAIL=admin@example.com
+```
+
+:::note
+
+`GOOGLE_COOKIE_PASSWORD` encrypts session cookies. If omitted, an auto-generated value is used that doesn't survive server restarts. Set it explicitly for production.
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/auth-google
+```
+
+## Basic usage
+
+The following example enables Google sign-in and restricts access to users whose verified Google ID token has `hd: "example.com"`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGoogle } from '@mastra/auth-google'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthGoogle({
+      allowedDomains: ['example.com'],
+    }),
+  },
+})
+```
+
+:::warning
+
+Use `allowedDomains` to enforce Workspace access. Mastra checks Google's verified `hd` claim, not the email address suffix.
+
+:::
+
+## Auth with Google Groups RBAC
+
+Add `MastraRBACGoogle` to map Google Workspace groups to Mastra permissions.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGoogle, MastraRBACGoogle } from '@mastra/auth-google'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthGoogle({
+      allowedDomains: ['example.com'],
+    }),
+    rbac: new MastraRBACGoogle({
+      serviceAccount: {
+        clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
+        privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
+        subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
+      },
+      roleMapping: {
+        'admins@example.com': ['*'],
+        'engineering@example.com': ['agents:*', 'workflows:*', 'tools:*'],
+        'viewers@example.com': ['agents:read', 'workflows:read'],
+        _default: [],
+      },
+    }),
+  },
+})
+```
+
+Group email addresses are used as role IDs by default. Use `mapGroupToRoles` if you want to map by group name or another property.
+
+## Cross-provider RBAC
+
+Use Google Groups RBAC with another auth provider by passing `getUserKey`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthAuth0 } from '@mastra/auth-auth0'
+import { MastraRBACGoogle } from '@mastra/auth-google'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthAuth0(),
+    rbac: new MastraRBACGoogle({
+      getUserKey: user => user.email,
+      serviceAccount: {
+        clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
+        privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
+        subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
+      },
+      roleMapping: {
+        'engineering@example.com': ['agents:*', 'workflows:*'],
+        'admins@example.com': ['*'],
+        _default: [],
+      },
+    }),
+  },
+})
+```
+
+## Client-side setup
+
+When auth is enabled, requests to Mastra routes require authentication. `MastraAuthGoogle` uses Google sign-in and stores the authenticated user in an encrypted session cookie.
+
+For cross-origin requests, enable CORS credentials on the Mastra server:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthGoogle({
+      allowedDomains: ['example.com'],
+    }),
+    cors: {
+      origin: 'http://localhost:3000',
+      credentials: true,
+    },
+  },
+})
+```
+
+Configure the client to include credentials:
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const mastraClient = new MastraClient({
+  baseUrl: 'http://localhost:4111',
+  credentials: 'include',
+})
+```
+
+You can also pass a Google ID token as a Bearer token. Mastra verifies the token against Google's JSON Web Key Set (JWKS) endpoint.
+
+## Troubleshooting
+
+- **401 after sign-in**: Check that `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` match the Google Cloud OAuth client.
+- **Workspace users are rejected**: Verify `GOOGLE_ALLOWED_DOMAINS` matches the Google ID token `hd` claim.
+- **Consumer Gmail accounts are rejected**: This is expected when `allowedDomains` is configured because Gmail accounts don't have a Workspace `hd` claim.
+- **RBAC returns default permissions**: Verify the service account has domain-wide delegation and the Directory API group read-only scope.
+- **Cookies are not sent cross-origin**: Set `credentials: "include"` in `MastraClient` and configure `server.cors` with `credentials: true`.
+
+## Related
+
+- [Auth overview](/docs/server/auth)
+- [Composite Auth](/docs/server/auth/composite-auth)
+- [MastraAuthGoogle reference](/reference/auth/google)
