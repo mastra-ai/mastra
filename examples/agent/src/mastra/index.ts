@@ -99,7 +99,6 @@ import {
 import { gatewayAgent } from './agents/gateway';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
-import { urlMediaAgent } from './agents/url-media-agent';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -147,7 +146,6 @@ export const mastra = new Mastra({
     clinicDirectAgent,
     clinicSpecialistAgent,
     clinicSupervisorAgent,
-    urlMediaAgent,
   },
   processors: {
     moderationProcessor,
