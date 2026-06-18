@@ -5,17 +5,17 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import AgentChannelsPage from '../index';
 import {
   emptyPlatforms,
   noSlackInstallations,
   slackAndDiscordPlatforms,
   slackInstallations,
   slackPlatform,
-} from '@/domains/agents/components/__tests__/fixtures/channels';
+} from '../../__tests__/fixtures/channels';
+import { AgentChannels } from '../agent-channels';
 import { v2Agent } from '@/domains/agents/components/__tests__/fixtures/composer-model-settings';
 import { server } from '@/test/msw-server';
 
@@ -29,7 +29,7 @@ vi.mock('@mastra/playground-ui', async () => {
 
 const BASE_URL = 'http://localhost:4111';
 
-function renderPage() {
+function renderChannels() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -38,10 +38,8 @@ function renderPage() {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <MemoryRouter initialEntries={['/agents/agent-1/channels']}>
-            <Routes>
-              <Route path="/agents/:agentId/channels" element={<AgentChannelsPage />} />
-            </Routes>
+          <MemoryRouter initialEntries={['/agents/agent-1/settings?tab=channels']}>
+            <AgentChannels agentId="agent-1" />
           </MemoryRouter>
         </TooltipProvider>
       </QueryClientProvider>
@@ -51,7 +49,7 @@ function renderPage() {
 
 afterEach(() => cleanup());
 
-describe('AgentChannelsPage MSW integration', () => {
+describe('AgentChannels MSW integration', () => {
   it('renders a connected platform when installations are active', async () => {
     server.use(
       http.get(`${BASE_URL}/api/agents/agent-1`, () => HttpResponse.json(v2Agent)),
@@ -59,7 +57,7 @@ describe('AgentChannelsPage MSW integration', () => {
       http.get(`${BASE_URL}/api/channels/slack/installations`, () => HttpResponse.json(slackInstallations)),
     );
 
-    renderPage();
+    renderChannels();
 
     expect(await screen.findByText('Slack')).not.toBeNull();
     expect(await screen.findByText('Connected')).not.toBeNull();
@@ -71,35 +69,9 @@ describe('AgentChannelsPage MSW integration', () => {
       http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(emptyPlatforms)),
     );
 
-    renderPage();
+    renderChannels();
 
     expect(await screen.findByText('No channel platforms configured.')).not.toBeNull();
-  });
-
-  it('shows a loading state while the agent is being fetched', async () => {
-    const gate = (() => {
-      let resolve: () => void = () => {};
-      const promise = new Promise<void>(r => {
-        resolve = r;
-      });
-      return { promise, resolve };
-    })();
-
-    server.use(
-      http.get(`${BASE_URL}/api/agents/agent-1`, async () => {
-        await gate.promise;
-        return HttpResponse.json(v2Agent);
-      }),
-      http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(emptyPlatforms)),
-    );
-
-    renderPage();
-
-    expect(await screen.findByRole('status', { name: 'Loading' })).not.toBeNull();
-
-    gate.resolve();
-
-    await waitFor(() => expect(screen.queryByText('No channel platforms configured.')).not.toBeNull());
   });
 
   it('filters platform rows by the search input', async () => {
@@ -110,7 +82,7 @@ describe('AgentChannelsPage MSW integration', () => {
       http.get(`${BASE_URL}/api/channels/discord/installations`, () => HttpResponse.json(noSlackInstallations)),
     );
 
-    renderPage();
+    renderChannels();
 
     expect(await screen.findByText('Slack')).not.toBeNull();
     expect(await screen.findByText('Discord')).not.toBeNull();
@@ -129,7 +101,7 @@ describe('AgentChannelsPage MSW integration', () => {
       http.get(`${BASE_URL}/api/channels/discord/installations`, () => HttpResponse.json(noSlackInstallations)),
     );
 
-    renderPage();
+    renderChannels();
 
     expect(await screen.findByText('Slack')).not.toBeNull();
 

@@ -11,9 +11,6 @@ import type { WorkflowBoundaryNode as WorkflowBoundaryNodeType, WorkflowStepNode
 const getScopedStepId = (stepId: string | undefined, workflowName?: string) =>
   stepId && workflowName ? `${workflowName}.${stepId}` : stepId;
 
-const FINISHED_EDGE_COLOR = '#22c55e';
-const INACTIVE_EDGE_COLOR = '#8e8e8e';
-
 const buildStepsFlow = (edges: Edge[]) =>
   edges.reduce(
     (acc, edge) => {
@@ -73,7 +70,7 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
           animated: isFinishedEdge ? false : edge.animated,
           style: {
             ...edge.style,
-            stroke: isFinishedEdge ? FINISHED_EDGE_COLOR : INACTIVE_EDGE_COLOR,
+            stroke: isFinishedEdge ? '#22c55e' : '#8e8e8e',
             strokeDasharray: isFinishedEdge ? 'none' : edge.style?.strokeDasharray,
           },
         };

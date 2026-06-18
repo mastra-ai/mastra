@@ -1,4 +1,4 @@
-- tabpanel "Overview":
+- tabpanel "General":
   - heading "Agents" [level=3]:
     - text: ""
     - link:
