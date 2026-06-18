@@ -24,7 +24,7 @@ const meta: Meta<DataListStoryArgs> = {
   },
   argTypes: {
     variant: {
-      control: 'select',
+      control: 'inline-radio',
       options: VARIANT_OPTIONS,
     },
   },
@@ -125,90 +125,10 @@ export const Default: Story = {
 };
 
 /**
- * Starts on the borderless zebra-striped variant. Use the `variant` control to
- * compare the same pagination example against default and lined treatments.
- */
-export const Striped: Story = {
-  args: {
-    variant: 'striped',
-  },
-  render: function StripedStory({ variant }) {
-    const [page, setPage] = useState(0);
-    return (
-      <DataList columns={COMPACT_COLUMNS} variant={variant} className="max-h-[320px]">
-        <DataList.Top>
-          <DataList.TopCell>ID</DataList.TopCell>
-          <DataList.TopCell>Input</DataList.TopCell>
-          <DataList.TopCell>Status</DataList.TopCell>
-          <DataList.TopCell>Date</DataList.TopCell>
-          <DataList.TopCell>Time</DataList.TopCell>
-        </DataList.Top>
-        {Array.from({ length: 12 }, (_, index) => {
-          const run = SAMPLE_RUNS[index % SAMPLE_RUNS.length];
-          return (
-            <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}}>
-              <DataList.IdCell id={`${run.id}_${index}`} />
-              <DataList.MonoCell>{run.input}</DataList.MonoCell>
-              <DataList.Cell height="compact">{run.status}</DataList.Cell>
-              <DataList.DateCell timestamp={run.createdAt} />
-              <DataList.TimeCell timestamp={run.createdAt} />
-            </DataList.RowButton>
-          );
-        })}
-        <DataList.Pagination
-          currentPage={page}
-          hasMore={page < 3}
-          onNextPage={() => setPage(p => p + 1)}
-          onPrevPage={() => setPage(p => Math.max(0, p - 1))}
-        />
-      </DataList>
-    );
-  },
-};
-
-/**
- * Starts on the lined variant. Use the `variant` control to compare the same
- * error-row example against default and striped treatments.
- */
-export const Lined: Story = {
-  args: {
-    variant: 'lined',
-  },
-  render: ({ variant }) => (
-    <DataList columns={COMPACT_COLUMNS} variant={variant} className="max-h-[320px]">
-      <DataList.Top>
-        <DataList.TopCell>ID</DataList.TopCell>
-        <DataList.TopCell>Input</DataList.TopCell>
-        <DataList.TopCell>Status</DataList.TopCell>
-        <DataList.TopCell>Date</DataList.TopCell>
-        <DataList.TopCell>Time</DataList.TopCell>
-      </DataList.Top>
-      {Array.from({ length: 12 }, (_, index) => {
-        const run = SAMPLE_RUNS[index % SAMPLE_RUNS.length];
-        const failed = run.status === 'failed';
-        return (
-          <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}} variant={failed ? 'error' : 'default'}>
-            <DataList.IdCell id={`${run.id}_${index}`} />
-            <DataList.MonoCell>{run.input}</DataList.MonoCell>
-            <DataList.Cell height="compact">{run.status}</DataList.Cell>
-            <DataList.DateCell timestamp={run.createdAt} />
-            <DataList.TimeCell timestamp={run.createdAt} />
-          </DataList.RowButton>
-        );
-      })}
-    </DataList>
-  ),
-};
-
-/**
  * Per-row `variant="error"` lays a subtle, theme-aware destructive tint over the
- * row. Starts on striped so the tint can be checked against zebra rows, but the
- * list-level `variant` control stays available.
+ * row. Use the `variant` control to compare it with each list treatment.
  */
-export const StripedWithErrorRows: Story = {
-  args: {
-    variant: 'striped',
-  },
+export const WithErrorRows: Story = {
   render: ({ variant }) => (
     <DataList columns={COMPACT_COLUMNS} variant={variant} className="max-h-[320px]">
       <DataList.Top>
