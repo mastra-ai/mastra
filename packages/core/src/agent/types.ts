@@ -267,19 +267,26 @@ export type AgentNotificationConfig = {
  * @experimental Agent notification signal APIs are experimental and may change in a future release.
  */
 export type SendAgentNotificationSignalResult<OUTPUT = unknown> = {
-  accepted: boolean;
   record: NotificationRecord;
+  /**
+   * The delivery-policy verdict for this notification (deliver, summarize,
+   * persist, or discard). Use this to determine what the notification policy
+   * decided to do with the record.
+   */
   decision: NotificationDeliveryDecision;
   runId?: string;
   signal?: CreatedAgentSignal;
   persisted?: Promise<void>;
   /**
-   * Present only when the notification's underlying signal was accepted and
-   * dispatched. See {@link SendAgentSignalResult.accepted}.
+   * The underlying signal's routing outcome. Present only when the notification
+   * actually emitted a signal (deliver/summarize paths); absent when the policy
+   * dropped or deferred the notification without sending a signal. Resolves with
+   * the routing decision and rejects if the underlying agent is misconfigured.
+   * See {@link SendAgentSignalResult.accepted}.
    *
    * @experimental
    */
-  outcome?: Promise<SendAgentSignalAccepted<OUTPUT>>;
+  accepted?: Promise<SendAgentSignalAccepted<OUTPUT>>;
 };
 
 export interface AgentThreadRun<OUTPUT = unknown> {

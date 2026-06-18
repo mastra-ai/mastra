@@ -1147,7 +1147,8 @@ describe('Agent signals', () => {
     );
 
     const subscribedRun = await nextRun;
-    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
+    expect(result).toEqual(expect.objectContaining({ runId: subscribedRun.value.runId }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
     expect(result.decision).toMatchObject({ action: 'deliver' });
     expect(result.record).toMatchObject({
       agentId: 'notification-agent',
@@ -1191,10 +1192,12 @@ describe('Agent signals', () => {
     );
 
     expect(results).toHaveLength(2);
-    expect(results[0]).toMatchObject({ accepted: true, decision: { action: 'deliver', reason: 'idle-high' } });
+    expect(results[0]).toMatchObject({ decision: { action: 'deliver', reason: 'idle-high' } });
+    await expect(results[0]?.accepted).resolves.toMatchObject({ action: expect.stringMatching(/wake|deliver/) });
     expect(results[0]?.signal).toMatchObject({ type: 'notification', tagName: 'notification' });
     expect(results[0]?.record).toMatchObject({ status: 'delivered', deliveredSignalId: results[0]?.signal?.id });
-    expect(results[1]).toMatchObject({ accepted: true, decision: { action: 'deliver', reason: 'idle-high' } });
+    expect(results[1]).toMatchObject({ decision: { action: 'deliver', reason: 'idle-high' } });
+    await expect(results[1]?.accepted).resolves.toMatchObject({ action: expect.stringMatching(/wake|deliver/) });
     expect(results[1]?.signal).toMatchObject({ type: 'notification', tagName: 'notification' });
     expect(results[1]?.record).toMatchObject({ status: 'delivered', deliveredSignalId: results[1]?.signal?.id });
   });
@@ -1284,7 +1287,7 @@ describe('Agent signals', () => {
         { resourceId: 'notification-user', threadId: 'notification-thread' },
       );
 
-      expect(result.accepted).toBe(false);
+      expect(result.accepted).toBeUndefined();
       expect(result.record).toMatchObject({
         status: 'pending',
         deliveryAttempts: 1,
@@ -1728,8 +1731,8 @@ describe('Agent signals', () => {
     await nextTick();
     expect(streamCount).toBe(0);
     expect(result.signal).toBeUndefined();
+    expect(result.accepted).toBeUndefined();
     expect(result).toMatchObject({
-      accepted: true,
       decision: { action: 'summarize', reason: 'idle-low-summary' },
       record: { status: 'pending', deliveryReason: 'idle-low-summary' },
     });
@@ -1974,11 +1977,11 @@ describe('Agent signals', () => {
     await nextTick();
     expect(streamCount).toBe(0);
     expect(result).toMatchObject({
-      accepted: true,
       decision: { action: 'defer', reason: 'after-hours' },
       record: { status: 'pending', deliveryReason: 'after-hours' },
     });
     expect(result.signal).toBeUndefined();
+    expect(result.accepted).toBeUndefined();
     expect(result.record.deliverAt?.toISOString()).toBe(deliverAt.toISOString());
   });
 

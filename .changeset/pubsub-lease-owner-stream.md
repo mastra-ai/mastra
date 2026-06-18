@@ -11,6 +11,8 @@ Added a `LeaseProvider` capability (`acquireLease` / `releaseLease` / `renewLeas
 
 This replaces the previous `accepted: true` boolean, the separate `outcome` promise, and the best-effort top-level `runId?: string` — there is no longer a phantom `runId` on the lost cross-process wake race. `result.persisted` stays top-level: await it when you need to know the signal has been durably written to memory (`accepted` does not wait on the write for `persist`).
 
+`sendNotificationSignal` follows the same shape, with one difference: its `accepted` promise is optional. A notification can be dropped or deferred by the delivery policy without ever emitting a signal, in which case there is no `accepted` promise — read `result.decision` for the policy verdict (`deliver` / `summarize` / `persist` / `discard`), and `await result.accepted` only when a signal was actually sent. This replaces the old notification-result `accepted: boolean` (which was set even on discard) and its leftover `outcome` field.
+
 When multiple processes (e.g. serverless Lambdas) race to wake the same agent thread, they first try to acquire a lease through the configured `LeaseProvider`. The winner runs the agent stream and resolves `accepted` to `{ action: 'wake', runId, output }` so the caller can `consumeStream()` it in-process. Losers publish a `signal-enqueued` event so the winner picks up their message, and resolve to `{ action: 'deliver', runId }` since the signal was queued onto the winning run rather than run locally.
 
 ```ts
