@@ -207,7 +207,7 @@ export const SearchWithDropdown: Story = {
           />
         </InputGroup>
         <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger aria-label="Sort by" className="rounded-full">
+          <SelectTrigger aria-label="Sort by" size="lg" className="rounded-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">

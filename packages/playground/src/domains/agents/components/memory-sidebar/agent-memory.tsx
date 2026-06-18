@@ -1,7 +1,6 @@
 import { Button, Skeleton, cn } from '@mastra/playground-ui';
 import { ExternalLink, Copy } from 'lucide-react';
 import { useCallback } from 'react';
-import { AgentMemoryConfig } from './agent-memory-config';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { useThreadInput } from '@/domains/conversation';
@@ -86,7 +85,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         }
       }
     },
-    [agentId, threadId, navigate],
+    [agentId, threadId, navigate, paths],
   );
 
   const searchScope = searchMemoryData?.searchScope;
@@ -174,13 +173,10 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         </div>
       )}
 
-      {/* Working Memory & Config Section - hidden for gateway memory */}
+      {/* Working Memory Section - hidden for gateway memory */}
       {!isGatewayMemory && (
         <div>
           <AgentWorkingMemory agentId={agentId} />
-          <div className="border-t border-border1">
-            <AgentMemoryConfig agentId={agentId} />
-          </div>
         </div>
       )}
 

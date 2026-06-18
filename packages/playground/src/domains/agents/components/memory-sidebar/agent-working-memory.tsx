@@ -11,7 +11,7 @@ import {
   cn,
 } from '@mastra/playground-ui';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';
 import { CodeDisplay } from './code-display';
 import { useMemoryConfig } from '@/domains/memory/hooks';
@@ -35,12 +35,17 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
     text: workingMemoryData ?? '',
     copyMessage: 'Working memory copied!',
   });
-  const [editValue, setEditValue] = useState<string>(workingMemoryData ?? '');
+  const [editState, setEditState] = useState({
+    source: workingMemoryData,
+    value: workingMemoryData ?? '',
+  });
   const [isEditing, setIsEditing] = useState(false);
 
-  React.useEffect(() => {
-    setEditValue(workingMemoryData ?? '');
-  }, [workingMemoryData]);
+  // Sync the buffer to fresh data, but not while editing — a background refetch or
+  // streamed update would otherwise discard the user's in-progress edits.
+  if (!isEditing && editState.source !== workingMemoryData) {
+    setEditState({ source: workingMemoryData, value: workingMemoryData ?? '' });
+  }
 
   if (isLoading || isConfigLoading) {
     return <Skeleton className="h-32 w-full" />;
@@ -91,17 +96,22 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                     <>
                       <div className="bg-surface3 border border-border1 rounded-lg" style={{ height: '300px' }}>
                         <ScrollArea className="h-full">
-                          <div
-                            className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs"
-                            onClick={handleCopy}
-                          >
-                            <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
+                          <div className="p-3 cursor-pointer hover:bg-surface4/20 transition-colors relative group text-ui-xs">
+                            <button
+                              type="button"
+                              onClick={handleCopy}
+                              aria-label="Copy working memory"
+                              className="absolute inset-0 z-10 rounded-lg focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent1"
+                            />
+                            <div className="pointer-events-none">
+                              <MarkdownRenderer>{workingMemoryData}</MarkdownRenderer>
+                            </div>
                             {isCopied && (
-                              <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500">
+                              <span className="absolute top-2 right-2 z-20 text-ui-xs px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-500 pointer-events-none">
                                 Copied!
                               </span>
                             )}
-                            <span className="absolute top-2 right-2 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface3 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="absolute top-2 right-2 z-20 text-ui-xs px-1.5 py-0.5 rounded-full bg-surface3 text-neutral4 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                               Click to copy
                             </span>
                           </div>
@@ -119,9 +129,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
           ) : (
             <textarea
               className="w-full min-h-[150px] p-3 border border-border1 rounded-lg bg-surface3 font-mono text-sm text-neutral5 resize-none"
-              value={editValue}
-              onChange={e => setEditValue(e.target.value)}
+              value={editState.value}
+              onChange={e => setEditState(state => ({ ...state, value: e.target.value }))}
               disabled={isUpdating}
+              aria-label="Working memory content"
               placeholder="Enter working memory content..."
             />
           )}
@@ -131,11 +142,14 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 {!threadExists ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span tabIndex={0}>
-                        <Button disabled className="text-xs pointer-events-none">
-                          Edit Working Memory
-                        </Button>
-                      </span>
+                      <Button
+                        type="button"
+                        aria-disabled="true"
+                        onClick={event => event.preventDefault()}
+                        className="text-xs cursor-not-allowed opacity-50"
+                      >
+                        Edit Working Memory
+                      </Button>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>Working memory will be available after the agent calls updateWorkingMemory</p>
@@ -152,7 +166,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 <Button
                   onClick={async () => {
                     try {
-                      await updateWorkingMemory(editValue);
+                      await updateWorkingMemory(editState.value);
                       setIsEditing(false);
                     } catch (error) {
                       console.error('Failed to update working memory:', error);
@@ -166,7 +180,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 </Button>
                 <Button
                   onClick={() => {
-                    setEditValue(workingMemoryData ?? '');
+                    setEditState({ source: workingMemoryData, value: workingMemoryData ?? '' });
                     setIsEditing(false);
                   }}
                   disabled={isUpdating}
