@@ -30,7 +30,10 @@ const ComposerAttachmentsContext = createContext<ComposerAttachmentsContextValue
 const kindForContentType = (contentType: string): ComposerAttachmentKind => {
   if (contentType.startsWith('image/')) return 'image';
   if (contentType === 'application/pdf') return 'pdf';
-  if (contentType.startsWith('video/')) return 'video';
+  // The 'video' kind is the file-chip media path: it forwards URLs untouched and
+  // inlines local files as a data URI. Audio shares this path so audio URLs are
+  // sent as file parts instead of falling through to the empty-text branch.
+  if (contentType.startsWith('video/') || contentType.startsWith('audio/')) return 'video';
   return 'text';
 };
 

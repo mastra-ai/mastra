@@ -153,6 +153,27 @@ describe('composer attachments', () => {
     expect(filePart!.mimeType).toBe('video/mp4');
   });
 
+  it('forwards an audio URL as a file part instead of empty text', async () => {
+    // Audio shares the file-chip ('video') path so the URL is forwarded as a
+    // file part rather than falling through to the empty-text branch.
+    const { ref } = renderProvider();
+
+    await act(async () => {
+      await ref.current!.addUrl('gs://my-bucket/track.mp3');
+    });
+
+    const att = ref.current!.attachments[0] as ComposerAttachment;
+    expect(att.isUrl).toBe(true);
+    expect(att.kind).toBe('video');
+    expect(att.contentType).toBe('audio/mpeg');
+
+    const messages = await ref.current!.toCoreUserMessages();
+    const filePart = (messages[0]!.content as Array<{ type: string; data?: string; mimeType?: string }>)[0];
+    expect(filePart!.type).toBe('file');
+    expect(filePart!.data).toBe('gs://my-bucket/track.mp3');
+    expect(filePart!.mimeType).toBe('audio/mpeg');
+  });
+
   it('inlines a local video file as a data URI file part', async () => {
     const { ref } = renderProvider();
 

@@ -16,4 +16,12 @@ export const EXTENSION_TO_MIME: Record<string, string> = {
   avi: 'video/x-msvideo',
   mpeg: 'video/mpeg',
   mpg: 'video/mpeg',
+  // Audio
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  flac: 'audio/flac',
 };
