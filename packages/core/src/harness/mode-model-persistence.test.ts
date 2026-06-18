@@ -137,16 +137,13 @@ describe('Harness mode-model persistence across restarts', () => {
     const controller = session.session.run.ensureAbortController();
 
     // Simulate a submit_plan tool that suspended during a plan-mode run.
-    const pendingSuspensions = (
-      session as unknown as { pendingSuspensions: Map<string, { runId: string; toolName: string }> }
-    ).pendingSuspensions;
-    pendingSuspensions.set('plan-call-1', { runId: 'run-1', toolName: 'submit_plan' });
+    session.session.suspensions.register({ toolCallId: 'plan-call-1', runId: 'run-1', toolName: 'submit_plan' });
 
     await session.respondToToolSuspension({ toolCallId: 'plan-call-1', resumeData: { action: 'approved' } });
 
     // Approval abandons the parked plan suspension and switches to the default
     // (execution) mode, aborting the plan-mode run.
-    expect(pendingSuspensions.has('plan-call-1')).toBe(false);
+    expect(session.session.suspensions.has({ toolCallId: 'plan-call-1' })).toBe(false);
     expect(controller.signal.aborted).toBe(true);
     expect(session.getCurrentModeId()).toBe('build');
   });

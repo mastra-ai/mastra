@@ -1,5 +1,8 @@
+import type { Agent } from '../agent';
+import type { AgentThreadSubscription } from '../agent/types';
+import type { RequestContext } from '../request-context';
 import { createEmptyTokenUsage } from './types';
-import type { TokenUsage, ToolCategory } from './types';
+import type { HarnessMessage, HarnessThread, TokenUsage, ToolCategory } from './types';
 
 /**
  * Minimal persistence surface the Session uses to read and write per-thread
@@ -29,15 +32,483 @@ const MODE_ID_KEY = 'currentModeId';
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
 /**
+ * Owns the session's identity: the memory `resourceId` and the active
+ * `threadId` this session reads and writes under. Together they form the memory
+ * binding (`{ thread, resource }`) every run uses. In a multi-user host one
+ * Harness serves many sessions, so this identity — "whose session is this, and
+ * which thread is it on" — belongs to the Session, not the Harness.
+ *
+ * `defaultResourceId` is the resourceId the session started with; switching to a
+ * different resource (e.g. impersonation, or browsing another user's threads)
+ * updates the current resourceId while the default is retained so the session
+ * can return to its own identity.
+ *
+ * The active thread the session is bound to lives on {@link SessionThread}, not
+ * here — identity is the stable "who", the thread is the navigational "where".
+ */
+export class SessionIdentity {
+  /** The memory resourceId the session currently reads/writes under. */
+  #resourceId: string;
+  /** The resourceId the session started with, retained across resource switches. */
+  readonly #defaultResourceId: string;
+
+  constructor({ resourceId }: { resourceId: string }) {
+    this.#resourceId = resourceId;
+    this.#defaultResourceId = resourceId;
+  }
+
+  /** The resourceId the session currently reads/writes under. */
+  getResourceId(): string {
+    return this.#resourceId;
+  }
+
+  /** The resourceId the session started with. */
+  getDefaultResourceId(): string {
+    return this.#defaultResourceId;
+  }
+
+  /** Point the session at a different resourceId (the default is unchanged). */
+  setResourceId({ resourceId }: { resourceId: string }): void {
+    this.#resourceId = resourceId;
+  }
+}
+
+/**
+ * The shared-host storage surface the Session's thread domain leverages to read
+ * and write threads. The Harness backs this with its memory storage (mapping raw
+ * storage rows to {@link HarnessThread}/{@link HarnessMessage}); when no storage
+ * is configured the handle is absent and the data methods degrade gracefully
+ * (empty lists, undefined settings, no-op writes).
+ *
+ * This is a gateway to shared infrastructure — not a callback into Harness
+ * orchestration. The Session owns the thread-domain logic; the host owns the DB.
+ */
+export interface ThreadDataStore {
+  /** List threads for a resource (or all resources), already mapped + filtered of forked subagents unless asked. */
+  listThreads(input: { resourceId?: string; includeForkedSubagents?: boolean }): Promise<HarnessThread[]>;
+  /** Fetch a single thread by id, or null when it doesn't exist. */
+  getById(input: { threadId: string }): Promise<HarnessThread | null>;
+  /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
+  listMessages(input: { threadId: string; limit?: number }): Promise<HarnessMessage[]>;
+  /** The first user message for each given thread id. */
+  firstUserMessages(input: { threadIds: string[] }): Promise<Map<string, HarnessMessage>>;
+  /** Read a value from a thread's metadata. */
+  getMetadata(input: { threadId: string; key: string }): Promise<unknown>;
+  /** Write a value into a thread's metadata. */
+  setMetadata(input: { threadId: string; key: string; value: unknown }): Promise<void>;
+  /** Delete a value from a thread's metadata. */
+  deleteMetadata(input: { threadId: string; key: string }): Promise<void>;
+}
+
+/**
+ * Owns the session's thread domain: the navigational binding (which thread the
+ * session is currently on) plus the data reads/queries scoped to it. `null`
+ * until the session is bound (a thread is created, switched to, or reacquired on
+ * startup); switching/deleting updates it.
+ *
+ * In the multi-user model each session has its own current thread and reads its
+ * own threads, while the Harness host shares storage, the thread lock, and the
+ * event bus. So the binding + data queries are per-session and live here; the
+ * session leverages the host's storage via an injected {@link ThreadDataStore}.
+ * Lifecycle *transitions* (create/switch/clone/delete) remain host machinery
+ * because they drive the shared event bus and rebind the shared agent stream.
+ */
+export class SessionThread {
+  /** The active thread id, or null when the session is not bound to a thread. */
+  #threadId: string | null = null;
+  /** Gateway to the host's shared thread storage, injected via {@link connect}. */
+  #store: ThreadDataStore | undefined;
+  /** Reads the session's current resourceId (sibling identity state). */
+  readonly #getResourceId: () => string;
+
+  constructor(getResourceId: () => string) {
+    this.#getResourceId = getResourceId;
+  }
+
+  /**
+   * Attach the shared-host storage gateway the thread domain reads/writes
+   * through. The Harness calls this once storage is available; without it the
+   * data methods degrade gracefully.
+   */
+  connect(store: ThreadDataStore | undefined): void {
+    this.#store = store;
+  }
+
+  /** The active thread id, or null when the session is not bound to a thread. */
+  getId(): string | null {
+    return this.#threadId;
+  }
+
+  /** Whether the session is currently bound to a thread. */
+  isSet(): boolean {
+    return this.#threadId !== null;
+  }
+
+  /** The active thread id, throwing when the session is not bound to a thread. */
+  requireId(): string {
+    if (this.#threadId === null) {
+      throw new Error('No active thread on this session');
+    }
+    return this.#threadId;
+  }
+
+  /** Bind the session to a thread. */
+  set({ threadId }: { threadId: string }): void {
+    this.#threadId = threadId;
+  }
+
+  /** Clear the session's thread binding. */
+  clear(): void {
+    this.#threadId = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Data domain: reads/queries scoped to this session, backed by host storage.
+  // ---------------------------------------------------------------------------
+
+  /** List this session's threads (its own resource by default, or all resources). */
+  async list(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
+    if (!this.#store) return [];
+    return this.#store.listThreads({
+      resourceId: options?.allResources ? undefined : this.#getResourceId(),
+      includeForkedSubagents: options?.includeForkedSubagents,
+    });
+  }
+
+  /** Fetch a single thread by id, or null when it doesn't exist / no storage. */
+  async getById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
+    if (!this.#store) return null;
+    return this.#store.getById({ threadId });
+  }
+
+  /** List messages for a thread (newest-`limit`, returned oldest-first), or all. */
+  async listMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
+    if (!this.#store) return [];
+    return this.#store.listMessages({ threadId, limit });
+  }
+
+  /** List messages for the session's active thread (empty when not bound). */
+  async listActiveMessages({ limit }: { limit?: number } = {}): Promise<HarnessMessage[]> {
+    if (this.#threadId === null) return [];
+    return this.listMessages({ threadId: this.#threadId, limit });
+  }
+
+  /** The first user message for a single thread, or null. */
+  async firstUserMessage({ threadId }: { threadId: string }): Promise<HarnessMessage | null> {
+    const messages = await this.firstUserMessages({ threadIds: [threadId] });
+    return messages.get(threadId) ?? null;
+  }
+
+  /** The first user message for each given thread id. */
+  async firstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
+    if (!this.#store || threadIds.length === 0) return new Map();
+    return this.#store.firstUserMessages({ threadIds });
+  }
+
+  /** Read a setting (metadata value) for the active thread. */
+  async getSetting({ key }: { key: string }): Promise<unknown> {
+    if (!this.#store || this.#threadId === null) return undefined;
+    return this.#store.getMetadata({ threadId: this.#threadId, key });
+  }
+
+  /** Persist a setting (metadata value) for the active thread. */
+  async setSetting({ key, value }: { key: string; value: unknown }): Promise<void> {
+    if (!this.#store || this.#threadId === null) return;
+    await this.#store.setMetadata({ threadId: this.#threadId, key, value });
+  }
+
+  /** Delete a setting (metadata value) for the active thread. */
+  async deleteSetting({ key }: { key: string }): Promise<void> {
+    if (!this.#store || this.#threadId === null) return;
+    await this.#store.deleteMetadata({ threadId: this.#threadId, key });
+  }
+}
+
+/**
+ * Owns the session's live subscription to the active thread's agent event
+ * stream. A subscription is created per `(agent, resource, thread)` and reused
+ * while that triple is unchanged (tracked by {@link key}); switching threads or
+ * agents tears the old one down and opens a new one.
+ *
+ * The Session owns the subscription *handle* and its dedup key plus the
+ * mechanical lifecycle (reuse check, teardown, identity check, run-id read).
+ * The Harness still owns *how* a subscription is produced (calling the agent)
+ * and *how* its stream is consumed, passing the resolved handle in via
+ * {@link attach}.
+ */
+export class SessionStream {
+  /** The live subscription to the active thread, or null when none is open. */
+  #subscription: AgentThreadSubscription<any> | null = null;
+  /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
+  #key: string | null = null;
+
+  /** Build the dedup key identifying a subscription to `threadId` for `agent`. */
+  static keyFor({ agent, resourceId, threadId }: { agent: Agent; resourceId: string; threadId: string }): string {
+    return `${agent.id}:${resourceId}:${threadId}`;
+  }
+
+  /** Whether the open subscription already targets `key` (so it can be reused). */
+  matches({ key }: { key: string }): boolean {
+    return this.#key === key && this.#subscription !== null;
+  }
+
+  /** Adopt `subscription` as the live one, recording its dedup `key`. */
+  attach({ subscription, key }: { subscription: AgentThreadSubscription<any>; key: string }): void {
+    this.#subscription = subscription;
+    this.#key = key;
+  }
+
+  /** Whether a subscription is currently open. */
+  isOpen(): boolean {
+    return this.#subscription !== null;
+  }
+
+  /** Whether `subscription` is the one currently adopted (identity check). */
+  isCurrent({ subscription }: { subscription: AgentThreadSubscription<any> }): boolean {
+    return this.#subscription === subscription;
+  }
+
+  /** The run id the live subscription reports as active, or null when none/idle. */
+  activeRunId(): string | null {
+    return this.#subscription?.activeRunId() ?? null;
+  }
+
+  /** Abort the live subscription's in-flight run, if any. Swallows errors. */
+  abort(): void {
+    try {
+      this.#subscription?.abort();
+    } catch {}
+  }
+
+  /** Detach the live subscription without aborting (e.g. on stream error). */
+  detach(): void {
+    this.#subscription?.unsubscribe();
+    this.#subscription = null;
+    this.#key = null;
+  }
+
+  /** Fully tear down the live subscription: abort, unsubscribe, and clear. */
+  cleanup(): void {
+    this.#subscription?.abort();
+    this.#subscription?.unsubscribe();
+    this.#subscription = null;
+    this.#key = null;
+  }
+}
+
+/** A tool call parked awaiting a resume, keyed in {@link SessionSuspensions}. */
+export interface PendingSuspension {
+  /** The run id to resume when this tool call is answered. */
+  runId: string;
+  /** The suspended tool's name (e.g. `ask_user`, `submit_plan`). */
+  toolName: string;
+}
+
+/**
+ * Owns the session's parked tool suspensions: tool calls paused via the native
+ * tool-suspension primitive (e.g. `ask_user` / `request_access` / `submit_plan`)
+ * that are awaiting a resume, keyed by `toolCallId`. Each entry records the run
+ * id to resume and the tool name. A Map (rather than single fields) lets several
+ * tools — e.g. parallel `ask_user` calls in one step — stay suspended and be
+ * resumed independently.
+ *
+ * This is the resume *data* the Harness reads to drive a resume. The richer
+ * per-suspension UI snapshot lives on the Harness display state; the Session
+ * owns only what's needed to resume.
+ */
+export class SessionSuspensions {
+  /** Parked tool calls awaiting a resume, keyed by `toolCallId`. */
+  readonly #pending = new Map<string, PendingSuspension>();
+
+  /** Park `toolCallId` as awaiting a resume on `runId` for `toolName`. */
+  register({ toolCallId, runId, toolName }: { toolCallId: string; runId: string; toolName: string }): void {
+    this.#pending.set(toolCallId, { runId, toolName });
+  }
+
+  /** The parked suspension for `toolCallId`, or undefined when none. */
+  get({ toolCallId }: { toolCallId: string }): PendingSuspension | undefined {
+    return this.#pending.get(toolCallId);
+  }
+
+  /** Whether `toolCallId` is currently parked. */
+  has({ toolCallId }: { toolCallId: string }): boolean {
+    return this.#pending.has(toolCallId);
+  }
+
+  /** Drop `toolCallId` from the parked set (e.g. once resumed). */
+  delete({ toolCallId }: { toolCallId: string }): void {
+    this.#pending.delete(toolCallId);
+  }
+
+  /** Drop all parked suspensions (e.g. on abort or thread switch). */
+  clear(): void {
+    this.#pending.clear();
+  }
+
+  /** Whether any tool calls are parked awaiting a resume. */
+  hasPending(): boolean {
+    return this.#pending.size > 0;
+  }
+
+  /**
+   * Resolve which parked suspension to act on. With an explicit `toolCallId` it
+   * must match a parked suspension; without one it returns the single parked
+   * suspension (or undefined when there are zero or several).
+   */
+  resolveToolCallId(toolCallId?: string): string | undefined {
+    if (toolCallId) {
+      return this.#pending.has(toolCallId) ? toolCallId : undefined;
+    }
+    if (this.#pending.size === 1) {
+      return this.#pending.keys().next().value;
+    }
+    return undefined;
+  }
+}
+
+/** A message queued to send once the active run finishes, held in {@link SessionFollowUps}. */
+export interface FollowUp {
+  /** The message text to send. */
+  content: string;
+  /** Optional request context to apply when the queued message is sent. */
+  requestContext?: RequestContext;
+}
+
+/**
+ * Owns the session's follow-up queue: messages a user submits while a run is in
+ * progress, held FIFO until the active run finishes and the queue is drained.
+ *
+ * This owns the queue *data* (enqueue/dequeue/requeue/clear/count). The Harness
+ * still drives draining — sending each message and emitting `follow_up_queued`
+ * as the count changes — and keeps the display-state mirror (`queuedFollowUps`).
+ */
+export class SessionFollowUps {
+  /** Messages waiting to be sent after the current run, in arrival order. */
+  #queue: FollowUp[] = [];
+
+  /** Number of messages currently queued. */
+  count(): number {
+    return this.#queue.length;
+  }
+
+  /** Whether the queue is empty. */
+  isEmpty(): boolean {
+    return this.#queue.length === 0;
+  }
+
+  /** Append a follow-up to the back of the queue. */
+  enqueue(followUp: FollowUp): void {
+    this.#queue.push(followUp);
+  }
+
+  /** Remove and return the next follow-up, or undefined when empty. */
+  dequeue(): FollowUp | undefined {
+    return this.#queue.shift();
+  }
+
+  /** Put a follow-up back at the front (e.g. when draining it failed). */
+  requeue(followUp: FollowUp): void {
+    this.#queue.unshift(followUp);
+  }
+
+  /** Drop all queued follow-ups (e.g. on steer or thread switch). */
+  clear(): void {
+    this.#queue = [];
+  }
+}
+
+/** The decision a user returns to resolve a parked tool-approval gate. */
+export interface ApprovalDecision {
+  /** Whether to run the gated tool or reject it. */
+  decision: 'approve' | 'decline';
+  /** Optional request context to apply when the gated tool resumes. */
+  requestContext?: RequestContext;
+}
+
+/**
+ * A user's response to a parked approval. `always_allow_category` approves the
+ * tool and additionally grants its category for the rest of the session.
+ */
+export interface ApprovalResponse {
+  decision: 'approve' | 'decline' | 'always_allow_category';
+  requestContext?: RequestContext;
+}
+
+/**
+ * Owns the session's interactive tool-approval gate: when a tool requires user
+ * approval, the run parks on a promise here until the UI responds approve or
+ * decline. Holds the pending resolver and the name of the tool being gated.
+ *
+ * At most one approval is in flight at a time. The Session owns the gate
+ * mechanics (arm / resolve / clear); the Harness still maps a decision to its
+ * effects (running vs declining the tool, and any "always allow" grant), since
+ * those touch config-derived tool categories.
+ */
+export class SessionApproval {
+  /** Resolver for the parked approval promise, or null when nothing is gated. */
+  #resolve: ((decision: ApprovalDecision) => void) | null = null;
+  /** Name of the tool currently awaiting approval, or null when none. */
+  #toolName: string | null = null;
+
+  /**
+   * Park a new approval for `toolName` and return a promise that resolves once
+   * {@link resolve} is called with the user's decision. The caller awaits this
+   * while the run is suspended on the gate.
+   */
+  arm({ toolName }: { toolName: string }): Promise<ApprovalDecision> {
+    this.#toolName = toolName;
+    return new Promise<ApprovalDecision>(resolve => {
+      this.#resolve = resolve;
+    });
+  }
+
+  /** Whether an approval is currently parked awaiting a decision. */
+  isArmed(): boolean {
+    return this.#resolve !== null;
+  }
+
+  /**
+   * Apply a user's {@link ApprovalResponse} to the parked gate. A no-op when
+   * nothing is armed. `always_allow_category` runs `onAlwaysAllow` with the
+   * gated tool name (so the caller can grant the tool's category — a lookup that
+   * needs Harness config) and then approves; `approve`/`decline` resolve as-is.
+   */
+  respond({
+    decision,
+    requestContext,
+    onAlwaysAllow,
+  }: ApprovalResponse & { onAlwaysAllow?: (toolName: string) => void }): void {
+    if (!this.isArmed()) return;
+
+    if (decision === 'always_allow_category' && this.#toolName) {
+      onAlwaysAllow?.(this.#toolName);
+    }
+
+    const resolved: ApprovalDecision = {
+      decision: decision === 'decline' ? 'decline' : 'approve',
+      requestContext,
+    };
+    this.#resolve?.(resolved);
+    this.#resolve = null;
+    this.#toolName = null;
+  }
+
+  /** Clear the gated tool name once a parked approval has been consumed. */
+  clearToolName(): void {
+    this.#toolName = null;
+  }
+}
+
+/**
  * Owns the session's transient run identity and abort control: the id of the
  * run currently streaming on the active thread, its trace id, a monotonic
  * operation counter bumped each time a new operation starts, and the
  * AbortController/abort-requested flag governing cancellation. All of this is
  * per-run scratch state — it is never persisted and resets between runs.
  *
- * The Harness still owns the live agent subscription (`activeRunId()`); this
- * holds the last run id observed on a chunk so callers have a stable value once
- * the subscription has settled.
+ * The live agent subscription itself lives on {@link SessionStream}
+ * (`session.stream`); this holds the last run id observed on a chunk so callers
+ * have a stable value once the subscription has settled.
  */
 export class SessionRun {
   /** Id of the run currently streaming on the active thread, or null when idle. */
@@ -289,6 +760,26 @@ export class SessionMode {
  * - transient run identity and abort control (`session.run`): the current run
  *   id, trace id, monotonic operation counter, and the AbortController/
  *   abort-requested flag. This is per-run scratch state and is never persisted.
+ * - the live agent thread subscription (`session.stream`): the open
+ *   subscription to the active thread's event stream and its dedup key. The
+ *   Harness still produces the subscription (calling the agent) and consumes its
+ *   stream; the Session owns the handle and its lifecycle.
+ * - the parked tool suspensions (`session.suspensions`): tool calls paused via
+ *   the native tool-suspension primitive awaiting a resume, keyed by toolCallId.
+ *   The Session owns the resume data; the Harness keeps the richer per-suspension
+ *   UI snapshot on its display state.
+ * - the follow-up queue (`session.followUps`): messages a user submits while a
+ *   run is in progress, held FIFO until the run finishes. The Session owns the
+ *   queue; the Harness drives draining and keeps the `queuedFollowUps` display
+ *   mirror.
+ * - the interactive tool-approval gate (`session.approval`): when a tool needs
+ *   user approval, the run parks on a promise here until the UI responds. The
+ *   Session owns the gate; the Harness maps the decision to its effects (run vs
+ *   decline, any "always allow" grant), which touch config-derived categories.
+ *
+ * It also exposes a couple of accessors that compose `run` and `stream`:
+ * {@link getCurrentRunId} (the active run id, preferring the live subscription)
+ * and {@link abortRun} (abort the live run and mark it aborting).
  *
  * Mode/model persistence is thread-scoped, so the Session writes through a
  * {@link ThreadSettingsStore} the Harness backs with thread metadata; when no
@@ -303,12 +794,31 @@ export class Session {
   #tokenUsage: TokenUsage = createEmptyTokenUsage();
   /** Thread-settings persistence handle, injected by the Harness via {@link setStore}. */
   #store: ThreadSettingsStore | undefined;
+  /** Resolves a tool name to its category, injected by the Harness via {@link setCategoryResolver} (the category map is Harness config). */
+  #resolveCategory: ((toolName: string) => ToolCategory | null) | undefined;
   /** The session's currently-selected model (source of truth) + per-mode memory. */
   readonly model = new SessionModel(() => this.#store);
   /** The session's currently-selected mode and switch sequence. */
   readonly mode = new SessionMode(() => this.#store, this.model);
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
+  /** Live subscription to the active thread's agent event stream. */
+  readonly stream = new SessionStream();
+  /** Tool calls parked awaiting a resume (the resume data, keyed by toolCallId). */
+  readonly suspensions = new SessionSuspensions();
+  /** Messages queued to send after the active run finishes. */
+  readonly followUps = new SessionFollowUps();
+  /** The interactive tool-approval gate the current run parks on. */
+  readonly approval = new SessionApproval();
+  /** The session's identity: the memory resourceId it reads/writes under. */
+  readonly identity: SessionIdentity;
+  /** The session's thread domain: current binding + reads scoped to it. */
+  readonly thread: SessionThread;
+
+  constructor({ resourceId }: { resourceId: string }) {
+    this.identity = new SessionIdentity({ resourceId });
+    this.thread = new SessionThread(() => this.identity.getResourceId());
+  }
 
   /**
    * Attach the thread-settings store the Session persists mode/model through.
@@ -317,6 +827,64 @@ export class Session {
    */
   setStore(store: ThreadSettingsStore | undefined): void {
     this.#store = store;
+  }
+
+  /**
+   * Attach the tool→category resolver used when a user picks "always allow
+   * category". The category map is Harness config, so the Harness injects this
+   * once; without it, an "always_allow_category" decision simply approves.
+   */
+  setCategoryResolver(resolveCategory: (toolName: string) => ToolCategory | null): void {
+    this.#resolveCategory = resolveCategory;
+  }
+
+  /**
+   * The id of the run currently active on this session: the live subscription's
+   * active run id when it is streaming, falling back to the last run id the run
+   * tracker observed. Null when the session is idle.
+   */
+  getCurrentRunId(): string | null {
+    return this.stream.activeRunId() ?? this.run.getRunId();
+  }
+
+  /**
+   * Abort the session's active run: drop any parked tool suspensions, abort the
+   * live subscription's in-flight run, and mark the run as aborting so the
+   * run-end path resolves its reason as 'aborted'.
+   *
+   * Dropping the parked suspensions matters because a run sitting in a tool
+   * `suspend()` (e.g. `ask_user` / `request_access`) is not actively streaming,
+   * so aborting the controller alone would leave it orphaned. The Harness still
+   * clears its own display-state mirror of those suspensions separately.
+   */
+  abortRun(): void {
+    this.suspensions.clear();
+    this.stream.abort();
+    this.run.requestAbort();
+  }
+
+  /**
+   * Respond to the parked tool-approval gate with the user's decision. A no-op
+   * when nothing is awaiting approval. "always_allow_category" grants the gated
+   * tool's category for the rest of the session (resolved via the injected
+   * {@link setCategoryResolver}) and then approves; "approve"/"decline" release
+   * the run as-is.
+   */
+  respondToToolApproval({
+    decision,
+    requestContext,
+  }: {
+    decision: 'approve' | 'decline' | 'always_allow_category';
+    requestContext?: RequestContext;
+  }): void {
+    this.approval.respond({
+      decision,
+      requestContext,
+      onAlwaysAllow: toolName => {
+        const category = this.#resolveCategory?.(toolName);
+        if (category) this.grantCategory(category);
+      },
+    });
   }
 
   /** Grant a tool category "allow" for the remainder of the session. */

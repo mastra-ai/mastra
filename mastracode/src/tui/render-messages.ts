@@ -658,7 +658,7 @@ function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefin
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
-  const messages = await state.harness.listMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
+  const messages = await state.harness.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
   state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
   state.chatContainer.clear();

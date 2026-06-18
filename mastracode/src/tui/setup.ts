@@ -573,7 +573,7 @@ export function updateTerminalTitle(state: TUIState): void {
 // =============================================================================
 
 export async function promptForThreadSelection(state: TUIState): Promise<void> {
-  const allThreads = await state.harness.listThreads();
+  const allThreads = await state.harness.session.thread.list();
 
   // Filter to threads matching the current working directory.
   const currentPath = state.projectInfo.rootPath;
@@ -606,7 +606,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
     try {
       await state.harness.switchThread({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
-        await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
+        await state.harness.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }
       return;
     } catch (error) {
@@ -626,7 +626,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
     try {
       await state.harness.switchThread({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
-        await state.harness.setThreadSetting({ key: 'projectPath', value: currentPath });
+        await state.harness.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }
       return;
     } catch (error) {

@@ -52,11 +52,14 @@ vi.mock('@mastra/core/harness', () => ({
     async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }) {
       const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
       await this.setState({ [key]: modelId });
-      await this.setThreadSetting({ key, value: modelId });
+      await this.session.thread.setSetting({ key, value: modelId });
     }
 
-    getResourceId() {
-      return 'resource-id';
+    get session() {
+      return {
+        identity: { getResourceId: () => 'resource-id' },
+        thread: { setSetting: async (_input: { key: string; value: unknown }) => {} },
+      };
     }
 
     listModes() {
