@@ -36,7 +36,14 @@ export const useExistingConnections = (
   const currentUserQuery = useCurrentUser();
   const callerAuthorId = currentUserQuery.data?.id;
 
-  const enabled = !!providerId && !!toolkit && (!scopeToSelf || Boolean(callerAuthorId));
+  // When self-scoping, wait until the current-user query has settled before
+  // firing so admins get the explicit `authorId` filter. If auth is disabled
+  // the query still settles (with no user); we then omit the filter and let
+  // the server scope by request context — otherwise the query would never run
+  // and the connection control would hang on its loading skeleton.
+  const callerReady = !scopeToSelf || !currentUserQuery.isPending;
+
+  const enabled = !!providerId && !!toolkit && callerReady;
 
   return useQuery({
     queryKey: scopeToSelf

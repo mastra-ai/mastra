@@ -45,7 +45,11 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
   const scopeToSelf = options?.scopeToSelf ?? false;
   const currentUserQuery = useCurrentUser();
   const callerAuthorId = currentUserQuery.data?.id;
-  const callerReady = !scopeToSelf || Boolean(callerAuthorId);
+  // When self-scoping, wait until the current-user query has settled rather
+  // than requiring an id. If auth is disabled the query settles with no user;
+  // we then omit the `authorId` filter and let the server scope by request
+  // context, so the picker still gates correctly instead of stalling.
+  const callerReady = !scopeToSelf || !currentUserQuery.isPending;
 
   // 1. For every provider, list its toolkits.
   const toolkitsQueries = useQueries({

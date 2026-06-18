@@ -83,4 +83,27 @@ describe('useAllConnections — hasConnection', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     await waitFor(() => expect(result.current.hasConnection('composio', 'gmail')).toBe(true));
   });
+
+  // Regression: when auth is disabled `/api/auth/me` has no user, so there is
+  // no caller authorId. The hook must still run the connection queries (server
+  // scopes by request context) instead of stalling on `scopeToSelf`.
+  it('still resolves connections when auth is disabled (no current user)', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/auth/me`, () => new HttpResponse(null, { status: 401 })),
+      http.get(`${BASE_URL}/api/tool-providers`, () =>
+        HttpResponse.json({ providers: [{ id: 'composio', name: 'Composio' }] }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () =>
+        HttpResponse.json({ data: [{ slug: 'gmail', name: 'Gmail' }] }),
+      ),
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () =>
+        HttpResponse.json({ items: [{ connectionId: 'conn_a', status: 'active', label: 'work' }] }),
+      ),
+    );
+
+    const { result } = renderHook(() => useAllConnections({ scopeToSelf: true }), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.hasConnection('composio', 'gmail')).toBe(true));
+  });
 });
