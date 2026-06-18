@@ -30,7 +30,7 @@ import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
-import { Session } from './session';
+import { Session, SessionStream } from './session';
 import {
   askUserTool,
   createSubagentTool,
@@ -452,8 +452,6 @@ export class Harness<TState = {}> {
   private resourceId: string;
   private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
-  private agentThreadSubscription: AgentThreadSubscription<any> | null = null;
-  private agentThreadSubscriptionKey: string | null = null;
   private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
   private pendingApprovalResolve:
     | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
@@ -1810,25 +1808,17 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   private cleanupAgentThreadSubscription(): void {
-    this.agentThreadSubscription?.abort();
-    this.agentThreadSubscription?.unsubscribe();
-    this.agentThreadSubscription = null;
-    this.agentThreadSubscriptionKey = null;
+    this.#session.stream.cleanup();
     this.#session.run.reset();
   }
 
-  private getAgentThreadSubscriptionKey(agent: Agent, threadId: string): string {
-    return `${agent.id}:${this.resourceId}:${threadId}`;
-  }
-
   private async ensureAgentThreadSubscription(agent: Agent, threadId: string): Promise<void> {
-    const key = this.getAgentThreadSubscriptionKey(agent, threadId);
-    if (this.agentThreadSubscriptionKey === key && this.agentThreadSubscription) return;
+    const key = SessionStream.keyFor({ agent, resourceId: this.resourceId, threadId });
+    if (this.#session.stream.matches({ key })) return;
 
     this.cleanupAgentThreadSubscription();
     const subscription = await agent.subscribeToThread({ resourceId: this.resourceId, threadId });
-    this.agentThreadSubscription = subscription;
-    this.agentThreadSubscriptionKey = key;
+    this.#session.stream.attach({ subscription, key });
     void this.processSubscribedThreadStream(subscription);
   }
 
@@ -1940,7 +1930,7 @@ export class Harness<TState = {}> {
 
     const next = this.followUpQueue.shift()!;
     try {
-      if (this.agentThreadSubscription && this.currentThreadId) {
+      if (this.#session.stream.isOpen() && this.currentThreadId) {
         const agent = this.getCurrentAgent();
         const streamOptions = await this.buildAgentMessageStreamOptions({
           requestContext: next.requestContext,
@@ -1968,10 +1958,6 @@ export class Harness<TState = {}> {
       this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
       throw error;
     }
-  }
-
-  private isActiveAgentThreadSubscription(subscription: AgentThreadSubscription<any>): boolean {
-    return this.agentThreadSubscription === subscription;
   }
 
   private async finishSubscribedStreamRun({
@@ -2002,9 +1988,7 @@ export class Harness<TState = {}> {
       this.emit({ type: 'error', error: getErrorFromUnknown(error) });
       this.emit({ type: 'agent_end', reason: 'error' });
     }
-    this.agentThreadSubscription?.unsubscribe();
-    this.agentThreadSubscription = null;
-    this.agentThreadSubscriptionKey = null;
+    this.#session.stream.detach();
     this.#session.run.reset();
     await this.drainFollowUpQueue();
   }
@@ -2016,7 +2000,7 @@ export class Harness<TState = {}> {
 
     try {
       for await (const chunk of subscription.stream) {
-        if (!this.isActiveAgentThreadSubscription(subscription)) {
+        if (!this.#session.stream.isCurrent({ subscription })) {
           subscription.unsubscribe();
           break;
         }
@@ -2082,7 +2066,7 @@ export class Harness<TState = {}> {
         }
       }
     } catch (error) {
-      if (this.isActiveAgentThreadSubscription(subscription)) {
+      if (this.#session.stream.isCurrent({ subscription })) {
         await this.handleSubscribedStreamError(error);
       }
     }
@@ -2118,7 +2102,7 @@ export class Harness<TState = {}> {
       const agent = this.getCurrentAgent();
       await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
 
-      if (this.#session.run.getRunId() && this.agentThreadSubscription?.activeRunId()) {
+      if (this.#session.run.getRunId() && this.#session.stream.activeRunId()) {
         const result = agent.sendSignal(signal, {
           resourceId: this.resourceId,
           threadId: this.currentThreadId,
@@ -2162,7 +2146,7 @@ export class Harness<TState = {}> {
     const agent = this.getCurrentAgent();
     await this.ensureAgentThreadSubscription(agent, this.currentThreadId);
 
-    if (this.#session.run.getRunId() && this.agentThreadSubscription?.activeRunId()) {
+    if (this.#session.run.getRunId() && this.#session.stream.activeRunId()) {
       return agent.sendNotificationSignal(input, {
         resourceId: this.resourceId,
         threadId: this.currentThreadId,
@@ -3341,9 +3325,7 @@ export class Harness<TState = {}> {
     // abort, and that a later respondToToolSuspension is a safe no-op.
     this.pendingSuspensions.clear();
     this.displayState.pendingSuspensions.clear();
-    try {
-      this.agentThreadSubscription?.abort();
-    } catch {}
+    this.#session.stream.abort();
     this.#session.run.requestAbort();
   }
 
@@ -3399,13 +3381,11 @@ export class Harness<TState = {}> {
   }
 
   getCurrentRunId(): string | null {
-    return this.agentThreadSubscription?.activeRunId() ?? this.#session.run.getRunId();
+    return this.#session.stream.activeRunId() ?? this.#session.run.getRunId();
   }
 
   isCurrentThreadStreamActive(): boolean {
-    return (
-      this.agentThreadSubscription?.activeRunId() !== null && this.agentThreadSubscription?.activeRunId() !== undefined
-    );
+    return this.#session.stream.activeRunId() !== null;
   }
 
   /**

@@ -1,3 +1,5 @@
+import type { Agent } from '../agent';
+import type { AgentThreadSubscription } from '../agent/types';
 import { createEmptyTokenUsage } from './types';
 import type { TokenUsage, ToolCategory } from './types';
 
@@ -29,15 +31,87 @@ const MODE_ID_KEY = 'currentModeId';
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
 /**
+ * Owns the session's live subscription to the active thread's agent event
+ * stream. A subscription is created per `(agent, resource, thread)` and reused
+ * while that triple is unchanged (tracked by {@link key}); switching threads or
+ * agents tears the old one down and opens a new one.
+ *
+ * The Session owns the subscription *handle* and its dedup key plus the
+ * mechanical lifecycle (reuse check, teardown, identity check, run-id read).
+ * The Harness still owns *how* a subscription is produced (calling the agent)
+ * and *how* its stream is consumed, passing the resolved handle in via
+ * {@link attach}.
+ */
+export class SessionStream {
+  /** The live subscription to the active thread, or null when none is open. */
+  #subscription: AgentThreadSubscription<any> | null = null;
+  /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
+  #key: string | null = null;
+
+  /** Build the dedup key identifying a subscription to `threadId` for `agent`. */
+  static keyFor({ agent, resourceId, threadId }: { agent: Agent; resourceId: string; threadId: string }): string {
+    return `${agent.id}:${resourceId}:${threadId}`;
+  }
+
+  /** Whether the open subscription already targets `key` (so it can be reused). */
+  matches({ key }: { key: string }): boolean {
+    return this.#key === key && this.#subscription !== null;
+  }
+
+  /** Adopt `subscription` as the live one, recording its dedup `key`. */
+  attach({ subscription, key }: { subscription: AgentThreadSubscription<any>; key: string }): void {
+    this.#subscription = subscription;
+    this.#key = key;
+  }
+
+  /** Whether a subscription is currently open. */
+  isOpen(): boolean {
+    return this.#subscription !== null;
+  }
+
+  /** Whether `subscription` is the one currently adopted (identity check). */
+  isCurrent({ subscription }: { subscription: AgentThreadSubscription<any> }): boolean {
+    return this.#subscription === subscription;
+  }
+
+  /** The run id the live subscription reports as active, or null when none/idle. */
+  activeRunId(): string | null {
+    return this.#subscription?.activeRunId() ?? null;
+  }
+
+  /** Abort the live subscription's in-flight run, if any. Swallows errors. */
+  abort(): void {
+    try {
+      this.#subscription?.abort();
+    } catch {}
+  }
+
+  /** Detach the live subscription without aborting (e.g. on stream error). */
+  detach(): void {
+    this.#subscription?.unsubscribe();
+    this.#subscription = null;
+    this.#key = null;
+  }
+
+  /** Fully tear down the live subscription: abort, unsubscribe, and clear. */
+  cleanup(): void {
+    this.#subscription?.abort();
+    this.#subscription?.unsubscribe();
+    this.#subscription = null;
+    this.#key = null;
+  }
+}
+
+/**
  * Owns the session's transient run identity and abort control: the id of the
  * run currently streaming on the active thread, its trace id, a monotonic
  * operation counter bumped each time a new operation starts, and the
  * AbortController/abort-requested flag governing cancellation. All of this is
  * per-run scratch state — it is never persisted and resets between runs.
  *
- * The Harness still owns the live agent subscription (`activeRunId()`); this
- * holds the last run id observed on a chunk so callers have a stable value once
- * the subscription has settled.
+ * The live agent subscription itself lives on {@link SessionStream}
+ * (`session.stream`); this holds the last run id observed on a chunk so callers
+ * have a stable value once the subscription has settled.
  */
 export class SessionRun {
   /** Id of the run currently streaming on the active thread, or null when idle. */
@@ -289,6 +363,10 @@ export class SessionMode {
  * - transient run identity and abort control (`session.run`): the current run
  *   id, trace id, monotonic operation counter, and the AbortController/
  *   abort-requested flag. This is per-run scratch state and is never persisted.
+ * - the live agent thread subscription (`session.stream`): the open
+ *   subscription to the active thread's event stream and its dedup key. The
+ *   Harness still produces the subscription (calling the agent) and consumes its
+ *   stream; the Session owns the handle and its lifecycle.
  *
  * Mode/model persistence is thread-scoped, so the Session writes through a
  * {@link ThreadSettingsStore} the Harness backs with thread metadata; when no
@@ -309,6 +387,8 @@ export class Session {
   readonly mode = new SessionMode(() => this.#store, this.model);
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
+  /** Live subscription to the active thread's agent event stream. */
+  readonly stream = new SessionStream();
 
   /**
    * Attach the thread-settings store the Session persists mode/model through.
