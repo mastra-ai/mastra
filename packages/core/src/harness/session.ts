@@ -867,11 +867,12 @@ class SessionState<TState = unknown> {
       this.#state = newState as TState;
     }
 
-    this.#emit?.({ type: 'state_changed', state: this.#state as Record<string, unknown>, changedKeys });
+    this.#emit?.({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
   }
 
   set(updates: Partial<TState>): Promise<void> {
-    const run = this.#updateQueue.then(() => this.apply(updates));
+    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
+    const run = this.#updateQueue.then(() => this.apply(updateSnapshot));
     this.#updateQueue = run.then(
       () => undefined,
       () => undefined,
@@ -978,10 +979,11 @@ export class Session<TState = unknown> {
   /** The session-owned Harness state domain. */
   readonly state: HarnessRequestState<TState>;
 
-  constructor({ resourceId, state }: { resourceId: string; state: SessionStateOptions<TState> }) {
+  constructor({ resourceId, state }: { resourceId: string; state?: SessionStateOptions<TState> }) {
     this.identity = new SessionIdentity({ resourceId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
-    this.state = new SessionState(state);
+    this.state = new SessionState(state ?? { initialState: {} as TState });
+  }
   }
 
   /**
