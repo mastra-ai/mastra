@@ -984,7 +984,6 @@ export class Session<TState = unknown> {
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.state = new SessionState(state ?? { initialState: {} as TState });
   }
-  }
 
   /**
    * Attach the thread-settings store the Session persists mode/model through.
