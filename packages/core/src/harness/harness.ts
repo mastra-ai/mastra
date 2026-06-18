@@ -3297,8 +3297,15 @@ export class Harness<TState = {}> {
     // a tool suspend() like ask_user / request_access isn't left orphaned),
     // aborts the live subscription, and marks the run as aborting. The Harness
     // owns the display-state mirror of those suspensions, so clear it here too.
+    const hadPendingSuspensions = this.#session.displayState.get().pendingSuspensions.size > 0;
     this.#session.displayState.clearPendingSuspensions();
     this.#session.abortRun();
+    // Clearing the suspension mirror is a direct mutation, so it doesn't flow
+    // through emit()'s display-state reducer. Notify subscribers explicitly when
+    // we actually removed something, otherwise stale suspension UI can linger.
+    if (hadPendingSuspensions) {
+      this.dispatchDisplayStateChanged();
+    }
   }
 
   /**

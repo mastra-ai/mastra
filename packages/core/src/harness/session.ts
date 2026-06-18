@@ -996,6 +996,15 @@ export class SessionDisplayState {
   }
 
   /**
+   * Clear the modified-files tally without touching the rest of the snapshot.
+   * Used after a clone, which starts the cloned thread with a clean working set
+   * while the surrounding UI reset handles tasks/tools explicitly.
+   */
+  clearModifiedFiles(): void {
+    this.#state.modifiedFiles.clear();
+  }
+
+  /**
    * Drop the display mirror of a single parked tool suspension once it has been
    * resumed, so the UI stops rendering only the resolved prompt while any other
    * parked suspensions stay visible.
