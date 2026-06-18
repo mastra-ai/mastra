@@ -45,8 +45,7 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
   const scopeToSelf = options?.scopeToSelf ?? false;
   const currentUserQuery = useCurrentUser();
   const callerAuthorId = currentUserQuery.data?.id;
-  const callerReady =
-    !scopeToSelf || currentUserQuery.isSuccess || isUnauthenticatedError(currentUserQuery.error);
+  const callerReady = !scopeToSelf || currentUserQuery.isSuccess || isUnauthenticatedError(currentUserQuery.error);
 
   // 1. For every provider, list its toolkits.
   const toolkitsQueries = useQueries({

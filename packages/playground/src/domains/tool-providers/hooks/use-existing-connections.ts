@@ -36,8 +36,7 @@ export const useExistingConnections = (
   const currentUserQuery = useCurrentUser();
   const callerAuthorId = currentUserQuery.data?.id;
 
-  const callerReady =
-    !scopeToSelf || currentUserQuery.isSuccess || isUnauthenticatedError(currentUserQuery.error);
+  const callerReady = !scopeToSelf || currentUserQuery.isSuccess || isUnauthenticatedError(currentUserQuery.error);
 
   const enabled = !!providerId && !!toolkit && callerReady;
 
