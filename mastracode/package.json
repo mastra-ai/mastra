@@ -53,8 +53,8 @@
     "test": "vitest",
     "lint": "eslint .",
     "e2e:list": "tsx e2e-list.ts",
-    "e2e:test": "vitest run --config e2e/vitest.shards.config.ts",
-    "e2e:test:vitest": "vitest run --config e2e/vitest.shards.config.ts"
+    "e2e:smoke": "vitest run --config e2e/vitest.shards.config.ts",
+    "e2e:test": "MC_E2E_VITEST_SCENARIOS=all vitest run --config e2e/vitest.shards.config.ts"
   },
   "keywords": [],
   "author": "",
