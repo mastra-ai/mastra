@@ -182,6 +182,7 @@ import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { MODEL_TOKENS } from '../../../../docs/src/plugins/remark-model-tokens/models';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import { resolveModel, getDynamicModel, getAnthropicApiKey, getOpenAIApiKey, resolveAuth } from '../model.js';
@@ -470,10 +471,10 @@ describe('resolveModel', () => {
     it('resolves Bedrock models through the AWS SDK with the credential chain', () => {
       process.env.AWS_REGION = 'us-west-2';
 
-      const result = resolveModel('amazon-bedrock/us.anthropic.claude-opus-4-6-v1') as Record<string, unknown>;
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__) as Record<string, unknown>;
 
       expect(result.__provider).toBe('amazon-bedrock');
-      expect(result.modelId).toBe('us.anthropic.claude-opus-4-6-v1');
+      expect(result.modelId).toBe(MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__);
       expect(result.region).toBe('us-west-2');
       expect(result.credentialProvider).toBe(mockCredentialProvider);
       expect(fromNodeProviderChain).toHaveBeenCalled();
@@ -484,23 +485,20 @@ describe('resolveModel', () => {
       delete process.env.AWS_REGION;
       delete process.env.AWS_DEFAULT_REGION;
 
-      const result = resolveModel('amazon-bedrock/us.anthropic.claude-opus-4-6-v1') as Record<string, unknown>;
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__) as Record<string, unknown>;
 
       expect(result.region).toBe('us-east-1');
     });
 
     it('preserves a colon-bearing Bedrock model id', () => {
-      const result = resolveModel('amazon-bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0') as Record<
-        string,
-        unknown
-      >;
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_SONNET__) as Record<string, unknown>;
 
       expect(result.__provider).toBe('amazon-bedrock');
-      expect(result.modelId).toBe('us.anthropic.claude-sonnet-4-5-20250929-v1:0');
+      expect(result.modelId).toBe(MODEL_TOKENS.__BEDROCK_MODEL_SONNET_BARE__);
     });
 
     it('passes harness headers to the Bedrock provider', () => {
-      const result = resolveModel('amazon-bedrock/us.anthropic.claude-opus-4-6-v1', {
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, {
         requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
       }) as Record<string, unknown>;
 
