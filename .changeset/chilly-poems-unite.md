@@ -1,5 +1,5 @@
 ---
-'@mastra/core': major
+'@mastra/core': minor
 ---
 
 Removed the legacy harness v1 entrypoint.
