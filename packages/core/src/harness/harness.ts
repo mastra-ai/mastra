@@ -21,8 +21,6 @@ import type { StorageThreadType } from '../memory/types';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
-import { toStandardSchema } from '../schema';
-import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
@@ -448,7 +446,6 @@ export class Harness<TState = {}> {
   readonly id: string;
 
   private config: HarnessConfig<TState>;
-  private stateSchema: StandardSchemaWithJSON | undefined;
   private listeners: HarnessEventListener[] = [];
   private workspace: Workspace | undefined = undefined;
   private workspaceFn:
@@ -478,19 +475,11 @@ export class Harness<TState = {}> {
     this.config = config;
     this.#instructions = config.instructions;
 
-    // Convert PublicSchema to StandardSchemaWithJSON at the boundary
-    this.stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
-
-    // Initialize session-owned state from schema defaults + initial state
-    const initialState = {
-      ...this.getSchemaDefaults(),
-      ...config.initialState,
-    } as TState;
     this.#session = new Session({
       resourceId: config.resourceId ?? config.id,
       state: {
-        initialState,
-        schema: this.stateSchema,
+        initialState: config.initialState,
+        stateSchema: config.stateSchema,
         emit: event => this.emit(event),
       },
     });
@@ -891,30 +880,6 @@ export class Harness<TState = {}> {
       | Promise<{ updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }>,
   ): Promise<TResult> {
     return this.#session.state.update(updater);
-  }
-
-  private getSchemaDefaults(): Partial<TState> {
-    if (!this.stateSchema) return {};
-
-    const defaults: Record<string, unknown> = {};
-
-    try {
-      // Extract defaults from the JSON Schema representation
-      const jsonSchema = this.stateSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as {
-        properties?: Record<string, { default?: unknown }>;
-      };
-      if (jsonSchema?.properties) {
-        for (const [key, prop] of Object.entries(jsonSchema.properties)) {
-          if (prop.default !== undefined) {
-            defaults[key] = prop.default;
-          }
-        }
-      }
-    } catch {
-      // Schema doesn't support JSON Schema extraction — skip defaults
-    }
-
-    return defaults as Partial<TState>;
   }
 
   // ===========================================================================

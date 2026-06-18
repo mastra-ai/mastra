@@ -1,7 +1,8 @@
 import type { Agent } from '../agent';
 import type { AgentThreadSubscription } from '../agent/types';
 import type { RequestContext } from '../request-context';
-import type { StandardSchemaWithJSON } from '../schema';
+import { toStandardSchema } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import { createEmptyTokenUsage } from './types';
 import type { HarnessEvent, HarnessMessage, HarnessMode, HarnessThread, TokenUsage, ToolCategory } from './types';
 
@@ -795,8 +796,8 @@ export type SessionStateUpdater<TState, TResult> = (
 ) => SessionStateUpdateResult<TState, TResult> | Promise<SessionStateUpdateResult<TState, TResult>>;
 
 export interface SessionStateOptions<TState> {
-  initialState: TState;
-  schema?: StandardSchemaWithJSON;
+  initialState?: Partial<TState>;
+  stateSchema?: PublicSchema<TState, any>;
   emit?: (event: HarnessEvent) => void;
 }
 
@@ -813,14 +814,41 @@ export class SessionState<TState = unknown> {
   readonly #schema: StandardSchemaWithJSON | undefined;
   readonly #emit: ((event: HarnessEvent) => void) | undefined;
 
-  constructor({ initialState, schema, emit }: SessionStateOptions<TState>) {
-    this.#state = initialState;
-    this.#schema = schema;
+  constructor({ initialState, stateSchema, emit }: SessionStateOptions<TState>) {
+    this.#schema = stateSchema ? toStandardSchema(stateSchema) : undefined;
+    this.#state = {
+      ...this.getSchemaDefaults(),
+      ...(initialState as Record<string, unknown> | undefined),
+    } as TState;
     this.#emit = emit;
   }
 
   get(): Readonly<TState> {
     return { ...(this.#state as Record<string, unknown>) } as TState;
+  }
+
+  private getSchemaDefaults(): Partial<TState> {
+    if (!this.#schema) return {};
+
+    const defaults: Record<string, unknown> = {};
+
+    try {
+      // Extract defaults from the JSON Schema representation.
+      const jsonSchema = this.#schema['~standard'].jsonSchema.output({ target: 'draft-07' }) as {
+        properties?: Record<string, { default?: unknown }>;
+      };
+      if (jsonSchema?.properties) {
+        for (const [key, prop] of Object.entries(jsonSchema.properties)) {
+          if (prop.default !== undefined) {
+            defaults[key] = prop.default;
+          }
+        }
+      }
+    } catch {
+      // Schema doesn't support JSON Schema extraction — skip defaults.
+    }
+
+    return defaults as Partial<TState>;
   }
 
   private async apply(updates: Partial<TState>): Promise<void> {
