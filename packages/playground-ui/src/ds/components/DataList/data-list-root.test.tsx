@@ -103,7 +103,7 @@ describe('DataListRoot', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       expect(grid?.className).toContain('gap-y-px');
-      expect(grid?.className).toContain('[&_.data-list-row]:after:inset-x-4');
+      expect(grid?.className).toContain('[&_.data-list-row]:after:inset-x-2');
       expect(grid?.className).toContain('[&_.data-list-row]:after:-bottom-px');
       expect(grid?.className).toContain('[&_.data-list-row]:after:bg-neutral6/10');
       expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
