@@ -452,7 +452,6 @@ export class Harness<TState = {}> {
   private resourceId: string;
   private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
-  private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
   private pendingApprovalResolve:
     | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
     | null = null;
@@ -1919,9 +1918,9 @@ export class Harness<TState = {}> {
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<boolean> {
-    if (this.followUpQueue.length === 0) return false;
+    if (this.#session.followUps.isEmpty()) return false;
 
-    const next = this.followUpQueue.shift()!;
+    const next = this.#session.followUps.dequeue()!;
     try {
       if (this.#session.stream.isOpen() && this.currentThreadId) {
         const agent = this.getCurrentAgent();
@@ -1935,9 +1934,9 @@ export class Harness<TState = {}> {
           threadId: this.currentThreadId,
           ifIdle: { streamOptions: streamOptions as any },
         });
-        this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length, runId: result.runId });
+        this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count(), runId: result.runId });
       } else {
-        this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
+        this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
         await this.sendMessage({
           content: next.content,
           requestContext: next.requestContext,
@@ -1947,8 +1946,8 @@ export class Harness<TState = {}> {
       }
       return true;
     } catch (error) {
-      this.followUpQueue.unshift(next);
-      this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
+      this.#session.followUps.requeue(next);
+      this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
       throw error;
     }
   }
@@ -3342,7 +3341,7 @@ export class Harness<TState = {}> {
    */
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
-    this.followUpQueue = [];
+    this.#session.followUps.clear();
     this.emit({ type: 'follow_up_queued', count: 0 });
     await this.sendMessage({ content, requestContext });
   }
@@ -3352,15 +3351,15 @@ export class Harness<TState = {}> {
    */
   async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     if (this.#session.run.isRunning()) {
-      this.followUpQueue.push({ content, requestContext });
-      this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
+      this.#session.followUps.enqueue({ content, requestContext });
+      this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
     } else {
       await this.sendMessage({ content, requestContext });
     }
   }
 
   getFollowUpCount(): number {
-    return this.followUpQueue.length;
+    return this.#session.followUps.count();
   }
 
   /**
@@ -3432,7 +3431,7 @@ export class Harness<TState = {}> {
     this.displayState.pendingSuspensions = new Map();
     this.displayState.activeSubagents = new Map();
     this.displayState.currentMessage = null;
-    this.followUpQueue = [];
+    this.#session.followUps.clear();
     this.displayState.queuedFollowUps = 0;
     this.displayState.modifiedFiles = new Map();
     this.displayState.tasks = [];

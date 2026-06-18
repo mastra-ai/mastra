@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import type { AgentThreadSubscription } from '../agent/types';
+import type { RequestContext } from '../request-context';
 import { createEmptyTokenUsage } from './types';
 import type { TokenUsage, ToolCategory } from './types';
 
@@ -169,6 +170,57 @@ export class SessionSuspensions {
       return this.#pending.keys().next().value;
     }
     return undefined;
+  }
+}
+
+/** A message queued to send once the active run finishes, held in {@link SessionFollowUps}. */
+export interface FollowUp {
+  /** The message text to send. */
+  content: string;
+  /** Optional request context to apply when the queued message is sent. */
+  requestContext?: RequestContext;
+}
+
+/**
+ * Owns the session's follow-up queue: messages a user submits while a run is in
+ * progress, held FIFO until the active run finishes and the queue is drained.
+ *
+ * This owns the queue *data* (enqueue/dequeue/requeue/clear/count). The Harness
+ * still drives draining — sending each message and emitting `follow_up_queued`
+ * as the count changes — and keeps the display-state mirror (`queuedFollowUps`).
+ */
+export class SessionFollowUps {
+  /** Messages waiting to be sent after the current run, in arrival order. */
+  #queue: FollowUp[] = [];
+
+  /** Number of messages currently queued. */
+  count(): number {
+    return this.#queue.length;
+  }
+
+  /** Whether the queue is empty. */
+  isEmpty(): boolean {
+    return this.#queue.length === 0;
+  }
+
+  /** Append a follow-up to the back of the queue. */
+  enqueue(followUp: FollowUp): void {
+    this.#queue.push(followUp);
+  }
+
+  /** Remove and return the next follow-up, or undefined when empty. */
+  dequeue(): FollowUp | undefined {
+    return this.#queue.shift();
+  }
+
+  /** Put a follow-up back at the front (e.g. when draining it failed). */
+  requeue(followUp: FollowUp): void {
+    this.#queue.unshift(followUp);
+  }
+
+  /** Drop all queued follow-ups (e.g. on steer or thread switch). */
+  clear(): void {
+    this.#queue = [];
   }
 }
 
@@ -441,6 +493,10 @@ export class SessionMode {
  *   the native tool-suspension primitive awaiting a resume, keyed by toolCallId.
  *   The Session owns the resume data; the Harness keeps the richer per-suspension
  *   UI snapshot on its display state.
+ * - the follow-up queue (`session.followUps`): messages a user submits while a
+ *   run is in progress, held FIFO until the run finishes. The Session owns the
+ *   queue; the Harness drives draining and keeps the `queuedFollowUps` display
+ *   mirror.
  *
  * It also exposes a couple of accessors that compose `run` and `stream`:
  * {@link getCurrentRunId} (the active run id, preferring the live subscription)
@@ -469,6 +525,8 @@ export class Session {
   readonly stream = new SessionStream();
   /** Tool calls parked awaiting a resume (the resume data, keyed by toolCallId). */
   readonly suspensions = new SessionSuspensions();
+  /** Messages queued to send after the active run finishes. */
+  readonly followUps = new SessionFollowUps();
 
   /**
    * Attach the thread-settings store the Session persists mode/model through.
