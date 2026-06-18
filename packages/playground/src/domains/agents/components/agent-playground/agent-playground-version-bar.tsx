@@ -40,6 +40,9 @@ interface AgentPlaygroundVersionBarProps {
   showCodeModeActions?: boolean;
   canOpenPr?: boolean;
   openPrTitle?: string;
+  codeSourceStorage?: 'filesystem' | 'source-provider' | 'unavailable';
+  sourceProviderName?: string;
+  sourceUnavailableReason?: string;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
   onDownloadJson?: () => Promise<void>;
@@ -73,6 +76,9 @@ export function AgentPlaygroundVersionBar({
   showCodeModeActions = false,
   canOpenPr = false,
   openPrTitle,
+  codeSourceStorage = 'filesystem',
+  sourceProviderName,
+  sourceUnavailableReason,
   onSaveDraft,
   onPublish,
   onDownloadJson,
@@ -81,6 +87,11 @@ export function AgentPlaygroundVersionBar({
 }: AgentPlaygroundVersionBarProps) {
   const [showMessageDialog, setShowMessageDialog] = useState(false);
   const [changeMessage, setChangeMessage] = useState('');
+
+  const codeSourceSaveUnavailable = isCodeSourceAgent && !!sourceUnavailableReason;
+  const codeSourceSaveLabel = codeSourceStorage === 'source-provider' ? 'Save to source' : 'Save to filesystem';
+  const codeSourceSaveTitle =
+    sourceUnavailableReason ?? `Save code-source changes${sourceProviderName ? ` with ${sourceProviderName}` : ''}`;
 
   const { data } = useAgentVersions({
     agentId,
@@ -118,8 +129,12 @@ export function AgentPlaygroundVersionBar({
   const currentValue = selectedVersionId ?? latestVersion?.id ?? '';
 
   const saveDisabled = readOnly || !isDirty || isSavingDraft || isPublishing;
+  const codeSourceVersionInfoText =
+    codeSourceStorage === 'source-provider'
+      ? `Code-source saves write override JSON through ${sourceProviderName ?? 'the configured source provider'}. This dropdown shows saved override snapshots for this agent.`
+      : 'Code-source saves write override JSON to filesystem-backed editor storage. This dropdown shows saved override snapshots for this agent.';
   const versionInfoText = isCodeSourceAgent
-    ? 'Code mode saves write override JSON to filesystem-backed editor storage. This dropdown shows saved override snapshots for this agent.'
+    ? codeSourceVersionInfoText
     : "Changes are saved as draft versions. When you're ready, publish a version to make it the active configuration used in production.";
 
   const handleSaveWithMessage = useCallback(async () => {
@@ -197,7 +212,13 @@ export function AgentPlaygroundVersionBar({
                 Open PR
               </Button>
             ) : (
-              <Button variant="primary" size="md" onClick={() => void onSaveDraft()} disabled={saveDisabled}>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => void onSaveDraft()}
+                disabled={saveDisabled || codeSourceSaveUnavailable}
+                title={codeSourceSaveTitle}
+              >
                 {isSavingDraft ? (
                   <>
                     <Spinner className="size-3.5" />
@@ -208,10 +229,15 @@ export function AgentPlaygroundVersionBar({
                     <Icon size="sm">
                       <Save />
                     </Icon>
-                    Save to filesystem
+                    {codeSourceSaveLabel}
                   </>
                 )}
               </Button>
+            )}
+            {sourceUnavailableReason && (
+              <Txt variant="ui-xs" className="max-w-64 text-right text-neutral3">
+                {sourceUnavailableReason}
+              </Txt>
             )}
           </ButtonsGroup>
         ) : readOnly && !isViewingPreviousVersion ? null : (
