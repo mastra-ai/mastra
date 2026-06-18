@@ -188,6 +188,9 @@ describe('composer attachments', () => {
     const messages = await ref.current!.toCoreUserMessages();
     const filePart = (messages[0]!.content as Array<{ type: string; data?: string }>)[0];
     expect(filePart!.type).toBe('file');
-    expect(filePart!.data).toMatch(/^data:video\/mp4;base64,/);
+    // A single, well-formed data URI — guards against double-wrapping the
+    // base64 payload (e.g. `data:video/mp4;base64,data:video/mp4;base64,...`).
+    expect(filePart!.data).toMatch(/^data:video\/mp4;base64,[^,]+$/);
+    expect(filePart!.data).not.toContain('base64,data:');
   });
 });
