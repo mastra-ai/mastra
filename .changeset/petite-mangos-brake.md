@@ -2,14 +2,12 @@
 '@mastra/playground-ui': minor
 ---
 
-Added support for attaching cloud-storage and remote media URLs in the Studio agent chat composer.
+Added helpers for working with remote and cloud-storage media URLs, used by the Studio agent chat composer so media can be attached by URL and forwarded to the model untouched instead of only being uploaded as inlined base64.
 
-You can now attach media by URL and have it forwarded to the model untouched, instead of only uploading local files inlined as base64. This works for:
+- Recognizes cloud-storage URIs (`gs://`, `s3://`) so they are passed through and resolved server-side by the model provider.
+- Recognizes video and audio URLs and renders them as a labeled file chip with the correct icon instead of a broken preview.
 
-- **Cloud-storage URIs** (`gs://`, `s3://`) that the model resolves server-side (for example Vertex Gemini, which declares them in `supportedUrls`).
-- **Video and audio** files by URL, which now render as a labeled file chip with the correct icon instead of a broken preview.
-
-Helpers for working with these URL schemes are exported from `@mastra/playground-ui`:
+New exports:
 
 ```ts
 import { isRemoteUrl, isBrowserFetchableUrl, isNonFetchableRemoteUrl } from '@mastra/playground-ui';
