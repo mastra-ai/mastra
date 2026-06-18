@@ -559,6 +559,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/google',
+              label: 'Google',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/jwt',
               label: 'JSON Web Token',
             },

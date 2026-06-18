@@ -1,0 +1,334 @@
+---
+title: "Reference: MastraAuthGoogle & MastraRBACGoogle | Auth"
+description: API reference for the MastraAuthGoogle and MastraRBACGoogle classes, which authenticate and authorize Mastra applications using Google Workspace.
+packages:
+  - "@mastra/auth-google"
+  - "@mastra/core"
+---
+
+# MastraAuthGoogle & MastraRBACGoogle
+
+The `MastraAuthGoogle` class authenticates users with Google OpenID Connect. The `MastraRBACGoogle` class maps Google Workspace groups to Mastra permissions.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGoogle, MastraRBACGoogle } from '@mastra/auth-google'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraAuthGoogle({
+      allowedDomains: ['example.com'],
+    }),
+    rbac: new MastraRBACGoogle({
+      serviceAccount: {
+        clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
+        privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
+        subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
+      },
+      roleMapping: {
+        'admins@example.com': ['*'],
+        'engineering@example.com': ['agents:*', 'workflows:*'],
+        _default: [],
+      },
+    }),
+  },
+})
+```
+
+## `MastraAuthGoogle` constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'clientId',
+    type: 'string',
+    description: 'Google OAuth client ID.',
+    isOptional: true,
+    defaultValue: 'process.env.GOOGLE_CLIENT_ID',
+  },
+  {
+    name: 'clientSecret',
+    type: 'string',
+    description: 'Google OAuth client secret. Required for Studio SSO.',
+    isOptional: true,
+    defaultValue: 'process.env.GOOGLE_CLIENT_SECRET',
+  },
+  {
+    name: 'redirectUri',
+    type: 'string',
+    description: 'OAuth redirect URI for the SSO callback.',
+    isOptional: true,
+    defaultValue: 'process.env.GOOGLE_REDIRECT_URI',
+  },
+  {
+    name: 'scopes',
+    type: 'string[]',
+    description: 'OAuth scopes requested during the login flow.',
+    isOptional: true,
+    defaultValue: "['openid', 'profile', 'email']",
+  },
+  {
+    name: 'allowedDomains',
+    type: 'string | string[]',
+    description: 'Allowed Google Workspace hosted domains. Mastra validates these against the verified `hd` claim.',
+    isOptional: true,
+    defaultValue: 'process.env.GOOGLE_ALLOWED_DOMAINS',
+  },
+  {
+    name: 'hostedDomain',
+    type: 'string',
+    description: 'Hosted-domain login hint passed to Google as `hd`. This is a hint only and is not used for authorization.',
+    isOptional: true,
+    defaultValue: 'process.env.GOOGLE_HOSTED_DOMAIN or the single allowed domain',
+  },
+  {
+    name: 'session',
+    type: 'GoogleSessionOptions',
+    description: 'Session cookie configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'GoogleSessionOptions',
+        parameters: [
+          {
+            name: 'cookieName',
+            type: 'string',
+            description: 'Name of the session cookie.',
+            isOptional: true,
+            defaultValue: "'google_session'",
+          },
+          {
+            name: 'cookieMaxAge',
+            type: 'number',
+            description: 'Cookie max age in seconds.',
+            isOptional: true,
+            defaultValue: '86400',
+          },
+          {
+            name: 'cookiePassword',
+            type: 'string',
+            description: 'Password for encrypting session cookies. Must be at least 32 characters.',
+            isOptional: true,
+            defaultValue: 'process.env.GOOGLE_COOKIE_PASSWORD',
+          },
+          {
+            name: 'secureCookies',
+            type: 'boolean',
+            description: 'Set the `Secure` flag on session cookies.',
+            isOptional: true,
+            defaultValue: 'true in production, false otherwise',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Custom name for the auth provider instance.',
+    isOptional: true,
+    defaultValue: "'google'",
+  },
+]}/>
+
+## `MastraRBACGoogle` constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'roleMapping',
+    type: 'RoleMapping',
+    description: 'Map Google Workspace group roles to Mastra permissions.',
+  },
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'Pre-obtained Workspace Directory API access token.',
+    isOptional: true,
+  },
+  {
+    name: 'getAccessToken',
+    type: '() => Promise<string> | string',
+    description: 'Callback that returns a Workspace Directory API access token.',
+    isOptional: true,
+  },
+  {
+    name: 'serviceAccount',
+    type: 'GoogleWorkspaceServiceAccount',
+    description: 'Service account credentials for domain-wide delegated Directory API access.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'GoogleWorkspaceServiceAccount',
+        parameters: [
+          {
+            name: 'clientEmail',
+            type: 'string',
+            description: 'Google service account email.',
+          },
+          {
+            name: 'privateKey',
+            type: 'string',
+            description: 'PEM-encoded private key. Escaped `\\n` values from .env files are supported.',
+          },
+          {
+            name: 'privateKeyId',
+            type: 'string',
+            description: 'Optional private key ID.',
+            isOptional: true,
+          },
+          {
+            name: 'subject',
+            type: 'string',
+            description: 'Workspace administrator user to impersonate with domain-wide delegation.',
+            isOptional: true,
+          },
+          {
+            name: 'scopes',
+            type: 'string[]',
+            description: 'OAuth scopes for the service account token.',
+            isOptional: true,
+            defaultValue: "['https://www.googleapis.com/auth/admin.directory.group.readonly']",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'getUserKey',
+    type: '(user: unknown) => string | undefined',
+    description: 'Extract the Directory API `userKey` from an authenticated user. Defaults to `user.email`.',
+    isOptional: true,
+  },
+  {
+    name: 'mapGroupToRoles',
+    type: '(group: GoogleWorkspaceGroup) => string[]',
+    description: 'Map a Google Workspace group to role IDs. Defaults to `[group.email]`.',
+    isOptional: true,
+  },
+  {
+    name: 'cache',
+    type: 'PermissionCacheOptions',
+    description: 'Group lookup cache configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'PermissionCacheOptions',
+        parameters: [
+          {
+            name: 'maxSize',
+            type: 'number',
+            description: 'Maximum number of users to cache.',
+            isOptional: true,
+            defaultValue: '1000',
+          },
+          {
+            name: 'ttlMs',
+            type: 'number',
+            description: 'Cache time-to-live in milliseconds.',
+            isOptional: true,
+            defaultValue: '60000',
+          },
+        ],
+      },
+    ],
+  },
+]}/>
+
+## Methods
+
+### Authentication
+
+#### `authenticateToken(token, request?)`
+
+Authenticates a Google ID token. When SSO is enabled, this method checks the encrypted session cookie before it verifies the Bearer token.
+
+```typescript
+const user = await auth.authenticateToken(idToken, request)
+```
+
+Returns: `Promise<GoogleUser | null>`
+
+#### `authorizeUser(user)`
+
+Returns `true` when the user has an ID, has not expired, and matches `allowedDomains` when domains are configured.
+
+```typescript
+const allowed = await auth.authorizeUser(user)
+```
+
+Returns: `boolean`
+
+### RBAC
+
+#### `getRoles(user)`
+
+Returns Google Workspace group role IDs for a user.
+
+```typescript
+const roles = await rbac.getRoles(user)
+```
+
+Returns: `Promise<string[]>`
+
+#### `getPermissions(user)`
+
+Returns Mastra permissions resolved from Google Workspace groups and `roleMapping`.
+
+```typescript
+const permissions = await rbac.getPermissions(user)
+```
+
+Returns: `Promise<string[]>`
+
+#### `hasPermission(user, permission)`
+
+Checks whether a user has a permission.
+
+```typescript
+const canReadAgents = await rbac.hasPermission(user, 'agents:read')
+```
+
+Returns: `Promise<boolean>`
+
+## `GoogleUser` type
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Mastra user ID. Uses the Google `sub` claim.',
+  },
+  {
+    name: 'googleId',
+    type: 'string',
+    description: 'Google Account subject identifier.',
+  },
+  {
+    name: 'email',
+    type: 'string',
+    description: 'User email address.',
+    isOptional: true,
+  },
+  {
+    name: 'hostedDomain',
+    type: 'string',
+    description: 'Google Workspace hosted domain from the verified `hd` claim.',
+    isOptional: true,
+  },
+  {
+    name: 'groups',
+    type: 'string[]',
+    description: 'Optional pre-resolved Google Workspace group role IDs.',
+    isOptional: true,
+  },
+]}/>
+
+## Additional configuration
+
+`MastraRBACGoogle` uses `GET https://admin.googleapis.com/admin/directory/v1/groups?userKey=...` and handles pagination. Provide a service account with domain-wide delegation for production Google Workspace deployments, or pass `accessToken` / `getAccessToken` if your application already manages Google API tokens.
+
+Visit [Google auth docs](/docs/server/auth/google) for setup guidance.
