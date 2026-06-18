@@ -9121,6 +9121,188 @@ export interface GetAuthPermissionPatterns_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /auth/fga/resource-types
+// ============================================================================
+export type GetAuthFgaResourceTypes_Response = {
+  resourceTypes: {
+    slug: string;
+    relations: string[];
+    customRelations: string[];
+    parentResourceTypeSlugs: string[];
+    hasInstances: boolean;
+  }[];
+};
+
+export type GetAuthFgaResourceTypes_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthFgaResourceTypes_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetAuthFgaResourceTypes_Request;
+  response: GetAuthFgaResourceTypes_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /auth/fga/resource-types/:resourceType/roles
+// ============================================================================
+export type GetAuthFgaResourceTypesResourceTypeRoles_PathParams = {
+  resourceType: string;
+};
+
+export type GetAuthFgaResourceTypesResourceTypeRoles_Response = {
+  roles: {
+    slug: string;
+    name?: string | undefined;
+    description?: string | undefined;
+  }[];
+};
+
+export type GetAuthFgaResourceTypesResourceTypeRoles_Request = Simplify<
+  (GetAuthFgaResourceTypesResourceTypeRoles_PathParams extends never
+    ? {}
+    : { params: GetAuthFgaResourceTypesResourceTypeRoles_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthFgaResourceTypesResourceTypeRoles_RouteContract {
+  pathParams: GetAuthFgaResourceTypesResourceTypeRoles_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAuthFgaResourceTypesResourceTypeRoles_Request;
+  response: GetAuthFgaResourceTypesResourceTypeRoles_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /auth/fga/resources/:resourceType/:resourceId/access
+// ============================================================================
+export type GetAuthFgaResourcesResourceTypeResourceIdAccess_PathParams = {
+  resourceType: string;
+  resourceId: string;
+};
+
+export type GetAuthFgaResourcesResourceTypeResourceIdAccess_Response = {
+  access: {
+    membershipId?: string | undefined;
+    userId?: string | undefined;
+    email?: string | undefined;
+    name?: string | undefined;
+    role?: string | undefined;
+  }[];
+};
+
+export type GetAuthFgaResourcesResourceTypeResourceIdAccess_Request = Simplify<
+  (GetAuthFgaResourcesResourceTypeResourceIdAccess_PathParams extends never
+    ? {}
+    : { params: GetAuthFgaResourcesResourceTypeResourceIdAccess_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthFgaResourcesResourceTypeResourceIdAccess_RouteContract {
+  pathParams: GetAuthFgaResourcesResourceTypeResourceIdAccess_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAuthFgaResourcesResourceTypeResourceIdAccess_Request;
+  response: GetAuthFgaResourcesResourceTypeResourceIdAccess_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /auth/fga/resources/:resourceType/:resourceId/access
+// ============================================================================
+export type PostAuthFgaResourcesResourceTypeResourceIdAccess_PathParams = {
+  resourceType: string;
+  resourceId: string;
+};
+
+export type PostAuthFgaResourcesResourceTypeResourceIdAccess_Response = {
+  success: boolean;
+  assignment?: any | undefined;
+};
+
+export type PostAuthFgaResourcesResourceTypeResourceIdAccess_Request = Simplify<
+  (PostAuthFgaResourcesResourceTypeResourceIdAccess_PathParams extends never
+    ? {}
+    : { params: PostAuthFgaResourcesResourceTypeResourceIdAccess_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAuthFgaResourcesResourceTypeResourceIdAccess_RouteContract {
+  pathParams: PostAuthFgaResourcesResourceTypeResourceIdAccess_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostAuthFgaResourcesResourceTypeResourceIdAccess_Request;
+  response: PostAuthFgaResourcesResourceTypeResourceIdAccess_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /auth/fga/resources/:resourceType/:resourceId/access/:membershipId
+// ============================================================================
+export type DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_PathParams = {
+  resourceType: string;
+  resourceId: string;
+  membershipId: string;
+};
+
+export type DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_Response = {
+  success: boolean;
+};
+
+export type DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_Request = Simplify<
+  (DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_PathParams extends never
+    ? {}
+    : { params: DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_RouteContract {
+  pathParams: DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_Request;
+  response: DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /auth/organization/members
+// ============================================================================
+export type GetAuthOrganizationMembers_Response = {
+  members: {
+    id?: string | undefined;
+    email?: string | undefined;
+    name?: string | undefined;
+    organizationMembershipId?: string | undefined;
+  }[];
+};
+
+export type GetAuthOrganizationMembers_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthOrganizationMembers_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetAuthOrganizationMembers_Request;
+  response: GetAuthOrganizationMembers_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /workflows
 // ============================================================================
 export type GetWorkflows_QueryParams = {
@@ -90002,6 +90184,12 @@ export interface RouteTypes {
   'POST /auth/credentials/sign-up': PostAuthCredentialsSignUp_RouteContract;
   'GET /auth/roles/:roleId/permissions': GetAuthRolesRoleIdPermissions_RouteContract;
   'GET /auth/permission-patterns': GetAuthPermissionPatterns_RouteContract;
+  'GET /auth/fga/resource-types': GetAuthFgaResourceTypes_RouteContract;
+  'GET /auth/fga/resource-types/:resourceType/roles': GetAuthFgaResourceTypesResourceTypeRoles_RouteContract;
+  'GET /auth/fga/resources/:resourceType/:resourceId/access': GetAuthFgaResourcesResourceTypeResourceIdAccess_RouteContract;
+  'POST /auth/fga/resources/:resourceType/:resourceId/access': PostAuthFgaResourcesResourceTypeResourceIdAccess_RouteContract;
+  'DELETE /auth/fga/resources/:resourceType/:resourceId/access/:membershipId': DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_RouteContract;
+  'GET /auth/organization/members': GetAuthOrganizationMembers_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
@@ -90512,11 +90700,27 @@ export interface Client {
   '/auth/credentials/sign-up': {
     POST: PostAuthCredentialsSignUp_RouteContract;
   };
+  '/auth/fga/resource-types': {
+    GET: GetAuthFgaResourceTypes_RouteContract;
+  };
+  '/auth/fga/resource-types/:resourceType/roles': {
+    GET: GetAuthFgaResourceTypesResourceTypeRoles_RouteContract;
+  };
+  '/auth/fga/resources/:resourceType/:resourceId/access': {
+    GET: GetAuthFgaResourcesResourceTypeResourceIdAccess_RouteContract;
+    POST: PostAuthFgaResourcesResourceTypeResourceIdAccess_RouteContract;
+  };
+  '/auth/fga/resources/:resourceType/:resourceId/access/:membershipId': {
+    DELETE: DeleteAuthFgaResourcesResourceTypeResourceIdAccessMembershipId_RouteContract;
+  };
   '/auth/logout': {
     POST: PostAuthLogout_RouteContract;
   };
   '/auth/me': {
     GET: GetAuthMe_RouteContract;
+  };
+  '/auth/organization/members': {
+    GET: GetAuthOrganizationMembers_RouteContract;
   };
   '/auth/permission-patterns': {
     GET: GetAuthPermissionPatterns_RouteContract;

@@ -10,9 +10,13 @@ import {
   Icon,
   useCopyToClipboard,
 } from '@mastra/playground-ui';
-import { CopyIcon, Link2, Check, Pencil } from 'lucide-react';
+import { CopyIcon, Link2, Check, Pencil, Users } from 'lucide-react';
+import { useState } from 'react';
 import { useAgent } from '../hooks/use-agent';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
+import { ShareAccessDialog } from '@/domains/auth/components/share-access-dialog';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { isAuthenticated } from '@/domains/auth/types';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentEntityHeaderProps {
@@ -24,6 +28,8 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const { handleCopy } = useCopyToClipboard({ text: agentId });
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
+  const { data: authCapabilities } = useAuthCapabilities();
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const sessionUrl = `${window.location.origin}/agents/${agentId}/session`;
   const { handleCopy: handleShareLink, isCopied: isShareCopied } = useCopyToClipboard({
     text: sessionUrl,
@@ -33,6 +39,8 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const isStoredAgent = agent?.source === 'stored';
   const editPath = paths.cmsAgentEditLink(agentId);
   const showEditButton = canCreateAgent && isStoredAgent && Boolean(editPath);
+  // Show Share Access button if user is authenticated (FGA requires auth)
+  const showShareAccessButton = authCapabilities && isAuthenticated(authCapabilities);
 
   return (
     <TooltipProvider>
@@ -45,6 +53,19 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
               </Icon>
               Edit
             </Button>
+          )}
+          {showShareAccessButton && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm" onClick={() => setShareDialogOpen(true)}>
+                  <Icon size="sm">
+                    <Users />
+                  </Icon>
+                  Share Access
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Manage who can access this agent</TooltipContent>
+            </Tooltip>
           )}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -68,6 +89,15 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
           </Tooltip>
         </div>
       </EntityHeader>
+
+      {/* Share Access Dialog */}
+      <ShareAccessDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        resourceType="agent"
+        resourceId={agentId}
+        resourceName={agentName}
+      />
     </TooltipProvider>
   );
 };
