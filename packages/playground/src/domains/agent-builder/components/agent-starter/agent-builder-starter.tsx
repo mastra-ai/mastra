@@ -9,6 +9,7 @@ import { useBuilderModelPolicy, useBuilderSettings } from '../../hooks/use-build
 import { ExampleList } from './example-list';
 import { resolveStarterModel, truncateName } from './utils';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 
 export const AgentBuilderStarter = () => {
@@ -17,6 +18,7 @@ export const AgentBuilderStarter = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { createStoredAgent } = useStoredAgentMutations(undefined);
   const defaultVisibility = useDefaultVisibility();
+  const { data: authCapabilities } = useAuthCapabilities();
   const { models: allowedModels } = useAgentBuilderAllowedModels();
   const modelPolicy = useBuilderModelPolicy();
   // While builder settings are still loading, useBuilderModelPolicy falls back
@@ -45,7 +47,11 @@ export const AgentBuilderStarter = () => {
         skills: {},
         visibility: defaultVisibility,
         model: resolveStarterModel(allowedModels, modelPolicy),
-        requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA,
+        // The default schema requires a `user` request-context variable, which
+        // is only populated when auth is enabled. Skip it when auth is off so
+        // the created agent doesn't fail validation on a `user` that can never
+        // be provided.
+        ...(authCapabilities?.enabled ? { requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } : {}),
       });
 
       void navigate(`/agent-builder/agents/${id}/edit`, {
