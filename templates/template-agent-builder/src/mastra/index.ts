@@ -8,10 +8,9 @@ import { SlackProvider } from '@mastra/slack';
 import { StagehandBrowser } from '@mastra/stagehand';
 
 import { initWorkOS } from './auth';
-import { getEnv, hasEnv, requireEnterpriseLicense } from './env';
+import { getEnv, hasEnv } from './env';
 import { workspace } from './workspace';
 
-requireEnterpriseLicense();
 const workos = await initWorkOS();
 
 const storage = new LibSQLStore({
@@ -103,8 +102,12 @@ export const mastra = new Mastra({
     sourcemap: true,
   },
   server: {
-    auth: workos.mastraAuth,
-    rbac: workos.rbacProvider,
+    ...(workos
+      ? {
+          auth: workos.mastraAuth,
+          rbac: workos.rbacProvider,
+        }
+      : {}),
     build: {
       swaggerUI: true,
     },
