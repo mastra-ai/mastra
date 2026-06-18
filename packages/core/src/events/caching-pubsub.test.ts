@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryServerCache } from '../cache/inmemory';
 import { CachingPubSub, withCaching } from './caching-pubsub';
 import { EventEmitterPubSub } from './event-emitter';
-import { PubSub } from './pubsub';
+import { isLeaseProvider, PubSub } from './pubsub';
 import type { Event } from './types';
 
 describe('CachingPubSub', () => {
@@ -385,56 +385,43 @@ describe('CachingPubSub', () => {
     });
   });
 
-  describe('lease delegation', () => {
-    it('should delegate acquireLease to the inner pubsub', async () => {
-      const spy = vi.spyOn(innerPubsub, 'acquireLease');
-
-      const result = await cachingPubsub.acquireLease('key-1', 'owner-1', 5000);
-
-      expect(spy).toHaveBeenCalledWith('key-1', 'owner-1', 5000);
-      expect(result).toEqual({ acquired: true, owner: 'owner-1' });
+  describe('lease provider', () => {
+    it('exposes the inner pubsub as the lease provider when the inner can lease', () => {
+      const leaseProvider = cachingPubsub.getLeaseProvider();
+      expect(leaseProvider).toBe(innerPubsub);
+      expect(isLeaseProvider(leaseProvider)).toBe(true);
     });
 
-    it('should delegate getLeaseOwner to the inner pubsub', async () => {
-      await cachingPubsub.acquireLease('key-1', 'owner-1', 5000);
-      const spy = vi.spyOn(innerPubsub, 'getLeaseOwner');
-
-      const owner = await cachingPubsub.getLeaseOwner('key-1');
-
-      expect(spy).toHaveBeenCalledWith('key-1');
-      expect(owner).toBe('owner-1');
+    it('returns undefined when the inner pubsub cannot lease', () => {
+      class NonLeaseInner extends PubSub {
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      const wrapped = new CachingPubSub(new NonLeaseInner(), cache);
+      expect(wrapped.getLeaseProvider()).toBeUndefined();
     });
 
-    it('should delegate releaseLease to the inner pubsub', async () => {
-      await cachingPubsub.acquireLease('key-1', 'owner-1', 5000);
-      const spy = vi.spyOn(innerPubsub, 'releaseLease');
+    it('preserves real lease semantics through the inner lease provider', async () => {
+      // Caching is transparent to leasing: callers resolve the inner's
+      // provider and coordinate through it, so wrapping with caching must
+      // not fake or weaken the lock. This guards against a regression where
+      // a second owner could "acquire" an already-held lease.
+      const leaseProvider = cachingPubsub.getLeaseProvider();
+      expect(leaseProvider).toBeDefined();
 
-      await cachingPubsub.releaseLease('key-1', 'owner-1');
-
-      expect(spy).toHaveBeenCalledWith('key-1', 'owner-1');
-      expect(await cachingPubsub.getLeaseOwner('key-1')).toBeUndefined();
-    });
-
-    it('should delegate renewLease to the inner pubsub', async () => {
-      await cachingPubsub.acquireLease('key-1', 'owner-1', 5000);
-      const spy = vi.spyOn(innerPubsub, 'renewLease');
-
-      const renewed = await cachingPubsub.renewLease('key-1', 'owner-1', 5000);
-
-      expect(spy).toHaveBeenCalledWith('key-1', 'owner-1', 5000);
-      expect(renewed).toBe(true);
-    });
-
-    it('preserves real lease semantics from the inner pubsub instead of falling back to no-op defaults', async () => {
-      // Without delegation, the base PubSub defaults would let a second
-      // owner "acquire" the same lease — this test guards against that
-      // regression.
-      const first = await cachingPubsub.acquireLease('thread-1', 'owner-a', 5000);
+      const first = await leaseProvider!.acquireLease('thread-1', 'owner-a', 5000);
       expect(first).toEqual({ acquired: true, owner: 'owner-a' });
 
-      const second = await cachingPubsub.acquireLease('thread-1', 'owner-b', 5000);
+      const second = await leaseProvider!.acquireLease('thread-1', 'owner-b', 5000);
       expect(second.acquired).toBe(false);
       expect(second.owner).toBe('owner-a');
+
+      expect(await leaseProvider!.getLeaseOwner('thread-1')).toBe('owner-a');
+
+      await leaseProvider!.releaseLease('thread-1', 'owner-a');
+      expect(await leaseProvider!.getLeaseOwner('thread-1')).toBeUndefined();
     });
   });
 

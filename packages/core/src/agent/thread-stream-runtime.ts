@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { getErrorFromUnknown } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
-import type { PubSub } from '../events/pubsub';
+import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
+import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
 import { parseMemoryRequestContext } from '../memory/types';
 import type { RequestContext } from '../request-context';
@@ -149,6 +150,28 @@ export class AgentThreadStreamRuntime {
     return pubsub ?? defaultAgentThreadPubSub;
   }
 
+  /**
+   * Resolve the {@link LeaseProvider} for the configured pubsub. Leasing is
+   * a separate capability from event delivery: a backend only implements it
+   * when it can genuinely coordinate a distributed lock (Redis via SET-NX,
+   * in-memory for single-process). We feature-detect once here so all lease
+   * call sites can use the resolved provider unconditionally.
+   *
+   * `CachingPubSub` exposes its inner's lease provider via `getLeaseProvider`
+   * (caching is transparent to leasing). Otherwise we duck-type the pubsub
+   * directly. Backends that cannot lease fall back to {@link NoopLeaseProvider}
+   * (always-win / no-op), preserving single-process behavior.
+   */
+  #getLeaseProvider(pubsub?: PubSub): LeaseProvider {
+    const resolved = this.#getPubSub(pubsub);
+    const unwrap = (resolved as { getLeaseProvider?: () => LeaseProvider | undefined }).getLeaseProvider;
+    if (typeof unwrap === 'function') {
+      const inner = unwrap.call(resolved);
+      return inner ?? NoopLeaseProvider;
+    }
+    return isLeaseProvider(resolved) ? resolved : NoopLeaseProvider;
+  }
+
   #getSourceId(): string {
     this.#id ??= randomUUID();
     return this.#id;
@@ -165,7 +188,9 @@ export class AgentThreadStreamRuntime {
   #releaseThreadLease(pubsub: PubSub | undefined, key: string, runId: string): void {
     const resolved = this.#getPubSub(pubsub);
     this.#stopLeaseRenewal(resolved, runId);
-    void resolved.releaseLease(key, runId).catch(() => {});
+    void this.#getLeaseProvider(resolved)
+      .releaseLease(key, runId)
+      .catch(() => {});
   }
 
   /**
@@ -179,8 +204,9 @@ export class AgentThreadStreamRuntime {
   #startLeaseRenewal(pubsub: PubSub, key: string, runId: string): void {
     const state = this.#getState(pubsub);
     if (state.leaseRenewalTimers.has(runId)) return;
+    const leaseProvider = this.#getLeaseProvider(pubsub);
     const timer = setInterval(() => {
-      void pubsub
+      void leaseProvider
         .renewLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
         .then(renewed => {
           if (!renewed) {
@@ -1508,6 +1534,7 @@ export class AgentThreadStreamRuntime {
     const reservedKey = key;
     const reservedRunId = runId;
     const resolvedPubSub = this.#getPubSub(pubsub);
+    const leaseProvider = this.#getLeaseProvider(resolvedPubSub);
     // First acquire the cross-process lease via pubsub; on win, kick off the stream and
     // resolve a `wake` accepted result carrying the owned stream. On loss, hand the user
     // signal off to the winning process via signal-enqueued and resolve a `deliver` result
@@ -1520,7 +1547,7 @@ export class AgentThreadStreamRuntime {
       // but failing closed would silently drop user messages on any Redis blip which
       // is the worse failure mode. Lease TTL + renewal still bound the duplicate
       // window to a single run, and the next clean acquireLease re-serializes callers.
-      const lease = await resolvedPubSub
+      const lease = await leaseProvider
         .acquireLease(reservedKey, reservedRunId, AGENT_THREAD_LEASE_TTL_MS)
         .catch(() => ({ acquired: true as boolean, owner: reservedRunId as string | undefined }));
 

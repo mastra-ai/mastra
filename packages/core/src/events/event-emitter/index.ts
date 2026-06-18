@@ -1,7 +1,7 @@
 import EventEmitter from 'node:events';
 import type { IMastraLogger } from '../../logger';
 import { PubSub } from '../pubsub';
-import type { PubSubDeliveryMode } from '../pubsub';
+import type { LeaseProvider, PubSubDeliveryMode } from '../pubsub';
 import type { Event, EventCallback, SubscribeOptions } from '../types';
 import { AckHandleBuffer } from './ack-handle-buffer';
 
@@ -18,7 +18,7 @@ export interface EventEmitterPubSubOptions {
 // to module scope so we don't allocate two new closures per emitted event.
 const NOOP_ACK = async (): Promise<void> => {};
 
-export class EventEmitterPubSub extends PubSub {
+export class EventEmitterPubSub extends PubSub implements LeaseProvider {
   // EventEmitter dispatches synchronously to listeners, so it can serve both
   // a push consumer (no worker) and a pull-style worker that simply calls
   // `subscribe()` to register a listener. Both modes are advertised so the
@@ -361,7 +361,7 @@ export class EventEmitterPubSub extends PubSub {
   // acquireLease call.
   private leases: Map<string, { owner: string; expiresAt: number }> = new Map();
 
-  override acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+  acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
     const now = Date.now();
     const existing = this.leases.get(key);
     if (existing && existing.expiresAt > now && existing.owner !== owner) {
@@ -371,7 +371,7 @@ export class EventEmitterPubSub extends PubSub {
     return Promise.resolve({ acquired: true, owner });
   }
 
-  override getLeaseOwner(key: string): Promise<string | undefined> {
+  getLeaseOwner(key: string): Promise<string | undefined> {
     const existing = this.leases.get(key);
     if (!existing) return Promise.resolve(undefined);
     if (existing.expiresAt <= Date.now()) {
@@ -381,7 +381,7 @@ export class EventEmitterPubSub extends PubSub {
     return Promise.resolve(existing.owner);
   }
 
-  override releaseLease(key: string, owner: string): Promise<void> {
+  releaseLease(key: string, owner: string): Promise<void> {
     const existing = this.leases.get(key);
     if (existing && existing.owner === owner) {
       this.leases.delete(key);
@@ -389,7 +389,7 @@ export class EventEmitterPubSub extends PubSub {
     return Promise.resolve();
   }
 
-  override renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
+  renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
     const existing = this.leases.get(key);
     if (!existing || existing.owner !== owner || existing.expiresAt <= Date.now()) {
       return Promise.resolve(false);
