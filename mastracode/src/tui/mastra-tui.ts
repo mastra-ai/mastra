@@ -582,7 +582,7 @@ export class MastraTUI {
     // Subscribe to harness events
     subscribeToHarness(this.state, event => this.handleEvent(event));
     // Restore escape-as-cancel setting from persisted state
-    const escState = this.state.harness.getState() as any;
+    const escState = this.state.harness.session.state.get() as any;
     if (escState?.escapeAsCancel === false) {
       this.state.editor.escapeEnabled = false;
     }
@@ -1307,8 +1307,8 @@ export class MastraTUI {
     }
 
     const omPack = result.omPack;
-    harness.setState({ observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
-    harness.setState({ yolo: result.yolo });
+    harness.session.state.set({ observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
+    harness.session.state.set({ yolo: result.yolo });
 
     const settings = loadSettings();
     settings.onboarding.completedAt = new Date().toISOString();
@@ -1385,7 +1385,7 @@ export class MastraTUI {
     const tools = this.state.allToolComponents.filter(
       (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
     );
-    const color = this.state.harness?.getCurrentMode?.()?.metadata?.color;
+    const color = this.state.harness?.session.mode.resolve().metadata?.color;
     const modeColor = typeof color === 'string' ? color : undefined;
     for (const tool of tools) {
       tool.setCompactToolModeColor?.(modeColor);

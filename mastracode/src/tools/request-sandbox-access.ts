@@ -10,6 +10,7 @@ import { createTool } from '@mastra/core/tools';
 import { LocalFilesystem } from '@mastra/core/workspace';
 import { z } from 'zod';
 import type { MastraCodeState } from '../schema.js';
+import { readHarnessState, writeHarnessState } from '../utils/harness-state.js';
 import { isPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
 function expandTilde(p: string): string {
@@ -82,9 +83,9 @@ export const requestSandboxAccessTool = createTool({
         // filesystem allowlist from `sandboxAllowedPaths` on every call
         // (getDynamicWorkspace), so an unawaited setState would let that
         // rebuild clobber the in-turn widen below before the grant lands.
-        const currentAllowed = (harnessCtx?.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];
+        const currentAllowed = (readHarnessState<MastraCodeState>(harnessCtx)?.sandboxAllowedPaths as string[] | undefined) ?? [];
         if (!currentAllowed.includes(absolutePath)) {
-          await harnessCtx?.setState?.({
+          await writeHarnessState<MastraCodeState>(harnessCtx, {
             sandboxAllowedPaths: [...currentAllowed, absolutePath],
           });
         }

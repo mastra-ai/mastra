@@ -25,7 +25,7 @@ async function showPermissions(ctx: SlashCommandContext): Promise<void> {
   const { TOOL_CATEGORIES, getToolsForCategory } = await import('../../permissions.js');
   const rules = ctx.harness.getPermissionRules();
   const grants = ctx.harness.session.getGrants();
-  const isYolo = (ctx.harness.getState() as any).yolo === true;
+  const isYolo = (ctx.harness.session.state.get() as any).yolo === true;
 
   const lines: string[] = [];
   lines.push('Tool Approval Permissions');

@@ -161,8 +161,8 @@ export function setupKeyboardShortcuts(
 
   // Ctrl+Y - toggle YOLO mode
   state.editor.onAction('toggleYolo', () => {
-    const current = (state.harness.getState() as any).yolo === true;
-    state.harness.setState({ yolo: !current } as any);
+    const current = (state.harness.session.state.get() as any).yolo === true;
+    state.harness.session.state.set({ yolo: !current } as any);
     showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
   });
 
@@ -438,7 +438,7 @@ export function setupAutocomplete(state: TUIState): void {
 
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
-    const configDir = state.harness.getState().configDir;
+    const configDir = state.harness.session.state.get().configDir;
     // Load from all sources (global and local)
     const globalCommands = await loadCustomCommands(undefined, configDir);
     const localCommands = await loadCustomCommands(process.cwd(), configDir);

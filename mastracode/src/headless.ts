@@ -458,7 +458,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
   // --- Resolve thinking level ---
   if (args.thinkingLevel) {
-    await harness.setState({ thinkingLevel: args.thinkingLevel } as unknown as Partial<TState>);
+    await harness.session.state.set({ thinkingLevel: args.thinkingLevel } as unknown as Partial<TState>);
     if (!emit) process.stderr.write(`[thinking] ${args.thinkingLevel}\n`);
   }
 

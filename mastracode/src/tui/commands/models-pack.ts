@@ -421,9 +421,9 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
   s.models.subagentModels = {};
 
   const hasOpenAI = Object.values(pack.models).some(m => m.startsWith('openai/'));
-  const currentThinking = ((harness.getState() as any)?.thinkingLevel ?? 'off') as string;
+  const currentThinking = ((harness.session.state.get() as any)?.thinkingLevel ?? 'off') as string;
   if (hasOpenAI && currentThinking === 'off') {
-    await harness.setState({ thinkingLevel: 'low' } as any);
+    await harness.session.state.set({ thinkingLevel: 'low' } as any);
     s.preferences.thinkingLevel = 'low';
   }
 

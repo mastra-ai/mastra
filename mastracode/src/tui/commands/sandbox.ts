@@ -5,7 +5,7 @@ import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
 async function sandboxAddPath(ctx: SlashCommandContext, rawPath: string): Promise<void> {
-  const harnessState = ctx.state.harness.getState() as {
+  const harnessState = ctx.state.harness.session.state.get() as {
     sandboxAllowedPaths?: string[];
   };
   const currentPaths = harnessState.sandboxAllowedPaths ?? [];
@@ -22,7 +22,7 @@ async function sandboxAddPath(ctx: SlashCommandContext, rawPath: string): Promis
     return;
   }
   const updated = [...currentPaths, resolved];
-  ctx.state.harness.setState({ sandboxAllowedPaths: updated } as any);
+  ctx.state.harness.session.state.set({ sandboxAllowedPaths: updated } as any);
   await ctx.state.harness.session.thread.setSetting({ key: 'sandboxAllowedPaths', value: updated });
   ctx.showInfo(`Added to sandbox: ${resolved}`);
 }
@@ -35,7 +35,7 @@ async function sandboxRemovePath(ctx: SlashCommandContext, rawPath: string, curr
     return;
   }
   const updated = currentPaths.filter(p => p !== match);
-  ctx.state.harness.setState({ sandboxAllowedPaths: updated } as any);
+  ctx.state.harness.session.state.set({ sandboxAllowedPaths: updated } as any);
   await ctx.state.harness.session.thread.setSetting({ key: 'sandboxAllowedPaths', value: updated });
   ctx.showInfo(`Removed from sandbox: ${match}`);
 }
@@ -62,7 +62,7 @@ async function showSandboxAddPrompt(ctx: SlashCommandContext): Promise<void> {
 }
 
 export async function handleSandboxCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  const harnessState = ctx.state.harness.getState() as {
+  const harnessState = ctx.state.harness.session.state.get() as {
     sandboxAllowedPaths?: string[];
   };
   const currentPaths = harnessState.sandboxAllowedPaths ?? [];

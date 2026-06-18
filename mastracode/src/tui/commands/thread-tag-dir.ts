@@ -14,7 +14,7 @@ export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promi
     return;
   }
 
-  const projectPath = (state.harness.getState() as any)?.projectPath as string | undefined;
+  const projectPath = (state.harness.session.state.get() as any)?.projectPath as string | undefined;
   if (!projectPath) {
     ctx.showInfo('Could not detect current project path.');
     return;

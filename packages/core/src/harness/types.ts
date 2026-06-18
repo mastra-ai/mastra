@@ -1036,40 +1036,63 @@ export type HarnessMessageContent =
  * Snapshot of the session-owned values exposed to request-context consumers.
  * Plain data captured per request; mutating it does not affect the Session.
  */
-export interface HarnessRequestSession {
+export type HarnessRequestStateUpdateResult<TState, TResult> = {
+  updates?: Partial<TState>;
+  events?: HarnessEvent[];
+  result: TResult;
+};
+
+export type HarnessRequestStateUpdater<TState, TResult> = (
+  state: Readonly<TState>,
+) =>
+  | HarnessRequestStateUpdateResult<TState, TResult>
+  | Promise<HarnessRequestStateUpdateResult<TState, TResult>>;
+
+export interface HarnessRequestState<TState = unknown> {
+  /** Get the current session-owned harness state (live, not request-context snapshot). */
+  get: () => Readonly<TState>;
+  /** Update session-owned harness state. */
+  set: (updates: Partial<TState>) => Promise<void>;
+  /** Update session-owned harness state from the latest snapshot in a serialized transaction. */
+  update: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
+}
+
+export interface HarnessRequestSession<TState = unknown> {
   /** Currently-selected mode ID */
   modeId: string;
   /** Currently-selected model ID ('' when none selected yet) */
   modelId: string;
+  /** Live session-owned harness state accessors. */
+  state: HarnessRequestState<TState>;
 }
 
 export interface HarnessRequestContext<TState = unknown> {
   /** The harness instance ID */
   harnessId: string;
 
-  /** Current harness state (read-only snapshot) */
-  state: TState;
+  /**
+   * Current harness state (read-only snapshot captured when the request context is built).
+   * @deprecated Prefer `session.state.get()` for live state reads.
+   */
+  state: Readonly<TState>;
 
-  /** Get the current harness state (live, not snapshot) */
-  getState: () => TState;
+  /**
+   * Get the current harness state (live, not snapshot).
+   * @deprecated Prefer `session.state.get()`.
+   */
+  getState: () => Readonly<TState>;
 
-  /** Update harness state */
+  /**
+   * Update harness state.
+   * @deprecated Prefer `session.state.set(...)`.
+   */
   setState: (updates: Partial<TState>) => Promise<void>;
 
-  /** Update harness state from the latest state snapshot in a serialized transaction */
-  updateState?: <TResult>(
-    updater: (state: Readonly<TState>) =>
-      | {
-          updates?: Partial<TState>;
-          events?: HarnessEvent[];
-          result: TResult;
-        }
-      | Promise<{
-          updates?: Partial<TState>;
-          events?: HarnessEvent[];
-          result: TResult;
-        }>,
-  ) => Promise<TResult>;
+  /**
+   * Update harness state from the latest state snapshot in a serialized transaction.
+   * @deprecated Prefer `session.state.update(...)`.
+   */
+  updateState?: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
   /** Current thread ID */
   threadId: string | null;
@@ -1081,7 +1104,7 @@ export interface HarnessRequestContext<TState = unknown> {
    * Snapshot of the relevant session-owned values for this request.
    * Plain data (not the live Session); read-only at the point of use.
    */
-  session: HarnessRequestSession;
+  session: HarnessRequestSession<TState>;
 
   /** Abort signal for the current operation */
   abortSignal?: AbortSignal;

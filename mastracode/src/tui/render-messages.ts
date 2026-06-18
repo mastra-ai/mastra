@@ -62,7 +62,7 @@ function getPendingUserMessageLabel(isInterjection?: boolean): string | undefine
 }
 
 function getCurrentModeColor(state: TUIState): string | undefined {
-  const color = state.harness.getCurrentMode?.()?.metadata?.color;
+  const color = state.harness.session.mode.resolve().metadata?.color;
   return typeof color === 'string' ? color : undefined;
 }
 
@@ -941,13 +941,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     if (state.taskProgress) {
       state.taskProgress.updateTasks(previousTasksAcc);
     }
-    const currentTasks =
-      typeof state.harness.getState === 'function'
-        ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
-        : undefined;
+    const currentTasks = (state.harness.session.state.get() as { tasks?: TaskItemSnapshot[] }).tasks;
     if (!areTasksEqual(currentTasks, previousTasksAcc)) {
       try {
-        await state.harness.setState({ tasks: previousTasksAcc });
+        await state.harness.session.state.set({ tasks: previousTasksAcc });
       } catch {
         // Custom harness state schemas may not accept TUI replayed task state.
         // Keep the reconstructed task list local to display state in that case.

@@ -147,7 +147,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
-      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      await state.harness.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
@@ -200,12 +200,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.goalManager?.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
       }
       // Sync inherited resource-level settings
-      const tState = state.harness.getState() as any;
+      const tState = state.harness.session.state.get() as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
       // Clear per-thread ephemeral state so new threads start clean.
-      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      await state.harness.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }

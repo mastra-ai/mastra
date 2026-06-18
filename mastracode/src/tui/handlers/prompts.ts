@@ -244,7 +244,7 @@ export async function handleSandboxAccessRequest(
  */
 async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: string, plan: string): Promise<void> {
   const { state } = ctx;
-  await state.harness.setState({
+  await state.harness.session.state.set({
     activePlan: {
       title,
       plan,

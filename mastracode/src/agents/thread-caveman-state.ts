@@ -1,4 +1,5 @@
 import type { Harness, HarnessThread } from '@mastra/core/harness';
+import { readHarnessState, writeHarnessState } from '../utils/harness-state';
 
 interface ThreadStateSetting {
   key: string;
@@ -17,7 +18,7 @@ const THREAD_STATE_SETTINGS: ThreadStateSetting[] = [
 ];
 
 function getStateValue(harness: Harness<Record<string, unknown>>, setting: ThreadStateSetting): unknown {
-  const value = (harness.getState() as Record<string, unknown>)[setting.key];
+  const value = readHarnessState(harness)?.[setting.key];
   return setting.isValid(value) ? value : undefined;
 }
 
@@ -59,7 +60,7 @@ async function restoreSettingsForThread(harness: Harness<Record<string, unknown>
   }
 
   if (Object.keys(updates).length > 0) {
-    await harness.setState(updates);
+    await writeHarnessState(harness, updates);
   }
 
   for (const setting of settingsToSeed) {
