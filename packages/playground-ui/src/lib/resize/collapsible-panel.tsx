@@ -10,7 +10,7 @@ export interface CollapsiblePanelProps extends PanelProps {
   direction: 'left' | 'right';
 }
 
-export const CollapsiblePanel = ({ collapsedSize, children, direction, ...props }: CollapsiblePanelProps) => {
+export const CollapsiblePanel = ({ collapsedSize, children, direction, onResize, ...props }: CollapsiblePanelProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const panelRef = usePanelRef();
 
@@ -24,15 +24,16 @@ export const CollapsiblePanel = ({ collapsedSize, children, direction, ...props 
       panelRef={panelRef}
       collapsedSize={collapsedSize}
       {...props}
-      onResize={size => {
-        if (!collapsedSize) return;
-        if (typeof collapsedSize !== 'number') return;
-
-        if (size.inPixels <= collapsedSize) {
-          setCollapsed(true);
-        } else if (collapsed) {
-          setCollapsed(false);
+      onResize={(size, id, prevSize) => {
+        if (typeof collapsedSize === 'number') {
+          if (size.inPixels <= collapsedSize) {
+            setCollapsed(true);
+          } else if (collapsed) {
+            setCollapsed(false);
+          }
         }
+
+        onResize?.(size, id, prevSize);
       }}
     >
       {collapsed ? (

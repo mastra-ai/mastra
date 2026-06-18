@@ -1,5 +1,85 @@
 # @mastra/playground-ui
 
+## 34.1.0-alpha.2
+
+### Minor Changes
+
+- Added drawer overlay modes for floating panels: ([#17770](https://github.com/mastra-ai/mastra/pull/17770))
+  - `auto`: keeps default drawer behavior and renders floating drawers without an overlay.
+  - `transparent`: blocks background interaction without drawing a visible backdrop.
+  - `visible`: renders the standard dimmed backdrop and blocks background interaction.
+
+  Each overlay-enabled floating drawer keeps native outside-click and drag dismissal.
+
+  ```tsx
+  <Drawer side="right" variant="floating" overlay="auto">
+    <DrawerContent>...</DrawerContent>
+  </Drawer>
+
+  <Drawer side="right" variant="floating" overlay="transparent">
+    <DrawerContent>...</DrawerContent>
+  </Drawer>
+
+  <Drawer side="right" variant="floating" overlay="visible">
+    <DrawerContent>...</DrawerContent>
+  </Drawer>
+  ```
+
+- Added a floating Drawer variant for inset panels without a backdrop. ([#17770](https://github.com/mastra-ai/mastra/pull/17770))
+
+  Usage:
+
+  ```tsx
+  <Drawer side="right" variant="floating">
+    <DrawerContent>...</DrawerContent>
+  </Drawer>
+  ```
+
+- Added a lined DataList variant with transparent rows and subtle separators. ([#18089](https://github.com/mastra-ai/mastra/pull/18089))
+
+  ```tsx
+  <DataList columns="1fr auto" variant="lined">
+    <DataList.Top>
+      <DataList.TopCell>Name</DataList.TopCell>
+      <DataList.TopCell>Status</DataList.TopCell>
+    </DataList.Top>
+    <DataList.RowButton onClick={() => {}}>
+      <DataList.Cell>Research Agent</DataList.Cell>
+      <DataList.Cell>Active</DataList.Cell>
+    </DataList.RowButton>
+  </DataList>
+  ```
+
+### Patch Changes
+
+- Improved keyboard navigation and accessibility metadata in Tree. ([#18097](https://github.com/mastra-ai/mastra/pull/18097))
+
+  Tree now supports roving keyboard focus across visible items, Arrow Right/Left folder expansion, and Enter/Space activation through the existing public API:
+
+  ```tsx
+  <Tree>
+    <Tree.Folder id="src" defaultOpen>
+      <Tree.FolderTrigger>
+        <Tree.Label>src</Tree.Label>
+      </Tree.FolderTrigger>
+      <Tree.FolderContent>
+        <Tree.File id="src/index.ts">
+          <Tree.Label>index.ts</Tree.Label>
+        </Tree.File>
+      </Tree.FolderContent>
+    </Tree.Folder>
+  </Tree>
+  ```
+
+- Added small badge size options for Playground UI badges. ([#18132](https://github.com/mastra-ai/mastra/pull/18132))
+
+- Improved Drawer content with a default top-right close button that can be hidden and kept floating side handles visible only on mobile and tablet viewports. ([#17770](https://github.com/mastra-ai/mastra/pull/17770))
+
+- Updated dependencies [[`339c57c`](https://github.com/mastra-ai/mastra/commit/339c57c5b2c6dbe75a125e138228e0556528976f), [`1dd4117`](https://github.com/mastra-ai/mastra/commit/1dd4117dcbd8e031ede9f0489436bfbc6f0315b8), [`2b11d1f`](https://github.com/mastra-ai/mastra/commit/2b11d1f6ac7024c5dd2b2dd12a48a956ac9d63bd), [`49af8df`](https://github.com/mastra-ai/mastra/commit/49af8df589c4ff71a5015a4553b377b32704b691), [`30ce559`](https://github.com/mastra-ai/mastra/commit/30ce55902ecf819b8ab8697398dd68b108228063), [`c241b92`](https://github.com/mastra-ai/mastra/commit/c241b929dc8c8d6a7b7219c99ed13ac1f3124a77), [`7d6ff70`](https://github.com/mastra-ai/mastra/commit/7d6ff708727297a0526ca0e26e93eeb5bbaaa187)]:
+  - @mastra/core@1.44.0-alpha.2
+  - @mastra/client-js@1.25.1-alpha.2
+  - @mastra/react@1.0.3-alpha.2
+
 ## 34.0.1-alpha.1
 
 ### Patch Changes

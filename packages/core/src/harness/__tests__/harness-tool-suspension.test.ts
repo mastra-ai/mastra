@@ -197,7 +197,7 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.createThread();
     await harness.sendMessage({ content: 'Do it' });
 
-    const ds = harness.getDisplayState();
+    const ds = harness.session.displayState.get();
     expect(ds.pendingSuspensions.size).toBe(1);
     const suspension = Array.from(ds.pendingSuspensions.values())[0];
     expect(suspension!.toolName).toBe('confirmAction');
@@ -286,7 +286,7 @@ describe('Harness: tool suspension and resumption', () => {
     expect(events.some((e: any) => e.type === 'error')).toBe(false);
 
     // pending suspensions should be cleared after resume
-    const ds = harness.getDisplayState();
+    const ds = harness.session.displayState.get();
     expect(ds.pendingSuspensions.size).toBe(0);
   });
 

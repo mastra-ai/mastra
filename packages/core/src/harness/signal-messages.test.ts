@@ -465,7 +465,7 @@ describe('Harness signal messages', () => {
     await harness.followUp({ content: 'queued follow-up' });
 
     expect(harness.session.followUps.count()).toBe(1);
-    expect(harness.getDisplayState().queuedFollowUps).toBe(1);
+    expect(harness.session.displayState.get().queuedFollowUps).toBe(1);
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
   });
 
@@ -517,7 +517,7 @@ describe('Harness signal messages', () => {
     );
     expect(sendSignal).not.toHaveBeenCalled();
     expect(harness.session.followUps.count()).toBe(0);
-    expect(harness.getDisplayState().queuedFollowUps).toBe(0);
+    expect(harness.session.displayState.get().queuedFollowUps).toBe(0);
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 0, runId: 'queued-run-id' });
   });
@@ -535,7 +535,7 @@ describe('Harness signal messages', () => {
 
     expect(sendMessage).toHaveBeenCalledWith({ content: 'idle follow-up', requestContext: undefined });
     expect(harness.session.followUps.count()).toBe(0);
-    expect(harness.getDisplayState().queuedFollowUps).toBe(0);
+    expect(harness.session.displayState.get().queuedFollowUps).toBe(0);
     expect(events.some(event => event.type === 'follow_up_queued')).toBe(false);
   });
 
