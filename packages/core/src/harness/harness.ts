@@ -1851,8 +1851,16 @@ export class Harness<TState = {}> {
         }
 
         const chunkRunId = 'runId' in chunk ? chunk.runId : null;
+        // Normal completed/errored runs can leave trailing stream parts behind; skip those
+        // until a fresh `start` boundary appears. Suspended runs intentionally clear this
+        // guard below because tool resumes reuse the same runId and may restart at
+        // `tool-result` rather than `start`.
         if (lastFinishedRunId && chunkRunId === lastFinishedRunId) {
-          continue;
+          if (chunk.type === 'start') {
+            lastFinishedRunId = null;
+          } else {
+            continue;
+          }
         }
 
         if (!currentRun) {
@@ -1902,7 +1910,7 @@ export class Harness<TState = {}> {
               error: isError,
               aborted,
             });
-            lastFinishedRunId = finishedRunId;
+            lastFinishedRunId = suspended ? null : finishedRunId;
             currentRun = undefined;
           }
         } catch (error) {
@@ -2481,67 +2489,6 @@ export class Harness<TState = {}> {
       error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
     });
     this.abort();
-  }
-
-  private async processStream(
-    response: { fullStream: AsyncIterable<any> },
-    requestContextInput?: RequestContext,
-  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
-    const state = this.createStreamState();
-    const requestContext = await this.buildRequestContext(requestContextInput);
-    this.#session.run.nextOperation();
-    this.emit({ type: 'agent_start' });
-
-    let result: { message: HarnessMessage; suspended?: boolean } | undefined;
-    let error = false;
-    let aborted = false;
-
-    for await (const chunk of response.fullStream) {
-      result = await this.processStreamChunk(state, chunk, requestContext);
-      if (chunk.type === 'error') {
-        error = true;
-      }
-      if (chunk.type === 'abort') {
-        aborted = true;
-      }
-      if (
-        result ||
-        chunk.type === 'finish' ||
-        chunk.type === 'error' ||
-        chunk.type === 'abort' ||
-        chunk.type === 'tool-call-suspended' ||
-        this.#session.run.isAbortRequested()
-      ) {
-        result ??= this.finishStreamState(state);
-        break;
-      }
-    }
-
-    result ??= this.finishStreamState(state);
-
-    // A non-success terminal finish reason (e.g. a `claude-fable-5`
-    // content-filter refusal) is surfaced as an explicit error so the run never
-    // silently stops without a visible terminal state.
-    if (state.terminalError && !error && !aborted && !this.#session.run.isAbortRequested() && !result.suspended) {
-      error = true;
-      this.emit({ type: 'error', error: new Error(state.terminalError) });
-    }
-
-    this.emit({
-      type: 'agent_end',
-      reason: error
-        ? 'error'
-        : result.suspended
-          ? 'suspended'
-          : aborted || this.#session.run.isAbortRequested()
-            ? 'aborted'
-            : 'complete',
-    });
-
-    this.#session.run.reset();
-    await this.drainFollowUpQueue();
-
-    return result;
   }
 
   private async processStreamChunk(
@@ -3328,11 +3275,15 @@ export class Harness<TState = {}> {
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
     const threadId = this.#session.thread.getId();
-    await agent.approveToolCall({
+    const resourceId = this.#session.identity.getResourceId();
+    await agent.sendToolApproval({
+      threadId: threadId!,
+      resourceId,
+      approved: true,
       runId,
       toolCallId,
       requireToolApproval: !isYolo,
-      memory: threadId ? { thread: threadId, resource: this.#session.identity.getResourceId() } : undefined,
+      memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
       abortSignal: this.#session.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
@@ -3356,11 +3307,15 @@ export class Harness<TState = {}> {
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
     const threadId = this.#session.thread.getId();
-    await agent.declineToolCall({
+    const resourceId = this.#session.identity.getResourceId();
+    await agent.sendToolApproval({
       runId,
       toolCallId,
+      approved: false,
+      threadId: threadId!,
+      resourceId,
       requireToolApproval: !isYolo,
-      memory: threadId ? { thread: threadId, resource: this.#session.identity.getResourceId() } : undefined,
+      memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
       abortSignal: this.#session.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
@@ -3392,8 +3347,16 @@ export class Harness<TState = {}> {
 
     const requestContext = await this.buildRequestContext(requestContextInput);
     const threadId = this.#session.thread.getId();
+    if (!threadId) {
+      throw new Error('Cannot resume a suspended tool without a current thread');
+    }
 
-    const output = await agent.resumeStream(resumeData, {
+    await this.ensureAgentThreadSubscription(agent, threadId);
+
+    // Thread subscriptions are the sole consumer for harness agent output. Resumed
+    // tools reuse the suspended runId, so consuming the returned stream here would
+    // race or duplicate the subscription stream and leave other subscribers behind.
+    await agent.resumeStream(resumeData, {
       // Re-supply the shared run budget (maxSteps, etc). Without it the resumed
       // run merges over the agent's small default maxSteps and stops mid-task.
       ...this.buildSharedRunOptions(),
@@ -3404,8 +3367,6 @@ export class Harness<TState = {}> {
       requestContext,
       toolsets: await this.buildToolsets(requestContext),
     });
-
-    await this.processStream(output, requestContext);
   }
 
   // ===========================================================================
