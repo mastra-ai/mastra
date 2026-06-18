@@ -10,7 +10,7 @@ import { AGENT_STREAM_TOPIC } from '@mastra/core/agent/durable';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { PROVIDER_REGISTRY, parseModelString } from '@mastra/core/llm';
+import { PROVIDER_REGISTRY, parseModelString, defaultGateways } from '@mastra/core/llm';
 import type { ProviderConfig, SystemMessage } from '@mastra/core/llm';
 import type {
   InputProcessor,
@@ -1500,8 +1500,19 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 export async function buildProvidersList(mastra: Context['mastra']): Promise<ProviderListItem[]> {
   const allProviders: Record<string, ProviderConfig> = {};
 
-  for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-    allProviders[id] = provider as ProviderConfig;
+  // When AUTO_BLOCK_EXTERNAL_PROVIDERS is set, surface only providers from
+  // user-registered custom gateways. The static registry (OpenAI, Anthropic,
+  // Gemini, etc.) and the built-in default gateways (models.dev, netlify,
+  // mastra) are all treated as "external" and hidden — useful for enterprise
+  // deployments that route exclusively through their own gateway.
+  const blockExternalProviders =
+    process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === 'true' || process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === '1';
+  const defaultGatewayIds = new Set<string>(defaultGateways.map(gateway => gateway.id));
+
+  if (!blockExternalProviders) {
+    for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
+      allProviders[id] = provider as ProviderConfig;
+    }
   }
 
   // Include gateway providers (defaults + user-registered)
@@ -1511,6 +1522,9 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
       for (const gateway of Object.values(allGateways)) {
         // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
         if (gateway.id === 'models.dev') continue;
+        // When blocking external providers, skip the built-in default gateways
+        // so only user-registered custom gateways remain.
+        if (blockExternalProviders && defaultGatewayIds.has(gateway.id)) continue;
         try {
           const gatewayProviders = await gateway.fetchProviders();
           for (const [providerId, config] of Object.entries(gatewayProviders)) {

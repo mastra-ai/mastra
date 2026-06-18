@@ -250,6 +250,62 @@ describe('getProvidersHandler', () => {
     delete process.env.CUSTOM_LLM_API_KEY;
   });
 
+  it('should hide registry and default-gateway providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set, keeping only custom gateways', async () => {
+    process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = 'true';
+
+    const mockGateway = {
+      id: 'test-gateway',
+      name: 'Test Gateway',
+      getId: () => 'test-gateway',
+      fetchProviders: vi.fn().mockResolvedValue({
+        'custom-llm': {
+          name: 'Custom LLM',
+          models: ['custom-model-1', 'custom-model-2'],
+          apiKeyEnvVar: 'CUSTOM_LLM_API_KEY',
+          gateway: 'test-gateway',
+        },
+      }),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+
+    const mastra = new Mastra({
+      gateways: {
+        'test-gateway': mockGateway,
+      },
+    });
+
+    const requestContext = new RequestContext();
+    const abortSignal = new AbortController().signal;
+
+    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+    // External registry providers should be hidden
+    expect(result.providers.find(p => p.id === 'openai')).toBeUndefined();
+    expect(result.providers.find(p => p.id === 'anthropic')).toBeUndefined();
+
+    // Built-in default gateways (models.dev, netlify, mastra) should be hidden
+    expect(result.providers.some(p => p.id === 'mastra' || p.id.startsWith('netlify/'))).toBe(false);
+
+    // The user-registered custom gateway provider should remain
+    const customProvider = result.providers.find(p => p.id === 'test-gateway/custom-llm');
+    expect(customProvider).toBeDefined();
+    expect(customProvider?.name).toBe('Custom LLM');
+  });
+
+  it('should return no providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set and no custom gateway is registered', async () => {
+    process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = '1';
+
+    const mastra = new Mastra({});
+    const requestContext = new RequestContext();
+    const abortSignal = new AbortController().signal;
+
+    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+    expect(result.providers).toEqual([]);
+  });
+
   it('should correctly show custom gateway providers as connected', async () => {
     // Mock a custom gateway provider in the registry
     (global as any).__MOCK_PROVIDER_REGISTRY__ = {
