@@ -4,8 +4,8 @@
 
 Added native Google Workspace authentication and group-based RBAC.
 
-- `MastraAuthGoogle` supports Google OpenID Connect sign-in, encrypted Studio session cookies, Bearer ID token verification, and Workspace hosted-domain checks using Google's verified `hd` claim.
-- `MastraRBACGoogle` maps Google Workspace groups to Mastra permissions through the Admin SDK Directory API, with service-account domain-wide delegation support.
+- `MastraAuthGoogle` lets developers authenticate users with Google accounts and restrict access to trusted Google Workspace domains.
+- `MastraRBACGoogle` lets developers map Google Workspace groups to Mastra permissions for role-based access.
 
 **Usage:**
 

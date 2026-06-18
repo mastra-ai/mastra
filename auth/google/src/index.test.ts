@@ -72,6 +72,21 @@ describe('MastraAuthGoogle', () => {
           }),
       ).toThrow('Cookie password must be at least 32 characters');
     });
+
+    it('throws in production when SSO cookie password is missing', () => {
+      const nodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        expect(
+          () =>
+            new MastraAuthGoogle({
+              clientSecret: 'test-client-secret',
+            }),
+        ).toThrow('GOOGLE_COOKIE_PASSWORD is required');
+      } finally {
+        process.env.NODE_ENV = nodeEnv;
+      }
+    });
   });
 
   describe('SSO login and callback', () => {
@@ -131,6 +146,21 @@ describe('MastraAuthGoogle', () => {
       await expect(auth.handleCallback('code', stateId)).resolves.toMatchObject({
         user: { id: 'google-user-123' },
       });
+    });
+
+    it('rejects a callback when the visible redirect state suffix was changed', async () => {
+      const auth = createSsoAuth();
+      const url = await auth.getLoginUrl(
+        'http://localhost:4111/api/auth/sso/callback',
+        'server-state-id|%2Fstudio',
+      );
+      const parsed = new URL(url);
+      const stateId = parsed.searchParams.get('state')!.split('|', 1)[0]!;
+
+      await expect(auth.handleCallback('code', `${stateId}|%2Fadmin`)).rejects.toThrow(
+        'Invalid state redirect suffix',
+      );
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('handles callback and creates a session cookie', async () => {
@@ -344,6 +374,12 @@ describe('MastraAuthGoogle', () => {
       expect(auth.authorizeUser({ id: 'u1', googleId: 'u1', hostedDomain: 'other.com' })).toBe(false);
       expect(auth.authorizeUser({ id: 'u1', googleId: 'u1', hostedDomain: 'example.com' })).toBe(true);
     });
+
+    it('does not synthesize users by arbitrary ID', async () => {
+      const auth = new MastraAuthGoogle({ allowedDomains: 'example.com' });
+
+      await expect(auth.getUser('google-user-123')).resolves.toBeNull();
+    });
   });
 });
 
@@ -446,6 +482,7 @@ describe('MastraRBACGoogle', () => {
     expect(firstUrl.searchParams.get('userKey')).toBe('user@example.com');
     expect(firstUrl.searchParams.get('maxResults')).toBe('200');
     expect(secondUrl.searchParams.get('pageToken')).toBe('next-page');
+    expect(mockFetch.mock.calls[0]![1]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
   it('supports custom getUserKey and mapGroupToRoles', async () => {
@@ -490,7 +527,8 @@ describe('MastraRBACGoogle', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('evicts failed lookups and applies _default when no roles resolve', async () => {
+  it('evicts failed lookups and propagates lookup errors', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mockFetch.mockResolvedValueOnce(new Response('nope', { status: 500 })).mockResolvedValueOnce(
       new Response(JSON.stringify({ groups: [{ email: 'viewer@example.com' }] }), {
         status: 200,
@@ -505,9 +543,16 @@ describe('MastraRBACGoogle', () => {
       },
     });
 
-    await expect(rbac.getPermissions(user)).resolves.toEqual(['agents:read']);
+    await expect(rbac.getPermissions(user)).rejects.toThrow('Google Directory groups.list failed');
+    expect(consoleError).toHaveBeenCalledWith(
+      '[MastraRBACGoogle] Failed to fetch Google Workspace groups:',
+      expect.any(Error),
+    );
+    expect(consoleError.mock.calls[0]?.join(' ')).not.toContain('user@example.com');
+
     await expect(rbac.getRoles(user)).resolves.toEqual(['viewer@example.com']);
     expect(mockFetch).toHaveBeenCalledTimes(2);
+    consoleError.mockRestore();
   });
 
   it('signs service-account JWTs and normalizes escaped private keys', async () => {
@@ -546,9 +591,11 @@ describe('MastraRBACGoogle', () => {
     await expect(rbac.getRoles(user)).resolves.toEqual(['admins@example.com']);
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(mockFetch.mock.calls[0]![0]).toBe('https://oauth2.googleapis.com/token');
+    expect(mockFetch.mock.calls[0]![1]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(mockFetch.mock.calls[1]![1]).toEqual(
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer service-account-token' }),
+        signal: expect.any(AbortSignal),
       }),
     );
   });

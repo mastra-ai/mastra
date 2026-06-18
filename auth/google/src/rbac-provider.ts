@@ -18,6 +18,7 @@ const DIRECTORY_GROUPS_URL = 'https://admin.googleapis.com/admin/directory/v1/gr
 const DEFAULT_DIRECTORY_SCOPES = ['https://www.googleapis.com/auth/admin.directory.group.readonly'];
 const DEFAULT_CACHE_TTL_MS = 60 * 1000;
 const DEFAULT_CACHE_MAX_SIZE = 1000;
+const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
 
 interface GroupsListResponse {
   groups?: GoogleWorkspaceGroup[];
@@ -64,9 +65,9 @@ export class MastraRBACGoogle implements IRBACProvider<GoogleUser> {
     }
 
     const rolesPromise = this.fetchRolesFromGoogle(userKey).catch(err => {
-      console.error(`[MastraRBACGoogle] Failed to fetch groups for user ${userKey}:`, err);
+      console.error('[MastraRBACGoogle] Failed to fetch Google Workspace groups:', err);
       this.rolesCache.delete(userKey);
-      return [];
+      throw err;
     });
     this.rolesCache.set(userKey, rolesPromise);
     return rolesPromise;
@@ -150,6 +151,7 @@ export class MastraRBACGoogle implements IRBACProvider<GoogleUser> {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
         },
+        signal: AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -229,6 +231,7 @@ export class MastraRBACGoogle implements IRBACProvider<GoogleUser> {
         grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
         assertion: `${unsigned}.${signature}`,
       }),
+      signal: AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS),
     });
 
     if (!response.ok) {

@@ -84,6 +84,15 @@ function getStateTokenFromCallbackState(state: string): string {
   return separatorIndex === -1 ? state : state.slice(0, separatorIndex);
 }
 
+function verifyCallbackStateSuffix(callbackState: string, originalState: string): void {
+  const callbackSuffix = getServerRedirectStateSuffix(callbackState);
+  if (!callbackSuffix) return;
+
+  if (callbackSuffix !== getServerRedirectStateSuffix(originalState)) {
+    throw new Error('Invalid state redirect suffix');
+  }
+}
+
 function getExpirationMs(expiresAt: unknown): number | undefined {
   if (expiresAt === undefined || expiresAt === null) {
     return undefined;
@@ -250,6 +259,7 @@ export class MastraAuthGoogle extends MastraAuthProvider<GoogleUser> implements 
     const configuredHostedDomain = normalizeDomain(options?.hostedDomain ?? process.env.GOOGLE_HOSTED_DOMAIN);
     const clientSecret = options?.clientSecret ?? process.env.GOOGLE_CLIENT_SECRET;
     const redirectUri = options?.redirectUri ?? process.env.GOOGLE_REDIRECT_URI;
+    const hasConfiguredCookiePassword = !!(options?.session?.cookiePassword ?? process.env.GOOGLE_COOKIE_PASSWORD);
     const cookiePassword =
       options?.session?.cookiePassword ??
       process.env.GOOGLE_COOKIE_PASSWORD ??
@@ -275,10 +285,13 @@ export class MastraAuthGoogle extends MastraAuthProvider<GoogleUser> implements 
         );
       }
 
-      if (!options?.session?.cookiePassword && !process.env.GOOGLE_COOKIE_PASSWORD) {
-        console.warn(
-          '[MastraAuthGoogle] No cookie password set — using auto-generated value. Sessions will not survive restarts. Set GOOGLE_COOKIE_PASSWORD for production use.',
-        );
+      if (!hasConfiguredCookiePassword) {
+        const message =
+          '[MastraAuthGoogle] GOOGLE_COOKIE_PASSWORD is required for Google SSO in production. Set GOOGLE_COOKIE_PASSWORD or pass session.cookiePassword.';
+        if (process.env.NODE_ENV === 'production') {
+          throw new Error(message);
+        }
+        console.warn(`${message} Using an auto-generated value for development only; sessions will not survive restarts.`);
       }
 
       this.attachSSOProvider();
@@ -325,11 +338,8 @@ export class MastraAuthGoogle extends MastraAuthProvider<GoogleUser> implements 
     return this.authenticateToken(token, request);
   }
 
-  async getUser(userId: string): Promise<GoogleUser | null> {
-    return {
-      id: userId,
-      googleId: userId,
-    };
+  async getUser(_userId: string): Promise<GoogleUser | null> {
+    return null;
   }
 
   getUserProfileUrl(user: GoogleUser): string {
@@ -471,7 +481,8 @@ export class MastraAuthGoogle extends MastraAuthProvider<GoogleUser> implements 
       callbackState: string,
     ): Promise<SSOCallbackResult<GoogleUser>> {
       const signedState = getStateTokenFromCallbackState(callbackState);
-      const { redirectUri, nonce } = await verifyStateToken(signedState, self.cookiePassword);
+      const { originalState, redirectUri, nonce } = await verifyStateToken(signedState, self.cookiePassword);
+      verifyCallbackStateSuffix(callbackState, originalState);
 
       const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
         method: 'POST',
