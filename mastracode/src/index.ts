@@ -653,38 +653,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // })) ?? { threads: [] as StorageThreadType[] };
   // const ownerId = `mastracode-${hash(`${hostname()}\0${project.rootPath}`)}`;
 
-  // temporary prefill sessions from threads
-  // await Promise.all(
-  //   threads.map(thread => {
-  //     const sessionHash = hash(`${thread.resourceId}\0${thread.id}`);
-
-  //     const meta = thread.metadata as Record<string, unknown> | undefined;
-  //     const modeId = typeof meta?.currentModeId === 'string' ? meta.currentModeId : defaultModeId;
-  //     const mode = modesV1.find(mode => mode.id === modeId) ?? modesV1.find(mode => mode.id === defaultModeId)!;
-  //     const modelId = typeof meta?.currentModelId === 'string' ? meta.currentModelId : mode.defaultModelId;
-  //     return harnessStorage.saveSession({
-  //       id: `sess-${sessionHash}`,
-  //       ownerId,
-  //       resourceId: thread.resourceId,
-  //       threadId: thread.id,
-  //       modeId: mode.id,
-  //       modelId,
-  //       origin: 'top-level',
-  //       createdAt: thread.createdAt,
-  //       lastActivityAt: thread.updatedAt,
-  //     });
-  //   }),
-  // );
-
-  // const harnessV1 = new HarnessV1({
-  //   ownerId,
-  //   agents: { [CODE_AGENT_ID]: codeAgent },
-  //   memory,
-  //   modes: modesV1,
-  //   defaultModeId,
-  //   storage: harnessStorage,
-  // });
-
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const harness: Harness<MastraCodeState> = new Harness<MastraCodeState>({
     id: 'mastra-code',
