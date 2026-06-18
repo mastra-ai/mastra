@@ -1,6 +1,6 @@
 ---
 title: "Modes | Harness"
-description: "Configure and switch between agent modes to give a single harness multiple personalities or capability sets."
+description: "Configure and switch between agent modes to give a single Harness multiple personalities or capability sets."
 packages:
   - "@mastra/core"
 ---
@@ -11,9 +11,11 @@ Modes define the different personalities or capability sets available within a H
 
 ## When to use modes
 
-Use modes when a single conversational session needs to switch between distinct behaviors — for example, a planning mode that reasons about tasks and a build mode that executes them. Modes share the same thread and state, so the agent retains context across switches.
+Use modes when a single conversational session needs to switch between distinct behaviors. For example, a planning mode that reasons about tasks and a build mode that executes them. Modes share the same thread and state, so the agent retains context across switches.
 
 ## Quickstart
+
+Import the `Harness` class and create a new instance with your agent and modes:
 
 ```typescript title="src/mastra/harness.ts"
 import { Harness } from '@mastra/core/harness'
@@ -22,6 +24,7 @@ import { myAgent } from './agents'
 const harness = new Harness({
   id: 'multi-mode',
   agent: myAgent,
+  // highlight-start
   modes: [
     {
       id: 'plan',
@@ -31,6 +34,7 @@ const harness = new Harness({
     },
     { id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
   ],
+  // highlight-end
 })
 
 await harness.init()
@@ -76,11 +80,11 @@ const planMode = { id: 'plan', tools: { planTool } }
 const buildMode = { id: 'build', additionalTools: { deployTool } }
 ```
 
-You cannot set both `tools` and `additionalTools` on the same mode.
+You can't set both `tools` and `additionalTools` on the same mode.
 
 ### Mode transitions
 
-A mode can declare a `transitionsTo` target. When the `submit_plan` built-in tool runs in that mode, the harness transitions to the target mode on approval:
+A mode can declare a `transitionsTo` target. When the `submit_plan` built-in tool runs in that mode, the Harness transitions to the target mode on approval:
 
 ```typescript
 const planMode = {
@@ -91,11 +95,11 @@ const planMode = {
 }
 ```
 
-On plan approval, the harness automatically switches to `build` mode. On rejection, the agent remains in `plan` mode to revise.
+On plan approval, the Harness automatically switches to `build` mode. On rejection, the agent remains in `plan` mode to revise.
 
 ## Switching modes
 
-Call `switchMode` to change the active mode. The harness aborts any in-progress generation, saves the current model to the outgoing mode, loads the incoming mode's model, and emits `mode_changed` and `model_changed` events:
+Call `switchMode()` to change the active mode. The Harness aborts any in-progress generation, saves the current model to the outgoing mode, loads the incoming mode's model, and emits `mode_changed` and `model_changed` events:
 
 ```typescript
 await harness.switchMode({ modeId: 'build' })

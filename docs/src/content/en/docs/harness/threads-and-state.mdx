@@ -72,7 +72,6 @@ const harness = new Harness({
       /* release lock */
     },
   },
-  // ...
 })
 ```
 
@@ -83,16 +82,24 @@ const harness = new Harness({
 Pass a `stateSchema` (Standard JSON Schema) to validate state and extract defaults:
 
 ```typescript title="src/mastra/harness.ts"
+import { Agent } from '@mastra/core/agent'
 import { Harness } from '@mastra/core/harness'
 import { z } from 'zod'
 
+const agent = new Agent({
+  name: 'assistant',
+  instructions: 'Help the user manage a stateful session.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
 const harness = new Harness({
   id: 'stateful-agent',
+  agent,
+  modes: [{ id: 'default', name: 'Default', metadata: { default: true } }],
   stateSchema: z.object({
     currentModelId: z.string().optional(),
     theme: z.enum(['light', 'dark']).default('dark'),
   }),
-  // ...
 })
 ```
 
@@ -116,7 +123,6 @@ Threads are scoped to a resource ID. The resource ID defaults to the harness `id
 const harness = new Harness({
   id: 'my-agent',
   resourceId: 'project-xyz',
-  // ...
 })
 
 // Change resource ID at runtime (clears the current thread)
@@ -127,5 +133,4 @@ harness.setResourceId({ resourceId: 'project-abc' })
 
 - [Harness overview](/docs/harness/overview)
 - [Modes](/docs/harness/modes)
-- [Memory overview](/docs/memory/overview)
 - [API reference](/reference/harness/harness-class)

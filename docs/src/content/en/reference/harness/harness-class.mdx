@@ -9,7 +9,7 @@ packages:
 
 :::experimental
 
-The `Harness` class is in alpha and subject to breaking changes in minor versions until it graduates from experimental status.
+The `Harness` feature is in alpha stage and subject to breaking changes in minor versions until it graduates from its alpha status.
 
 :::
 
@@ -18,6 +18,8 @@ The `Harness` class orchestrates multiple agent modes, shared state, memory, and
 For a conceptual introduction, see the [Harness overview](/docs/harness/overview).
 
 ## Usage example
+
+Import the `Harness` class and create a new instance with your agent, storage backend, and modes:
 
 ```typescript title="src/mastra/harness.ts"
 import { Harness } from '@mastra/core/harness'

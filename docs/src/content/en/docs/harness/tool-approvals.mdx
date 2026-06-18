@@ -45,7 +45,6 @@ const harness = new Harness({
     if (toolName.includes('execute')) return 'execute'
     return 'read'
   },
-  // ...
 })
 ```
 
@@ -53,7 +52,7 @@ Built-in categories are `read`, `edit`, `execute`, `mcp`, and `other`.
 
 ## Responding to approval requests
 
-When a tool's policy is `ask`, the harness emits a `tool_approval_required` event. Your UI should display a prompt and call `session.respondToToolApproval`:
+When a tool's policy is `ask`, the Harness emits a `tool_approval_required` event. Your UI should display a prompt and call `session.respondToToolApproval()`:
 
 ```typescript
 harness.subscribe(event => {
@@ -64,7 +63,7 @@ harness.subscribe(event => {
 })
 ```
 
-The `decision` field accepts `'approve'`, `'decline'`, or `'always_allow_category'`. When `always_allow_category` is used, the tool's category is granted for the rest of the session — future tools in the same category are auto-approved:
+The `decision` field accepts `'approve'`, `'decline'`, or `'always_allow_category'`. When `always_allow_category` is used, the tool's category is granted for the rest of the session. Future tools in the same category are auto-approved.
 
 ```typescript
 harness.session.respondToToolApproval({ decision: 'always_allow_category' })
@@ -88,7 +87,7 @@ const grants = harness.session.getGrants()
 
 ## Tool suspensions
 
-Interactive built-in tools (`ask_user`, `submit_plan`) use the native tool-suspension primitive instead of the approval flow. They emit a `tool_suspended` event with `toolCallId`, `toolName`, and `suspendPayload`. Resume with `respondToToolSuspension`:
+Interactive built-in tools (`ask_user`, `submit_plan`) use the native tool-suspension primitive instead of the approval flow. They emit a `tool_suspended` event with `toolCallId`, `toolName`, and `suspendPayload`. Resume with `respondToToolSuspension()`:
 
 ```typescript
 harness.subscribe(event => {
@@ -141,7 +140,6 @@ Disable specific built-in tools with `disableBuiltinTools`:
 const harness = new Harness({
   id: 'no-plans',
   disableBuiltinTools: ['submit_plan'],
-  // ...
 })
 ```
 

@@ -22,16 +22,25 @@ Use subagents when:
 Define subagent types in the Harness constructor:
 
 ```typescript title="src/mastra/harness.ts"
+import { Agent } from '@mastra/core/agent'
 import { Harness } from '@mastra/core/harness'
+
+const agent = new Agent({
+  name: 'assistant',
+  instructions: 'Use subagents when a focused task needs a narrower toolset.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
 
 const harness = new Harness({
   id: 'with-subagents',
+  agent,
+  modes: [{ id: 'default', name: 'Default', metadata: { default: true } }],
   subagents: [
     {
       id: 'explore',
       name: 'Explore',
       description: 'Reads files and gathers context without making changes.',
-      instructions: 'You are a read-only exploration agent...',
+      instructions: 'You are a read-only exploration agent.',
       allowedWorkspaceTools: ['read_file', 'list_directory', 'grep_search'],
       defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
       maxSteps: 30,
@@ -40,30 +49,17 @@ const harness = new Harness({
       id: 'execute',
       name: 'Execute',
       description: 'Makes changes to files and runs commands.',
-      instructions: 'You are an execution agent...',
+      instructions: 'You are an execution agent.',
       allowedWorkspaceTools: ['read_file', 'write_file', 'execute_command'],
       defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
     },
   ],
-  // ...
 })
 ```
 
 The parent agent can then call the auto-generated `subagent` tool with a `task` description and optional `agentType`.
 
-## Subagent configuration
-
-Each subagent definition accepts:
-
-- `id`: Unique identifier for this subagent type
-- `name`: Human-readable name shown in tool output
-- `description`: Used in the auto-generated tool description
-- `instructions`: System prompt for the subagent
-- `tools`: Direct tool access for the subagent
-- `allowedHarnessTools`: Subset of harness-level shared tools
-- `allowedWorkspaceTools`: Subset of workspace tools (by exposed name)
-- `defaultModelId`: Model for this subagent type
-- `maxSteps`: Maximum loop iterations (defaults to 50)
+For the full list of subagent configuration options, see [`Harness` reference](/reference/harness/harness-class#subagents).
 
 ## Forked subagents
 
@@ -77,6 +73,7 @@ const collaborator = {
   name: 'Collaborator',
   description: 'Continues the conversation in a fork.',
   instructions: '...', // Ignored in forked mode
+  // highlight-next-line
   forked: true,
 }
 ```
@@ -85,7 +82,7 @@ Or per-invocation via the `subagent` tool's `forked` input parameter.
 
 ### Forked mode semantics
 
-- Memory must be configured on the harness (forking clones the thread)
+- Memory must be configured on the Harness (forking clones the thread)
 - The parent agent's instructions, tools, model, and `maxSteps` apply
 - The subagent definition's own `instructions`, `tools`, and `defaultModelId` are ignored
 - Fork threads are tagged with `metadata.forkedSubagent === true` and hidden from `listThreads` by default
