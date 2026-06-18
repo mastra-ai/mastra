@@ -511,7 +511,7 @@ export class AgentThreadStreamRuntime {
     output: MastraModelOutput<OUTPUT>,
     streamOptions: AgentExecutionOptions<OUTPUT>,
     pubsub?: PubSub,
-  ) {
+  ): Promise<void> | undefined {
     const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
     if (!threadId) return;
 
@@ -538,6 +538,7 @@ export class AgentThreadStreamRuntime {
     const registered = this.#publishAndWait(pubsub, key, { type: 'run-registered', runId: output.runId });
     void registered.then(startBroadcast, startBroadcast);
     this.#watchThreadRunCompletion(state, pubsub, key, record);
+    return registered;
   }
 
   #watchThreadRunCompletion(
@@ -933,6 +934,10 @@ export class AgentThreadStreamRuntime {
       if (!data) return;
       if (data.type === 'run-registered') {
         state.activeThreadRunIds.set(key, data.runId);
+        // A resumed suspended tool re-registers the same runId. Treat the new
+        // registration as a new stream boundary so existing subscribers consume
+        // the resumed output instead of dropping it as an already-seen run.
+        seenRunIds.delete(data.runId);
         const record = state.threadRunsById.get(data.runId) ?? createRemoteRun(data.runId);
         enqueueRun(record);
         wake();
