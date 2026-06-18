@@ -452,10 +452,6 @@ export class Harness<TState = {}> {
   private resourceId: string;
   private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
-  private pendingApprovalResolve:
-    | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
-    | null = null;
-  private pendingApprovalToolName: string | null = null;
   private workspace: Workspace | undefined = undefined;
   private workspaceFn:
     | ((ctx: {
@@ -511,6 +507,7 @@ export class Harness<TState = {}> {
       get: key => this.getThreadSetting({ key }),
       set: (key, value) => this.setThreadSetting({ key, value }),
     });
+    this.#session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
     if (config.workspace instanceof Workspace) {
@@ -2882,15 +2879,11 @@ export class Harness<TState = {}> {
           break;
         }
 
-        this.pendingApprovalToolName = toolName;
+        const approvalPromise = this.#session.approval.arm({ toolName });
         this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
-        const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
-          resolve => {
-            this.pendingApprovalResolve = resolve;
-          },
-        );
-        this.pendingApprovalToolName = null;
+        const approval = await approvalPromise;
+        this.#session.approval.clearToolName();
 
         if (approval.decision === 'approve') {
           await this.handleToolApprove({ toolCallId, requestContext: approval.requestContext ?? requestContext });
@@ -3435,34 +3428,6 @@ export class Harness<TState = {}> {
     this.displayState.omProgress = defaultOMProgressState();
     this.displayState.bufferingMessages = false;
     this.displayState.bufferingObservations = false;
-  }
-
-  /**
-   * Respond to a pending tool approval from the UI.
-   * "always_allow_category" grants the tool's category for the rest of the session, then approves.
-   */
-  respondToToolApproval({
-    decision,
-    requestContext,
-  }: {
-    decision: 'approve' | 'decline' | 'always_allow_category';
-    requestContext?: RequestContext;
-  }): void {
-    if (!this.pendingApprovalResolve) return;
-
-    if (decision === 'always_allow_category') {
-      const tn = this.pendingApprovalToolName;
-      if (tn) {
-        const category = this.getToolCategory({ toolName: tn });
-        if (category) {
-          this.#session.grantCategory(category);
-        }
-      }
-      this.pendingApprovalResolve({ decision: 'approve', requestContext });
-    } else {
-      this.pendingApprovalResolve({ decision, requestContext });
-    }
-    this.pendingApprovalResolve = null;
   }
 
   /**
