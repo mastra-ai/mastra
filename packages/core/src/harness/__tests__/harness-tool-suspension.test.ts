@@ -19,6 +19,16 @@ import { Harness } from '../harness';
 
 vi.setConfig({ testTimeout: 30_000 });
 
+async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const start = Date.now();
+  while (!condition()) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('Timed out waiting for condition');
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
 function createToolCallStream() {
   return new ReadableStream({
     start(controller) {
@@ -306,11 +316,33 @@ describe('Harness: tool suspension and resumption', () => {
     const suspendEnd = events.find((e: any) => e.type === 'agent_end');
     expect(suspendEnd?.reason).toBe('suspended');
 
+    const originalResumeStream = registeredAgent.resumeStream.bind(registeredAgent);
+    let returnedResumeStreamReadCount = 0;
+    vi.spyOn(registeredAgent, 'resumeStream').mockImplementation(async (...args: Parameters<typeof registeredAgent.resumeStream>) => {
+      const output = await originalResumeStream(...args);
+      const originalFullStream = output.fullStream;
+      Object.defineProperty(output, 'fullStream', {
+        value: {
+          async *[Symbol.asyncIterator]() {
+            for await (const chunk of originalFullStream) {
+              returnedResumeStreamReadCount++;
+              yield chunk;
+            }
+          },
+        },
+      });
+      return output;
+    });
+
     // Clear events for resume phase
     events.length = 0;
 
     // Resume with data
     await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await waitFor(() => events.some((e: any) => e.type === 'agent_end' && e.reason === 'complete'));
+    // Threaded harness sessions should let the existing thread subscription consume
+    // resumed output instead of directly reading the resumeStream return value.
+    expect(returnedResumeStreamReadCount).toBe(0);
 
     // Should emit agent_start + agent_end(complete) for the resumed run
     const resumeStart = events.find((e: any) => e.type === 'agent_start');
