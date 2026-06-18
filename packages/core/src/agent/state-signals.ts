@@ -172,6 +172,23 @@ export async function resolveStateSignalHistory({
   const memoryStore = await memory.storage.getStore('memory');
   if (!memoryStore) return { ...localHistory, contextWindow };
 
+  const trackedSignalIds = new Set<string>();
+  for (const activeCopy of tracking.activeCopies ?? []) {
+    trackedSignalIds.add(activeCopy.id);
+  }
+  trackedSignalIds.add(tracking.lastSnapshotSignalId);
+
+  if (trackedSignalIds.size > 0 && typeof memoryStore.listMessagesById === 'function') {
+    const storedMessages = await memoryStore.listMessagesById({ messageIds: [...trackedSignalIds] });
+    const storedStateSignals = dbMessagesToStateSignals(storedMessages.messages, stateId, threadId);
+    const resolvedStateSignals = mergeStateSignals(storedStateSignals, localStateSignals);
+
+    return {
+      ...deriveStateSignalHistory(resolvedStateSignals.length > 0 ? resolvedStateSignals : localStateSignals),
+      contextWindow,
+    };
+  }
+
   const storedMessages = await memoryStore.listMessages({
     threadId,
     resourceId,
