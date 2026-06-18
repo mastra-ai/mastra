@@ -32,6 +32,44 @@ const MODE_ID_KEY = 'currentModeId';
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
 /**
+ * Owns the session's identity: which memory `resourceId` this session reads and
+ * writes under. In a multi-user host one Harness serves many sessions, so the
+ * resourceId — "whose session is this" — belongs to the Session, not the
+ * Harness.
+ *
+ * `defaultResourceId` is the resourceId the session started with; switching to a
+ * different resource (e.g. impersonation, or browsing another user's threads)
+ * updates the current resourceId while the default is retained so the session
+ * can return to its own identity.
+ */
+export class SessionIdentity {
+  /** The memory resourceId the session currently reads/writes under. */
+  #resourceId: string;
+  /** The resourceId the session started with, retained across resource switches. */
+  readonly #defaultResourceId: string;
+
+  constructor({ resourceId }: { resourceId: string }) {
+    this.#resourceId = resourceId;
+    this.#defaultResourceId = resourceId;
+  }
+
+  /** The resourceId the session currently reads/writes under. */
+  getResourceId(): string {
+    return this.#resourceId;
+  }
+
+  /** The resourceId the session started with. */
+  getDefaultResourceId(): string {
+    return this.#defaultResourceId;
+  }
+
+  /** Point the session at a different resourceId (the default is unchanged). */
+  setResourceId({ resourceId }: { resourceId: string }): void {
+    this.#resourceId = resourceId;
+  }
+}
+
+/**
  * Owns the session's live subscription to the active thread's agent event
  * stream. A subscription is created per `(agent, resource, thread)` and reused
  * while that triple is unchanged (tracked by {@link key}); switching threads or
@@ -617,6 +655,12 @@ export class Session {
   readonly followUps = new SessionFollowUps();
   /** The interactive tool-approval gate the current run parks on. */
   readonly approval = new SessionApproval();
+  /** The session's identity: the memory resourceId it reads/writes under. */
+  readonly identity: SessionIdentity;
+
+  constructor({ resourceId }: { resourceId: string }) {
+    this.identity = new SessionIdentity({ resourceId });
+  }
 
   /**
    * Attach the thread-settings store the Session persists mode/model through.

@@ -3,8 +3,8 @@ import type { SlashCommandContext } from './types.js';
 export async function handleResourceCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const { state, harness } = ctx;
   const sub = args[0]?.trim();
-  const current = harness.getResourceId();
-  const defaultId = harness.getDefaultResourceId();
+  const current = harness.session.identity.getResourceId();
+  const defaultId = harness.session.identity.getDefaultResourceId();
 
   if (!sub) {
     const knownIds = await harness.getKnownResourceIds();

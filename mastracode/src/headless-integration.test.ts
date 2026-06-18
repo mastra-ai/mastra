@@ -1204,7 +1204,7 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(harness.getResourceId()).toBe('resource-b');
+    expect(harness.session.identity.getResourceId()).toBe('resource-b');
     expect(harness.getCurrentThreadId()).toBe(betaThread.id);
 
     exitCode = await runHeadless(harness, {
@@ -1216,7 +1216,7 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(harness.getResourceId()).toBe('resource-a');
+    expect(harness.session.identity.getResourceId()).toBe('resource-a');
     expect(harness.getCurrentThreadId()).toBe(alphaThread.id);
     expect(harness.getCurrentThreadId()).not.toBe(alphaOlderThread.id);
   });

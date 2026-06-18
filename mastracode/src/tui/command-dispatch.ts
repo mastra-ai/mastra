@@ -71,7 +71,7 @@ export async function dispatchSlashCommand(
     ctx.analytics?.trackCommand(command, {
       action: 'attempted',
       threadId: state.harness.getCurrentThreadId(),
-      resourceId: state.harness.getResourceId(),
+      resourceId: state.harness.session.identity.getResourceId(),
       mode: state.harness.getCurrentModeId(),
     });
   };

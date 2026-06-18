@@ -99,7 +99,7 @@ describe('dispatchSlashCommand models routing', () => {
       customSlashCommands: [],
       harness: {
         getCurrentThreadId: vi.fn(() => 'thread-1'),
-        getResourceId: vi.fn(() => 'resource-1'),
+        session: { identity: { getResourceId: vi.fn(() => 'resource-1') } },
         getCurrentModeId: vi.fn(() => 'build'),
       },
     } as any;
@@ -123,7 +123,7 @@ describe('dispatchSlashCommand models routing', () => {
       customSlashCommands: [],
       harness: {
         getCurrentThreadId: vi.fn(() => 'thread-1'),
-        getResourceId: vi.fn(() => 'resource-1'),
+        session: { identity: { getResourceId: vi.fn(() => 'resource-1') } },
         getCurrentModeId: vi.fn(() => 'build'),
       },
     } as any;
@@ -498,7 +498,7 @@ describe('dispatchSlashCommand models routing', () => {
       customSlashCommands: [{ name: 'new', description: 'Custom new', template: 'custom new', sourcePath: '' }],
       harness: {
         getCurrentThreadId: vi.fn(() => null),
-        getResourceId: vi.fn(() => 'resource-1'),
+        session: { identity: { getResourceId: vi.fn(() => 'resource-1') } },
         getCurrentModeId: vi.fn(() => 'build'),
       },
     } as any;

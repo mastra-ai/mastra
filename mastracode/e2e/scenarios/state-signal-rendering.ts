@@ -35,7 +35,7 @@ export const stateSignalRenderingScenario: McE2eScenario = {
                 value: { activeUrl: 'https://example.test/state' },
               },
               {
-                resourceId: result.harness.getResourceId(),
+                resourceId: result.harness.session.identity.getResourceId(),
                 threadId,
                 ifActive: { attributes: { source: 'mc-e2e' } },
                 ifIdle: { behavior: 'persist' },

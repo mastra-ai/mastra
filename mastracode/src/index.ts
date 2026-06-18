@@ -755,7 +755,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         await githubSignals.startPollingForThread(
           {
             threadId,
-            resourceId: thread?.resourceId ?? harness.getResourceId(),
+            resourceId: thread?.resourceId ?? harness.session.identity.getResourceId(),
           },
           { pollImmediately: true },
         );

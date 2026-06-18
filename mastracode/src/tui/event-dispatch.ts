@@ -91,7 +91,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       trackInteractivePrompt(ectx, 'tool_approval_required', {
         toolName: event.toolName,
         threadId: state.harness.getCurrentThreadId(),
-        resourceId: state.harness.getResourceId(),
+        resourceId: state.harness.session.identity.getResourceId(),
       });
       handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
       break;
@@ -109,7 +109,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         trackInteractivePrompt(ectx, event.toolName, {
           toolName: event.toolName,
           threadId: state.harness.getCurrentThreadId(),
-          resourceId: state.harness.getResourceId(),
+          resourceId: state.harness.session.identity.getResourceId(),
         });
       }
       handleToolInputStart(ectx, event.toolCallId, event.toolName);

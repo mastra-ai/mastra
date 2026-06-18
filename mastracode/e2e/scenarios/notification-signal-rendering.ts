@@ -39,7 +39,7 @@ export const notificationSignalRenderingScenario = {
               dedupeKey: 'mc-e2e-notification-signal',
             },
             {
-              resourceId: result.harness.getResourceId(),
+              resourceId: result.harness.session.identity.getResourceId(),
               threadId,
               ifIdle: { behavior: 'wake' },
             },
