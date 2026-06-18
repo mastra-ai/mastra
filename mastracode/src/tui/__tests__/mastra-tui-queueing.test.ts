@@ -881,11 +881,15 @@ describe('syncInitialThreadState', () => {
     };
     const state = {
       harness: {
-        getCurrentThreadId: vi.fn(() => 'thread-1'),
-        listThreads: vi.fn().mockResolvedValue([
-          { id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } },
-          { id: 'thread-2', title: 'Other thread', metadata: {} },
-        ]),
+        session: {
+          thread: {
+            getId: vi.fn(() => 'thread-1'),
+            list: vi.fn().mockResolvedValue([
+              { id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } },
+              { id: 'thread-2', title: 'Other thread', metadata: {} },
+            ]),
+          },
+        },
         sendMessage: vi.fn(),
       },
       goalManager: {
@@ -924,10 +928,14 @@ describe('syncInitialThreadState', () => {
     };
     const state = {
       harness: {
-        getCurrentThreadId: vi.fn(() => 'thread-1'),
-        listThreads: vi
-          .fn()
-          .mockResolvedValue([{ id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } }]),
+        session: {
+          thread: {
+            getId: vi.fn(() => 'thread-1'),
+            list: vi
+              .fn()
+              .mockResolvedValue([{ id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } }]),
+          },
+        },
         sendMessage: vi.fn(),
       },
       goalManager: {

@@ -34,7 +34,7 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
   harness.setResourceId({ resourceId: newId });
 
   // Try to resume the most recent thread for this resource
-  const threads = await harness.listThreads();
+  const threads = await harness.session.thread.list();
   const latest = [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
 
   if (latest) {

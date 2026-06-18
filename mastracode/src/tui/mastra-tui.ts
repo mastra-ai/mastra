@@ -107,10 +107,10 @@ const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
 const CAFFEINATE_ARGS = ['-i', '-m'];
 
 export async function syncInitialThreadState(state: TUIState): Promise<void> {
-  const initThreadId = state.harness.getCurrentThreadId();
+  const initThreadId = state.harness.session.thread.getId();
   if (!initThreadId) return;
 
-  const initThreads = await state.harness.listThreads();
+  const initThreads = await state.harness.session.thread.list();
   const initThread = initThreads.find(t => t.id === initThreadId);
   if (initThread?.title) {
     state.currentThreadTitle = initThread.title;
@@ -157,7 +157,7 @@ export class MastraTUI {
     this.state = createTUIState(options);
 
     options.githubSignals?.onSubscriptionsChanged(event => {
-      const currentThreadId = this.state.harness.getCurrentThreadId?.();
+      const currentThreadId = this.state.harness.session?.thread?.getId?.();
       const currentResourceId = this.state.harness.session?.identity?.getResourceId?.();
       if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
       this.state.activeGithubPrSubscriptions = event.subscriptions.map(subscription => ({
@@ -173,7 +173,7 @@ export class MastraTUI {
     });
 
     (options.githubSignals as GithubSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
-      const currentThreadId = this.state.harness.getCurrentThreadId?.();
+      const currentThreadId = this.state.harness.session?.thread?.getId?.();
       const currentResourceId = this.state.harness.session?.identity?.getResourceId?.();
       if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
       if (!this.state.githubPrGradientAnimator) {
@@ -425,7 +425,7 @@ export class MastraTUI {
     const send = () => {
       this.clearIdleCounter();
       this.state.analytics?.capture('mastracode_prompt_submitted', {
-        threadId: this.state.harness.getCurrentThreadId(),
+        threadId: this.state.harness.session.thread.getId(),
         resourceId: this.state.harness.session.identity.getResourceId(),
         mode: this.state.harness.getCurrentModeId(),
         hasImages: Boolean(images?.length),
@@ -775,7 +775,7 @@ export class MastraTUI {
         modelId: event.modelId,
         scope: event.scope,
         mode: event.modeId ?? this.state.harness.getCurrentModeId(),
-        threadId: this.state.harness.getCurrentThreadId(),
+        threadId: this.state.harness.session.thread.getId(),
         resourceId: this.state.harness.session.identity.getResourceId(),
       });
     }
@@ -785,7 +785,7 @@ export class MastraTUI {
     const harness = this.state.harness;
     const traceId = harness.session.run.getTraceId() ?? undefined;
     const runId = harness.session.getCurrentRunId() ?? undefined;
-    const threadId = harness.getCurrentThreadId() ?? undefined;
+    const threadId = harness.session.thread.getId() ?? undefined;
 
     if (!traceId && !runId && !threadId) return;
 
@@ -895,13 +895,13 @@ export class MastraTUI {
     metadata?: Record<string, unknown>;
   }): Promise<void> {
     const settings = loadSettings();
-    const currentThreadId = this.state.harness.getCurrentThreadId();
+    const currentThreadId = this.state.harness.session.thread.getId();
     if (!currentThreadId) return;
 
     const resolvedThread =
       thread?.id === currentThreadId
         ? thread
-        : (await this.state.harness.listThreads()).find(t => t.id === currentThreadId);
+        : (await this.state.harness.session.thread.list()).find(t => t.id === currentThreadId);
     const access = await this.buildProviderAccess();
     const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
     const resolvedPackId = resolveThreadActiveModelPackId(
@@ -1285,7 +1285,7 @@ export class MastraTUI {
       const modelId = (modePack.models as Record<string, string>)[mode.id];
       if (modelId) {
         (mode as any).defaultModelId = modelId;
-        await harness.setThreadSetting({
+        await harness.session.thread.setSetting({
           key: `modeModelId_${mode.id}`,
           value: modelId,
         });
@@ -1341,8 +1341,8 @@ export class MastraTUI {
 
     settings.onboarding.modePackId = activeModePackId;
     settings.models.activeModelPackId = activeModePackId;
-    if (harness.getCurrentThreadId()) {
-      await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
+    if (harness.session.thread.getId()) {
+      await harness.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
 
     settings.models.activeOmPackId = omPack.id;

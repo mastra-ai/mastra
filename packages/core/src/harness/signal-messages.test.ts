@@ -137,7 +137,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'signal-user-1',
         role: 'user',
@@ -165,7 +165,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'signal-1',
         role: 'user',
@@ -206,7 +206,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'signal-array',
         role: 'user',
@@ -246,7 +246,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'reactive-signal-1',
         role: 'user',
@@ -294,7 +294,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'summary-1',
         role: 'user',
@@ -348,7 +348,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'notification-signal-1',
         role: 'user',

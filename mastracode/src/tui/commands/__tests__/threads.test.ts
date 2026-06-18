@@ -72,11 +72,15 @@ function createContext(threads: HarnessThread[]) {
     allToolComponents: [] as any[],
     pendingTools: new Map(),
     harness: {
-      listThreads: vi.fn(async () => threads),
-      getCurrentThreadId: vi.fn(() => null),
-      session: { identity: { getResourceId: vi.fn(() => 'resource-1') } },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn(async () => threads),
+          firstUserMessages: vi.fn(async () => new Map()),
+        },
+      },
       getCurrentModeId: vi.fn(() => 'build'),
-      getFirstUserMessagesForThreads: vi.fn(async () => new Map()),
       setResourceId: vi.fn(),
       switchThread: vi.fn(),
       cloneThread: vi.fn(),
@@ -153,7 +157,7 @@ describe('handleThreadsCommand thread listing', () => {
       updatedAt: new Date('2026-03-17T15:10:00.000Z').getTime(),
     });
     state.attemptedThreadPreviewIds.add('thread-1');
-    state.harness.getFirstUserMessagesForThreads = vi.fn(
+    state.harness.session.thread.firstUserMessages = vi.fn(
       async () => new Map([['thread-1', createMessage('message-1', 'slow')]]),
     );
 
@@ -166,7 +170,7 @@ describe('handleThreadsCommand thread listing', () => {
     await expect(selector.options.getMessagePreviews(['thread-1', 'thread-2'])).resolves.toEqual(
       new Map([['thread-1', 'Cached preview']]),
     );
-    expect(state.harness.getFirstUserMessagesForThreads).not.toHaveBeenCalled();
+    expect(state.harness.session.thread.firstUserMessages).not.toHaveBeenCalled();
     expect(state.threadPreviewCache.get('thread-1')).toEqual({
       preview: 'Cached preview',
       updatedAt: new Date('2026-03-17T15:10:00.000Z').getTime(),

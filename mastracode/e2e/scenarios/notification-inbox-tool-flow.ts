@@ -24,7 +24,7 @@ export const notificationInboxToolFlowScenario = {
       },
       onCreated: result => {
         timer = setInterval(() => {
-          const threadId = result.harness.getCurrentThreadId();
+          const threadId = result.harness.session.thread.getId();
           if (sent || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
           sent = true;
           if (timer) clearInterval(timer);

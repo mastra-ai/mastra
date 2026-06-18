@@ -114,8 +114,30 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     await super.switchThread({ threadId });
   }
 
-  async listThreads(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
-    const [sessions, legacyThreads] = await Promise.all([this.#harnessV1.listSessions(), super.listThreads(options)]);
+  protected override createThreadDataStore() {
+    const base = super.createThreadDataStore();
+    return {
+      ...base,
+      listThreads: (input: { resourceId?: string; includeForkedSubagents?: boolean }) =>
+        this.listMergedThreads({
+          allResources: input.resourceId === undefined,
+          includeForkedSubagents: input.includeForkedSubagents,
+          baseList: () => base.listThreads(input),
+        }),
+    };
+  }
+
+  private async listMergedThreads({
+    allResources,
+    includeForkedSubagents,
+    baseList,
+  }: {
+    allResources?: boolean;
+    includeForkedSubagents?: boolean;
+    baseList: () => Promise<HarnessThread[]>;
+  }): Promise<HarnessThread[]> {
+    const options = { allResources, includeForkedSubagents };
+    const [sessions, legacyThreads] = await Promise.all([this.#harnessV1.listSessions(), baseList()]);
     const resourceId = this.session.identity.getResourceId();
 
     const sessionThreads = sessions
@@ -177,7 +199,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     title?: string;
     resourceId?: string;
   } = {}): Promise<HarnessThread> {
-    const sourceId = sourceThreadId ?? this.getCurrentThreadId();
+    const sourceId = sourceThreadId ?? this.session.thread.getId();
     if (!sourceId) {
       throw new Error('No source thread to clone');
     }

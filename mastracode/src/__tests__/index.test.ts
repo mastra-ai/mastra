@@ -112,23 +112,23 @@ vi.mock('@mastra/core/harness', () => ({
     subscribe(eventHandler: unknown) {
       harnessSubscribeMock(eventHandler);
     }
-    getCurrentThreadId() {
-      return harnessGetCurrentThreadIdMock();
-    }
     get session() {
-      return { identity: { getResourceId: () => 'project-resource' } };
+      return {
+        identity: {
+          getResourceId: () => 'project-resource',
+        },
+        thread: {
+          getId: () => harnessGetCurrentThreadIdMock(),
+          list: (options: unknown) => harnessListThreadsMock(options),
+          setSetting: (setting: unknown) => harnessSetThreadSettingMock(setting),
+        },
+      };
     }
     getState() {
       return harnessStateMock;
     }
-    listThreads(options: unknown) {
-      return harnessListThreadsMock(options);
-    }
     setState(state: unknown) {
       return harnessSetStateMock(state);
-    }
-    setThreadSetting(setting: unknown) {
-      return harnessSetThreadSettingMock(setting);
     }
   },
   taskWriteTool: {},
