@@ -11,6 +11,7 @@ import {
   GITHUB_SIGNALS_METADATA_KEY,
   GITHUB_SYNC_STATUS_TAG,
   normalizeGithubChecksForSnapshot,
+  sanitizeCommentText,
 } from './index.js';
 import type {
   GithubPullRequestSnapshot,
@@ -1489,7 +1490,8 @@ describe('GithubSignals', () => {
           metadata: expect.objectContaining({
             github: expect.objectContaining({
               latestCommentAuthor: 'devin-ai-integration',
-              latestCommentBody: 'Acknowledged! The authorized comment should still be delivered.',
+              // Full comment body is no longer persisted in notification metadata; only the excerpt.
+              latestCommentExcerpt: 'Acknowledged! The authorized comment should still be delivered.',
               latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-devin',
               latestCommentUpdatedAt: '2026-06-05T22:05:00.000Z',
             }),
@@ -1778,8 +1780,7 @@ describe('GithubSignals', () => {
           metadata: expect.objectContaining({
             github: expect.objectContaining({
               latestCommentAuthor: 'devin-ai-integration[bot]',
-              latestCommentBody:
-                'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
+              // Full comment body is no longer persisted in notification metadata; only the excerpt.
               latestCommentExcerpt:
                 'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
               latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
@@ -2641,6 +2642,135 @@ describe('GithubSignals', () => {
       ],
       expect.anything(),
     );
+  });
+
+  describe('sanitizeCommentText', () => {
+    it('removes large HTML-comment state blobs while keeping human-readable text', () => {
+      const body = [
+        'Nice work on the refactor!',
+        '',
+        '<!-- internal state start',
+        'eyJzdGF0ZSI6ImxhcmdlLWJhc2U2NC1ibG9iLXRoYXQtaXMtaHVnZSJ9',
+        'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        'internal state end -->',
+      ].join('\n');
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('Nice work on the refactor!');
+      expect(sanitized).not.toContain('internal state');
+      expect(sanitized).not.toContain('eyJzdGF0ZSI');
+    });
+
+    it('removes <details> blocks including their collapsed inner content', () => {
+      const body = [
+        'Top-level walkthrough.',
+        '<details open>',
+        '<summary>Walkthrough</summary>',
+        'collapsed detail content',
+        '</details>',
+        'After the section.',
+      ].join('\n');
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('Top-level walkthrough.');
+      expect(sanitized).toContain('After the section.');
+      // The collapsed block content is dropped, not just its tags.
+      expect(sanitized).not.toContain('collapsed detail content');
+      expect(sanitized).not.toContain('Walkthrough');
+      expect(sanitized).not.toContain('<details');
+      expect(sanitized).not.toContain('<summary');
+    });
+
+    it('strips standalone tags while keeping surrounding prose', () => {
+      const body = 'Looks good.<br/> Ship it.';
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('Looks good.');
+      expect(sanitized).toContain('Ship it.');
+      expect(sanitized).not.toContain('<br');
+    });
+
+    it('removes an unterminated comment and its payload through end-of-string', () => {
+      const body = 'before <!-- large-hidden-state-payload-with-no-closing-marker';
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('before');
+      expect(sanitized).not.toContain('<!--');
+      expect(sanitized).not.toContain('large-hidden-state');
+    });
+
+    it('leaves no stray < behind so no partial markup can survive', () => {
+      const sanitized = sanitizeCommentText('before <unterminated tag payload');
+      expect(sanitized).toContain('before');
+      expect(sanitized).not.toContain('<');
+    });
+
+    it('handles adversarial repeated comment openers without catastrophic backtracking', () => {
+      const body = `${'<!-- internal state start -->'.repeat(5000)}tail`;
+      const start = Date.now();
+      const sanitized = sanitizeCommentText(body);
+      expect(Date.now() - start).toBeLessThan(1000);
+      expect(sanitized).toContain('tail');
+      expect(sanitized).not.toContain('<!--');
+    });
+
+    it('handles adversarial leading <!--- repetitions without catastrophic backtracking', () => {
+      const body = `${'<!---'.repeat(20000)}tail`;
+      const start = Date.now();
+      const sanitized = sanitizeCommentText(body);
+      expect(Date.now() - start).toBeLessThan(1000);
+      expect(sanitized).not.toContain('<!--');
+    });
+
+    it('leaves an ordinary comment untouched aside from whitespace normalization', () => {
+      const body = 'Thanks for the fix — looks good to me.';
+      expect(sanitizeCommentText(body)).toBe(body);
+    });
+
+    it('preserves angle-bracket code inside an inline code span', () => {
+      const sanitized = sanitizeCommentText('Use `<Component>` here');
+      expect(sanitized).toBe('Use `<Component>` here');
+    });
+
+    it('preserves JSX/TSX inside fenced code blocks while stripping markup outside', () => {
+      const body = ['Before <br/> the block.', '```tsx', 'const x = <Component prop="a" />;', '```', 'After.'].join(
+        '\n',
+      );
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('const x = <Component prop="a" />;');
+      expect(sanitized).toContain('```tsx');
+      expect(sanitized).toContain('Before  the block.');
+      expect(sanitized).toContain('After.');
+      expect(sanitized).not.toContain('<br');
+    });
+
+    it('still strips real markup that appears outside code spans', () => {
+      const body = 'See `<Component>` but not <details open>secret</details> here.';
+      const sanitized = sanitizeCommentText(body);
+      expect(sanitized).toContain('`<Component>`');
+      expect(sanitized).not.toContain('secret');
+      expect(sanitized).not.toContain('<details');
+    });
+
+    it('preserves angle-bracket code inside a multi-backtick inline span', () => {
+      const sanitized = sanitizeCommentText('Use ``<Component prop="`a`" />`` here');
+      expect(sanitized).toBe('Use ``<Component prop="`a`" />`` here');
+    });
+
+    it('keeps ordinary prose containing a lone "<" (e.g. comparisons)', () => {
+      const sanitized = sanitizeCommentText('coverage < 80% but tests pass');
+      expect(sanitized).toBe('coverage  80% but tests pass');
+    });
+
+    it('leaves no "<script" or lone "<" in the output even when unterminated', () => {
+      const sanitized = sanitizeCommentText('hello <script>alert(1) and a dangling <scr');
+      expect(sanitized).not.toContain('<script');
+      expect(sanitized).not.toContain('<');
+      expect(sanitized).toContain('hello');
+    });
+
+    it('does not collapse blank lines inside a preserved fenced code block', () => {
+      const body = ['intro', '```ts', 'const a = 1;', '', '', '', 'const b = 2;', '```'].join('\n');
+      const sanitized = sanitizeCommentText(body);
+      // The 3+ blank lines inside the fence are restored verbatim, not normalized to one.
+      expect(sanitized).toContain('const a = 1;\n\n\n\nconst b = 2;');
+    });
   });
 
   it('starts polling after subscribe and stops after the last subscription is removed', async () => {

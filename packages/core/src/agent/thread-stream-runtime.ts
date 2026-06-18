@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { getErrorFromUnknown } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
@@ -669,7 +670,7 @@ export class AgentThreadStreamRuntime {
         this.#publish(pubsub, key, {
           type: 'run-failed',
           runId: pending.runId,
-          error: err instanceof Error ? err.message : String(err),
+          error: getErrorFromUnknown(err).message,
         });
         void this.#drainPendingContinuations(state, pubsub, key).then(started => {
           if (!started) {
@@ -751,7 +752,7 @@ export class AgentThreadStreamRuntime {
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: pendingIdle.runId,
-        error: err instanceof Error ? err.message : String(err),
+        error: getErrorFromUnknown(err).message,
       });
       void this.#drainPendingIdleSignals(state, pubsub, key);
     }
@@ -1411,7 +1412,7 @@ export class AgentThreadStreamRuntime {
         this.#publish(pubsub, key, {
           type: 'run-failed',
           runId,
-          error: err instanceof Error ? err.message : String(err),
+          error: getErrorFromUnknown(err).message,
         });
         void this.#drainPendingIdleSignals(state, pubsub, key);
       });

@@ -254,7 +254,7 @@ async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: 
   savePlanToDisk({
     title,
     plan,
-    resourceId: state.harness.getResourceId(),
+    resourceId: state.harness.session.identity.getResourceId(),
   }).catch(() => {});
   await state.harness.respondToToolSuspension({
     toolCallId,

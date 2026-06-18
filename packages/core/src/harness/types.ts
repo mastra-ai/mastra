@@ -959,6 +959,7 @@ export type HarnessMessageContent =
       timestamp?: string;
       goalMaxTurns?: number;
       judgeModelId?: string;
+      goalEvaluation?: GoalEvaluationPayload;
     }
   | {
       type: 'state_signal';
@@ -1031,6 +1032,17 @@ export type HarnessMessageContent =
  * Harness-specific context set on the RequestContext under the 'harness' key.
  * Tools can access harness state and methods through requestContext.get('harness').
  */
+/**
+ * Snapshot of the session-owned values exposed to request-context consumers.
+ * Plain data captured per request; mutating it does not affect the Session.
+ */
+export interface HarnessRequestSession {
+  /** Currently-selected mode ID */
+  modeId: string;
+  /** Currently-selected model ID ('' when none selected yet) */
+  modelId: string;
+}
+
 export interface HarnessRequestContext<TState = unknown> {
   /** The harness instance ID */
   harnessId: string;
@@ -1065,8 +1077,11 @@ export interface HarnessRequestContext<TState = unknown> {
   /** Current resource ID */
   resourceId: string;
 
-  /** Current mode ID */
-  modeId: string;
+  /**
+   * Snapshot of the relevant session-owned values for this request.
+   * Plain data (not the live Session); read-only at the point of use.
+   */
+  session: HarnessRequestSession;
 
   /** Abort signal for the current operation */
   abortSignal?: AbortSignal;
