@@ -357,7 +357,7 @@ async function resolveThread<TState extends Record<string, unknown>>(
   harness: Harness<TState>,
   threadIdOrTitle: string,
 ): Promise<{ threadId: string; matchType: 'id' | 'title' } | { error: string }> {
-  const threads = await harness.listThreads();
+  const threads = await harness.session.thread.list();
 
   const byId = threads.find(t => t.id === threadIdOrTitle);
   if (byId) return { threadId: byId.id, matchType: 'id' };
@@ -526,7 +526,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
       await harness.switchThread({ threadId: result.threadId });
       if (!emit) process.stderr.write(`[thread] resumed ${result.threadId} (matched by ${result.matchType})\n`);
     } else if (args.continue_) {
-      const threads = await harness.listThreads();
+      const threads = await harness.session.thread.list();
       if (threads.length > 0) {
         const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         await harness.switchThread({ threadId: sorted[0]!.id });

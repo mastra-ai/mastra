@@ -1102,7 +1102,7 @@ describe('headless mode — thread control', () => {
     await new Promise(resolve => setTimeout(resolve, 300));
 
     // Verify the targeted thread was actually used (updatedAt advanced)
-    const threads = await harness.listThreads();
+    const threads = await harness.session.thread.list();
     const targeted = threads.find(t => t.id === thread.id);
     expect(targeted).toBeDefined();
     expect(targeted!.updatedAt.getTime()).toBeGreaterThan(updatedAtBefore);
@@ -1133,7 +1133,7 @@ describe('headless mode — thread control', () => {
     await new Promise(resolve => setTimeout(resolve, 300));
 
     // Verify the titled thread was actually used
-    const threads = await harness.listThreads();
+    const threads = await harness.session.thread.list();
     const targeted = threads.find(t => t.id === thread.id);
     expect(targeted).toBeDefined();
     expect(targeted!.updatedAt.getTime()).toBeGreaterThan(updatedAtBefore);
@@ -1175,7 +1175,7 @@ describe('headless mode — thread control', () => {
 
     expect(exitCode).toBe(0);
 
-    const threads = await harness.listThreads();
+    const threads = await harness.session.thread.list();
     const titled = threads.find(t => t.title === 'my-new-title');
     expect(titled).toBeDefined();
   });
@@ -1286,7 +1286,7 @@ describe('headless mode — thread control', () => {
     // Main's #17558 carries the harness's current model onto the session at
     // switchThread, so the startup model overrides the prefilled session model.
     expect(session.setModelId).toHaveBeenCalledWith('mock-model');
-    const threads = await harness.listThreads();
+    const threads = await harness.session.thread.list();
     const matchingThreads = threads.filter(t => t.id === thread.id);
     expect(matchingThreads).toHaveLength(1);
     const targeted = matchingThreads[0]!;

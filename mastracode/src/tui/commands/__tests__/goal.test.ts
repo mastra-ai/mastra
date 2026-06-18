@@ -442,8 +442,7 @@ describe('handleGoalCommand', () => {
         pendingNewThread: false,
         goalManager,
         harness: {
-          session: { thread: { getId: vi.fn(() => 'thread-1') } },
-          setThreadSetting: vi.fn().mockResolvedValue(undefined),
+          session: { thread: { getId: vi.fn(() => 'thread-1'), setSetting: vi.fn().mockResolvedValue(undefined) } },
           sendMessage,
         },
       },

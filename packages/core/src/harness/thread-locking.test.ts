@@ -241,7 +241,7 @@ describe('Harness thread locking', () => {
       const thread = await harness.createThread({ title: 'to-delete' });
       await harness.memory.deleteThread({ threadId: thread.id });
 
-      const threads = await harness.listThreads();
+      const threads = await harness.session.thread.list();
       expect(threads.find(t => t.id === thread.id)).toBeUndefined();
     });
 

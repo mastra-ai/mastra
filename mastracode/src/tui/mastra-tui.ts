@@ -110,7 +110,7 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   const initThreadId = state.harness.session.thread.getId();
   if (!initThreadId) return;
 
-  const initThreads = await state.harness.listThreads();
+  const initThreads = await state.harness.session.thread.list();
   const initThread = initThreads.find(t => t.id === initThreadId);
   if (initThread?.title) {
     state.currentThreadTitle = initThread.title;
@@ -901,7 +901,7 @@ export class MastraTUI {
     const resolvedThread =
       thread?.id === currentThreadId
         ? thread
-        : (await this.state.harness.listThreads()).find(t => t.id === currentThreadId);
+        : (await this.state.harness.session.thread.list()).find(t => t.id === currentThreadId);
     const access = await this.buildProviderAccess();
     const packs = getAvailableModePacks(access, settings.customModelPacks).filter(p => p.id !== 'custom');
     const resolvedPackId = resolveThreadActiveModelPackId(
@@ -1285,7 +1285,7 @@ export class MastraTUI {
       const modelId = (modePack.models as Record<string, string>)[mode.id];
       if (modelId) {
         (mode as any).defaultModelId = modelId;
-        await harness.setThreadSetting({
+        await harness.session.thread.setSetting({
           key: `modeModelId_${mode.id}`,
           value: modelId,
         });
@@ -1342,7 +1342,7 @@ export class MastraTUI {
     settings.onboarding.modePackId = activeModePackId;
     settings.models.activeModelPackId = activeModePackId;
     if (harness.session.thread.getId()) {
-      await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
+      await harness.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
 
     settings.models.activeOmPackId = omPack.id;

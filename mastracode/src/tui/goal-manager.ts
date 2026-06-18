@@ -273,7 +273,7 @@ export class GoalManager {
         }
       }
       // Clear any legacy thread-metadata goal so it can't shadow the record.
-      await state.harness.setThreadSetting({ key: THREAD_GOAL_KEY, value: undefined });
+      await state.harness.session.thread.setSetting({ key: THREAD_GOAL_KEY, value: undefined });
     } catch {
       // Persistence is not critical.
     }

@@ -2,7 +2,7 @@ import type { Agent } from '../agent';
 import type { AgentThreadSubscription } from '../agent/types';
 import type { RequestContext } from '../request-context';
 import { createEmptyTokenUsage } from './types';
-import type { TokenUsage, ToolCategory } from './types';
+import type { HarnessMessage, HarnessThread, TokenUsage, ToolCategory } from './types';
 
 /**
  * Minimal persistence surface the Session uses to read and write per-thread
@@ -74,17 +74,65 @@ export class SessionIdentity {
 }
 
 /**
- * Owns the session's navigational thread state: which thread the session is
- * currently bound to. `null` until the session is bound (a thread is created,
- * switched to, or reacquired on startup); switching/deleting updates it.
+ * The shared-host storage surface the Session's thread domain leverages to read
+ * and write threads. The Harness backs this with its memory storage (mapping raw
+ * storage rows to {@link HarnessThread}/{@link HarnessMessage}); when no storage
+ * is configured the handle is absent and the data methods degrade gracefully
+ * (empty lists, undefined settings, no-op writes).
  *
- * In the multi-user model each session has its own current thread while the
- * Harness host shares storage, the thread lock, and the event bus — so the
- * thread binding is per-session state and lives here, not on the host.
+ * This is a gateway to shared infrastructure — not a callback into Harness
+ * orchestration. The Session owns the thread-domain logic; the host owns the DB.
+ */
+export interface ThreadDataStore {
+  /** List threads for a resource (or all resources), already mapped + filtered of forked subagents unless asked. */
+  listThreads(input: { resourceId?: string; includeForkedSubagents?: boolean }): Promise<HarnessThread[]>;
+  /** Fetch a single thread by id, or null when it doesn't exist. */
+  getById(input: { threadId: string }): Promise<HarnessThread | null>;
+  /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
+  listMessages(input: { threadId: string; limit?: number }): Promise<HarnessMessage[]>;
+  /** The first user message for each given thread id. */
+  firstUserMessages(input: { threadIds: string[] }): Promise<Map<string, HarnessMessage>>;
+  /** Read a value from a thread's metadata. */
+  getMetadata(input: { threadId: string; key: string }): Promise<unknown>;
+  /** Write a value into a thread's metadata. */
+  setMetadata(input: { threadId: string; key: string; value: unknown }): Promise<void>;
+  /** Delete a value from a thread's metadata. */
+  deleteMetadata(input: { threadId: string; key: string }): Promise<void>;
+}
+
+/**
+ * Owns the session's thread domain: the navigational binding (which thread the
+ * session is currently on) plus the data reads/queries scoped to it. `null`
+ * until the session is bound (a thread is created, switched to, or reacquired on
+ * startup); switching/deleting updates it.
+ *
+ * In the multi-user model each session has its own current thread and reads its
+ * own threads, while the Harness host shares storage, the thread lock, and the
+ * event bus. So the binding + data queries are per-session and live here; the
+ * session leverages the host's storage via an injected {@link ThreadDataStore}.
+ * Lifecycle *transitions* (create/switch/clone/delete) remain host machinery
+ * because they drive the shared event bus and rebind the shared agent stream.
  */
 export class SessionThread {
   /** The active thread id, or null when the session is not bound to a thread. */
   #threadId: string | null = null;
+  /** Gateway to the host's shared thread storage, injected via {@link connect}. */
+  #store: ThreadDataStore | undefined;
+  /** Reads the session's current resourceId (sibling identity state). */
+  readonly #getResourceId: () => string;
+
+  constructor(getResourceId: () => string) {
+    this.#getResourceId = getResourceId;
+  }
+
+  /**
+   * Attach the shared-host storage gateway the thread domain reads/writes
+   * through. The Harness calls this once storage is available; without it the
+   * data methods degrade gracefully.
+   */
+  connect(store: ThreadDataStore | undefined): void {
+    this.#store = store;
+  }
 
   /** The active thread id, or null when the session is not bound to a thread. */
   getId(): string | null {
@@ -112,6 +160,67 @@ export class SessionThread {
   /** Clear the session's thread binding. */
   clear(): void {
     this.#threadId = null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Data domain: reads/queries scoped to this session, backed by host storage.
+  // ---------------------------------------------------------------------------
+
+  /** List this session's threads (its own resource by default, or all resources). */
+  async list(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
+    if (!this.#store) return [];
+    return this.#store.listThreads({
+      resourceId: options?.allResources ? undefined : this.#getResourceId(),
+      includeForkedSubagents: options?.includeForkedSubagents,
+    });
+  }
+
+  /** Fetch a single thread by id, or null when it doesn't exist / no storage. */
+  async getById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
+    if (!this.#store) return null;
+    return this.#store.getById({ threadId });
+  }
+
+  /** List messages for a thread (newest-`limit`, returned oldest-first), or all. */
+  async listMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
+    if (!this.#store) return [];
+    return this.#store.listMessages({ threadId, limit });
+  }
+
+  /** List messages for the session's active thread (empty when not bound). */
+  async listActiveMessages({ limit }: { limit?: number } = {}): Promise<HarnessMessage[]> {
+    if (this.#threadId === null) return [];
+    return this.listMessages({ threadId: this.#threadId, limit });
+  }
+
+  /** The first user message for a single thread, or null. */
+  async firstUserMessage({ threadId }: { threadId: string }): Promise<HarnessMessage | null> {
+    const messages = await this.firstUserMessages({ threadIds: [threadId] });
+    return messages.get(threadId) ?? null;
+  }
+
+  /** The first user message for each given thread id. */
+  async firstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
+    if (!this.#store || threadIds.length === 0) return new Map();
+    return this.#store.firstUserMessages({ threadIds });
+  }
+
+  /** Read a setting (metadata value) for the active thread. */
+  async getSetting({ key }: { key: string }): Promise<unknown> {
+    if (!this.#store || this.#threadId === null) return undefined;
+    return this.#store.getMetadata({ threadId: this.#threadId, key });
+  }
+
+  /** Persist a setting (metadata value) for the active thread. */
+  async setSetting({ key, value }: { key: string; value: unknown }): Promise<void> {
+    if (!this.#store || this.#threadId === null) return;
+    await this.#store.setMetadata({ threadId: this.#threadId, key, value });
+  }
+
+  /** Delete a setting (metadata value) for the active thread. */
+  async deleteSetting({ key }: { key: string }): Promise<void> {
+    if (!this.#store || this.#threadId === null) return;
+    await this.#store.deleteMetadata({ threadId: this.#threadId, key });
   }
 }
 
@@ -703,11 +812,12 @@ export class Session {
   readonly approval = new SessionApproval();
   /** The session's identity: the memory resourceId it reads/writes under. */
   readonly identity: SessionIdentity;
-  /** The thread the session is currently bound to (navigational state). */
-  readonly thread = new SessionThread();
+  /** The session's thread domain: current binding + reads scoped to it. */
+  readonly thread: SessionThread;
 
   constructor({ resourceId }: { resourceId: string }) {
     this.identity = new SessionIdentity({ resourceId });
+    this.thread = new SessionThread(() => this.identity.getResourceId());
   }
 
   /**

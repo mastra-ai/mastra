@@ -31,6 +31,7 @@ import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
 import { Session, SessionStream } from './session';
+import type { ThreadDataStore } from './session';
 import {
   askUserTool,
   createSubagentTool,
@@ -500,10 +501,11 @@ export class Harness<TState = {}> {
     }
     this.#session.mode.set({ modeId: defaultMode.id });
     this.#session.setStore({
-      get: key => this.getThreadSetting({ key }),
-      set: (key, value) => this.setThreadSetting({ key, value }),
+      get: key => this.#session.thread.getSetting({ key }),
+      set: (key, value) => this.#session.thread.setSetting({ key, value }),
     });
     this.#session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
+    this.#session.thread.connect(this.createThreadDataStore());
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
     if (config.workspace instanceof Workspace) {
@@ -657,7 +659,7 @@ export class Harness<TState = {}> {
    * Select the most recent thread, or create one if none exist.
    */
   async selectOrCreateThread(): Promise<HarnessThread> {
-    const threads = await this.listThreads();
+    const threads = await this.#session.thread.list();
 
     if (threads.length === 0) {
       return await this.createThread();
@@ -682,6 +684,175 @@ export class Harness<TState = {}> {
       throw new Error('Storage does not have a memory domain configured');
     }
     return memoryStorage;
+  }
+
+  /**
+   * The shared-host storage gateway the Session's thread domain reads/writes
+   * through. The Session owns the thread-domain logic; this adapter just maps
+   * raw storage rows to Harness types — it does not call back into Session.
+   */
+  protected createThreadDataStore(): ThreadDataStore {
+    return {
+      listThreads: ({ resourceId, includeForkedSubagents }) =>
+        this.queryThreads({ resourceId, includeForkedSubagents }),
+      getById: ({ threadId }) => this.queryThreadById({ threadId }),
+      listMessages: ({ threadId, limit }) => this.queryThreadMessages({ threadId, limit }),
+      firstUserMessages: ({ threadIds }) => this.queryFirstUserMessages({ threadIds }),
+      getMetadata: ({ threadId, key }) => this.readThreadMetadataValue({ threadId, key }),
+      setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
+      deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
+    };
+  }
+
+  private async readThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
+    if (!this.config.storage) return undefined;
+    try {
+      const memoryStorage = await this.getMemoryStorage();
+      const thread = await memoryStorage.getThreadById({ threadId });
+      const metadata = thread?.metadata as Record<string, unknown> | undefined;
+      return metadata?.[key];
+    } catch {
+      // Settings reads are not critical
+      return undefined;
+    }
+  }
+
+  private async writeThreadMetadataValue({
+    threadId,
+    key,
+    value,
+  }: {
+    threadId: string;
+    key: string;
+    value: unknown;
+  }): Promise<void> {
+    if (!this.config.storage) return;
+    try {
+      const memoryStorage = await this.getMemoryStorage();
+      const thread = await memoryStorage.getThreadById({ threadId });
+      if (thread) {
+        await memoryStorage.saveThread({
+          thread: { ...thread, metadata: { ...thread.metadata, [key]: value }, updatedAt: new Date() },
+        });
+      }
+    } catch {
+      // Settings persistence is not critical
+    }
+  }
+
+  private async removeThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<void> {
+    if (!this.config.storage) return;
+    try {
+      const memoryStorage = await this.getMemoryStorage();
+      const thread = await memoryStorage.getThreadById({ threadId });
+      if (thread && thread.metadata) {
+        const metadata = { ...thread.metadata };
+        delete metadata[key];
+        await memoryStorage.saveThread({
+          thread: {
+            ...thread,
+            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+            updatedAt: new Date(),
+          },
+        });
+      }
+    } catch {
+      // Settings removal is not critical
+    }
+  }
+
+  private async queryThreadById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
+    if (!this.config.storage) return null;
+    const memoryStorage = await this.getMemoryStorage();
+    const thread = await memoryStorage.getThreadById({ threadId });
+    if (!thread) return null;
+    return {
+      id: thread.id,
+      resourceId: thread.resourceId,
+      title: thread.title,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+      metadata: thread.metadata,
+    };
+  }
+
+  private async queryThreads({
+    resourceId,
+    includeForkedSubagents,
+  }: {
+    resourceId?: string;
+    includeForkedSubagents?: boolean;
+  }): Promise<HarnessThread[]> {
+    if (!this.config.storage) return [];
+
+    const memoryStorage = await this.getMemoryStorage();
+    const filter: { resourceId?: string } | undefined = resourceId === undefined ? undefined : { resourceId };
+
+    const result = await memoryStorage.listThreads({ filter, perPage: false });
+
+    const threads = includeForkedSubagents
+      ? result.threads
+      : result.threads.filter(thread => {
+          const metadata = thread.metadata as Record<string, unknown> | undefined;
+          return metadata?.forkedSubagent !== true;
+        });
+
+    return threads.map((thread: StorageThreadType) => ({
+      id: thread.id,
+      resourceId: thread.resourceId,
+      title: thread.title,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+      metadata: thread.metadata,
+    }));
+  }
+
+  private async queryThreadMessages({
+    threadId,
+    limit,
+  }: {
+    threadId: string;
+    limit?: number;
+  }): Promise<HarnessMessage[]> {
+    if (!this.config.storage) return [];
+
+    const memoryStorage = await this.getMemoryStorage();
+
+    if (limit) {
+      const result = await memoryStorage.listMessages({
+        threadId,
+        perPage: limit,
+        page: 0,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      return result.messages.map(msg => this.convertToHarnessMessage(msg)).reverse();
+    }
+
+    const result = await memoryStorage.listMessages({ threadId, perPage: false });
+    return result.messages.map(msg => this.convertToHarnessMessage(msg));
+  }
+
+  private async queryFirstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
+    if (!this.config.storage || threadIds.length === 0) return new Map();
+
+    const memoryStorage = await this.getMemoryStorage();
+    const result = await memoryStorage.listMessages({
+      threadId: threadIds,
+      perPage: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const firstUserMessages = new Map<string, HarnessMessage>();
+    for (const message of result.messages) {
+      if (message.role !== 'user' || !message.threadId || firstUserMessages.has(message.threadId)) continue;
+      firstUserMessages.set(message.threadId, this.convertToHarnessMessage(message));
+
+      if (firstUserMessages.size === threadIds.length) {
+        break;
+      }
+    }
+
+    return firstUserMessages;
   }
 
   // ===========================================================================
@@ -1066,7 +1237,7 @@ export class Harness<TState = {}> {
   }
 
   async getKnownResourceIds(): Promise<string[]> {
-    const threads = await this.listThreads({ allResources: true });
+    const threads = await this.#session.thread.list({ allResources: true });
     const ids = new Set(threads.map(t => t.resourceId));
     return [...ids].sort();
   }
@@ -1179,7 +1350,8 @@ export class Harness<TState = {}> {
     return {
       createThread: this.createThread.bind(this),
       switchThread: this.switchThread.bind(this),
-      listThreads: this.listThreads.bind(this),
+      listThreads: (options?: { allResources?: boolean; includeForkedSubagents?: boolean }) =>
+        this.#session.thread.list(options),
       renameThread: this.renameThread.bind(this),
       deleteThread: this.deleteThread.bind(this),
     };
@@ -1318,101 +1490,6 @@ export class Harness<TState = {}> {
     await this.ensureCurrentAgentThreadSubscription();
   }
 
-  async listThreads(options?: {
-    allResources?: boolean;
-    /**
-     * Include forked subagent fork threads. Defaults to false: forks are
-     * transient clones used by the runtime and should not show up in user-facing
-     * thread lists / pickers / startup flows. Set to true for admin / debug
-     * tooling that needs to see every thread.
-     */
-    includeForkedSubagents?: boolean;
-  }): Promise<HarnessThread[]> {
-    if (!this.config.storage) return [];
-
-    const memoryStorage = await this.getMemoryStorage();
-    const filter: { resourceId?: string } | undefined = options?.allResources
-      ? undefined
-      : { resourceId: this.#session.identity.getResourceId() };
-
-    const result = await memoryStorage.listThreads({ filter, perPage: false });
-
-    const threads = options?.includeForkedSubagents
-      ? result.threads
-      : result.threads.filter(thread => {
-          const metadata = thread.metadata as Record<string, unknown> | undefined;
-          return metadata?.forkedSubagent !== true;
-        });
-
-    return threads.map((thread: StorageThreadType) => ({
-      id: thread.id,
-      resourceId: thread.resourceId,
-      title: thread.title,
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-      metadata: thread.metadata,
-    }));
-  }
-
-  async getThreadSetting({ key }: { key: string }): Promise<unknown> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId || !this.config.storage) return undefined;
-
-    try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      const metadata = thread?.metadata as Record<string, unknown> | undefined;
-      return metadata?.[key];
-    } catch {
-      // Settings reads are not critical
-      return undefined;
-    }
-  }
-
-  async setThreadSetting({ key, value }: { key: string; value: unknown }): Promise<void> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId || !this.config.storage) return;
-
-    try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread) {
-        await memoryStorage.saveThread({
-          thread: {
-            ...thread,
-            metadata: { ...thread.metadata, [key]: value },
-            updatedAt: new Date(),
-          },
-        });
-      }
-    } catch {
-      // Settings persistence is not critical
-    }
-  }
-
-  private async deleteThreadSetting({ key }: { key: string }): Promise<void> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId || !this.config.storage) return;
-
-    try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread && thread.metadata) {
-        const metadata = { ...thread.metadata };
-        delete metadata[key];
-        await memoryStorage.saveThread({
-          thread: {
-            ...thread,
-            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-            updatedAt: new Date(),
-          },
-        });
-      }
-    } catch {
-      // Settings removal is not critical
-    }
-  }
-
   private async loadThreadMetadata(): Promise<void> {
     const threadId = this.#session.thread.getId();
     if (!threadId || !this.config.storage) {
@@ -1507,13 +1584,13 @@ export class Harness<TState = {}> {
       if (!hasObservationThreshold) {
         const observationThreshold = this.getObservationThreshold();
         if (observationThreshold !== undefined) {
-          await this.setThreadSetting({ key: 'observationThreshold', value: observationThreshold });
+          await this.#session.thread.setSetting({ key: 'observationThreshold', value: observationThreshold });
         }
       }
       if (!hasReflectionThreshold) {
         const reflectionThreshold = this.getReflectionThreshold();
         if (reflectionThreshold !== undefined) {
-          await this.setThreadSetting({ key: 'reflectionThreshold', value: reflectionThreshold });
+          await this.#session.thread.setSetting({ key: 'reflectionThreshold', value: reflectionThreshold });
         }
       }
     } catch {
@@ -1707,7 +1784,7 @@ export class Harness<TState = {}> {
    */
   async switchObserverModel({ modelId }: { modelId: string }): Promise<void> {
     void this.setState({ observerModelId: modelId } as unknown as Partial<TState>);
-    await this.setThreadSetting({ key: 'observerModelId', value: modelId });
+    await this.#session.thread.setSetting({ key: 'observerModelId', value: modelId });
     this.emit({ type: 'om_model_changed', role: 'observer', modelId } as HarnessEvent);
   }
 
@@ -1716,7 +1793,7 @@ export class Harness<TState = {}> {
    */
   async switchReflectorModel({ modelId }: { modelId: string }): Promise<void> {
     void this.setState({ reflectorModelId: modelId } as unknown as Partial<TState>);
-    await this.setThreadSetting({ key: 'reflectorModelId', value: modelId });
+    await this.#session.thread.setSetting({ key: 'reflectorModelId', value: modelId });
     this.emit({ type: 'om_model_changed', role: 'reflector', modelId } as HarnessEvent);
   }
 
@@ -1737,7 +1814,7 @@ export class Harness<TState = {}> {
   async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
     const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
     void this.setState({ [key]: modelId } as unknown as Partial<TState>);
-    await this.setThreadSetting({ key, value: modelId });
+    await this.#session.thread.setSetting({ key, value: modelId });
     this.emit({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType } as HarnessEvent);
   }
 
@@ -2212,12 +2289,6 @@ export class Harness<TState = {}> {
     return;
   }
 
-  async listMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId) return [];
-    return this.listMessagesForThread({ threadId, limit: options?.limit });
-  }
-
   async saveSystemReminderMessage({
     message,
     reminderType,
@@ -2256,53 +2327,6 @@ export class Harness<TState = {}> {
     const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
     const saved = result.messages[0] ?? dbMessage;
     return this.convertToHarnessMessage(saved);
-  }
-
-  async listMessagesForThread({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
-    if (!this.config.storage) return [];
-
-    const memoryStorage = await this.getMemoryStorage();
-
-    if (limit) {
-      const result = await memoryStorage.listMessages({
-        threadId,
-        perPage: limit,
-        page: 0,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
-      return result.messages.map(msg => this.convertToHarnessMessage(msg)).reverse();
-    }
-
-    const result = await memoryStorage.listMessages({ threadId, perPage: false });
-    return result.messages.map(msg => this.convertToHarnessMessage(msg));
-  }
-
-  async getFirstUserMessageForThread({ threadId }: { threadId: string }): Promise<HarnessMessage | null> {
-    const messages = await this.getFirstUserMessagesForThreads({ threadIds: [threadId] });
-    return messages.get(threadId) ?? null;
-  }
-
-  async getFirstUserMessagesForThreads({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
-    if (!this.config.storage || threadIds.length === 0) return new Map();
-
-    const memoryStorage = await this.getMemoryStorage();
-    const result = await memoryStorage.listMessages({
-      threadId: threadIds,
-      perPage: false,
-      orderBy: { field: 'createdAt', direction: 'ASC' },
-    });
-
-    const firstUserMessages = new Map<string, HarnessMessage>();
-    for (const message of result.messages) {
-      if (message.role !== 'user' || !message.threadId || firstUserMessages.has(message.threadId)) continue;
-      firstUserMessages.set(message.threadId, this.convertToHarnessMessage(message));
-
-      if (firstUserMessages.size === threadIds.length) {
-        break;
-      }
-    }
-
-    return firstUserMessages;
   }
 
   private convertToHarnessMessage(msg: {
@@ -4432,7 +4456,7 @@ export class Harness<TState = {}> {
     return {
       currentThreadId: this.#session.thread.getId(),
       currentModeId: this.#session.mode.get(),
-      threads: await this.listThreads(),
+      threads: await this.#session.thread.list(),
     };
   }
 

@@ -52,7 +52,7 @@ export function showThreadLockPrompt(
 
 export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
-  const threads = await state.harness.listThreads({ allResources: true });
+  const threads = await state.harness.session.thread.list({ allResources: true });
   const currentId = state.pendingNewThread ? null : state.harness.session.thread.getId();
   const currentResourceId = state.harness.session.identity.getResourceId();
   const threadById = new Map(threads.map(thread => [thread.id, thread] as const));

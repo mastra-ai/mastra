@@ -25,7 +25,7 @@ async function findThread(
   harness: Harness<Record<string, unknown>>,
   threadId: string,
 ): Promise<HarnessThread | undefined> {
-  const threads = await harness.listThreads({ allResources: true });
+  const threads = await harness.session.thread.list({ allResources: true });
   return threads.find(t => t.id === threadId);
 }
 
@@ -63,7 +63,7 @@ async function restoreSettingsForThread(harness: Harness<Record<string, unknown>
   }
 
   for (const setting of settingsToSeed) {
-    await harness.setThreadSetting(setting);
+    await harness.session.thread.setSetting(setting);
   }
 }
 

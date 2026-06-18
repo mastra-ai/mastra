@@ -384,7 +384,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     const modelId = (pack.models as Record<string, string>)[mode.id];
     if (modelId) {
       (mode as any).defaultModelId = modelId;
-      await harness.setThreadSetting({ key: `modeModelId_${mode.id}`, value: modelId });
+      await harness.session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
     }
   }
 
@@ -402,7 +402,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     }
   }
 
-  await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
+  await harness.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
 
   const s = loadSettings();
   const modeDefaults: Record<string, string> = {};
@@ -471,10 +471,10 @@ async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, pre
   if (previousPackId && previousPackId !== pack.id) {
     const harness = ctx.state.harness;
     const threadId = harness.session.thread.getId();
-    const thread = threadId ? (await harness.listThreads()).find(t => t.id === threadId) : undefined;
+    const thread = threadId ? (await harness.session.thread.list()).find(t => t.id === threadId) : undefined;
     const threadPackId = (thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] as string | undefined) ?? null;
     if (threadPackId === previousPackId) {
-      await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
+      await harness.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
     }
   }
 }
@@ -484,7 +484,7 @@ async function deleteCustomPack(ctx: SlashCommandContext, pack: ModePack): Promi
 
   const harness = ctx.state.harness;
   const threadId = harness.session.thread.getId();
-  const thread = threadId ? (await harness.listThreads()).find(t => t.id === threadId) : undefined;
+  const thread = threadId ? (await harness.session.thread.list()).find(t => t.id === threadId) : undefined;
   const threadPackId = (thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] as string | undefined) ?? null;
 
   const settings = loadSettings();
@@ -492,7 +492,7 @@ async function deleteCustomPack(ctx: SlashCommandContext, pack: ModePack): Promi
   saveSettings(settings);
 
   if (threadPackId === pack.id) {
-    await harness.setThreadSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: null });
+    await harness.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: null });
   }
 }
 
@@ -608,7 +608,7 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
   }
 
   const threadId = harness.session.thread.getId();
-  const thread = threadId ? (await harness.listThreads()).find(t => t.id === threadId) : undefined;
+  const thread = threadId ? (await harness.session.thread.list()).find(t => t.id === threadId) : undefined;
   const currentPackId = resolveThreadActiveModelPackId(
     settings,
     packs,

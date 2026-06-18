@@ -163,7 +163,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         }
       });
       // Update current thread title for status line display
-      const threads = await state.harness.listThreads();
+      const threads = await state.harness.session.thread.list();
       const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;

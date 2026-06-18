@@ -113,23 +113,23 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
         },
         onObservationThresholdChange: async value => {
           await ctx.state.harness.setState({ observationThreshold: value } as any);
-          await ctx.state.harness.setThreadSetting({ key: 'observationThreshold', value });
+          await ctx.state.harness.session.thread.setSetting({ key: 'observationThreshold', value });
           persistOmThresholds({ observationThreshold: value });
         },
         onReflectionThresholdChange: async value => {
           await ctx.state.harness.setState({ reflectionThreshold: value } as any);
-          await ctx.state.harness.setThreadSetting({ key: 'reflectionThreshold', value });
+          await ctx.state.harness.session.thread.setSetting({ key: 'reflectionThreshold', value });
           persistOmThresholds({ reflectionThreshold: value });
         },
         onCavemanObservationsChange: async enabled => {
           await ctx.state.harness.setState({ cavemanObservations: enabled } as any);
-          await ctx.state.harness.setThreadSetting({ key: 'cavemanObservations', value: enabled });
+          await ctx.state.harness.session.thread.setSetting({ key: 'cavemanObservations', value: enabled });
           persistOmCavemanObservations(enabled);
           ctx.showInfo(`Caveman observations → ${enabled ? 'on' : 'off'}`);
         },
         onObserveAttachmentsChange: async value => {
           await ctx.state.harness.setState({ observeAttachments: value } as any);
-          await ctx.state.harness.setThreadSetting({ key: 'observeAttachments', value });
+          await ctx.state.harness.session.thread.setSetting({ key: 'observeAttachments', value });
           persistOmObserveAttachments(value);
           const label = value === 'auto' ? 'auto' : value ? 'on' : 'off';
           ctx.showInfo(`Observe attachments → ${label}`);

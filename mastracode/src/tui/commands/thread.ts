@@ -21,7 +21,7 @@ export async function handleThreadCommand(ctx: SlashCommandContext): Promise<voi
     return;
   }
 
-  const threads = await harness.listThreads({ allResources: true });
+  const threads = await harness.session.thread.list({ allResources: true });
   const thread = threads.find(t => t.id === currentThreadId);
 
   const cloneMetadata =

@@ -146,9 +146,9 @@ describe('renderExistingMessages startup history loading', () => {
   it('loads only the visible startup window and renders returned messages in order', async () => {
     const messages = [createUserMessage('first', 'user-1'), createUserMessage('second', 'user-2')];
     const state = createState();
-    const listMessages = vi.fn().mockResolvedValue(messages);
+    const listActiveMessages = vi.fn().mockResolvedValue(messages);
     state.harness = {
-      listMessages,
+      session: { thread: { listActiveMessages } },
       getDisplayState: () => ({ isRunning: false }),
       setState: vi.fn().mockResolvedValue(undefined),
       restoreDisplayTasks: vi.fn(),
@@ -156,7 +156,7 @@ describe('renderExistingMessages startup history loading', () => {
 
     await renderExistingMessages(state);
 
-    expect(listMessages).toHaveBeenCalledWith({ limit: 40 });
+    expect(listActiveMessages).toHaveBeenCalledWith({ limit: 40 });
     const children = visibleChildren(state);
     expect(children).toHaveLength(2);
     expect(state.messageComponentsById.get('user-1')).toBe(children[0]);
@@ -171,7 +171,7 @@ describe('renderExistingMessages startup history loading', () => {
     ] as HarnessMessage[];
     const state = createState();
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue(messages),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) } },
       getDisplayState: () => ({ isRunning: false }),
       setState: vi.fn().mockResolvedValue(undefined),
       restoreDisplayTasks: vi.fn(),
@@ -186,13 +186,13 @@ describe('renderExistingMessages startup history loading', () => {
     const messages = [createUserMessage('recent', 'user-1')];
     const existingTasks = [{ id: 'old-task', content: 'Old task', status: 'pending', activeForm: 'Working' }];
     const state = createState();
-    const listMessages = vi.fn().mockResolvedValue(messages);
+    const listActiveMessages = vi.fn().mockResolvedValue(messages);
     const updateTasks = vi.fn();
     const setState = vi.fn().mockResolvedValue(undefined);
     const restoreDisplayTasks = vi.fn();
     state.taskProgress = { updateTasks, getTasks: () => existingTasks } as unknown as TUIState['taskProgress'];
     state.harness = {
-      listMessages,
+      session: { thread: { listActiveMessages } },
       getDisplayState: () => ({ isRunning: false, tasks: existingTasks, previousTasks: [] }),
       getState: () => ({ tasks: existingTasks }),
       setState,
@@ -201,7 +201,7 @@ describe('renderExistingMessages startup history loading', () => {
 
     await renderExistingMessages(state);
 
-    expect(listMessages).toHaveBeenCalledWith({ limit: 40 });
+    expect(listActiveMessages).toHaveBeenCalledWith({ limit: 40 });
     expect(updateTasks).not.toHaveBeenCalled();
     expect(setState).not.toHaveBeenCalled();
     expect(restoreDisplayTasks).not.toHaveBeenCalled();
@@ -236,7 +236,7 @@ describe('renderExistingMessages subagents', () => {
     };
     const state = createState();
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue([message]),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) } },
       getDisplayState: () => ({ isRunning: false }),
       getFullModelId: () => 'openai/gpt-5.5',
       setState: vi.fn().mockResolvedValue(undefined),
@@ -306,7 +306,7 @@ describe('renderExistingMessages task tools', () => {
     const displayState = { isRunning: false, tasks: [], previousTasks: [] };
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue(messages),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) } },
       getDisplayState: () => displayState,
       setState,
       restoreDisplayTasks: createRestoreDisplayTasks(displayState),
@@ -370,7 +370,7 @@ describe('renderExistingMessages task tools', () => {
     const displayState = { isRunning: false, tasks: [], previousTasks: [] };
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue(messages),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) } },
       getDisplayState: () => displayState,
       setState,
       restoreDisplayTasks: createRestoreDisplayTasks(displayState),
@@ -429,7 +429,7 @@ describe('renderExistingMessages task tools', () => {
     const setState = vi.fn().mockResolvedValue(undefined);
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue(messages),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) } },
       getDisplayState: () => ({ isRunning: false }),
       setState,
       restoreDisplayTasks: vi.fn(),
@@ -475,7 +475,7 @@ describe('renderExistingMessages task tools', () => {
     const displayState = { isRunning: false, tasks: [], previousTasks: [] };
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue(messages),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) } },
       getDisplayState: () => displayState,
       setState,
       restoreDisplayTasks: createRestoreDisplayTasks(displayState),
@@ -546,7 +546,7 @@ describe('renderExistingMessages task tools', () => {
     const setState = vi.fn().mockResolvedValue(undefined);
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue(messages),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) } },
       getDisplayState: () => ({ isRunning: false }),
       setState,
       restoreDisplayTasks: vi.fn(),
@@ -597,10 +597,10 @@ describe('renderExistingMessages task tools', () => {
     const state = createState();
     const updateTasks = vi.fn();
     const setState = vi.fn().mockResolvedValue(undefined);
-    const listMessages = vi.fn().mockResolvedValue([...fillerMessages, visibleTaskUpdate]);
+    const listActiveMessages = vi.fn().mockResolvedValue([...fillerMessages, visibleTaskUpdate]);
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.harness = {
-      listMessages,
+      session: { thread: { listActiveMessages } },
       getDisplayState: () => ({ isRunning: false }),
       setState,
       restoreDisplayTasks: vi.fn(),
@@ -609,7 +609,7 @@ describe('renderExistingMessages task tools', () => {
     await renderExistingMessages(state);
 
     const expectedTasks = [{ id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' }];
-    expect(listMessages).toHaveBeenCalledWith({ limit: 40 });
+    expect(listActiveMessages).toHaveBeenCalledWith({ limit: 40 });
     expect(updateTasks).toHaveBeenCalledWith(expectedTasks);
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
     expect(visibleChildren(state)).toHaveLength(39);
@@ -677,7 +677,7 @@ describe('renderExistingMessages task tools', () => {
     ];
     const state = createState();
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue(messages),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) } },
       getDisplayState: () => ({ isRunning: false }),
       setState: vi.fn().mockResolvedValue(undefined),
       restoreDisplayTasks: vi.fn(),
@@ -729,7 +729,7 @@ describe('renderExistingMessages task tools', () => {
     ] as HarnessMessage[];
     const state = createState();
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue(messages),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) } },
       getDisplayState: () => ({ isRunning: false }),
       setState: vi.fn().mockResolvedValue(undefined),
       restoreDisplayTasks: vi.fn(),
@@ -752,7 +752,7 @@ describe('renderExistingMessages task tools', () => {
       getTasks: () => [{ id: 'old', content: 'Old task', status: 'pending', activeForm: 'Doing old task' }],
     } as unknown as TUIState['taskProgress'];
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue([]),
+      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue([]) } },
       getDisplayState: () => ({ isRunning: false }),
       setState,
       restoreDisplayTasks,

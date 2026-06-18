@@ -27,6 +27,6 @@ export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promi
     options: [{ label: 'Yes' }, { label: 'No' }],
   });
   if (answer?.toLowerCase().startsWith('y')) {
-    await state.harness.setThreadSetting({ key: 'projectPath', value: projectPath });
+    await state.harness.session.thread.setSetting({ key: 'projectPath', value: projectPath });
   }
 }
