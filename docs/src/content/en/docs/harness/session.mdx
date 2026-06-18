@@ -1,23 +1,23 @@
 ---
 title: "Session | Harness"
-description: "Understand the Session — the per-conversation state object on a Harness — and the identity, thread, mode, grants, run, and display state it tracks."
+description: "Understand the Session — the live state object on a Harness — and the identity, thread, mode, grants, run, and display state it tracks."
 packages:
   - "@mastra/core"
 ---
 
 # Session
 
-A [`Session`](/reference/harness/session) holds the per-conversation state of a Harness: who the conversation is for, which thread is active, the selected mode and model, permission grants, queued follow-ups, token usage, application state, and the display snapshot. You reach it through `harness.session`.
+A [`Session`](/reference/harness/session) holds the live state of a Harness: who the session is for, which thread is active, the selected mode and model, permission grants, queued follow-ups, token usage, application state, and the display snapshot. You reach it through `harness.session`.
 
 ## What the Session tracks
 
-The Session is the live state of one conversation. It answers "what is true about this conversation right now": who the conversation belongs to, which thread is bound, which mode and model are selected, what the user has approved, what's queued or running, the application state, and the snapshot to render. Anything that describes the current conversation lives here; the Harness owns the shared infrastructure that every conversation runs on.
+The Session is the live state of a single user's interaction with the Harness. It answers "what is true right now": who the session belongs to, which thread is currently bound, which mode and model are selected, what the user has approved, what's queued or running, the application state, and the snapshot to render. A session has one active thread at a time but can list, switch between, and clone many threads over its lifetime. Anything that describes the current state lives here; the Harness owns the shared infrastructure every session runs on.
 
-Because the Session is scoped to a single conversation, one Harness can serve many conversations at once — each backed by its own Session — without one conversation's mode, grants, or active thread leaking into another.
+Because each session has its own identity and state, one Harness can serve many users at once — each backed by its own Session — without one session's mode, grants, or active thread leaking into another.
 
-The rest of this page walks through the Session's state in the order a conversation builds it up. Each part is a focused sub-object on `harness.session`:
+The rest of this page walks through the Session's state. Each part is a focused sub-object on `harness.session`:
 
-- **Where the conversation lives**: [Identity](#identity) sets the resource the conversation belongs to, and [Thread](#thread) binds it to a specific conversation thread.
+- **Who and where**: [Identity](#identity) sets the resource the session belongs to, and [Thread](#thread) tracks the currently bound thread.
 - **How the agent behaves**: [Mode and model](#mode-and-model) controls which agent profile and model are active, and [Permission grants](#permission-grants) records what the user has approved to run without prompting.
 - **What's happening right now**: [Run state](#run-state) reflects the in-flight generation, and [Follow-ups](#follow-ups) holds messages queued to send when it finishes.
 - **What you store and render**: [State](#state) holds your application's structured data, and [Display state](#display-state) is the single snapshot your UI renders from.
