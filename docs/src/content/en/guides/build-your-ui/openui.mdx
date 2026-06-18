@@ -111,7 +111,7 @@ Embed Mastra in your Next.js API route and connect an OpenUI `<FullScreen />` ch
         name: 'OpenUI Agent',
         instructions: `You are a helpful assistant. Use tools when relevant.\n\n${systemPrompt}`,
         model: {
-          id: 'openai/gpt-4o',
+          id: '__GATEWAY_OPENAI_MODEL__',
           apiKey: process.env.OPENAI_API_KEY,
         },
         tools: { getWeather },
