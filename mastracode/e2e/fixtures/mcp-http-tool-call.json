@@ -1,0 +1,34 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Use the MCP HTTP lookup tool for the status payload.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_mcp_http_lookup_e2e",
+            "name": "e2e_http_mcp_lookup_status",
+            "arguments": {
+              "query": "mcp-http-e2e"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_mcp_http_lookup_e2e",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MCP HTTP lookup completed with payload MC_MCP_HTTP_TOOL_RESULT:mcp-http-e2e:ok."
+      }
+    }
+  ]
+}

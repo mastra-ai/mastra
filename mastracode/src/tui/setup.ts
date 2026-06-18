@@ -438,9 +438,10 @@ export function setupAutocomplete(state: TUIState): void {
 
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
+    const configDir = state.harness.getState().configDir;
     // Load from all sources (global and local)
-    const globalCommands = await loadCustomCommands();
-    const localCommands = await loadCustomCommands(process.cwd());
+    const globalCommands = await loadCustomCommands(undefined, configDir);
+    const localCommands = await loadCustomCommands(process.cwd(), configDir);
 
     // Merge commands, with local taking precedence over global for same names
     const commandMap = new Map<string, (typeof globalCommands)[number]>();
@@ -503,9 +504,9 @@ export function setupKeyHandlers(
     stop: () => void;
     doubleCtrlCMs: number;
   },
-): void {
+): () => void {
   // Handle Ctrl+C via process signal (backup for when editor doesn't capture it)
-  process.on('SIGINT', () => {
+  const sigintHandler = () => {
     const now = Date.now();
     if (now - state.lastCtrlCTime < callbacks.doubleCtrlCMs) {
       callbacks.stop();
@@ -524,12 +525,17 @@ export function setupKeyHandlers(
     state.pendingAskUserComponents?.clear();
     state.userInitiatedAbort = true;
     state.harness.abort();
-  });
+  };
+  process.on('SIGINT', sigintHandler);
 
   // Use onDebug callback for Shift+Ctrl+D
   state.ui.onDebug = () => {
     // Toggle debug mode or show debug info
     // Currently unused - could add debug panel in future
+  };
+
+  return () => {
+    process.off('SIGINT', sigintHandler);
   };
 }
 
