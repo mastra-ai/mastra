@@ -44,7 +44,7 @@ jobs:
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           permission-issues: write
-          permission-pull-requests: read
+          permission-pull-requests: write
           permission-members: read
 
       - name: Setup pnpm and node
@@ -95,7 +95,7 @@ jobs:
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           permission-issues: write
-          permission-pull-requests: read
+          permission-pull-requests: write
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node
@@ -144,6 +144,7 @@ jobs:
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           permission-issues: write
+          permission-pull-requests: write
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node
