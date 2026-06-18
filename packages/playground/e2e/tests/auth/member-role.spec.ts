@@ -89,11 +89,20 @@ test.describe('Member Role', () => {
 
     test('member can view agent tools', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/settings');
 
-      // Member should be able to see agent tools (they have agents:read and tools:read)
-      const toolsSection = page.getByText(/weatherInfo|simpleMcpTool/i);
-      await expect(toolsSection.first()).toBeVisible();
+      // Member should be able to see agent tools (they have agents:read and tools:read).
+      await expect(page.getByTestId('agent-settings-view')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('heading', { name: 'Tools' })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
+        'href',
+        /\/agents\/weather-agent\/tools\/weatherInfo$/,
+      );
+      await expect(page.getByRole('link', { name: 'simpleMcpTool' })).toHaveAttribute(
+        'href',
+        /\/agents\/weather-agent\/tools\/simpleMcpTool$/,
+      );
     });
 
     test('member does not see agent creation controls', async ({ page }) => {
