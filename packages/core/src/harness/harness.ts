@@ -457,13 +457,6 @@ export class Harness<TState = {}> {
     | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
     | null = null;
   private pendingApprovalToolName: string | null = null;
-  /**
-   * Tool calls currently suspended via the native tool-suspension primitive,
-   * keyed by `toolCallId`. Each entry records the `runId` to resume. A Map (rather
-   * than single fields) lets multiple tools (e.g. parallel `ask_user` calls in one
-   * step — see issue #13642) stay suspended and be resumed independently.
-   */
-  private pendingSuspensions = new Map<string, { runId: string; toolName: string }>();
   private workspace: Workspace | undefined = undefined;
   private workspaceFn:
     | ((ctx: {
@@ -2206,7 +2199,7 @@ export class Harness<TState = {}> {
       await new Promise(resolve => setTimeout(resolve, 0));
       await this.waitForCurrentThreadStreamIdle();
       unsubscribeAgentEnd?.();
-      if (!emittedAgentEnd && this.pendingSuspensions.size === 0) {
+      if (!emittedAgentEnd && !this.#session.suspensions.hasPending()) {
         this.emit({ type: 'agent_end', reason: 'complete' });
       }
     }
@@ -2917,7 +2910,11 @@ export class Harness<TState = {}> {
 
         const suspRunId = this.#session.run.getRunId();
         if (suspRunId) {
-          this.pendingSuspensions.set(suspToolCallId, { runId: suspRunId, toolName: suspToolName });
+          this.#session.suspensions.register({
+            toolCallId: suspToolCallId,
+            runId: suspRunId,
+            toolName: suspToolName,
+          });
         }
         state.isSuspended = true;
 
@@ -3318,12 +3315,10 @@ export class Harness<TState = {}> {
    * Abort the current operation.
    */
   abort(): void {
-    // Drop any tool suspensions parked awaiting a resume. A run sitting in a
-    // tool suspend() (e.g. ask_user / request_access) is not actively streaming,
-    // so aborting the AbortController alone leaves it orphaned. Clearing the map
-    // ensures the harness no longer considers itself awaiting resumes after an
-    // abort, and that a later respondToToolSuspension is a safe no-op.
-    this.pendingSuspensions.clear();
+    // session.abortRun() drops the parked tool suspensions (so a run sitting in
+    // a tool suspend() like ask_user / request_access isn't left orphaned),
+    // aborts the live subscription, and marks the run as aborting. The Harness
+    // owns the display-state mirror of those suspensions, so clear it here too.
     this.displayState.pendingSuspensions.clear();
     this.#session.abortRun();
   }
@@ -3376,7 +3371,7 @@ export class Harness<TState = {}> {
    * should check this too.
    */
   hasPendingSuspensions(): boolean {
-    return this.pendingSuspensions.size > 0;
+    return this.#session.suspensions.hasPending();
   }
 
   isCurrentThreadStreamActive(): boolean {
@@ -3492,10 +3487,10 @@ export class Harness<TState = {}> {
     toolCallId?: string;
     requestContext?: RequestContext;
   }): Promise<void> {
-    const resolvedToolCallId = this.resolvePendingSuspensionToolCallId(toolCallId);
+    const resolvedToolCallId = this.#session.suspensions.resolveToolCallId(toolCallId);
     if (!resolvedToolCallId) return;
 
-    const suspension = this.pendingSuspensions.get(resolvedToolCallId);
+    const suspension = this.#session.suspensions.get({ toolCallId: resolvedToolCallId });
 
     try {
       // `submit_plan` resumes carry a plan-approval decision. Approval additionally
@@ -3521,21 +3516,6 @@ export class Harness<TState = {}> {
       this.emit({ type: 'error', error: err });
       this.emit({ type: 'agent_end', reason: 'error' });
     }
-  }
-
-  /**
-   * Resolve which suspended tool call to act on. With an explicit `toolCallId` it
-   * must match a pending suspension; without one it returns the single pending
-   * suspension (or undefined when there are zero or several).
-   */
-  private resolvePendingSuspensionToolCallId(toolCallId?: string): string | undefined {
-    if (toolCallId) {
-      return this.pendingSuspensions.has(toolCallId) ? toolCallId : undefined;
-    }
-    if (this.pendingSuspensions.size === 1) {
-      return this.pendingSuspensions.keys().next().value;
-    }
-    return undefined;
   }
 
   // ===========================================================================
@@ -3575,7 +3555,7 @@ export class Harness<TState = {}> {
 
     // Approved: drop the parked suspension (its run is about to be aborted by the mode
     // switch) and move to the default execution mode.
-    this.pendingSuspensions.delete(toolCallId);
+    this.#session.suspensions.delete({ toolCallId });
 
     const currentMode = this.getCurrentMode();
     const transitionModeId =
@@ -3663,7 +3643,7 @@ export class Harness<TState = {}> {
     toolCallId: string;
     requestContext?: RequestContext;
   }): Promise<void> {
-    const suspension = this.pendingSuspensions.get(toolCallId);
+    const suspension = this.#session.suspensions.get({ toolCallId });
     if (!suspension) {
       throw new Error('No active suspension to resume');
     }
@@ -3674,7 +3654,7 @@ export class Harness<TState = {}> {
     // the same toolCallId without being clobbered by this cleanup. Drop the matching
     // display-state entry too so the UI stops rendering only the resolved prompt
     // while any other parked suspensions stay visible.
-    this.pendingSuspensions.delete(toolCallId);
+    this.#session.suspensions.delete({ toolCallId });
     this.displayState.pendingSuspensions.delete(toolCallId);
 
     const requestContext = await this.buildRequestContext(requestContextInput);

@@ -10,6 +10,6 @@ Move the Harness's live agent thread subscription onto the Session as `session.s
 With the subscription now session-owned, two accessors that compose it relocate onto the Session:
 
 - `Session.getCurrentRunId()` — the active run id, preferring the live subscription's run id and falling back to the run tracker. `Harness.getCurrentRunId()` is removed; read `harness.session.getCurrentRunId()`.
-- `Session.abortRun()` — abort the live subscription's run and mark the run as aborting. `Harness.abort()` keeps its parked-tool-suspension cleanup (Harness-owned) and delegates the rest to `session.abortRun()`.
+- `Session.abortRun()` — abort the live subscription's run and mark the run as aborting. `Harness.abort()` delegates the run-abort to `session.abortRun()`.
 
 `Harness.abort()` and `Harness.isCurrentThreadStreamActive()` remain on the public API with unchanged behavior. Mastracode reads of `getCurrentRunId()` are repointed at `harness.session.getCurrentRunId()`.

@@ -102,6 +102,76 @@ export class SessionStream {
   }
 }
 
+/** A tool call parked awaiting a resume, keyed in {@link SessionSuspensions}. */
+export interface PendingSuspension {
+  /** The run id to resume when this tool call is answered. */
+  runId: string;
+  /** The suspended tool's name (e.g. `ask_user`, `submit_plan`). */
+  toolName: string;
+}
+
+/**
+ * Owns the session's parked tool suspensions: tool calls paused via the native
+ * tool-suspension primitive (e.g. `ask_user` / `request_access` / `submit_plan`)
+ * that are awaiting a resume, keyed by `toolCallId`. Each entry records the run
+ * id to resume and the tool name. A Map (rather than single fields) lets several
+ * tools — e.g. parallel `ask_user` calls in one step — stay suspended and be
+ * resumed independently.
+ *
+ * This is the resume *data* the Harness reads to drive a resume. The richer
+ * per-suspension UI snapshot lives on the Harness display state; the Session
+ * owns only what's needed to resume.
+ */
+export class SessionSuspensions {
+  /** Parked tool calls awaiting a resume, keyed by `toolCallId`. */
+  readonly #pending = new Map<string, PendingSuspension>();
+
+  /** Park `toolCallId` as awaiting a resume on `runId` for `toolName`. */
+  register({ toolCallId, runId, toolName }: { toolCallId: string; runId: string; toolName: string }): void {
+    this.#pending.set(toolCallId, { runId, toolName });
+  }
+
+  /** The parked suspension for `toolCallId`, or undefined when none. */
+  get({ toolCallId }: { toolCallId: string }): PendingSuspension | undefined {
+    return this.#pending.get(toolCallId);
+  }
+
+  /** Whether `toolCallId` is currently parked. */
+  has({ toolCallId }: { toolCallId: string }): boolean {
+    return this.#pending.has(toolCallId);
+  }
+
+  /** Drop `toolCallId` from the parked set (e.g. once resumed). */
+  delete({ toolCallId }: { toolCallId: string }): void {
+    this.#pending.delete(toolCallId);
+  }
+
+  /** Drop all parked suspensions (e.g. on abort or thread switch). */
+  clear(): void {
+    this.#pending.clear();
+  }
+
+  /** Whether any tool calls are parked awaiting a resume. */
+  hasPending(): boolean {
+    return this.#pending.size > 0;
+  }
+
+  /**
+   * Resolve which parked suspension to act on. With an explicit `toolCallId` it
+   * must match a parked suspension; without one it returns the single parked
+   * suspension (or undefined when there are zero or several).
+   */
+  resolveToolCallId(toolCallId?: string): string | undefined {
+    if (toolCallId) {
+      return this.#pending.has(toolCallId) ? toolCallId : undefined;
+    }
+    if (this.#pending.size === 1) {
+      return this.#pending.keys().next().value;
+    }
+    return undefined;
+  }
+}
+
 /**
  * Owns the session's transient run identity and abort control: the id of the
  * run currently streaming on the active thread, its trace id, a monotonic
@@ -367,6 +437,10 @@ export class SessionMode {
  *   subscription to the active thread's event stream and its dedup key. The
  *   Harness still produces the subscription (calling the agent) and consumes its
  *   stream; the Session owns the handle and its lifecycle.
+ * - the parked tool suspensions (`session.suspensions`): tool calls paused via
+ *   the native tool-suspension primitive awaiting a resume, keyed by toolCallId.
+ *   The Session owns the resume data; the Harness keeps the richer per-suspension
+ *   UI snapshot on its display state.
  *
  * It also exposes a couple of accessors that compose `run` and `stream`:
  * {@link getCurrentRunId} (the active run id, preferring the live subscription)
@@ -393,6 +467,8 @@ export class Session {
   readonly run = new SessionRun();
   /** Live subscription to the active thread's agent event stream. */
   readonly stream = new SessionStream();
+  /** Tool calls parked awaiting a resume (the resume data, keyed by toolCallId). */
+  readonly suspensions = new SessionSuspensions();
 
   /**
    * Attach the thread-settings store the Session persists mode/model through.
@@ -413,12 +489,17 @@ export class Session {
   }
 
   /**
-   * Abort the session's active run: abort the live subscription's in-flight run
-   * and mark the run as aborting so the run-end path resolves its reason as
-   * 'aborted'. The Harness still clears any parked tool suspensions before
-   * calling this, since those live outside the session.
+   * Abort the session's active run: drop any parked tool suspensions, abort the
+   * live subscription's in-flight run, and mark the run as aborting so the
+   * run-end path resolves its reason as 'aborted'.
+   *
+   * Dropping the parked suspensions matters because a run sitting in a tool
+   * `suspend()` (e.g. `ask_user` / `request_access`) is not actively streaming,
+   * so aborting the controller alone would leave it orphaned. The Harness still
+   * clears its own display-state mirror of those suspensions separately.
    */
   abortRun(): void {
+    this.suspensions.clear();
     this.stream.abort();
     this.run.requestAbort();
   }

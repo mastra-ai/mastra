@@ -172,23 +172,23 @@ describe('Harness: ask_user native suspension', () => {
     const resumed: string[] = [];
     (harness as any).handleToolResume = async ({ toolCallId }: { toolCallId: string }) => {
       resumed.push(toolCallId);
-      (harness as any).pendingSuspensions.delete(toolCallId);
+      harness.session.suspensions.delete({ toolCallId });
     };
 
-    const pending: Map<string, { runId: string }> = (harness as any).pendingSuspensions;
-    pending.set('call-a', { runId: 'run-a' });
-    pending.set('call-b', { runId: 'run-b' });
+    const pending = harness.session.suspensions;
+    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user' });
+    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user' });
 
     // Explicit toolCallId resumes only that suspension; the other stays pending.
     await harness.respondToToolSuspension({ toolCallId: 'call-b', resumeData: 'two' });
     expect(resumed).toEqual(['call-b']);
-    expect(pending.has('call-a')).toBe(true);
-    expect(pending.has('call-b')).toBe(false);
+    expect(pending.has({ toolCallId: 'call-a' })).toBe(true);
+    expect(pending.has({ toolCallId: 'call-b' })).toBe(false);
 
     // The remaining suspension can then be resumed by its own toolCallId.
     await harness.respondToToolSuspension({ toolCallId: 'call-a', resumeData: 'one' });
     expect(resumed).toEqual(['call-b', 'call-a']);
-    expect(pending.size).toBe(0);
+    expect(pending.hasPending()).toBe(false);
   });
 
   it('resolves the sole pending suspension when toolCallId is omitted', async () => {
@@ -197,21 +197,22 @@ describe('Harness: ask_user native suspension', () => {
     const resumed: string[] = [];
     (harness as any).handleToolResume = async ({ toolCallId }: { toolCallId: string }) => {
       resumed.push(toolCallId);
-      (harness as any).pendingSuspensions.delete(toolCallId);
+      harness.session.suspensions.delete({ toolCallId });
     };
 
-    const pending: Map<string, { runId: string }> = (harness as any).pendingSuspensions;
-    pending.set('call-only', { runId: 'run-only' });
+    const pending = harness.session.suspensions;
+    pending.register({ toolCallId: 'call-only', runId: 'run-only', toolName: 'ask_user' });
 
     await harness.respondToToolSuspension({ resumeData: 'ok' });
     expect(resumed).toEqual(['call-only']);
 
     // With more than one pending and no toolCallId, the call is a no-op.
-    pending.set('call-x', { runId: 'run-x' });
-    pending.set('call-y', { runId: 'run-y' });
+    pending.register({ toolCallId: 'call-x', runId: 'run-x', toolName: 'ask_user' });
+    pending.register({ toolCallId: 'call-y', runId: 'run-y', toolName: 'ask_user' });
     await harness.respondToToolSuspension({ resumeData: 'ambiguous' });
     expect(resumed).toEqual(['call-only']);
-    expect(pending.size).toBe(2);
+    expect(pending.has({ toolCallId: 'call-x' })).toBe(true);
+    expect(pending.has({ toolCallId: 'call-y' })).toBe(true);
   });
 
   it('clears pending suspensions on abort so the harness is no longer parked (and resume is a no-op)', async () => {
@@ -225,15 +226,15 @@ describe('Harness: ask_user native suspension', () => {
       resumed = true;
     };
 
-    const pending: Map<string, { runId: string }> = (harness as any).pendingSuspensions;
-    pending.set('call-a', { runId: 'run-a' });
-    pending.set('call-b', { runId: 'run-b' });
+    const pending = harness.session.suspensions;
+    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user' });
+    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user' });
     expect(harness.hasPendingSuspensions()).toBe(true);
 
     harness.abort();
 
     expect(harness.hasPendingSuspensions()).toBe(false);
-    expect(pending.size).toBe(0);
+    expect(pending.hasPending()).toBe(false);
 
     // Resuming a suspension that abort already dropped is a safe no-op.
     await harness.respondToToolSuspension({ toolCallId: 'call-a', resumeData: 'late' });
