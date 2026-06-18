@@ -3325,8 +3325,7 @@ export class Harness<TState = {}> {
     // abort, and that a later respondToToolSuspension is a safe no-op.
     this.pendingSuspensions.clear();
     this.displayState.pendingSuspensions.clear();
-    this.#session.stream.abort();
-    this.#session.run.requestAbort();
+    this.#session.abortRun();
   }
 
   /**
@@ -3378,10 +3377,6 @@ export class Harness<TState = {}> {
    */
   hasPendingSuspensions(): boolean {
     return this.pendingSuspensions.size > 0;
-  }
-
-  getCurrentRunId(): string | null {
-    return this.#session.stream.activeRunId() ?? this.#session.run.getRunId();
   }
 
   isCurrentThreadStreamActive(): boolean {

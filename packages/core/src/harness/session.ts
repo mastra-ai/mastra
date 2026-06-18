@@ -368,6 +368,10 @@ export class SessionMode {
  *   Harness still produces the subscription (calling the agent) and consumes its
  *   stream; the Session owns the handle and its lifecycle.
  *
+ * It also exposes a couple of accessors that compose `run` and `stream`:
+ * {@link getCurrentRunId} (the active run id, preferring the live subscription)
+ * and {@link abortRun} (abort the live run and mark it aborting).
+ *
  * Mode/model persistence is thread-scoped, so the Session writes through a
  * {@link ThreadSettingsStore} the Harness backs with thread metadata; when no
  * storage is configured the store is absent and state stays in memory.
@@ -397,6 +401,26 @@ export class Session {
    */
   setStore(store: ThreadSettingsStore | undefined): void {
     this.#store = store;
+  }
+
+  /**
+   * The id of the run currently active on this session: the live subscription's
+   * active run id when it is streaming, falling back to the last run id the run
+   * tracker observed. Null when the session is idle.
+   */
+  getCurrentRunId(): string | null {
+    return this.stream.activeRunId() ?? this.run.getRunId();
+  }
+
+  /**
+   * Abort the session's active run: abort the live subscription's in-flight run
+   * and mark the run as aborting so the run-end path resolves its reason as
+   * 'aborted'. The Harness still clears any parked tool suspensions before
+   * calling this, since those live outside the session.
+   */
+  abortRun(): void {
+    this.stream.abort();
+    this.run.requestAbort();
   }
 
   /** Grant a tool category "allow" for the remainder of the session. */

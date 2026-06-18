@@ -784,7 +784,7 @@ export class MastraTUI {
   private emitErrorFeedback(errorMessage: string): void {
     const harness = this.state.harness;
     const traceId = harness.session.run.getTraceId() ?? undefined;
-    const runId = harness.getCurrentRunId() ?? undefined;
+    const runId = harness.session.getCurrentRunId() ?? undefined;
     const threadId = harness.getCurrentThreadId() ?? undefined;
 
     if (!traceId && !runId && !threadId) return;

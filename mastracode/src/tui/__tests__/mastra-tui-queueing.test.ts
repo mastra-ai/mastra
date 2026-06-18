@@ -251,7 +251,7 @@ describe('MastraTUI queueing', () => {
       harness: {
         sendSignal,
         isCurrentThreadStreamActive: () => true,
-        getCurrentRunId: () => null,
+        session: { getCurrentRunId: () => null },
         getDisplayState: () => ({ isRunning: true }),
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),
@@ -319,7 +319,7 @@ describe('MastraTUI queueing', () => {
       harness: {
         sendSignal,
         isCurrentThreadStreamActive: () => false,
-        getCurrentRunId: () => null,
+        session: { getCurrentRunId: () => null },
         getDisplayState: () => ({ isRunning: false }),
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),
@@ -392,7 +392,7 @@ describe('MastraTUI queueing', () => {
       harness: {
         sendSignal,
         isCurrentThreadStreamActive: () => false,
-        getCurrentRunId: () => null,
+        session: { getCurrentRunId: () => null },
         getDisplayState: () => ({ isRunning: false }),
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),
@@ -428,7 +428,7 @@ describe('MastraTUI queueing', () => {
       harness: {
         sendSignal,
         isCurrentThreadStreamActive: () => false,
-        getCurrentRunId: () => null,
+        session: { getCurrentRunId: () => null },
         getDisplayState: () => ({ isRunning: false }),
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),
