@@ -382,7 +382,6 @@ export class ProcessorRunner {
       messageList,
       memory: resolvedMemory,
       threadId: resolvedThreadId,
-      resourceId: resolvedResourceId,
       stateId,
       tracking,
     });
