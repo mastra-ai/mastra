@@ -363,7 +363,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
  */
 export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, _argsTextDelta: string): void {
   const { state } = ctx;
-  const ds = state.harness.getDisplayState();
+  const ds = state.harness.session.displayState.get();
   const buffer = ds.toolInputBuffers.get(toolCallId);
   if (buffer === undefined) return;
 

@@ -62,7 +62,7 @@ function getPendingUserMessageLabel(isInterjection?: boolean): string | undefine
 }
 
 function getCurrentModeColor(state: TUIState): string | undefined {
-  const color = state.harness.getCurrentMode?.()?.metadata?.color;
+  const color = state.harness.session?.mode?.resolve?.()?.metadata?.color;
   return typeof color === 'string' ? color : undefined;
 }
 
@@ -212,7 +212,7 @@ export function confirmPendingUserMessage(state: TUIState, messageId: string, te
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+  if (state.streamingComponent && state.harness.session.displayState.get().isRunning) {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   }
@@ -553,7 +553,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     state.messageComponentsById.set(message.id, userComponent);
 
-    if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+    if (state.streamingComponent && state.harness.session.displayState.get().isRunning) {
       state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
       reconcileChatBoundarySpacers(state.chatContainer);
@@ -953,10 +953,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
         // Keep the reconstructed task list local to display state in that case.
       }
     }
-    const harnessWithReplayTasks = state.harness as typeof state.harness & {
-      restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
-    };
-    harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
+    state.harness.session.displayState.restoreTasks(previousTasksAcc);
   }
 
   reconcileChatBoundarySpacers(state.chatContainer);

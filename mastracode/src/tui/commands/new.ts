@@ -19,7 +19,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   state.messageComponentsById.clear();
   state.allShellComponents = [];
   // Clear file tracking in display state (thread_created will also reset this)
-  state.harness.getDisplayState().modifiedFiles.clear();
+  state.harness.session.displayState.get().modifiedFiles.clear();
   // Clear per-thread ephemeral state from the global harness state
   await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
   if (state.taskProgress) {

@@ -364,7 +364,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         // narrates completion), so we don't leave a redundant completed-task
         // receipt in the transcript that reads like a second live list. We only
         // render an inline receipt when the list is explicitly cleared.
-        const previousTasks = state.harness.getDisplayState().previousTasks;
+        const previousTasks = state.harness.session.displayState.get().previousTasks;
         if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
           // Tasks were cleared
           ectx.renderClearedTasksInline(previousTasks, insertIndex);
