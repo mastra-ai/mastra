@@ -87,9 +87,14 @@ export class EventedAgent<
         pubsub: this.pubsubInternal,
       });
       // Fire and forget - use startAsync for non-blocking execution.
-      // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
-      const agentSpan = globalRunRegistry.get(runId)?.agentSpan;
-      await run.startAsync({ inputData: workflowInput, ...createObservabilityContext({ currentSpan: agentSpan }) });
+      // Pass the caller's requestContext (so config selectors pick the same observability
+      // instance the root spans were created with) and parent the run under the AGENT_RUN span.
+      const entry = globalRunRegistry.get(runId);
+      await run.startAsync({
+        inputData: workflowInput,
+        requestContext: entry?.requestContext,
+        ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
+      });
     } catch (error) {
       await this.emitError(runId, error instanceof Error ? error : new Error(String(error)));
     }
