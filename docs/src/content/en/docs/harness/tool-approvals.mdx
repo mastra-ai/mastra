@@ -71,7 +71,7 @@ harness.session.respondToToolApproval({ decision: 'always_allow_category' })
 
 ## Session grants
 
-Permission grants live on the `session` object. Grant a category or tool for the rest of the session so it runs without further prompting:
+The Harness owns permission *policy* (which categories require approval); the [`Session`](/docs/harness/session) owns the *grants* a user makes during a conversation. Grant a category or tool for the rest of the session so it runs without further prompting:
 
 ```typescript
 // Grant all edit tools for this session
@@ -146,6 +146,7 @@ const harness = new Harness({
 ## Related
 
 - [Harness overview](/docs/harness/overview)
+- [Session](/docs/harness/session)
 - [Subagents](/docs/harness/subagents)
 - [Agent approval](/docs/agents/agent-approval)
 - [API reference](/reference/harness/harness-class)

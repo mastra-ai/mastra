@@ -1,0 +1,135 @@
+---
+title: "Session | Harness"
+description: "Understand the Session — the per-conversation state object on a Harness — and how it divides responsibility with the shared host."
+packages:
+  - "@mastra/core"
+---
+
+# Session
+
+A `Session` holds the per-conversation state of a Harness: who the conversation is for, which thread is active, the selected mode and model, permission grants, queued follow-ups, token usage, and the display snapshot. You reach it through `harness.session`.
+
+## Harness vs. Session
+
+The Harness is the shared host. It owns the machinery that doesn't change from one conversation to the next: configuration, storage, the agent registry, the thread lock, the event bus, and permission *policy*. The Session is the per-conversation state that sits on top of that machinery.
+
+A useful way to remember the split: the **Harness** is the application, and the **Session** is the current conversation running inside it. Operations that mutate shared infrastructure or coordinate the event bus stay on the Harness; everything that describes "this conversation right now" lives on the Session.
+
+| Lives on the Harness (shared host) | Lives on the Session (per-conversation) |
+| - | - |
+| Configuration, storage, and memory | Resource ID and active thread binding ([`session.identity`](#identity), [`session.thread`](#thread)) |
+| Thread lifecycle: `createThread`, `switchThread`, `cloneThread`, `renameThread`, `deleteThread` | Thread and message reads ([`session.thread.list()`](#thread)) |
+| The event bus (`subscribe`, event emission) | Selected mode and model ([`session.mode`](#mode-and-model), [`session.model`](#mode-and-model)) |
+| Permission *policy* (`setPermissionForCategory`, `getToolCategory`) | Permission *grants* ([`session.grantCategory`](#permission-grants)) |
+| Mode and model *definitions* (`config.modes`) | Run state, abort, follow-ups, suspensions ([`session.run`](#run-state), [`session.followUps`](#follow-ups)) |
+| The shared agent loop and subagent spawning | Token usage and the display snapshot ([`session.displayState`](#display-state)) |
+
+This is why thread *creation* is `harness.createThread()` (it acquires the shared lock and emits an event) while thread *reads* are `harness.session.thread.list()` (they describe the current conversation's view).
+
+In single-player apps there is one Harness and one Session, so the split is mostly organizational. In a multi-user host, the same Harness can serve many conversations — each backed by its own Session — without one conversation's mode, grants, or active thread leaking into another.
+
+## Identity
+
+`session.identity` holds the resource ID the conversation belongs to and the currently bound thread ID. Threads are scoped to a resource ID, so this is what groups a conversation's threads together:
+
+```typescript
+const resourceId = harness.session.identity.getResourceId()
+const threadId = harness.session.thread.getId()
+```
+
+To change the resource a conversation operates under, use `harness.setResourceId()` — it lives on the Harness because it also clears the active thread and releases the shared lock.
+
+## Thread
+
+`session.thread` owns the active thread binding and read access to threads and messages. The Harness performs lifecycle transitions; the Session reads the result:
+
+```typescript
+// Lifecycle transitions live on the Harness
+await harness.switchThread({ threadId: 'thread-abc123' })
+
+// Reads live on the Session
+const threads = await harness.session.thread.list()
+const messages = await harness.session.thread.listActiveMessages()
+```
+
+See [Threads and state](/docs/harness/threads-and-state) for the full lifecycle.
+
+## Mode and model
+
+The Harness defines the available modes in `config.modes`. The Session tracks which mode and model are *currently* selected:
+
+```typescript
+// Switch mode (Harness orchestration — aborts the run, emits events)
+await harness.switchMode({ modeId: 'build' })
+
+// Read the current selection (Session state)
+const modeId = harness.session.mode.get()
+const mode = harness.session.mode.resolve()
+const modelId = harness.session.model.get()
+```
+
+See [Modes](/docs/harness/modes) for how modes carry their own model.
+
+## Permission grants
+
+The Harness owns permission *policy* — which categories or tools require approval. The Session owns the *grants* a user makes during the conversation. A grant lets a tool run for the rest of the session without prompting again:
+
+```typescript
+// Grant a category or tool for the rest of the session
+harness.session.grantCategory('edit')
+harness.session.grantTool('mastra_workspace_execute_command')
+
+// Inspect current grants
+const grants = harness.session.getGrants()
+```
+
+Grants are intentionally in-memory and reset when the session restarts. See [Tool approvals](/docs/harness/tool-approvals) for the approval flow.
+
+## Run state
+
+`session.run` tracks the in-flight generation: whether a run is active, its run and trace IDs, and the abort signal. Use it to reflect run status in your UI:
+
+```typescript
+if (harness.session.run.isRunning()) {
+  // show a stop button
+}
+
+// Abort the active run (Harness orchestration clears related state)
+harness.abort()
+```
+
+## Follow-ups
+
+While a run is in progress, queued follow-up messages live on `session.followUps`. They are sent when the current run finishes:
+
+```typescript
+const queued = harness.session.followUps.count()
+```
+
+## Display state
+
+`session.displayState` is the coalesced `HarnessDisplayState` snapshot — the single object a UI renders from. It folds run status, streaming messages, active tools, tasks, token usage, and pending approvals into one place:
+
+```typescript
+const snapshot = harness.session.displayState.get()
+
+// React to changes
+harness.subscribe(event => {
+  if (event.type === 'display_state_changed') {
+    render(harness.session.displayState.get())
+  }
+})
+```
+
+:::note
+
+Visit the [Session reference](/reference/harness/session) for the full list of sub-objects and method signatures.
+
+:::
+
+## Related
+
+- [Harness overview](/docs/harness/overview)
+- [Threads and state](/docs/harness/threads-and-state)
+- [Tool approvals](/docs/harness/tool-approvals)
+- [Session reference](/reference/harness/session)
