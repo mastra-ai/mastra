@@ -16,6 +16,7 @@ function createMockState() {
     allShellComponents: [{}],
     taskProgress: { updateTasks: vi.fn() },
     taskToolInsertIndex: 5,
+    session: { state: { set: vi.fn(async () => {}) } },
     harness: {
       abort: vi.fn(),
       detachFromCurrentThread: vi.fn(),
@@ -74,7 +75,7 @@ describe('handleNewCommand', () => {
     expect(state.allSystemReminderComponents).toEqual([]);
     expect(state.messageComponentsById.size).toBe(0);
     expect(state.allShellComponents).toEqual([]);
-    expect(state.harness.setState).toHaveBeenCalledWith({
+    expect(state.session.state.set).toHaveBeenCalledWith({
       tasks: [],
       activePlan: null,
       sandboxAllowedPaths: [],

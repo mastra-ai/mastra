@@ -25,7 +25,7 @@ import { getMarkdownTheme } from '../theme.js';
 import type { EventHandlerContext } from './types.js';
 
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
-  const color = ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+  const color = ctx.state.session?.mode?.resolve?.()?.metadata?.color;
   return typeof color === 'string' ? color : undefined;
 }
 
@@ -145,14 +145,14 @@ export function handleToolApprovalRequired(
       state.ui.hideOverlay();
       state.pendingApprovalDismiss = null;
       if (action.type === 'approve') {
-        state.harness.session.respondToToolApproval({ decision: 'approve' });
+        state.session.respondToToolApproval({ decision: 'approve' });
       } else if (action.type === 'always_allow_category') {
-        state.harness.session.respondToToolApproval({ decision: 'always_allow_category' });
+        state.session.respondToToolApproval({ decision: 'always_allow_category' });
       } else if (action.type === 'yolo') {
-        state.harness.setState({ yolo: true } as any);
-        state.harness.session.respondToToolApproval({ decision: 'approve' });
+        void state.session.state.set({ yolo: true } as any);
+        state.session.respondToToolApproval({ decision: 'approve' });
       } else {
-        state.harness.session.respondToToolApproval({ decision: 'decline' });
+        state.session.respondToToolApproval({ decision: 'decline' });
       }
     },
   });
@@ -161,7 +161,7 @@ export function handleToolApprovalRequired(
   state.pendingApprovalDismiss = () => {
     state.ui.hideOverlay();
     state.pendingApprovalDismiss = null;
-    state.harness.session.respondToToolApproval({ decision: 'decline' });
+    state.session.respondToToolApproval({ decision: 'decline' });
   };
 
   // Show the dialog as an overlay

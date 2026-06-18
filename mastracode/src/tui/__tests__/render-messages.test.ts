@@ -569,15 +569,18 @@ describe('renderExistingMessages signals', () => {
     const state = createState();
     addPendingUserMessage(state, 'stale-signal', 'stale preview', undefined, { isInterjection: true });
 
+    state.session = {
+      ...state.session,
+      thread: {
+        listActiveMessages: vi
+          .fn()
+          .mockResolvedValue([
+            createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
+          ]),
+      },
+    } as unknown as TUIState['session'];
     state.harness = {
       session: {
-        thread: {
-          listActiveMessages: vi
-            .fn()
-            .mockResolvedValue([
-              createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
-            ]),
-        },
         displayState: { get: () => ({ isRunning: false }) },
       },
     } as unknown as TUIState['harness'];
@@ -627,9 +630,12 @@ describe('renderExistingMessages subagents', () => {
     };
     const state = createState();
     state.quietMode = true;
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
     state.harness = {
       session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
         displayState: { get: () => ({ isRunning: false }) },
       },
       getFullModelId: () => 'openai/gpt-5.5',

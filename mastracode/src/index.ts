@@ -417,14 +417,19 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           const requestContext = new RequestContext();
           const harnessContext: HarnessRequestContext = {
             harnessId: harness.id,
-            state: harness.getState(),
-            getState: () => harness.getState(),
-            setState: updates => harness.setState(updates),
+            state: harness.session.state.get(),
+            getState: () => harness.session.state.get(),
+            setState: updates => harness.session.state.set(updates),
             threadId,
             resourceId,
             session: {
               modeId: harness.session.mode.get(),
               modelId: harness.session.model.get(),
+              state: {
+                get: () => harness.session.state.get(),
+                set: updates => harness.session.state.set(updates),
+                update: updater => harness.session.state.update(updater),
+              },
             },
             workspace: harness.getWorkspace(),
             getSubagentModelId: params => harness.getSubagentModelId(params),
@@ -436,7 +441,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
             requestContext,
             maxSteps: 1000,
             savePerStep: false,
-            requireToolApproval: (harness.getState() as Record<string, unknown>).yolo !== true,
+            requireToolApproval: (harness.session.state.get() as Record<string, unknown>).yolo !== true,
             modelSettings: { temperature: 1 },
           };
         },
@@ -489,11 +494,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
           const harnessContext = requestContext?.get('harness') as
-            | { state?: { projectPath?: string }; getState?: () => { projectPath?: string } }
+            | HarnessRequestContext<{ projectPath?: string }>
             | undefined;
-          const projectPath =
-            harnessContext?.getState?.()?.projectPath ?? harnessContext?.state?.projectPath ?? project.rootPath;
-          return getStaticallyLoadedInstructionPaths(projectPath);
+          const state = harnessContext?.session.state.get();
+          return getStaticallyLoadedInstructionPaths(state?.projectPath ?? project.rootPath);
         },
       }),
       new ProviderHistoryCompat(),

@@ -1,6 +1,8 @@
 import type { Agent } from '../agent';
 import type { AgentThreadSubscription } from '../agent/types';
 import type { RequestContext } from '../request-context';
+import { toStandardSchema } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import { safeStringify } from '../utils';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
@@ -9,6 +11,8 @@ import type {
   HarnessEvent,
   HarnessMessage,
   HarnessMode,
+  HarnessRequestState,
+  HarnessRequestStateUpdater,
   HarnessThread,
   TokenUsage,
   ToolCategory,
@@ -793,6 +797,112 @@ export class SessionMode {
   }
 }
 
+type SessionStateUpdater<TState, TResult> = HarnessRequestStateUpdater<TState, TResult>;
+
+interface SessionStateOptions<TState> {
+  initialState?: Partial<TState>;
+  stateSchema?: PublicSchema<TState, any>;
+  emit?: (event: HarnessEvent) => void;
+}
+
+/**
+ * Owns the live Harness state for a single Session.
+ *
+ * Reads return shallow snapshots, writes are serialized through a promise queue,
+ * and validated updates emit the same `state_changed` event the Harness used to
+ * emit when it owned state directly.
+ */
+class SessionState<TState = unknown> {
+  #state: TState;
+  #updateQueue: Promise<void> = Promise.resolve();
+  readonly #schema: StandardSchemaWithJSON | undefined;
+  readonly #emit: ((event: HarnessEvent) => void) | undefined;
+
+  constructor({ initialState, stateSchema, emit }: SessionStateOptions<TState>) {
+    this.#schema = stateSchema ? toStandardSchema(stateSchema) : undefined;
+    this.#state = {
+      ...this.getSchemaDefaults(),
+      ...(initialState as Record<string, unknown> | undefined),
+    } as TState;
+    this.#emit = emit;
+  }
+
+  get(): Readonly<TState> {
+    return { ...(this.#state as Record<string, unknown>) } as TState;
+  }
+
+  private getSchemaDefaults(): Partial<TState> {
+    if (!this.#schema) return {};
+
+    const defaults: Record<string, unknown> = {};
+
+    try {
+      // Extract defaults from the JSON Schema representation.
+      const jsonSchema = this.#schema['~standard'].jsonSchema.output({ target: 'draft-07' }) as {
+        properties?: Record<string, { default?: unknown }>;
+      };
+      if (jsonSchema?.properties) {
+        for (const [key, prop] of Object.entries(jsonSchema.properties)) {
+          if (prop.default !== undefined) {
+            defaults[key] = prop.default;
+          }
+        }
+      }
+    } catch {
+      // Schema doesn't support JSON Schema extraction — skip defaults.
+    }
+
+    return defaults as Partial<TState>;
+  }
+
+  private async apply(updates: Partial<TState>): Promise<void> {
+    const changedKeys = Object.keys(updates as Record<string, unknown>);
+    const newState = { ...(this.#state as Record<string, unknown>), ...(updates as Record<string, unknown>) };
+
+    if (this.#schema) {
+      const result = await this.#schema['~standard'].validate(newState);
+      if (result.issues) {
+        const messages = result.issues.map(i => i.message).join('; ');
+        throw new Error(`Invalid state update: ${messages}`);
+      }
+      this.#state = result.value as TState;
+    } else {
+      this.#state = newState as TState;
+    }
+
+    this.#emit?.({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
+  }
+
+  set(updates: Partial<TState>): Promise<void> {
+    const updateSnapshot = { ...(updates as Record<string, unknown>) } as Partial<TState>;
+    const run = this.#updateQueue.then(() => this.apply(updateSnapshot));
+    this.#updateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  update<TResult>(updater: SessionStateUpdater<TState, TResult>): Promise<TResult> {
+    const run = this.#updateQueue.then(async () => {
+      const update = await updater(this.get());
+      if (update.updates && Object.keys(update.updates as Record<string, unknown>).length > 0) {
+        await this.apply(update.updates);
+      }
+      for (const event of update.events ?? []) {
+        this.#emit?.(event);
+      }
+      return update.result;
+    });
+
+    this.#updateQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+}
+
 /**
  * A Harness session owns the per-conversation runtime state that today lives
  * flattened on the {@link Harness} instance. This class is the seam we extract
@@ -800,6 +910,9 @@ export class SessionMode {
  * `Session` rather than the state itself.
  *
  * Currently owns:
+ * - the live Harness state (`session.state`): schema-validated snapshots and
+ *   serialized updates that emit `state_changed`. `Harness.getState()` /
+ *   `Harness.setState()` are compatibility wrappers over this domain.
  * - session-scoped permission grants — the "allow for this session" approvals a
  *   user makes when a tool or tool category is gated behind the permission check.
  * - the live token-usage counter for the active thread. The Session holds the
@@ -1304,7 +1417,7 @@ export class SessionDisplayState {
   }
 }
 
-export class Session {
+export class Session<TState = unknown> {
   /** Tool categories the user has granted "allow" for the lifetime of this session. */
   readonly #grantedCategories = new Set<string>();
   /** Individual tool names the user has granted "allow" for the lifetime of this session. */
@@ -1337,8 +1450,10 @@ export class Session {
   readonly thread: SessionThread;
   /** The canonical display state a UI renders, plus the reducer that maintains it. */
   readonly displayState: SessionDisplayState;
+  /** The session-owned Harness state domain. */
+  readonly state: HarnessRequestState<TState>;
 
-  constructor({ resourceId }: { resourceId: string }) {
+  constructor({ resourceId, state }: { resourceId: string; state?: SessionStateOptions<TState> }) {
     this.identity = new SessionIdentity({ resourceId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.displayState = new SessionDisplayState({
@@ -1347,6 +1462,7 @@ export class Session {
       getThreadId: () => this.thread.getId(),
       clearFollowUps: () => this.followUps.clear(),
     });
+    this.state = new SessionState(state ?? { initialState: {} as TState });
   }
 
   /**

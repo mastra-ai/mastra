@@ -21,8 +21,6 @@ import type { StorageThreadType } from '../memory/types';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
-import { toStandardSchema } from '../schema';
-import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
@@ -445,8 +443,6 @@ export class Harness<TState = {}> {
   readonly id: string;
 
   private config: HarnessConfig<TState>;
-  private stateSchema: StandardSchemaWithJSON | undefined;
-  private state: TState;
   private listeners: HarnessEventListener[] = [];
   private workspace: Workspace | undefined = undefined;
   private workspaceFn:
@@ -461,8 +457,7 @@ export class Harness<TState = {}> {
     | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
     | undefined = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
-  readonly #session: Session;
-  private stateUpdateQueue: Promise<void> = Promise.resolve();
+  readonly #session: Session<TState>;
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
@@ -474,17 +469,16 @@ export class Harness<TState = {}> {
 
     this.id = config.id;
     this.config = config;
-    this.#session = new Session({ resourceId: config.resourceId ?? config.id });
     this.#instructions = config.instructions;
 
-    // Convert PublicSchema to StandardSchemaWithJSON at the boundary
-    this.stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
-
-    // Initialize state from schema defaults + initial state
-    this.state = {
-      ...this.getSchemaDefaults(),
-      ...config.initialState,
-    } as TState;
+    this.#session = new Session({
+      resourceId: config.resourceId ?? config.id,
+      state: {
+        initialState: config.initialState,
+        stateSchema: config.stateSchema,
+        emit: event => this.emit(event),
+      },
+    });
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
@@ -550,7 +544,7 @@ export class Harness<TState = {}> {
    * session-scoped permission grants. Prefer `harness.session.*` over the
    * (removed) re-exposed grant helpers on the Harness.
    */
-  get session(): Session {
+  get session(): Session<TState> {
     return this.#session;
   }
 
@@ -860,40 +854,19 @@ export class Harness<TState = {}> {
 
   /**
    * Get current harness state (read-only snapshot).
+   * @deprecated Prefer `harness.session.state.get()`.
    */
   getState(): Readonly<TState> {
-    return { ...this.state };
-  }
-
-  private async applyStateUpdates(updates: Partial<TState>): Promise<void> {
-    const changedKeys = Object.keys(updates);
-    const newState = { ...this.state, ...updates };
-
-    if (this.stateSchema) {
-      const result = await this.stateSchema['~standard'].validate(newState);
-      if (result.issues) {
-        const messages = result.issues.map(i => i.message).join('; ');
-        throw new Error(`Invalid state update: ${messages}`);
-      }
-      this.state = result.value as TState;
-    } else {
-      this.state = newState as TState;
-    }
-
-    this.emit({ type: 'state_changed', state: this.state as Record<string, unknown>, changedKeys });
+    return this.#session.state.get();
   }
 
   /**
    * Update harness state. Validates against schema if provided.
    * Emits state_changed event.
+   * @deprecated Prefer `harness.session.state.set(...)`.
    */
   async setState(updates: Partial<TState>): Promise<void> {
-    const run = this.stateUpdateQueue.then(() => this.applyStateUpdates(updates));
-    this.stateUpdateQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+    return this.#session.state.set(updates);
   }
 
   private async updateState<TResult>(
@@ -903,46 +876,7 @@ export class Harness<TState = {}> {
       | { updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }
       | Promise<{ updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }>,
   ): Promise<TResult> {
-    const run = this.stateUpdateQueue.then(async () => {
-      const update = await updater(this.getState());
-      if (update.updates && Object.keys(update.updates).length > 0) {
-        await this.applyStateUpdates(update.updates);
-      }
-      for (const event of update.events ?? []) {
-        this.emit(event);
-      }
-      return update.result;
-    });
-
-    this.stateUpdateQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
-  }
-
-  private getSchemaDefaults(): Partial<TState> {
-    if (!this.stateSchema) return {};
-
-    const defaults: Record<string, unknown> = {};
-
-    try {
-      // Extract defaults from the JSON Schema representation
-      const jsonSchema = this.stateSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as {
-        properties?: Record<string, { default?: unknown }>;
-      };
-      if (jsonSchema?.properties) {
-        for (const [key, prop] of Object.entries(jsonSchema.properties)) {
-          if (prop.default !== undefined) {
-            defaults[key] = prop.default;
-          }
-        }
-      }
-    } catch {
-      // Schema doesn't support JSON Schema extraction — skip defaults
-    }
-
-    return defaults as Partial<TState>;
+    return this.#session.state.update(updater);
   }
 
   // ===========================================================================
@@ -1265,7 +1199,7 @@ export class Harness<TState = {}> {
     }
 
     // Auto-tag with projectPath from state so threads are scoped to the working directory
-    const projectPath = (this.state as any).projectPath;
+    const projectPath = (this.#session.state.get() as any).projectPath;
     if (projectPath) {
       metadata.projectPath = projectPath;
     }
@@ -1738,28 +1672,28 @@ export class Harness<TState = {}> {
    * Returns the observer model ID from state, falling back to omConfig defaults.
    */
   getObserverModelId(): string | undefined {
-    return (this.state as any).observerModelId ?? this.config.omConfig?.defaultObserverModelId;
+    return (this.#session.state.get() as any).observerModelId ?? this.config.omConfig?.defaultObserverModelId;
   }
 
   /**
    * Returns the reflector model ID from state, falling back to omConfig defaults.
    */
   getReflectorModelId(): string | undefined {
-    return (this.state as any).reflectorModelId ?? this.config.omConfig?.defaultReflectorModelId;
+    return (this.#session.state.get() as any).reflectorModelId ?? this.config.omConfig?.defaultReflectorModelId;
   }
 
   /**
    * Returns the observation threshold from state, falling back to omConfig defaults.
    */
   getObservationThreshold(): number | undefined {
-    return (this.state as any).observationThreshold ?? this.config.omConfig?.defaultObservationThreshold;
+    return (this.#session.state.get() as any).observationThreshold ?? this.config.omConfig?.defaultObservationThreshold;
   }
 
   /**
    * Returns the reflection threshold from state, falling back to omConfig defaults.
    */
   getReflectionThreshold(): number | undefined {
-    return (this.state as any).reflectionThreshold ?? this.config.omConfig?.defaultReflectionThreshold;
+    return (this.#session.state.get() as any).reflectionThreshold ?? this.config.omConfig?.defaultReflectionThreshold;
   }
 
   /**
@@ -1803,7 +1737,7 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
-    const state = this.state as Record<string, unknown>;
+    const state = this.#session.state.get() as Record<string, unknown>;
     if (agentType) {
       const perType = state[`subagentModelId_${agentType}`];
       if (typeof perType === 'string') return perType;
@@ -1840,7 +1774,7 @@ export class Harness<TState = {}> {
   }
 
   getPermissionRules(): PermissionRules {
-    const state = this.state as Record<string, unknown>;
+    const state = this.#session.state.get() as Record<string, unknown>;
     const rules = state.permissionRules as PermissionRules | undefined;
     return rules ?? { categories: {}, tools: {} };
   }
@@ -1851,7 +1785,7 @@ export class Harness<TState = {}> {
    * session category grant → category policy → "ask"
    */
   private resolveToolApproval(toolName: string): PermissionPolicy {
-    const state = this.state as Record<string, unknown>;
+    const state = this.#session.state.get() as Record<string, unknown>;
     const rules = this.getPermissionRules();
 
     const toolPolicy = rules.tools[toolName];
@@ -1993,7 +1927,7 @@ export class Harness<TState = {}> {
    * small default and ends it mid-task (see {@link HARNESS_MAX_STEPS}).
    */
   private buildSharedRunOptions(): Record<string, unknown> {
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
     const shared: Record<string, unknown> = {
       maxSteps: HARNESS_MAX_STEPS,
       savePerStep: false,
@@ -3555,7 +3489,7 @@ export class Harness<TState = {}> {
     const agent = this.getCurrentAgent();
 
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
     const threadId = this.#session.thread.getId();
     await agent.approveToolCall({
       runId,
@@ -3583,7 +3517,7 @@ export class Harness<TState = {}> {
     const agent = this.getCurrentAgent();
 
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
     const threadId = this.#session.thread.getId();
     await agent.declineToolCall({
       runId,
@@ -3817,17 +3751,22 @@ export class Harness<TState = {}> {
    */
   private async buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
     requestContext ??= new RequestContext();
-    const harnessContext: HarnessRequestContext<Readonly<TState>> = {
+    const harnessContext: HarnessRequestContext<TState> = {
       harnessId: this.id,
-      state: this.getState(),
-      getState: () => this.getState(),
-      setState: updates => this.setState(updates),
-      updateState: updater => this.updateState(updater),
+      state: this.#session.state.get(),
+      getState: () => this.#session.state.get(),
+      setState: updates => this.#session.state.set(updates),
+      updateState: updater => this.#session.state.update(updater),
       threadId: this.#session.thread.getId(),
       resourceId: this.#session.identity.getResourceId(),
       session: {
         modeId: this.#session.mode.get(),
         modelId: this.#session.model.get(),
+        state: {
+          get: () => this.#session.state.get(),
+          set: updates => this.#session.state.set(updates),
+          update: updater => this.#session.state.update(updater),
+        },
       },
       abortSignal: this.#session.run.getAbortSignal(),
       workspace: this.workspace,

@@ -71,9 +71,18 @@ function createState() {
 
   return {
     options: {},
+    session: {
+      followUps: { count: vi.fn(() => 0) },
+      identity: { getResourceId: vi.fn(() => 'resource-1') },
+      thread: { getId: vi.fn(() => 'thread-1') },
+      mode: {
+        get: vi.fn(() => 'build'),
+        resolve: vi.fn(() => ({ id: 'build', name: 'build', metadata: { color: '#00ff00' } })),
+      },
+      state: { get: vi.fn(() => ({ yolo: false })) },
+    },
     harness: {
       listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
-      getState: vi.fn(() => ({ yolo: false })),
       getObserverModelId: vi.fn(() => 'openai/gpt-4o'),
       getReflectorModelId: vi.fn(() => 'openai/gpt-4o-mini'),
       getFullModelId: vi.fn(() => 'anthropic/claude-sonnet-4-20250514'),
@@ -132,7 +141,7 @@ describe('updateStatusLine', () => {
   it('shows queued count in the status line', () => {
     const state = createState();
     state.pendingQueuedActions = ['message', 'slash'];
-    state.harness.session.followUps.count.mockReturnValue(1);
+    state.session.followUps.count.mockReturnValue(1);
 
     updateStatusLine(state);
 
