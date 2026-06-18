@@ -241,6 +241,24 @@ describe('Harness: ask_user native suspension', () => {
     expect(resumed).toBe(false);
   });
 
+  it('releases a parked tool-approval gate on abort (resolves as decline) so the run can finalize', async () => {
+    // A run awaiting approval.arm() is not actively streaming, so abort() must
+    // resolve the parked gate itself — otherwise the await never settles and the
+    // run hangs. Resolving as a decline rejects the gated tool, which is correct
+    // for an aborted run.
+    const { harness } = await buildHarness('approval-abort', JSON.stringify({ question: 'Pick?' }));
+
+    const approval = harness.session.approval;
+    const parked = approval.arm({ toolName: 'edit_file' });
+    expect(approval.isArmed()).toBe(true);
+
+    harness.abort();
+
+    const decision = await parked;
+    expect(decision.decision).toBe('decline');
+    expect(approval.isArmed()).toBe(false);
+  });
+
   it('surfaces three ask_user questions one at a time across resumes (#13642 serialized flow)', async () => {
     // When the model emits three ask_user calls in one step, suspend-capable tools
     // run sequentially: only the first suspends per run, and answering it resumes

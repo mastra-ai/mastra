@@ -498,6 +498,18 @@ export class SessionApproval {
     this.#toolName = null;
   }
 
+  /**
+   * Release a parked gate without a user decision — used when the run is
+   * aborted. Resolves the awaiting producer as a `decline` so the gated tool is
+   * rejected (not run) and the run can finalize. A no-op when nothing is armed.
+   */
+  cancel(): void {
+    if (!this.isArmed()) return;
+    this.#resolve?.({ decision: 'decline' });
+    this.#resolve = null;
+    this.#toolName = null;
+  }
+
   /** Clear the gated tool name once a parked approval has been consumed. */
   clearToolName(): void {
     this.#toolName = null;
@@ -886,9 +898,14 @@ export class Session {
    * `suspend()` (e.g. `ask_user` / `request_access`) is not actively streaming,
    * so aborting the controller alone would leave it orphaned. The Harness still
    * clears its own display-state mirror of those suspensions separately.
+   *
+   * Releasing a parked tool-approval gate matters for the same reason: a run
+   * awaiting `approval.arm()` is not streaming, so we resolve it as a decline so
+   * the gated tool is rejected and the run can finalize rather than hang.
    */
   abortRun(): void {
     this.suspensions.clear();
+    this.approval.cancel();
     this.stream.abort();
     this.run.requestAbort();
   }

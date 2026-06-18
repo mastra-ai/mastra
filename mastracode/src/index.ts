@@ -337,11 +337,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         // Use dot-notation because these are nested inside the 'harness' key.
         //
         // Session identifiers:
-        //   threadId, resourceId, modeId, harnessId
+        //   threadId, resourceId, session.modeId, harnessId
         // Environment & project:
         //   state.projectName, state.gitBranch
         // Model configuration:
-        //   state.currentModelId, state.subagentModelId
+        //   session.modelId, state.subagentModelId
         // Agent settings:
         //   state.yolo, state.thinkingLevel, state.smartEditing
         // Observational memory settings:
@@ -351,13 +351,13 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           // Session identifiers
           'harness.threadId',
           'harness.resourceId',
-          'harness.modeId',
+          'harness.session.modeId',
           'harness.harnessId',
           // Environment & project
           'harness.state.projectName',
           'harness.state.gitBranch',
           // Model configuration
-          'harness.state.currentModelId',
+          'harness.session.modelId',
           'harness.state.subagentModelId',
           // Agent settings
           'harness.state.yolo',
