@@ -216,8 +216,8 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
             id: randomUUID(),
             kind: 'question',
             status: 'pending',
-            runId: context.agent?.runId ?? context.workflow?.runId ?? null,
-            traceId: context.traceId ?? null,
+            runId: session.getCurrentRunId(),
+            traceId: session.getCurrentTraceId(),
             payload: input,
           });
           return { isError: false, pendingItemId: pending.id, status: pending.status };
@@ -237,8 +237,8 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
             id: randomUUID(),
             kind: 'plan-approval',
             status: 'pending',
-            runId: context.agent?.runId ?? context.workflow?.runId ?? null,
-            traceId: context.traceId ?? null,
+            runId: session.getCurrentRunId(),
+            traceId: session.getCurrentTraceId(),
             payload: { ...input, transitionModeId: session.getMode().transitionsTo },
           });
           return { isError: false, pendingItemId: pending.id, status: pending.status };
