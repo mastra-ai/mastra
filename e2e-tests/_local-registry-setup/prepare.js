@@ -1,5 +1,5 @@
 import { exec, execSync, spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -82,6 +82,14 @@ function retryWithTimeout(fn, timeout, name, retryCount = 0) {
     }
     throw err;
   });
+}
+
+function isInChangesetPreMode(monorepoDir) {
+  const preJsonPath = join(monorepoDir, '.changeset/pre.json');
+  if (!existsSync(preJsonPath)) return false;
+
+  const preJson = JSON.parse(readFileSync(preJsonPath, 'utf8'));
+  return preJson.mode === 'pre';
 }
 
 function cleanup(monorepoDir, resetChanges = false) {
@@ -237,14 +245,18 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
     changeset += `---`;
     writeFileSync(join(monorepoDir, `.changeset/test-${new Date().toISOString()}.md`), changeset);
     // process.exit(0); // Remove this - it prevents changeset commands from running
-    console.log('Running pnpm changeset-cli pre exit');
-    await retryWithTimeout(
-      async () => {
-        await execWithTimeout('pnpm changeset-cli pre exit', { cwd: monorepoDir }, defaultTimeout);
-      },
-      defaultTimeout,
-      'pnpm changeset-cli pre exit',
-    );
+    if (isInChangesetPreMode(monorepoDir)) {
+      console.log('Running pnpm changeset-cli pre exit');
+      await retryWithTimeout(
+        async () => {
+          await execWithTimeout('pnpm changeset-cli pre exit', { cwd: monorepoDir }, defaultTimeout);
+        },
+        defaultTimeout,
+        'pnpm changeset-cli pre exit',
+      );
+    } else {
+      console.log('Skipping pnpm changeset-cli pre exit because changesets are not in pre mode');
+    }
 
     console.log(`Running pnpm changeset-cli version --snapshot ${tag}`);
     await retryWithTimeout(
