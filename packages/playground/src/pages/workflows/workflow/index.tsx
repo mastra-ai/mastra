@@ -3,6 +3,8 @@ import { useParams } from 'react-router';
 import { WorkflowSelectedStepProvider } from '@/domains/workflows/context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow-step-detail-provider';
 import { WorkflowGraph } from '@/domains/workflows/workflow/workflow-graph';
+import { WorkflowSuspendedOverlay } from '@/domains/workflows/workflow/workflow-suspended-overlay';
+import { WorkflowTimeline } from '@/domains/workflows/workflow/workflow-timeline';
 import { useWorkflow } from '@/hooks/use-workflows';
 
 export const Workflow = () => {
@@ -30,7 +32,13 @@ export const Workflow = () => {
   return (
     <WorkflowSelectedStepProvider>
       <WorkflowStepDetailProvider>
-        <WorkflowGraph workflowId={workflowId!} workflow={workflow ?? undefined} isLoading={isLoading} />
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="relative min-h-0 flex-1 p-2 pb-0">
+            <WorkflowGraph workflowId={workflowId!} workflow={workflow ?? undefined} isLoading={isLoading} />
+            <WorkflowSuspendedOverlay />
+            <WorkflowTimeline />
+          </div>
+        </div>
       </WorkflowStepDetailProvider>
     </WorkflowSelectedStepProvider>
   );

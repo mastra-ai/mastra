@@ -328,30 +328,33 @@ export function WorkflowTrigger({
         )}
 
         {canExecuteWorkflow && (
-          <WorkflowTriggerForm
-            zodSchema={zodSchemaToUse}
-            defaultValues={payload}
-            isStreaming={isStreamingWorkflow || isSuspendedSteps}
-            onExecute={data => {
-              setPayload(data);
-              void handleExecuteWorkflow(data);
-            }}
-            isViewingRun={!!paramsRunId || hasFinished}
-            isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps}
-            disableSubmit={isSuspendedSteps}
-            isProcessorWorkflow={workflow?.isProcessorWorkflow}
-            collapsible={false}
-            headingSlot={headingSlot}
-            leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
-            submitActions={
-              <>
-                {workflow?.requestContextSchema && (
-                  <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
-                )}
-                <WorkflowRunOptionsDialog />
-              </>
-            }
-          />
+          <>
+            <WorkflowTriggerForm
+              zodSchema={zodSchemaToUse}
+              defaultValues={payload}
+              isStreaming={isStreamingWorkflow || isSuspendedSteps}
+              onExecute={data => {
+                setPayload(data);
+                void handleExecuteWorkflow(data);
+              }}
+              isViewingRun={!!paramsRunId || hasFinished}
+              isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps}
+              disableSubmit={isSuspendedSteps}
+              isProcessorWorkflow={workflow?.isProcessorWorkflow}
+              collapsible={false}
+              headingSlot={headingSlot}
+              leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
+              submitActions={
+                <>
+                  {workflow?.requestContextSchema && (
+                    <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
+                  )}
+                  <WorkflowRunOptionsDialog />
+                </>
+              }
+            />
+
+          </>
         )}
 
         {!canExecuteWorkflow && (

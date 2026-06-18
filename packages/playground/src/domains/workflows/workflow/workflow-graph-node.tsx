@@ -35,7 +35,7 @@ const WorkflowStepCard = ({
   stepsFlow: Record<string, string[]>;
 }) => {
   const { steps } = useCurrentRun();
-  const { selectedStepId } = useWorkflowSelectedStep();
+  const { selectedStepId, hoverStepId, setHoverStepId } = useWorkflowSelectedStep();
   const { showNestedGraph } = useWorkflowStepDetail();
   const { label, stepId, description } = data;
   const mapConfig = data.mapConfig ?? ('step' in data.workflowStep ? data.workflowStep.step?.mapConfig : undefined);
@@ -44,6 +44,7 @@ const WorkflowStepCard = ({
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
   const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
   const isSelected = selectedStepId === stepKey;
+  const isHovered = hoverStepId === stepKey;
   const step = steps[stepKey];
   const { displayStatus, isTripwire } = getDisplayStatus(step);
 
@@ -56,6 +57,8 @@ const WorkflowStepCard = ({
       isNestedWorkflowStep={data.workflowStep.kind === 'nested-workflow-step'}
       stepKey={stepKey}
       isSelected={isSelected}
+      isHovered={isHovered}
+      onHoverChange={isHovered => setHoverStepId(isHovered ? stepKey : null)}
       duration={data.duration}
       date={data.date}
       isForEach={data.isForEach}
