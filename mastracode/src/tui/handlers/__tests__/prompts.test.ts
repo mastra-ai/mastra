@@ -90,7 +90,7 @@ function createPlanApprovalCtx() {
   const state = {
     harness: {
       setState: vi.fn().mockResolvedValue(undefined),
-      getResourceId: vi.fn(() => 'resource-1'),
+      session: { identity: { getResourceId: vi.fn(() => 'resource-1') } },
       respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
       sendSignal,
     },

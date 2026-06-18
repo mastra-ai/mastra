@@ -286,7 +286,7 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           createThread,
-          getCurrentThreadId: vi.fn(() => currentThreadId),
+          session: { thread: { getId: vi.fn(() => currentThreadId) } },
           sendSignal,
         },
       },
@@ -337,7 +337,7 @@ describe('handleGoalCommand', () => {
         pendingNewThread: false,
         goalManager,
         harness: {
-          getCurrentThreadId: vi.fn(() => 'thread-1'),
+          session: { thread: { getId: vi.fn(() => 'thread-1') } },
           sendSignal,
         },
       },
@@ -410,7 +410,7 @@ describe('handleGoalCommand', () => {
         pendingNewThread: false,
         goalManager,
         harness: {
-          getCurrentThreadId: vi.fn(() => 'thread-1'),
+          session: { thread: { getId: vi.fn(() => 'thread-1') } },
           sendSignal,
         },
       },
@@ -442,8 +442,7 @@ describe('handleGoalCommand', () => {
         pendingNewThread: false,
         goalManager,
         harness: {
-          getCurrentThreadId: vi.fn(() => 'thread-1'),
-          setThreadSetting: vi.fn().mockResolvedValue(undefined),
+          session: { thread: { getId: vi.fn(() => 'thread-1'), setSetting: vi.fn().mockResolvedValue(undefined) } },
           sendMessage,
         },
       },
@@ -485,7 +484,7 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]),
-          getCurrentModelId: vi.fn(() => 'anthropic/claude-sonnet-4-5'),
+          session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         },
         ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() },
       },
@@ -525,7 +524,7 @@ describe('handleGoalCommand', () => {
         goalManager,
         harness: {
           listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]),
-          getCurrentModelId: vi.fn(() => 'anthropic/claude-sonnet-4-5'),
+          session: { model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-5') } },
         },
         ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() },
       },
@@ -589,8 +588,7 @@ describe('handleGoalCommand', () => {
       pendingInlineQuestions: [],
       pendingAskUserComponents: new Map(),
       harness: {
-        isRunning: vi.fn(() => false),
-        hasPendingSuspensions: vi.fn(() => false),
+        session: { run: { isRunning: vi.fn(() => false) }, suspensions: { hasPending: vi.fn(() => false) } },
         abort,
       },
     };
@@ -624,8 +622,7 @@ describe('handleGoalCommand', () => {
       pendingInlineQuestions: [() => {}],
       pendingAskUserComponents: new Map([['t', {}]]),
       harness: {
-        isRunning: vi.fn(() => true),
-        hasPendingSuspensions: vi.fn(() => false),
+        session: { run: { isRunning: vi.fn(() => true) }, suspensions: { hasPending: vi.fn(() => false) } },
         abort,
       },
     };
@@ -665,7 +662,7 @@ describe('handleGoalCommand', () => {
     const state = {
       goalManager,
       harness: {
-        getCurrentThreadId: vi.fn(() => 'thread-1'),
+        session: { thread: { getId: vi.fn(() => 'thread-1') } },
         sendSignal,
       },
       planStartedGoalId: 'plan-goal-xyz',

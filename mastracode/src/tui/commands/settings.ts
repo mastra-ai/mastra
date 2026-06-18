@@ -196,7 +196,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     notifications: (state?.notifications ?? 'off') as NotificationMode,
     yolo: state?.yolo === true,
     thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
-    currentModelId: ctx.state.harness.getCurrentModelId() ?? '',
+    currentModelId: ctx.state.harness.session.model.get() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
     quietMode: globalSettings.preferences.quietMode,
     quietModeMaxToolPreviewLines: globalSettings.preferences.quietModeMaxToolPreviewLines,
@@ -224,7 +224,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       onEscapeAsCancelChange: async enabled => {
         ctx.state.editor.escapeEnabled = enabled;
         await ctx.state.harness.setState({ escapeAsCancel: enabled });
-        await ctx.state.harness.setThreadSetting({ key: 'escapeAsCancel', value: enabled });
+        await ctx.state.harness.session.thread.setSetting({ key: 'escapeAsCancel', value: enabled });
       },
       onQuietModeChange: enabled => {
         const current = loadSettings();

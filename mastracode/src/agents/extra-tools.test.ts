@@ -25,10 +25,9 @@ function makeRequestContext(
 ) {
   const ctx = new RequestContext();
   ctx.set('harness', {
-    modeId: overrides.modeId ?? 'build',
+    session: { modeId: overrides.modeId ?? 'build', modelId: 'anthropic/claude-opus-4-6' },
     getState: () => ({
       projectPath: overrides.projectPath ?? '/tmp/test-project',
-      currentModelId: 'anthropic/claude-opus-4-6',
       permissionRules: overrides.permissionRules ?? { categories: {}, tools: {} },
     }),
   });

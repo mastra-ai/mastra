@@ -90,11 +90,13 @@ function createState(isRunning: boolean) {
   const state = {
     editor,
     harness: {
-      isRunning: vi.fn(() => isRunning),
-      hasPendingSuspensions: vi.fn(() => false),
+      session: {
+        run: { isRunning: vi.fn(() => isRunning) },
+        suspensions: { hasPending: vi.fn(() => false) },
+        mode: { get: vi.fn() },
+      },
       getState: vi.fn(() => ({})),
       listModes: vi.fn(() => []),
-      getCurrentModeId: vi.fn(),
       switchMode: vi.fn(),
       setState: vi.fn(),
       abort: vi.fn(),
@@ -420,7 +422,7 @@ describe('setupKeyboardShortcuts', () => {
   it('aborts when parked in a tool suspension even though isRunning() is false', () => {
     const { state, editor, actions } = createState(false);
     editor.getText.mockReturnValue('');
-    state.harness.hasPendingSuspensions.mockReturnValue(true);
+    state.harness.session.suspensions.hasPending.mockReturnValue(true);
 
     setupKeyboardShortcuts(state, {
       stop: vi.fn(),
@@ -465,7 +467,7 @@ describe('setupKeyboardShortcuts', () => {
     // aborts and clears the inline plan-approval component.
     const { state, editor, actions } = createState(false);
     editor.getText.mockReturnValue('');
-    state.harness.hasPendingSuspensions.mockReturnValue(true);
+    state.harness.session.suspensions.hasPending.mockReturnValue(true);
     state.activeInlinePlanApproval = { handleInput: vi.fn() } as any;
 
     setupKeyboardShortcuts(state, {
