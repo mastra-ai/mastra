@@ -74,6 +74,7 @@ const dataListRootVariants = cva('grid min-w-0 max-w-full content-start', {
       ),
       lined: cn(
         ...borderlessTableStyles,
+        '[&_.data-list-row]:after:absolute [&_.data-list-row]:after:h-px [&_.data-list-row]:after:content-[""] [&_.data-list-row]:after:pointer-events-none',
         '[&_.data-list-row]:after:inset-x-2 [&_.data-list-row]:after:-bottom-px [&_.data-list-row]:after:bg-neutral6/10',
       ),
     },
