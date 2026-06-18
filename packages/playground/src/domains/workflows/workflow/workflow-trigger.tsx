@@ -353,7 +353,6 @@ export function WorkflowTrigger({
                 </>
               }
             />
-
           </>
         )}
 
