@@ -85,7 +85,7 @@ Or per-invocation via the `subagent` tool's `forked` input parameter.
 - Memory must be configured on the Harness (forking clones the thread)
 - The parent agent's instructions, tools, model, and `maxSteps` apply
 - The subagent definition's own `instructions`, `tools`, and `defaultModelId` are ignored
-- Fork threads are tagged with `metadata.forkedSubagent === true` and hidden from `listThreads` by default
+- Fork threads are tagged with `metadata.forkedSubagent === true` and hidden from `session.thread.list()` by default
 - Recursive forks are blocked at runtime to prevent infinite nesting
 
 ### When to prefer non-forked mode

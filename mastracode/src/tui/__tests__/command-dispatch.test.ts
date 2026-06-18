@@ -419,7 +419,7 @@ describe('dispatchSlashCommand models routing', () => {
       ui: { requestRender: vi.fn() },
       session: { stream: { isActive: vi.fn(() => true) } },
       harness: {
-        getDisplayState: vi.fn(() => ({ isRunning: true })),
+        session: { stream: { isActive: vi.fn(() => true) }, displayState: { get: vi.fn(() => ({ isRunning: true })) } },
         sendSignal,
         sendMessage: vi.fn().mockResolvedValue(undefined),
       },
@@ -452,7 +452,7 @@ describe('dispatchSlashCommand models routing', () => {
       ui: { requestRender: vi.fn() },
       session: { stream: { isActive: vi.fn(() => true) } },
       harness: {
-        getDisplayState: vi.fn(() => ({ isRunning: true })),
+        session: { stream: { isActive: vi.fn(() => true) }, displayState: { get: vi.fn(() => ({ isRunning: true })) } },
         sendSignal,
         sendMessage: vi.fn().mockResolvedValue(undefined),
       },

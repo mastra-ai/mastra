@@ -82,15 +82,26 @@ function createState() {
       state: { get: vi.fn(() => ({ yolo: false })) },
     },
     harness: {
-      getDisplayState: vi.fn(() => ({
-        omProgress: { status: 'idle' },
-        bufferingMessages: false,
-        bufferingObservations: false,
-      })),
       listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
       getObserverModelId: vi.fn(() => 'openai/gpt-4o'),
       getReflectorModelId: vi.fn(() => 'openai/gpt-4o-mini'),
       getFullModelId: vi.fn(() => 'anthropic/claude-sonnet-4-20250514'),
+      session: {
+        displayState: {
+          get: vi.fn(() => ({
+            omProgress: { status: 'idle' },
+            bufferingMessages: false,
+            bufferingObservations: false,
+          })),
+        },
+        followUps: { count: vi.fn(() => 0) },
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: {
+          get: vi.fn(() => 'build'),
+          resolve: vi.fn(() => ({ id: 'build', name: 'build', metadata: { color: '#00ff00' } })),
+        },
+      },
     },
     statusLine: { setText },
     memoryStatusLine: { setText: memorySetText },
@@ -378,7 +389,7 @@ describe('updateStatusLine', () => {
     vi.mocked(formatObservationStatus).mockReturnValue('msg 100%');
     vi.mocked(formatReflectionStatus).mockReturnValue('mem 100%');
     const state = createState();
-    state.harness.getDisplayState.mockReturnValue({
+    state.harness.session.displayState.get.mockReturnValue({
       omProgress: { status: 'observing' },
       bufferingMessages: true,
       bufferingObservations: true,

@@ -31,7 +31,7 @@ function createState(): TUIState {
     pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],
     harness: {
-      getDisplayState: () => ({ isRunning: false }),
+      session: { displayState: { get: () => ({ isRunning: false }) } },
     },
   } as unknown as TUIState;
 }
@@ -580,7 +580,9 @@ describe('renderExistingMessages signals', () => {
       },
     } as unknown as TUIState['session'];
     state.harness = {
-      getDisplayState: () => ({ isRunning: false }),
+      session: {
+        displayState: { get: () => ({ isRunning: false }) },
+      },
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -633,7 +635,9 @@ describe('renderExistingMessages subagents', () => {
       thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
     } as unknown as TUIState['session'];
     state.harness = {
-      getDisplayState: () => ({ isRunning: false }),
+      session: {
+        displayState: { get: () => ({ isRunning: false }) },
+      },
       getFullModelId: () => 'openai/gpt-5.5',
     } as unknown as TUIState['harness'];
 

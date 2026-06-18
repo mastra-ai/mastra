@@ -410,6 +410,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'harness/session',
+          label: 'Session',
+        },
+        {
+          type: 'doc',
           id: 'harness/modes',
           label: 'Modes',
         },

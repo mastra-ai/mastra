@@ -14,19 +14,21 @@ function createMockHarness(initialState: Record<string, unknown> = {}, previousT
     state,
     loadOMProgress: vi.fn().mockResolvedValue(undefined),
     session: {
+      thread: { list: vi.fn().mockResolvedValue([]) },
       state: {
         get: () => ({ ...state }),
         set: setState,
       },
-      thread: { list: vi.fn().mockResolvedValue([]) },
+      displayState: {
+        get: () => ({
+          isRunning: false,
+          tasks: [],
+          previousTasks,
+          omProgress: { status: 'idle', pendingTokens: 0 },
+          modifiedFiles: new Map(),
+        }),
+      },
     },
-    getDisplayState: () => ({
-      isRunning: false,
-      tasks: [],
-      previousTasks,
-      omProgress: { status: 'idle', pendingTokens: 0 },
-      modifiedFiles: new Map(),
-    }),
   };
 }
 

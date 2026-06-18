@@ -20,7 +20,8 @@ function createMockState() {
     harness: {
       abort: vi.fn(),
       detachFromCurrentThread: vi.fn(),
-      getDisplayState: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })),
+      session: { displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) } },
+      setState: vi.fn(async () => {}),
     },
     ui: { requestRender: vi.fn() },
   } as any;

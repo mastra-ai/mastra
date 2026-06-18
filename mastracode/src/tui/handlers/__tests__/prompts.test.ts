@@ -14,7 +14,7 @@ function createCtx() {
     options: { inlineQuestions: true },
     harness: {
       respondToToolSuspension: vi.fn(),
-      getDisplayState: vi.fn(() => ({ isRunning: false })),
+      session: { displayState: { get: vi.fn(() => ({ isRunning: false })) } },
     },
     pendingInlineQuestions: [],
     gradientAnimator: {
