@@ -1,6 +1,5 @@
 import * as path from 'node:path';
 import { buildSkillPaths } from '../agents/workspace.js';
-import { readHarnessState } from '../utils/harness-state.js';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 
 /**
@@ -26,8 +25,12 @@ export function isPathAllowed(targetPath: string, projectRoot: string, allowedPa
 export function getAllowedPathsFromContext(
   toolContext: { requestContext?: { get: (key: string) => unknown } } | undefined,
 ): string[] {
-  const harnessCtx = toolContext?.requestContext?.get('harness');
-  const state = readHarnessState<{ sandboxAllowedPaths?: string[]; projectPath?: string; configDir?: string }>(harnessCtx);
+  const harnessCtx = toolContext?.requestContext?.get('harness') as
+    | {
+        session: { state: { get: () => { sandboxAllowedPaths?: string[]; projectPath?: string; configDir?: string } } };
+      }
+    | undefined;
+  const state = harnessCtx?.session.state.get();
   const projectPath = state?.projectPath ? path.resolve(state.projectPath) : process.cwd();
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
   const skillPaths = buildSkillPaths(projectPath, configDir);

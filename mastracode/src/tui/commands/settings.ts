@@ -7,7 +7,6 @@ import { Box, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
-import { readHarnessState, writeHarnessState } from '../../utils/harness-state.js';
 import { SettingsComponent } from '../components/settings.js';
 import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
 import { askModalQuestion } from '../modal-question.js';
@@ -191,7 +190,7 @@ function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolea
 }
 
 export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<void> {
-  const state = readHarnessState(ctx.state.harness) as any;
+  const state = ctx.state.harness.session.state.get() as any;
   const globalSettings = loadSettings();
   const config = {
     notifications: (state?.notifications ?? 'off') as NotificationMode,
@@ -210,21 +209,21 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
   return new Promise<void>(resolve => {
     const settings = new SettingsComponent(config, {
       onNotificationsChange: async mode => {
-        await writeHarnessState(ctx.state.harness, { notifications: mode });
+        await ctx.state.harness.session.state.set({ notifications: mode });
         ctx.showInfo(`Notifications: ${mode}`);
       },
       onYoloChange: async enabled => {
-        await writeHarnessState(ctx.state.harness, { yolo: enabled } as any);
+        await ctx.state.harness.session.state.set({ yolo: enabled } as any);
       },
       onThinkingLevelChange: async level => {
-        await writeHarnessState(ctx.state.harness, { thinkingLevel: level } as any);
+        await ctx.state.harness.session.state.set({ thinkingLevel: level } as any);
         const current = loadSettings();
         current.preferences.thinkingLevel = level as ThinkingLevelSetting;
         saveSettings(current);
       },
       onEscapeAsCancelChange: async enabled => {
         ctx.state.editor.escapeEnabled = enabled;
-        await writeHarnessState(ctx.state.harness, { escapeAsCancel: enabled });
+        await ctx.state.harness.session.state.set({ escapeAsCancel: enabled });
         await ctx.state.harness.session.thread.setSetting({ key: 'escapeAsCancel', value: enabled });
       },
       onQuietModeChange: enabled => {

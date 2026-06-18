@@ -89,8 +89,10 @@ function createPlanApprovalCtx() {
   });
   const state = {
     harness: {
-      setState: vi.fn().mockResolvedValue(undefined),
-      session: { identity: { getResourceId: vi.fn(() => 'resource-1') } },
+      session: {
+        state: { set: vi.fn().mockResolvedValue(undefined) },
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+      },
       respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
       sendSignal,
     },

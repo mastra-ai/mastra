@@ -3,7 +3,6 @@
  * tool_suspended (ask_user / request_access / submit_plan).
  */
 import type { AskUserSelectionMode } from '@mastra/core/tools';
-import { writeHarnessState } from '../../utils/harness-state.js';
 import { savePlanToDisk } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
@@ -245,7 +244,7 @@ export async function handleSandboxAccessRequest(
  */
 async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: string, plan: string): Promise<void> {
   const { state } = ctx;
-  await writeHarnessState(state.harness, {
+  await state.harness.session.state.set({
     activePlan: {
       title,
       plan,

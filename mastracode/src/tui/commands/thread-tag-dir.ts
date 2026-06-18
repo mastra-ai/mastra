@@ -1,4 +1,3 @@
-import { readHarnessState } from '../../utils/harness-state.js';
 import { askModalQuestion } from '../modal-question.js';
 import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
@@ -15,7 +14,7 @@ export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promi
     return;
   }
 
-  const projectPath = (readHarnessState(state.harness) as any)?.projectPath as string | undefined;
+  const projectPath = (state.harness.session.state.get() as any)?.projectPath as string | undefined;
   if (!projectPath) {
     ctx.showInfo('Could not detect current project path.');
     return;

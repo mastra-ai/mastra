@@ -1,7 +1,6 @@
 import type { MastraBrowser } from '@mastra/core/browser';
 
 import type { BrowserProvider, BrowserSettings, StagehandEnv } from '../../onboarding/settings.js';
-import { readHarnessState, writeHarnessState } from '../../utils/harness-state.js';
 import {
   checkProfileProviderMismatch,
   createBrowserFromSettings,
@@ -101,12 +100,12 @@ function applyBrowserToAgents(
   const modes = ctx.harness.listModes();
   let harnessState: unknown;
   for (const mode of modes) {
-    const agent = resolveModeAgent(mode, (harnessState ??= readHarnessState(ctx.state.harness)));
+    const agent = resolveModeAgent(mode, (harnessState ??= ctx.state.harness.session.state.get()));
     agent?.setBrowser?.(browser);
   }
   ctx.harness.setBrowser?.(browser);
   // Track the active browser settings in harness state
-  void writeHarnessState(ctx.harness, { [ACTIVE_BROWSER_KEY]: browserSettings } as any);
+  void ctx.harness.session.state.set({ [ACTIVE_BROWSER_KEY]: browserSettings } as any);
 }
 
 /**
@@ -234,7 +233,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
 
   if (arg === 'status') {
     // Get the active browser settings from harness state (what's actually running)
-    const state = readHarnessState(ctx.harness) as any;
+    const state = ctx.harness.session.state.get() as any;
     const activeSettings = state?.[ACTIVE_BROWSER_KEY] as BrowserSettings | undefined;
 
     // Check for config drift between file and active instance
@@ -437,7 +436,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     }
 
     const currentMode = ctx.harness.session.mode.resolve();
-    const currentAgent = resolveModeAgent(currentMode, readHarnessState(ctx.state.harness));
+    const currentAgent = resolveModeAgent(currentMode, ctx.state.harness.session.state.get());
     let browserInstance = currentAgent?.browser;
 
     if (!browserInstance && browser.enabled) {

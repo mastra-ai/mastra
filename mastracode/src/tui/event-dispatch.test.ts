@@ -7,14 +7,19 @@ import type { TUIState } from './state.js';
 
 function createMockHarness(initialState: Record<string, unknown> = {}, previousTasks: TaskItemSnapshot[] = []) {
   let state = { ...initialState };
+  const setState = vi.fn(async (updates: Record<string, unknown>) => {
+    state = { ...state, ...updates };
+  });
   return {
     state,
-    getState: () => ({ ...state }),
-    setState: vi.fn(async (updates: Record<string, unknown>) => {
-      state = { ...state, ...updates };
-    }),
     loadOMProgress: vi.fn().mockResolvedValue(undefined),
-    session: { thread: { list: vi.fn().mockResolvedValue([]) } },
+    session: {
+      state: {
+        get: () => ({ ...state }),
+        set: setState,
+      },
+      thread: { list: vi.fn().mockResolvedValue([]) },
+    },
     getDisplayState: () => ({
       isRunning: false,
       tasks: [],
@@ -81,7 +86,7 @@ describe('dispatchEvent thread lifecycle', () => {
       state,
     );
 
-    expect(harness.setState).toHaveBeenCalledWith(
+    expect(harness.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
         tasks: [],
         activePlan: null,
@@ -97,7 +102,7 @@ describe('dispatchEvent thread lifecycle', () => {
       state,
     );
 
-    expect(harness.setState).toHaveBeenCalledWith(
+    expect(harness.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
         tasks: [],
         activePlan: null,
@@ -183,7 +188,7 @@ describe('dispatchEvent thread lifecycle', () => {
       state,
     );
 
-    const setStateCall = harness.setState.mock.calls[0]![0];
+    const setStateCall = harness.session.state.set.mock.calls[0]![0];
     expect(setStateCall).not.toHaveProperty('currentModelId');
   });
 });

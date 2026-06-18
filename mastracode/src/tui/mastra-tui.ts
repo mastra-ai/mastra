@@ -23,7 +23,6 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   MEMORY_GATEWAY_PROVIDER,
 } from '../onboarding/settings.js';
-import { readHarnessState, writeHarnessState } from '../utils/harness-state.js';
 import {
   detectPackageManager,
   fetchChangelog,
@@ -583,7 +582,7 @@ export class MastraTUI {
     // Subscribe to harness events
     subscribeToHarness(this.state, event => this.handleEvent(event));
     // Restore escape-as-cancel setting from persisted state
-    const escState = readHarnessState(this.state.harness) as any;
+    const escState = this.state.harness.session.state.get() as any;
     if (escState?.escapeAsCancel === false) {
       this.state.editor.escapeEnabled = false;
     }
@@ -1308,8 +1307,8 @@ export class MastraTUI {
     }
 
     const omPack = result.omPack;
-    void writeHarnessState(harness, { observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
-    void writeHarnessState(harness, { yolo: result.yolo });
+    void harness.session.state.set({ observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
+    void harness.session.state.set({ yolo: result.yolo });
 
     const settings = loadSettings();
     settings.onboarding.completedAt = new Date().toISOString();

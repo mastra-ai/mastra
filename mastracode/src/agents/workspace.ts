@@ -10,7 +10,6 @@ import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '
 import type { LSPConfig, WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
-import { readHarnessState } from '../utils/harness-state.js';
 import type { MastraCodeState } from '../schema';
 import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
 
@@ -130,7 +129,7 @@ function detectPackageRunner(projectPath: string): string | undefined {
 
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
-  const state = readHarnessState<MastraCodeState>(ctx);
+  const state = ctx?.session.state.get();
   const modeId = ctx?.session?.modeId ?? 'build';
   const rawProjectPath = state?.projectPath;
 

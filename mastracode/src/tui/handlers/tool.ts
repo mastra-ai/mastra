@@ -11,7 +11,6 @@ import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
 import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
-import { writeHarnessState } from '../../utils/harness-state.js';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -150,7 +149,7 @@ export function handleToolApprovalRequired(
       } else if (action.type === 'always_allow_category') {
         state.harness.session.respondToToolApproval({ decision: 'always_allow_category' });
       } else if (action.type === 'yolo') {
-        void writeHarnessState(state.harness, { yolo: true } as any);
+        void state.harness.session.state.set({ yolo: true } as any);
         state.harness.session.respondToToolApproval({ decision: 'approve' });
       } else {
         state.harness.session.respondToToolApproval({ decision: 'decline' });

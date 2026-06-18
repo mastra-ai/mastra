@@ -80,7 +80,6 @@ import type { MastraCodeState } from './schema.js';
 
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
-import { readHarnessState } from './utils/harness-state.js';
 import {
   detectProject,
   getObservabilityDatabasePath,
@@ -494,8 +493,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
-          const harnessContext = requestContext?.get('harness');
-          const state = readHarnessState<{ projectPath?: string }>(harnessContext);
+          const harnessContext = requestContext?.get('harness') as
+            | HarnessRequestContext<{ projectPath?: string }>
+            | undefined;
+          const state = harnessContext?.session.state.get();
           return getStaticallyLoadedInstructionPaths(state?.projectPath ?? project.rootPath);
         },
       }),

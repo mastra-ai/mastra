@@ -14,7 +14,6 @@ import type { ToolHooks } from '@mastra/core/tools';
 import type { HookManager } from '../hooks';
 import type { McpManager } from '../mcp';
 import type { MastraCodeComposedState } from '../schema';
-import { readHarnessState } from '../utils/harness-state.js';
 import { MC_TOOLS } from '../tool-names.js';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
@@ -97,7 +96,7 @@ export function createDynamicTools(
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeComposedState> | undefined;
-    const state = readHarnessState<MastraCodeComposedState>(ctx);
+    const state = ctx?.session.state.get();
 
     const modelId = ctx?.session?.modelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');

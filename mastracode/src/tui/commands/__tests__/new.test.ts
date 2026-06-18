@@ -20,7 +20,7 @@ function createMockState() {
       abort: vi.fn(),
       detachFromCurrentThread: vi.fn(),
       getDisplayState: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })),
-      setState: vi.fn(async () => {}),
+      session: { state: { set: vi.fn(async () => {}) } },
     },
     ui: { requestRender: vi.fn() },
   } as any;
@@ -74,7 +74,7 @@ describe('handleNewCommand', () => {
     expect(state.allSystemReminderComponents).toEqual([]);
     expect(state.messageComponentsById.size).toBe(0);
     expect(state.allShellComponents).toEqual([]);
-    expect(state.harness.setState).toHaveBeenCalledWith({
+    expect(state.harness.session.state.set).toHaveBeenCalledWith({
       tasks: [],
       activePlan: null,
       sandboxAllowedPaths: [],

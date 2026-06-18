@@ -10,7 +10,6 @@ import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import chalk from 'chalk';
-import { readHarnessState, writeHarnessState } from '../utils/harness-state.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -942,10 +941,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     if (state.taskProgress) {
       state.taskProgress.updateTasks(previousTasksAcc);
     }
-    const currentTasks = (readHarnessState(state.harness) as { tasks?: TaskItemSnapshot[] } | undefined)?.tasks;
+    const currentTasks = (state.harness.session.state.get() as { tasks?: TaskItemSnapshot[] } | undefined)?.tasks;
     if (!areTasksEqual(currentTasks, previousTasksAcc)) {
       try {
-        await writeHarnessState(state.harness, { tasks: previousTasksAcc });
+        await state.harness.session.state.set({ tasks: previousTasksAcc });
       } catch {
         // Custom harness state schemas may not accept TUI replayed task state.
         // Keep the reconstructed task list local to display state in that case.

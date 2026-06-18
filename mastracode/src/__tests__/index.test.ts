@@ -122,6 +122,17 @@ vi.mock('@mastra/core/harness', () => ({
           list: (options: unknown) => harnessListThreadsMock(options),
           setSetting: (setting: unknown) => harnessSetThreadSettingMock(setting),
         },
+        mode: { get: () => 'build' },
+        model: { get: () => 'anthropic/claude-opus-4-6' },
+        state: {
+          get: () => harnessStateMock,
+          set: (state: unknown) => harnessSetStateMock(state),
+          update: async (updater: any) => {
+            const result = await updater(harnessStateMock);
+            if (result?.updates) harnessSetStateMock(result.updates);
+            return result?.result;
+          },
+        },
       };
     }
     getState() {
