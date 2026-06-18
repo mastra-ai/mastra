@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MODEL_TOKENS } from '../../../../docs/src/plugins/remark-model-tokens/models';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -26,12 +27,12 @@ describe('getBedrockModelCatalog', () => {
       jsonResponse({
         'amazon-bedrock': {
           models: {
-            'us.anthropic.claude-sonnet-4-5-20250929-v1:0': {},
-            'us.anthropic.claude-opus-4-6-v1': {},
-            'us.meta.llama4-scout-17b-instruct-v1:0': {},
+            [MODEL_TOKENS.__BEDROCK_MODEL_SONNET_BARE__]: {},
+            [MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__]: {},
+            [MODEL_TOKENS.__BEDROCK_MODEL_LLAMA_SCOUT_BARE__]: {},
           },
         },
-        anthropic: { models: { 'claude-sonnet-4-5': {} } },
+        anthropic: { models: { [MODEL_TOKENS.__AI_SDK_ANTHROPIC_MODEL_SONNET__]: {} } },
       }),
     );
 
@@ -43,9 +44,9 @@ describe('getBedrockModelCatalog', () => {
       expect.objectContaining({ signal: expect.anything() }),
     );
     expect(models.map(m => m.id)).toEqual([
-      'us.anthropic.claude-opus-4-6-v1',
-      'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
-      'us.meta.llama4-scout-17b-instruct-v1:0',
+      MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__,
+      MODEL_TOKENS.__BEDROCK_MODEL_SONNET_BARE__,
+      MODEL_TOKENS.__BEDROCK_MODEL_LLAMA_SCOUT_BARE__,
     ]);
   });
 
@@ -66,7 +67,7 @@ describe('getBedrockModelCatalog', () => {
     const models = await getBedrockModelCatalog();
 
     expect(models.length).toBeGreaterThan(0);
-    expect(models.map(m => m.id)).toContain('us.anthropic.claude-opus-4-6-v1');
+    expect(models.map(m => m.id)).toContain(MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__);
   });
 
   it('falls back when models.dev returns a non-OK status', async () => {
