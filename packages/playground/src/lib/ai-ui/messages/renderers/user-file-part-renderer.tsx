@@ -46,11 +46,6 @@ export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
   }
 
   return (
-    <InMessageAttachment
-      type="document"
-      contentType={mimeType}
-      src={isFetchableUrl ? data : undefined}
-      data={src}
-    />
+    <InMessageAttachment type="document" contentType={mimeType} src={isFetchableUrl ? data : undefined} data={src} />
   );
 };
