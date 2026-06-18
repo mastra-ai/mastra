@@ -23,7 +23,7 @@ async function sandboxAddPath(ctx: SlashCommandContext, rawPath: string): Promis
   }
   const updated = [...currentPaths, resolved];
   ctx.state.harness.setState({ sandboxAllowedPaths: updated } as any);
-  await ctx.state.harness.setThreadSetting({ key: 'sandboxAllowedPaths', value: updated });
+  await ctx.state.harness.session.thread.setSetting({ key: 'sandboxAllowedPaths', value: updated });
   ctx.showInfo(`Added to sandbox: ${resolved}`);
 }
 
@@ -36,7 +36,7 @@ async function sandboxRemovePath(ctx: SlashCommandContext, rawPath: string, curr
   }
   const updated = currentPaths.filter(p => p !== match);
   ctx.state.harness.setState({ sandboxAllowedPaths: updated } as any);
-  await ctx.state.harness.setThreadSetting({ key: 'sandboxAllowedPaths', value: updated });
+  await ctx.state.harness.session.thread.setSetting({ key: 'sandboxAllowedPaths', value: updated });
   ctx.showInfo(`Removed from sandbox: ${match}`);
 }
 

@@ -90,11 +90,13 @@ function createState(isRunning: boolean) {
   const state = {
     editor,
     harness: {
-      isRunning: vi.fn(() => isRunning),
-      hasPendingSuspensions: vi.fn(() => false),
+      session: {
+        run: { isRunning: vi.fn(() => isRunning) },
+        suspensions: { hasPending: vi.fn(() => false) },
+        mode: { get: vi.fn() },
+      },
       getState: vi.fn(() => ({})),
       listModes: vi.fn(() => []),
-      getCurrentModeId: vi.fn(),
       switchMode: vi.fn(),
       setState: vi.fn(),
       abort: vi.fn(),
@@ -393,7 +395,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(abortController.signal.aborted).toBe(true);
     expect(component.setInterrupted).toHaveBeenCalledTimes(1);
     expect(state.userInitiatedAbort).toBe(true);
-    expect(state.harness.abort).not.toHaveBeenCalled();
+    expect(state.harness.abort).toHaveBeenCalledTimes(1);
     expect(editor.setText).not.toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
   });
@@ -420,7 +422,7 @@ describe('setupKeyboardShortcuts', () => {
   it('aborts when parked in a tool suspension even though isRunning() is false', () => {
     const { state, editor, actions } = createState(false);
     editor.getText.mockReturnValue('');
-    state.harness.hasPendingSuspensions.mockReturnValue(true);
+    state.harness.session.suspensions.hasPending.mockReturnValue(true);
 
     setupKeyboardShortcuts(state, {
       stop: vi.fn(),
@@ -435,6 +437,29 @@ describe('setupKeyboardShortcuts', () => {
     expect(editor.setText).not.toHaveBeenCalled();
   });
 
+  it('aborts the harness and persists a paused goal when clearing during goal judge evaluation', () => {
+    const { state, actions } = createState(true);
+    const abortController = { abort: vi.fn() };
+    const component = { setInterrupted: vi.fn() };
+    state.activeGoalJudge = { modelId: 'openai/gpt-5.5', abortController, component };
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(abortController.abort).toHaveBeenCalledTimes(1);
+    expect(component.setInterrupted).toHaveBeenCalledTimes(1);
+    expect(state.harness.abort).toHaveBeenCalledTimes(1);
+    expect(state.goalManager.pause).toHaveBeenCalledWith('Judge evaluation was interrupted.');
+    expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(state.activeGoalJudge).toBeUndefined();
+    expect(state.userInitiatedAbort).toBe(true);
+  });
+
   it('aborts and clears an active plan approval parked in a tool suspension', () => {
     // Regression: Ctrl+C while a submit_plan approval box is up must abort the
     // parked suspension (not hang). The editor-level handleInput override lets
@@ -442,7 +467,7 @@ describe('setupKeyboardShortcuts', () => {
     // aborts and clears the inline plan-approval component.
     const { state, editor, actions } = createState(false);
     editor.getText.mockReturnValue('');
-    state.harness.hasPendingSuspensions.mockReturnValue(true);
+    state.harness.session.suspensions.hasPending.mockReturnValue(true);
     state.activeInlinePlanApproval = { handleInput: vi.fn() } as any;
 
     setupKeyboardShortcuts(state, {

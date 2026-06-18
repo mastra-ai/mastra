@@ -56,7 +56,7 @@ describe('Harness listThreads — forked subagent filter', () => {
       metadata: { forkedSubagent: true, parentThreadId: 'normal-1' },
     });
 
-    const threads = await harness.listThreads();
+    const threads = await harness.session.thread.list();
 
     expect(threads.map(t => t.id)).toEqual(['normal-1']);
   });
@@ -72,7 +72,7 @@ describe('Harness listThreads — forked subagent filter', () => {
       metadata: { forkedSubagent: true, parentThreadId: 'normal-2' },
     });
 
-    const threads = await harness.listThreads({ includeForkedSubagents: true });
+    const threads = await harness.session.thread.list({ includeForkedSubagents: true });
 
     expect(threads.map(t => t.id).sort()).toEqual(['fork-2', 'normal-2']);
   });
@@ -90,7 +90,7 @@ describe('Harness listThreads — forked subagent filter', () => {
       metadata: { forkedSubagent: true },
     });
 
-    const threads = await harness.listThreads({ allResources: true });
+    const threads = await harness.session.thread.list({ allResources: true });
 
     expect(threads.map(t => t.id)).toEqual(['a-normal']);
   });
@@ -108,7 +108,7 @@ describe('Harness listThreads — forked subagent filter', () => {
       metadata: { forkedSubagent: 'true' as unknown as boolean },
     });
 
-    const threads = await harness.listThreads();
+    const threads = await harness.session.thread.list();
     expect(threads.map(t => t.id).sort()).toEqual(['t-false', 't-string', 't-undef']);
   });
 });
