@@ -7,6 +7,7 @@ import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
+import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import chalk from 'chalk';
 import {
@@ -16,6 +17,7 @@ import {
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
+import { JudgeDisplayComponent } from './components/judge-display.js';
 import { NotificationSummaryComponent } from './components/notification-summary.js';
 import { NotificationComponent } from './components/notification.js';
 import { OMMarkerComponent } from './components/om-marker.js';
@@ -293,7 +295,25 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   );
 
   if (reminderPart) {
-    const goalMetadata = reminderPart as typeof reminderPart & { goalMaxTurns?: number; judgeModelId?: string };
+    const goalMetadata = reminderPart as typeof reminderPart & {
+      goalMaxTurns?: number;
+      judgeModelId?: string;
+      goalEvaluation?: GoalEvaluationPayload;
+    };
+
+    if (reminderPart.reminderType === 'goal-judge' && goalMetadata.goalEvaluation) {
+      const judgeComponent = new JudgeDisplayComponent(
+        null,
+        goalMetadata.goalEvaluation.iteration,
+        goalMetadata.goalEvaluation.maxRuns,
+      );
+      judgeComponent.setEvaluation(goalMetadata.goalEvaluation);
+      addChildBeforeMessageOrFollowUps(state, judgeComponent, reminderPart.precedesMessageId);
+      state.messageComponentsById.set(message.id, judgeComponent);
+      state.ui.requestRender();
+      return;
+    }
+
     const reminderComponent = createReminderComponent(reminderPart.reminderType, {
       message: reminderPart.message,
       path: reminderPart.path,
@@ -417,6 +437,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     .join('\n');
 
   const imageCount = message.content.filter(c => c.type === 'image').length;
+  const fileCount = message.content.filter(c => c.type === 'file').length;
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
@@ -519,7 +540,11 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     return;
   }
 
-  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
+  const attachmentLabels = [
+    imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}]` : '',
+    fileCount > 0 ? `[${fileCount} file${fileCount > 1 ? 's' : ''}]` : '',
+  ].filter(Boolean);
+  const prefix = attachmentLabels.length > 0 ? `${attachmentLabels.join(' ')} ` : '';
   if (displayText || prefix) {
     const label = getUserMessageLabel(message, options?.label);
     const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
@@ -633,7 +658,7 @@ function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefin
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
-  const messages = await state.harness.listMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
+  const messages = await state.harness.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
   state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
   state.chatContainer.clear();

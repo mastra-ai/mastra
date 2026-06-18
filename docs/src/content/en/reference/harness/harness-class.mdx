@@ -1,40 +1,46 @@
 ---
 title: "Reference: Harness class | Harness"
-description: "Documentation for the Harness class, the core orchestrator for multi-mode agents, shared state, memory, and storage in Mastra."
+description: "API reference for the Harness class, the orchestrator for multi-mode agents with shared state, threads, and tool approvals."
 packages:
   - "@mastra/core"
 ---
 
 # Harness class
 
-**Added in:** `@mastra/core@1.5.0`
-
 :::experimental
 
-The `Harness` class is in alpha stage and subject to change. It won't follow semantic versioning guarantees until it graduates from experimental status. Use with caution and expect breaking changes in minor versions.
-
-[Mastra Code](https://code.mastra.ai/) is the flagship implementation of the `Harness` class, showcasing how it can be used to build a powerful terminal-based coding agent with multi-model support, persistent conversations, and built-in tools.
+The `Harness` feature is in alpha stage and subject to breaking changes in minor versions until it graduates from its alpha status.
 
 :::
 
 The `Harness` class orchestrates multiple agent modes, shared state, memory, and storage. It provides a control layer that a TUI or other UI can drive to manage threads, switch models and modes, send messages, handle tool approvals, and track events.
 
+For a conceptual introduction, see the [Harness overview](/docs/harness/overview).
+
 ## Usage example
 
-```typescript
+Import the `Harness` class and create a new instance with your agent, storage backend, and modes:
+
+```typescript title="src/mastra/harness.ts"
 import { Harness } from '@mastra/core/harness'
 import { LibSQLStore } from '@mastra/libsql'
 import { z } from 'zod'
 
 const harness = new Harness({
   id: 'my-coding-agent',
+  agent: myAgent,
   storage: new LibSQLStore({ url: 'file:./data.db' }),
   stateSchema: z.object({
     currentModelId: z.string().optional(),
   }),
   modes: [
-    { id: 'plan', name: 'Plan', default: true, agent: planAgent },
-    { id: 'build', name: 'Build', agent: buildAgent },
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      instructions: 'Reason about changes before making them.',
+    },
+    { id: 'build', name: 'Build', transitionsTo: 'plan' },
   ],
 })
 
@@ -95,7 +101,7 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'modes',
     type: 'HarnessMode[]',
     description:
-      'Available agent modes. At least one mode is required. Each mode defines an agent and optional defaults.',
+      'Available agent modes. At least one mode is required. When a top-level `agent` is provided, each mode layers its own instructions and tool overrides on top of the shared agent.',
     properties: [
       {
         type: 'HarnessMode',
@@ -114,7 +120,8 @@ await harness.sendMessage({ content: 'Hello!' })
           {
             name: 'default',
             type: 'boolean',
-            description: 'Whether this is the default mode when the harness starts.',
+            description:
+              'Whether this is the default mode when the harness starts. Deprecated in favor of `metadata.default` or the top-level `defaultModeId`.',
             isOptional: true,
             defaultValue: 'false',
           },
@@ -126,20 +133,72 @@ await harness.sendMessage({ content: 'Hello!' })
             isOptional: true,
           },
           {
-            name: 'color',
+            name: 'description',
             type: 'string',
-            description: 'Hex color for the mode indicator (e.g., `"#7c3aed"`).',
+            description: 'Description surfaced in mode pickers and Studio UI.',
+            isOptional: true,
+          },
+          {
+            name: 'instructions',
+            type: 'string',
+            description: "Additional instructions layered above the backing agent's own instructions for this mode.",
+            isOptional: true,
+          },
+          {
+            name: 'transitionsTo',
+            type: 'string',
+            description: "Target mode ID to switch to on `submit_plan` approval. Must reference another mode's `id`.",
+            isOptional: true,
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            description:
+              'Arbitrary metadata. `metadata.default === true` marks the default mode when `defaultModeId` is unset.',
+            isOptional: true,
+          },
+          {
+            name: 'tools',
+            type: 'ToolsInput',
+            description: "Replaces the backing agent's tools for this mode. Mutually exclusive with `additionalTools`.",
+            isOptional: true,
+          },
+          {
+            name: 'additionalTools',
+            type: 'ToolsInput',
+            description: "Tools layered on top of the backing agent's tools. Mutually exclusive with `tools`.",
             isOptional: true,
           },
           {
             name: 'agent',
-            type: 'Agent | ((state) => Agent)',
+            type: 'Agent',
             description:
-              'The agent for this mode. It can be a static Agent instance or a function that receives harness state and returns an Agent.',
+              'The agent for this mode. Deprecated in favor of the top-level `agent` config with mode-level overrides.',
+            isOptional: true,
           },
         ],
       },
     ],
+  },
+  {
+    name: 'agent',
+    type: 'Agent',
+    description:
+      'Shared backing agent that each mode forks and decorates. When provided, modes layer instructions and tool overrides on top of this agent instead of providing their own.',
+    isOptional: true,
+  },
+  {
+    name: 'defaultModeId',
+    type: 'string',
+    description:
+      'Default mode to enter when a thread has no persisted mode. Takes precedence over `metadata.default` on individual modes.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: "Base instructions shared across all modes. Appended to the backing agent's instructions.",
+    isOptional: true,
   },
   {
     name: 'tools',
@@ -153,6 +212,13 @@ await harness.sendMessage({ content: 'Hello!' })
     type: 'Workspace | WorkspaceConfig | ((ctx) => Workspace)',
     description:
       'Workspace configuration. Accepts a pre-constructed Workspace, a WorkspaceConfig for the harness to construct internally, or a dynamic factory function.',
+    isOptional: true,
+  },
+  {
+    name: 'browser',
+    type: 'MastraBrowser | ((ctx) => MastraBrowser)',
+    description:
+      "Browser automation configuration. Propagated to mode agents that don't have their own browser configured.",
     isOptional: true,
   },
   {
@@ -283,6 +349,27 @@ await harness.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
+    name: 'modelUseCountTracker',
+    type: 'ModelUseCountTracker',
+    description:
+      'Callback invoked when a model is selected via `switchModel()`. Use to track and persist model usage for ranking.',
+    isOptional: true,
+  },
+  {
+    name: 'customModelCatalogProvider',
+    type: 'CustomModelCatalogProvider',
+    description:
+      'Catalog hook for additional models (e.g., user-defined custom providers). Returned entries are merged into `listAvailableModels()`.',
+    isOptional: true,
+  },
+  {
+    name: 'gateways',
+    type: 'MastraModelGatewayInterface[]',
+    description:
+      'Model gateways registered on the internal Mastra instance. Apps that need gateway-backed model resolution should also provide `resolveModel`.',
+    isOptional: true,
+  },
+  {
     name: 'toolCategoryResolver',
     type: '(toolName: string) => ToolCategory | null',
     description:
@@ -290,10 +377,23 @@ await harness.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
+    name: 'pubsub',
+    type: 'PubSub',
+    description: 'PubSub instance used by the internal Mastra instance and mode agents for event coordination.',
+    isOptional: true,
+  },
+  {
     name: 'threadLock',
     type: '{ acquire, release }',
     description:
       'Thread locking callbacks to prevent concurrent access from multiple processes. `acquire` should throw if the lock is held.',
+    isOptional: true,
+  },
+  {
+    name: 'observability',
+    type: 'ObservabilityEntrypoint',
+    description:
+      'Observability entrypoint for tracing, scoring, and feedback. When provided, the internal Mastra instance produces trace spans for agent runs.',
     isOptional: true,
   },
 ]}
@@ -307,6 +407,12 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'id',
     type: 'string',
     description: 'Harness identifier, set at construction.',
+  },
+  {
+    name: 'session',
+    type: 'Session',
+    description:
+      'The per-conversation session object. Owns runtime state such as session-scoped permission grants, token usage, the active mode/model, follow-up queue, tool-approval gate, and the live agent stream subscription. Access session-level APIs through `harness.session` — for example, `harness.session.respondToToolApproval()` and `harness.session.getGrants()`.',
   },
 ]}
 />
@@ -337,6 +443,46 @@ Stop all heartbeat handlers and clean up resources.
 
 ```typescript
 await harness.destroy()
+```
+
+#### `removeHeartbeat({ id })`
+
+Remove a specific heartbeat handler by ID. Calls the handler's `shutdown()` callback if defined.
+
+```typescript
+await harness.removeHeartbeat({ id: 'gateway-sync' })
+```
+
+#### `stopHeartbeats()`
+
+Stop and remove all heartbeat handlers.
+
+```typescript
+await harness.stopHeartbeats()
+```
+
+#### `getCurrentAgent()`
+
+Return the fully-configured Agent for the current mode with runtime services (storage, memory, workspace, pubsub, telemetry) propagated.
+
+```typescript
+const agent = harness.getCurrentAgent()
+```
+
+#### `getResolvedMemory()`
+
+Return the resolved memory instance, or `null` if no memory is configured.
+
+```typescript
+const memory = await harness.getResolvedMemory()
+```
+
+#### `getMastra()`
+
+Return the internal `Mastra` instance, or `undefined` before `init()`. Useful for scorer registration, observability access, and eval tooling.
+
+```typescript
+const mastra = harness.getMastra()
 ```
 
 ### State
@@ -559,6 +705,14 @@ Set the resource ID and clear the current thread.
 harness.setResourceId({ resourceId: 'project-xyz' })
 ```
 
+#### `getKnownResourceIds()`
+
+Return the distinct resource IDs that have threads in storage.
+
+```typescript
+const resourceIds = await harness.getKnownResourceIds()
+```
+
 #### `getSession()`
 
 Return current session information including thread ID, mode ID, and the list of threads.
@@ -607,23 +761,7 @@ const firstMsg = await harness.getFirstUserMessageForThread({ threadId: 'thread-
 
 ### Memory
 
-The `memory` property exposes thread management operations. These are also available as top-level methods on the harness.
-
-#### `memory.createThread({ title? })`
-
-Create a new thread. Same as `harness.createThread()`.
-
-#### `memory.switchThread({ threadId })`
-
-Switch to a different thread. Same as `harness.switchThread()`.
-
-#### `memory.listThreads(options?)`
-
-List threads from storage. Same as `harness.listThreads()`.
-
-#### `memory.renameThread({ title })`
-
-Update the title of the current thread. Same as `harness.renameThread()`.
+The `memory` property exposes thread management operations as convenience aliases. `memory.createThread`, `memory.switchThread`, `memory.listThreads`, and `memory.renameThread` delegate to the corresponding top-level Harness methods documented above.
 
 #### `memory.deleteThread({ threadId })`
 
@@ -661,13 +799,16 @@ harness.followUp({ content: 'Now apply those changes' })
 
 ### Tool approvals
 
-#### `respondToToolApproval({ decision, requestContext? })`
+#### `session.respondToToolApproval({ decision, requestContext? })`
 
-Respond to a pending tool approval request. Called when a `tool_approval_required` event is received.
+Respond to a pending tool approval request. Called when a `tool_approval_required` event is received. Accepts `'approve'`, `'decline'`, or `'always_allow_category'`. When `always_allow_category` is used, the tool's category is granted for the rest of the session — future tools in the same category are auto-approved without prompting.
 
 ```typescript
-harness.respondToToolApproval({ decision: 'approve' })
-harness.respondToToolApproval({ decision: 'decline' })
+harness.session.respondToToolApproval({ decision: 'approve' })
+harness.session.respondToToolApproval({ decision: 'decline' })
+
+// Grant the tool's entire category for this session
+harness.session.respondToToolApproval({ decision: 'always_allow_category' })
 ```
 
 ### Tool suspensions and plans
@@ -719,29 +860,31 @@ harness.respondToToolSuspension({
 
 ### Permissions
 
-#### `grantSessionCategory({ category })`
+Permission grants live on the `session` object. They control which tools and categories are auto-approved for the current session.
+
+#### `session.grantCategory(category)`
 
 Grant a tool category for the current session. Tools in this category are auto-approved without prompting.
 
 ```typescript
-harness.grantSessionCategory({ category: 'edit' })
+harness.session.grantCategory('edit')
 ```
 
-#### `grantSessionTool({ toolName })`
+#### `session.grantTool(toolName)`
 
 Grant a specific tool for the current session.
 
 ```typescript
-harness.grantSessionTool({ toolName: 'mastra_workspace_execute_command' })
+harness.session.grantTool('mastra_workspace_execute_command')
 ```
 
-#### `getSessionGrants()`
+#### `session.getGrants()`
 
 Return currently granted session categories and tools.
 
 ```typescript
-const grants = harness.getSessionGrants()
-// { categories: Set<string>, tools: Set<string> }
+const grants = harness.session.getGrants()
+// { categories: ['edit'], tools: ['mastra_workspace_execute_command'] }
 ```
 
 #### `setPermissionForCategory({ category, policy })`
@@ -1051,6 +1194,9 @@ The harness emits events through registered listeners. The following table lists
 | `subagent_end` | A subagent finished processing. |
 | `subagent_model_changed` | A subagent's model changed. |
 | `task_updated` | A task list was updated. |
+| `goal_evaluation` | A goal evaluation completed (when native agent goals are configured). |
+| `shell_output` | A tool emitted shell output (stdout or stderr). |
+| `display_state_changed` | The canonical `HarnessDisplayState` snapshot changed. Use [`subscribeDisplayState`](#subscribedisplaystatelistener-options) to receive coalesced snapshots. |
 
 ## Built-in tools
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/nestjs",
-  "version": "0.1.16",
+  "version": "0.1.17-alpha.1",
   "description": "Mastra NestJS adapter for the server",
   "type": "module",
   "main": "dist/index.js",

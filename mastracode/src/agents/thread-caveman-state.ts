@@ -25,7 +25,7 @@ async function findThread(
   harness: Harness<Record<string, unknown>>,
   threadId: string,
 ): Promise<HarnessThread | undefined> {
-  const threads = await harness.listThreads({ allResources: true });
+  const threads = await harness.session.thread.list({ allResources: true });
   return threads.find(t => t.id === threadId);
 }
 
@@ -37,7 +37,7 @@ async function findThread(
  */
 async function restoreSettingsForThread(harness: Harness<Record<string, unknown>>, threadId: string): Promise<void> {
   const thread = await findThread(harness, threadId);
-  if (harness.getCurrentThreadId() !== threadId) return;
+  if (harness.session.thread.getId() !== threadId) return;
 
   const updates: Record<string, unknown> = {};
   const settingsToSeed: Array<{ key: string; value: unknown }> = [];
@@ -63,7 +63,7 @@ async function restoreSettingsForThread(harness: Harness<Record<string, unknown>
   }
 
   for (const setting of settingsToSeed) {
-    await harness.setThreadSetting(setting);
+    await harness.session.thread.setSetting(setting);
   }
 }
 
@@ -92,7 +92,7 @@ export function attachOMThreadStatePersistence(harness: Harness<Record<string, u
  * since the subscription set up later misses the startup `thread_changed` event.
  */
 export async function restoreOMThreadStateForCurrentThread(harness: Harness<Record<string, unknown>>): Promise<void> {
-  const threadId = harness.getCurrentThreadId();
+  const threadId = harness.session.thread.getId();
   if (!threadId) return;
   await restoreSettingsForThread(harness, threadId);
 }

@@ -4,7 +4,7 @@ import type { SlashCommandContext } from './types.js';
 
 export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
-  const threadId = state.harness.getCurrentThreadId();
+  const threadId = state.harness.session.thread.getId();
   if (!threadId && state.pendingNewThread) {
     ctx.showInfo('No active thread yet — send a message first.');
     return;
@@ -27,6 +27,6 @@ export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promi
     options: [{ label: 'Yes' }, { label: 'No' }],
   });
   if (answer?.toLowerCase().startsWith('y')) {
-    await state.harness.setThreadSetting({ key: 'projectPath', value: projectPath });
+    await state.harness.session.thread.setSetting({ key: 'projectPath', value: projectPath });
   }
 }

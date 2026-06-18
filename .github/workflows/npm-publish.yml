@@ -43,25 +43,25 @@ jobs:
         (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore: version packages') && github.event.head_commit.author.username == 'dane-ai-mastra[bot]') ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_type == 'prerelease')
       )
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     permissions:
-      contents: write
+      contents: read
       issues: write
-      pull-requests: write
       id-token: write
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
@@ -157,15 +157,13 @@ jobs:
       github.repository == 'mastra-ai/mastra' && 
       github.event_name == 'workflow_dispatch' && 
       github.event.inputs.publish_type == 'stable'
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: read
       id-token: write
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -176,9 +174,12 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-issues: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
@@ -194,13 +195,13 @@ jobs:
             echo "files_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
@@ -314,13 +315,12 @@ jobs:
         (github.event.inputs.publish_type == 'stable' && !inputs.dry_run && needs.stable.result == 'success') ||
         github.event.inputs.publish_type == 'enter-prerelease'
       )
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -331,21 +331,23 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
@@ -384,10 +386,9 @@ jobs:
       github.event_name == 'workflow_dispatch' && 
       github.event.inputs.publish_type == 'snapshot' &&
       github.ref != 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
       id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -395,7 +396,7 @@ jobs:
       TURBO_CACHE: remote:r
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -406,21 +407,23 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'

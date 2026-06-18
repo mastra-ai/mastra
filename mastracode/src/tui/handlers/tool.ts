@@ -145,14 +145,14 @@ export function handleToolApprovalRequired(
       state.ui.hideOverlay();
       state.pendingApprovalDismiss = null;
       if (action.type === 'approve') {
-        state.harness.respondToToolApproval({ decision: 'approve' });
+        state.harness.session.respondToToolApproval({ decision: 'approve' });
       } else if (action.type === 'always_allow_category') {
-        state.harness.respondToToolApproval({ decision: 'always_allow_category' });
+        state.harness.session.respondToToolApproval({ decision: 'always_allow_category' });
       } else if (action.type === 'yolo') {
         state.harness.setState({ yolo: true } as any);
-        state.harness.respondToToolApproval({ decision: 'approve' });
+        state.harness.session.respondToToolApproval({ decision: 'approve' });
       } else {
-        state.harness.respondToToolApproval({ decision: 'decline' });
+        state.harness.session.respondToToolApproval({ decision: 'decline' });
       }
     },
   });
@@ -161,7 +161,7 @@ export function handleToolApprovalRequired(
   state.pendingApprovalDismiss = () => {
     state.ui.hideOverlay();
     state.pendingApprovalDismiss = null;
-    state.harness.respondToToolApproval({ decision: 'decline' });
+    state.harness.session.respondToToolApproval({ decision: 'decline' });
   };
 
   // Show the dialog as an overlay

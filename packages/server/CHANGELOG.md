@@ -1,5 +1,25 @@
 # @mastra/server
 
+## 1.44.0-alpha.1
+
+### Patch Changes
+
+- Fix SSO callback routing for dual auth configurations. OAuth redirects from identity providers now correctly route to studio auth instead of failing with "sso_not_configured" error. ([#18054](https://github.com/mastra-ai/mastra/pull/18054))
+
+- Updated dependencies [[`b7dff0a`](https://github.com/mastra-ai/mastra/commit/b7dff0a3d1022eb6868f48dc40a2b1febd5c277f), [`02087e1`](https://github.com/mastra-ai/mastra/commit/02087e1fbc54aa07f3071f7a200df1bf5be601a8), [`ab975d4`](https://github.com/mastra-ai/mastra/commit/ab975d4dd9488752f05bda7afa03166d207e3e2a)]:
+  - @mastra/core@1.44.0-alpha.1
+
+## 1.43.1-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Fix crash on every request when deployed with @mastra/core < 1.42.0. The server now gracefully falls back to server-only auth instead of throwing `TypeError: this.mastra.getStudio is not a function`. ([#18075](https://github.com/mastra-ai/mastra/pull/18075))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/core@1.43.1-alpha.0
+
 ## 1.43.0
 
 ### Minor Changes

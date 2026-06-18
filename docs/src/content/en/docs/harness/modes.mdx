@@ -1,0 +1,125 @@
+---
+title: "Modes | Harness"
+description: "Configure and switch between agent modes to give a single Harness multiple personalities or capability sets."
+packages:
+  - "@mastra/core"
+---
+
+# Modes
+
+Modes define the different personalities or capability sets available within a Harness. Each mode layers its own instructions and tool overrides on top of a shared backing agent. The Harness ensures only one mode is active at a time and handles transitions between them.
+
+## When to use modes
+
+Use modes when a single conversational session needs to switch between distinct behaviors. For example, a planning mode that reasons about tasks and a build mode that executes them. Modes share the same thread and state, so the agent retains context across switches.
+
+## Quickstart
+
+Import the `Harness` class and create a new instance with your agent and modes:
+
+```typescript title="src/mastra/harness.ts"
+import { Harness } from '@mastra/core/harness'
+import { myAgent } from './agents'
+
+const harness = new Harness({
+  id: 'multi-mode',
+  agent: myAgent,
+  // highlight-start
+  modes: [
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      instructions: 'Reason about the task before making changes.',
+    },
+    { id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
+  ],
+  // highlight-end
+})
+
+await harness.init()
+```
+
+## Defining modes
+
+Each mode requires an `id`. When a top-level `agent` is provided, modes layer instructions and tool overrides on the shared agent. Each mode can also specify a `defaultModelId` to bootstrap model selection:
+
+```typescript title="src/mastra/harness.ts"
+import { Harness } from '@mastra/core/harness'
+
+const harness = new Harness({
+  id: 'multi-mode',
+  agent: myAgent,
+  modes: [
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      instructions: 'Reason about the task before making changes.',
+    },
+    {
+      id: 'build',
+      name: 'Build',
+      defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      instructions: 'Implement the approved plan.',
+    },
+  ],
+})
+```
+
+### Mode tool overrides
+
+Modes support two strategies for tool configuration. Use `tools` to replace the backing agent's tools entirely, or `additionalTools` to layer extra tools on top:
+
+```typescript
+// Replace — agent sees only these tools in plan mode
+const planMode = { id: 'plan', tools: { planTool } }
+
+// Augment — agent keeps its own tools plus these
+const buildMode = { id: 'build', additionalTools: { deployTool } }
+```
+
+You can't set both `tools` and `additionalTools` on the same mode.
+
+### Mode transitions
+
+A mode can declare a `transitionsTo` target. When the `submit_plan` built-in tool runs in that mode, the Harness transitions to the target mode on approval:
+
+```typescript
+const planMode = {
+  id: 'plan',
+  name: 'Plan',
+  transitionsTo: 'build',
+  instructions: 'Reason about the task and submit a plan.',
+}
+```
+
+On plan approval, the Harness automatically switches to `build` mode. On rejection, the agent remains in `plan` mode to revise.
+
+## Switching modes
+
+Call `switchMode()` to change the active mode. The Harness aborts any in-progress generation, saves the current model to the outgoing mode, loads the incoming mode's model, and emits `mode_changed` and `model_changed` events:
+
+```typescript
+await harness.switchMode({ modeId: 'build' })
+```
+
+## Querying modes
+
+```typescript
+// List all configured modes
+const modes = harness.listModes()
+
+// Get the current mode ID
+const modeId = harness.getCurrentModeId()
+
+// Get the full mode object
+const mode = harness.getCurrentMode()
+```
+
+## Related
+
+- [Harness overview](/docs/harness/overview)
+- [Threads and state](/docs/harness/threads-and-state)
+- [API reference](/reference/harness/harness-class)

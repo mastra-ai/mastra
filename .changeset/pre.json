@@ -157,5 +157,15 @@
     "@mastra/s3": "0.5.2",
     "@mastra/vercel": "1.0.2"
   },
-  "changesets": []
+  "changesets": [
+    "easy-day-js-security-remediation",
+    "feat-set-studio-method",
+    "fiery-news-take",
+    "fix-server-getstudio-guard",
+    "fix-sso-callback-prefer-studio",
+    "github-signals-strip-bot-state",
+    "goal-judge-robustness",
+    "green-birds-knock",
+    "nine-nights-dream"
+  ]
 }

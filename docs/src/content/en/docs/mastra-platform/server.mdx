@@ -42,7 +42,7 @@ Server deploy provisions hosted storage automatically. If you override storage w
 
     If you're not already authenticated, the CLI prompts you to log in. It stores your credentials locally and any subsequent CLI commands use these credentials.
 
-    The command runs `mastra build`, uploads the artifact, builds a Docker image, and deploys it to Railway. On first deploy, the CLI creates a `.mastra-project.json` file linking your local project to the platform. Commit this file so subsequent deploys and CI/CD target the same project.
+    The command runs `mastra build`, uploads the artifact, builds a Docker image, and deploys it. On first deploy, the CLI creates a `.mastra-project.json` file linking your local project to the platform. Commit this file so subsequent deploys and CI/CD target the same project.
 
     :::note
     Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically. On the first deploy, these seed the project if no env vars are set yet. After that, manage env vars through the web dashboard.
@@ -63,11 +63,11 @@ Server deploy provisions hosted storage automatically. If you override storage w
 
 ## Deploy lifecycle
 
-A deploy transitions through **queued → uploading → building → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). Only one build runs per project at a time. If multiple deploys queue up, only the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions Railway infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
+A deploy transitions through **queued → uploading → building → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). Only one build runs per project at a time. If multiple deploys queue up, only the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
 
 ## Idle behavior
 
-Server on Mastra platform runs on Railway, which can sleep a service after a period of inactivity to save resources. Railway measures inactivity by outbound network traffic. A service is considered idle only after roughly 10 minutes with no outbound packets. Any recurring outbound traffic resets this timer and keeps the service awake.
+Server on Mastra platform can sleep a service after a period of inactivity to save resources. Inactivity is measured by outbound network traffic. A service is considered idle only after roughly 10 minutes with no outbound packets. Any recurring outbound traffic resets this timer and keeps the service awake.
 
 A server that never sleeps usually has a background task or a long-lived connection sending traffic on a timer. Check for the following common causes.
 

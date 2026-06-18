@@ -45,7 +45,7 @@ export type BuildContextOptions = {
  */
 export async function buildEvalContext(options: BuildContextOptions): Promise<MastraCodeEvalContext> {
   const { harness, lastNTurns } = options;
-  const threadId = options.threadId ?? harness.getCurrentThreadId();
+  const threadId = options.threadId ?? harness.session.thread.getId();
 
   if (!threadId) {
     throw new Error('No thread ID available. Start a session before building eval context.');
@@ -220,7 +220,7 @@ function buildRequestContext(harness: Harness<any>, threadId: string): Record<st
   return {
     threadId,
     mode: state.currentMode ?? state.mode,
-    modelId: state.currentModelId,
+    modelId: harness.session.model.get(),
     projectPath: state.projectPath,
     projectName: state.projectName,
     gitBranch: state.gitBranch,
