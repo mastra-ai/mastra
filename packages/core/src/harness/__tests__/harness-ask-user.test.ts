@@ -115,8 +115,8 @@ describe('Harness: ask_user native suspension', () => {
     expect(suspendEvent.suspendPayload.selectionMode).toBe('single_select');
 
     // Display state should reflect the pending suspension.
-    expect(harness.getDisplayState().pendingSuspensions.get('call-1')?.toolCallId).toBe('call-1');
-    expect(harness.getDisplayState().pendingSuspensions.get('call-1')?.toolName).toBe('ask_user');
+    expect(harness.session.displayState.get().pendingSuspensions.get('call-1')?.toolCallId).toBe('call-1');
+    expect(harness.session.displayState.get().pendingSuspensions.get('call-1')?.toolName).toBe('ask_user');
   });
 
   it('resumes the suspended ask_user tool with the answer via respondToToolSuspension', async () => {
@@ -141,7 +141,7 @@ describe('Harness: ask_user native suspension', () => {
     });
 
     expect(events.some(e => e.type === 'error')).toBe(false);
-    expect(harness.getDisplayState().pendingSuspensions.size).toBe(0);
+    expect(harness.session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 
   it('emits multi_select in the suspend payload when requested', async () => {
@@ -350,6 +350,6 @@ describe('Harness: ask_user native suspension', () => {
       }
     }
 
-    expect(harness.getDisplayState().pendingSuspensions.size).toBe(0);
+    expect(harness.session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 });

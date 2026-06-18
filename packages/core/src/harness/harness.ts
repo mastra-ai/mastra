@@ -22,13 +22,10 @@ import type { StorageThreadType } from '../memory/types';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
-import { toStandardSchema } from '../schema';
-import type { StandardSchemaWithJSON } from '../schema';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { ToolPayloadTransformPhase } from '../tools/types';
-import { safeStringify } from '../utils';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
@@ -43,13 +40,11 @@ import {
   taskUpdateTool,
   taskWriteTool,
 } from './tools';
-import type { TaskItemSnapshot } from './tools';
-import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
+import { createEmptyTokenUsage } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
   HarnessConfig,
-  HarnessDisplayState,
   HarnessEvent,
   HarnessEventListener,
   HarnessMessage,
@@ -449,8 +444,6 @@ export class Harness<TState = {}> {
   readonly id: string;
 
   private config: HarnessConfig<TState>;
-  private stateSchema: StandardSchemaWithJSON | undefined;
-  private state: TState;
   private listeners: HarnessEventListener[] = [];
   private workspace: Workspace | undefined = undefined;
   private workspaceFn:
@@ -465,9 +458,7 @@ export class Harness<TState = {}> {
     | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
     | undefined = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
-  readonly #session: Session;
-  private displayState: HarnessDisplayState = defaultDisplayState();
-  private stateUpdateQueue: Promise<void> = Promise.resolve();
+  readonly #session: Session<TState>;
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
@@ -479,17 +470,16 @@ export class Harness<TState = {}> {
 
     this.id = config.id;
     this.config = config;
-    this.#session = new Session({ resourceId: config.resourceId ?? config.id });
     this.#instructions = config.instructions;
 
-    // Convert PublicSchema to StandardSchemaWithJSON at the boundary
-    this.stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
-
-    // Initialize state from schema defaults + initial state
-    this.state = {
-      ...this.getSchemaDefaults(),
-      ...config.initialState,
-    } as TState;
+    this.#session = new Session({
+      resourceId: config.resourceId ?? config.id,
+      state: {
+        initialState: config.initialState,
+        stateSchema: config.stateSchema,
+        emit: event => this.emit(event),
+      },
+    });
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
@@ -507,6 +497,7 @@ export class Harness<TState = {}> {
       set: (key, value) => this.#session.thread.setSetting({ key, value }),
     });
     this.#session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
+    this.#session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
     this.#session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
     this.#session.thread.connect(this.createThreadDataStore());
 
@@ -554,7 +545,7 @@ export class Harness<TState = {}> {
    * session-scoped permission grants. Prefer `harness.session.*` over the
    * (removed) re-exposed grant helpers on the Harness.
    */
-  get session(): Session {
+  get session(): Session<TState> {
     return this.#session;
   }
 
@@ -864,40 +855,19 @@ export class Harness<TState = {}> {
 
   /**
    * Get current harness state (read-only snapshot).
+   * @deprecated Prefer `harness.session.state.get()`.
    */
   getState(): Readonly<TState> {
-    return { ...this.state };
-  }
-
-  private async applyStateUpdates(updates: Partial<TState>): Promise<void> {
-    const changedKeys = Object.keys(updates);
-    const newState = { ...this.state, ...updates };
-
-    if (this.stateSchema) {
-      const result = await this.stateSchema['~standard'].validate(newState);
-      if (result.issues) {
-        const messages = result.issues.map(i => i.message).join('; ');
-        throw new Error(`Invalid state update: ${messages}`);
-      }
-      this.state = result.value as TState;
-    } else {
-      this.state = newState as TState;
-    }
-
-    this.emit({ type: 'state_changed', state: this.state as Record<string, unknown>, changedKeys });
+    return this.#session.state.get();
   }
 
   /**
    * Update harness state. Validates against schema if provided.
    * Emits state_changed event.
+   * @deprecated Prefer `harness.session.state.set(...)`.
    */
   async setState(updates: Partial<TState>): Promise<void> {
-    const run = this.stateUpdateQueue.then(() => this.applyStateUpdates(updates));
-    this.stateUpdateQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+    return this.#session.state.set(updates);
   }
 
   private async updateState<TResult>(
@@ -907,46 +877,7 @@ export class Harness<TState = {}> {
       | { updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }
       | Promise<{ updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }>,
   ): Promise<TResult> {
-    const run = this.stateUpdateQueue.then(async () => {
-      const update = await updater(this.getState());
-      if (update.updates && Object.keys(update.updates).length > 0) {
-        await this.applyStateUpdates(update.updates);
-      }
-      for (const event of update.events ?? []) {
-        this.emit(event);
-      }
-      return update.result;
-    });
-
-    this.stateUpdateQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
-  }
-
-  private getSchemaDefaults(): Partial<TState> {
-    if (!this.stateSchema) return {};
-
-    const defaults: Record<string, unknown> = {};
-
-    try {
-      // Extract defaults from the JSON Schema representation
-      const jsonSchema = this.stateSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as {
-        properties?: Record<string, { default?: unknown }>;
-      };
-      if (jsonSchema?.properties) {
-        for (const [key, prop] of Object.entries(jsonSchema.properties)) {
-          if (prop.default !== undefined) {
-            defaults[key] = prop.default;
-          }
-        }
-      }
-    } catch {
-      // Schema doesn't support JSON Schema extraction — skip defaults
-    }
-
-    return defaults as Partial<TState>;
+    return this.#session.state.update(updater);
   }
 
   // ===========================================================================
@@ -1269,7 +1200,7 @@ export class Harness<TState = {}> {
     }
 
     // Auto-tag with projectPath from state so threads are scoped to the working directory
-    const projectPath = (this.state as any).projectPath;
+    const projectPath = (this.#session.state.get() as any).projectPath;
     if (projectPath) {
       metadata.projectPath = projectPath;
     }
@@ -1742,28 +1673,28 @@ export class Harness<TState = {}> {
    * Returns the observer model ID from state, falling back to omConfig defaults.
    */
   getObserverModelId(): string | undefined {
-    return (this.state as any).observerModelId ?? this.config.omConfig?.defaultObserverModelId;
+    return (this.#session.state.get() as any).observerModelId ?? this.config.omConfig?.defaultObserverModelId;
   }
 
   /**
    * Returns the reflector model ID from state, falling back to omConfig defaults.
    */
   getReflectorModelId(): string | undefined {
-    return (this.state as any).reflectorModelId ?? this.config.omConfig?.defaultReflectorModelId;
+    return (this.#session.state.get() as any).reflectorModelId ?? this.config.omConfig?.defaultReflectorModelId;
   }
 
   /**
    * Returns the observation threshold from state, falling back to omConfig defaults.
    */
   getObservationThreshold(): number | undefined {
-    return (this.state as any).observationThreshold ?? this.config.omConfig?.defaultObservationThreshold;
+    return (this.#session.state.get() as any).observationThreshold ?? this.config.omConfig?.defaultObservationThreshold;
   }
 
   /**
    * Returns the reflection threshold from state, falling back to omConfig defaults.
    */
   getReflectionThreshold(): number | undefined {
-    return (this.state as any).reflectionThreshold ?? this.config.omConfig?.defaultReflectionThreshold;
+    return (this.#session.state.get() as any).reflectionThreshold ?? this.config.omConfig?.defaultReflectionThreshold;
   }
 
   /**
@@ -1807,7 +1738,7 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
-    const state = this.state as Record<string, unknown>;
+    const state = this.#session.state.get() as Record<string, unknown>;
     if (agentType) {
       const perType = state[`subagentModelId_${agentType}`];
       if (typeof perType === 'string') return perType;
@@ -1844,7 +1775,7 @@ export class Harness<TState = {}> {
   }
 
   getPermissionRules(): PermissionRules {
-    const state = this.state as Record<string, unknown>;
+    const state = this.#session.state.get() as Record<string, unknown>;
     const rules = state.permissionRules as PermissionRules | undefined;
     return rules ?? { categories: {}, tools: {} };
   }
@@ -1855,7 +1786,7 @@ export class Harness<TState = {}> {
    * session category grant → category policy → "ask"
    */
   private resolveToolApproval(toolName: string): PermissionPolicy {
-    const state = this.state as Record<string, unknown>;
+    const state = this.#session.state.get() as Record<string, unknown>;
     const rules = this.getPermissionRules();
 
     const toolPolicy = rules.tools[toolName];
@@ -1997,7 +1928,7 @@ export class Harness<TState = {}> {
    * small default and ends it mid-task (see {@link HARNESS_MAX_STEPS}).
    */
   private buildSharedRunOptions(): Record<string, unknown> {
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
     const shared: Record<string, unknown> = {
       maxSteps: HARNESS_MAX_STEPS,
       savePerStep: false,
@@ -3378,8 +3309,15 @@ export class Harness<TState = {}> {
     // a tool suspend() like ask_user / request_access isn't left orphaned),
     // aborts the live subscription, and marks the run as aborting. The Harness
     // owns the display-state mirror of those suspensions, so clear it here too.
-    this.displayState.pendingSuspensions.clear();
+    const hadPendingSuspensions = this.#session.displayState.get().pendingSuspensions.size > 0;
+    this.#session.displayState.clearPendingSuspensions();
     this.#session.abortRun();
+    // Clearing the suspension mirror is a direct mutation, so it doesn't flow
+    // through emit()'s display-state reducer. Notify subscribers explicitly when
+    // we actually removed something, otherwise stale suspension UI can linger.
+    if (hadPendingSuspensions) {
+      this.dispatchDisplayStateChanged();
+    }
   }
 
   /**
@@ -3443,50 +3381,6 @@ export class Harness<TState = {}> {
 
   private getSubagentDisplayName(agentType: string): string | undefined {
     return this.config.subagents?.find(subagent => subagent.id === agentType)?.name;
-  }
-
-  // ===========================================================================
-  // Display State
-  // ===========================================================================
-
-  /**
-   * Returns a read-only snapshot of the canonical display state.
-   * UIs should use this to render instead of building up state from raw events.
-   */
-  getDisplayState(): Readonly<HarnessDisplayState> {
-    return this.displayState;
-  }
-
-  /**
-   * Restore task display state after a UI replays persisted task tool history.
-   * This updates the Harness-owned display snapshot without emitting a live
-   * `task_updated` event, since no task tool just ran.
-   */
-  restoreDisplayTasks(tasks: TaskItemSnapshot[]): void {
-    this.displayState.previousTasks = [...this.displayState.tasks];
-    this.displayState.tasks = [...tasks];
-    this.dispatchDisplayStateChanged();
-  }
-
-  /**
-   * Reset display state fields that are scoped to a thread.
-   * Called on thread switch/creation.
-   */
-  private resetThreadDisplayState(): void {
-    this.displayState.activeTools = new Map();
-    this.displayState.toolInputBuffers = new Map();
-    this.displayState.pendingApproval = null;
-    this.displayState.pendingSuspensions = new Map();
-    this.displayState.activeSubagents = new Map();
-    this.displayState.currentMessage = null;
-    this.#session.followUps.clear();
-    this.displayState.queuedFollowUps = 0;
-    this.displayState.modifiedFiles = new Map();
-    this.displayState.tasks = [];
-    this.displayState.previousTasks = [];
-    this.displayState.omProgress = defaultOMProgressState();
-    this.displayState.bufferingMessages = false;
-    this.displayState.bufferingObservations = false;
   }
 
   /**
@@ -3614,7 +3508,7 @@ export class Harness<TState = {}> {
     const agent = this.getCurrentAgent();
 
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
     const threadId = this.#session.thread.getId();
     await agent.approveToolCall({
       runId,
@@ -3642,7 +3536,7 @@ export class Harness<TState = {}> {
     const agent = this.getCurrentAgent();
 
     const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.state as Record<string, unknown>).yolo === true;
+    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
     const threadId = this.#session.thread.getId();
     await agent.declineToolCall({
       runId,
@@ -3676,7 +3570,7 @@ export class Harness<TState = {}> {
     // display-state entry too so the UI stops rendering only the resolved prompt
     // while any other parked suspensions stay visible.
     this.#session.suspensions.delete({ toolCallId });
-    this.displayState.pendingSuspensions.delete(toolCallId);
+    this.#session.displayState.deletePendingSuspension(toolCallId);
 
     const requestContext = await this.buildRequestContext(requestContextInput);
     const threadId = this.#session.thread.getId();
@@ -3714,8 +3608,10 @@ export class Harness<TState = {}> {
   }
 
   private emit(event: HarnessEvent): void {
-    // Update display state based on the event (before dispatching to listeners)
-    this.applyDisplayStateUpdate(event);
+    // The Session owns the display-state reducer; fold the event into the
+    // canonical snapshot before dispatching to listeners. The Harness still owns
+    // the event bus (listeners) and the display_state_changed fan-out.
+    this.#session.displayState.apply(event);
 
     this.dispatchToListeners(event);
 
@@ -3730,7 +3626,7 @@ export class Harness<TState = {}> {
     // (not through emit()) to avoid infinite recursion.
     this.dispatchToListeners({
       type: 'display_state_changed',
-      displayState: this.displayState,
+      displayState: this.#session.displayState.get(),
     });
   }
 
@@ -3744,386 +3640,6 @@ export class Harness<TState = {}> {
       } catch (err) {
         console.error('Error in harness event listener:', err);
       }
-    }
-  }
-
-  /**
-   * Apply a display state update based on an incoming event.
-   * This is the centralized state machine that keeps HarnessDisplayState in sync
-   * with every event the Harness emits.
-   */
-  private applyDisplayStateUpdate(event: HarnessEvent): void {
-    const ds = this.displayState;
-
-    switch (event.type) {
-      // ── Agent lifecycle ────────────────────────────────────────────────
-      case 'agent_start':
-        ds.isRunning = true;
-        ds.activeTools = new Map();
-        ds.toolInputBuffers = new Map();
-        ds.currentMessage = null;
-        ds.pendingApproval = null;
-        // Parked tool suspensions are intentionally NOT cleared here: resuming
-        // one parked tool restarts the run (a fresh agent_start) and the other
-        // parallel prompts must stay rendered until they are resolved.
-        break;
-
-      case 'agent_end':
-        ds.isRunning = false;
-        ds.pendingApproval = null;
-        // A suspended run keeps its pending tool suspensions alive so the UI can
-        // still render the prompts (e.g. `ask_user`, which pauses via the native
-        // tool-suspension primitive). When the run ends for any other reason the
-        // parked suspensions are abandoned, so clear them all.
-        if (event.reason !== 'suspended') {
-          ds.pendingSuspensions.clear();
-        }
-        // Mark any still-running tools as errored (handles abort mid-run)
-        for (const [, tool] of ds.activeTools) {
-          if (tool.status === 'running' || tool.status === 'streaming_input') {
-            tool.status = 'error';
-          }
-        }
-        ds.activeSubagents = new Map();
-        break;
-
-      // ── Message streaming ──────────────────────────────────────────────
-      case 'message_start':
-        ds.currentMessage = event.message;
-        break;
-
-      case 'message_update':
-        ds.currentMessage = event.message;
-        break;
-
-      case 'message_end':
-        ds.currentMessage = event.message;
-        break;
-
-      // ── Tool lifecycle ─────────────────────────────────────────────────
-      case 'tool_input_start': {
-        ds.toolInputBuffers.set(event.toolCallId, { text: '', toolName: event.toolName });
-        const existing = ds.activeTools.get(event.toolCallId);
-        if (existing) {
-          existing.status = 'streaming_input';
-        } else {
-          ds.activeTools.set(event.toolCallId, {
-            name: event.toolName,
-            args: {},
-            status: 'streaming_input',
-          });
-        }
-        break;
-      }
-
-      case 'tool_input_delta': {
-        const buf = ds.toolInputBuffers.get(event.toolCallId);
-        if (buf) {
-          buf.text += event.argsTextDelta;
-        }
-        break;
-      }
-
-      case 'tool_input_end':
-        ds.toolInputBuffers.delete(event.toolCallId);
-        break;
-
-      case 'tool_start': {
-        const existingTool = ds.activeTools.get(event.toolCallId);
-        if (existingTool) {
-          existingTool.name = event.toolName;
-          existingTool.args = event.args;
-          existingTool.status = 'running';
-        } else {
-          ds.activeTools.set(event.toolCallId, {
-            name: event.toolName,
-            args: event.args,
-            status: 'running',
-          });
-        }
-        break;
-      }
-
-      case 'tool_update': {
-        const tool = ds.activeTools.get(event.toolCallId);
-        if (tool) {
-          tool.partialResult =
-            typeof event.partialResult === 'string' ? event.partialResult : safeStringify(event.partialResult);
-        }
-        break;
-      }
-
-      case 'tool_end': {
-        const endedTool = ds.activeTools.get(event.toolCallId);
-        if (endedTool) {
-          endedTool.status = event.isError ? 'error' : 'completed';
-          endedTool.result = event.result;
-          endedTool.isError = event.isError;
-        }
-        // Track file modifications
-        if (!event.isError) {
-          const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
-          const toolState = ds.activeTools.get(event.toolCallId);
-          if (toolState && FILE_TOOLS.includes(toolState.name)) {
-            const toolArgs = toolState.args as Record<string, unknown>;
-            const filePath = toolArgs?.path as string;
-            if (filePath) {
-              const existing = ds.modifiedFiles.get(filePath);
-              if (existing) {
-                existing.operations.push(toolState.name);
-              } else {
-                ds.modifiedFiles.set(filePath, {
-                  operations: [toolState.name],
-                  firstModified: new Date(),
-                });
-              }
-            }
-          }
-        }
-        break;
-      }
-
-      case 'shell_output': {
-        const shellTool = ds.activeTools.get(event.toolCallId);
-        if (shellTool) {
-          shellTool.shellOutput = (shellTool.shellOutput ?? '') + event.output;
-        }
-        break;
-      }
-
-      case 'tool_approval_required':
-        ds.pendingApproval = {
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          args: event.args,
-        };
-        break;
-
-      case 'tool_suspended':
-        ds.pendingSuspensions.set(event.toolCallId, {
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          args: event.args,
-          suspendPayload: event.suspendPayload,
-          resumeSchema: event.resumeSchema,
-        });
-        break;
-
-      // ── Subagent tracking ──────────────────────────────────────────────
-      case 'subagent_start': {
-        const displayName = this.getSubagentDisplayName(event.agentType);
-        ds.activeSubagents.set(event.toolCallId, {
-          agentType: event.agentType,
-          ...(displayName !== undefined ? { displayName } : {}),
-          task: event.task,
-          modelId: event.modelId,
-          forked: event.forked,
-          toolCalls: [],
-          textDelta: '',
-          status: 'running',
-        });
-        break;
-      }
-
-      case 'subagent_text_delta': {
-        const sub = ds.activeSubagents.get(event.toolCallId);
-        if (sub) {
-          sub.textDelta += event.textDelta;
-        }
-        break;
-      }
-
-      case 'subagent_tool_start': {
-        const subAgent = ds.activeSubagents.get(event.toolCallId);
-        if (subAgent) {
-          subAgent.toolCalls.push({ name: event.subToolName, isError: false });
-        }
-        break;
-      }
-
-      case 'subagent_tool_end': {
-        const subTool = ds.activeSubagents.get(event.toolCallId);
-        if (subTool) {
-          const tc = subTool.toolCalls.find(t => t.name === event.subToolName && !t.isError);
-          if (tc) {
-            tc.isError = event.isError;
-          }
-        }
-        break;
-      }
-
-      case 'subagent_end': {
-        const endedSub = ds.activeSubagents.get(event.toolCallId);
-        if (endedSub) {
-          endedSub.status = event.isError ? 'error' : 'completed';
-          endedSub.durationMs = event.durationMs;
-          endedSub.result = event.result;
-        }
-        break;
-      }
-
-      // ── Observational Memory ───────────────────────────────────────────
-      case 'om_status': {
-        const w = event.windows;
-        ds.omProgress.pendingTokens = w.active.messages.tokens;
-        ds.omProgress.threshold = w.active.messages.threshold;
-        ds.omProgress.thresholdPercent =
-          w.active.messages.threshold > 0 ? (w.active.messages.tokens / w.active.messages.threshold) * 100 : 0;
-        ds.omProgress.observationTokens = w.active.observations.tokens;
-        ds.omProgress.reflectionThreshold = w.active.observations.threshold;
-        ds.omProgress.reflectionThresholdPercent =
-          w.active.observations.threshold > 0
-            ? (w.active.observations.tokens / w.active.observations.threshold) * 100
-            : 0;
-        ds.omProgress.buffered = {
-          observations: { ...w.buffered.observations },
-          reflection: { ...w.buffered.reflection },
-        };
-        ds.omProgress.generationCount = event.generationCount;
-        ds.omProgress.stepNumber = event.stepNumber;
-        // Drive buffering animation flags from status fields
-        ds.bufferingMessages = w.buffered.observations.status === 'running';
-        ds.bufferingObservations = w.buffered.reflection.status === 'running';
-        break;
-      }
-
-      case 'om_observation_start':
-        ds.omProgress.status = 'observing';
-        ds.omProgress.cycleId = event.cycleId;
-        ds.omProgress.startTime = Date.now();
-        break;
-
-      case 'om_observation_end':
-        ds.omProgress.status = 'idle';
-        ds.omProgress.cycleId = undefined;
-        ds.omProgress.startTime = undefined;
-        ds.omProgress.observationTokens = event.observationTokens;
-        // Messages have been observed — reset pending tokens
-        ds.omProgress.pendingTokens = 0;
-        ds.omProgress.thresholdPercent = 0;
-        break;
-
-      case 'om_observation_failed':
-        ds.omProgress.status = 'idle';
-        ds.omProgress.cycleId = undefined;
-        ds.omProgress.startTime = undefined;
-        break;
-
-      case 'om_reflection_start':
-        ds.omProgress.status = 'reflecting';
-        ds.omProgress.cycleId = event.cycleId;
-        ds.omProgress.startTime = Date.now();
-        ds.omProgress.preReflectionTokens = ds.omProgress.observationTokens;
-        ds.omProgress.observationTokens = event.tokensToReflect;
-        ds.omProgress.reflectionThresholdPercent =
-          ds.omProgress.reflectionThreshold > 0 ? (event.tokensToReflect / ds.omProgress.reflectionThreshold) * 100 : 0;
-        break;
-
-      case 'om_reflection_end':
-        ds.omProgress.status = 'idle';
-        ds.omProgress.cycleId = undefined;
-        ds.omProgress.startTime = undefined;
-        ds.omProgress.observationTokens = event.compressedTokens;
-        ds.omProgress.reflectionThresholdPercent =
-          ds.omProgress.reflectionThreshold > 0
-            ? (event.compressedTokens / ds.omProgress.reflectionThreshold) * 100
-            : 0;
-        break;
-
-      case 'om_reflection_failed':
-        ds.omProgress.status = 'idle';
-        ds.omProgress.cycleId = undefined;
-        ds.omProgress.startTime = undefined;
-        break;
-
-      case 'om_buffering_start':
-        if (event.operationType === 'observation') {
-          ds.bufferingMessages = true;
-        } else {
-          ds.bufferingObservations = true;
-        }
-        break;
-
-      case 'om_buffering_end':
-        if (event.operationType === 'observation') {
-          ds.bufferingMessages = false;
-        } else {
-          ds.bufferingObservations = false;
-        }
-        break;
-
-      case 'om_buffering_failed':
-        if (event.operationType === 'observation') {
-          ds.bufferingMessages = false;
-        } else {
-          ds.bufferingObservations = false;
-        }
-        break;
-
-      case 'om_activation':
-        if (event.operationType === 'observation') {
-          ds.bufferingMessages = false;
-        } else {
-          ds.bufferingObservations = false;
-        }
-        break;
-
-      // ── Token usage ────────────────────────────────────────────────────
-      case 'usage_update':
-        ds.tokenUsage = this.#session.getTokenUsage();
-        break;
-
-      // ── Tasks ──────────────────────────────────────────────────────────
-      case 'task_updated':
-        ds.previousTasks = [...ds.tasks];
-        ds.tasks = event.tasks;
-        break;
-
-      // ── Follow-up queue ────────────────────────────────────────────────
-      case 'follow_up_queued':
-        ds.queuedFollowUps = event.count;
-        break;
-
-      // ── Thread lifecycle ───────────────────────────────────────────────
-      case 'thread_changed':
-        this.resetThreadDisplayState();
-        ds.tokenUsage = this.#session.getTokenUsage();
-        break;
-
-      case 'thread_created':
-        this.resetThreadDisplayState();
-        ds.tokenUsage = createEmptyTokenUsage();
-        break;
-
-      case 'thread_deleted':
-        if (!this.#session.thread.getId()) {
-          this.resetThreadDisplayState();
-          ds.tokenUsage = createEmptyTokenUsage();
-        }
-        break;
-
-      // ── State changes (for OM threshold overrides) ──────────────────────
-      case 'state_changed': {
-        const keys = event.changedKeys;
-        if (keys.includes('observationThreshold')) {
-          const value = (event.state as Record<string, unknown>).observationThreshold;
-          if (typeof value === 'number') {
-            ds.omProgress.threshold = value;
-            ds.omProgress.thresholdPercent = value > 0 ? (ds.omProgress.pendingTokens / value) * 100 : 0;
-          }
-        }
-        if (keys.includes('reflectionThreshold')) {
-          const value = (event.state as Record<string, unknown>).reflectionThreshold;
-          if (typeof value === 'number') {
-            ds.omProgress.reflectionThreshold = value;
-            ds.omProgress.reflectionThresholdPercent = value > 0 ? (ds.omProgress.observationTokens / value) * 100 : 0;
-          }
-        }
-        break;
-      }
-
-      default:
-        break;
     }
   }
 
@@ -4254,17 +3770,22 @@ export class Harness<TState = {}> {
    */
   private async buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
     requestContext ??= new RequestContext();
-    const harnessContext: HarnessRequestContext<Readonly<TState>> = {
+    const harnessContext: HarnessRequestContext<TState> = {
       harnessId: this.id,
-      state: this.getState(),
-      getState: () => this.getState(),
-      setState: updates => this.setState(updates),
-      updateState: updater => this.updateState(updater),
+      state: this.#session.state.get(),
+      getState: () => this.#session.state.get(),
+      setState: updates => this.#session.state.set(updates),
+      updateState: updater => this.#session.state.update(updater),
       threadId: this.#session.thread.getId(),
       resourceId: this.#session.identity.getResourceId(),
       session: {
         modeId: this.#session.mode.get(),
         modelId: this.#session.model.get(),
+        state: {
+          get: () => this.#session.state.get(),
+          set: updates => this.#session.state.set(updates),
+          update: updater => this.#session.state.update(updater),
+        },
       },
       abortSignal: this.#session.run.getAbortSignal(),
       workspace: this.workspace,

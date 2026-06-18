@@ -306,6 +306,12 @@ const sidebars = {
           label: 'Harness Class',
           customProps: { tags: ['alpha'] },
         },
+        {
+          type: 'doc',
+          id: 'harness/session',
+          label: 'Session Class',
+          customProps: { tags: ['alpha'] },
+        },
       ],
     },
     {

@@ -7,27 +7,35 @@ import type { TUIState } from './state.js';
 
 function createMockHarness(initialState: Record<string, unknown> = {}, previousTasks: TaskItemSnapshot[] = []) {
   let state = { ...initialState };
+  const setState = vi.fn(async (updates: Record<string, unknown>) => {
+    state = { ...state, ...updates };
+  });
   return {
     state,
-    getState: () => ({ ...state }),
-    setState: vi.fn(async (updates: Record<string, unknown>) => {
-      state = { ...state, ...updates };
-    }),
     loadOMProgress: vi.fn().mockResolvedValue(undefined),
-    session: { thread: { list: vi.fn().mockResolvedValue([]) } },
-    getDisplayState: () => ({
-      isRunning: false,
-      tasks: [],
-      previousTasks,
-      omProgress: { status: 'idle', pendingTokens: 0 },
-      modifiedFiles: new Map(),
-    }),
+    session: {
+      thread: { list: vi.fn().mockResolvedValue([]) },
+      state: {
+        get: () => ({ ...state }),
+        set: setState,
+      },
+      displayState: {
+        get: () => ({
+          isRunning: false,
+          tasks: [],
+          previousTasks,
+          omProgress: { status: 'idle', pendingTokens: 0 },
+          modifiedFiles: new Map(),
+        }),
+      },
+    },
   };
 }
 
 function createMockTUIState(harness: ReturnType<typeof createMockHarness>): TUIState {
   return {
     harness: harness as any,
+    session: harness.session as any,
     taskProgress: {
       updateTasks: vi.fn(),
       getTasks: () => [],
@@ -81,7 +89,7 @@ describe('dispatchEvent thread lifecycle', () => {
       state,
     );
 
-    expect(harness.setState).toHaveBeenCalledWith(
+    expect(state.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
         tasks: [],
         activePlan: null,
@@ -97,7 +105,7 @@ describe('dispatchEvent thread lifecycle', () => {
       state,
     );
 
-    expect(harness.setState).toHaveBeenCalledWith(
+    expect(state.session.state.set).toHaveBeenCalledWith(
       expect.objectContaining({
         tasks: [],
         activePlan: null,
@@ -183,7 +191,7 @@ describe('dispatchEvent thread lifecycle', () => {
       state,
     );
 
-    const setStateCall = harness.setState.mock.calls[0]![0];
+    const setStateCall = (state.session.state.set as any).mock.calls[0]![0];
     expect(setStateCall).not.toHaveProperty('currentModelId');
   });
 });
