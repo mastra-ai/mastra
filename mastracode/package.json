@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.23.1-alpha.0",
+  "version": "0.23.1-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -53,9 +53,9 @@
     "build:watch": "pnpm build --watch",
     "test": "vitest",
     "lint": "eslint .",
-    "e2e:list": "tsx scripts/mc-e2e.ts --list",
-    "e2e:test": "tsx scripts/mc-e2e.ts --run --default-all",
-    "e2e:observe": "tsx scripts/mc-e2e.ts --observe"
+    "e2e:list": "tsx e2e-list.ts",
+    "e2e:test": "vitest run --config e2e/vitest.shards.config.ts",
+    "e2e:test:vitest": "vitest run --config e2e/vitest.shards.config.ts"
   },
   "keywords": [],
   "author": "",
@@ -97,10 +97,10 @@
     "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@microsoft/tui-test": "^0.0.4",
     "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "@xterm/headless": "6.0.0",
     "eslint": "^10.4.1",
     "tsup": "^8.5.1",
     "tsx": "catalog:",
