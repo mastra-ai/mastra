@@ -485,7 +485,6 @@ export class Harness<TState = {}> {
     | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
     | undefined = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
-  private tokenUsage: TokenUsage = createEmptyTokenUsage();
   readonly #session = new Session();
   private displayState: HarnessDisplayState = defaultDisplayState();
   private stateUpdateQueue: Promise<void> = Promise.resolve();
@@ -1225,7 +1224,7 @@ export class Harness<TState = {}> {
       void this.setState({ currentModelId: modelId } as unknown as Partial<TState>);
     }
 
-    this.tokenUsage = createEmptyTokenUsage();
+    this.#session.resetTokenUsage();
     this.emit({ type: 'thread_created', thread });
     await this.ensureCurrentAgentThreadSubscription();
 
@@ -1266,7 +1265,7 @@ export class Harness<TState = {}> {
       }
       this.cleanupAgentThreadSubscription();
       this.currentThreadId = null;
-      this.tokenUsage = createEmptyTokenUsage();
+      this.#session.resetTokenUsage();
     }
 
     this.emit({ type: 'thread_deleted', threadId });
@@ -1341,7 +1340,7 @@ export class Harness<TState = {}> {
     this.cleanupAgentThreadSubscription();
     this.currentThreadId = clonedThread.id;
     await this.loadThreadMetadata();
-    this.tokenUsage = createEmptyTokenUsage();
+    this.#session.resetTokenUsage();
     this.emit({ type: 'thread_created', thread: clonedThread });
     await this.ensureCurrentAgentThreadSubscription();
 
@@ -1457,7 +1456,7 @@ export class Harness<TState = {}> {
 
   private async loadThreadMetadata(): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) {
-      this.tokenUsage = createEmptyTokenUsage();
+      this.#session.resetTokenUsage();
       return;
     }
 
@@ -1466,9 +1465,9 @@ export class Harness<TState = {}> {
       const thread = await memoryStorage.getThreadById({ threadId: this.currentThreadId });
 
       // Load token usage
-      const savedUsage = thread?.metadata?.tokenUsage as typeof this.tokenUsage | undefined;
+      const savedUsage = thread?.metadata?.tokenUsage as TokenUsage | undefined;
       if (savedUsage) {
-        this.tokenUsage = {
+        this.#session.setTokenUsage({
           ...createEmptyTokenUsage(),
           ...savedUsage,
           promptTokens: savedUsage.promptTokens ?? 0,
@@ -1476,9 +1475,9 @@ export class Harness<TState = {}> {
           totalTokens: savedUsage.totalTokens ?? 0,
           cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
           cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
-        };
+        });
       } else {
-        this.tokenUsage = createEmptyTokenUsage();
+        this.#session.resetTokenUsage();
       }
 
       const meta = thread?.metadata as Record<string, unknown> | undefined;
@@ -1556,7 +1555,7 @@ export class Harness<TState = {}> {
         }
       }
     } catch {
-      this.tokenUsage = createEmptyTokenUsage();
+      this.#session.resetTokenUsage();
     }
   }
 
@@ -3005,15 +3004,7 @@ export class Harness<TState = {}> {
             stepUsage.raw = usageRecord.raw;
           }
 
-          this.tokenUsage.promptTokens += promptTokens;
-          this.tokenUsage.completionTokens += completionTokens;
-          this.tokenUsage.totalTokens += totalTokens;
-          addOptionalUsageField(this.tokenUsage, 'reasoningTokens', stepUsage.reasoningTokens);
-          addOptionalUsageField(this.tokenUsage, 'cachedInputTokens', stepUsage.cachedInputTokens);
-          addOptionalUsageField(this.tokenUsage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);
-          if (stepUsage.raw !== undefined) {
-            this.tokenUsage.raw = stepUsage.raw;
-          }
+          this.#session.addUsage(stepUsage);
 
           this.persistTokenUsage().catch(() => {});
           this.emit({ type: 'usage_update', usage: stepUsage });
@@ -4149,7 +4140,7 @@ export class Harness<TState = {}> {
 
       // ── Token usage ────────────────────────────────────────────────────
       case 'usage_update':
-        ds.tokenUsage = { ...this.tokenUsage };
+        ds.tokenUsage = this.#session.getTokenUsage();
         break;
 
       // ── Tasks ──────────────────────────────────────────────────────────
@@ -4166,7 +4157,7 @@ export class Harness<TState = {}> {
       // ── Thread lifecycle ───────────────────────────────────────────────
       case 'thread_changed':
         this.resetThreadDisplayState();
-        ds.tokenUsage = { ...this.tokenUsage };
+        ds.tokenUsage = this.#session.getTokenUsage();
         break;
 
       case 'thread_created':
@@ -4389,10 +4380,6 @@ export class Harness<TState = {}> {
   // Token Usage
   // ===========================================================================
 
-  getTokenUsage(): TokenUsage {
-    return { ...this.tokenUsage };
-  }
-
   private async persistTokenUsage(): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
@@ -4403,7 +4390,7 @@ export class Harness<TState = {}> {
         await memoryStorage.saveThread({
           thread: {
             ...thread,
-            metadata: { ...thread.metadata, tokenUsage: this.tokenUsage },
+            metadata: { ...thread.metadata, tokenUsage: this.#session.getTokenUsage() },
             updatedAt: new Date(),
           },
         });
