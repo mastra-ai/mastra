@@ -3,6 +3,7 @@ import type { AgentThreadSubscription } from '../agent/types';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import { SessionThreadHost } from './thread-host';
 import { createEmptyTokenUsage } from './types';
 import type { HarnessEvent, HarnessMessage, HarnessMode, HarnessThread, TokenUsage, ToolCategory } from './types';
 
@@ -112,8 +113,8 @@ export interface ThreadDataStore {
  * own threads, while the Harness host shares storage, the thread lock, and the
  * event bus. So the binding + data queries are per-session and live here; the
  * session leverages the host's storage via an injected {@link ThreadDataStore}.
- * Lifecycle *transitions* (create/switch/clone/delete) remain host machinery
- * because they drive the shared event bus and rebind the shared agent stream.
+ * Lifecycle *transitions* (create/switch/clone/delete) are owned by the sibling
+ * {@link SessionThreadHost}, which receives shared infrastructure from the host.
  */
 export class SessionThread {
   /** The active thread id, or null when the session is not bound to a thread. */
@@ -974,6 +975,8 @@ export class Session<TState = unknown> {
   readonly identity: SessionIdentity;
   /** The session's thread domain: current binding + reads scoped to it. */
   readonly thread: SessionThread;
+  /** The session's thread lifecycle domain: select/create/switch/delete/clone transitions. */
+  readonly threadHost: SessionThreadHost<TState>;
   /** The session-owned Harness state domain. */
   readonly state: SessionState<TState>;
 
@@ -981,6 +984,14 @@ export class Session<TState = unknown> {
     this.identity = new SessionIdentity({ resourceId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.state = new SessionState(state);
+    this.threadHost = new SessionThreadHost({
+      identity: this.identity,
+      thread: this.thread,
+      mode: this.mode,
+      model: this.model,
+      state: this.state,
+      resetTokenUsage: () => this.resetTokenUsage(),
+    });
   }
 
   /**
