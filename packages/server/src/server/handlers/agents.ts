@@ -1822,7 +1822,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       // `persist`/`discard` never start a run; the stored-message id (`result.signal.id`)
       // is the correlatable id for those, keeping the wire contract (`runId: string`) stable.
       const settled = await result.accepted;
-      const settledRunId = 'runId' in settled ? settled.runId : result.signal.id;
+      const settledRunId = 'runId' in settled ? settled.runId : result.signal?.id;
       return result.signal === undefined
         ? { accepted: true as const, runId: settledRunId }
         : { accepted: true as const, runId: settledRunId, signal: result.signal };

@@ -7247,6 +7247,19 @@ export class Agent<
             results.push({ record: failed, decision });
             continue;
           }
+          // The routing policy can resolve to `persist`/`discard` (no run, no
+          // delivery). Only stamp `summarySignalId` when a run actually picked
+          // the signal up (`wake`/`deliver`).
+          if (summaryAccepted.action === 'persist' || summaryAccepted.action === 'discard') {
+            results.push({
+              record: updated,
+              decision,
+              signal: result.signal,
+              persisted: result.persisted,
+              accepted: result.accepted,
+            });
+            continue;
+          }
           const summarized = await notifications.updateNotification({
             id: updated.id,
             threadId: updated.threadId,
@@ -7287,6 +7300,20 @@ export class Agent<
           deliveryReason: decision.reason,
         });
         results.push({ record: failed, decision });
+        continue;
+      }
+
+      // The routing policy can resolve to `persist`/`discard` (no run picked the
+      // signal up). Don't mark the notification `delivered` in that case — the
+      // record stays in its current state with the emitted signal attached.
+      if (delivered.action === 'persist' || delivered.action === 'discard') {
+        results.push({
+          record,
+          decision,
+          signal: result.signal,
+          persisted: result.persisted,
+          accepted: result.accepted,
+        });
         continue;
       }
 

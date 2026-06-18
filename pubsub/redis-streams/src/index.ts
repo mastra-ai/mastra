@@ -324,14 +324,23 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const redisKey = this.#leaseKey(key);
     const result = await this.#writeClient.set(redisKey, owner, { NX: true, PX: ttlMs });
     if (result === 'OK') return { acquired: true, owner };
-    // Someone holds the key — check if it's us, and renew if so.
-    const current = await this.#writeClient.get(redisKey);
-    if (current === owner) {
-      // Same owner re-claiming: refresh TTL.
-      await this.#writeClient.pExpire(redisKey, ttlMs);
-      return { acquired: true, owner };
-    }
-    return { acquired: false, owner: current ?? undefined };
+    // Someone holds the key. Re-claim only if we still own it, refreshing the
+    // TTL atomically: a bare GET+PEXPIRE would let us extend a *new* owner's
+    // lease if the key expired and was re-acquired between the two calls.
+    const script = `
+      local current = redis.call("GET", KEYS[1])
+      if current == ARGV[1] then
+        redis.call("PEXPIRE", KEYS[1], ARGV[2])
+        return 1
+      end
+      return 0
+    `;
+    const refreshed = await this.#writeClient.eval(script, {
+      keys: [redisKey],
+      arguments: [owner, String(ttlMs)],
+    });
+    if (refreshed === 1) return { acquired: true, owner };
+    return { acquired: false, owner: (await this.#writeClient.get(redisKey)) ?? undefined };
   }
 
   async getLeaseOwner(key: string): Promise<string | undefined> {

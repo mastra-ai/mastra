@@ -1967,8 +1967,12 @@ export class Harness<TState = {}> {
           threadId,
           ifIdle: { streamOptions: streamOptions as any },
         });
-        const accepted = await result.accepted.catch(() => undefined);
-        const runId = accepted && 'runId' in accepted ? accepted.runId : undefined;
+        // Let a rejected `accepted` propagate: `next` is already dequeued, so a
+        // setup/misconfig failure must reach the outer catch to requeue it
+        // rather than being swallowed into a false success (the follow-up would
+        // otherwise be lost).
+        const accepted = await result.accepted;
+        const runId = 'runId' in accepted ? accepted.runId : undefined;
         this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count(), runId });
       } else {
         this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
