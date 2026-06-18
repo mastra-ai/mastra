@@ -5,6 +5,7 @@ import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
+  AgentInstructions,
   AgentThreadSubscription,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
@@ -940,6 +941,21 @@ export class Harness<TState = {}> {
     const mode = this.getCurrentMode();
     const combined = [this.#instructions ?? '', mode?.instructions ?? ''].filter(Boolean).join('\n');
     return combined || undefined;
+  }
+
+  /**
+   * Convert AgentInstructions (string | string[] | system message objects) to
+   * a plain string for combining with mode instructions.
+   */
+  private instructionsToString(instructions: AgentInstructions): string {
+    if (typeof instructions === 'string') return instructions;
+    if (Array.isArray(instructions)) {
+      return instructions
+        .map(msg => (typeof msg === 'string' ? msg : typeof msg.content === 'string' ? msg.content : ''))
+        .filter(Boolean)
+        .join('\n\n');
+    }
+    return typeof instructions.content === 'string' ? instructions.content : '';
   }
 
   /**
@@ -1926,7 +1942,22 @@ export class Harness<TState = {}> {
     const requestContext = await this.buildRequestContext(requestContextInput);
     // Resolve mode-aware instructions at call time so the agent's own
     // instructions are never mutated by the harness.
-    const modeInstructions = this.config.agent ? this.resolveCurrentModeInstructions() : undefined;
+    // When mode/harness instructions exist, combine them with the agent's
+    // own instructions so dynamic instructions (e.g. AGENTS.md, project
+    // context) aren't lost — the agent treats options.instructions as a
+    // full override.
+    let callTimeInstructions: string | undefined;
+    if (this.config.agent) {
+      const modeInstructions = this.resolveCurrentModeInstructions();
+      if (modeInstructions) {
+        const agent = this.getCurrentAgent();
+        const agentInstructions = await agent.getInstructions({ requestContext });
+        const agentStr = this.instructionsToString(agentInstructions);
+        callTimeInstructions = [agentStr, modeInstructions].filter(Boolean).join('\n') || undefined;
+      }
+      // When no mode instructions, don't pass instructions — the agent
+      // uses its own getInstructions() naturally.
+    }
 
     const streamOptions: Record<string, unknown> = {
       ...this.buildSharedRunOptions(),
@@ -1935,7 +1966,7 @@ export class Harness<TState = {}> {
       requestContext,
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
-      ...(modeInstructions && { instructions: modeInstructions }),
+      ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(requestContext);
 
