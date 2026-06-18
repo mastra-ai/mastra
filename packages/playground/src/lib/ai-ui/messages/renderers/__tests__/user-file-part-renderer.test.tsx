@@ -165,4 +165,23 @@ describe('UserFilePartRenderer', () => {
     expect(link?.getAttribute('href')).toBe('https://example.com/song.mp3');
     expect(container.querySelector('[aria-label="Audio file"]')).not.toBeNull();
   });
+
+  it('does not use a local data: payload as the chip label', () => {
+    const dataUri = `data:video/mp4;base64,${'A'.repeat(2048)}`;
+    const part = v5FilePart({
+      type: 'file',
+      mediaType: 'video/mp4',
+      url: dataUri,
+    });
+
+    const { container } = render(<UserFilePartRenderer part={part} />);
+
+    // Local inlined media must render the chip without leaking the long base64
+    // payload into a title/tooltip attribute.
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.querySelector('[aria-label="Video file"]')).not.toBeNull();
+    expect(container.querySelector(`[title*="base64"]`)).toBeNull();
+    expect(container.innerHTML).not.toContain(dataUri);
+  });
 });

@@ -25,6 +25,10 @@ export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
   const src = typeof data === 'string' ? data : undefined;
   const isFetchableUrl = typeof data === 'string' && isBrowserFetchableUrl(data);
   const isNonFetchableUrl = typeof data === 'string' && isNonFetchableRemoteUrl(data);
+  // Only use the source as the chip label when it is a real URL. Local inlined
+  // media is a long `data:...;base64,...` payload that would bloat the chip
+  // title/tooltip and DOM attributes.
+  const fileLabel = isFetchableUrl || isNonFetchableUrl ? src : undefined;
   const isImage = typeof mimeType === 'string' && mimeType.startsWith('image/');
   const isVideo = typeof mimeType === 'string' && mimeType.startsWith('video/');
   const isAudio = typeof mimeType === 'string' && mimeType.startsWith('audio/');
@@ -32,7 +36,9 @@ export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
   // Cloud-storage URIs (gs://, s3://) and audio/video can't be previewed
   // in-browser — show a labeled chip instead of a broken image/preview.
   if (isNonFetchableUrl || isVideo || isAudio) {
-    return <InMessageAttachment type="file" contentType={mimeType} name={src} src={isFetchableUrl ? src : undefined} />;
+    return (
+      <InMessageAttachment type="file" contentType={mimeType} name={fileLabel} src={isFetchableUrl ? src : undefined} />
+    );
   }
 
   if (isImage) {
