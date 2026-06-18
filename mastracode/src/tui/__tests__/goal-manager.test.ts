@@ -36,7 +36,7 @@ function createState(agent?: FakeAgent, threadId: string | undefined = 'parent-t
   return {
     harness: {
       getCurrentThreadId: vi.fn(() => threadId),
-      getResourceId: vi.fn(() => 'resource-1'),
+      session: { identity: { getResourceId: vi.fn(() => 'resource-1') } },
       setThreadSetting: vi.fn().mockResolvedValue(undefined),
       getCurrentAgent: vi.fn(() => agent),
     },

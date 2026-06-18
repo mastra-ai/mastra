@@ -22,8 +22,12 @@ function createMockHarness(opts?: { id?: string; resourceId?: string }) {
   }> = [];
 
   return {
-    getResourceId: vi.fn(() => currentResourceId),
-    getDefaultResourceId: vi.fn(() => defaultResourceId),
+    session: {
+      identity: {
+        getResourceId: vi.fn(() => currentResourceId),
+        getDefaultResourceId: vi.fn(() => defaultResourceId),
+      },
+    },
     getKnownResourceIds: vi.fn(async () => [...new Set(threads.map(t => t.resourceId))]),
     setResourceId: vi.fn(({ resourceId }: { resourceId: string }) => {
       currentResourceId = resourceId;

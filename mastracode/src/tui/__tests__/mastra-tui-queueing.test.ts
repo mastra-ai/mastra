@@ -37,7 +37,7 @@ const EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS = {
 function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
   return {
     harness: {
-      getFollowUpCount: vi.fn(() => 0),
+      session: { followUps: { count: vi.fn(() => 0) } },
     },
     goalManager: { stopActiveTimer: vi.fn() },
     gradientAnimator: undefined,
@@ -615,7 +615,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-456',
       harness: {
-        getFollowUpCount: vi.fn(() => 0),
+        session: { followUps: { count: vi.fn(() => 0) } },
         switchMode,
       } as any,
       goalManager: {
@@ -644,7 +644,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: undefined,
       harness: {
-        getFollowUpCount: vi.fn(() => 0),
+        session: { followUps: { count: vi.fn(() => 0) } },
         switchMode,
       } as any,
       goalManager: {
@@ -670,7 +670,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-123',
       harness: {
-        getFollowUpCount: vi.fn(() => 0),
+        session: { followUps: { count: vi.fn(() => 0) } },
         switchMode,
       } as any,
       goalManager: {
@@ -698,7 +698,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-321',
       harness: {
-        getFollowUpCount: vi.fn(() => 0),
+        session: { followUps: { count: vi.fn(() => 0) } },
         switchMode,
       } as any,
       goalManager: {
@@ -726,7 +726,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-xyz',
       harness: {
-        getFollowUpCount: vi.fn(() => 0),
+        session: { followUps: { count: vi.fn(() => 0) } },
         switchMode,
       } as any,
       goalManager: {
@@ -754,7 +754,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-failed',
       harness: {
-        getFollowUpCount: vi.fn(() => 0),
+        session: { followUps: { count: vi.fn(() => 0) } },
         switchMode,
       } as any,
       goalManager: {
@@ -787,7 +787,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: originalGoalId,
       harness: {
-        getFollowUpCount: vi.fn(() => 0),
+        session: { followUps: { count: vi.fn(() => 0) } },
         switchMode,
       } as any,
       goalManager: {
@@ -815,7 +815,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: originalGoalId,
       harness: {
-        getFollowUpCount: vi.fn(() => 0),
+        session: { followUps: { count: vi.fn(() => 0) } },
         switchMode,
       } as any,
       goalManager: {
@@ -855,7 +855,7 @@ describe('MastraTUI queueing', () => {
 
   it('waits for harness-level follow-ups to finish before draining the local queue', () => {
     const state = createQueueState({
-      harness: { getFollowUpCount: vi.fn(() => 1) } as any,
+      harness: { session: { followUps: { count: vi.fn(() => 1) } } } as any,
       pendingQueuedActions: ['message'],
       pendingFollowUpMessages: [{ content: 'queued' }],
     });

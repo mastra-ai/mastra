@@ -55,8 +55,8 @@ vi.mock('@mastra/core/harness', () => ({
       await this.setThreadSetting({ key, value: modelId });
     }
 
-    getResourceId() {
-      return 'resource-id';
+    get session() {
+      return { identity: { getResourceId: () => 'resource-id' } };
     }
 
     listModes() {

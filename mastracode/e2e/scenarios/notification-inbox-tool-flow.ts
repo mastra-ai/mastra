@@ -38,7 +38,7 @@ export const notificationInboxToolFlowScenario = {
               dedupeKey: 'mc-e2e-notification-inbox-tool-flow',
             },
             {
-              resourceId: result.harness.getResourceId(),
+              resourceId: result.harness.session.identity.getResourceId(),
               threadId,
               ifIdle: { behavior: 'wake' },
             },

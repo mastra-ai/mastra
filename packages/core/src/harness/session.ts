@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import type { AgentThreadSubscription } from '../agent/types';
+import type { RequestContext } from '../request-context';
 import { createEmptyTokenUsage } from './types';
 import type { TokenUsage, ToolCategory } from './types';
 
@@ -29,6 +30,44 @@ function addOptionalUsageField(usage: TokenUsage, key: OptionalUsageField, value
 const MODE_ID_KEY = 'currentModeId';
 /** Persisted thread-setting key prefix for a mode's last-used model. */
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
+
+/**
+ * Owns the session's identity: which memory `resourceId` this session reads and
+ * writes under. In a multi-user host one Harness serves many sessions, so the
+ * resourceId — "whose session is this" — belongs to the Session, not the
+ * Harness.
+ *
+ * `defaultResourceId` is the resourceId the session started with; switching to a
+ * different resource (e.g. impersonation, or browsing another user's threads)
+ * updates the current resourceId while the default is retained so the session
+ * can return to its own identity.
+ */
+export class SessionIdentity {
+  /** The memory resourceId the session currently reads/writes under. */
+  #resourceId: string;
+  /** The resourceId the session started with, retained across resource switches. */
+  readonly #defaultResourceId: string;
+
+  constructor({ resourceId }: { resourceId: string }) {
+    this.#resourceId = resourceId;
+    this.#defaultResourceId = resourceId;
+  }
+
+  /** The resourceId the session currently reads/writes under. */
+  getResourceId(): string {
+    return this.#resourceId;
+  }
+
+  /** The resourceId the session started with. */
+  getDefaultResourceId(): string {
+    return this.#defaultResourceId;
+  }
+
+  /** Point the session at a different resourceId (the default is unchanged). */
+  setResourceId({ resourceId }: { resourceId: string }): void {
+    this.#resourceId = resourceId;
+  }
+}
 
 /**
  * Owns the session's live subscription to the active thread's agent event
@@ -169,6 +208,139 @@ export class SessionSuspensions {
       return this.#pending.keys().next().value;
     }
     return undefined;
+  }
+}
+
+/** A message queued to send once the active run finishes, held in {@link SessionFollowUps}. */
+export interface FollowUp {
+  /** The message text to send. */
+  content: string;
+  /** Optional request context to apply when the queued message is sent. */
+  requestContext?: RequestContext;
+}
+
+/**
+ * Owns the session's follow-up queue: messages a user submits while a run is in
+ * progress, held FIFO until the active run finishes and the queue is drained.
+ *
+ * This owns the queue *data* (enqueue/dequeue/requeue/clear/count). The Harness
+ * still drives draining — sending each message and emitting `follow_up_queued`
+ * as the count changes — and keeps the display-state mirror (`queuedFollowUps`).
+ */
+export class SessionFollowUps {
+  /** Messages waiting to be sent after the current run, in arrival order. */
+  #queue: FollowUp[] = [];
+
+  /** Number of messages currently queued. */
+  count(): number {
+    return this.#queue.length;
+  }
+
+  /** Whether the queue is empty. */
+  isEmpty(): boolean {
+    return this.#queue.length === 0;
+  }
+
+  /** Append a follow-up to the back of the queue. */
+  enqueue(followUp: FollowUp): void {
+    this.#queue.push(followUp);
+  }
+
+  /** Remove and return the next follow-up, or undefined when empty. */
+  dequeue(): FollowUp | undefined {
+    return this.#queue.shift();
+  }
+
+  /** Put a follow-up back at the front (e.g. when draining it failed). */
+  requeue(followUp: FollowUp): void {
+    this.#queue.unshift(followUp);
+  }
+
+  /** Drop all queued follow-ups (e.g. on steer or thread switch). */
+  clear(): void {
+    this.#queue = [];
+  }
+}
+
+/** The decision a user returns to resolve a parked tool-approval gate. */
+export interface ApprovalDecision {
+  /** Whether to run the gated tool or reject it. */
+  decision: 'approve' | 'decline';
+  /** Optional request context to apply when the gated tool resumes. */
+  requestContext?: RequestContext;
+}
+
+/**
+ * A user's response to a parked approval. `always_allow_category` approves the
+ * tool and additionally grants its category for the rest of the session.
+ */
+export interface ApprovalResponse {
+  decision: 'approve' | 'decline' | 'always_allow_category';
+  requestContext?: RequestContext;
+}
+
+/**
+ * Owns the session's interactive tool-approval gate: when a tool requires user
+ * approval, the run parks on a promise here until the UI responds approve or
+ * decline. Holds the pending resolver and the name of the tool being gated.
+ *
+ * At most one approval is in flight at a time. The Session owns the gate
+ * mechanics (arm / resolve / clear); the Harness still maps a decision to its
+ * effects (running vs declining the tool, and any "always allow" grant), since
+ * those touch config-derived tool categories.
+ */
+export class SessionApproval {
+  /** Resolver for the parked approval promise, or null when nothing is gated. */
+  #resolve: ((decision: ApprovalDecision) => void) | null = null;
+  /** Name of the tool currently awaiting approval, or null when none. */
+  #toolName: string | null = null;
+
+  /**
+   * Park a new approval for `toolName` and return a promise that resolves once
+   * {@link resolve} is called with the user's decision. The caller awaits this
+   * while the run is suspended on the gate.
+   */
+  arm({ toolName }: { toolName: string }): Promise<ApprovalDecision> {
+    this.#toolName = toolName;
+    return new Promise<ApprovalDecision>(resolve => {
+      this.#resolve = resolve;
+    });
+  }
+
+  /** Whether an approval is currently parked awaiting a decision. */
+  isArmed(): boolean {
+    return this.#resolve !== null;
+  }
+
+  /**
+   * Apply a user's {@link ApprovalResponse} to the parked gate. A no-op when
+   * nothing is armed. `always_allow_category` runs `onAlwaysAllow` with the
+   * gated tool name (so the caller can grant the tool's category — a lookup that
+   * needs Harness config) and then approves; `approve`/`decline` resolve as-is.
+   */
+  respond({
+    decision,
+    requestContext,
+    onAlwaysAllow,
+  }: ApprovalResponse & { onAlwaysAllow?: (toolName: string) => void }): void {
+    if (!this.isArmed()) return;
+
+    if (decision === 'always_allow_category' && this.#toolName) {
+      onAlwaysAllow?.(this.#toolName);
+    }
+
+    const resolved: ApprovalDecision = {
+      decision: decision === 'decline' ? 'decline' : 'approve',
+      requestContext,
+    };
+    this.#resolve?.(resolved);
+    this.#resolve = null;
+    this.#toolName = null;
+  }
+
+  /** Clear the gated tool name once a parked approval has been consumed. */
+  clearToolName(): void {
+    this.#toolName = null;
   }
 }
 
@@ -441,6 +613,14 @@ export class SessionMode {
  *   the native tool-suspension primitive awaiting a resume, keyed by toolCallId.
  *   The Session owns the resume data; the Harness keeps the richer per-suspension
  *   UI snapshot on its display state.
+ * - the follow-up queue (`session.followUps`): messages a user submits while a
+ *   run is in progress, held FIFO until the run finishes. The Session owns the
+ *   queue; the Harness drives draining and keeps the `queuedFollowUps` display
+ *   mirror.
+ * - the interactive tool-approval gate (`session.approval`): when a tool needs
+ *   user approval, the run parks on a promise here until the UI responds. The
+ *   Session owns the gate; the Harness maps the decision to its effects (run vs
+ *   decline, any "always allow" grant), which touch config-derived categories.
  *
  * It also exposes a couple of accessors that compose `run` and `stream`:
  * {@link getCurrentRunId} (the active run id, preferring the live subscription)
@@ -459,6 +639,8 @@ export class Session {
   #tokenUsage: TokenUsage = createEmptyTokenUsage();
   /** Thread-settings persistence handle, injected by the Harness via {@link setStore}. */
   #store: ThreadSettingsStore | undefined;
+  /** Resolves a tool name to its category, injected by the Harness via {@link setCategoryResolver} (the category map is Harness config). */
+  #resolveCategory: ((toolName: string) => ToolCategory | null) | undefined;
   /** The session's currently-selected model (source of truth) + per-mode memory. */
   readonly model = new SessionModel(() => this.#store);
   /** The session's currently-selected mode and switch sequence. */
@@ -469,6 +651,16 @@ export class Session {
   readonly stream = new SessionStream();
   /** Tool calls parked awaiting a resume (the resume data, keyed by toolCallId). */
   readonly suspensions = new SessionSuspensions();
+  /** Messages queued to send after the active run finishes. */
+  readonly followUps = new SessionFollowUps();
+  /** The interactive tool-approval gate the current run parks on. */
+  readonly approval = new SessionApproval();
+  /** The session's identity: the memory resourceId it reads/writes under. */
+  readonly identity: SessionIdentity;
+
+  constructor({ resourceId }: { resourceId: string }) {
+    this.identity = new SessionIdentity({ resourceId });
+  }
 
   /**
    * Attach the thread-settings store the Session persists mode/model through.
@@ -477,6 +669,15 @@ export class Session {
    */
   setStore(store: ThreadSettingsStore | undefined): void {
     this.#store = store;
+  }
+
+  /**
+   * Attach the tool→category resolver used when a user picks "always allow
+   * category". The category map is Harness config, so the Harness injects this
+   * once; without it, an "always_allow_category" decision simply approves.
+   */
+  setCategoryResolver(resolveCategory: (toolName: string) => ToolCategory | null): void {
+    this.#resolveCategory = resolveCategory;
   }
 
   /**
@@ -502,6 +703,30 @@ export class Session {
     this.suspensions.clear();
     this.stream.abort();
     this.run.requestAbort();
+  }
+
+  /**
+   * Respond to the parked tool-approval gate with the user's decision. A no-op
+   * when nothing is awaiting approval. "always_allow_category" grants the gated
+   * tool's category for the rest of the session (resolved via the injected
+   * {@link setCategoryResolver}) and then approves; "approve"/"decline" release
+   * the run as-is.
+   */
+  respondToToolApproval({
+    decision,
+    requestContext,
+  }: {
+    decision: 'approve' | 'decline' | 'always_allow_category';
+    requestContext?: RequestContext;
+  }): void {
+    this.approval.respond({
+      decision,
+      requestContext,
+      onAlwaysAllow: toolName => {
+        const category = this.#resolveCategory?.(toolName);
+        if (category) this.grantCategory(category);
+      },
+    });
   }
 
   /** Grant a tool category "allow" for the remainder of the session. */

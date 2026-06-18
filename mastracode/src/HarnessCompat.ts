@@ -99,12 +99,11 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
     // The harness's selected model now lives on the base Harness session; fall
     // back to composed state where the base harness is stubbed (unit tests).
-    const currentModelId =
-      this.session?.model?.get() || (this.getState() as SessionStateFields).currentModelId;
+    const currentModelId = this.session?.model?.get() || (this.getState() as SessionStateFields).currentModelId;
 
     const session = await this.#harnessV1.session({
       threadId,
-      resourceId: this.getResourceId(),
+      resourceId: this.session.identity.getResourceId(),
     });
     this.#session = session;
 
@@ -117,7 +116,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
 
   async listThreads(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
     const [sessions, legacyThreads] = await Promise.all([this.#harnessV1.listSessions(), super.listThreads(options)]);
-    const resourceId = this.getResourceId();
+    const resourceId = this.session.identity.getResourceId();
 
     const sessionThreads = sessions
       .filter(session => options?.allResources || session.resourceId === resourceId)
@@ -183,7 +182,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       throw new Error('No source thread to clone');
     }
 
-    const sourceResourceId = resourceId ?? this.getResourceId();
+    const sourceResourceId = resourceId ?? this.session.identity.getResourceId();
     const currentSession = this.#session as HarnessV1Session<TState> | undefined;
     const sourceSession: HarnessV1Session<TState> =
       currentSession?.threadId === sourceId && currentSession.resourceId === sourceResourceId

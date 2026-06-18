@@ -17,7 +17,7 @@ function createMockHarness() {
 
   return {
     getCurrentThreadId: vi.fn(() => currentThreadId),
-    getResourceId: vi.fn(() => currentResourceId),
+    session: { identity: { getResourceId: vi.fn(() => currentResourceId) } },
     listThreads: vi.fn(async () => threads),
     _setCurrentThreadId(threadId: string | null) {
       currentThreadId = threadId;

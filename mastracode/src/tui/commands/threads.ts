@@ -13,7 +13,7 @@ export function showThreadLockPrompt(
 ): void {
   ctx.analytics?.trackInteractivePrompt('thread_lock_prompt', {
     threadId: lockedThreadId ?? ctx.state.harness.getCurrentThreadId(),
-    resourceId: ctx.state.harness.getResourceId(),
+    resourceId: ctx.state.harness.session.identity.getResourceId(),
     mode: ctx.state.harness.getCurrentModeId(),
   });
 
@@ -54,7 +54,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
   const { state } = ctx;
   const threads = await state.harness.listThreads({ allResources: true });
   const currentId = state.pendingNewThread ? null : state.harness.getCurrentThreadId();
-  const currentResourceId = state.harness.getResourceId();
+  const currentResourceId = state.harness.session.identity.getResourceId();
   const threadById = new Map(threads.map(thread => [thread.id, thread] as const));
 
   for (const [threadId, cachedPreview] of [...state.threadPreviewCache.entries()]) {

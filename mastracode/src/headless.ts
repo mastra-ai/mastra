@@ -206,7 +206,7 @@ function autoResolve<TState extends Record<string, unknown>>(
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
     case 'tool_approval_required': {
-      harness.respondToToolApproval({ decision: 'approve' });
+      harness.session.respondToToolApproval({ decision: 'approve' });
       return { resolved: true, label: `[auto-approved] ${event.toolName}`, json: { ...event, autoApproved: true } };
     }
     case 'tool_suspended': {

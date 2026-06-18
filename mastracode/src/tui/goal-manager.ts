@@ -140,7 +140,7 @@ export class GoalManager {
       const persisted = await agent.setObjective(objective, {
         id,
         threadId,
-        resourceId: state.harness.getResourceId(),
+        resourceId: state.harness.session.identity.getResourceId(),
         ...(judgeModelId ? { judgeModelId } : {}),
         maxRuns: maxTurns,
       });
@@ -256,7 +256,7 @@ export class GoalManager {
             await agent.setObjective(this.record.objective, {
               id: this.record.id,
               threadId,
-              resourceId: state.harness.getResourceId(),
+              resourceId: state.harness.session.identity.getResourceId(),
               ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
               ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
             });

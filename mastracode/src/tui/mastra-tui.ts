@@ -158,7 +158,7 @@ export class MastraTUI {
 
     options.githubSignals?.onSubscriptionsChanged(event => {
       const currentThreadId = this.state.harness.getCurrentThreadId?.();
-      const currentResourceId = this.state.harness.getResourceId?.();
+      const currentResourceId = this.state.harness.session?.identity?.getResourceId?.();
       if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
       this.state.activeGithubPrSubscriptions = event.subscriptions.map(subscription => ({
         owner: subscription.owner,
@@ -174,7 +174,7 @@ export class MastraTUI {
 
     (options.githubSignals as GithubSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
       const currentThreadId = this.state.harness.getCurrentThreadId?.();
-      const currentResourceId = this.state.harness.getResourceId?.();
+      const currentResourceId = this.state.harness.session?.identity?.getResourceId?.();
       if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
       if (!this.state.githubPrGradientAnimator) {
         this.state.githubPrGradientAnimator = new GradientAnimator(() => {
@@ -426,7 +426,7 @@ export class MastraTUI {
       this.clearIdleCounter();
       this.state.analytics?.capture('mastracode_prompt_submitted', {
         threadId: this.state.harness.getCurrentThreadId(),
-        resourceId: this.state.harness.getResourceId(),
+        resourceId: this.state.harness.session.identity.getResourceId(),
         mode: this.state.harness.getCurrentModeId(),
         hasImages: Boolean(images?.length),
         isFirstPromptInThread: pendingNewThread,
@@ -764,7 +764,7 @@ export class MastraTUI {
         action: 'switched',
         threadId: event.threadId,
         previousThreadId: event.previousThreadId,
-        resourceId: this.state.harness.getResourceId(),
+        resourceId: this.state.harness.session.identity.getResourceId(),
         mode: this.state.harness.getCurrentModeId(),
       });
       return;
@@ -776,7 +776,7 @@ export class MastraTUI {
         scope: event.scope,
         mode: event.modeId ?? this.state.harness.getCurrentModeId(),
         threadId: this.state.harness.getCurrentThreadId(),
-        resourceId: this.state.harness.getResourceId(),
+        resourceId: this.state.harness.session.identity.getResourceId(),
       });
     }
   }
