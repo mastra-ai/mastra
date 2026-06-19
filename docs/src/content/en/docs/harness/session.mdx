@@ -55,8 +55,8 @@ See [Threads and state](/docs/harness/threads-and-state) for the full lifecycle.
 The Harness defines the available modes in `config.modes`. The Session tracks which mode and model are _currently_ selected:
 
 ```typescript
-// Switch mode (Harness orchestration — aborts the run, emits events)
-await harness.switchMode({ modeId: 'build' })
+// Switch mode (aborts the run, emits events)
+await harness.session.mode.switch({ modeId: 'build' })
 
 // Read the current selection (Session state)
 const modeId = harness.session.mode.get()

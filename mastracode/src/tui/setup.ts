@@ -156,7 +156,7 @@ export function setupKeyboardShortcuts(
     const currentIndex = modes.findIndex(m => m.id === currentId);
     const nextIndex = (currentIndex + 1) % modes.length;
     const nextMode = modes[nextIndex]!;
-    await state.harness.switchMode({ modeId: nextMode.id });
+    await state.session.mode.switch({ modeId: nextMode.id });
   });
 
   // Ctrl+Y - toggle YOLO mode
