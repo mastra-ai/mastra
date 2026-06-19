@@ -24,7 +24,7 @@ import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility'
 import { navCrumb } from '@/lib/nav';
 import { RouteHeaderCrumbs } from '@/lib/route-header';
 import type { CrumbDef } from '@/lib/route-header';
-import { AddSkillDialog, FileViewer, SkillsTable, WorkspaceFileBrowser } from '@/domains/workspace/components';
+import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
@@ -35,6 +35,9 @@ import {
   useWorkspaces,
   useSearchWorkspace,
   useWorkspaceFile,
+  useWorkspaceFiles,
+  useCreateWorkspaceDirectory,
+  useDeleteWorkspaceFile,
 } from '@/domains/workspace/hooks/use-workspace';
 import { useWorkspaceSkills, useSearchWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skills';
 import type { WorkspaceItem } from '@/domains/workspace/types';
@@ -49,7 +52,6 @@ export default function Workspace() {
   const [updatingSkillName, setUpdatingSkillName] = useState<string | null>(null);
   // Track if we installed a skill that wasn't discovered (client-side only, resets on refresh)
   const [hasUndiscoveredInstall, setHasUndiscoveredInstall] = useState(false);
-  const [fileTreeRefreshToken, setFileTreeRefreshToken] = useState(0);
 
   // Get state from URL query params
   const fileFromUrl = searchParams.get('file');
@@ -136,6 +138,40 @@ export default function Workspace() {
     workspaceId: effectiveWorkspaceId,
   });
 
+  // Full file tree, loaded eagerly with a single recursive listing.
+  const {
+    data: filesData,
+    isLoading: isLoadingFiles,
+    error: filesError,
+    refetch: refetchFiles,
+  } = useWorkspaceFiles('.', {
+    recursive: true,
+    workspaceId: effectiveWorkspaceId,
+    enabled: workspaceInfo?.capabilities?.hasFilesystem ?? false,
+  });
+  const createDirectory = useCreateWorkspaceDirectory();
+  const deleteFile = useDeleteWorkspaceFile();
+
+  const handleCreateDirectory = useCallback(
+    (path: string) => {
+      createDirectory.mutate(
+        { path, workspaceId: effectiveWorkspaceId },
+        { onSuccess: () => void refetchFiles() },
+      );
+    },
+    [createDirectory, effectiveWorkspaceId, refetchFiles],
+  );
+
+  const handleDeleteFile = useCallback(
+    (path: string) => {
+      deleteFile.mutate(
+        { path, recursive: true, force: true, workspaceId: effectiveWorkspaceId },
+        { onSuccess: () => void refetchFiles() },
+      );
+    },
+    [deleteFile, effectiveWorkspaceId, refetchFiles],
+  );
+
   // Skills - pass workspaceId to get skills from the selected workspace
   const {
     data: skillsData,
@@ -179,7 +215,7 @@ export default function Workspace() {
               setShowAddSkillDialog(false);
 
               // Reload the file tree so the newly installed skill folder shows up without a manual refresh
-              setFileTreeRefreshToken(token => token + 1);
+              void refetchFiles();
 
               // Refetch skills and check if the installed skill appears in the list
               const { data: refreshedData, error } = await refetchSkills();
@@ -416,11 +452,18 @@ export default function Workspace() {
                 collapsible={true}
                 className="min-w-0 overflow-auto border-r border-border1"
               >
-                <WorkspaceFileBrowser
-                  workspaceId={effectiveWorkspaceId}
-                  readOnly={isReadOnly}
+                <FileBrowser
+                  entries={filesData?.entries ?? []}
+                  currentPath="."
+                  isLoading={isLoadingFiles}
+                  error={filesError instanceof Error ? filesError : null}
+                  onNavigate={() => undefined}
                   onFileSelect={setSelectedFile}
-                  refreshToken={fileTreeRefreshToken}
+                  onRefresh={() => void refetchFiles()}
+                  onCreateDirectory={isReadOnly ? undefined : handleCreateDirectory}
+                  onDelete={isReadOnly ? undefined : handleDeleteFile}
+                  isCreatingDirectory={createDirectory.isPending}
+                  isDeleting={deleteFile.isPending}
                 />
               </CollapsiblePanel>
               <PanelSeparator />

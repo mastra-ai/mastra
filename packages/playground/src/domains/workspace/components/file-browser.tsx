@@ -257,15 +257,26 @@ function buildFileTree(entries: FileEntry[], currentPath: string): FileTreeNode[
       ensureDirectory(parts.slice(0, index).join('/'));
     }
 
-    const node: FileTreeNode = { name: parts.at(-1) ?? entry.name, path, entry, children: [] };
-    nodes.set(path, node);
+    // Reuse any placeholder directory node created for this path so a real
+    // entry merges into it rather than appearing as a duplicate sibling.
+    const existing = nodes.get(path);
+    let node: FileTreeNode;
+    if (existing) {
+      existing.entry = entry;
+      existing.name = parts.at(-1) ?? entry.name;
+      node = existing;
+    } else {
+      node = { name: parts.at(-1) ?? entry.name, path, entry, children: [] };
+      nodes.set(path, node);
+    }
 
     if (parts.length === 1) {
       roots.set(path, node);
     } else {
       const parent = ensureDirectory(parts.slice(0, -1).join('/'));
-      parent.children = parent.children.filter(child => child.path !== path);
-      parent.children.push(node);
+      if (!parent.children.some(child => child.path === path)) {
+        parent.children.push(node);
+      }
     }
   }
 
