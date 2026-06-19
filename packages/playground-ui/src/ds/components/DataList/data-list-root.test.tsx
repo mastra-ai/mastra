@@ -43,6 +43,7 @@ describe('DataListRoot', () => {
       expect(grid).not.toBeNull();
       expect(grid).not.toBe(container.firstElementChild);
       expect(grid?.className).not.toContain('overflow-auto');
+      expect(grid?.className).toContain('w-full');
       expect(grid?.className).toContain('gap-y-px');
       expect(grid?.className).toContain('[&_.data-list-row]:after:absolute');
       expect(grid?.className).toContain('[&_.data-list-row]:after:content-[""]');
@@ -221,7 +222,10 @@ describe('DataListRoot', () => {
       const topCell = container.querySelector<HTMLElement>('.data-list-top .data-list-sticky-start');
       const rowHeaderCell = container.querySelector<HTMLElement>('.data-list-row-header');
 
-      expect(grid?.className).toContain('[&_.data-list-sticky-start]:bg-surface4');
+      expect(grid?.className).toContain('[&_.data-list-top>.data-list-sticky-start]:bg-inherit');
+      expect(grid?.className).toContain(
+        '[&_.data-list-row_.data-list-sticky-start]:bg-[var(--data-list-sticky-row-bg,var(--surface2))]',
+      );
       expect(grid?.className).toContain('[&_.data-list-row:hover_.data-list-sticky-start]:bg-surface-overlay-strong!');
       expect(topCell?.className).toContain('sticky');
       expect(topCell?.className).toContain('left-0');

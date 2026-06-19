@@ -60,7 +60,8 @@ const borderlessTableStyles = [
   '[&_.data-list-row]:mx-0 [&_.data-list-row]:my-0 [&_.data-list-row]:rounded-md',
   '[&_.data-list-row]:hover:bg-surface-overlay-strong!',
   '[&_.data-list-row]:focus-visible:bg-surface-overlay-strong!',
-  '[&_.data-list-sticky-start]:bg-surface4',
+  '[&_.data-list-top>.data-list-sticky-start]:bg-inherit',
+  '[&_.data-list-row_.data-list-sticky-start]:bg-[var(--data-list-sticky-row-bg,var(--surface2))]',
   '[&_.data-list-row:hover_.data-list-sticky-start]:bg-surface-overlay-strong!',
   '[&_.data-list-row:focus-visible_.data-list-sticky-start]:bg-surface-overlay-strong!',
   '[&_.data-list-row:focus-within_.data-list-sticky-start]:bg-surface-overlay-strong!',
@@ -74,7 +75,7 @@ const stickyStartStyles = [
   '[&_.data-list-row:focus-within_.data-list-sticky-start]:bg-surface4',
 ] as const;
 
-const dataListRootVariants = cva(cn('grid min-w-0 max-w-full content-start', ...stickyStartStyles), {
+const dataListRootVariants = cva(cn('grid w-full min-w-0 max-w-full content-start', ...stickyStartStyles), {
   variants: {
     variant: {
       striped: cn(

@@ -7,7 +7,7 @@ import { TabList } from '../../../ds/components/Tabs/tabs-list';
 import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { ScorerSummary, ScoresOverTimePoint } from '../hooks/use-scores-metrics';
-import { CHART_COLORS } from './metrics-utils';
+import { CHART_COLORS, METRICS_DATA_LIST_CLASS_NAME } from './metrics-utils';
 
 const SERIES_COLORS = [
   CHART_COLORS.green,
@@ -77,7 +77,7 @@ export function ScoresCardView({ data, isLoading, isError }: ScoresCardViewProps
                 )}
               </TabContent>
               <TabContent value="summary">
-                <DataList columns="auto auto auto auto auto" variant="lined" className="max-h-80">
+                <DataList columns="auto auto auto auto auto" className={METRICS_DATA_LIST_CLASS_NAME}>
                   <DataList.Top>
                     <DataList.TopCell sticky="start">Scorer</DataList.TopCell>
                     <DataList.TopCell className="justify-end text-right">Avg</DataList.TopCell>

@@ -9,7 +9,7 @@ import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { LinkComponent as DataListLinkComponent } from '../../../ds/types/link-component';
 import type { ActiveThreadRow } from '../hooks/use-top-active-threads-metrics';
 import type { ResourceThreadsRow } from '../hooks/use-top-resources-by-threads-metrics';
-import { formatCompact, formatCost } from './metrics-utils';
+import { formatCompact, formatCost, METRICS_DATA_LIST_CLASS_NAME } from './metrics-utils';
 
 export type MemoryTab = 'threads' | 'resources';
 
@@ -103,7 +103,7 @@ export function MemoryCardView({
             </TabList>
             <TabContent value="threads">
               {hasThreadData ? (
-                <DataList columns="auto auto auto auto auto" variant="lined" className="max-h-80">
+                <DataList columns="auto auto auto auto auto" className={METRICS_DATA_LIST_CLASS_NAME}>
                   <DataList.Top>
                     <DataList.TopCell sticky="start">Thread ID</DataList.TopCell>
                     <DataList.TopCell className="justify-end text-right">Resource ID</DataList.TopCell>
@@ -160,7 +160,7 @@ export function MemoryCardView({
             </TabContent>
             <TabContent value="resources">
               {hasResourceData ? (
-                <DataList columns="auto auto auto auto" variant="lined" className="max-h-80">
+                <DataList columns="auto auto auto auto" className={METRICS_DATA_LIST_CLASS_NAME}>
                   <DataList.Top>
                     <DataList.TopCell sticky="start">Resource ID</DataList.TopCell>
                     <DataList.TopCell className="justify-end text-right">Threads</DataList.TopCell>
