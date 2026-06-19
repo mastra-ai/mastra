@@ -11,11 +11,12 @@ Use this checklist to manually verify the restored Mastra Code behavior on the `
   - Verify the follow-up tool call can read the granted path.
 
 - [ ] **Blocked prompt attachments restore**
-  - Attach or paste an image/file.
+  - Attach or paste an obvious image/file.
   - Type a prompt that is blocked by a user prompt hook.
   - Verify the editor text is restored after the block.
   - Verify the pending attachment/image is still present.
   - Retry and confirm the original text + attachment sends successfully.
+  - Confirm the retry result proves the attachment was actually sent, not just that a `[image]` marker was restored.
 
 - [ ] **Custom provider model selector**
   - Add or import a custom provider with a model ID.

@@ -72,7 +72,13 @@ export const fileAttachmentBlockedRetryScenario = {
     );
   },
   async inProcessApp({ startMastraCodeApp }) {
-    const restoreFetch = installOpenAIFetchCapture({ capturePath: RAW_REQUEST_CAPTURE_PATH });
+    const restoreFetch = installOpenAIFetchCapture({
+      capturePath: RAW_REQUEST_CAPTURE_PATH,
+      requireBodyIncludes: [
+        { value: 'image/png', label: 'restored image MIME type' },
+        { value: TINY_PNG_BASE64, label: 'restored image payload' },
+      ],
+    });
     const app = await startMastraCodeApp();
     return {
       stop: async () => {
