@@ -24,7 +24,9 @@ vi.mock('disk', () => {
   class MockArchil {
     disks = {
       get: vi.fn().mockResolvedValue(mockDisk),
-      create: vi.fn().mockResolvedValue({ disk: mockDisk, token: 'tok-123', tokenIdentifier: 'id-123', authorizedUsers: [] }),
+      create: vi
+        .fn()
+        .mockResolvedValue({ disk: mockDisk, token: 'tok-123', tokenIdentifier: 'id-123', authorizedUsers: [] }),
       list: vi.fn().mockResolvedValue([mockDisk]),
     };
     tokens = {
@@ -163,7 +165,12 @@ describe('ArchilFilesystem', () => {
 
     it('creates parent directories with recursive option', async () => {
       mockDisk.putObject.mockResolvedValue({ etag: '"abc"' });
-      mockDisk.exec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timing: { totalMs: 100, queueMs: 10, executeMs: 90 } });
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
       await fs.writeFile('/a/b/file.txt', 'content', { recursive: true });
       expect(mockDisk.exec).toHaveBeenCalledWith(expect.stringContaining('mkdir -p'));
     });
@@ -203,7 +210,12 @@ describe('ArchilFilesystem', () => {
   describe('copyFile', () => {
     it('copies using exec', async () => {
       mockDisk.objectExists.mockResolvedValue(false);
-      mockDisk.exec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timing: { totalMs: 100, queueMs: 10, executeMs: 90 } });
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
       await fs.copyFile('/src.txt', '/dest.txt');
       expect(mockDisk.exec).toHaveBeenCalledWith(expect.stringContaining('cp'));
     });
@@ -212,7 +224,12 @@ describe('ArchilFilesystem', () => {
   describe('moveFile', () => {
     it('moves using exec', async () => {
       mockDisk.objectExists.mockResolvedValue(false);
-      mockDisk.exec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timing: { totalMs: 100, queueMs: 10, executeMs: 90 } });
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
       await fs.moveFile('/old.txt', '/new.txt');
       expect(mockDisk.exec).toHaveBeenCalledWith(expect.stringContaining('mv'));
     });
@@ -220,13 +237,23 @@ describe('ArchilFilesystem', () => {
 
   describe('mkdir', () => {
     it('creates directory using exec', async () => {
-      mockDisk.exec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timing: { totalMs: 100, queueMs: 10, executeMs: 90 } });
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
       await fs.mkdir('/newdir');
       expect(mockDisk.exec).toHaveBeenCalledWith(expect.stringContaining('mkdir'));
     });
 
     it('creates nested dirs with recursive', async () => {
-      mockDisk.exec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timing: { totalMs: 100, queueMs: 10, executeMs: 90 } });
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
       await fs.mkdir('/a/b/c', { recursive: true });
       expect(mockDisk.exec).toHaveBeenCalledWith(expect.stringContaining('mkdir -p'));
     });
@@ -339,7 +366,12 @@ describe('ArchilFilesystem', () => {
 
   describe('exec', () => {
     it('passes through to disk.exec', async () => {
-      const result = { exitCode: 0, stdout: 'hello\n', stderr: '', timing: { totalMs: 500, queueMs: 100, executeMs: 400 } };
+      const result = {
+        exitCode: 0,
+        stdout: 'hello\n',
+        stderr: '',
+        timing: { totalMs: 500, queueMs: 100, executeMs: 400 },
+      };
       mockDisk.exec.mockResolvedValue(result);
       const res = await fs.exec('echo hello');
       expect(res).toEqual(result);

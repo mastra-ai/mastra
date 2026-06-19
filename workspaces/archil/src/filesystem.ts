@@ -369,7 +369,8 @@ export class ArchilFilesystem extends MastraFilesystem {
       }
     }
 
-    const body = typeof content === 'string' ? content : content instanceof Uint8Array ? content : new Uint8Array(content);
+    const body =
+      typeof content === 'string' ? content : content instanceof Uint8Array ? content : new Uint8Array(content);
     const mimeType = options?.mimeType ?? getMimeType(path);
     await this.disk.putObject(key, body, mimeType);
   }
