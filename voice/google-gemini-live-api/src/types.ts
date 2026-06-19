@@ -240,6 +240,11 @@ export interface GeminiLiveServerMessage {
   setup?: {
     sessionHandle?: string;
   };
+  // Session resumption update from server (camelCase per wire format)
+  sessionResumptionUpdate?: {
+    newHandle?: string;
+    resumable?: boolean;
+  };
 
   // Setup complete message (alternative format)
   setupComplete?: Record<string, unknown>;
