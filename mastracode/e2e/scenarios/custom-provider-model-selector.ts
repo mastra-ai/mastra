@@ -24,7 +24,6 @@ export const customProviderModelSelectorScenario = {
   description:
     'creates a /models custom pack by selecting models from a configured OpenAI-compatible custom provider catalog',
   testName: 'selects custom-provider models in the /models custom pack flow and persists defaults',
-  skipReason: 'current main no longer exposes settings-backed custom provider models in the selector catalog',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
