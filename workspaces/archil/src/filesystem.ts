@@ -228,6 +228,9 @@ export class ArchilFilesystem extends MastraFilesystem {
 
   async init(): Promise<void> {
     try {
+      if (this._diskId && this._createDiskOptions) {
+        throw new Error('diskId and createDiskOptions are mutually exclusive');
+      }
       if (this._diskId) {
         this._disk = await this.archil.disks.get(this._diskId);
       } else if (this._createDiskOptions) {
@@ -286,6 +289,7 @@ export class ArchilFilesystem extends MastraFilesystem {
    */
   async exec(command: string): Promise<ExecResult> {
     await this.ensureReady();
+    this.assertWritable();
     return this.disk.exec(command);
   }
 
@@ -489,7 +493,9 @@ export class ArchilFilesystem extends MastraFilesystem {
       throw new Error('Cannot remove root directory');
     }
 
-    const cmd = options?.recursive ? `rm -rf ${shellEscape(key)}` : `rmdir ${shellEscape(key)}`;
+    const cmd = options?.recursive
+      ? `rm -r${options?.force ? 'f' : ''} ${shellEscape(key)}`
+      : `rmdir ${shellEscape(key)}`;
     const result = await this.disk.exec(options?.force ? `${cmd} 2>/dev/null; true` : cmd);
     if (result.exitCode !== 0 && !options?.force) {
       if (result.stderr.includes('No such file') || result.stderr.includes('not found')) {

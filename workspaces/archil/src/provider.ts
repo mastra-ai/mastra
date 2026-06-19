@@ -11,9 +11,10 @@ export const archilFilesystemProvider: FilesystemProvider<ArchilFilesystemOption
   description: 'Elastic, serverless filesystem for AI agents (Archil)',
   configSchema: {
     type: 'object',
-    required: [],
+    oneOf: [{ required: ['diskId'] }, { required: ['createDiskOptions'] }],
     properties: {
       diskId: { type: 'string', description: 'Existing Archil disk ID (e.g. "dsk-0123456789abcdef")' },
+      createDiskOptions: { type: 'object', description: 'Options used to create a new Archil disk on init' },
       apiKey: { type: 'string', description: 'Archil API key (falls back to ARCHIL_API_KEY env var)' },
       region: { type: 'string', description: 'Archil region (e.g. "aws-us-east-1")' },
       readOnly: { type: 'boolean', description: 'Mount as read-only', default: false },

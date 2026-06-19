@@ -108,6 +108,17 @@ describe('ArchilFilesystem', () => {
       expect(badFs.status).toBe('error');
     });
 
+    it('throws when both diskId and createDiskOptions are provided', async () => {
+      const badFs = new ArchilFilesystem({
+        diskId: 'dsk-0123456789abcdef',
+        createDiskOptions: { name: 'new-disk' },
+        apiKey: 'key',
+        region: 'aws-us-east-1',
+      });
+      await expect(badFs._init()).rejects.toThrow('diskId and createDiskOptions are mutually exclusive');
+      expect(badFs.status).toBe('error');
+    });
+
     it('destroys cleanly', async () => {
       await fs._destroy();
       expect(fs.status).toBe('destroyed');
@@ -364,6 +375,87 @@ describe('ArchilFilesystem', () => {
     });
   });
 
+  describe('appendFile', () => {
+    it('appends string content using exec', async () => {
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
+      await fs.appendFile('/log.txt', 'new line\n');
+      expect(mockDisk.exec).toHaveBeenCalledWith(expect.stringContaining('>>'));
+    });
+
+    it('appends binary content via base64', async () => {
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
+      await fs.appendFile('/data.bin', Buffer.from([0x01, 0x02, 0x03]));
+      expect(mockDisk.exec).toHaveBeenCalledWith(expect.stringContaining('base64 -d'));
+    });
+  });
+
+  describe('rmdir', () => {
+    it('removes empty directory', async () => {
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
+      await fs.rmdir('/emptydir');
+      expect(mockDisk.exec).toHaveBeenCalledWith(expect.stringContaining('rmdir'));
+    });
+
+    it('removes directory recursively', async () => {
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
+      await fs.rmdir('/mydir', { recursive: true, force: true });
+      expect(mockDisk.exec).toHaveBeenCalledWith(expect.stringContaining('rm -rf'));
+    });
+
+    it('uses rm -r (without f) when recursive but not force', async () => {
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
+      await fs.rmdir('/mydir', { recursive: true, force: false });
+      const call = mockDisk.exec.mock.calls[0][0] as string;
+      expect(call).toContain('rm -r');
+      expect(call).not.toContain('rm -rf');
+    });
+
+    it('throws FileNotFoundError for missing directory', async () => {
+      mockDisk.exec.mockResolvedValue({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'No such file or directory',
+        timing: { totalMs: 100, queueMs: 10, executeMs: 90 },
+      });
+      await expect(fs.rmdir('/missing')).rejects.toThrow();
+    });
+  });
+
+  describe('share', () => {
+    it('returns signed share URL', async () => {
+      const shareResult = { url: 'https://share.archil.com/abc123', expiresAt: '2026-12-31T00:00:00Z' };
+      mockDisk.share.mockResolvedValue(shareResult);
+      const res = await fs.share('/report.pdf', { expiresIn: 3600 });
+      expect(res).toEqual(shareResult);
+      expect(mockDisk.share).toHaveBeenCalledWith('/report.pdf', { expiresIn: 3600 });
+    });
+  });
+
   describe('exec', () => {
     it('passes through to disk.exec', async () => {
       const result = {
@@ -376,6 +468,17 @@ describe('ArchilFilesystem', () => {
       const res = await fs.exec('echo hello');
       expect(res).toEqual(result);
       expect(mockDisk.exec).toHaveBeenCalledWith('echo hello');
+    });
+
+    it('blocks exec when readOnly', async () => {
+      const readOnlyFs = new ArchilFilesystem({
+        diskId: 'dsk-0123456789abcdef',
+        apiKey: 'key',
+        region: 'aws-us-east-1',
+        readOnly: true,
+      });
+      await readOnlyFs._init();
+      await expect(readOnlyFs.exec('ls')).rejects.toThrow();
     });
   });
 

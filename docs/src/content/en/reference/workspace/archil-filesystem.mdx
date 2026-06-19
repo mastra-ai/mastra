@@ -60,7 +60,7 @@ const filesystem = new ArchilFilesystem({
   },
 })
 
-await filesystem._init()
+await filesystem.init()
 // filesystem.diskId now contains the newly created disk ID
 ```
 
@@ -209,7 +209,7 @@ ArchilFilesystem implements the [WorkspaceFilesystem interface](/reference/works
 Initialize the filesystem. Connects to the existing disk or creates a new one.
 
 ```typescript
-await filesystem._init()
+await filesystem.init()
 ```
 
 ### `getInfo()`
