@@ -53,7 +53,9 @@ const editor = new MastraEditor({
       agent: {
         workspace: { type: 'id', workspaceId: workspace.id },
         memory: {
-          observationalMemory: true,
+          observationalMemory: {
+            model: 'openai/gpt-5.4-mini',
+          },
           options: {
             lastMessages: 10,
           },
