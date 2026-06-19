@@ -197,6 +197,8 @@ import type {
   ScheduleResponse,
   ListScheduleTriggersParams,
   ListScheduleTriggersResponse,
+  Heartbeat,
+  ListHeartbeatsParams,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -2195,6 +2197,8 @@ export class MastraClient extends BaseResource {
     const searchParams = new URLSearchParams();
     if (params.workflowId) searchParams.set('workflowId', params.workflowId);
     if (params.status) searchParams.set('status', params.status);
+    if (params.ownerType) searchParams.set('ownerType', params.ownerType);
+    if (params.ownerId) searchParams.set('ownerId', params.ownerId);
     const qs = searchParams.toString();
     return this.request(`/schedules${qs ? `?${qs}` : ''}`);
   }
@@ -2237,5 +2241,22 @@ export class MastraClient extends BaseResource {
    */
   public resumeSchedule(scheduleId: string): Promise<ScheduleResponse> {
     return this.request(`/schedules/${encodeURIComponent(scheduleId)}/resume`, { method: 'POST' });
+  }
+
+  /**
+   * Lists heartbeats across all agents. Pass `agentId` to scope the list to
+   * a single agent. Heartbeats are the user-facing view of scheduled agent
+   * self-messages; the schedule + workflow that backs them is hidden.
+   */
+  public listHeartbeats(params: ListHeartbeatsParams = {}): Promise<Heartbeat[]> {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.name) searchParams.set('name', params.name);
+    const qs = searchParams.toString();
+    return this.request<{ heartbeats: Heartbeat[] }>(`/heartbeats${qs ? `?${qs}` : ''}`).then(
+      response => response.heartbeats,
+    );
   }
 }

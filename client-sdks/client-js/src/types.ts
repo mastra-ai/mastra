@@ -2997,17 +2997,15 @@ export interface ScheduleResponse {
 
 export type ScheduleTriggerOutcome =
   | 'published'
-  | 'failed'
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
   | 'skipped'
-  | 'acked'
-  | 'alerted'
-  | 'deferred'
-  | 'appended-from-queue'
-  | 'dropped-stale'
-  | 'dropped-superseded'
-  | 'dropped-busy';
+  | 'aborted'
+  | 'failed';
 
-export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain';
+export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
 export interface ScheduleTriggerResponse {
   id?: string;
@@ -3040,6 +3038,142 @@ export interface ListScheduleTriggersParams {
 
 export interface ListScheduleTriggersResponse {
   triggers: ScheduleTriggerResponse[];
+}
+
+// ---------------------------------------------------------------------------
+// Heartbeats
+//
+// A Heartbeat is the user-facing view of a scheduled agent self-message. The
+// underlying storage is a Schedule + built-in workflow, but callers of the
+// SDK never see that — the server flattens the schedule's `inputData` onto
+// the top level so the SDK contract stays stable across implementations.
+// ---------------------------------------------------------------------------
+
+export interface HeartbeatActiveHours {
+  start: string;
+  end: string;
+  timezone?: string;
+}
+
+/**
+ * Broadcast policy for the chunks produced by a heartbeat-driven run.
+ *
+ * - `live` (default) — pass every chunk through to subscribers
+ * - `on-complete` — drop intermediate chunks; replay full text on finish
+ * - `never` — drop every chunk (the run still happens server-side)
+ */
+export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
+
+export interface Heartbeat {
+  id: string;
+  agentId: string;
+  name?: string;
+  threadId?: string;
+  resourceId?: string;
+  prompt: string;
+  cron: string;
+  timezone?: string;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number;
+  lastRunId?: string;
+  signalType?: string;
+  ifActive?: 'deliver' | 'persist' | 'discard';
+  ifIdle?: 'wake' | 'persist' | 'discard';
+  activeHours?: HeartbeatActiveHours;
+  idleThresholdMs?: number;
+  broadcast?: HeartbeatBroadcastMode;
+  metadata?: Record<string, unknown>;
+  lastRun?: ScheduleRunSummary;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface HeartbeatTrigger {
+  id?: string;
+  scheduleId: string;
+  runId: string | null;
+  scheduledFireAt: number;
+  actualFireAt: number;
+  outcome: ScheduleTriggerOutcome;
+  error?: string;
+  triggerKind?: ScheduleTriggerKind;
+  parentTriggerId?: string;
+  metadata?: Record<string, unknown>;
+  run?: ScheduleRunSummary;
+}
+
+/**
+ * Options for `agent.createHeartbeat(...)`. Mirrors the public
+ * `CreateHeartbeatInput` shape on the core Heartbeats service.
+ */
+export interface CreateHeartbeatInput {
+  cron: string;
+  prompt: string;
+  name?: string;
+  timezone?: string;
+  threadId?: string;
+  resourceId?: string;
+  signalType?: string;
+  ifActive?: 'deliver' | 'persist' | 'discard';
+  ifIdle?: 'wake' | 'persist' | 'discard';
+  activeHours?: HeartbeatActiveHours;
+  idleThresholdMs?: number;
+  broadcast?: HeartbeatBroadcastMode;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Patch body for `agent.updateHeartbeat(...)`. `threadId` / `resourceId` are
+ * part of the heartbeat identity and cannot be changed — to retarget,
+ * delete and recreate.
+ */
+export interface UpdateHeartbeatOptions {
+  cron?: string;
+  prompt?: string;
+  name?: string;
+  timezone?: string;
+  signalType?: string;
+  ifActive?: 'deliver' | 'persist' | 'discard';
+  ifIdle?: 'wake' | 'persist' | 'discard';
+  activeHours?: HeartbeatActiveHours;
+  idleThresholdMs?: number;
+  broadcast?: HeartbeatBroadcastMode;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListHeartbeatsParams {
+  agentId?: string;
+  threadId?: string;
+  resourceId?: string;
+  name?: string;
+}
+
+export interface ListHeartbeatsResponse {
+  heartbeats: Heartbeat[];
+}
+
+export interface ListHeartbeatTriggersParams {
+  limit?: number;
+  fromActualFireAt?: number;
+  toActualFireAt?: number;
+}
+
+export interface ListHeartbeatTriggersResponse {
+  triggers: HeartbeatTrigger[];
+}
+
+/**
+ * Response for POST /agents/:agentId/heartbeats/:heartbeatId/run.
+ *
+ * The run runs asynchronously through the same HeartbeatWorker pipeline as
+ * scheduled fires. `claimId` is the trigger row's `runId` (used to look up
+ * the resulting trigger row).
+ */
+export interface RunHeartbeatResponse {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
 }
 
 export interface ExperimentReviewCounts {

@@ -50,6 +50,12 @@ import type {
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
   RestoreAgentVersionResponse,
+  Heartbeat,
+  ListHeartbeatTriggersParams,
+  ListHeartbeatTriggersResponse,
+  RunHeartbeatResponse,
+  CreateHeartbeatInput,
+  UpdateHeartbeatOptions,
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
@@ -3372,5 +3378,116 @@ export class Agent extends BaseResource {
       method: 'POST',
       body: params,
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // Heartbeats
+  //
+  // Mirrors the public `mastra.heartbeats.*` service, scoped to this agent.
+  // Heartbeats are persisted as `Schedule` rows with `target.type === 'heartbeat'`;
+  // the server flattens that representation into a `Heartbeat` view model.
+  // -------------------------------------------------------------------------
+
+  /**
+   * Lists heartbeats owned by this agent, optionally filtered by
+   * `threadId`, `resourceId`, or `name`.
+   */
+  listHeartbeats(params: { threadId?: string; resourceId?: string; name?: string } = {}): Promise<Heartbeat[]> {
+    const search = new URLSearchParams();
+    if (params.threadId) search.set('threadId', params.threadId);
+    if (params.resourceId) search.set('resourceId', params.resourceId);
+    if (params.name) search.set('name', params.name);
+    const qs = search.toString();
+    return this.request<{ heartbeats: Heartbeat[] }>(`/agents/${this.agentId}/heartbeats${qs ? `?${qs}` : ''}`).then(
+      response => response.heartbeats,
+    );
+  }
+
+  /**
+   * Gets a single heartbeat owned by this agent by id.
+   */
+  getHeartbeat(heartbeatId: string): Promise<Heartbeat> {
+    return this.request(`/agents/${this.agentId}/heartbeats/${encodeURIComponent(heartbeatId)}`);
+  }
+
+  /**
+   * Creates a heartbeat on this agent. Each call creates a new heartbeat
+   * with a random `hb_<uuid>` id — multiple heartbeats per agent/thread are
+   * supported. Use `name` to label distinct heartbeats.
+   */
+  createHeartbeat(options: CreateHeartbeatInput): Promise<Heartbeat> {
+    return this.request(`/agents/${this.agentId}/heartbeats`, {
+      method: 'POST',
+      body: options,
+    });
+  }
+
+  /**
+   * Patches an existing heartbeat. `threadId` / `resourceId` are immutable —
+   * to retarget, delete and recreate.
+   */
+  updateHeartbeat(heartbeatId: string, patch: UpdateHeartbeatOptions): Promise<Heartbeat> {
+    return this.request(`/agents/${this.agentId}/heartbeats/${encodeURIComponent(heartbeatId)}`, {
+      method: 'PATCH',
+      body: patch,
+    });
+  }
+
+  /**
+   * Deletes a heartbeat.
+   */
+  deleteHeartbeat(heartbeatId: string): Promise<{ message: string }> {
+    return this.request(`/agents/${this.agentId}/heartbeats/${encodeURIComponent(heartbeatId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Pauses a heartbeat. Idempotent — pausing an already-paused heartbeat
+   * returns the current state unchanged.
+   */
+  pauseHeartbeat(heartbeatId: string): Promise<Heartbeat> {
+    return this.request(`/agents/${this.agentId}/heartbeats/${encodeURIComponent(heartbeatId)}/pause`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Resumes a paused heartbeat. Recomputes nextFireAt from "now" so a
+   * long-paused heartbeat does not fire a backlog. Idempotent.
+   */
+  resumeHeartbeat(heartbeatId: string): Promise<Heartbeat> {
+    return this.request(`/agents/${this.agentId}/heartbeats/${encodeURIComponent(heartbeatId)}/resume`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Fires a heartbeat manually, out-of-band from the cron schedule.
+   * The run goes through the same HeartbeatWorker pipeline as a scheduled
+   * fire (activeHours, ifActive/ifIdle, broadcast processor). Does not
+   * advance nextFireAt. The returned `claimId` is the trigger row's runId.
+   */
+  runHeartbeat(heartbeatId: string): Promise<RunHeartbeatResponse> {
+    return this.request(`/agents/${this.agentId}/heartbeats/${encodeURIComponent(heartbeatId)}/run`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Lists trigger history for a heartbeat, ordered by actualFireAt descending.
+   */
+  listHeartbeatTriggers(
+    heartbeatId: string,
+    params: ListHeartbeatTriggersParams = {},
+  ): Promise<ListHeartbeatTriggersResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+    if (params.fromActualFireAt !== undefined) searchParams.set('fromActualFireAt', String(params.fromActualFireAt));
+    if (params.toActualFireAt !== undefined) searchParams.set('toActualFireAt', String(params.toActualFireAt));
+    const qs = searchParams.toString();
+    return this.request(
+      `/agents/${this.agentId}/heartbeats/${encodeURIComponent(heartbeatId)}/triggers${qs ? `?${qs}` : ''}`,
+    );
   }
 }

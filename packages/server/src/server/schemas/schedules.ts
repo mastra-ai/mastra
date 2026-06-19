@@ -2,13 +2,35 @@ import { z } from 'zod';
 
 export const scheduleStatusSchema = z.enum(['active', 'paused']);
 
-export const scheduleTargetSchema = z.object({
+const workflowScheduleTargetSchema = z.object({
   type: z.literal('workflow'),
   workflowId: z.string(),
   inputData: z.unknown().optional(),
   initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
 });
+
+const heartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
+
+const heartbeatScheduleTargetSchema = z.object({
+  type: z.literal('heartbeat'),
+  agentId: z.string(),
+  prompt: z.string(),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  signalType: z.string().optional(),
+  ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
+  ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
+  activeHours: z.object({ start: z.string(), end: z.string(), timezone: z.string().optional() }).optional(),
+  idleThresholdMs: z.number().int().positive().optional(),
+  broadcast: heartbeatBroadcastModeSchema.optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const scheduleTargetSchema = z.discriminatedUnion('type', [
+  workflowScheduleTargetSchema,
+  heartbeatScheduleTargetSchema,
+]);
 
 export const workflowRunStatusSchema = z.enum([
   'running',
@@ -50,18 +72,16 @@ export const scheduleResponseSchema = z.object({
 
 export const scheduleTriggerOutcomeSchema = z.enum([
   'published',
-  'failed',
+  'succeeded',
+  'delivered',
+  'persisted',
+  'discarded',
   'skipped',
-  'acked',
-  'alerted',
-  'deferred',
-  'appended-from-queue',
-  'dropped-stale',
-  'dropped-superseded',
-  'dropped-busy',
+  'aborted',
+  'failed',
 ]);
 
-export const scheduleTriggerKindSchema = z.enum(['schedule-fire', 'queue-drain']);
+export const scheduleTriggerKindSchema = z.enum(['schedule-fire', 'queue-drain', 'manual']);
 
 export const scheduleTriggerResponseSchema = z.object({
   id: z.string().optional(),
