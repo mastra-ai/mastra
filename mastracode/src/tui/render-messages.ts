@@ -100,7 +100,11 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
   insertTaskHistoryComponent(state, container, insertIndex);
 }
 
-function renderCompletedTasksInline(state: TUIState, completedTasks: TaskItemSnapshot[], insertIndex = -1): void {
+export function renderCompletedTasksInline(
+  state: TUIState,
+  completedTasks: TaskItemSnapshot[],
+  insertIndex = -1,
+): void {
   const container = new TaskHistoryComponent();
   const count = completedTasks.length;
   container.addChild(

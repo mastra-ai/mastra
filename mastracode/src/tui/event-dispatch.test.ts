@@ -63,6 +63,7 @@ function createMockEctx(): EventHandlerContext {
     renderExistingMessages: vi.fn().mockResolvedValue(undefined),
     refreshModelAuthStatus: vi.fn().mockResolvedValue(undefined),
     renderClearedTasksInline: vi.fn(),
+    renderCompletedTasksInline: vi.fn(),
   } as unknown as EventHandlerContext;
 }
 
@@ -197,16 +198,15 @@ describe('dispatchEvent thread lifecycle', () => {
 });
 
 describe('dispatchEvent task updates', () => {
-  it('updates the pinned list and resets the insert index without an inline receipt when all tasks complete', async () => {
+  it('renders a completed-task receipt when all tasks complete live', async () => {
     const tasks = [{ id: 'task-1', content: 'Task 1', status: 'completed' as const, activeForm: 'Completing task 1' }];
     const state = createMockTUIState(createMockHarness());
     const ectx = createMockEctx();
 
     await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);
 
-    // The pinned list hides itself once everything is completed; we must not
-    // leave a redundant completed-task receipt in the transcript.
     expect(state.taskProgress!.updateTasks).toHaveBeenCalledWith(tasks);
+    expect(ectx.renderCompletedTasksInline).toHaveBeenCalledWith(tasks, 5);
     expect(ectx.renderClearedTasksInline).not.toHaveBeenCalled();
     expect(state.taskToolInsertIndex).toBe(-1);
   });

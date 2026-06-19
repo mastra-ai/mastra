@@ -56,6 +56,7 @@ import {
   addUserMessage,
   removePendingUserMessage,
   renderClearedTasksInline,
+  renderCompletedTasksInline,
   renderExistingMessages,
 } from './render-messages.js';
 import {
@@ -1096,6 +1097,8 @@ export class MastraTUI {
       renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
         renderClearedTasksInline(this.state, clearedTasks, insertIndex),
+      renderCompletedTasksInline: (completedTasks, insertIndex) =>
+        renderCompletedTasksInline(this.state, completedTasks, insertIndex),
       refreshModelAuthStatus: () => this.refreshModelAuthStatus(),
     };
   }

@@ -15,6 +15,9 @@ export const taskInlineTransitionsScenario: McE2eScenario = {
 
     await runtime.waitForScreenText(/✓\s+Plan task inline e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/✓\s+Finish task inline e2e/i, terminal, 8_000);
+    await runtime.waitForOutputText(/Tasks\s+\[2\/2 completed\]/i, terminal, 8_000);
+    await runtime.waitForOutputText(/Plan task inline e2e/i, terminal, 8_000);
+    await runtime.waitForOutputText(/Finish task inline e2e/i, terminal, 8_000);
 
     await runtime.waitForScreenText(/Tasks cleared/i, terminal, 8_000);
     await runtime.waitForScreenText(/Task inline transition e2e complete\./i, terminal, 8_000);
