@@ -26,7 +26,7 @@ const editor = new MastraEditor({
   ...(hasComposio
     ? {
         toolProviders: {
-          composio: new ComposioToolProvider({ apiKey: getEnv('COMPOSIO_API_KEY')! }),
+          composio: new ComposioToolProvider({ apiKey: getEnv('COMPOSIO_API_KEY')!, allowedToolkits: ['gmail'] }),
         },
       }
     : {}),
