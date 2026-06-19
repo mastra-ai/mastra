@@ -354,7 +354,7 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'modelUseCountTracker',
     type: 'ModelUseCountTracker',
     description:
-      'Callback invoked when a model is selected via `switchModel()`. Use to track and persist model usage for ranking.',
+      'Callback invoked when a model is selected via `session.model.switch()`. Use to track and persist model usage for ranking.',
     isOptional: true,
   },
   {
@@ -517,18 +517,6 @@ Return the complete model ID string.
 
 ```typescript
 const fullId = harness.getFullModelId()
-```
-
-#### `switchModel({ modelId, scope?, modeId? })`
-
-Switch the active model. When `scope` is `'thread'`, the model ID is persisted to thread metadata so it's restored when switching back. Emits a `model_changed` event.
-
-```typescript
-// Set for current session only
-await harness.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
-
-// Persist to the current thread
-await harness.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__', scope: 'thread' })
 ```
 
 #### `getCurrentModelAuthStatus()`

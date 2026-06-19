@@ -391,7 +391,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
   const currentModeId = harness.session.mode.get();
   const currentModeModel = (pack.models as Record<string, string>)[currentModeId];
   if (currentModeModel) {
-    await harness.switchModel({ modelId: currentModeModel });
+    await harness.session.model.switch({ modelId: currentModeModel });
   }
 
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };

@@ -1154,7 +1154,7 @@ export class MastraTUI {
           const { PROVIDER_DEFAULT_MODELS } = await import('../auth/storage.js');
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
-            await this.state.harness.switchModel({ modelId: defaultModel });
+            await this.state.harness.session.model.switch({ modelId: defaultModel });
             showInfo(this.state, `Logged in to ${providerName} - switched to ${defaultModel}`);
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);
@@ -1296,7 +1296,7 @@ export class MastraTUI {
     const currentModeId = harness.session.mode.get();
     const currentModeModel = (modePack.models as Record<string, string>)[currentModeId];
     if (currentModeModel) {
-      await harness.switchModel({ modelId: currentModeModel });
+      await harness.session.model.switch({ modelId: currentModeModel });
     }
 
     const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };

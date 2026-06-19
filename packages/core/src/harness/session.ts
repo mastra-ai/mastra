@@ -14,6 +14,7 @@ import type {
   HarnessRequestState,
   HarnessRequestStateUpdater,
   HarnessThread,
+  ModelUseCountTracker,
   TokenUsage,
   ToolCategory,
 } from './types';
@@ -656,9 +657,33 @@ export class SessionRun {
 export class SessionModel {
   #id = '';
   readonly #store: () => ThreadSettingsStore | undefined;
+  /**
+   * Reads the active mode id. Injected by the Harness via {@link setResolver},
+   * since {@link switch} defaults a model change to the current mode.
+   */
+  #getCurrentModeId: (() => string) | undefined;
+  /** Emits Harness events (`model_changed`). Injected via {@link setResolver}. */
+  #emit: ((event: HarnessEvent) => void) | undefined;
+  /** App hook to track model usage for ranking. Injected via {@link setResolver}. */
+  #trackModelUse: ModelUseCountTracker | undefined;
 
   constructor(store: () => ThreadSettingsStore | undefined) {
     this.#store = store;
+  }
+
+  /**
+   * Attach the Harness-owned dependencies {@link switch} needs: the active-mode
+   * accessor, the event emitter, and the optional model-use tracker. The
+   * Harness injects these once.
+   */
+  setResolver(options: {
+    getCurrentModeId: () => string;
+    emit: (event: HarnessEvent) => void;
+    trackModelUse?: ModelUseCountTracker;
+  }): void {
+    this.#getCurrentModeId = options.getCurrentModeId;
+    this.#emit = options.emit;
+    this.#trackModelUse = options.trackModelUse;
   }
 
   /** The currently-selected model id ('' when none selected yet). */
@@ -695,6 +720,43 @@ export class SessionModel {
     const stored = (await this.#store()?.get(modeModelKey(modeId))) as string | undefined;
     if (stored) return stored;
     return defaultModelId ?? null;
+  }
+
+  /**
+   * Switch to a different model at runtime.
+   *
+   * When `scope` is `'thread'` (the default), the model is persisted as the
+   * per-mode model for `modeId` so it's restored when switching back. The
+   * in-memory selection only updates when the target mode is the active mode.
+   * Reports the selection to the model-use tracker and emits `model_changed`.
+   */
+  async switch({
+    modelId,
+    scope = 'thread',
+    modeId,
+  }: {
+    modelId: string;
+    scope?: 'global' | 'thread';
+    modeId?: string;
+  }): Promise<void> {
+    const currentModeId = this.#getCurrentModeId?.() ?? '';
+    const targetModeId = modeId ?? currentModeId;
+
+    if (targetModeId === currentModeId) {
+      this.set({ modelId });
+    }
+
+    if (scope === 'thread') {
+      await this.saveForMode({ modeId: targetModeId, modelId });
+    }
+
+    try {
+      await Promise.resolve(this.#trackModelUse?.(modelId));
+    } catch (error) {
+      console.error('Failed to track model usage count', error);
+    }
+
+    this.#emit?.({ type: 'model_changed', modelId, scope, modeId: targetModeId });
   }
 }
 

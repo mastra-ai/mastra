@@ -501,6 +501,11 @@ export class Harness<TState = {}> {
       abort: () => this.abort(),
       emit: event => this.emit(event),
     });
+    this.#session.model.setResolver({
+      getCurrentModeId: () => this.#session.mode.get(),
+      emit: event => this.emit(event),
+      trackModelUse: this.config.modelUseCountTracker,
+    });
     this.#session.thread.connect(this.createThreadDataStore());
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
@@ -1014,37 +1019,6 @@ export class Harness<TState = {}> {
    */
   getFullModelId(): string {
     return this.#session.model.get();
-  }
-
-  /**
-   * Switch to a different model at runtime.
-   */
-  async switchModel({
-    modelId,
-    scope = 'thread',
-    modeId,
-  }: {
-    modelId: string;
-    scope?: 'global' | 'thread';
-    modeId?: string;
-  }): Promise<void> {
-    const targetModeId = modeId ?? this.#session.mode.get();
-
-    if (targetModeId === this.#session.mode.get()) {
-      this.#session.model.set({ modelId });
-    }
-
-    if (scope === 'thread') {
-      await this.#session.model.saveForMode({ modeId: targetModeId, modelId });
-    }
-
-    try {
-      await Promise.resolve(this.config.modelUseCountTracker?.(modelId));
-    } catch (error) {
-      console.error('Failed to track model usage count', error);
-    }
-
-    this.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId } as HarnessEvent);
   }
 
   /**
