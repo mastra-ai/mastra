@@ -28,7 +28,7 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
         className={cn(
           'h-8 min-w-0 max-w-full overflow-hidden py-1 flex items-center whitespace-nowrap text-neutral2 font-semibold tracking-tight text-ui-sm',
           sticky === 'start' && dataListStickyStartStyles,
-          sticky === 'start' && 'z-20',
+          sticky === 'start' && 'z-20 bg-[var(--data-list-sticky-header-background)]',
           className,
         )}
         {...rest}

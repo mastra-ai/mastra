@@ -265,7 +265,7 @@ describe('DataListRoot', () => {
       expect(rowHeaderCell?.className).toContain('w-full');
       expect(rowHeaderCell?.className).toContain('self-stretch');
       expect(rowHeaderCell?.className).toContain('isolate');
-      expect(rowHeaderCell?.className).toContain('bg-[var(--data-list-sticky-header-background)]');
+      expect(rowHeaderCell?.className).not.toContain('bg-[var(--data-list-sticky-header-background)]');
       expect(rowHeaderCell?.className).toContain('text-neutral2');
       expect(rowHeaderCell?.className).toContain('font-semibold');
       expect(rowHeaderCell?.className).toContain('tracking-tight');

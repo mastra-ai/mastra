@@ -28,7 +28,7 @@ import { cva } from 'class-variance-authority';
 export type DataListSticky = 'start';
 
 export const dataListStickyStartStyles = [
-  'data-list-sticky-start sticky left-0 z-10 isolate w-full self-stretch overflow-visible bg-[var(--data-list-sticky-header-background)]',
+  'data-list-sticky-start sticky left-0 z-10 isolate w-full self-stretch overflow-visible',
   'after:absolute after:-right-4 after:top-1/2 after:-translate-y-1/2 after:h-4 after:w-px after:bg-border2 after:content-[""] after:pointer-events-none',
 ] as const;
 
