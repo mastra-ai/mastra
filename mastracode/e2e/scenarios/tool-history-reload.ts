@@ -9,7 +9,6 @@ export const toolHistoryReloadScenario: McE2eScenario = {
   name: 'tool-history-reload',
   description: 'Load persisted tool call history and verify tool result rendering reconstructs in the real TUI.',
   testName: 'restores completed tool rendering from loaded history',
-  skipReason: 'current main restores loaded view/web tool history but no longer renders seeded task history entries',
   prepare({ dbPath, projectDir }) {
     const now = new Date('2026-06-07T13:00:00.000Z');
     const resourceId = 'mc-e2e-tool-history-resource';
