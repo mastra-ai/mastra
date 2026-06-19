@@ -27,7 +27,7 @@ describe('SlackWebApiSyncClient', () => {
         url: 'https://mastra.slack.com/',
       }),
     );
-    const client = new SlackWebApiSyncClient({ token: 'xoxb-test', baseUrl: 'https://slack.test/api', fetch: fetchMock as any });
+    const client = new SlackWebApiSyncClient({ token: 'xoxp-test', baseUrl: 'https://slack.test/api', fetch: fetchMock as any });
 
     await expect(client.getWorkspace()).resolves.toEqual({
       teamId: 'T123',
@@ -41,7 +41,7 @@ describe('SlackWebApiSyncClient', () => {
       'https://slack.test/api/auth.test',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({ authorization: 'Bearer xoxb-test' }),
+        headers: expect.objectContaining({ authorization: 'Bearer xoxp-test' }),
       }),
     );
   });
@@ -66,7 +66,7 @@ describe('SlackWebApiSyncClient', () => {
           response_metadata: { next_cursor: '' },
         }),
       );
-    const client = new SlackWebApiSyncClient({ token: 'xoxb-test', baseUrl: 'https://slack.test/api/', fetch: fetchMock as any });
+    const client = new SlackWebApiSyncClient({ token: 'xoxp-test', baseUrl: 'https://slack.test/api/', fetch: fetchMock as any });
 
     await expect(
       client.listConversations({ types: ['public_channel', 'private_channel', 'im', 'mpim'], limit: 100 }),
@@ -101,7 +101,7 @@ describe('SlackWebApiSyncClient', () => {
           response_metadata: { next_cursor: '' },
         }),
       );
-    const client = new SlackWebApiSyncClient({ token: 'xoxb-test', baseUrl: 'https://slack.test/api/', fetch: fetchMock as any });
+    const client = new SlackWebApiSyncClient({ token: 'xoxp-test', baseUrl: 'https://slack.test/api/', fetch: fetchMock as any });
 
     await expect(
       client.listMessages({
@@ -140,7 +140,7 @@ describe('SlackWebApiSyncClient', () => {
 
   it('throws structured Slack API errors', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ ok: false, error: 'missing_scope' }));
-    const client = new SlackWebApiSyncClient({ token: 'xoxb-test', fetch: fetchMock as any });
+    const client = new SlackWebApiSyncClient({ token: 'xoxp-test', fetch: fetchMock as any });
 
     await expect(client.getWorkspace()).rejects.toMatchObject({
       name: 'SlackSignalsApiError',
@@ -151,7 +151,7 @@ describe('SlackWebApiSyncClient', () => {
 
   it('throws structured HTTP errors', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ error: 'server_error' }, { status: 500 }));
-    const client = new SlackWebApiSyncClient({ token: 'xoxb-test', fetch: fetchMock as any });
+    const client = new SlackWebApiSyncClient({ token: 'xoxp-test', fetch: fetchMock as any });
 
     await expect(client.getWorkspace()).rejects.toMatchObject({
       name: 'SlackSignalsApiError',
@@ -167,7 +167,7 @@ describe('SlackWebApiSyncClient', () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'rate_limited' }, { status: 429, headers: { 'retry-after': '0' } }))
       .mockResolvedValueOnce(jsonResponse({ ok: true, team_id: 'T123' }));
-    const client = new SlackWebApiSyncClient({ token: 'xoxb-test', fetch: fetchMock as any, sleep });
+    const client = new SlackWebApiSyncClient({ token: 'xoxp-test', fetch: fetchMock as any, sleep });
 
     await expect(client.getWorkspace()).resolves.toEqual({ teamId: 'T123' });
 

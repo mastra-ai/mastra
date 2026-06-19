@@ -68,6 +68,7 @@
     "@mastra/agent-browser": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/github-signals": "workspace:*",
+    "@mastra/slack-signals": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",
     "@mastra/libsql": "workspace:*",

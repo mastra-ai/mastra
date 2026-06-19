@@ -47,3 +47,60 @@ vi.mock('@mastra/github-signals', () => ({
   GITHUB_SIGNALS_METADATA_KEY: 'githubSignals',
   normalizeGithubChecksForSnapshot: vi.fn(() => ({ checks: [] })),
 }));
+
+// Global mock for @mastra/slack-signals — same rationale as the GitHub mock above.
+vi.mock('@mastra/slack-signals', () => ({
+  SlackSignals: class SlackSignals {
+    static signals = {
+      subscribe: vi.fn(),
+      unsubscribe: vi.fn(),
+    };
+    id = 'slack-signals';
+    name = 'Slack Signals';
+    isConnected = false;
+    addAgent() {}
+    connect() {
+      this.isConnected = true;
+    }
+    startPolling() {}
+    stopAllPolling() {}
+    onSubscriptionsChanged() {}
+    onPollingChanged() {}
+    isPollingThread() {
+      return false;
+    }
+    isPollingThreadRunning() {
+      return false;
+    }
+    startPollingForThread() {
+      return Promise.resolve(true);
+    }
+    getInputProcessors() {
+      return [{ id: 'slack-signals', processInput: vi.fn() }];
+    }
+    getOutputProcessors() {
+      return [];
+    }
+    getTools() {
+      return {};
+    }
+    start() {}
+    __registerMastra() {}
+  },
+  SLACK_SIGNALS_PROVIDER_ID: 'slack-signals',
+  SLACK_SIGNALS_METADATA_KEY: 'slackSignals',
+  SLACK_SUBSCRIBE_TAG: 'slack-subscribe',
+  SLACK_UNSUBSCRIBE_TAG: 'slack-unsubscribe',
+  SLACK_SYNC_STATUS_TAG: 'slack-sync-status',
+  getSlackSignalsMetadata: (raw: Record<string, unknown>) => {
+    const mastra = raw?.mastra;
+    if (!mastra || typeof mastra !== 'object') return {};
+    const slackSignals = (mastra as Record<string, unknown>).slackSignals;
+    if (!slackSignals || typeof slackSignals !== 'object') return {};
+    const sub = (slackSignals as Record<string, unknown>).subscription;
+    if (sub && typeof sub === 'object' && 'workspaceId' in sub && 'subscribedAt' in sub) {
+      return { subscription: sub as Record<string, unknown> };
+    }
+    return {};
+  },
+}));

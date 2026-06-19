@@ -88,6 +88,7 @@ import { shellPassthroughConfiguredSettingsScenario } from './shell-passthrough-
 import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
 import { shellPassthroughLongOutputScenario } from './shell-passthrough-long-output.js';
 import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpersistent.js';
+import { slackSignalsCommandScenario } from './slack-signals-command.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
 import { skillsSymlinkDedupeScenario } from './skills-symlink-dedupe.js';
 import { startupScenario } from './startup.js';
@@ -164,6 +165,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'github-signals-notification-reload': githubSignalsNotificationReloadScenario,
   'github-signals-polling-inbox': githubSignalsPollingInboxScenario,
   'github-signals-unsubscribe-reload': githubSignalsUnsubscribeReloadScenario,
+  'slack-signals-command': slackSignalsCommandScenario,
   'harness-api-config': harnessApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'visible-commands': visibleCommandsScenario,

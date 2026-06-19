@@ -27,7 +27,7 @@ import { Agent } from '@mastra/core/agent';
 import { SlackSignalsProvider } from '@mastra/slack-signals';
 
 const slackSignals = new SlackSignalsProvider({
-  token: process.env.SLACK_BOT_TOKEN!,
+  token: process.env.SLACK_USER_TOKEN!,
 });
 
 export const agent = new Agent({
@@ -57,7 +57,7 @@ A subscribed thread receives Slack messages as notification records with:
 
 ```ts
 const slackSignals = new SlackSignalsProvider({
-  token: process.env.SLACK_BOT_TOKEN!,
+  token: process.env.SLACK_USER_TOKEN!,
   pollIntervalMs: 60_000,
   maxMessagesPerChannel: 100,
   include: {
@@ -136,7 +136,9 @@ The provider uses these Slack Web API methods:
 - `conversations.list`
 - `conversations.history`
 
-Typical bot-token scopes:
+A **user token (`xoxp-`)** is recommended — it acts as your Slack identity, giving access to all channels and DMs you're a member of. Bot tokens (`xoxb-`) only see channels they've been explicitly invited to, so they can't watch "all DMs and channels" without admin intervention. Only use a user token in workspaces where you've approved that access.
+
+Required scopes (User Token Scopes in the Slack app config):
 
 | Conversation type | Discovery scope | History scope |
 | --- | --- | --- |
@@ -144,8 +146,7 @@ Typical bot-token scopes:
 | Private channels | `groups:read` | `groups:history` |
 | DMs | `im:read` | `im:history` |
 | Group DMs | `mpim:read` | `mpim:history` |
-
-A bot token must also be able to access the conversation. For example, private channels usually require the bot to be invited. User tokens can expose different Slack access, but they should only be used when the workspace and user have explicitly approved that access.
+| Search | `search:read` | — |
 
 ## Sync behavior
 
@@ -197,7 +198,7 @@ const syncClient = {
 };
 
 const slackSignals = new SlackSignalsProvider({
-  token: 'xoxb-test',
+  token: 'xoxp-test',
   syncClient,
 });
 ```
@@ -208,12 +209,12 @@ The HTTP client also accepts a custom `baseUrl`, `fetch`, `maxRetries`, and `sle
 import { SlackSignalsProvider, SlackWebApiSyncClient } from '@mastra/slack-signals';
 
 const syncClient = new SlackWebApiSyncClient({
-  token: 'xoxb-test',
+  token: 'xoxp-test',
   baseUrl: 'http://localhost:4003/api/',
 });
 
 const slackSignals = new SlackSignalsProvider({
-  token: 'xoxb-test',
+  token: 'xoxp-test',
   syncClient,
 });
 ```

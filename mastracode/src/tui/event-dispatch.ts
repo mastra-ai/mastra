@@ -42,7 +42,7 @@ import {
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import type { TUIState } from './state.js';
-import { getGithubPrSubscriptionsFromMetadata } from './state.js';
+import { getGithubPrSubscriptionsFromMetadata, getSlackSubscriptionFromMetadata } from './state.js';
 
 /**
  * Dispatch a HarnessEvent to the appropriate handler.
@@ -169,8 +169,10 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.currentThreadTitle = currentThread.title;
         const metadata = currentThread.metadata as Record<string, unknown> | undefined;
         state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
+        state.activeSlackSubscription = getSlackSubscriptionFromMetadata(metadata);
         state.githubPrPollingActive = false;
         state.githubPrGradientAnimator?.stop();
+        state.slackPollingActive = false;
         // Load the objective from the durable ThreadState slot, falling back to
         // the legacy thread-metadata goal for pre-migration threads.
         await state.goalManager.loadFromThread(state);
@@ -188,8 +190,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
         event.thread.metadata as Record<string, unknown> | undefined,
       );
+      state.activeSlackSubscription = getSlackSubscriptionFromMetadata(
+        event.thread.metadata as Record<string, unknown> | undefined,
+      );
       state.githubPrPollingActive = false;
       state.githubPrGradientAnimator?.stop();
+      state.slackPollingActive = false;
       // If /goal started without an existing thread, save that pending goal to the
       // newly-created thread. Otherwise load the thread's own goal metadata so goals
       // do not bleed into unrelated new threads.

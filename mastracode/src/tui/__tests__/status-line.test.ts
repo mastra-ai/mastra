@@ -113,6 +113,7 @@ function createState() {
     gradientAnimator: undefined,
     githubPrGradientAnimator: undefined,
     githubPrPollingActive: false,
+    slackPollingActive: false,
     modelAuthStatus: { hasAuth: true, apiKeyEnvVar: undefined },
     projectInfo: {
       rootPath: '/Users/tylerbarnes/code/mastra-ai/mastra--feat-mc-queueing-ux',
@@ -120,6 +121,7 @@ function createState() {
     },
     pendingQueuedActions: [],
     activeGithubPrSubscriptions: [],
+    activeSlackSubscription: undefined,
     goalManager: { getGoal: vi.fn(() => null) },
     ui: { requestRender: vi.fn() },
   } as any;
@@ -224,6 +226,30 @@ describe('updateStatusLine', () => {
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).not.toContain('PR#');
+  });
+
+  it('shows Slack badge when thread is subscribed', () => {
+    const state = createState();
+    state.activeSlackSubscription = {
+      workspaceId: 'T123',
+      workspaceName: 'Test Workspace',
+      conversationTypes: ['public_channel', 'im'],
+      channelCount: 3,
+    };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('Slack:Test Workspace');
+  });
+
+  it('does not show Slack badge for unsubscribed threads', () => {
+    const state = createState();
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).not.toContain('Slack');
   });
 
   it('preserves the gateway prefix when compacting gateway-backed model ids', () => {

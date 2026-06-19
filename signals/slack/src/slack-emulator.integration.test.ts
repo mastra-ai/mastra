@@ -7,7 +7,7 @@ import { SLACK_SIGNALS_METADATA_KEY, SlackSignalsProvider } from './index.js';
 import type { SlackSignalsThreadStore } from './index.js';
 import { SlackWebApiSyncClient } from './slack-client.js';
 
-const token = 'xoxb-slack-signals-emulator';
+const token = 'xoxp-slack-signals-emulator';
 
 type EmulatedSlack = {
   url: string;

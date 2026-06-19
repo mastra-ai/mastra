@@ -6,7 +6,7 @@ import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
-import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
+import type { GithubPrSubscriptionBadge, SlackSubscriptionBadge, TUIState } from './state.js';
 import { theme, mastra, tintHex, getTermWidth, extendedColors } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
@@ -32,6 +32,26 @@ function formatGithubPrLabel(
   const label = plain;
   const color = subscription.lastNotificationPriority === 'high' ? mastra.orange : extendedColors.skyBlue;
   if (state.githubPrPollingActive && state.githubPrGradientAnimator?.isRunning()) {
+    return {
+      plain: label,
+      styled: applyGradientSweep(
+        label,
+        state.githubPrGradientAnimator.getOffset(),
+        color,
+        state.githubPrGradientAnimator.getFadeProgress(),
+      ),
+    };
+  }
+  return { plain: label, styled: chalk.hex(color)(label) };
+}
+
+function formatSlackLabel(
+  state: TUIState,
+  subscription: SlackSubscriptionBadge,
+): { plain: string; styled: string } {
+  const label = subscription.workspaceName ? `Slack:${subscription.workspaceName}` : 'Slack';
+  const color = mastra.purple;
+  if (state.slackPollingActive && state.githubPrGradientAnimator?.isRunning()) {
     return {
       plain: label,
       styled: applyGradientSweep(
@@ -186,11 +206,15 @@ export function updateStatusLine(state: TUIState): void {
   const shortGoalLabel = goalDuration ? `goal (${goalDuration})` : null;
   const activeGithubPr = state.activeGithubPrSubscriptions?.[0];
   const githubPrLabel = activeGithubPr ? formatGithubPrLabel(state, activeGithubPr) : null;
+  const slackLabel = state.activeSlackSubscription ? formatSlackLabel(state, state.activeSlackSubscription) : null;
+  const prefixLabels = [githubPrLabel, slackLabel].filter((l): l is { plain: string; styled: string } => l !== null);
   const formatDirPart = (value: string) => {
-    if (!githubPrLabel) return { plain: value, styled: theme.fg('dim', value) };
+    if (prefixLabels.length === 0) return { plain: value, styled: theme.fg('dim', value) };
+    const prefixPlain = prefixLabels.map(l => l.plain).join(' ');
+    const prefixStyled = prefixLabels.map(l => l.styled).join(' ');
     return {
-      plain: `${githubPrLabel.plain} ${value}`,
-      styled: `${githubPrLabel.styled} ${theme.fg('dim', value)}`,
+      plain: `${prefixPlain} ${value}`,
+      styled: `${prefixStyled} ${theme.fg('dim', value)}`,
     };
   };
   // Build progressively shorter directory strings for layout fallback
@@ -349,7 +373,7 @@ export function updateStatusLine(state: TUIState): void {
         return null;
       }
       if (dirWidth > availableForDir && availableForDir >= MIN_TRUNCATED_DIR) {
-        const reservedPrefix = githubPrLabel ? `${githubPrLabel.plain} ` : '';
+        const reservedPrefix = prefixLabels.length > 0 ? `${prefixLabels.map(l => l.plain).join(' ')} ` : '';
         const availableForText = availableForDir - visibleWidth(reservedPrefix);
         dirText = availableForText > 1 ? dirText.slice(0, availableForText - 1) + '…' : null;
       } else if (dirWidth > availableForDir) {

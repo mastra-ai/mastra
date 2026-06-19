@@ -1,10 +1,12 @@
 import { execFile, spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { Box, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
+import { setClipboardText } from '../../clipboard/index.js';
 import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { SettingsComponent } from '../components/settings.js';
@@ -12,6 +14,7 @@ import type { IToolExecutionComponent } from '../components/tool-execution-inter
 import { askModalQuestion } from '../modal-question.js';
 import type { NotificationMode } from '../notify.js';
 import { showModalOverlay } from '../overlay.js';
+import { setupAutocomplete } from '../setup.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -175,6 +178,105 @@ async function ensureGitcrawlReady(ctx: SlashCommandContext): Promise<boolean> {
   }
 }
 
+const SLACK_MANIFEST = JSON.stringify(
+  {
+    display_information: {
+      name: `Mastra Slack Signals (${process.env.USER ?? 'user'})`,
+      description: 'Watch Slack activity and surface new messages as notifications',
+      background_color: '#1a1a1a',
+    },
+    oauth_config: {
+      scopes: {
+        user: [
+          'channels:read',
+          'channels:history',
+          'groups:read',
+          'groups:history',
+          'im:read',
+          'im:history',
+          'mpim:read',
+          'mpim:history',
+          'users:read',
+          'search:read',
+        ],
+      },
+    },
+  },
+  null,
+  2,
+);
+
+async function ensureSlackTokenReady(ctx: SlashCommandContext): Promise<boolean> {
+  // Already configured (stored key or env var) — nothing to do
+  if (ctx.authStorage?.getStoredApiKey('slack-signals') || process.env.SLACK_USER_TOKEN) return true;
+
+  const manifestChoice = await askModalQuestion(ctx.state.ui, {
+    question:
+      'Slack signals need a user token (acts as you, not a bot).\n' +
+      'Use a premade app manifest for easier setup?\n' +
+      '(Paste into the "From a manifest" field when creating the app)',
+    options: [
+      { label: 'Copy to clipboard', description: 'Paste into Slack manifest field' },
+      { label: 'Write to file', description: 'Save as slack-manifest.json in cwd' },
+      { label: 'Do it manually', description: 'Add scopes yourself in OAuth & Permissions' },
+    ],
+  });
+
+  if (manifestChoice === 'Copy to clipboard') {
+    if (setClipboardText(SLACK_MANIFEST)) ctx.showInfo('Manifest copied to clipboard');
+    else ctx.showError('Clipboard unavailable — manifest:\n' + SLACK_MANIFEST);
+  } else if (manifestChoice === 'Write to file') {
+    const filePath = join(process.cwd(), 'slack-manifest.json');
+    try {
+      writeFileSync(filePath, SLACK_MANIFEST, 'utf8');
+      ctx.showInfo(`Manifest written to ${filePath}`);
+    } catch {
+      ctx.showError('Failed to write manifest file');
+    }
+  }
+
+  const urlChoice = await askModalQuestion(ctx.state.ui, {
+    question:
+      'Create the app at https://api.slack.com/apps\n' +
+      '(Create New App → From a manifest → paste the JSON)',
+    options: [
+      { label: 'Open in browser', description: 'Open the URL in your default browser' },
+      { label: 'Copy URL', description: 'Copy https://api.slack.com/apps to clipboard' },
+      { label: 'Continue', description: 'I already have the page open' },
+    ],
+  });
+
+  if (urlChoice === 'Open in browser') {
+    try {
+      spawn('open', ['https://api.slack.com/apps'], { stdio: 'ignore' });
+    } catch {
+      ctx.showError('Could not open browser — open https://api.slack.com/apps manually');
+    }
+  } else if (urlChoice === 'Copy URL') {
+    if (setClipboardText('https://api.slack.com/apps')) ctx.showInfo('URL copied to clipboard');
+    else ctx.showError('Clipboard unavailable — open https://api.slack.com/apps manually');
+  }
+
+  const token = await askModalQuestion(ctx.state.ui, {
+    question:
+      'After creating the app:\n' +
+      '1. In the left sidebar, click OAuth & Permissions\n' +
+      '2. Click Install App (install to your workspace)\n' +
+      '3. Copy the User OAuth Token (starts with xoxp-)\n\n' +
+      'Paste your user token:',
+    allowCustomResponse: true,
+    allowEmptyInput: false,
+    overlay: { widthPercent: 0.85, maxHeight: '75%' },
+  });
+  if (!token || !token.startsWith('xoxp-')) {
+    ctx.showError('A valid Slack user token (starting with xoxp-) is required. Slack signals remain disabled.');
+    return false;
+  }
+
+  ctx.authStorage?.setStoredApiKey('slack-signals', token, 'SLACK_USER_TOKEN');
+  return true;
+}
+
 function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean, previewLineLimit: number): void {
   const tools = ctx.state.allToolComponents.filter(
     (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
@@ -204,6 +306,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
     experimentalGithubSignals: globalSettings.signals.experimentalGithubSignals,
+    experimentalSlackSignals: globalSettings.signals.experimentalSlackSignals,
   };
 
   return new Promise<void>(resolve => {
@@ -263,6 +366,15 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         current.signals.experimentalGithubSignals = enabled;
         saveSettings(current);
         ctx.showInfo(`Experimental GitHub signals: ${enabled ? 'on' : 'off'} (restart required)`);
+        return true;
+      },
+      onExperimentalSlackSignalsChange: async enabled => {
+        if (enabled && !(await ensureSlackTokenReady(ctx))) return false;
+        const current = loadSettings();
+        current.signals.experimentalSlackSignals = enabled;
+        saveSettings(current);
+        setupAutocomplete(ctx.state);
+        ctx.showInfo(`Experimental Slack signals: ${enabled ? 'on' : 'off'} (restart required)`);
         return true;
       },
       onApiKeys: () => {

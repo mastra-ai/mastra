@@ -100,7 +100,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: false, slackPollIntervalMs: 60_000 },
   };
 }
 
@@ -356,6 +356,7 @@ describe('createMastraCode', () => {
     delete process.env.MC_E2E_PRIMARY_KEY;
     delete process.env.MC_E2E_SECONDARY_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.SLACK_USER_TOKEN;
   });
 
   it('registers the MastraCode gateway and app-provided model hooks on Harness', async () => {
@@ -748,5 +749,34 @@ describe('createMastraCode', () => {
       { threadId: 'thread-1', resourceId: 'thread-resource' },
       { pollImmediately: true },
     );
+  });
+
+  it('configures SlackSignals as a signal provider when experimentalSlackSignals is enabled and a token is set', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: true, slackPollIntervalMs: 60_000 },
+    });
+    process.env.SLACK_USER_TOKEN = 'xoxp-test-token';
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
+    expect(agentConfig?.signals?.map(s => s.id)).toContain('slack-signals');
+  });
+
+  it('does not configure SlackSignals when no user token is set', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: true, slackPollIntervalMs: 60_000 },
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
+    expect(agentConfig?.signals?.map(s => s.id)).not.toContain('slack-signals');
   });
 });

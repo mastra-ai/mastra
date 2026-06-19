@@ -29,6 +29,7 @@ export interface SettingsConfig {
   pgConnectionString: string;
   libsqlUrl: string;
   experimentalGithubSignals: boolean;
+  experimentalSlackSignals: boolean;
 }
 
 export interface SettingsCallbacks {
@@ -40,6 +41,7 @@ export interface SettingsCallbacks {
   onQuietModeMaxToolPreviewLinesChange: (lines: number) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
+  onExperimentalSlackSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onApiKeys?: () => void;
   onClose: () => void;
 }
@@ -419,6 +421,35 @@ export class SettingsComponent extends Box implements Focusable {
               const accepted = await callbacks.onExperimentalGithubSignalsChange(nextValue);
               config.experimentalGithubSignals = accepted === false ? !nextValue : nextValue;
               done(config.experimentalGithubSignals ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'experimentalSlackSignals',
+        label: 'Experimental Slack signals',
+        description: 'Enable Slack message notifications via bot token (restart required).',
+        currentValue: config.experimentalSlackSignals ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Enable Slack signal processor and message subscription tools',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Disable Slack signal processor and tools',
+              },
+            ],
+            config.experimentalSlackSignals ? 'on' : 'off',
+            async value => {
+              const nextValue = value === 'on';
+              const accepted = await callbacks.onExperimentalSlackSignalsChange(nextValue);
+              config.experimentalSlackSignals = accepted === false ? !nextValue : nextValue;
+              done(config.experimentalSlackSignals ? 'On' : 'Off');
             },
             () => done(),
           ),

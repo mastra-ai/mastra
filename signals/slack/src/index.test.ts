@@ -174,7 +174,7 @@ describe('SlackSignalsProvider', () => {
   });
 
   it('defaults to watching all reachable Slack conversation types', () => {
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test' });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test' });
 
     expect(provider.include).toEqual(DEFAULT_SLACK_SIGNALS_INCLUDE);
     expect(provider.conversationTypes).toEqual(['public_channel', 'private_channel', 'im', 'mpim']);
@@ -183,7 +183,7 @@ describe('SlackSignalsProvider', () => {
 
   it('supports disabling selected conversation types', () => {
     const provider = new SlackSignalsProvider({
-      token: 'xoxb-test',
+      token: 'xoxp-test',
       pollIntervalMs: 30_000,
       include: {
         privateChannels: false,
@@ -205,7 +205,7 @@ describe('SlackSignalsProvider', () => {
     const thread = createThread();
     const threadStore = createThreadStore(thread);
     const syncClient = createSyncClient();
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
 
     await expect(provider.subscribeThreadToSlack({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toMatchObject({
       subscribed: true,
@@ -232,7 +232,7 @@ describe('SlackSignalsProvider', () => {
     const thread = createThread();
     const threadStore = createThreadStore(thread);
     const syncClient = createSyncClient();
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
 
     await provider.subscribeThreadToSlack({ threadId: thread.id, resourceId: thread.resourceId });
     await expect(provider.subscribeThreadToSlack({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toMatchObject({
@@ -265,7 +265,7 @@ describe('SlackSignalsProvider', () => {
       },
     });
     const threadStore = createThreadStore(thread);
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient: createSyncClient() });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient: createSyncClient() });
 
     await expect(provider.unsubscribeThreadFromSlack({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toMatchObject({
       removed: true,
@@ -279,7 +279,7 @@ describe('SlackSignalsProvider', () => {
   it('does not save when unsubscribing a thread without a subscription', async () => {
     const thread = createThread();
     const threadStore = createThreadStore(thread);
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient: createSyncClient() });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient: createSyncClient() });
 
     await expect(provider.unsubscribeThreadFromSlack({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toMatchObject({
       removed: false,
@@ -292,7 +292,7 @@ describe('SlackSignalsProvider', () => {
     const thread = createThread({ id: 'thread-tools', resourceId: 'resource-tools' });
 
     const result = await runSlackSignalsProcessor({
-      processor: new SlackSignalsProvider({ token: 'xoxb-test', threadStore: createThreadStore(thread), syncClient: createSyncClient() }),
+      processor: new SlackSignalsProvider({ token: 'xoxp-test', threadStore: createThreadStore(thread), syncClient: createSyncClient() }),
       messageList: new MessageList({ threadId: thread.id, resourceId: thread.resourceId }),
       requestContext: createRequestContext(thread),
     });
@@ -303,7 +303,7 @@ describe('SlackSignalsProvider', () => {
   it('subscribe and unsubscribe tools mutate the current thread subscription directly', async () => {
     const thread = createThread({ id: 'thread-tool-signal', resourceId: 'resource-tool-signal' });
     const threadStore = createThreadStore(thread);
-    const processor = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient: createSyncClient() });
+    const processor = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient: createSyncClient() });
 
     const result = await runSlackSignalsProcessor({
       processor,
@@ -347,7 +347,7 @@ describe('SlackSignalsProvider', () => {
 
   it('does no sync work when no subscriptions are passed to poll', async () => {
     const syncClient = createSyncClient();
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore: createThreadStore(createThread()), syncClient });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore: createThreadStore(createThread()), syncClient });
 
     await provider.poll([]);
 
@@ -369,7 +369,7 @@ describe('SlackSignalsProvider', () => {
       ],
     });
     const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
     provider.connect({ sendNotificationSignal } as any);
 
     await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
@@ -411,7 +411,7 @@ describe('SlackSignalsProvider', () => {
       ],
     });
     const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
     provider.connect({ sendNotificationSignal } as any);
 
     await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
@@ -467,7 +467,7 @@ describe('SlackSignalsProvider', () => {
       ],
     });
     const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient, maxMessagesPerChannel: 25 });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient, maxMessagesPerChannel: 25 });
     provider.connect({ sendNotificationSignal } as any);
 
     await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
@@ -550,7 +550,7 @@ describe('SlackSignalsProvider', () => {
       latestTs: '1710000002.000000',
       messages: [{ channelId: 'C1', channelName: 'general', channelType: 'public_channel', ts: '1710000002.000000', user: 'U1' }],
     });
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
     provider.connect({ sendNotificationSignal: vi.fn(async () => { throw new Error('delivery failed'); }) } as any);
 
     await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
@@ -606,7 +606,7 @@ describe('SlackSignalsProvider', () => {
         messages: [{ channelId: 'C2', channelName: 'random', channelType: 'public_channel', ts: '1710000002.000000', user: 'U2' }],
       });
     const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
     provider.connect({ sendNotificationSignal } as any);
 
     await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
@@ -648,7 +648,7 @@ describe('SlackSignalsProvider', () => {
       });
     const sendNotificationSignal = vi.fn(async () => undefined);
     const provider = new SlackSignalsProvider({
-      token: 'xoxb-test',
+      token: 'xoxp-test',
       threadStore,
       syncClient,
       filters: { includeChannelIds: ['C2'] },
@@ -699,7 +699,7 @@ describe('SlackSignalsProvider', () => {
       });
     const sendNotificationSignal = vi.fn(async () => undefined);
     const provider = new SlackSignalsProvider({
-      token: 'xoxb-test',
+      token: 'xoxp-test',
       threadStore,
       syncClient,
       filters: { excludeChannelNames: ['random'] },
@@ -738,7 +738,7 @@ describe('SlackSignalsProvider', () => {
     });
     const sendNotificationSignal = vi.fn(async () => undefined);
     const provider = new SlackSignalsProvider({
-      token: 'xoxb-test',
+      token: 'xoxp-test',
       threadStore,
       syncClient,
       filters: { keywords: ['mastra'], ignoredBotIds: ['B999'] },
@@ -783,7 +783,7 @@ describe('SlackSignalsProvider', () => {
     });
     const sendNotificationSignal = vi.fn(async () => undefined);
     const provider = new SlackSignalsProvider({
-      token: 'xoxb-test',
+      token: 'xoxp-test',
       threadStore,
       syncClient,
       filters: { maxPreviewLength: 18, priority: { dms: 'high', mentions: 'urgent' } },
@@ -808,7 +808,7 @@ describe('SlackSignalsProvider', () => {
     const thread = createThread({ id: 'thread-signal', resourceId: 'resource-signal' });
     const threadStore = createThreadStore(thread);
     const syncClient = createSyncClient();
-    const processor = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient });
+    const processor = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
     const sendSignal = vi.fn(async () => ({ id: 'status-signal' }));
     const subscribeSignal = createSignal(SlackSignalsProvider.signals.subscribe());
     const subscribeMessage = subscribeSignal.toDBMessage({ threadId: thread.id, resourceId: thread.resourceId });

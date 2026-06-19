@@ -10,6 +10,7 @@ import type { HarnessEventListener } from '@mastra/core/harness';
 
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
+import { loadSettings } from '../onboarding/settings.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
@@ -391,6 +392,22 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
+
+  // Only show /slack in autocomplete when experimental Slack signals are enabled
+  if (loadSettings().signals.experimentalSlackSignals) {
+    slashCommands.push({
+      name: 'slack',
+      description: 'Subscribe/unsubscribe/config Slack signals',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'subscribe', label: 'subscribe', description: 'Subscribe this thread to Slack messages' },
+          { value: 'unsubscribe', label: 'unsubscribe', description: 'Unsubscribe this thread from Slack' },
+          { value: 'config', label: 'config', description: 'Show Slack signal subscription info' },
+          { value: 'token', label: 'token', description: 'Update or clear your Slack user token' },
+          { value: 'poll', label: 'poll', description: 'Change the Slack poll interval' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    });
+  }
 
   // Only show /mode if there's more than one mode
   const modes = state.harness.listModes();

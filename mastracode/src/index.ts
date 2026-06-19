@@ -27,6 +27,7 @@ import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
+import { SlackSignals, SlackWebApiSyncClient } from '@mastra/slack-signals';
 import {
   Observability,
   MastraStorageExporter,
@@ -248,6 +249,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       google: 'GOOGLE_GENERATIVE_AI_API_KEY',
       cerebras: 'CEREBRAS_API_KEY',
       deepseek: 'DEEPSEEK_API_KEY',
+      'slack-signals': 'SLACK_USER_TOKEN',
     });
   }
 
@@ -447,6 +449,25 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
       })
     : undefined;
+  const slackToken =
+    authStorage.getStoredApiKey('slack-signals') ??
+    process.env.SLACK_USER_TOKEN ??
+    process.env.MASTRACODE_SLACK_USER_TOKEN ??
+    '';
+  const slackApiBaseUrl = process.env.MASTRACODE_SLACK_API_BASE_URL;
+  const slackPollIntervalMs = globalSettings.signals?.experimentalSlackSignals
+    ? globalSettings.signals.slackPollIntervalMs
+    : undefined;
+  const slackSignals: SlackSignals | undefined =
+    globalSettings.signals?.experimentalSlackSignals && slackToken
+      ? new SlackSignals({
+          token: slackToken,
+          ...(slackPollIntervalMs ? { pollIntervalMs: slackPollIntervalMs } : {}),
+          ...(slackApiBaseUrl
+            ? { syncClient: new SlackWebApiSyncClient({ token: slackToken, baseUrl: slackApiBaseUrl }) }
+            : {}),
+        })
+      : undefined;
   const codeAgent: Agent = new Agent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
@@ -467,7 +488,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.
-    signals: [new TaskSignalProvider(), ...(githubSignals ? [githubSignals] : [])],
+    signals: [new TaskSignalProvider(), ...(githubSignals ? [githubSignals] : []), ...(slackSignals ? [slackSignals] : [])],
     // Native goal mechanism: the in-loop goal step judges the thread's active
     // objective each qualifying iteration. The judge model is required for any
     // gating to occur; when unset the goal step is a complete no-op. A6 auto-wires
@@ -764,5 +785,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     builtinOmPacks,
     effectiveDefaults,
     githubSignals,
+    slackSignals,
   };
 }

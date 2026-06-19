@@ -56,6 +56,11 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: vi.fn(),
 }));
 
+vi.mock('../../onboarding/settings.js', () => ({
+  loadSettings: vi.fn(() => ({ signals: { experimentalSlackSignals: false, experimentalGithubSignals: false } })),
+  saveSettings: vi.fn(),
+}));
+
 import { showError, showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';

@@ -1,0 +1,1 @@
+{"fixtures":[{"match":{"endpoint":"chat","model":"gpt-5.4-mini","userMessage":"Create a Slack Signals e2e thread.","turnIndex":0},"response":{"content":"Slack Signals thread ready."}}]}

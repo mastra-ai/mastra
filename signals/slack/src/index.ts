@@ -942,3 +942,4 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
 }
 
 export const SlackSignals = SlackSignalsProvider;
+export type SlackSignals = SlackSignalsProvider;

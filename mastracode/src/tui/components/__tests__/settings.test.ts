@@ -106,6 +106,7 @@ function createConfig(overrides: Partial<SettingsConfig> = {}): SettingsConfig {
     pgConnectionString: '',
     libsqlUrl: '',
     experimentalGithubSignals: false,
+    experimentalSlackSignals: false,
     ...overrides,
   };
 }
@@ -120,6 +121,7 @@ function createCallbacks(overrides: Partial<SettingsCallbacks> = {}): SettingsCa
     onQuietModeMaxToolPreviewLinesChange: vi.fn(),
     onStorageBackendChange: vi.fn(),
     onExperimentalGithubSignalsChange: vi.fn(),
+    onExperimentalSlackSignalsChange: vi.fn(),
     onClose: vi.fn(),
     ...overrides,
   };

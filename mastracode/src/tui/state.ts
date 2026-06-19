@@ -9,6 +9,7 @@ import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@e
 import type { Harness, HarnessMessage, Session } from '@mastra/core/harness';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
+import type { SlackSignals } from '@mastra/slack-signals';
 import type { MastraCodeAnalytics } from '../analytics.js';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
@@ -53,6 +54,15 @@ export interface GithubPrSubscriptionBadge {
   lastNotificationPriority?: string;
 }
 
+export interface SlackSubscriptionBadge {
+  workspaceId: string;
+  workspaceName?: string;
+  conversationTypes: string[];
+  channelCount: number;
+  lastSyncAt?: string;
+  lastSyncStatus?: string;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -82,6 +92,26 @@ export function getGithubPrSubscriptionsFromMetadata(
     });
   }
   return result.sort((a, b) => a.prNumber - b.prNumber);
+}
+
+export function getSlackSubscriptionFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): SlackSubscriptionBadge | undefined {
+  const mastraMetadata = isRecord(metadata?.mastra) ? metadata.mastra : undefined;
+  const slackSignals = isRecord(mastraMetadata?.slackSignals) ? mastraMetadata.slackSignals : undefined;
+  const rawSubscription = isRecord(slackSignals?.subscription) ? slackSignals.subscription : undefined;
+  const workspaceId = typeof rawSubscription?.workspaceId === 'string' ? rawSubscription.workspaceId : undefined;
+  if (!workspaceId || !rawSubscription) return undefined;
+  const channels = isRecord(rawSubscription.channels) ? rawSubscription.channels : {};
+  const rawConversationTypes = Array.isArray(rawSubscription.conversationTypes) ? rawSubscription.conversationTypes : [];
+  return {
+    workspaceId,
+    ...(typeof rawSubscription.workspaceName === 'string' ? { workspaceName: rawSubscription.workspaceName } : {}),
+    conversationTypes: rawConversationTypes.filter((t): t is string => typeof t === 'string'),
+    channelCount: Object.keys(channels).length,
+    ...(typeof rawSubscription.lastSyncAt === 'string' ? { lastSyncAt: rawSubscription.lastSyncAt } : {}),
+    ...(typeof rawSubscription.lastSyncStatus === 'string' ? { lastSyncStatus: rawSubscription.lastSyncStatus } : {}),
+  };
 }
 // =============================================================================
 // MastraTUIOptions
@@ -127,6 +157,9 @@ export interface MastraTUIOptions {
 
   /** GitHub PR signal processor used for status-line polling state. */
   githubSignals?: GithubSignals;
+
+  /** Slack signals processor used for /slack command actions. */
+  slackSignals?: SlackSignals;
 
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;
@@ -200,6 +233,8 @@ export interface TUIState {
   currentThreadTitle?: string;
   /** GitHub PR subscriptions for the current thread. */
   activeGithubPrSubscriptions: GithubPrSubscriptionBadge[];
+  /** Slack subscription for the current thread (if any). */
+  activeSlackSubscription?: SlackSubscriptionBadge;
   /** Cached thread previews for the current TUI session */
   threadPreviewCache: Map<string, { preview: string; updatedAt: number }>;
   /** Threads whose preview lookup already returned empty during this session */
@@ -241,6 +276,7 @@ export interface TUIState {
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
   githubPrGradientAnimator?: GradientAnimator;
   githubPrPollingActive: boolean;
+  slackPollingActive: boolean;
 
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
@@ -347,6 +383,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingNewThread: false,
     currentThreadTitle: undefined,
     activeGithubPrSubscriptions: [],
+    activeSlackSubscription: undefined,
     threadPreviewCache: new Map(),
     attemptedThreadPreviewIds: new Set(),
 
@@ -367,6 +404,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
     githubPrPollingActive: false,
+    slackPollingActive: false,
 
     // Goal loop
     goalManager: new GoalManager(),
