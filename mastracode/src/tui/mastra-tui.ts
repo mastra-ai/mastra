@@ -92,6 +92,7 @@ export type { MastraTUIOptions } from './state.js';
  */
 type GithubPollingChangedHandler = (event: { threadId: string; resourceId: string; running: boolean }) => void;
 type GithubSignalsWithPollingEvents = { onPollingChanged?: (handler: GithubPollingChangedHandler) => void };
+type SlackSignalsWithPollingEvents = { onPollingChanged?: (handler: (event: { threadId: string; resourceId: string; running: boolean }) => void) => void };
 
 const USER_SIGNAL_DELIVERY_OPTIONS: {
   ifActive: { attributes: AgentSignalAttributes };
@@ -183,6 +184,22 @@ export class MastraTUI {
         });
       }
       this.state.githubPrPollingActive = event.running;
+      if (event.running) this.state.githubPrGradientAnimator.start();
+      else this.state.githubPrGradientAnimator.stop();
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+    });
+
+    (options.slackSignals as SlackSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
+      const currentThreadId = this.state.session?.thread?.getId?.();
+      const currentResourceId = this.state.session?.identity?.getResourceId?.();
+      if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
+      if (!this.state.githubPrGradientAnimator) {
+        this.state.githubPrGradientAnimator = new GradientAnimator(() => {
+          updateStatusLine(this.state);
+        });
+      }
+      this.state.slackPollingActive = event.running;
       if (event.running) this.state.githubPrGradientAnimator.start();
       else this.state.githubPrGradientAnimator.stop();
       updateStatusLine(this.state);

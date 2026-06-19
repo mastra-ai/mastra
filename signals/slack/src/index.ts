@@ -514,6 +514,11 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   readonly #include: Required<SlackSignalsIncludeConfig>;
   readonly #filters: NormalizedSlackSignalsFilterConfig;
   readonly #syncClient: SlackSignalsSyncClient;
+  #pollingChangedHandler?: (event: { threadId: string; resourceId: string; running: boolean }) => void;
+
+  onPollingChanged(handler: (event: { threadId: string; resourceId: string; running: boolean }) => void): void {
+    this.#pollingChangedHandler = handler;
+  }
 
   constructor(options: SlackSignalsProviderConfig) {
     super();
@@ -595,6 +600,15 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   }
 
   async #pollThread(input: SlackPollingThread): Promise<SlackPollResult> {
+    this.#pollingChangedHandler?.({ ...input, running: true });
+    try {
+      return await this.#doPollThread(input);
+    } finally {
+      this.#pollingChangedHandler?.({ ...input, running: false });
+    }
+  }
+
+  async #doPollThread(input: SlackPollingThread): Promise<SlackPollResult> {
     const { threadStore, loadedThread } = await this.#loadThread(input);
     const slackMetadata = getSlackSignalsMetadata(loadedThread.metadata);
     const subscription = slackMetadata.subscription;
