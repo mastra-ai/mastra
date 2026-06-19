@@ -140,7 +140,8 @@ const CopyButton = ({ text }: { text: string }) => {
   const [copied, setCopied] = useState(false);
   return (
     <Button
-      size="icon-md"
+      variant="ghost"
+      size="icon-xs"
       tooltip="Copy"
       aria-label="Copy"
       onClick={() => {
@@ -178,11 +179,17 @@ const AssistantActionBar = ({
     )}
     {(onReadAloud || onStopSpeaking) &&
       (isSpeaking ? (
-        <Button size="icon-md" tooltip="Stop" aria-label="Stop" onClick={() => onStopSpeaking?.()}>
+        <Button variant="ghost" size="icon-xs" tooltip="Stop" aria-label="Stop" onClick={() => onStopSpeaking?.()}>
           <StopCircleIcon />
         </Button>
       ) : (
-        <Button size="icon-md" tooltip="Read aloud" aria-label="Read aloud" onClick={() => onReadAloud?.(text)}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          tooltip="Read aloud"
+          aria-label="Read aloud"
+          onClick={() => onReadAloud?.(text)}
+        >
           <AudioLinesIcon />
         </Button>
       ))}
