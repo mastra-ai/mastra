@@ -702,7 +702,7 @@ export class SessionModel {
 
   /**
    * A short display name for the selected model: the last segment of the model
-   * id (e.g. `__GATEWAY_ANTHROPIC_MODEL_SONNET__` -> `__AI_SDK_ANTHROPIC_MODEL_SONNET__`). Returns
+   * id (e.g. `anthropic/claude-sonnet-4` -> `claude-sonnet-4`). Returns
    * `'unknown'` when no model is selected.
    */
   displayName(): string {

@@ -42,16 +42,16 @@ describe('session.model.displayName', () => {
   it('returns the last segment of a provider-prefixed model id', async () => {
     const harness = createHarness();
 
-    await harness.session.model.switch({ modelId: 'anthropic/__AI_SDK_ANTHROPIC_MODEL_SONNET__' });
+    await harness.session.model.switch({ modelId: 'anthropic/claude-sonnet-4' });
 
-    expect(harness.session.model.displayName()).toBe('__AI_SDK_ANTHROPIC_MODEL_SONNET__');
+    expect(harness.session.model.displayName()).toBe('claude-sonnet-4');
   });
 
   it('returns the whole id when there is no provider prefix', async () => {
     const harness = createHarness();
 
-    await harness.session.model.switch({ modelId: '__AI_SDK_OPENAI_MODEL_BASE__' });
+    await harness.session.model.switch({ modelId: 'gpt-4o' });
 
-    expect(harness.session.model.displayName()).toBe('__AI_SDK_OPENAI_MODEL_BASE__');
+    expect(harness.session.model.displayName()).toBe('gpt-4o');
   });
 });
