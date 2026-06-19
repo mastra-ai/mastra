@@ -1,0 +1,49 @@
+name: Mastra Code E2E
+
+on:
+  pull_request:
+    paths:
+      - 'mastracode/**'
+      - 'packages/core/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/mastracode-e2e.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mastracode-e2e:
+    name: Mastra Code E2E
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Build Mastra Code
+        run: pnpm run build:mastracode
+
+      - name: Run Mastra Code E2E
+        run: pnpm --filter ./mastracode run e2e:test -- --reporter=dot

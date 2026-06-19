@@ -116,7 +116,7 @@ describe('Harness tracing propagation', () => {
     harness.subscribe(event => {
       events.push(event as { type: string; reason?: string });
     });
-    (harness as unknown as { abortRequested: boolean }).abortRequested = true;
+    harness.session.run.requestAbort();
 
     await harness.sendMessage({ content: 'hello' });
 

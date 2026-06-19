@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   matchesKey: vi.fn((_data: string, _key: string) => false),
 }));
 
-vi.mock('@mariozechner/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', () => {
   class MockEditor {
     constructor(_tui: unknown, _theme: unknown) {}
     handleInput(data: string): void {

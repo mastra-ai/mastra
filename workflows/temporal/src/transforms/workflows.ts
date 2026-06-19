@@ -6,7 +6,9 @@ import * as t from '@babel/types';
 import { rollup } from 'rollup';
 import { toWorkflowType } from '../utils';
 import {
+  collectCreateStepFactoryBindings,
   collectImportedNames,
+  getCreateStepCallFromExpression,
   getCreateStepId,
   getObjectPropertyName,
   isCreateWorkflowCall,
@@ -125,6 +127,14 @@ function parseWorkflowChain(
  */
 function collectStepBindings(program: t.Program): Map<string, string> {
   const stepBindings = new Map<string, string>();
+  const stepFactoryBindings = collectCreateStepFactoryBindings(program);
+
+  for (const [factoryName, createStepCall] of stepFactoryBindings) {
+    const stepId = getCreateStepId(createStepCall);
+    if (stepId) {
+      stepBindings.set(factoryName, stepId);
+    }
+  }
 
   for (const statement of program.body) {
     if (
@@ -143,7 +153,8 @@ function collectStepBindings(program: t.Program): Map<string, string> {
         continue;
       }
 
-      const stepId = getCreateStepId(declaration.init);
+      const createStepCall = getCreateStepCallFromExpression(declaration.init, stepFactoryBindings);
+      const stepId = getCreateStepId(createStepCall);
       if (stepId) {
         stepBindings.set(declaration.id.name, stepId);
       }
@@ -202,6 +213,10 @@ function getWorkflowStepName(node: t.Node | null | undefined, stepBindings: Map<
 
   if (t.isStringLiteral(node)) {
     return node.value;
+  }
+
+  if (t.isCallExpression(node) && t.isIdentifier(node.callee)) {
+    return stepBindings.get(node.callee.name) ?? getCreateStepId(node);
   }
 
   return getCreateStepId(node);

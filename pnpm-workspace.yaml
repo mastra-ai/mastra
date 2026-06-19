@@ -78,7 +78,13 @@ minimumReleaseAgeExclude:
   - 'mastra'
   - 'create-mastra'
   - 'mastracode'
+  - '@earendil-works/pi-tui'
   - railway@3.3.1
+  # Turso-recommended busy_timeout fix (libsql-client-ts#288/#345). Adopted
+  # immediately on their guidance; pinned so the release-age gate still applies
+  # to any later @libsql/client versions.
+  - '@libsql/client@0.17.4'
+  - '@libsql/core@0.17.4'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -103,6 +109,13 @@ overrides:
   better-auth: ^1.4.18
   js-yaml: ^3.14.2
   glob@<=10.5.0: 10.5.0
+  # image-size 2.x (incl. 2.0.2 latest) has unpatched DoS infinite-loop flaws
+  # (CVE-2025-71330 / GHSA-w3rx-r6r6-pgpr). No fixed 2.x exists, so pin to the
+  # maintained legacy 1.2.1 release, which predates the vulnerable code paths
+  # and is API-compatible (default imageSize(buffer) usage). See issue #17975.
+  # Scoped to @mastra/memory only — a global override breaks the docs build,
+  # which relies on the `image-size/fromFile` subpath export added in 2.x.
+  '@mastra/memory>image-size': 1.2.1
   body-parser@<=2.2.1: 2.2.2
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.7.1
@@ -112,6 +125,89 @@ overrides:
   serialize-javascript@<7.0.5: ^7.0.5
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1
+  'aggregate-error': 'npm:@socketregistry/aggregate-error@^1'
+  'array-buffer-byte-length': 'npm:@socketregistry/array-buffer-byte-length@^1'
+  'array-flatten': 'npm:@socketregistry/array-flatten@^1'
+  'array-includes': 'npm:@socketregistry/array-includes@^1'
+  'array.prototype.findlast': 'npm:@socketregistry/array.prototype.findlast@^1'
+  'array.prototype.flat': 'npm:@socketregistry/array.prototype.flat@^1'
+  'array.prototype.flatmap': 'npm:@socketregistry/array.prototype.flatmap@^1'
+  'array.prototype.tosorted': 'npm:@socketregistry/array.prototype.tosorted@^1'
+  'arraybuffer.prototype.slice': 'npm:@socketregistry/arraybuffer.prototype.slice@^1'
+  'available-typed-arrays': 'npm:@socketregistry/available-typed-arrays@^1'
+  'deep-equal': 'npm:@socketregistry/deep-equal@^1'
+  'define-properties': 'npm:@socketregistry/define-properties@^1'
+  'es-define-property': 'npm:@socketregistry/es-define-property@^1'
+  'es-iterator-helpers': 'npm:@socketregistry/es-iterator-helpers@^1'
+  'es-set-tostringtag': 'npm:@socketregistry/es-set-tostringtag@^1'
+  'for-each': 'npm:@socketregistry/for-each@^1'
+  'function-bind': 'npm:@socketregistry/function-bind@^1'
+  'function.prototype.name': 'npm:@socketregistry/function.prototype.name@^1'
+  'functions-have-names': 'npm:@socketregistry/functions-have-names@^1'
+  'get-symbol-description': 'npm:@socketregistry/get-symbol-description@^1'
+  'globalthis': 'npm:@socketregistry/globalthis@^1'
+  'gopd': 'npm:@socketregistry/gopd@^1'
+  'has-property-descriptors': 'npm:@socketregistry/has-property-descriptors@^1'
+  'has-proto': 'npm:@socketregistry/has-proto@^1'
+  'has-symbols': 'npm:@socketregistry/has-symbols@^1'
+  'has-tostringtag': 'npm:@socketregistry/has-tostringtag@^1'
+  'hasown': 'npm:@socketregistry/hasown@^1'
+  'indent-string': 'npm:@socketregistry/indent-string@^1'
+  'internal-slot': 'npm:@socketregistry/internal-slot@^1'
+  'is-array-buffer': 'npm:@socketregistry/is-array-buffer@^1'
+  'is-bigint': 'npm:@socketregistry/is-bigint@^1'
+  'is-boolean-object': 'npm:@socketregistry/is-boolean-object@^1'
+  'is-core-module': 'npm:@socketregistry/is-core-module@^1'
+  'is-date-object': 'npm:@socketregistry/is-date-object@^1'
+  'is-generator-function': 'npm:@socketregistry/is-generator-function@^1'
+  'is-interactive': 'npm:@socketregistry/is-interactive@^1'
+  'is-map': 'npm:@socketregistry/is-map@^1'
+  'is-negative-zero': 'npm:@socketregistry/is-negative-zero@^1'
+  'is-number-object': 'npm:@socketregistry/is-number-object@^1'
+  'is-regex': 'npm:@socketregistry/is-regex@^1'
+  'is-set': 'npm:@socketregistry/is-set@^1'
+  'is-shared-array-buffer': 'npm:@socketregistry/is-shared-array-buffer@^1'
+  'is-string': 'npm:@socketregistry/is-string@^1'
+  'is-symbol': 'npm:@socketregistry/is-symbol@^1'
+  'is-typed-array': 'npm:@socketregistry/is-typed-array@^1'
+  'is-unicode-supported': 'npm:@socketregistry/is-unicode-supported@^1'
+  'is-weakmap': 'npm:@socketregistry/is-weakmap@^1'
+  'is-weakref': 'npm:@socketregistry/is-weakref@^1'
+  'is-weakset': 'npm:@socketregistry/is-weakset@^1'
+  'isarray': 'npm:@socketregistry/isarray@^1'
+  'iterator.prototype': 'npm:@socketregistry/iterator.prototype@^1'
+  'object-assign': 'npm:@socketregistry/object-assign@^1'
+  'object-keys': 'npm:@socketregistry/object-keys@^1'
+  'object.assign': 'npm:@socketregistry/object.assign@^1'
+  'object.entries': 'npm:@socketregistry/object.entries@^1'
+  'object.fromentries': 'npm:@socketregistry/object.fromentries@^1'
+  'object.values': 'npm:@socketregistry/object.values@^1'
+  'path-parse': 'npm:@socketregistry/path-parse@^1'
+  'querystringify': 'npm:@socketregistry/querystringify@^1'
+  'reflect.getprototypeof': 'npm:@socketregistry/reflect.getprototypeof@^1'
+  'regexp.prototype.flags': 'npm:@socketregistry/regexp.prototype.flags@^1'
+  'safe-array-concat': 'npm:@socketregistry/safe-array-concat@^1'
+  'safe-buffer': 'npm:@socketregistry/safe-buffer@^1'
+  'safe-regex-test': 'npm:@socketregistry/safe-regex-test@^1'
+  'safer-buffer': 'npm:@socketregistry/safer-buffer@^1'
+  'set-function-length': 'npm:@socketregistry/set-function-length@^1'
+  'shell-quote': 'npm:shell-quote@^1'
+  'side-channel': 'npm:@socketregistry/side-channel@^1'
+  'string.prototype.matchall': 'npm:@socketregistry/string.prototype.matchall@^1'
+  'string.prototype.repeat': 'npm:@socketregistry/string.prototype.repeat@^1'
+  'string.prototype.trim': 'npm:@socketregistry/string.prototype.trim@^1'
+  'string.prototype.trimend': 'npm:@socketregistry/string.prototype.trimend@^1'
+  'string.prototype.trimstart': 'npm:@socketregistry/string.prototype.trimstart@^1'
+  'typed-array-buffer': 'npm:@socketregistry/typed-array-buffer@^1'
+  'typed-array-byte-length': 'npm:@socketregistry/typed-array-byte-length@^1'
+  'typed-array-byte-offset': 'npm:@socketregistry/typed-array-byte-offset@^1'
+  'typed-array-length': 'npm:@socketregistry/typed-array-length@^1'
+  'typedarray': 'npm:@socketregistry/typedarray@^1'
+  'unbox-primitive': 'npm:@socketregistry/unbox-primitive@^1'
+  'which-boxed-primitive': 'npm:@socketregistry/which-boxed-primitive@^1'
+  'which-collection': 'npm:@socketregistry/which-collection@^1'
+  'which-typed-array': 'npm:@socketregistry/which-typed-array@^1'
+  'yocto-spinner': 'npm:@socketregistry/yocto-spinner@^1'
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false

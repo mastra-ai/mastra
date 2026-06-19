@@ -976,6 +976,28 @@ export class Mastra<
   }
 
   /**
+   * Sets the studio configuration for this Mastra instance.
+   *
+   * The studio configuration controls authentication and authorization for Studio UI,
+   * separate from the server configuration. This enables dual auth patterns where
+   * Studio users (e.g., internal team) use different auth than API consumers.
+   *
+   * @param studio - The studio configuration object
+   *
+   * @example
+   * ```typescript
+   * // Set studio auth separately from server auth
+   * mastra.setStudio({
+   *   auth: new MastraAuthStudio(),
+   *   rbac: new MastraRBACStudio({ roleMapping: { admin: ['*'] } }),
+   * });
+   * ```
+   */
+  public setStudio(studio: StudioConfig): void {
+    this.#studio = studio;
+  }
+
+  /**
    * Registers an exporter on the default observability instance.
    *
    * If the current observability is a no-op (user didn't configure any), it is

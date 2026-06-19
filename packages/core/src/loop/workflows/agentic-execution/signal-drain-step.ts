@@ -13,6 +13,7 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
   runId,
   messageList,
   mastra,
+  rotateResponseMessageId,
 }: OuterLLMRun<Tools, OUTPUT>) {
   const scopeCtx = { mastra, runId, _internal };
   return createStep({
@@ -28,17 +29,18 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
       }
 
       messageList.markResponseMessageBoundary(typedInput.stepResult?.messageId ?? typedInput.messageId);
+      const nextMessageId = rotateResponseMessageId();
       for (const pendingSignal of pendingSignals) {
         const signalForTranscript = messageList.addSignal(pendingSignal);
         controller.enqueue(signalForTranscript.toDataPart() as unknown as ChunkType<OUTPUT>);
       }
 
-      const generateId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId');
       return {
         ...typedInput,
-        messageId: generateId?.() ?? mastra?.generateId?.() ?? typedInput.messageId,
+        messageId: nextMessageId,
         stepResult: {
           ...typedInput.stepResult,
+          messageId: nextMessageId,
           reason: 'other',
           isContinued: true,
         },

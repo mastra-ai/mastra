@@ -96,14 +96,23 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       const pendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId) ?? [];
       if (pendingSignals.length > 0) {
-        typedInputData.messageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID();
+        messageList.markResponseMessageBoundary(typedInputData.stepResult?.messageId ?? typedInputData.messageId);
+
+        const nextMessageId = rest.rotateResponseMessageId();
+        typedInputData.messageId = nextMessageId;
         for (const pendingSignal of pendingSignals) {
-          messageList.add(pendingSignal.toLLMMessage(), 'input');
-          safeEnqueue(controller, pendingSignal.toDataPart() as any);
+          const signalForTranscript = messageList.addSignal(pendingSignal);
+          safeEnqueue(controller, signalForTranscript.toDataPart() as any);
         }
         if (typedInputData.stepResult) {
+          typedInputData.stepResult.messageId = nextMessageId;
           typedInputData.stepResult.isContinued = true;
         }
+        typedInputData.messages = {
+          all: messageList.get.all.aiV5.model(),
+          user: messageList.get.input.aiV5.model(),
+          nonUser: messageList.get.response.aiV5.model(),
+        };
       }
 
       if (pendingFeedbackStop) {

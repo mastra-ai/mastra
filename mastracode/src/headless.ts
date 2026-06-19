@@ -206,7 +206,7 @@ function autoResolve<TState extends Record<string, unknown>>(
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
     case 'tool_approval_required': {
-      harness.respondToToolApproval({ decision: 'approve' });
+      harness.session.respondToToolApproval({ decision: 'approve' });
       return { resolved: true, label: `[auto-approved] ${event.toolName}`, json: { ...event, autoApproved: true } };
     }
     case 'tool_suspended': {
@@ -349,7 +349,7 @@ function finalizeSummary<TState extends Record<string, unknown>>(
   harness: Harness<TState>,
 ): void {
   summary.finishReason = endEvent.reason;
-  summary.threadId = harness.getCurrentThreadId() ?? undefined;
+  summary.threadId = harness.session.thread.getId() ?? undefined;
 }
 
 /** Resolve a thread by ID or title. Tries exact ID match first, then title. */
@@ -357,7 +357,7 @@ async function resolveThread<TState extends Record<string, unknown>>(
   harness: Harness<TState>,
   threadIdOrTitle: string,
 ): Promise<{ threadId: string; matchType: 'id' | 'title' } | { error: string }> {
-  const threads = await harness.listThreads();
+  const threads = await harness.session.thread.list();
 
   const byId = threads.find(t => t.id === threadIdOrTitle);
   if (byId) return { threadId: byId.id, matchType: 'id' };
@@ -432,7 +432,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
       const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
       return failEarly(`Model "${args.model}" has no API key configured.${keyHint}`);
     }
-    await harness.switchModel({ modelId: args.model });
+    await harness.session.model.switch({ modelId: args.model });
     if (!emit) process.stderr.write(`[model] ${args.model}\n`);
   } else if (args.mode) {
     // --mode flag: look up model from effectiveDefaults (resolved from settings at startup)
@@ -447,7 +447,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
         const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
         return failEarly(`Model "${modelId}" (mode: ${args.mode}) has no API key configured.${keyHint}`);
       }
-      await harness.switchModel({ modelId });
+      await harness.session.model.switch({ modelId });
       if (!emit) process.stderr.write(`[model] ${modelId} (mode: ${args.mode})\n`);
     } else {
       const warnMsg = `--mode ${args.mode} has no configured model, using default`;
@@ -458,7 +458,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
   // --- Resolve thinking level ---
   if (args.thinkingLevel) {
-    await harness.setState({ thinkingLevel: args.thinkingLevel } as unknown as Partial<TState>);
+    await harness.session.state.set({ thinkingLevel: args.thinkingLevel } as unknown as Partial<TState>);
     if (!emit) process.stderr.write(`[thinking] ${args.thinkingLevel}\n`);
   }
 
@@ -526,7 +526,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
       await harness.switchThread({ threadId: result.threadId });
       if (!emit) process.stderr.write(`[thread] resumed ${result.threadId} (matched by ${result.matchType})\n`);
     } else if (args.continue_) {
-      const threads = await harness.listThreads();
+      const threads = await harness.session.thread.list();
       if (threads.length > 0) {
         const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         await harness.switchThread({ threadId: sorted[0]!.id });
@@ -625,9 +625,11 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   const { harness, mcpManager, effectiveDefaults } = result;
 
   if (mcpManager?.hasServers()) {
-    mcpManager.initInBackground().catch(err => {
+    try {
+      await mcpManager.initInBackground();
+    } catch (err) {
       process.stderr.write(`Warning: MCP server initialization failed: ${(err as Error).message ?? err}\n`);
-    });
+    }
   }
 
   setupDebugLogging();

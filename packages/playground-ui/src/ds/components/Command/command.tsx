@@ -3,6 +3,8 @@ import { Search } from 'lucide-react';
 import * as React from 'react';
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -22,12 +24,20 @@ type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'c
   children?: React.ReactNode;
   title?: string;
   description?: string;
+  contentClassName?: string;
+  commandClassName?: string;
+  showOverlay?: boolean;
+  overlayClassName?: string;
 };
 
 const CommandDialog = ({
   children,
   title = 'Command Palette',
   description = 'Search for commands and actions',
+  contentClassName,
+  commandClassName,
+  showOverlay = false,
+  overlayClassName,
   ...props
 }: CommandDialogProps) => {
   // Custom filter that preserves DOM order by returning 1 for all matches
@@ -45,12 +55,18 @@ const CommandDialog = ({
   // Stop propagation to prevent keyboard events from reaching
   // global document-level listeners (e.g., table keyboard nav)
   const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') return;
+
     e.stopPropagation();
   }, []);
 
   return (
     <Dialog {...props}>
-      <DialogContent className="overflow-hidden p-0">
+      <DialogContent
+        showOverlay={showOverlay}
+        overlayClassName={overlayClassName}
+        className={cn('overflow-hidden p-0', contentClassName)}
+      >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">{description}</DialogDescription>
         <Command
@@ -59,10 +75,11 @@ const CommandDialog = ({
           className={cn(
             '**:[[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium **:[[cmdk-group-heading]]:text-neutral3',
             '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 **:[[cmdk-group]]:px-2',
-            '[&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5',
+            '[&_[data-slot=command-input-wrapper]_svg]:h-5 [&_[data-slot=command-input-wrapper]_svg]:w-5',
             '**:[[cmdk-input]]:h-12',
             '**:[[cmdk-item]]:px-2 **:[[cmdk-item]]:py-3',
             '[&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5',
+            commandClassName,
           )}
         >
           {children}
@@ -72,37 +89,76 @@ const CommandDialog = ({
   );
 };
 
-const CommandInput = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.Input>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
->(({ className, ...props }, ref) => (
-  <div className={cn('flex items-center border-b border-border1 px-3', transitions.colors)} cmdk-input-wrapper="">
-    <Search className={cn('mr-2 h-4 w-4 shrink-0 text-neutral3', transitions.colors)} />
-    <CommandPrimitive.Input
-      ref={ref}
-      className={cn(
-        'flex h-10 w-full rounded-md bg-transparent py-3 text-ui-smd leading-ui-sm text-neutral6',
-        'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
-        'outline-none focus:outline-none focus-visible:outline-none',
-        transitions.colors,
-        className,
+type CommandInputProps = React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input> & {
+  rightSlot?: React.ReactNode;
+  wrapperClassName?: string;
+};
+
+const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Input>, CommandInputProps>(
+  ({ className, rightSlot, wrapperClassName, ...props }, ref) => (
+    <div
+      data-slot="command-input-wrapper"
+      className={cn('flex items-center border-b border-border1 px-3', transitions.colors, wrapperClassName)}
+    >
+      <Search className={cn('mr-2 h-4 w-4 shrink-0 text-neutral3', transitions.colors)} />
+      <CommandPrimitive.Input
+        ref={ref}
+        className={cn(
+          'flex h-10 min-w-0 flex-1 rounded-md bg-transparent py-3 text-ui-smd leading-ui-sm text-neutral6',
+          'placeholder:text-neutral3 disabled:cursor-not-allowed disabled:opacity-50',
+          'outline-none focus:outline-none focus-visible:outline-none',
+          transitions.colors,
+          className,
+        )}
+        {...props}
+      />
+      {rightSlot && (
+        <div data-slot="command-input-right-slot" className="ml-2 flex shrink-0 items-center text-neutral3">
+          {rightSlot}
+        </div>
       )}
-      {...props}
-    />
-  </div>
-));
+    </div>
+  ),
+);
 CommandInput.displayName = CommandPrimitive.Input.displayName;
 
-const CommandList = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.List
-    ref={ref}
-    className={cn('max-h-dropdown-max-height overflow-y-auto overflow-x-hidden', className)}
-    {...props}
-  />
-));
+type CommandListProps = React.ComponentPropsWithoutRef<typeof CommandPrimitive.List> & {
+  scrollArea?: boolean;
+  scrollAreaClassName?: string;
+  scrollAreaViewportClassName?: string;
+  scrollAreaMask?: ScrollAreaMask;
+};
+
+const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.List>, CommandListProps>(
+  (
+    { className, scrollArea = false, scrollAreaClassName, scrollAreaViewportClassName, scrollAreaMask, ...props },
+    ref,
+  ) => {
+    const list = (
+      <CommandPrimitive.List
+        ref={ref}
+        className={cn(
+          'outline-none focus:outline-none focus-visible:outline-none',
+          scrollArea ? 'overflow-visible' : 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden',
+          className,
+        )}
+        {...props}
+      />
+    );
+
+    if (!scrollArea) return list;
+
+    return (
+      <ScrollArea
+        className={cn('min-h-0', scrollAreaClassName)}
+        viewPortClassName={scrollAreaViewportClassName}
+        mask={scrollAreaMask}
+      >
+        {list}
+      </ScrollArea>
+    );
+  },
+);
 CommandList.displayName = CommandPrimitive.List.displayName;
 
 const CommandEmpty = React.forwardRef<

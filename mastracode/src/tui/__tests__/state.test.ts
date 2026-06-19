@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@mariozechner/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', () => {
   class MockContainer {
     children: unknown[] = [];
   }
@@ -43,7 +43,9 @@ import { createTUIState } from '../state.js';
 
 function createHarness() {
   return {
-    getCurrentMode: vi.fn(() => ({ id: 'build', metadata: { color: '#7c3aed' } })),
+    session: {
+      mode: { resolve: vi.fn(() => ({ id: 'build', metadata: { color: '#7c3aed' } })) },
+    },
   };
 }
 
@@ -127,6 +129,6 @@ describe('createTUIState', () => {
     expect(state.projectInfo).toEqual({ rootPath: '/tmp/mastra-code-project', gitBranch: 'main' });
 
     expect(state.editor.getModeColor?.()).toBe('#7c3aed');
-    expect(harness.getCurrentMode).toHaveBeenCalled();
+    expect(harness.session.mode.resolve).toHaveBeenCalled();
   });
 });

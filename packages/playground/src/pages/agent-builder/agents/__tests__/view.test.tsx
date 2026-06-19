@@ -28,6 +28,7 @@ vi.mock('@/domains/agent-builder', () => ({
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
+  isUnauthenticatedError: () => false,
 }));
 
 vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({

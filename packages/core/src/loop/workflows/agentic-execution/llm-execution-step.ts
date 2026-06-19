@@ -860,6 +860,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   workspace,
   outputWriter,
   mastra,
+  rotateResponseMessageId: rotateLoopResponseMessageId,
 }: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
   const initialUntaggedSystemMessages = messageList.getSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
@@ -951,7 +952,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             const preRunSignals =
               readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId, 'pre-run') ?? [];
             if (preRunSignals.length > 0) {
-              currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
+              currentMessageId = rotateLoopResponseMessageId();
             }
             for (const preRunSignal of preRunSignals) {
               const signalForTranscript = messageList.addSignal(preRunSignal);
