@@ -64,7 +64,7 @@ describe('Harness.getObservationalMemoryRecord', () => {
 
   it('returns the OM record with activeObservations when one exists', async () => {
     const thread = await harness.createThread();
-    const resourceId = harness.getResourceId();
+    const resourceId = harness.session.identity.getResourceId();
     const observationText = '- User prefers dark mode\n- User is building a web UI';
 
     await seedObservationalMemory(storage, thread.id, resourceId, observationText);
@@ -80,7 +80,7 @@ describe('Harness.getObservationalMemoryRecord', () => {
   it('returns record for the current thread after switching threads', async () => {
     const threadA = await harness.createThread();
     const threadB = await harness.createThread();
-    const resourceId = harness.getResourceId();
+    const resourceId = harness.session.identity.getResourceId();
 
     await seedObservationalMemory(storage, threadA.id, resourceId, 'Thread A observations');
     await seedObservationalMemory(storage, threadB.id, resourceId, 'Thread B observations');

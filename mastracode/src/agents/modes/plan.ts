@@ -23,21 +23,11 @@ export const planMode: HarnessMode = {
 - **Understand deeply**: Use view with view_range to read specific sections of key files
 - **Parallelize**: Make multiple independent tool calls when exploring different areas
 
-## Efficiency
-Your output returns to the parent agent. Be concise:
-- Don't include raw file contents — reference by path and line number
-- Focus on actionable details, not general observations
-- If you find many similar patterns, describe the pattern once with examples
-
-## Output Format
-Structure your plan as:
-
-. **Summary**: One-paragraph overview (2-3 sentences)
-. **Files to Change**: List each file with specific changes needed
-. **Implementation Order**: Numbered steps in dependency order
-. **Risks**: Potential issues or edge cases (if any)
-
-Be specific about code locations (file paths, function names, line numbers). Keep the plan actionable and under 500 words.`,
+## Plan Delivery
+- When your exploration is complete, call the \`submit_plan\` tool with your plan.
+- Do NOT output the plan as text — it MUST go through the submit_plan tool call.
+- Be concise: reference files by path and line number, don't include raw contents.
+- Focus on actionable details, not general observations.`,
 
   metadata: {
     default: false,

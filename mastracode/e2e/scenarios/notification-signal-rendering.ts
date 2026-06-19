@@ -25,8 +25,8 @@ export const notificationSignalRenderingScenario = {
       },
       onCreated: result => {
         timer = setInterval(() => {
-          const threadId = result.harness.getCurrentThreadId();
-          if (sent || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
+          const threadId = result.harness.session.thread.getId();
+          if (sent || !threadId || !result.harness.session.stream.isActive()) return;
           sent = true;
           if (timer) clearInterval(timer);
           const agent = result.harness.getMastra()?.getAgentById('code-agent');
@@ -39,7 +39,7 @@ export const notificationSignalRenderingScenario = {
               dedupeKey: 'mc-e2e-notification-signal',
             },
             {
-              resourceId: result.harness.getResourceId(),
+              resourceId: result.harness.session.identity.getResourceId(),
               threadId,
               ifIdle: { behavior: 'wake' },
             },

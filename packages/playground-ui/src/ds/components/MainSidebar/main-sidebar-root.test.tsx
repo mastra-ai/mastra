@@ -120,6 +120,7 @@ describe('MainSidebar mobile drawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
 
     expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeDefined();
+    expect(document.querySelector('[data-slot="drawer-popup"]')?.getAttribute('data-swipe-direction')).toBe('left');
     expect(screen.getByRole('link', { name: 'Agents' })).toBeDefined();
   });
 });

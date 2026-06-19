@@ -137,7 +137,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'signal-user-1',
         role: 'user',
@@ -165,7 +165,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'signal-1',
         role: 'user',
@@ -206,7 +206,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'signal-array',
         role: 'user',
@@ -246,7 +246,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'reactive-signal-1',
         role: 'user',
@@ -294,7 +294,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'summary-1',
         role: 'user',
@@ -348,7 +348,7 @@ describe('Harness signal messages', () => {
       ],
     });
 
-    await expect(harness.listMessages()).resolves.toEqual([
+    await expect(harness.session.thread.listActiveMessages()).resolves.toEqual([
       {
         id: 'notification-signal-1',
         role: 'user',
@@ -409,7 +409,7 @@ describe('Harness signal messages', () => {
     expect(assistantStarts).toHaveLength(1);
     expect(assistantEnds).toHaveLength(1);
     expect(assistantEnds[0]?.message.content).toEqual([{ type: 'text', text: 'Hello' }]);
-    expect(harness.getCurrentRunId()).toBeNull();
+    expect(harness.session.getCurrentRunId()).toBeNull();
   });
 
   it('sends active text signals without building idle stream options', async () => {
@@ -430,7 +430,7 @@ describe('Harness signal messages', () => {
     const thread = await harness.createThread();
 
     // Simulate an active run from the harness consumer's perspective
-    (harness as any).currentRunId = 'active-run-id';
+    harness.session.run.setRunId({ runId: 'active-run-id' });
 
     const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
     const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
@@ -460,12 +460,12 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    (harness as any).abortController = new AbortController();
+    harness.session.run.ensureAbortController();
 
     await harness.followUp({ content: 'queued follow-up' });
 
-    expect(harness.getFollowUpCount()).toBe(1);
-    expect(harness.getDisplayState().queuedFollowUps).toBe(1);
+    expect(harness.session.followUps.count()).toBe(1);
+    expect(harness.session.displayState.get().queuedFollowUps).toBe(1);
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
   });
 
@@ -495,7 +495,7 @@ describe('Harness signal messages', () => {
     });
     const sendSignal = vi.spyOn(agent, 'sendSignal');
     const thread = await harness.createThread();
-    (harness as any).abortController = new AbortController();
+    harness.session.run.ensureAbortController();
 
     await harness.followUp({ content: 'queued follow-up' });
     await (harness as any).drainFollowUpQueue();
@@ -516,8 +516,8 @@ describe('Harness signal messages', () => {
       }),
     );
     expect(sendSignal).not.toHaveBeenCalled();
-    expect(harness.getFollowUpCount()).toBe(0);
-    expect(harness.getDisplayState().queuedFollowUps).toBe(0);
+    expect(harness.session.followUps.count()).toBe(0);
+    expect(harness.session.displayState.get().queuedFollowUps).toBe(0);
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 0, runId: 'queued-run-id' });
   });
@@ -534,8 +534,8 @@ describe('Harness signal messages', () => {
     await harness.followUp({ content: 'idle follow-up' });
 
     expect(sendMessage).toHaveBeenCalledWith({ content: 'idle follow-up', requestContext: undefined });
-    expect(harness.getFollowUpCount()).toBe(0);
-    expect(harness.getDisplayState().queuedFollowUps).toBe(0);
+    expect(harness.session.followUps.count()).toBe(0);
+    expect(harness.session.displayState.get().queuedFollowUps).toBe(0);
     expect(events.some(event => event.type === 'follow_up_queued')).toBe(false);
   });
 
@@ -603,13 +603,13 @@ describe('Harness signal messages', () => {
 
     const signal = harness.sendSignal({ content: 'active hello' });
     await signal.accepted;
-    expect(harness.getCurrentRunId()).toBe('active-run-id');
+    expect(harness.session.getCurrentRunId()).toBe('active-run-id');
 
     await harness.createThread();
 
     expect(abort).toHaveBeenCalled();
     expect(unsubscribe).toHaveBeenCalled();
-    expect(harness.getCurrentRunId()).toBeNull();
+    expect(harness.session.getCurrentRunId()).toBeNull();
   });
 
   it('emits an error and clears run state when a subscription iterator throws', async () => {
@@ -640,8 +640,8 @@ describe('Harness signal messages', () => {
     await waitFor(() => events.some(event => event.type === 'agent_end' && event.reason === 'error'));
 
     expect(events.some(event => event.type === 'error' && event.error.message === 'subscription failed')).toBe(true);
-    await waitFor(() => harness.getCurrentRunId() === null);
-    expect(harness.getCurrentRunId()).toBeNull();
+    await waitFor(() => harness.session.getCurrentRunId() === null);
+    expect(harness.session.getCurrentRunId()).toBeNull();
   });
 
   it('ignores trailing chunks from an aborted subscription run', async () => {
@@ -891,20 +891,20 @@ describe('Harness signal messages', () => {
 
     const firstIdle = harness.sendSignal({ content: 'start first idle stream' });
     await firstIdle.accepted;
-    await waitFor(() => harness.getCurrentRunId() !== null && releaseInitialCalls.length === 1);
+    await waitFor(() => harness.session.getCurrentRunId() !== null && releaseInitialCalls.length === 1);
     const firstInterjection = harness.sendSignal({ content: 'first active interjection' });
     await firstInterjection.accepted;
     releaseInitialCalls.shift()?.();
-    await waitFor(() => harness.getCurrentRunId() === null);
+    await waitFor(() => harness.session.getCurrentRunId() === null);
     expect(JSON.stringify(prompts[1])).toContain('first active interjection');
 
     const secondIdle = harness.sendSignal({ content: 'start second idle stream' });
     await secondIdle.accepted;
-    await waitFor(() => harness.getCurrentRunId() !== null && releaseInitialCalls.length === 1);
+    await waitFor(() => harness.session.getCurrentRunId() !== null && releaseInitialCalls.length === 1);
     const secondInterjection = harness.sendSignal({ content: 'second active interjection' });
     await secondInterjection.accepted;
     releaseInitialCalls.shift()?.();
-    await waitFor(() => harness.getCurrentRunId() === null);
+    await waitFor(() => harness.session.getCurrentRunId() === null);
     expect(JSON.stringify(prompts[3])).toContain('second active interjection');
   });
 

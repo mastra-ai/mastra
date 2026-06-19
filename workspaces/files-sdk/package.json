@@ -1,6 +1,6 @@
 {
   "name": "@mastra/files-sdk",
-  "version": "0.2.3-alpha.0",
+  "version": "0.3.0-alpha.0",
   "description": "FilesSDK filesystem provider for Mastra workspaces — unified storage across S3, R2, GCS, Azure, Vercel Blob, and more",
   "type": "module",
   "main": "dist/index.js",
