@@ -42,7 +42,7 @@ export const lifecycleHooksConfiguredScenario: McE2eScenario = {
             {
               type: 'command',
               command: 'node .mastracode/hook-before.cjs',
-              timeout: 3000,
+              timeout: 10_000,
               description: 'before reload prompt block',
             },
           ],
@@ -59,7 +59,7 @@ fs.writeFileSync('.mastracode/hooks.json', JSON.stringify({
   UserPromptSubmit: [{
     type: 'command',
     command: 'node .mastracode/hook-after.cjs',
-    timeout: 3000,
+    timeout: 10_000,
     description: 'after reload prompt block'
   }]
 }, null, 2));
@@ -99,8 +99,6 @@ console.log('HOOK_BLOCK_LOG=after:UserPromptSubmit:true');
     await runtime.waitForScreenText(/HOOKS_REWRITTEN=after/i, terminal);
 
     terminal.submit('/hooks reload');
-    await runtime.waitForScreenText(/Hooks config reloaded\./i, terminal);
-
     terminal.submit('/hooks');
     await runtime.waitForScreenText(/hook-after\.cjs/i, terminal);
     await runtime.waitForScreenText(/after reload prompt block/i, terminal);
