@@ -55,6 +55,8 @@
     "zod": ">=3.0.0 || >=4.0.0"
   },
   "devDependencies": {
+    "@emulators/core": "0.6.1",
+    "@emulators/slack": "0.6.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

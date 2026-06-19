@@ -646,7 +646,7 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
           ? result.latestTs
           : previous?.latestTs;
 
-        if (!previous?.latestTs) {
+        if (!previous) {
           channels[conversation.id] = {
             id: conversation.id,
             ...(conversation.name ? { name: conversation.name } : {}),

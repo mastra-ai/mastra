@@ -391,6 +391,47 @@ describe('SlackSignalsProvider', () => {
     );
   });
 
+  it('emits the first future message after an empty channel baseline', async () => {
+    const thread = createThreadWithChannelState({
+      id: 'thread-empty-baseline',
+      resourceId: 'resource-empty-baseline',
+      channels: {
+        C1: { id: 'C1', name: 'general', type: 'public_channel', lastSyncStatus: 'success' },
+      },
+    });
+    const threadStore = createThreadStore(thread);
+    const syncClient = createSyncClient();
+    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
+      conversations: [{ id: 'C1', name: 'general', type: 'public_channel' }],
+    });
+    vi.mocked(syncClient.listMessages).mockResolvedValueOnce({
+      latestTs: '1710000001.000000',
+      messages: [
+        { channelId: 'C1', channelName: 'general', channelType: 'public_channel', ts: '1710000001.000000', user: 'U1', text: 'first message' },
+      ],
+    });
+    const sendNotificationSignal = vi.fn(async () => undefined);
+    const provider = new SlackSignalsProvider({ token: 'xoxb-test', threadStore, syncClient });
+    provider.connect({ sendNotificationSignal } as any);
+
+    await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
+      notificationsSent: 1,
+      channelsSynced: 1,
+      channelsFailed: 0,
+    });
+
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        summary: 'U1 in #general: first message',
+        sourceId: 'T123:C1:1710000001.000000',
+      }),
+      { resourceId: thread.resourceId, threadId: thread.id },
+    );
+    expect(getSavedSlackMetadata(threadStore).subscription.channels.C1).toEqual(
+      expect.objectContaining({ latestTs: '1710000001.000000', lastSyncStatus: 'success' }),
+    );
+  });
+
   it('emits notifications for messages newer than the channel high-water timestamp', async () => {
     const thread = createSubscribedThread({
       id: 'thread-new-message',
