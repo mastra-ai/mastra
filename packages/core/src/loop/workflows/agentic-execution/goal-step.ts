@@ -17,6 +17,7 @@ import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import { createProcessorSendSignal } from '../../../processors/send-signal';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
 import type { ChunkType, GoalEvaluationActivity } from '../../../stream/types';
+import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
 import { runStreamCompletionScorers } from '../../network/validation';
@@ -145,24 +146,27 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         if (inputData.stepResult) {
           inputData.stepResult.isContinued = false;
         }
-        controller.enqueue({
-          type: 'goal',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: {
-            objective: record.objective,
-            iteration: record.runsUsed,
-            maxRuns: effective.maxRuns,
-            passed: false,
-            status: record.status,
-            results: [],
-            reason: undefined,
-            duration: 0,
-            timedOut: false,
-            maxRunsReached: true,
-            suppressFeedback: false,
-          },
-        } as ChunkType<OUTPUT>);
+        safeEnqueue(
+          controller,
+          {
+            type: 'goal',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              objective: record.objective,
+              iteration: record.runsUsed,
+              maxRuns: effective.maxRuns,
+              passed: false,
+              status: record.status,
+              results: [],
+              reason: undefined,
+              duration: 0,
+              timedOut: false,
+              maxRunsReached: true,
+              suppressFeedback: false,
+            },
+          } as ChunkType<OUTPUT>,
+        );
         return inputData;
       }
 
@@ -205,25 +209,28 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
               ? activity.message
               : formatJudgeActivityMessage(activity.name ?? activity.message, args);
           if (!message) return;
-          controller.enqueue({
-            type: 'goal',
-            runId,
-            from: ChunkFrom.AGENT,
-            payload: {
-              objective: record.objective,
-              iteration: record.runsUsed + 1,
-              maxRuns: effective.maxRuns,
-              passed: false,
-              status: record.status,
-              results: [],
-              duration: 0,
-              timedOut: false,
-              maxRunsReached: false,
-              suppressFeedback: true,
-              pending: true,
-              activity: [{ ...activity, name, message }],
-            },
-          } as ChunkType<OUTPUT>);
+          safeEnqueue(
+            controller,
+            {
+              type: 'goal',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                objective: record.objective,
+                iteration: record.runsUsed + 1,
+                maxRuns: effective.maxRuns,
+                passed: false,
+                status: record.status,
+                results: [],
+                duration: 0,
+                timedOut: false,
+                maxRunsReached: false,
+                suppressFeedback: true,
+                pending: true,
+                activity: [{ ...activity, name, message }],
+              },
+            } as ChunkType<OUTPUT>,
+          );
         };
         const observeJudgeStream = (stream: { fullStream?: AsyncIterable<ChunkType> }) => {
           if (!stream.fullStream) return;
@@ -330,24 +337,27 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
 
         // Emit a pending chunk so consumers (the TUI judge display) can show a
         // loading indicator while the scorer runs.
-        controller.enqueue({
-          type: 'goal',
-          runId,
-          from: ChunkFrom.AGENT,
-          payload: {
-            objective: record.objective,
-            iteration: record.runsUsed + 1,
-            maxRuns: effective.maxRuns,
-            passed: false,
-            status: record.status,
-            results: [],
-            duration: 0,
-            timedOut: false,
-            maxRunsReached: false,
-            suppressFeedback: true,
-            pending: true,
-          },
-        } as ChunkType<OUTPUT>);
+        safeEnqueue(
+          controller,
+          {
+            type: 'goal',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              objective: record.objective,
+              iteration: record.runsUsed + 1,
+              maxRuns: effective.maxRuns,
+              passed: false,
+              status: record.status,
+              results: [],
+              duration: 0,
+              timedOut: false,
+              maxRunsReached: false,
+              suppressFeedback: true,
+              pending: true,
+            },
+          } as ChunkType<OUTPUT>,
+        );
 
         result = await runStreamCompletionScorers([scorer], goalContext, { strategy: 'all' });
       } catch (error: any) {
@@ -488,12 +498,15 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         metadata: { goalEvaluation: goalEvaluationPayload },
       });
 
-      controller.enqueue({
-        type: 'goal',
-        runId,
-        from: ChunkFrom.AGENT,
-        payload: goalEvaluationPayload,
-      } as ChunkType<OUTPUT>);
+      safeEnqueue(
+        controller,
+        {
+          type: 'goal',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: goalEvaluationPayload,
+        } as ChunkType<OUTPUT>,
+      );
 
       return inputData;
     },
