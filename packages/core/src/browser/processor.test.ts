@@ -83,19 +83,24 @@ describe('BrowserContextProcessor', () => {
     const createStateArgs = (
       browserCtx?: BrowserContext,
       activeStateSignals: any[] = [],
-      options: { contextWindow?: { hasSnapshot?: boolean }; lastSnapshot?: any } = {},
+      options: {
+        contextWindow?: { hasSnapshot?: boolean };
+        lastSnapshot?: any;
+        steps?: any[];
+        messageListMessages?: MastraDBMessage[];
+      } = {},
     ) => {
       const requestContext = new RequestContext();
       if (browserCtx) requestContext.set('browser', browserCtx);
       return {
         messages: [],
-        messageList: createMockMessageList() as any,
+        messageList: createMockMessageList(options.messageListMessages) as any,
         requestContext,
         state: {},
         abort: vi.fn() as any,
         retryCount: 0,
         stepNumber: 0,
-        steps: [],
+        steps: options.steps ?? [],
         resourceId: 'resource-1',
         threadId: 'thread-1',
         activeStateSignals,
@@ -587,6 +592,192 @@ describe('BrowserContextProcessor', () => {
           mode: 'delta',
           contents: 'changed: user changed active tab URL to https://www.google.com/',
           delta: { activeUrl: 'https://www.google.com/', activeUrlChangeSource: 'user' },
+        }),
+      );
+    });
+
+    it('attributes active URL changes to the agent when the latest browser click returned that URL', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com/review-trip',
+          },
+          [activeSignal as any],
+          {
+            steps: [
+              {
+                toolResults: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'browser_click',
+                    output: { success: true, url: 'https://example.com/review-trip' },
+                  },
+                ],
+              },
+            ],
+          },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: agent changed active tab URL to https://example.com/review-trip',
+          delta: { activeUrl: 'https://example.com/review-trip', activeUrlChangeSource: 'agent' },
+        }),
+      );
+    });
+
+    it('overrides user attribution when the latest browser click in message history returned the active URL', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com/pricing',
+            activeUrlChangeSource: 'user',
+          },
+          [activeSignal as any],
+          {
+            messageListMessages: [
+              {
+                id: 'assistant-1',
+                role: 'assistant',
+                content: {
+                  format: 2,
+                  parts: [
+                    {
+                      type: 'tool-invocation',
+                      toolInvocation: {
+                        state: 'result',
+                        toolName: 'browser_click',
+                        result: { success: true, url: 'https://example.com/pricing' },
+                      },
+                    },
+                  ],
+                },
+              } as any,
+            ],
+          },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: agent changed active tab URL to https://example.com/pricing',
+          delta: { activeUrl: 'https://example.com/pricing', activeUrlChangeSource: 'agent' },
+        }),
+      );
+    });
+
+    it('keeps user attribution when the latest browser click returned a different URL', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://www.google.com/',
+          },
+          [activeSignal as any],
+          {
+            steps: [
+              {
+                toolResults: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'browser_click',
+                    output: { success: true, url: 'https://example.com' },
+                  },
+                ],
+              },
+            ],
+          },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: user changed active tab URL to https://www.google.com/',
+          delta: { activeUrl: 'https://www.google.com/', activeUrlChangeSource: 'user' },
+        }),
+      );
+    });
+
+    it('includes active URL change source when the URL changes but source stays the same', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: {
+            processId: 'browser-process',
+            open: true,
+            activeUrl: 'https://example.com',
+            activeUrlChangeSource: 'agent',
+          },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com/pricing',
+            activeUrlChangeSource: 'agent',
+          },
+          [activeSignal as any],
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: agent changed active tab URL to https://example.com/pricing',
+          delta: { activeUrl: 'https://example.com/pricing', activeUrlChangeSource: 'agent' },
         }),
       );
     });

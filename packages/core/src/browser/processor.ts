@@ -143,16 +143,23 @@ export class BrowserContextProcessor {
       browserState.activeUrl &&
       previousState.activeUrl !== browserState.activeUrl &&
       previousState.processId === browserState.processId &&
-      !browserState.activeUrlChangeSource
+      browserState.activeUrlChangeSource !== 'agent'
     ) {
-      browserState = { ...browserState, activeUrlChangeSource: 'user' };
+      const recentClickUrl =
+        getMostRecentBrowserClickResultUrl(args.steps) ??
+        getMostRecentBrowserClickResultUrlFromMessageList(args.messageList);
+      const activeUrlChangeSource = recentClickUrl === browserState.activeUrl ? 'agent' : browserState.activeUrlChangeSource ?? 'user';
+      browserState = {
+        ...browserState,
+        activeUrlChangeSource,
+      };
     }
 
     const changed = getChangedBrowserState(previousState, browserState);
     if (previousState && Object.keys(changed).length === 0 && !shouldRefreshSnapshot) return;
 
     const isDelta = Boolean(previousState && !shouldRefreshSnapshot);
-    return {
+    const result = {
       id: 'browser',
       cacheKey: stableBrowserStateCacheKey(browserState),
       mode: isDelta ? 'delta' : 'snapshot',
@@ -167,7 +174,8 @@ export class BrowserContextProcessor {
       metadata: {
         browser: browserState,
       },
-    };
+    } satisfies Exclude<ComputeStateSignalResult, undefined | void>;
+    return result;
   }
 }
 
@@ -203,6 +211,61 @@ function getMostRecentBrowserState(
     if (browserState) return browserState;
   }
   return undefined;
+}
+
+function getMostRecentBrowserClickResultUrl(steps: ComputeStateSignalArgs['steps']): string | undefined {
+  for (const step of [...steps].reverse()) {
+    const toolResults = Array.isArray(step.toolResults) ? step.toolResults : [];
+    for (const toolResult of [...toolResults].reverse()) {
+      if (toolResult?.toolName !== 'browser_click') continue;
+      const url = getBrowserClickResultUrl(getToolResultOutputForAttribution(toolResult));
+      if (url) return url;
+    }
+  }
+  return undefined;
+}
+
+function getMostRecentBrowserClickResultUrlFromMessageList(
+  messageList: ComputeStateSignalArgs['messageList'],
+): string | undefined {
+  try {
+    return getMostRecentBrowserClickResultUrlFromMessages(messageList.get.all.db());
+  } catch {
+    return undefined;
+  }
+}
+
+function getMostRecentBrowserClickResultUrlFromMessages(messages: ComputeStateSignalArgs['messages']): string | undefined {
+  for (const message of [...messages].reverse()) {
+    const content = message.content;
+    if (!content || typeof content !== 'object' || Array.isArray(content)) continue;
+    const parts = (content as { parts?: unknown }).parts;
+    if (!Array.isArray(parts)) continue;
+
+    for (const part of [...parts].reverse()) {
+      if (!part || typeof part !== 'object' || Array.isArray(part)) continue;
+      const toolInvocation = (part as { toolInvocation?: unknown }).toolInvocation;
+      if (!toolInvocation || typeof toolInvocation !== 'object' || Array.isArray(toolInvocation)) continue;
+      const invocation = toolInvocation as Record<string, unknown>;
+      if (invocation.toolName !== 'browser_click' || invocation.state !== 'result') continue;
+      const url = getBrowserClickResultUrl(invocation.result ?? invocation.output);
+      if (url) return url;
+    }
+  }
+  return undefined;
+}
+
+function getBrowserClickResultUrl(output: unknown): string | undefined {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return undefined;
+  if ((output as { success?: unknown }).success !== true) return undefined;
+  const url = (output as { url?: unknown }).url;
+  return typeof url === 'string' && url.length > 0 ? url : undefined;
+}
+
+function getToolResultOutputForAttribution(toolResult: unknown): unknown {
+  if (!toolResult || typeof toolResult !== 'object' || Array.isArray(toolResult)) return undefined;
+  const record = toolResult as Record<string, unknown>;
+  return record.output ?? record.result;
 }
 
 function getBrowserStateFromSignal(signal?: ComputeStateSignalArgs['lastSnapshot']): BrowserState | undefined {
@@ -252,6 +315,10 @@ function getChangedBrowserState(previous: BrowserState | undefined, current: Bro
     if (JSON.stringify(previous[key]) !== JSON.stringify(current[key])) {
       (changed as Record<string, unknown>)[key] = current[key];
     }
+  }
+
+  if (previous.activeUrl !== current.activeUrl && current.activeUrlChangeSource) {
+    changed.activeUrlChangeSource = current.activeUrlChangeSource;
   }
 
   if (!previous.open && current.open) {
