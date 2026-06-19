@@ -1036,7 +1036,7 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
       toolCallId: approvalToolCallId,
     });
 
-    let toolDeclinedMessage = '';
+    let toolDeclinedMessage: unknown = '';
 
     for await (const _chunk of resumeStream.fullStream) {
       // consume
