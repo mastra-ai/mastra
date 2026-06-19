@@ -63,6 +63,7 @@ export type ScenarioName =
   | 'integration-commands'
   | 'lifecycle-hooks-configured'
   | 'login-dialog-masked-input'
+  | 'long-thread-startup-history'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'

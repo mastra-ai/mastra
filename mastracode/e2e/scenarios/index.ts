@@ -44,6 +44,7 @@ import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availab
 import { integrationCommandsScenario } from './integration-commands.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
+import { longThreadStartupHistoryScenario } from './long-thread-startup-history.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
 import { mcpReloadConfigScenario } from './mcp-reload-config.js';
@@ -173,6 +174,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'integration-commands': integrationCommandsScenario,
   'lifecycle-hooks-configured': lifecycleHooksConfiguredScenario,
   'login-dialog-masked-input': loginDialogMaskedInputScenario,
+  'long-thread-startup-history': longThreadStartupHistoryScenario,
   'modal-and-shell': modalAndShellScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
   'mcp-long-running-tool': mcpLongRunningToolScenario,
