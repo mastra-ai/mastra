@@ -69,12 +69,22 @@ function withThreadMemory(memory: unknown, resourceId: string, threadId: string)
   };
 }
 
+type AgentThreadRunLifecycle = 'running' | 'suspending' | 'suspended' | 'resuming' | 'completed' | 'failed' | 'aborted';
+
+type AgentThreadRunSuspension = {
+  toolCallId?: string;
+  toolName?: string;
+  kind: 'approval' | 'generic-tool';
+};
+
 type AgentThreadRunRecord<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
   output: MastraModelOutput<OUTPUT>;
   runId: string;
   streamId: string;
   streamSeq: number;
+  lifecycle: AgentThreadRunLifecycle;
+  suspension?: AgentThreadRunSuspension;
   threadId: string;
   resourceId?: string;
   streamOptions: AgentExecutionOptions<OUTPUT>;
@@ -112,6 +122,8 @@ type AgentThreadRuntimeState = {
   activeThreadStreamIds: Map<string, string>;
   streamSeqByRunId: Map<string, number>;
   approvalSuspendedRunIds: Set<string>;
+  suspendedRunIds: Set<string>;
+  suspensionMetadataByRunId: Map<string, AgentThreadRunSuspension>;
   pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
@@ -153,6 +165,8 @@ function createRuntimeState(): AgentThreadRuntimeState {
     activeThreadStreamIds: new Map(),
     streamSeqByRunId: new Map(),
     approvalSuspendedRunIds: new Set(),
+    suspendedRunIds: new Set(),
+    suspensionMetadataByRunId: new Map(),
     pendingSignalsByThread: new Map(),
     preRunSignalsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
@@ -364,8 +378,18 @@ export class AgentThreadStreamRuntime {
     return state.approvalSuspendedRunIds.has(runId);
   }
 
+  #isSuspendedRun(state: AgentThreadRuntimeState, runId: string) {
+    return state.suspendedRunIds.has(runId) || this.#isApprovalSuspendedRun(state, runId);
+  }
+
   #isThreadBlockingRun(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
-    return record.output.status === 'running' || this.#isApprovalSuspendedRun(state, record.runId);
+    return (
+      record.output.status === 'running' ||
+      record.lifecycle === 'suspending' ||
+      record.lifecycle === 'suspended' ||
+      record.lifecycle === 'resuming' ||
+      this.#isSuspendedRun(state, record.runId)
+    );
   }
 
   #serializeSignal(signal: CreatedAgentSignal): SerializableAgentSignal {
@@ -376,6 +400,30 @@ export class AgentThreadStreamRuntime {
     const streamSeq = (state.streamSeqByRunId.get(runId) ?? 0) + 1;
     state.streamSeqByRunId.set(runId, streamSeq);
     return { streamId: randomUUID(), streamSeq };
+  }
+
+  #markRunSuspending(
+    state: AgentThreadRuntimeState,
+    runId: string,
+    streamId: string,
+    suspension: AgentThreadRunSuspension,
+  ) {
+    state.suspendedRunIds.add(runId);
+    state.suspensionMetadataByRunId.set(runId, suspension);
+    const record = state.threadRunsByStreamId.get(streamId) ?? state.threadRunsById.get(runId);
+    if (record) {
+      record.lifecycle = 'suspending';
+      record.suspension = suspension;
+    }
+    if (suspension.kind === 'approval') {
+      state.approvalSuspendedRunIds.add(runId);
+    }
+  }
+
+  #clearSuspendedRun(state: AgentThreadRuntimeState, runId: string) {
+    state.suspendedRunIds.delete(runId);
+    state.suspensionMetadataByRunId.delete(runId);
+    state.approvalSuspendedRunIds.delete(runId);
   }
 
   getThreadState(options: { resourceId?: string; threadId: string }, pubsub?: PubSub): AgentThreadState {
@@ -426,8 +474,15 @@ export class AgentThreadStreamRuntime {
     };
 
     const emitPart = async (part: unknown) => {
-      if (part && typeof part === 'object' && 'type' in part && part.type === 'tool-call-approval') {
-        runtime.#getState(pubsub).approvalSuspendedRunIds.add(output.runId);
+      if (part && typeof part === 'object' && 'type' in part) {
+        const typedPart = part as { type?: string; payload?: { toolCallId?: string; toolName?: string } };
+        if (typedPart.type === 'tool-call-approval' || typedPart.type === 'tool-call-suspended') {
+          runtime.#markRunSuspending(runtime.#getState(pubsub), output.runId, streamId, {
+            toolCallId: typedPart.payload?.toolCallId,
+            toolName: typedPart.payload?.toolName,
+            kind: typedPart.type === 'tool-call-approval' ? 'approval' : 'generic-tool',
+          });
+        }
       }
       parts.push(part);
       await runtime.#publishAndWait(pubsub, key, {
@@ -619,6 +674,8 @@ export class AgentThreadStreamRuntime {
     state.threadKeysByRunId.clear();
     state.activeThreadRunIds.clear();
     state.approvalSuspendedRunIds.clear();
+    state.suspendedRunIds.clear();
+    state.suspensionMetadataByRunId.clear();
     state.pendingSignalsByThread.clear();
     state.preRunSignalsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
@@ -699,6 +756,7 @@ export class AgentThreadStreamRuntime {
       runId,
       streamId,
       streamSeq,
+      lifecycle: 'running',
       threadId,
       resourceId,
       streamOptions: {},
@@ -767,6 +825,7 @@ export class AgentThreadStreamRuntime {
       runId: output.runId,
       streamId,
       streamSeq,
+      lifecycle: 'running',
       threadId,
       resourceId,
       streamOptions: streamOptions as AgentThreadRunRecord<OUTPUT>['streamOptions'],
@@ -804,12 +863,14 @@ export class AgentThreadStreamRuntime {
       state.watchedThreadStreamIds.delete(record.streamId);
       this.#cleanupPreparedRun(state, record.runId);
 
-      if (record.output.status === 'suspended' && this.#isApprovalSuspendedRun(state, record.runId)) {
+      if (record.output.status === 'suspended' && this.#isSuspendedRun(state, record.runId)) {
+        record.lifecycle = 'suspended';
         this.#publish(pubsub, key, { type: 'run-suspended', runId: record.runId, streamId: record.streamId });
         return;
       }
 
-      state.approvalSuspendedRunIds.delete(record.runId);
+      record.lifecycle = 'completed';
+      this.#clearSuspendedRun(state, record.runId);
       state.threadRunsByStreamId.delete(record.streamId);
       if (state.threadRunsById.get(record.runId) === record) {
         state.threadRunsById.delete(record.runId);
@@ -1289,6 +1350,7 @@ export class AgentThreadStreamRuntime {
         runId,
         streamId,
         streamSeq,
+        lifecycle: 'running',
         threadId: options.threadId,
         resourceId: options.resourceId,
         streamOptions: {},
@@ -1356,8 +1418,11 @@ export class AgentThreadStreamRuntime {
       }
       if (data.type === 'run-completed' || data.type === 'run-aborted' || data.type === 'run-suspended') {
         const eventStreamId = data.streamId ?? data.runId;
-        if (
-          (data.type !== 'run-suspended' || !state.approvalSuspendedRunIds.has(data.runId)) &&
+        if (data.type === 'run-suspended') {
+          state.suspendedRunIds.add(data.runId);
+          const record = state.threadRunsByStreamId.get(eventStreamId) ?? state.threadRunsById.get(data.runId);
+          if (record) record.lifecycle = 'suspended';
+        } else if (
           state.activeThreadRunIds.get(key) === data.runId &&
           (!data.streamId || state.activeThreadStreamIds.get(key) === data.streamId)
         ) {
@@ -1365,7 +1430,7 @@ export class AgentThreadStreamRuntime {
           state.activeThreadStreamIds.delete(key);
         }
         if (data.type !== 'run-suspended') {
-          state.approvalSuspendedRunIds.delete(data.runId);
+          this.#clearSuspendedRun(state, data.runId);
         }
         const remoteRun = remoteRuns.get(eventStreamId);
         if (remoteRun) {

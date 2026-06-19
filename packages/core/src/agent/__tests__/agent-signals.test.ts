@@ -2238,6 +2238,86 @@ describe('Agent signals', () => {
     }
   });
 
+  it.each(['request_access', 'ask_user'])('keeps %s suspensions discoverable and blocks idle wake', async toolName => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = {
+      id: `generic-suspended-${toolName}`,
+      stream: vi.fn(),
+    } as unknown as Agent<any, any, any, any>;
+    const idleAgent = {
+      id: `idle-agent-${toolName}`,
+      stream: vi.fn(),
+    } as unknown as Agent<any, any, any, any>;
+    const runId = `generic-suspended-run-${toolName}`;
+    const threadId = `generic-suspended-thread-${toolName}`;
+    const resourceId = `generic-suspended-user-${toolName}`;
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const events: any[] = [];
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    await pubsub.subscribe(topic, event => events.push(event.data));
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'suspended',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({
+                type: 'tool-call-suspended',
+                runId,
+                payload: { toolCallId: `tool-call-${toolName}`, toolName },
+              });
+              controller.close();
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+
+      await withTimeout(iterator.next(), 'Timed out waiting for generic suspended run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for generic suspended chunk');
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+
+      const queuedForSuspendedRun = runtime.sendMessage(agent, 'Resume-adjacent input', { resourceId, threadId }, pubsub);
+      expect(queuedForSuspendedRun).toEqual(expect.objectContaining({ accepted: true, runId }));
+      expect((agent as any).stream).not.toHaveBeenCalled();
+      expect(runtime.drainPendingSignals(runId, pubsub)[0]).toMatchObject({
+        type: 'user',
+        contents: 'Resume-adjacent input',
+      });
+
+      finishRun();
+      await waitForCondition(() => events.some(event => event?.type === 'run-suspended' && event.runId === runId));
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+
+      const idleWake = runtime.sendSignal(
+        idleAgent,
+        createSignal({ type: 'user-message', contents: 'Unrelated idle wake' }),
+        { resourceId, threadId, ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } } },
+        pubsub,
+      );
+      expect(idleWake.accepted).toBe(true);
+      expect((idleAgent as any).stream).not.toHaveBeenCalled();
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+    } finally {
+      finishRun();
+      subscription.unsubscribe();
+    }
+  });
+
   it('queues queueMessage until the active run completes', async () => {
     let releaseFirst!: () => void;
     const firstFinished = new Promise<void>(resolve => {

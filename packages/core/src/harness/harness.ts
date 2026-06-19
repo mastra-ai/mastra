@@ -3139,7 +3139,10 @@ export class Harness<TState = {}> {
    * be drained with the previous run's already-aborted abortSignal.
    */
   private async waitForCurrentThreadStreamIdle(): Promise<void> {
-    while (this.#session.stream.isActive() || this.#session.run.getRunId() !== null) {
+    while (
+      (this.#session.stream.isActive() || this.#session.run.getRunId() !== null) &&
+      !this.#session.suspensions.hasPending()
+    ) {
       await new Promise(resolve => setTimeout(resolve, 0));
     }
   }
