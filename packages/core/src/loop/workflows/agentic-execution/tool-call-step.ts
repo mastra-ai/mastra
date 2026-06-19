@@ -439,6 +439,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               .describe(
                 'Controls if the tool call is approved or not, should be true when approved and false when declined',
               ),
+            reason: z
+              .string()
+              .nullable()
+              .optional()
+              .describe('Optional reason provided when approval is declined'),
           }),
         );
 
@@ -549,15 +554,20 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     args: inputData.args,
                     resumeSchema: JSON.stringify(
                       standardSchemaToJSONSchema(
-                        toStandardSchema(
-                          z.object({
-                            approved: z
-                              .boolean()
-                              .describe(
-                                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                              ),
-                          }),
-                        ),
+                      toStandardSchema(
+                        z.object({
+                          approved: z
+                            .boolean()
+                            .describe(
+                              'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                            ),
+                          reason: z
+                            .string()
+                            .nullable()
+                            .optional()
+                            .describe('Optional reason provided when approval is declined'),
+                        }),
+                      ),
                       ),
                     ),
                   },

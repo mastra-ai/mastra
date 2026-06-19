@@ -2,8 +2,20 @@
 "@mastra/core": minor
 ---
 
-HITL: return structured JSON for declined tool approvals instead of hard-coded English string
+Added structured JSON response for declined HITL tool approvals
 
-When a human-in-the-loop tool approval is declined, `@mastra/core` now returns a structured object `{ status: 'denied', approved: false, reason }` instead of the hard-coded English string `'Tool call was not approved by the user'`. The `reason` field is populated from `resumeData.reason` when present, otherwise `null`.
+When a human-in-the-loop tool approval is declined, `@mastra/core` now returns a structured object instead of a hard-coded English string. The old response was a opaque string that required fragile string-matching to detect; the new response is a well-defined machine-readable shape:
 
-This applies consistently across the agentic-execution loop, the durable agent build, and the network tool execution path.
+```ts
+// Old (removed):
+result: 'Tool call was not approved by the user'
+
+// New:
+result: {
+  status: 'denied',
+  approved: false,
+  reason: 'The amount exceeded the daily limit' // or null when not provided
+}
+```
+
+The `reason` field is populated from `resumeData.reason` when present, otherwise `null`. This applies consistently across the agentic-execution loop, the durable agent build, and the network tool execution path.

@@ -1469,6 +1469,11 @@ export async function createNetworkLoop({
       approved: z
         .boolean()
         .describe('Controls if the tool call is approved or not, should be true when approved and false when declined'),
+      reason: z
+        .string()
+        .nullable()
+        .optional()
+        .describe('Optional reason provided when approval is declined'),
     }),
     execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
@@ -1602,6 +1607,11 @@ export async function createNetworkLoop({
               .describe(
                 'Controls if the tool call is approved or not, should be true when approved and false when declined',
               ),
+            reason: z
+              .string()
+              .nullable()
+              .optional()
+              .describe('Optional reason provided when approval is declined'),
           });
           const requireApprovalResumeSchema = JSON.stringify(
             standardSchemaToJSONSchema(toStandardSchema(approvalSchema)),
