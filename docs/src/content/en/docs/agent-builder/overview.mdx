@@ -43,7 +43,7 @@ The Agent Builder requires:
 - **A builder agent**: Register an agent created with the [`createBuilderAgent()`](/reference/editor/agent-builder/create-builder-agent) factory from `@mastra/editor/ee` on `Mastra.agents`. This is the agent that powers the chat-based editor; without it, the editor is unavailable.
 - **Model credentials**: Two providers are used by default:
   - **OpenAI** (`OPENAI_API_KEY`): `createBuilderAgent()` uses an OpenAI model. To use a different provider, pass a `model` override to `createBuilderAgent({ model })` — see the [`createBuilderAgent()` reference](/reference/editor/agent-builder/create-builder-agent).
-  - **Gemini** (`GOOGLE_GENERATIVE_AI_API_KEY`): Builder-created agents enable observational memory by default, which uses `google/gemini-2.5-flash`. To use a different model, see [Observational Memory models](/docs/memory/observational-memory#models) or the [Observational Memory reference](/reference/memory/observational-memory).
+  - **Gemini** (`GOOGLE_GENERATIVE_AI_API_KEY`): Builder-created agents enable observational memory by default, which uses `__GATEWAY_GOOGLE_MODEL__`. To use a different model, see [Observational Memory models](/docs/memory/observational-memory#models) or the [Observational Memory reference](/reference/memory/observational-memory).
 
 ## Quickstart
 

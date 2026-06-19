@@ -52,7 +52,7 @@ const builderAgent = createBuilderAgent({
     type: "Partial<AgentConfig<'builder-agent'>>",
     isOptional: true,
     description:
-      'Partial agent configuration merged over the builder defaults. Accepts the same fields as the Agent constructor — see the Agent reference. The most common override is `model`. The `id`, `name`, and `description` are fixed by the factory and cannot be overridden; supplied `errorProcessors` are appended to the built-in defaults.',
+      'Partial agent configuration merged over the builder defaults. Accepts the same fields as the Agent constructor — see the Agent reference. The most common override is `model`. The `id`, `name`, and `description` are fixed by the factory and cannot be overridden; array-valued `errorProcessors` are appended to the built-in defaults, while dynamic overrides are passed through unchanged.',
   },
 ]}
 />
@@ -95,7 +95,7 @@ const builderAgent = createBuilderAgent({
     name: 'errorProcessors',
     type: 'Processor[]',
     description:
-      'Built-in processors that recover from provider-side stream and history errors during long, tool-heavy builds. Any processors you pass are appended to these.',
+      'Built-in processors that recover from provider-side stream and history errors during long, tool-heavy builds. An array you pass is appended to these; a dynamic override is passed through unchanged.',
   },
 ]}
 />
