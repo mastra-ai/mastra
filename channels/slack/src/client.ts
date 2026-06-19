@@ -7,6 +7,8 @@ export interface SlackManifestClientConfig {
   token: string;
   refreshToken: string;
   onTokenRotation?: (tokens: { token: string; refreshToken: string }) => Promise<void>;
+  /** Override the Slack Web API base URL. Defaults to `https://slack.com/api`. */
+  apiBaseUrl?: string;
 }
 
 /**
@@ -18,11 +20,13 @@ export class SlackManifestClient {
   #refreshToken: string;
   #onTokenRotation?: (tokens: { token: string; refreshToken: string }) => Promise<void>;
   #rotationPromise: Promise<void> | null = null;
+  #apiBaseUrl: string;
 
   constructor(config: SlackManifestClientConfig) {
     this.#token = config.token;
     this.#refreshToken = config.refreshToken;
     this.#onTokenRotation = config.onTokenRotation;
+    this.#apiBaseUrl = config.apiBaseUrl ?? SLACK_API_BASE;
   }
 
   /**
@@ -62,7 +66,7 @@ export class SlackManifestClient {
   }
 
   async #doRotateToken(): Promise<void> {
-    const response = await fetch(`${SLACK_API_BASE}/tooling.tokens.rotate`, {
+    const response = await fetch(`${this.#apiBaseUrl}/tooling.tokens.rotate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -112,7 +116,7 @@ export class SlackManifestClient {
     // Ensure tokens are fresh
     await this.rotateToken();
 
-    const response = await fetch(`${SLACK_API_BASE}/apps.manifest.create`, {
+    const response = await fetch(`${this.#apiBaseUrl}/apps.manifest.create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -167,7 +171,7 @@ export class SlackManifestClient {
   async deleteApp(appId: string): Promise<void> {
     await this.rotateToken();
 
-    const response = await fetch(`${SLACK_API_BASE}/apps.manifest.delete`, {
+    const response = await fetch(`${this.#apiBaseUrl}/apps.manifest.delete`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -193,7 +197,7 @@ export class SlackManifestClient {
   async updateApp(appId: string, manifest: SlackAppManifest): Promise<void> {
     await this.rotateToken();
 
-    const response = await fetch(`${SLACK_API_BASE}/apps.manifest.update`, {
+    const response = await fetch(`${this.#apiBaseUrl}/apps.manifest.update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -228,7 +232,7 @@ export class SlackManifestClient {
     formData.append('app_id', appId);
     formData.append('image', new Blob([imageData], { type: 'image/png' }), 'icon.png');
 
-    const response = await fetch(`${SLACK_API_BASE}/apps.icon.set`, {
+    const response = await fetch(`${this.#apiBaseUrl}/apps.icon.set`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.#token}`,

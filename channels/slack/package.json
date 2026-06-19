@@ -33,6 +33,9 @@
     "@chat-adapter/slack": "^4.29.0"
   },
   "devDependencies": {
+    "@emulators/core": "0.7.0",
+    "@emulators/slack": "0.7.0",
+    "@internal/ai-sdk-v5": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "^22.19.21",
     "tsup": "^8.5.1",

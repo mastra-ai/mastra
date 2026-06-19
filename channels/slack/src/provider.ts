@@ -145,12 +145,34 @@ export class SlackProvider implements ChannelProvider {
   }
 
   /**
+   * Resolved Slack Web API base URL (`oauth.v2.access`, `apps.manifest.*`).
+   * Defaults to `https://slack.com/api`; overridable via `apiUrl` (used by
+   * tests pointing at a local Slack API emulator).
+   */
+  get #apiBaseUrl(): string {
+    return this.#channelConfig.apiUrl ?? 'https://slack.com/api';
+  }
+
+  /**
+   * Base URL for the OAuth v2 authorize redirect. In production this is the
+   * Slack web host (`https://slack.com`); when `apiUrl` is overridden (tests
+   * against a local emulator) the authorize endpoint lives on that origin.
+   */
+  get #oauthAuthorizeUrl(): string {
+    const apiUrl = this.#channelConfig.apiUrl;
+    if (!apiUrl) return 'https://slack.com/oauth/v2/authorize';
+    // Emulator serves the authorize endpoint at <origin>/oauth/v2/authorize.
+    return `${new URL(apiUrl).origin}/oauth/v2/authorize`;
+  }
+
+  /**
    * Create or replace the manifest client with new credentials.
    */
   #initManifestClient(token: string, refreshToken: string): void {
     this.#manifestClient = new SlackManifestClient({
       token,
       refreshToken,
+      apiBaseUrl: this.#apiBaseUrl,
       onTokenRotation: async tokens => {
         await this.#saveConfigTokens(
           this.#encryptConfigTokens({
@@ -733,8 +755,8 @@ export class SlackProvider implements ChannelProvider {
    * applied separately.
    */
   #forwardedAdapterOptions() {
-    const { logger } = this.#channelConfig;
-    return { logger };
+    const { logger, apiUrl } = this.#channelConfig;
+    return apiUrl ? { logger, apiUrl } : { logger };
   }
 
   /**
@@ -1005,7 +1027,7 @@ export class SlackProvider implements ChannelProvider {
     const scopes = manifest.oauth_config?.scopes?.bot?.join(',') ?? '';
     const slackBaseUrl =
       appCredentials.oauthAuthorizeUrl ??
-      `https://slack.com/oauth/v2/authorize?client_id=${appCredentials.clientId}&scope=${encodeURIComponent(scopes)}`;
+      `${this.#oauthAuthorizeUrl}?client_id=${appCredentials.clientId}&scope=${encodeURIComponent(scopes)}`;
 
     // Append our redirect_uri and state to the URL
     const authUrl = new URL(slackBaseUrl);
@@ -1242,7 +1264,7 @@ export class SlackProvider implements ChannelProvider {
 
     try {
       // Exchange code for tokens
-      const tokenResponse = await fetch('https://slack.com/api/oauth.v2.access', {
+      const tokenResponse = await fetch(`${this.#apiBaseUrl}/oauth.v2.access`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
