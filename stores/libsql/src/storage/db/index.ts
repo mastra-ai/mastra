@@ -35,7 +35,23 @@ export type LibSQLDomainBaseConfig = {
    * @default 100
    */
   initialBackoffMs?: number;
+  /**
+   * SQLite `busy_timeout` (in milliseconds) applied to the underlying connection
+   * for local (`file:`/`:memory:`) databases. Lets a write wait for a lock to
+   * clear instead of failing immediately with `SQLITE_BUSY`. Requires
+   * `@libsql/client` >= 0.17.4 (see libsql-client-ts#288/#345). Ignored when an
+   * existing `client` is supplied.
+   * @default 5000
+   */
+  connectionTimeoutMs?: number;
 };
+
+/**
+ * Default SQLite `busy_timeout` (ms) for local LibSQL connections. Chosen to
+ * comfortably exceed the write-retry backoff window so contended writes block
+ * briefly rather than surfacing as `SQLITE_BUSY` errors.
+ */
+export const DEFAULT_CONNECTION_TIMEOUT_MS = 5000;
 
 /**
  * Configuration for LibSQL domains - accepts either credentials or an existing client
@@ -63,9 +79,14 @@ export function resolveClient(config: LibSQLDomainConfig): Client {
   if ('client' in config) {
     return config.client;
   }
+  const isLocal = config.url.startsWith('file:') || config.url.includes(':memory:');
+  const timeout = config.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
   return createClient({
     url: config.url,
     ...(config.authToken ? { authToken: config.authToken } : {}),
+    // Only local sqlite3 connections honor `busy_timeout`; remote contention is
+    // resolved server-side, so passing it there is meaningless.
+    ...(isLocal ? { timeout } : {}),
   });
 }
 

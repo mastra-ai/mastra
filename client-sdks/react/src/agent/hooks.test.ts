@@ -705,6 +705,45 @@ describe('useChat forwards clientTools', () => {
     expect(result.current.messages.map(message => message.id)).toEqual(['msg-was-pending']);
   });
 
+  it('strips a leftover clientMessageId even when the reloaded message is not pending', async () => {
+    // The correlation key is sent to the server with the message and can be
+    // persisted, so a reloaded (non-pending) message may still carry it. It must
+    // never survive into rendered state; the row key falls back to the stable id.
+    const initialMessages = [
+      {
+        id: 'msg-confirmed',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'hello' }],
+          metadata: {
+            mode: 'stream',
+            [CLIENT_MESSAGE_ID_KEY]: 'client-msg-leftover',
+          },
+        },
+      },
+    ] satisfies MastraDBMessage[];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
+      expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    });
+    expect(result.current.messages.map(message => message.id)).toEqual(['msg-confirmed']);
+  });
+
   it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {
     keepSubscriptionOpen = true;
     const { rerender } = renderHook(
@@ -1066,9 +1105,12 @@ describe('useChat optimistic pending user message', () => {
     expect(metadata?.status).toBe('pending');
     expect(metadata?.mode).toBe('stream');
 
-    // The optimistic bubble carries a client correlation id...
+    const optimisticMessageId = userMessages[0]?.id;
+    expect(optimisticMessageId).toMatch(/^client-set-/);
+
+    // The optimistic bubble carries the same client-set id as its correlation id...
     const clientMessageId = metadata?.[CLIENT_MESSAGE_ID_KEY];
-    expect(typeof clientMessageId).toBe('string');
+    expect(clientMessageId).toBe(optimisticMessageId);
 
     // ...and the same id is sent to the server in the outgoing message metadata
     // so the echo can reconcile the pending bubble.
@@ -1076,11 +1118,10 @@ describe('useChat optimistic pending user message', () => {
     const sendArgs = sendMessageMock.mock.calls[0]?.[0] as
       | { message?: { metadata?: Record<string, unknown> } }
       | undefined;
-    expect(sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(clientMessageId);
-    expect(typeof sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
+    expect(sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(optimisticMessageId);
   });
 
-  it('stamps the correlation id and pending status on only the first bubble of a multi-message send', async () => {
+  it('merges a multi-message send (text + attachment) into a single pending bubble', async () => {
     const { result } = renderHook(
       () =>
         useChat({
@@ -1095,25 +1136,30 @@ describe('useChat optimistic pending user message', () => {
     await act(async () => {
       await result.current.sendMessage({
         mode: 'stream',
-        message: 'first',
+        message: 'look at this',
         threadId: 'thread-1',
-        coreUserMessages: [{ role: 'user', content: [{ type: 'text', text: 'second' }] }],
+        coreUserMessages: [
+          { role: 'user', content: [{ type: 'image', image: 'https://example.com/cat.png', mimeType: 'image/png' }] },
+        ],
       });
     });
 
+    // The whole user turn (text + attachment) renders as one bubble, matching
+    // how memory/reload resolves the persisted multi-part user message. The
+    // single bubble carries the correlation id and pending status so the server
+    // echo reconciles the whole turn.
     const userMessages = result.current.messages.filter(m => m.role === 'user');
-    expect(userMessages).toHaveLength(2);
+    expect(userMessages).toHaveLength(1);
 
-    // The whole turn is sent as a single signal that echoes back one
-    // `data-user-message`, so only the first bubble carries the correlation id
-    // and pending status. Sharing one id across bubbles would let the echo
-    // adopt the same server id onto multiple messages.
-    const first = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
-    const second = userMessages[1]?.content.metadata as MastraDBMessageMetadata | undefined;
-    expect(first?.status).toBe('pending');
-    expect(typeof first?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
-    expect(second?.status).toBeUndefined();
-    expect(second?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    const parts = userMessages[0]?.content.parts ?? [];
+    expect(parts.map(p => p.type)).toEqual(['text', 'file']);
+    expect(parts[0]).toMatchObject({ type: 'text', text: 'look at this' });
+    expect(parts[1]).toMatchObject({ type: 'file', data: 'https://example.com/cat.png' });
+
+    const metadata = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
+    expect(metadata?.status).toBe('pending');
+    expect(userMessages[0]?.id).toMatch(/^client-set-/);
+    expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(userMessages[0]?.id);
   });
 
   it('keys two sequential sends as independent pending messages', async () => {
@@ -1139,8 +1185,10 @@ describe('useChat optimistic pending user message', () => {
     expect(userMessages).toHaveLength(2);
     expect(new Set(userMessages.map(m => m.id)).size).toBe(2);
     for (const message of userMessages) {
+      expect(message.id).toMatch(/^client-set-/);
       const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
       expect(metadata?.status).toBe('pending');
+      expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(message.id);
     }
   });
 

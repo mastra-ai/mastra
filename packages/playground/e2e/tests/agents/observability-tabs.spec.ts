@@ -93,7 +93,7 @@ test('keeps agent observability tabs disabled when runtime observability is unav
   await mockSystemPackages(page, false);
 
   await page.goto('/agents/weather-agent/chat/new');
-  await page.getByRole('main').getByText('Traces').hover();
+  await page.getByRole('tab', { name: 'Traces' }).hover();
 
   await expect(page.getByRole('tooltip').getByText('Add @mastra/observability to enable this tab.')).toBeVisible();
 });

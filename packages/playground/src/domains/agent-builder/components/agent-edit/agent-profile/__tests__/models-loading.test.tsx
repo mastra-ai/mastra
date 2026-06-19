@@ -62,6 +62,6 @@ describe('Models loading state', () => {
     expect(queryByTestId('model-card-picker')).toBeNull();
     // Lock in the structural grid contract so a regression to the old
     // `<Skeleton className="h-40 w-full" />` block can't slip back in.
-    expect(skeleton.className).toContain('grid-rows-[auto_auto_minmax(0,1fr)]');
+    expect(skeleton.className).toContain('grid-cols-[280px_minmax(0,1fr)]');
   });
 });

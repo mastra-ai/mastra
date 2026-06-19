@@ -7,6 +7,7 @@ import { Models } from './models';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
 import { ProviderLogo } from '@/domains/llm/components/provider-logo';
+import { cleanProviderId } from '@/domains/llm/utils';
 import { startViewTransition } from '@/lib/routing';
 
 interface ActiveModelBadgeProps {
@@ -14,9 +15,10 @@ interface ActiveModelBadgeProps {
   name: string;
 }
 const ActiveModelBadge = ({ provider, name }: ActiveModelBadgeProps) => {
+  const providerId = cleanProviderId(provider);
   return (
     <Badge variant="default">
-      <ProviderLogo providerId={provider} size={16} /> {provider}/{name}
+      <ProviderLogo providerId={providerId} size={16} /> {providerId}/{name}
     </Badge>
   );
 };
@@ -42,6 +44,7 @@ export const AgentProfileModelStep = () => {
           </div>
         ) : undefined
       }
+      contentClassName="overflow-hidden"
       cta={
         <Button onClick={handleContinue} disabled={isStreaming}>
           Continue{' '}
@@ -51,7 +54,7 @@ export const AgentProfileModelStep = () => {
         </Button>
       }
     >
-      <Models editable />
+      <Models editable={!isStreaming} />
     </AgentStepContainer>
   );
 };

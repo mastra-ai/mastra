@@ -25,19 +25,19 @@ describe('Harness resource ID', () => {
   describe('getDefaultResourceId', () => {
     it('returns the harness id when no explicit resourceId is configured', () => {
       const harness = createHarness();
-      expect(harness.getDefaultResourceId()).toBe('test-harness');
+      expect(harness.session.identity.getDefaultResourceId()).toBe('test-harness');
     });
 
     it('returns the configured resourceId when one is provided', () => {
       const harness = createHarness({ resourceId: 'custom-resource' });
-      expect(harness.getDefaultResourceId()).toBe('custom-resource');
+      expect(harness.session.identity.getDefaultResourceId()).toBe('custom-resource');
     });
 
     it('still returns the original default after setResourceId is called', () => {
       const harness = createHarness({ resourceId: 'original' });
       harness.setResourceId({ resourceId: 'changed' });
-      expect(harness.getResourceId()).toBe('changed');
-      expect(harness.getDefaultResourceId()).toBe('original');
+      expect(harness.session.identity.getResourceId()).toBe('changed');
+      expect(harness.session.identity.getDefaultResourceId()).toBe('original');
     });
   });
 

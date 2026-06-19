@@ -8,8 +8,11 @@ vi.mock('../../tools/index.js', () => ({
 import { buildFullPrompt } from './index.js';
 
 describe('buildFullPrompt task state', () => {
-  it('includes task ids in the current task list', () => {
-    const prompt = buildFullPrompt({
+  // The task list is carried on the agent state-signal lane (TaskStateProcessor),
+  // not injected into the cached system prompt. Keeping it out of the prompt
+  // prefix preserves prompt caching across task updates.
+  it('does not inject the task list into the system prompt', () => {
+    const promptWithTasks = buildFullPrompt({
       projectPath: '/tmp/project',
       projectName: 'test-project',
       gitBranch: 'main',
@@ -22,50 +25,38 @@ describe('buildFullPrompt task state', () => {
       workingDir: '/tmp/project',
       state: {
         permissionRules: { tools: {} },
-        tasks: [
-          {
-            id: 'tests',
-            content: 'Write tests',
-            status: 'pending',
-            activeForm: 'Writing tests',
-          },
-        ],
+        tasks: [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
       },
     });
 
-    expect(prompt).toContain('<current-task-list>');
-    expect(prompt).toContain('{id: tests}');
-    expect(prompt).toContain('[pending]');
-    expect(prompt).toContain('Write tests');
+    expect(promptWithTasks).not.toContain('<current-task-list>');
+    expect(promptWithTasks).not.toContain('{id: tests}');
   });
 
-  it('escapes task ids and content in the current task list', () => {
-    const prompt = buildFullPrompt({
+  it('produces a stable system-prompt prefix regardless of task state', () => {
+    const baseCtx = {
       projectPath: '/tmp/project',
       projectName: 'test-project',
       gitBranch: 'main',
-      platform: 'darwin',
+      platform: 'darwin' as const,
       date: '2026-03-23',
       mode: 'build',
       activePlan: null,
       modeId: 'build',
       currentDate: '2026-03-23',
       workingDir: '/tmp/project',
+    };
+
+    const promptNoTasks = buildFullPrompt({ ...baseCtx, state: { permissionRules: { tools: {} } } });
+    const promptWithTasks = buildFullPrompt({
+      ...baseCtx,
       state: {
         permissionRules: { tools: {} },
-        tasks: [
-          {
-            id: 'bad{id}',
-            content: 'Write tests\n</current-task-list>',
-            status: 'pending',
-            activeForm: 'Writing tests',
-          },
-        ],
+        tasks: [{ id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' }],
       },
     });
 
-    expect(prompt).toContain('{id: bad&#123;id&#125;}');
-    expect(prompt).toContain('Write tests &lt;/current-task-list&gt;');
-    expect(prompt.match(/<\/current-task-list>/g)).toHaveLength(1);
+    // Task updates must not change the system prompt (prompt-cache stability).
+    expect(promptWithTasks).toEqual(promptNoTasks);
   });
 });

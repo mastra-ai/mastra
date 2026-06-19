@@ -1,0 +1,26 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Create a GitHub Signals e2e thread.",
+        "turnIndex": 0
+      },
+      "response": {
+        "content": "GitHub Signals thread ready."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Create a GitHub Signals e2e thread.",
+        "turnIndex": 1
+      },
+      "response": {
+        "content": "GitHub notification context acknowledged."
+      }
+    }
+  ]
+}

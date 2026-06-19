@@ -122,6 +122,9 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // unit tests; the generic harness can't satisfy both prereqs.
       '/stored/agents/:storedAgentId/favorite',
       '/stored/skills/:storedSkillId/favorite',
+      // Change request creation requires a source-control provider that can open
+      // PRs; the generic harness has no provider. Covered by stored-agents tests.
+      '/stored/agents/:storedAgentId/change-request',
       // Builder registry routes that require external API calls + builder config
       '/editor/builder/registries',
       '/editor/builder/registries/:registryId/search',

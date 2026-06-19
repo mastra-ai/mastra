@@ -1,5 +1,7 @@
+import { Container } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
-import { handleSkillCommand } from '../skills.js';
+import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { handleSkillCommand, handleSkillsCommand } from '../skills.js';
 
 function createCtx(options?: {
   pendingNewThread?: boolean;
@@ -26,7 +28,7 @@ function createCtx(options?: {
   const state = {
     pendingNewThread: options?.pendingNewThread ?? false,
     allSlashCommandComponents: [],
-    chatContainer: { addChild: vi.fn() },
+    chatContainer: new Container(),
     ui: { requestRender: vi.fn() },
   };
   const harness = {
@@ -51,13 +53,47 @@ function createCtx(options?: {
 }
 
 describe('handleSkillCommand', () => {
-  it('loads a named skill and sends its instructions to the agent', async () => {
+  it('eagerly resolves the workspace for /skills when no message has resolved it yet', async () => {
+    const workspace = {
+      skills: {
+        list: vi.fn().mockResolvedValue([
+          { name: 'review', description: 'Review code' },
+          { name: 'internal-helper', description: 'Hidden helper', 'user-invocable': false },
+        ]),
+      },
+    };
+    const ctx = {
+      harness: {
+        hasWorkspace: vi.fn(() => true),
+        resolveWorkspace: vi.fn().mockResolvedValue(workspace),
+      },
+      getResolvedWorkspace: vi.fn(() => undefined),
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    await handleSkillsCommand(ctx);
+
+    expect(ctx.harness.resolveWorkspace).toHaveBeenCalledTimes(1);
+    expect(workspace.skills.list).toHaveBeenCalledTimes(1);
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Skills (1):\n  review - Review code'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.not.stringContaining('internal-helper'));
+    expect(ctx.showError).not.toHaveBeenCalled();
+  });
+
+  it('loads a named skill and sends its instructions to the agent with immediate boundary spacing', async () => {
     const { ctx, harness, state } = createCtx();
+    const previousComponent = new Container();
+    (previousComponent as any).getChatSpacingKind = () => 'user-message';
+    state.chatContainer.addChild(previousComponent);
 
     await handleSkillCommand(ctx, 'github-triage', ['focus', 'tests']);
 
     expect(state.allSlashCommandComponents).toHaveLength(1);
-    expect(state.chatContainer.addChild).toHaveBeenCalledWith(state.allSlashCommandComponents[0]);
+    expect(state.chatContainer.children).toHaveLength(3);
+    expect(state.chatContainer.children[0]).toBe(previousComponent);
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    expect(state.chatContainer.children[2]).toBe(state.allSlashCommandComponents[0]);
     expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
     expect(harness.sendMessage).toHaveBeenCalledWith({
       content:

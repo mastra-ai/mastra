@@ -113,6 +113,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/goals',
+          label: 'Goals',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/background-tasks',
           label: 'Background Tasks',
           customProps: {
@@ -327,6 +335,7 @@ const sidebars = {
             { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
             { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
             { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+            { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
             { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
             { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
           ],
@@ -389,6 +398,45 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Harness',
+      customProps: {
+        tags: ['alpha'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'harness/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'harness/session',
+          label: 'Session',
+        },
+        {
+          type: 'doc',
+          id: 'harness/modes',
+          label: 'Modes',
+        },
+        {
+          type: 'doc',
+          id: 'harness/threads-and-state',
+          label: 'Threads and State',
+        },
+        {
+          type: 'doc',
+          id: 'harness/subagents',
+          label: 'Subagents',
+        },
+        {
+          type: 'doc',
+          id: 'harness/tool-approvals',
+          label: 'Tool Approvals',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Workspaces',
       items: [
         {
@@ -444,6 +492,11 @@ const sidebars = {
           type: 'doc',
           id: 'browser/stagehand',
           label: 'Stagehand',
+        },
+        {
+          type: 'doc',
+          id: 'browser/recording',
+          label: 'Recording',
         },
         {
           type: 'doc',
@@ -840,6 +893,19 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/server',
           label: 'Server',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/github',
+          label: 'GitHub integration',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/database',
+          label: 'Hosted databases',
         },
         {
           type: 'doc',

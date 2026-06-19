@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Calculator, Calendar, CreditCard, Settings, Smile, User } from 'lucide-react';
+import { Bot, Calculator, Calendar, CreditCard, GitBranch, Rocket, Settings, Shield, Smile, User } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '../Button';
+import { Kbd } from '../Kbd';
 import {
   Command,
   CommandDialog,
@@ -25,6 +26,28 @@ const meta: Meta<typeof Command> = {
 
 export default meta;
 type Story = StoryObj<typeof Command>;
+
+const InlineResult = ({
+  icon,
+  title,
+  subtitle,
+  value,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  value: string;
+}) => (
+  <CommandItem value={value} className="h-auto items-start gap-3 px-2.5 py-2">
+    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-surface5 text-neutral4">
+      {icon}
+    </span>
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="truncate text-ui-sm font-medium leading-ui-sm text-neutral6">{title}</span>
+      <span className="truncate text-ui-xs leading-ui-xs text-neutral3">{subtitle}</span>
+    </span>
+  </CommandItem>
+);
 
 export const Default: Story = {
   render: () => (
@@ -66,6 +89,72 @@ export const Default: Story = {
         </CommandGroup>
       </CommandList>
     </Command>
+  ),
+};
+
+export const InlineVercelStyle: Story = {
+  render: () => (
+    <div className="w-[24rem] overflow-hidden rounded-xl border border-border1 bg-surface2 shadow-dialog">
+      <Command className="rounded-none bg-surface2">
+        <CommandInput
+          placeholder="Find..."
+          rightSlot={
+            <Kbd className="min-w-0 rounded border-border1 bg-surface4 px-1.5 py-0 text-[10px] leading-4 text-neutral4">
+              Esc
+            </Kbd>
+          }
+        />
+        <CommandList
+          scrollArea
+          scrollAreaClassName="max-h-[22rem]"
+          scrollAreaViewportClassName="rounded-[inherit]"
+          className="p-1.5"
+        >
+          <CommandEmpty>No results found.</CommandEmpty>
+          <CommandGroup heading="Projects">
+            <InlineResult
+              icon={<Settings className="size-3.5" />}
+              title="Settings"
+              subtitle="Mastra"
+              value="settings mastra account billing"
+            />
+            <InlineResult
+              icon={<Rocket className="size-3.5" />}
+              title="mastra-cloud-admin"
+              subtitle="Project"
+              value="mastra cloud admin project"
+            />
+            <InlineResult
+              icon={<GitBranch className="size-3.5" />}
+              title="codex/eu-residency-ux-plan"
+              subtitle="platform-admin-portal"
+              value="codex eu residency ux plan platform admin portal"
+            />
+          </CommandGroup>
+          <CommandSeparator />
+          <CommandGroup heading="Commands">
+            <InlineResult
+              icon={<Shield className="size-3.5" />}
+              title="Deployments"
+              subtitle="mastra-docs-1.x"
+              value="deployments mastra docs"
+            />
+            <InlineResult
+              icon={<Settings className="size-3.5" />}
+              title="On-Demand Concurrent Builds"
+              subtitle="Mastra / Build and Deployment / Settings"
+              value="on demand concurrent builds mastra build deployment settings"
+            />
+            <InlineResult
+              icon={<Bot className="size-3.5" />}
+              title="Navigation Assistant"
+              subtitle="Search projects, routes, and commands"
+              value="navigation assistant search projects routes commands"
+            />
+          </CommandGroup>
+        </CommandList>
+      </Command>
+    </div>
   ),
 };
 

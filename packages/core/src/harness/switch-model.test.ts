@@ -19,12 +19,12 @@ function createHarness(onModelUse?: (modelId: string) => void) {
   });
 }
 
-describe('Harness.switchModel', () => {
+describe('session.model.switch', () => {
   it('tracks model selection via modelUseCountTracker', async () => {
     const trackModelUse = vi.fn<(modelId: string) => void>();
     const harness = createHarness(trackModelUse);
 
-    await harness.switchModel({ modelId: 'openai/gpt-5.3-codex' });
+    await harness.session.model.switch({ modelId: 'openai/gpt-5.3-codex' });
 
     expect(trackModelUse).toHaveBeenCalledTimes(1);
     expect(trackModelUse).toHaveBeenCalledWith('openai/gpt-5.3-codex');
