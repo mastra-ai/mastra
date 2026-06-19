@@ -31,3 +31,4 @@ Ordinary `IMastraLogger` infrastructure logging, `console.*`, EventEmitter event
 - [08-runtime-surfaces-pulse-candidates.md](./08-runtime-surfaces-pulse-candidates.md): tool execution, task tools/state signals, LLM model routing, and websocket transport candidates.
 - [09-storage-observability-pulse-candidates.md](./09-storage-observability-pulse-candidates.md): observability helpers, storage composition/init, observability storage, and storage-domain method surfaces.
 - [10-protocol-telemetry-adapter-pulse-candidates.md](./10-protocol-telemetry-adapter-pulse-candidates.md): A2A, ToolLoopAgent adapter, Agent Builder policy, telemetry, logging, and thin boundary re-exports.
+- [11-pulse-applicability-review.md](./11-pulse-applicability-review.md): narrows the raw audit to user-primitive Pulse candidates and marks admin/query/storage/infrastructure items to skip or defer.
