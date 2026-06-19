@@ -10,6 +10,7 @@ import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } fr
 import type {
   HarnessDisplayState,
   HarnessEvent,
+  HarnessEventListener,
   HarnessMessage,
   HarnessMode,
   HarnessOMConfig,
@@ -661,32 +662,27 @@ export class SessionRun {
 export class SessionModel {
   #id = '';
   readonly #store: () => ThreadSettingsStore | undefined;
+  /** This session's event bus; {@link switch} emits `model_changed` here. */
+  readonly #bus: SessionBus;
   /**
    * Reads the active mode id. Injected by the Harness via {@link setResolver},
    * since {@link switch} defaults a model change to the current mode.
    */
   #getCurrentModeId: (() => string) | undefined;
-  /** Emits Harness events (`model_changed`). Injected via {@link setResolver}. */
-  #emit: ((event: HarnessEvent) => void) | undefined;
   /** App hook to track model usage for ranking. Injected via {@link setResolver}. */
   #trackModelUse: ModelUseCountTracker | undefined;
 
-  constructor(store: () => ThreadSettingsStore | undefined) {
+  constructor(store: () => ThreadSettingsStore | undefined, bus: SessionBus) {
     this.#store = store;
+    this.#bus = bus;
   }
 
   /**
    * Attach the Harness-owned dependencies {@link switch} needs: the active-mode
-   * accessor, the event emitter, and the optional model-use tracker. The
-   * Harness injects these once.
+   * accessor and the optional model-use tracker. The Harness injects these once.
    */
-  setResolver(options: {
-    getCurrentModeId: () => string;
-    emit: (event: HarnessEvent) => void;
-    trackModelUse?: ModelUseCountTracker;
-  }): void {
+  setResolver(options: { getCurrentModeId: () => string; trackModelUse?: ModelUseCountTracker }): void {
     this.#getCurrentModeId = options.getCurrentModeId;
-    this.#emit = options.emit;
     this.#trackModelUse = options.trackModelUse;
   }
 
@@ -772,7 +768,7 @@ export class SessionModel {
       console.error('Failed to track model usage count', error);
     }
 
-    this.#emit?.({ type: 'model_changed', modelId, scope, modeId: targetModeId });
+    this.#bus.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId });
   }
 }
 
@@ -793,6 +789,8 @@ export class SessionMode {
   #switchVersion = 0;
   readonly #store: () => ThreadSettingsStore | undefined;
   readonly #model: SessionModel;
+  /** This session's event bus; {@link switch} emits mode_changed / model_changed here. */
+  readonly #bus: SessionBus;
   /**
    * Resolves a mode id to its full definition. Injected by the Harness via
    * {@link setResolver}, since the mode *catalog* (`config.modes`) is host config.
@@ -803,30 +801,22 @@ export class SessionMode {
    * via {@link setResolver}, since aborting a run is Harness-owned orchestration.
    */
   #abort: (() => void) | undefined;
-  /**
-   * Emits Harness events (mode_changed / model_changed) during a switch.
-   * Injected by the Harness via {@link setResolver}.
-   */
-  #emit: ((event: HarnessEvent) => void) | undefined;
 
-  constructor(store: () => ThreadSettingsStore | undefined, model: SessionModel) {
+  constructor(store: () => ThreadSettingsStore | undefined, model: SessionModel, bus: SessionBus) {
     this.#store = store;
     this.#model = model;
+    this.#bus = bus;
   }
 
   /**
    * Attach the resolver that maps a mode id to its definition, plus the
-   * Harness-owned orchestration callbacks ({@link switch} uses to abort the
-   * in-flight run and emit events). The Harness owns the mode catalog
-   * (`config.modes`) and injects these once.
+   * Harness-owned abort callback ({@link switch} uses to abort the in-flight
+   * run before switching). The Harness owns the mode catalog (`config.modes`)
+   * and injects these once.
    */
-  setResolver(
-    resolve: (modeId: string) => HarnessMode | null,
-    options?: { abort?: () => void; emit?: (event: HarnessEvent) => void },
-  ): void {
+  setResolver(resolve: (modeId: string) => HarnessMode | null, options?: { abort?: () => void }): void {
     this.#resolveMode = resolve;
     this.#abort = options?.abort;
-    this.#emit = options?.emit;
   }
 
   /** The currently-selected mode id. */
@@ -875,7 +865,7 @@ export class SessionMode {
 
     // Emit the mode change immediately so UIs can update without waiting for
     // the storage round-trips below.
-    this.#emit?.({ type: 'mode_changed', modeId, previousModeId });
+    this.#bus.emit({ type: 'mode_changed', modeId, previousModeId });
 
     // Remember the outgoing mode's model before moving on.
     if (previousModelId) {
@@ -890,7 +880,7 @@ export class SessionMode {
     if (this.#switchVersion !== version) return;
     if (modelId) {
       this.#model.set({ modelId });
-      this.#emit?.({ type: 'model_changed', modelId } as HarnessEvent);
+      this.#bus.emit({ type: 'model_changed', modelId } as HarnessEvent);
     }
   }
 }
@@ -917,15 +907,16 @@ interface SessionOMRoleConfig {
  */
 class SessionOMRole {
   readonly #config: SessionOMRoleConfig;
+  readonly #bus: SessionBus;
   #getState: (() => Record<string, unknown>) | undefined;
   #setState: ((updates: Record<string, unknown>) => void) | undefined;
   #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
-  #emit: ((event: HarnessEvent) => void) | undefined;
   #omConfig: HarnessOMConfig | undefined;
   #resolveModel: ((modelId: string) => MastraModelConfig) | undefined;
 
-  constructor(config: SessionOMRoleConfig) {
+  constructor(config: SessionOMRoleConfig, bus: SessionBus) {
     this.#config = config;
+    this.#bus = bus;
   }
 
   /** @internal Injected by {@link SessionOM.setResolver}. */
@@ -933,14 +924,12 @@ class SessionOMRole {
     getState: () => Record<string, unknown>;
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
-    emit: (event: HarnessEvent) => void;
     omConfig?: HarnessOMConfig;
     resolveModel?: (modelId: string) => MastraModelConfig;
   }): void {
     this.#getState = wiring.getState;
     this.#setState = wiring.setState;
     this.#setSetting = wiring.setSetting;
-    this.#emit = wiring.emit;
     this.#omConfig = wiring.omConfig;
     this.#resolveModel = wiring.resolveModel;
   }
@@ -968,7 +957,7 @@ class SessionOMRole {
   async switchModel({ modelId }: { modelId: string }): Promise<void> {
     this.#setState?.({ [this.#config.modelIdKey]: modelId });
     await this.#setSetting?.({ key: this.#config.modelIdKey, value: modelId });
-    this.#emit?.({ type: 'om_model_changed', role: this.#config.role, modelId });
+    this.#bus.emit({ type: 'om_model_changed', role: this.#config.role, modelId });
   }
 }
 
@@ -980,31 +969,41 @@ class SessionOMRole {
  * which fans the wiring out to both roles.
  */
 class SessionOM {
-  readonly observer = new SessionOMRole({
-    role: 'observer',
-    modelIdKey: 'observerModelId',
-    thresholdKey: 'observationThreshold',
-    defaultModelId: omConfig => omConfig?.defaultObserverModelId,
-    defaultThreshold: omConfig => omConfig?.defaultObservationThreshold,
-  });
-  readonly reflector = new SessionOMRole({
-    role: 'reflector',
-    modelIdKey: 'reflectorModelId',
-    thresholdKey: 'reflectionThreshold',
-    defaultModelId: omConfig => omConfig?.defaultReflectorModelId,
-    defaultThreshold: omConfig => omConfig?.defaultReflectionThreshold,
-  });
+  readonly observer: SessionOMRole;
+  readonly reflector: SessionOMRole;
+
+  constructor(bus: SessionBus) {
+    this.observer = new SessionOMRole(
+      {
+        role: 'observer',
+        modelIdKey: 'observerModelId',
+        thresholdKey: 'observationThreshold',
+        defaultModelId: omConfig => omConfig?.defaultObserverModelId,
+        defaultThreshold: omConfig => omConfig?.defaultObservationThreshold,
+      },
+      bus,
+    );
+    this.reflector = new SessionOMRole(
+      {
+        role: 'reflector',
+        modelIdKey: 'reflectorModelId',
+        thresholdKey: 'reflectionThreshold',
+        defaultModelId: omConfig => omConfig?.defaultReflectorModelId,
+        defaultThreshold: omConfig => omConfig?.defaultReflectionThreshold,
+      },
+      bus,
+    );
+  }
 
   /**
-   * Attach the session-state read/write, thread-settings persistence, event
-   * emitter, and the Harness-owned `omConfig` defaults plus model resolver. The
-   * Harness injects these once; the wiring is shared by both roles.
+   * Attach the session-state read/write, thread-settings persistence, and the
+   * Harness-owned `omConfig` defaults plus model resolver. The Harness injects
+   * these once; the wiring is shared by both roles.
    */
   setResolver(options: {
     getState: () => Record<string, unknown>;
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
-    emit: (event: HarnessEvent) => void;
     omConfig?: HarnessOMConfig;
     resolveModel?: (modelId: string) => MastraModelConfig;
   }): void {
@@ -1068,22 +1067,24 @@ function subagentModelKey(agentType?: string): string {
  * {@link SessionSubagents.setResolver}.
  */
 class SessionSubagentModel {
+  readonly #bus: SessionBus;
   #getState: (() => Record<string, unknown>) | undefined;
   #setState: ((updates: Record<string, unknown>) => void) | undefined;
   #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
-  #emit: ((event: HarnessEvent) => void) | undefined;
+
+  constructor(bus: SessionBus) {
+    this.#bus = bus;
+  }
 
   /** @internal Injected by {@link SessionSubagents.setResolver}. */
   setWiring(wiring: {
     getState: () => Record<string, unknown>;
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
-    emit: (event: HarnessEvent) => void;
   }): void {
     this.#getState = wiring.getState;
     this.#setState = wiring.setState;
     this.#setSetting = wiring.setSetting;
-    this.#emit = wiring.emit;
   }
 
   /**
@@ -1108,7 +1109,7 @@ class SessionSubagentModel {
     const key = subagentModelKey(agentType);
     this.#setState?.({ [key]: modelId });
     await this.#setSetting?.({ key, value: modelId });
-    this.#emit?.({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType });
+    this.#bus.emit({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType });
   }
 }
 
@@ -1120,17 +1121,20 @@ class SessionSubagentModel {
  * via {@link setResolver}.
  */
 class SessionSubagents {
-  readonly model = new SessionSubagentModel();
+  readonly model: SessionSubagentModel;
+
+  constructor(bus: SessionBus) {
+    this.model = new SessionSubagentModel(bus);
+  }
 
   /**
-   * Attach the session-state read/write, thread-settings persistence, and event
-   * emitter. The Harness injects these once.
+   * Attach the session-state read/write and thread-settings persistence. The
+   * Harness injects these once.
    */
   setResolver(options: {
     getState: () => Record<string, unknown>;
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
-    emit: (event: HarnessEvent) => void;
   }): void {
     this.model.setWiring(options);
   }
@@ -1141,7 +1145,6 @@ type SessionStateUpdater<TState, TResult> = HarnessRequestStateUpdater<TState, T
 interface SessionStateOptions<TState> {
   initialState?: Partial<TState>;
   stateSchema?: PublicSchema<TState, any>;
-  emit?: (event: HarnessEvent) => void;
 }
 
 /**
@@ -1155,15 +1158,15 @@ class SessionState<TState = unknown> {
   #state: TState;
   #updateQueue: Promise<void> = Promise.resolve();
   readonly #schema: StandardSchemaWithJSON | undefined;
-  readonly #emit: ((event: HarnessEvent) => void) | undefined;
+  readonly #bus: SessionBus;
 
-  constructor({ initialState, stateSchema, emit }: SessionStateOptions<TState>) {
+  constructor({ initialState, stateSchema }: SessionStateOptions<TState>, bus: SessionBus) {
     this.#schema = stateSchema ? toStandardSchema(stateSchema) : undefined;
     this.#state = {
       ...this.getSchemaDefaults(),
       ...(initialState as Record<string, unknown> | undefined),
     } as TState;
-    this.#emit = emit;
+    this.#bus = bus;
   }
 
   get(): Readonly<TState> {
@@ -1209,7 +1212,7 @@ class SessionState<TState = unknown> {
       this.#state = newState as TState;
     }
 
-    this.#emit?.({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
+    this.#bus.emit({ type: 'state_changed', state: this.get() as Record<string, unknown>, changedKeys });
   }
 
   set(updates: Partial<TState>): Promise<void> {
@@ -1229,7 +1232,7 @@ class SessionState<TState = unknown> {
         await this.apply(update.updates);
       }
       for (const event of update.events ?? []) {
-        this.#emit?.(event);
+        this.#bus.emit(event);
       }
       return update.result;
     });
@@ -1764,7 +1767,57 @@ export class SessionDisplayState {
   }
 }
 
+/**
+ * A session's event bus. Owns the listener list and the full emit pipeline:
+ * fold the event into the canonical display state, dispatch to this session's
+ * listeners, then fan out a synthetic `display_state_changed`. Each session
+ * has its own bus, so events never cross between sessions. Subsystems hold a
+ * reference to their session's bus and call {@link emit} directly.
+ */
+export class SessionBus {
+  readonly #listeners: HarnessEventListener[] = [];
+  #displayState: SessionDisplayState | undefined;
+
+  /** Attach the display-state reducer the bus folds events into. Set once by the Session. */
+  setDisplayState(displayState: SessionDisplayState): void {
+    this.#displayState = displayState;
+  }
+
+  subscribe(listener: HarnessEventListener): () => void {
+    this.#listeners.push(listener);
+    return () => {
+      const index = this.#listeners.indexOf(listener);
+      if (index !== -1) {
+        this.#listeners.splice(index, 1);
+      }
+    };
+  }
+
+  emit(event: HarnessEvent): void {
+    this.#displayState?.apply(event);
+    this.#dispatch(event);
+    if (event.type !== 'display_state_changed' && this.#displayState) {
+      this.#dispatch({ type: 'display_state_changed', displayState: this.#displayState.get() });
+    }
+  }
+
+  #dispatch(event: HarnessEvent): void {
+    for (const listener of this.#listeners) {
+      try {
+        const result = listener(event);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
+        }
+      } catch (err) {
+        console.error('Error in session event listener:', err);
+      }
+    }
+  }
+}
+
 export class Session<TState = unknown> {
+  /** This session's event bus. Constructed first so every subsystem can route its events here. */
+  readonly #bus = new SessionBus();
   /** Tool categories the user has granted "allow" for the lifetime of this session. */
   readonly #grantedCategories = new Set<string>();
   /** Individual tool names the user has granted "allow" for the lifetime of this session. */
@@ -1778,15 +1831,15 @@ export class Session<TState = unknown> {
   /** Resolves a subagent's display name from Harness config, injected via {@link setSubagentNameResolver}. */
   #resolveSubagentName: ((agentType: string) => string | undefined) | undefined;
   /** The session's currently-selected model (source of truth) + per-mode memory. */
-  readonly model = new SessionModel(() => this.#store);
+  readonly model = new SessionModel(() => this.#store, this.#bus);
   /** The session's currently-selected mode and switch sequence. */
-  readonly mode = new SessionMode(() => this.#store, this.model);
+  readonly mode = new SessionMode(() => this.#store, this.model, this.#bus);
   /** The session's observational-memory model selection (observer/reflector). */
-  readonly om = new SessionOM();
+  readonly om = new SessionOM(this.#bus);
   /** The session's persisted tool-permission rules (per-category / per-tool). */
   readonly permissions = new SessionPermissions();
   /** The session's subagent configuration (currently the subagent model). */
-  readonly subagents = new SessionSubagents();
+  readonly subagents = new SessionSubagents(this.#bus);
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
   /** Live subscription to the active thread's agent event stream. */
@@ -1815,7 +1868,30 @@ export class Session<TState = unknown> {
       getThreadId: () => this.thread.getId(),
       clearFollowUps: () => this.followUps.clear(),
     });
-    this.state = new SessionState(state ?? { initialState: {} as TState });
+    this.#bus.setDisplayState(this.displayState);
+    this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
+  }
+
+  // ===========================================================================
+  // Event bus
+  // ===========================================================================
+
+  /**
+   * Subscribe to this session's events. Returns an unsubscribe function.
+   * Listeners are scoped to this session: a session never delivers its events
+   * to another session's subscribers.
+   */
+  subscribe(listener: HarnessEventListener): () => void {
+    return this.#bus.subscribe(listener);
+  }
+
+  /**
+   * Emit an event on this session. Delegates to this session's bus, which folds
+   * the event into the canonical display state, dispatches to this session's
+   * listeners, then fans out a synthetic `display_state_changed`.
+   */
+  emit(event: HarnessEvent): void {
+    this.#bus.emit(event);
   }
 
   /**

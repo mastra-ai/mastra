@@ -22,9 +22,9 @@ function createHarness(storage?: InMemoryStore, opts?: { subagents?: HarnessSuba
   });
 }
 
-// Helper to call the private emit method
+// Helper to emit an event on the harness's session bus.
 function emit(harness: Harness, event: HarnessEvent) {
-  (harness as any).emit(event);
+  harness.session.emit(event);
 }
 
 describe('defaultDisplayState', () => {
@@ -328,7 +328,7 @@ describe('tool lifecycle', () => {
 
   it('uses display transforms while processing tool stream chunks', async () => {
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     const result = await (harness as any).processStream(
       {
@@ -399,7 +399,7 @@ describe('tool lifecycle', () => {
 
   it('preserves explicit null display transforms', async () => {
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     const result = await (harness as any).processStream(
       {
@@ -1437,7 +1437,7 @@ describe('display_state_changed emission', () => {
   beforeEach(() => {
     harness = createHarness();
     events = [];
-    harness.subscribe((event: HarnessEvent) => {
+    harness.session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
   });
@@ -1523,7 +1523,7 @@ describe('display_state_changed emission', () => {
 
   it('display_state_changed reflects state at time of each event', () => {
     const snapshots: boolean[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    harness.session.subscribe((event: HarnessEvent) => {
       if (event.type === 'display_state_changed') {
         snapshots.push(event.displayState.isRunning);
       }

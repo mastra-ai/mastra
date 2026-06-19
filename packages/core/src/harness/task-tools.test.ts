@@ -287,7 +287,7 @@ describe('task tool display bridge', () => {
     const harness = createHarness();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     // Real harness request context — wires emitEvent -> harness.emit, the
     // display-only bridge the agnostic task tools call when present.

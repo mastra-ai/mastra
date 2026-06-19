@@ -22,7 +22,7 @@ describe('Harness OM failure abort behavior', () => {
   it('aborts stream and emits an error when OM buffering fails', async () => {
     const harness = createHarness();
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     harness.session.run.ensureAbortController();
 
@@ -55,7 +55,7 @@ describe('Harness OM failure abort behavior', () => {
   it('aborts stream and emits an error when OM observation run fails', async () => {
     const harness = createHarness();
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     harness.session.run.ensureAbortController();
 

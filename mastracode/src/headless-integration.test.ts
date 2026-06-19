@@ -191,7 +191,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -232,7 +232,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -253,7 +253,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -295,7 +295,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -365,7 +365,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -577,10 +577,6 @@ describe('headless mode — --output-format contracts', () => {
       message: 'Browser state changed',
     };
     const harness = {
-      subscribe: vi.fn((next: (event: HarnessEvent) => void) => {
-        listener = next;
-        return () => {};
-      }),
       sendMessage: vi.fn(async () => {
         listener?.({ type: 'agent_start', runId: 'run-state' } as HarnessEvent);
         listener?.({
@@ -594,7 +590,13 @@ describe('headless mode — --output-format contracts', () => {
         } as HarnessEvent);
         listener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
       }),
-      session: { thread: { getId: vi.fn(() => 'thread-state') } },
+      session: {
+        subscribe: vi.fn((next: (event: HarnessEvent) => void) => {
+          listener = next;
+          return () => {};
+        }),
+        thread: { getId: vi.fn(() => 'thread-state') },
+      },
     } as unknown as Harness<Record<string, unknown>>;
 
     const {
@@ -650,7 +652,7 @@ describe('headless mode — --model flag', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
@@ -688,7 +690,7 @@ describe('headless mode — --model flag', () => {
     });
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
@@ -730,7 +732,7 @@ describe('headless mode — --model flag', () => {
     });
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
@@ -890,7 +892,7 @@ describe('headless mode — --model flag', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
@@ -916,7 +918,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(
       harness,
@@ -1056,7 +1058,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     // No effectiveDefaults passed — should warn, not error
     const exitCode = await runHeadless(harness, {

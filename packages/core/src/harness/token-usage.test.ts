@@ -85,7 +85,7 @@ describe('step-finish token usage extraction', () => {
       raw: { provider: 'test-provider' },
     };
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     await (harness as any).processStream({ fullStream: mockStream(usage) });
 

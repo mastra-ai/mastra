@@ -76,7 +76,7 @@ async function restoreSettingsForThread(harness: Harness<Record<string, unknown>
  * the host.
  */
 export function attachOMThreadStatePersistence(harness: Harness<Record<string, unknown>>): void {
-  harness.subscribe(event => {
+  harness.session.subscribe(event => {
     if (event.type === 'thread_changed' || event.type === 'thread_created') {
       const threadId = event.type === 'thread_changed' ? event.threadId : event.thread.id;
       void restoreSettingsForThread(harness, threadId).catch(() => {

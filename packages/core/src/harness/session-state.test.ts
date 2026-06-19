@@ -49,7 +49,7 @@ describe('Harness session state', () => {
       },
     });
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     await harness.session.state.set({ count: 1 });
 

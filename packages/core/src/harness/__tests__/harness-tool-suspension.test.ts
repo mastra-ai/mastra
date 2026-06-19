@@ -166,7 +166,7 @@ describe('Harness: tool suspension and resumption', () => {
 
     // Collect all events
     const events: any[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -294,7 +294,7 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.init();
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
