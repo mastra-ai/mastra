@@ -804,53 +804,7 @@ if (record) {
 }
 ```
 
-#### `getObserverModelId()`
-
-Return the observer model ID from state or the default from `omConfig`.
-
-```typescript
-const modelId = harness.getObserverModelId()
-```
-
-#### `getReflectorModelId()`
-
-Return the reflector model ID from state or the default from `omConfig`.
-
-```typescript
-const modelId = harness.getReflectorModelId()
-```
-
-#### `switchObserverModel({ modelId })`
-
-Switch the observer model. Persists the setting to thread metadata and emits an `om_model_changed` event.
-
-```typescript
-await harness.switchObserverModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
-```
-
-#### `switchReflectorModel({ modelId })`
-
-Switch the reflector model. Persists the setting to thread metadata and emits an `om_model_changed` event.
-
-```typescript
-await harness.switchReflectorModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
-```
-
-#### `getObservationThreshold()`
-
-Return the observation threshold in tokens from state or the default from `omConfig`.
-
-```typescript
-const threshold = harness.getObservationThreshold()
-```
-
-#### `getReflectionThreshold()`
-
-Return the reflection threshold in tokens from state or the default from `omConfig`.
-
-```typescript
-const threshold = harness.getReflectionThreshold()
-```
+The observer/reflector model selection and observation/reflection thresholds live on the Session under [`session.om`](/reference/harness/session#observational-memory). Read them with `session.om.observerModelId()`, `session.om.reflectorModelId()`, `session.om.observationThreshold()`, and `session.om.reflectionThreshold()`, and change a role's model with `session.om.switchObserverModel()` / `session.om.switchReflectorModel()`.
 
 ### Subagents
 

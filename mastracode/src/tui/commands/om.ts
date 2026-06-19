@@ -83,10 +83,10 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
 
   const harnessState = ctx.state.session.state.get() as Record<string, unknown> | undefined;
   const config = {
-    observerModelId: ctx.state.harness.getObserverModelId() ?? '',
-    reflectorModelId: ctx.state.harness.getReflectorModelId() ?? '',
-    observationThreshold: ctx.state.harness.getObservationThreshold() ?? 30_000,
-    reflectionThreshold: ctx.state.harness.getReflectionThreshold() ?? 40_000,
+    observerModelId: ctx.state.session.om.observerModelId() ?? '',
+    reflectorModelId: ctx.state.session.om.reflectorModelId() ?? '',
+    observationThreshold: ctx.state.session.om.observationThreshold() ?? 30_000,
+    reflectionThreshold: ctx.state.session.om.reflectionThreshold() ?? 40_000,
     cavemanObservations: (harnessState?.cavemanObservations as boolean | undefined) ?? false,
     observeAttachments: (harnessState?.observeAttachments as 'auto' | boolean | undefined) ?? 'auto',
   };
@@ -97,15 +97,15 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
       {
         onObserverModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          const currentReflector = ctx.state.harness.getReflectorModelId() ?? null;
-          await ctx.state.harness.switchObserverModel({ modelId: model.id });
+          const currentReflector = ctx.state.session.om.reflectorModelId() ?? null;
+          await ctx.state.session.om.switchObserverModel({ modelId: model.id });
           persistOmRoleOverride('observer', model.id, currentReflector);
           ctx.showInfo(`Observer model → ${model.id}`);
         },
         onReflectorModelChange: async model => {
           await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
-          const currentObserver = ctx.state.harness.getObserverModelId() ?? null;
-          await ctx.state.harness.switchReflectorModel({ modelId: model.id });
+          const currentObserver = ctx.state.session.om.observerModelId() ?? null;
+          await ctx.state.session.om.switchReflectorModel({ modelId: model.id });
           persistOmRoleOverride('reflector', model.id, currentObserver);
           ctx.showInfo(`Reflector model → ${model.id}`);
         },

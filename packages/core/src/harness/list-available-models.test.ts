@@ -122,7 +122,7 @@ describe('Harness.listAvailableModels', () => {
       },
     });
 
-    const observerModel = harness.getResolvedObserverModel() as { modelId?: string };
+    const observerModel = harness.session.om.resolvedObserverModel() as { modelId?: string };
     expect(observerModel).toMatchObject({ modelId: 'test-gateway/acme/sonic-fast' });
     expect(resolveModel).toHaveBeenCalledWith('test-gateway/acme/sonic-fast');
 

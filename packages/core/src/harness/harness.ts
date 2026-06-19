@@ -506,6 +506,14 @@ export class Harness<TState = {}> {
       emit: event => this.emit(event),
       trackModelUse: this.config.modelUseCountTracker,
     });
+    this.#session.om.setResolver({
+      getState: () => this.#session.state.get() as Record<string, unknown>,
+      setState: updates => void this.#session.state.set(updates as Partial<TState>),
+      setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
+      emit: event => this.emit(event),
+      omConfig: this.config.omConfig,
+      resolveModel: this.config.resolveModel,
+    });
     this.#session.thread.connect(this.createThreadDataStore());
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
@@ -1449,13 +1457,13 @@ export class Harness<TState = {}> {
       }
 
       if (!hasObservationThreshold) {
-        const observationThreshold = this.getObservationThreshold();
+        const observationThreshold = this.#session.om.observationThreshold();
         if (observationThreshold !== undefined) {
           await this.#session.thread.setSetting({ key: 'observationThreshold', value: observationThreshold });
         }
       }
       if (!hasReflectionThreshold) {
-        const reflectionThreshold = this.getReflectionThreshold();
+        const reflectionThreshold = this.#session.om.reflectionThreshold();
         if (reflectionThreshold !== undefined) {
           await this.#session.thread.setSetting({ key: 'reflectionThreshold', value: reflectionThreshold });
         }
@@ -1598,70 +1606,6 @@ export class Harness<TState = {}> {
     } catch {
       return null;
     }
-  }
-
-  /**
-   * Returns the observer model ID from state, falling back to omConfig defaults.
-   */
-  getObserverModelId(): string | undefined {
-    return (this.#session.state.get() as any).observerModelId ?? this.config.omConfig?.defaultObserverModelId;
-  }
-
-  /**
-   * Returns the reflector model ID from state, falling back to omConfig defaults.
-   */
-  getReflectorModelId(): string | undefined {
-    return (this.#session.state.get() as any).reflectorModelId ?? this.config.omConfig?.defaultReflectorModelId;
-  }
-
-  /**
-   * Returns the observation threshold from state, falling back to omConfig defaults.
-   */
-  getObservationThreshold(): number | undefined {
-    return (this.#session.state.get() as any).observationThreshold ?? this.config.omConfig?.defaultObservationThreshold;
-  }
-
-  /**
-   * Returns the reflection threshold from state, falling back to omConfig defaults.
-   */
-  getReflectionThreshold(): number | undefined {
-    return (this.#session.state.get() as any).reflectionThreshold ?? this.config.omConfig?.defaultReflectionThreshold;
-  }
-
-  /**
-   * Resolves the observer model ID to a language model instance via the configured resolver.
-   */
-  getResolvedObserverModel() {
-    const modelId = this.getObserverModelId();
-    if (!modelId || !this.config.resolveModel) return undefined;
-    return this.config.resolveModel(modelId);
-  }
-
-  /**
-   * Resolves the reflector model ID to a language model instance via the configured resolver.
-   */
-  getResolvedReflectorModel() {
-    const modelId = this.getReflectorModelId();
-    if (!modelId || !this.config.resolveModel) return undefined;
-    return this.config.resolveModel(modelId);
-  }
-
-  /**
-   * Switch the Observer model.
-   */
-  async switchObserverModel({ modelId }: { modelId: string }): Promise<void> {
-    void this.setState({ observerModelId: modelId } as unknown as Partial<TState>);
-    await this.#session.thread.setSetting({ key: 'observerModelId', value: modelId });
-    this.emit({ type: 'om_model_changed', role: 'observer', modelId } as HarnessEvent);
-  }
-
-  /**
-   * Switch the Reflector model.
-   */
-  async switchReflectorModel({ modelId }: { modelId: string }): Promise<void> {
-    void this.setState({ reflectorModelId: modelId } as unknown as Partial<TState>);
-    await this.#session.thread.setSetting({ key: 'reflectorModelId', value: modelId });
-    this.emit({ type: 'om_model_changed', role: 'reflector', modelId } as HarnessEvent);
   }
 
   // ===========================================================================
