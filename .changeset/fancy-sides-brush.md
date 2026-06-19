@@ -16,3 +16,5 @@ await harness.switchMode({ modeId: 'build' });
 ```typescript
 await harness.session.mode.switch({ modeId: 'build' });
 ```
+
+`mastracode` is updated to consume the new API: the TUI and headless callers now invoke `harness.session.mode.switch()` instead of the removed `harness.switchMode()`.
