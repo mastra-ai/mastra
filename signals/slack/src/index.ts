@@ -8,9 +8,13 @@ import { SignalProvider } from '@mastra/core/signals';
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
+import { SlackRtmClient } from './slack-rtm-client.js';
+import type { SlackRtmMessageEvent } from './slack-rtm-client.js';
 import { SlackWebApiSyncClient } from './slack-client.js';
 export { SlackSignalsApiError, SlackWebApiSyncClient } from './slack-client.js';
 export type { SlackWebApiSyncClientOptions } from './slack-client.js';
+export { SlackRtmClient } from './slack-rtm-client.js';
+export type { SlackRtmClientOptions, SlackRtmMessageEvent, SlackRtmLifecycleState } from './slack-rtm-client.js';
 
 export const SLACK_SIGNALS_PROVIDER_ID = 'slack-signals';
 export const SLACK_SIGNALS_METADATA_KEY = 'slackSignals';
@@ -194,6 +198,7 @@ export type SlackSignalsProviderConfig = {
   syncClient?: SlackSignalsSyncClient;
   threadStore?: SlackSignalsThreadStore;
   maxMessagesPerChannel?: number;
+  rtmClient?: SlackRtmClient;
 };
 
 export type SlackSignalsOptions = SlackSignalsProviderConfig;
@@ -271,14 +276,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function compareSlackTimestamps(a: string, b: string): number {
-  return Number(a) - Number(b);
-}
-
-function isNewerSlackTimestamp(candidate: string, previous?: string): boolean {
-  return !previous || compareSlackTimestamps(candidate, previous) > 0;
 }
 
 function isSlackConversationType(value: unknown): value is SlackConversationType {
@@ -481,7 +478,6 @@ function createSlackNotificationInput(
 export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   readonly id = SLACK_SIGNALS_PROVIDER_ID;
   override readonly name = 'Slack Signals';
-  override readonly pollInterval?: number;
 
   static signals = {
     subscribe(): AgentSignalInput {
@@ -514,6 +510,9 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   readonly #include: Required<SlackSignalsIncludeConfig>;
   readonly #filters: NormalizedSlackSignalsFilterConfig;
   readonly #syncClient: SlackSignalsSyncClient;
+  readonly #rtmClient: SlackRtmClient;
+  #rtmConnected = false;
+  readonly #subscribedThreads = new Map<string, SlackPollingThread>();
 
   constructor(options: SlackSignalsProviderConfig) {
     super();
@@ -521,7 +520,15 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     this.#include = normalizeIncludeConfig(options.include);
     this.#filters = normalizeSlackFilters(options.filters);
     this.#syncClient = options.syncClient ?? new SlackWebApiSyncClient({ token: options.token });
-    this.pollInterval = options.pollIntervalMs ?? DEFAULT_SLACK_SIGNALS_POLL_INTERVAL_MS;
+    this.#rtmClient = options.rtmClient ?? new SlackRtmClient({ token: options.token });
+  }
+
+  get rtmConnected(): boolean {
+    return this.#rtmConnected;
+  }
+
+  get rtmState(): string {
+    return this.#rtmClient.state;
   }
 
   get include(): Required<SlackSignalsIncludeConfig> {
@@ -534,6 +541,79 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
 
   get token(): string {
     return this.#options.token;
+  }
+
+  override connect(agent: any): void {
+    super.connect(agent);
+    this.#startRtm();
+  }
+
+  disconnect(): void {
+    this.#rtmClient.disconnect();
+    this.#subscribedThreads.clear();
+    this.#rtmConnected = false;
+  }
+
+  #startRtm(): void {
+    this.#rtmClient.onLifecycle(state => {
+      this.#rtmConnected = state === 'connected';
+    });
+
+    this.#rtmClient.onMessage(event => {
+      this.#handleRtmMessage(event).catch(error => {
+        // Best-effort — don't crash RTM on notification errors
+        console.warn(`[slack-signals] RTM message handler error:`, error);
+      });
+    });
+
+    void this.#rtmClient.connect().catch(error => {
+      console.warn(`[slack-signals] RTM connection failed:`, error);
+    });
+  }
+
+  async #handleRtmMessage(event: SlackRtmMessageEvent): Promise<void> {
+    // Skip message edits/deletes/joins/leaves — only handle new messages
+    if (event.subtype && event.subtype !== 'bot_message') return;
+
+    const channelType = this.#resolveChannelType(event);
+    const message: SlackSignalsMessage = {
+      channelId: event.channel,
+      channelType,
+      ts: event.ts,
+      ...(event.threadTs ? { threadTs: event.threadTs } : {}),
+      ...(event.user ? { user: event.user } : {}),
+      ...(event.botId ? { botId: event.botId } : {}),
+      ...(event.username ? { username: event.username } : {}),
+      ...(event.text ? { text: event.text } : {}),
+    };
+
+    if (!shouldNotifyMessage(message, this.#filters)) return;
+
+    // Dispatch to all subscribed threads
+    for (const target of this.#subscribedThreads.values()) {
+      const { loadedThread } = await this.#loadThread(target);
+      const subscription = getSlackSignalsMetadata(loadedThread.metadata).subscription;
+      if (!subscription) continue;
+
+      // Check conversation type filter
+      if (subscription.conversationTypes.length > 0 && !subscription.conversationTypes.includes(channelType)) {
+        continue;
+      }
+
+      await this.notify(createSlackNotificationInput(subscription, message, this.#filters), target);
+    }
+  }
+
+  #resolveChannelType(event: SlackRtmMessageEvent): SlackConversationType {
+    if (event.channelType === 'channel') return 'public_channel';
+    if (event.channelType === 'group') return 'private_channel';
+    if (event.channelType === 'im') return 'im';
+    if (event.channelType === 'mpim') return 'mpim';
+    // Fallback: infer from channel ID prefix
+    if (event.channel.startsWith('C')) return 'public_channel';
+    if (event.channel.startsWith('G')) return 'private_channel';
+    if (event.channel.startsWith('D')) return 'im';
+    return 'public_channel';
   }
 
   getInputProcessors(): InputProcessorOrWorkflow[] {
@@ -578,136 +658,6 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
 
   async unsubscribeThreadFromSlack(input: { threadId?: string; resourceId?: string }): Promise<SlackOperationResult> {
     return this.#unsubscribe({ id: `slack-command-unsubscribe-${randomUUID()}`, ...input });
-  }
-
-  async pollThread(input: SlackPollingThread): Promise<SlackPollResult> {
-    const { threadStore, loadedThread } = await this.#loadThread(input);
-    const slackMetadata = getSlackSignalsMetadata(loadedThread.metadata);
-    const subscription = slackMetadata.subscription;
-    if (!subscription) {
-      this.unsubscribeAll(input);
-      return { notificationsSent: 0, channelsSynced: 0, channelsFailed: 0 };
-    }
-
-    const now = new Date().toISOString();
-    const channels: Record<string, SlackSignalsChannelState> = { ...subscription.channels };
-    let notificationsSent = 0;
-    let channelsSynced = 0;
-    let channelsFailed = 0;
-    let lastSyncStatus: 'success' | 'error' = 'success';
-    let lastSyncError: string | undefined;
-
-    let conversations: SlackSignalsConversation[] = [];
-    try {
-      conversations = (
-        await this.#syncClient.listConversations({
-          types: subscription.conversationTypes.length > 0 ? subscription.conversationTypes : this.conversationTypes,
-        })
-      ).conversations;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const nextSubscription: SlackSignalsSubscription = {
-        ...subscription,
-        updatedAt: now,
-        lastSyncAt: now,
-        lastSyncStatus: 'error',
-        lastSyncError: message,
-        channels,
-      };
-      await this.#saveSubscription(threadStore, loadedThread, input, nextSubscription);
-      return { notificationsSent: 0, channelsSynced: 0, channelsFailed: 0 };
-    }
-
-    for (const conversation of conversations) {
-      const previous = channels[conversation.id];
-      try {
-        const result = await this.#syncClient.listMessages({
-          conversation,
-          oldest: previous?.latestTs,
-          inclusive: false,
-          limit: this.#options.maxMessagesPerChannel,
-        });
-        const newMessages = result.messages.filter(message => isNewerSlackTimestamp(message.ts, previous?.latestTs));
-        const latestTs = result.latestTs && isNewerSlackTimestamp(result.latestTs, previous?.latestTs)
-          ? result.latestTs
-          : previous?.latestTs;
-
-        if (!previous) {
-          channels[conversation.id] = {
-            id: conversation.id,
-            ...(conversation.name ? { name: conversation.name } : {}),
-            type: conversation.type,
-            ...(latestTs ? { latestTs } : {}),
-            lastSyncAt: now,
-            lastSyncStatus: 'success',
-          };
-          channelsSynced += 1;
-          continue;
-        }
-
-        for (const message of newMessages) {
-          if (!shouldNotifyMessage(message, this.#filters)) continue;
-          await this.notify(createSlackNotificationInput(subscription, message, this.#filters), input);
-          notificationsSent += 1;
-        }
-
-        channels[conversation.id] = {
-          id: conversation.id,
-          ...(conversation.name ? { name: conversation.name } : previous?.name ? { name: previous.name } : {}),
-          type: conversation.type,
-          ...(latestTs ? { latestTs } : {}),
-          lastSyncAt: now,
-          lastSyncStatus: 'success',
-        };
-        channelsSynced += 1;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        channels[conversation.id] = {
-          id: conversation.id,
-          ...(conversation.name ? { name: conversation.name } : previous?.name ? { name: previous.name } : {}),
-          type: conversation.type,
-          ...(previous?.latestTs ? { latestTs: previous.latestTs } : {}),
-          ...(previous?.latestMessageHash ? { latestMessageHash: previous.latestMessageHash } : {}),
-          lastSyncAt: now,
-          lastSyncStatus: 'error',
-          lastSyncError: message,
-        };
-        channelsFailed += 1;
-        lastSyncStatus = 'error';
-        lastSyncError = message;
-      }
-    }
-
-    const nextSubscription: SlackSignalsSubscription = {
-      ...subscription,
-      updatedAt: now,
-      lastSyncAt: now,
-      lastSyncStatus,
-      ...(lastSyncError ? { lastSyncError } : {}),
-      channels,
-    };
-    if (!lastSyncError) delete nextSubscription.lastSyncError;
-    await this.#saveSubscription(threadStore, loadedThread, input, nextSubscription);
-
-    return { notificationsSent, channelsSynced, channelsFailed };
-  }
-
-  async #saveSubscription(
-    threadStore: SlackSignalsThreadStore,
-    loadedThread: StorageThreadType,
-    input: SlackPollingThread,
-    subscription: SlackSignalsSubscription,
-  ): Promise<void> {
-    await threadStore.saveThread({
-      thread: {
-        ...loadedThread,
-        id: input.threadId,
-        resourceId: input.resourceId,
-        createdAt: loadedThread.createdAt ?? new Date(),
-        updatedAt: new Date(),
-        metadata: setSlackSignalsMetadata(loadedThread.metadata, { subscription }),
-      },
-    });
   }
 
   async #resolveThreadStore(): Promise<SlackSignalsThreadStore | undefined> {
@@ -846,6 +796,10 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
       getWorkspaceExternalResourceId(workspace.teamId),
       { workspaceId: workspace.teamId, workspaceName: workspace.teamName },
     );
+    this.#subscribedThreads.set(`${input.resourceId}:${input.threadId}`, {
+      threadId: input.threadId!,
+      resourceId: input.resourceId!,
+    });
 
     return {
       workspaceId: workspace.teamId,
@@ -873,6 +827,7 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
       },
     });
     this.unsubscribe({ threadId: input.threadId!, resourceId: input.resourceId! }, getWorkspaceExternalResourceId(existing.workspaceId));
+    this.#subscribedThreads.delete(`${input.resourceId}:${input.threadId}`);
 
     return {
       workspaceId: existing.workspaceId,

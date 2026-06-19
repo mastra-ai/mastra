@@ -8,13 +8,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   DEFAULT_SLACK_SIGNALS_INCLUDE,
-  DEFAULT_SLACK_SIGNALS_POLL_INTERVAL_MS,
   SLACK_SIGNALS_METADATA_KEY,
   SLACK_SYNC_STATUS_TAG,
   SlackSignalsProvider,
   getSlackConversationTypes,
 } from './index.js';
-import type { SlackSignalsSyncClient, SlackSignalsThreadStore } from './index.js';
+import type { SlackRtmClient, SlackRtmMessageEvent, SlackSignalsSyncClient, SlackSignalsThreadStore } from './index.js';
 
 const mockLogger: IMastraLogger = {
   debug: vi.fn(),
@@ -71,6 +70,48 @@ function createSyncClient(): SlackSignalsSyncClient {
   };
 }
 
+function createMockRtmClient() {
+  let messageHandler: ((event: SlackRtmMessageEvent) => void) | undefined;
+  let lifecycleHandler: ((state: string) => void) | undefined;
+  return {
+    onMessage: vi.fn((handler: (event: SlackRtmMessageEvent) => void) => { messageHandler = handler; }),
+    onLifecycle: vi.fn((handler: (state: string) => void) => { lifecycleHandler = handler; }),
+    connect: vi.fn(async () => { lifecycleHandler?.('connected'); }),
+    disconnect: vi.fn(() => { lifecycleHandler?.('disconnected'); }),
+    state: 'disconnected' as string,
+    /** Test helper: simulate receiving an RTM message event */
+    receive(event: Partial<SlackRtmMessageEvent> & { ts: string; channel: string }) {
+      messageHandler?.({ type: 'message', eventTs: event.ts, ...event } as SlackRtmMessageEvent);
+    },
+    /** Test helper: simulate lifecycle state change */
+    setLifecycle(state: string) {
+      this.state = state;
+      lifecycleHandler?.(state);
+    },
+  };
+}
+
+function createProviderWithRtm(options?: {
+  thread?: StorageThreadType;
+  syncClient?: SlackSignalsSyncClient;
+  filters?: Record<string, unknown>;
+}) {
+  const thread = options?.thread ?? createThread();
+  const threadStore = createThreadStore(thread);
+  const syncClient = options?.syncClient ?? createSyncClient();
+  const rtmClient = createMockRtmClient();
+  const sendNotificationSignal = vi.fn(async () => undefined);
+  const provider = new SlackSignalsProvider({
+    token: 'xoxp-test',
+    threadStore,
+    syncClient,
+    rtmClient: rtmClient as any as SlackRtmClient,
+    ...(options?.filters ? { filters: options.filters as any } : {}),
+  });
+  provider.connect({ sendNotificationSignal } as any);
+  return { provider, threadStore, syncClient, rtmClient, sendNotificationSignal, thread };
+}
+
 async function runSlackSignalsProcessor(args: {
   processor: SlackSignalsProvider;
   messageList: MessageList;
@@ -123,35 +164,6 @@ function createSubscribedThread(overrides: Partial<StorageThreadType> = {}) {
   });
 }
 
-function createThreadWithChannelState(input: {
-  channels: Record<string, unknown>;
-  conversationTypes?: string[];
-  id?: string;
-  resourceId?: string;
-}) {
-  return createSubscribedThread({
-    ...(input.id ? { id: input.id } : {}),
-    ...(input.resourceId ? { resourceId: input.resourceId } : {}),
-    metadata: {
-      mastra: {
-        [SLACK_SIGNALS_METADATA_KEY]: {
-          subscription: {
-            workspaceId: 'T123',
-            workspaceName: 'Mastra',
-            userId: 'U123',
-            botId: 'B123',
-            conversationTypes: input.conversationTypes ?? ['public_channel'],
-            subscribedAt: '2026-01-01T00:00:00.000Z',
-            updatedAt: '2026-01-01T00:00:00.000Z',
-            lastSubscribeSignalId: 'signal-1',
-            channels: input.channels,
-          },
-        },
-      },
-    },
-  });
-}
-
 describe('SlackSignalsProvider', () => {
   it('creates typed subscribe and unsubscribe signals', () => {
     expect(SlackSignalsProvider.signals.subscribe()).toEqual(
@@ -178,13 +190,11 @@ describe('SlackSignalsProvider', () => {
 
     expect(provider.include).toEqual(DEFAULT_SLACK_SIGNALS_INCLUDE);
     expect(provider.conversationTypes).toEqual(['public_channel', 'private_channel', 'im', 'mpim']);
-    expect(provider.pollInterval).toBe(DEFAULT_SLACK_SIGNALS_POLL_INTERVAL_MS);
   });
 
   it('supports disabling selected conversation types', () => {
     const provider = new SlackSignalsProvider({
       token: 'xoxp-test',
-      pollIntervalMs: 30_000,
       include: {
         privateChannels: false,
         groupDms: false,
@@ -198,7 +208,6 @@ describe('SlackSignalsProvider', () => {
       groupDms: false,
     });
     expect(provider.conversationTypes).toEqual(['public_channel', 'im']);
-    expect(provider.pollInterval).toBe(30_000);
   });
 
   it('stores a workspace subscription in thread metadata', async () => {
@@ -345,464 +354,119 @@ describe('SlackSignalsProvider', () => {
     expect(getSavedSlackMetadata(threadStore).subscription).toBeUndefined();
   });
 
-  it('does no sync work when thread has no subscription', async () => {
-    const thread = createThread();
-    const syncClient = createSyncClient();
-    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore: createThreadStore(thread), syncClient });
+  // ── RTM tests ──────────────────────────────────────────────────────
 
-    await provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+  it('connects to RTM on connect() and tracks connection state', async () => {
+    const { provider, rtmClient } = createProviderWithRtm();
 
-    expect(syncClient.listConversations).not.toHaveBeenCalled();
-    expect(syncClient.listMessages).not.toHaveBeenCalled();
+    expect(rtmClient.connect).toHaveBeenCalled();
+    expect(rtmClient.onMessage).toHaveBeenCalled();
+    expect(rtmClient.onLifecycle).toHaveBeenCalled();
+    expect(provider.rtmConnected).toBe(true);
   });
 
-  it('baselines newly discovered channels without emitting historical notifications', async () => {
-    const thread = createSubscribedThread({ id: 'thread-baseline', resourceId: 'resource-baseline' });
-    const threadStore = createThreadStore(thread);
-    const syncClient = createSyncClient();
-    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
-      conversations: [{ id: 'C1', name: 'general', type: 'public_channel' }],
-    });
-    vi.mocked(syncClient.listMessages).mockResolvedValueOnce({
-      latestTs: '1710000002.000000',
-      messages: [
-        { channelId: 'C1', channelName: 'general', channelType: 'public_channel', ts: '1710000002.000000', user: 'U1', text: 'old' },
-      ],
-    });
-    const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
-    provider.connect({ sendNotificationSignal } as any);
+  it('emits notification for RTM message in a subscribed thread', async () => {
+    const thread = createSubscribedThread({ id: 'thread-rtm', resourceId: 'resource-rtm' });
+    const { provider, rtmClient, sendNotificationSignal } = createProviderWithRtm({ thread });
 
-    await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
-      notificationsSent: 0,
-      channelsSynced: 1,
-      channelsFailed: 0,
+    await provider.subscribeThreadToSlack({ threadId: thread.id, resourceId: thread.resourceId });
+
+    rtmClient.receive({
+      ts: '1525215129.000001',
+      channel: 'C123',
+      channelType: 'channel',
+      user: 'U456',
+      text: 'hello from slack',
     });
 
-    expect(sendNotificationSignal).not.toHaveBeenCalled();
-    expect(syncClient.listConversations).toHaveBeenCalledWith({ types: ['public_channel', 'private_channel', 'im', 'mpim'] });
-    expect(syncClient.listMessages).toHaveBeenCalledWith({
-      conversation: { id: 'C1', name: 'general', type: 'public_channel' },
-      oldest: undefined,
-      inclusive: false,
-      limit: undefined,
-    });
-    expect(getSavedSlackMetadata(threadStore).subscription.channels.C1).toEqual(
-      expect.objectContaining({ latestTs: '1710000002.000000', lastSyncStatus: 'success' }),
-    );
+    await vi.waitFor(() => expect(sendNotificationSignal).toHaveBeenCalledTimes(1));
+    const call = (sendNotificationSignal.mock.calls as any[]).at(0)?.[0];
+    expect(call.source).toBe('slack');
+    expect(call.kind).toBe('slack-message');
+    expect(call.summary).toContain('hello from slack');
   });
 
-  it('emits the first future message after an empty channel baseline', async () => {
-    const thread = createThreadWithChannelState({
-      id: 'thread-empty-baseline',
-      resourceId: 'resource-empty-baseline',
-      channels: {
-        C1: { id: 'C1', name: 'general', type: 'public_channel', lastSyncStatus: 'success' },
-      },
-    });
-    const threadStore = createThreadStore(thread);
-    const syncClient = createSyncClient();
-    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
-      conversations: [{ id: 'C1', name: 'general', type: 'public_channel' }],
-    });
-    vi.mocked(syncClient.listMessages).mockResolvedValueOnce({
-      latestTs: '1710000001.000000',
-      messages: [
-        { channelId: 'C1', channelName: 'general', channelType: 'public_channel', ts: '1710000001.000000', user: 'U1', text: 'first message' },
-      ],
-    });
-    const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
-    provider.connect({ sendNotificationSignal } as any);
+  it('skips message_changed and message_deleted subtypes', async () => {
+    const thread = createSubscribedThread({ id: 'thread-skip', resourceId: 'resource-skip' });
+    const { provider, rtmClient, sendNotificationSignal } = createProviderWithRtm({ thread });
 
-    await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
-      notificationsSent: 1,
-      channelsSynced: 1,
-      channelsFailed: 0,
-    });
+    await provider.subscribeThreadToSlack({ threadId: thread.id, resourceId: thread.resourceId });
 
-    expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        summary: 'U1 in #general: first message',
-        sourceId: 'T123:C1:1710000001.000000',
-      }),
-      { resourceId: thread.resourceId, threadId: thread.id },
-    );
-    expect(getSavedSlackMetadata(threadStore).subscription.channels.C1).toEqual(
-      expect.objectContaining({ latestTs: '1710000001.000000', lastSyncStatus: 'success' }),
-    );
-  });
+    rtmClient.receive({ ts: '123.000', channel: 'C1', subtype: 'message_changed' });
+    rtmClient.receive({ ts: '124.000', channel: 'C1', subtype: 'message_deleted' });
 
-  it('emits notifications for messages newer than the channel high-water timestamp', async () => {
-    const thread = createSubscribedThread({
-      id: 'thread-new-message',
-      resourceId: 'resource-new-message',
-      metadata: {
-        mastra: {
-          [SLACK_SIGNALS_METADATA_KEY]: {
-            subscription: {
-              workspaceId: 'T123',
-              workspaceName: 'Mastra',
-              conversationTypes: ['public_channel'],
-              subscribedAt: '2026-01-01T00:00:00.000Z',
-              updatedAt: '2026-01-01T00:00:00.000Z',
-              lastSubscribeSignalId: 'signal-1',
-              channels: {
-                C1: { id: 'C1', name: 'general', type: 'public_channel', latestTs: '1710000001.000000' },
-              },
-            },
-          },
-        },
-      },
-    });
-    const threadStore = createThreadStore(thread);
-    const syncClient = createSyncClient();
-    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
-      conversations: [{ id: 'C1', name: 'general', type: 'public_channel' }],
-    });
-    vi.mocked(syncClient.listMessages).mockResolvedValueOnce({
-      latestTs: '1710000002.000000',
-      messages: [
-        { channelId: 'C1', channelName: 'general', channelType: 'public_channel', ts: '1710000001.000000', user: 'U0', text: 'old' },
-        { channelId: 'C1', channelName: 'general', channelType: 'public_channel', ts: '1710000002.000000', user: 'U1', text: 'new' },
-      ],
-    });
-    const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient, maxMessagesPerChannel: 25 });
-    provider.connect({ sendNotificationSignal } as any);
-
-    await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
-      notificationsSent: 1,
-      channelsSynced: 1,
-      channelsFailed: 0,
-    });
-
-    expect(syncClient.listMessages).toHaveBeenCalledWith({
-      conversation: { id: 'C1', name: 'general', type: 'public_channel' },
-      oldest: '1710000001.000000',
-      inclusive: false,
-      limit: 25,
-    });
-    expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'slack',
-        kind: 'slack-message',
-        summary: 'U1 in #general: new',
-        sourceId: 'T123:C1:1710000002.000000',
-        dedupeKey: 'T123:C1:1710000002.000000',
-        coalesceKey: 'T123:C1',
-        payload: expect.objectContaining({ channelId: 'C1', messageTs: '1710000002.000000', text: 'new' }),
-      }),
-      { resourceId: thread.resourceId, threadId: thread.id },
-    );
-    const slackMetadata = getSavedSlackMetadata(threadStore);
-    expect(slackMetadata.subscription.channels.C1).toEqual(
-      expect.objectContaining({ latestTs: '1710000002.000000', lastSyncStatus: 'success' }),
-    );
-    expect(JSON.stringify(slackMetadata)).not.toContain('next_cursor');
-
-    sendNotificationSignal.mockClear();
-    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
-      conversations: [{ id: 'C1', name: 'general', type: 'public_channel' }],
-    });
-    vi.mocked(syncClient.listMessages).mockResolvedValueOnce({
-      latestTs: '1710000002.000000',
-      messages: [
-        { channelId: 'C1', channelName: 'general', channelType: 'public_channel', ts: '1710000002.000000', user: 'U1', text: 'new' },
-      ],
-    });
-
-    await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
-      notificationsSent: 0,
-      channelsSynced: 1,
-      channelsFailed: 0,
-    });
+    await new Promise(resolve => setTimeout(resolve, 10));
     expect(sendNotificationSignal).not.toHaveBeenCalled();
   });
 
-  it('does not advance latestTs when notification delivery fails', async () => {
-    const thread = createSubscribedThread({
-      id: 'thread-notify-fail',
-      resourceId: 'resource-notify-fail',
-      metadata: {
-        mastra: {
-          [SLACK_SIGNALS_METADATA_KEY]: {
-            subscription: {
-              workspaceId: 'T123',
-              workspaceName: 'Mastra',
-              conversationTypes: ['public_channel'],
-              subscribedAt: '2026-01-01T00:00:00.000Z',
-              updatedAt: '2026-01-01T00:00:00.000Z',
-              lastSubscribeSignalId: 'signal-1',
-              channels: {
-                C1: { id: 'C1', name: 'general', type: 'public_channel', latestTs: '1710000001.000000' },
-              },
-            },
-          },
-        },
-      },
-    });
-    const threadStore = createThreadStore(thread);
-    const syncClient = createSyncClient();
-    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
-      conversations: [{ id: 'C1', name: 'general', type: 'public_channel' }],
-    });
-    vi.mocked(syncClient.listMessages).mockResolvedValueOnce({
-      latestTs: '1710000002.000000',
-      messages: [{ channelId: 'C1', channelName: 'general', channelType: 'public_channel', ts: '1710000002.000000', user: 'U1' }],
-    });
-    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
-    provider.connect({ sendNotificationSignal: vi.fn(async () => { throw new Error('delivery failed'); }) } as any);
+  it('allows bot_message subtype through', async () => {
+    const thread = createSubscribedThread({ id: 'thread-bot', resourceId: 'resource-bot' });
+    const { provider, rtmClient, sendNotificationSignal } = createProviderWithRtm({ thread });
 
-    await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
-      notificationsSent: 0,
-      channelsSynced: 0,
-      channelsFailed: 1,
-    });
+    await provider.subscribeThreadToSlack({ threadId: thread.id, resourceId: thread.resourceId });
 
-    expect(getSavedSlackMetadata(threadStore).subscription.channels.C1).toEqual(
-      expect.objectContaining({
-        latestTs: '1710000001.000000',
-        lastSyncStatus: 'error',
-        lastSyncError: 'delivery failed',
-      }),
-    );
+    rtmClient.receive({ ts: '125.000', channel: 'C1', subtype: 'bot_message', botId: 'B1', text: 'bot says hi' });
+
+    await vi.waitFor(() => expect(sendNotificationSignal).toHaveBeenCalledTimes(1));
   });
 
-  it('continues syncing other channels when one channel fails', async () => {
-    const thread = createSubscribedThread({
-      id: 'thread-partial-fail',
-      resourceId: 'resource-partial-fail',
-      metadata: {
-        mastra: {
-          [SLACK_SIGNALS_METADATA_KEY]: {
-            subscription: {
-              workspaceId: 'T123',
-              workspaceName: 'Mastra',
-              conversationTypes: ['public_channel'],
-              subscribedAt: '2026-01-01T00:00:00.000Z',
-              updatedAt: '2026-01-01T00:00:00.000Z',
-              lastSubscribeSignalId: 'signal-1',
-              channels: {
-                C1: { id: 'C1', name: 'general', type: 'public_channel', latestTs: '1710000001.000000' },
-                C2: { id: 'C2', name: 'random', type: 'public_channel', latestTs: '1710000001.000000' },
-              },
-            },
-          },
-        },
-      },
-    });
-    const threadStore = createThreadStore(thread);
-    const syncClient = createSyncClient();
-    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
-      conversations: [
-        { id: 'C1', name: 'general', type: 'public_channel' },
-        { id: 'C2', name: 'random', type: 'public_channel' },
-      ],
-    });
-    vi.mocked(syncClient.listMessages)
-      .mockRejectedValueOnce(new Error('history failed'))
-      .mockResolvedValueOnce({
-        latestTs: '1710000002.000000',
-        messages: [{ channelId: 'C2', channelName: 'random', channelType: 'public_channel', ts: '1710000002.000000', user: 'U2' }],
-      });
-    const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore, syncClient });
-    provider.connect({ sendNotificationSignal } as any);
+  it('does not notify threads without subscription', async () => {
+    const thread = createThread({ id: 'thread-nosub', resourceId: 'resource-nosub' });
+    const { rtmClient, sendNotificationSignal } = createProviderWithRtm({ thread });
 
-    await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
-      notificationsSent: 1,
-      channelsSynced: 1,
-      channelsFailed: 1,
-    });
+    rtmClient.receive({ ts: '126.000', channel: 'C1', user: 'U1', text: 'no one listening' });
 
-    const channels = getSavedSlackMetadata(threadStore).subscription.channels;
-    expect(channels.C1).toEqual(expect.objectContaining({ latestTs: '1710000001.000000', lastSyncStatus: 'error' }));
-    expect(channels.C2).toEqual(expect.objectContaining({ latestTs: '1710000002.000000', lastSyncStatus: 'success' }));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
   });
 
-  it('filters notifications by included channel ids while still advancing high-water state', async () => {
-    const thread = createThreadWithChannelState({
-      id: 'thread-include-filter',
-      resourceId: 'resource-include-filter',
-      channels: {
-        C1: { id: 'C1', name: 'general', type: 'public_channel', latestTs: '1710000001.000000' },
-        C2: { id: 'C2', name: 'alerts', type: 'public_channel', latestTs: '1710000001.000000' },
-      },
-    });
-    const threadStore = createThreadStore(thread);
-    const syncClient = createSyncClient();
-    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
-      conversations: [
-        { id: 'C1', name: 'general', type: 'public_channel' },
-        { id: 'C2', name: 'alerts', type: 'public_channel' },
-      ],
-    });
-    vi.mocked(syncClient.listMessages)
-      .mockResolvedValueOnce({
-        latestTs: '1710000002.000000',
-        messages: [{ channelId: 'C1', channelName: 'general', channelType: 'public_channel', ts: '1710000002.000000', user: 'U1', text: 'skip me' }],
-      })
-      .mockResolvedValueOnce({
-        latestTs: '1710000003.000000',
-        messages: [{ channelId: 'C2', channelName: 'alerts', channelType: 'public_channel', ts: '1710000003.000000', user: 'U2', text: 'notify me' }],
-      });
-    const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({
-      token: 'xoxp-test',
-      threadStore,
-      syncClient,
-      filters: { includeChannelIds: ['C2'] },
-    });
-    provider.connect({ sendNotificationSignal } as any);
-
-    await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
-      notificationsSent: 1,
-      channelsSynced: 2,
-      channelsFailed: 0,
+  it('filters bot messages when ignoreBotMessages is true', async () => {
+    const thread = createSubscribedThread({ id: 'thread-filter-bot', resourceId: 'resource-filter-bot' });
+    const { provider, rtmClient, sendNotificationSignal } = createProviderWithRtm({
+      thread,
+      filters: { ignoreBotMessages: true },
     });
 
-    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
-    expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: expect.objectContaining({ channelId: 'C2' }) }),
-      { resourceId: thread.resourceId, threadId: thread.id },
-    );
-    const channels = getSavedSlackMetadata(threadStore).subscription.channels;
-    expect(channels.C1).toEqual(expect.objectContaining({ latestTs: '1710000002.000000' }));
-    expect(channels.C2).toEqual(expect.objectContaining({ latestTs: '1710000003.000000' }));
+    await provider.subscribeThreadToSlack({ threadId: thread.id, resourceId: thread.resourceId });
+
+    rtmClient.receive({ ts: '127.000', channel: 'C1', subtype: 'bot_message', botId: 'B1', text: 'bot spam' });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
   });
 
-  it('filters notifications by excluded channel names', async () => {
-    const thread = createThreadWithChannelState({
-      id: 'thread-exclude-filter',
-      resourceId: 'resource-exclude-filter',
-      channels: {
-        C1: { id: 'C1', name: 'general', type: 'public_channel', latestTs: '1710000001.000000' },
-        C2: { id: 'C2', name: 'random', type: 'public_channel', latestTs: '1710000001.000000' },
-      },
-    });
-    const threadStore = createThreadStore(thread);
-    const syncClient = createSyncClient();
-    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
-      conversations: [
-        { id: 'C1', name: 'general', type: 'public_channel' },
-        { id: 'C2', name: 'random', type: 'public_channel' },
-      ],
-    });
-    vi.mocked(syncClient.listMessages)
-      .mockResolvedValueOnce({
-        latestTs: '1710000002.000000',
-        messages: [{ channelId: 'C1', channelName: 'general', channelType: 'public_channel', ts: '1710000002.000000', user: 'U1', text: 'keep' }],
-      })
-      .mockResolvedValueOnce({
-        latestTs: '1710000002.000000',
-        messages: [{ channelId: 'C2', channelName: 'random', channelType: 'public_channel', ts: '1710000002.000000', user: 'U2', text: 'drop' }],
-      });
-    const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({
-      token: 'xoxp-test',
-      threadStore,
-      syncClient,
-      filters: { excludeChannelNames: ['random'] },
-    });
-    provider.connect({ sendNotificationSignal } as any);
+  it('assigns DM priority for IM channel type', async () => {
+    const thread = createSubscribedThread({ id: 'thread-dm', resourceId: 'resource-dm' });
+    const { provider, rtmClient, sendNotificationSignal } = createProviderWithRtm({ thread });
 
-    await provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    await provider.subscribeThreadToSlack({ threadId: thread.id, resourceId: thread.resourceId });
 
-    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
-    expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: expect.objectContaining({ channelId: 'C1' }) }),
-      { resourceId: thread.resourceId, threadId: thread.id },
-    );
+    rtmClient.receive({ ts: '128.000', channel: 'D123', channelType: 'im', user: 'U1', text: 'private message' });
+
+    await vi.waitFor(() => expect(sendNotificationSignal).toHaveBeenCalledTimes(1));
+    const call = (sendNotificationSignal.mock.calls as any[]).at(0)?.[0];
+    expect(call.priority).toBe('high');
   });
 
-  it('filters notifications by keyword allowlist and ignored bots', async () => {
-    const thread = createThreadWithChannelState({
-      id: 'thread-keyword-filter',
-      resourceId: 'resource-keyword-filter',
-      channels: {
-        C1: { id: 'C1', name: 'alerts', type: 'public_channel', latestTs: '1710000001.000000' },
-      },
-    });
-    const threadStore = createThreadStore(thread);
-    const syncClient = createSyncClient();
-    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
-      conversations: [{ id: 'C1', name: 'alerts', type: 'public_channel' }],
-    });
-    vi.mocked(syncClient.listMessages).mockResolvedValueOnce({
-      latestTs: '1710000004.000000',
-      messages: [
-        { channelId: 'C1', channelName: 'alerts', channelType: 'public_channel', ts: '1710000002.000000', user: 'U1', text: 'ordinary update' },
-        { channelId: 'C1', channelName: 'alerts', channelType: 'public_channel', ts: '1710000003.000000', botId: 'B999', text: 'mastra alert from bot' },
-        { channelId: 'C1', channelName: 'alerts', channelType: 'public_channel', ts: '1710000004.000000', user: 'U2', text: 'Mastra alert from user' },
-      ],
-    });
-    const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({
-      token: 'xoxp-test',
-      threadStore,
-      syncClient,
-      filters: { keywords: ['mastra'], ignoredBotIds: ['B999'] },
-    });
-    provider.connect({ sendNotificationSignal } as any);
+  it('disconnect closes RTM client', async () => {
+    const { provider, rtmClient } = createProviderWithRtm();
 
-    await expect(provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId })).resolves.toEqual({
-      notificationsSent: 1,
-      channelsSynced: 1,
-      channelsFailed: 0,
-    });
+    provider.disconnect();
 
-    expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: expect.objectContaining({ user: 'U2', text: 'Mastra alert from user' }) }),
-      { resourceId: thread.resourceId, threadId: thread.id },
-    );
-    expect(getSavedSlackMetadata(threadStore).subscription.channels.C1).toEqual(
-      expect.objectContaining({ latestTs: '1710000004.000000' }),
-    );
+    expect(rtmClient.disconnect).toHaveBeenCalled();
+    expect(provider.rtmConnected).toBe(false);
   });
 
-  it('assigns DM and mention priorities and truncates long previews', async () => {
-    const thread = createThreadWithChannelState({
-      id: 'thread-priority-filter',
-      resourceId: 'resource-priority-filter',
-      conversationTypes: ['im'],
-      channels: {
-        D1: { id: 'D1', type: 'im', latestTs: '1710000001.000000' },
-      },
-    });
-    const threadStore = createThreadStore(thread);
-    const syncClient = createSyncClient();
-    vi.mocked(syncClient.listConversations).mockResolvedValueOnce({
-      conversations: [{ id: 'D1', type: 'im' }],
-    });
-    vi.mocked(syncClient.listMessages).mockResolvedValueOnce({
-      latestTs: '1710000003.000000',
-      messages: [
-        { channelId: 'D1', channelType: 'im', ts: '1710000002.000000', user: 'U1', text: 'direct message' },
-        { channelId: 'D1', channelType: 'im', ts: '1710000003.000000', user: 'U1', text: '<@B123> this is a very long urgent direct message' },
-      ],
-    });
-    const sendNotificationSignal = vi.fn(async () => undefined);
-    const provider = new SlackSignalsProvider({
-      token: 'xoxp-test',
-      threadStore,
-      syncClient,
-      filters: { maxPreviewLength: 18, priority: { dms: 'high', mentions: 'urgent' } },
-    });
-    provider.connect({ sendNotificationSignal } as any);
+  it('maps channel_type to SlackConversationType correctly', async () => {
+    const thread = createSubscribedThread({ id: 'thread-map', resourceId: 'resource-map' });
+    const { provider, rtmClient, sendNotificationSignal } = createProviderWithRtm({ thread });
 
-    await provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    await provider.subscribeThreadToSlack({ threadId: thread.id, resourceId: thread.resourceId });
 
-    expect(sendNotificationSignal).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ priority: 'high', summary: 'U1 in D1: direct message' }),
-      { resourceId: thread.resourceId, threadId: thread.id },
-    );
-    expect(sendNotificationSignal).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ priority: 'urgent', summary: 'U1 in D1: <@B123> this is a…' }),
-      { resourceId: thread.resourceId, threadId: thread.id },
-    );
+    // group → private_channel
+    rtmClient.receive({ ts: '129.000', channel: 'G1', channelType: 'group', user: 'U1', text: 'private channel' });
+    await vi.waitFor(() => expect(sendNotificationSignal).toHaveBeenCalledTimes(1));
+    expect((sendNotificationSignal.mock.calls as any[]).at(0)?.[0].priority).toBe('low');
   });
 
   it('processes subscribe and unsubscribe signals and emits useful status', async () => {
