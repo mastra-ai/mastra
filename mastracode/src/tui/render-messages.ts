@@ -202,7 +202,12 @@ export function addPendingUserMessage(
   }
 
   const component = new PendingUserMessageComponent(text, images?.length ?? 0);
-  state.pendingSignalMessageComponentsById.set(messageId, { component, text, isInterjection: options?.isInterjection });
+  state.pendingSignalMessageComponentsById.set(messageId, {
+    component,
+    text,
+    images,
+    isInterjection: options?.isInterjection,
+  });
   state.chatContainer.addChild(component);
   reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
@@ -224,8 +229,10 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
+  const imageCount = pending.images?.length ?? 0;
+  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   const label = getPendingUserMessageLabel(pending.isInterjection);
-  const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+  const confirmed = new UserMessageComponent(prefix + text, getMarkdownTheme(), {
     ...(label ? { label } : {}),
   });
   const idx = state.chatContainer.children.indexOf(pending.component as never);

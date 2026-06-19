@@ -54,6 +54,7 @@ import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 import {
   addPendingUserMessage,
   addUserMessage,
+  confirmPendingUserMessage,
   removePendingUserMessage,
   renderClearedTasksInline,
   renderExistingMessages,
@@ -310,8 +311,6 @@ export class MastraTUI {
       if (!userInput.trim() && userInput !== ' ') continue;
 
       try {
-        const pendingNewThread = this.state.pendingNewThread;
-
         // Handle slash commands
         if (userInput.startsWith('/')) {
           const handled = await this.handleSlashCommand(userInput);
@@ -333,14 +332,12 @@ export class MastraTUI {
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
-        const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
         const allowed = await this.runUserPromptHook(userInput);
         if (!allowed) {
-          this.removeOptimisticUserMessage(optimisticMessageId);
           continue;
         }
 
-        this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
+        this.signalMessage(content, images);
       } catch (error) {
         showError(this.state, error instanceof Error ? error.message : 'Unknown error');
       }
@@ -384,44 +381,16 @@ export class MastraTUI {
       : content;
   }
 
-  private renderOptimisticUserMessage(content: string, images?: Array<{ data: string; mimeType: string }>): string {
-    const messageId = `user-${Date.now()}`;
-    const isInterjection = this.state.session.stream.isActive();
-    addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
-      ...(isInterjection ? { label: 'steer' } : {}),
-    });
-    this.state.ui.requestRender();
-    return messageId;
-  }
-
-  private removeOptimisticUserMessage(messageId: string): void {
-    const component = this.state.messageComponentsById.get(messageId);
-    if (!component) return;
-    this.state.chatContainer.removeChild(component as never);
-    this.state.messageComponentsById.delete(messageId);
-    this.state.ui.requestRender();
-  }
-
-  private remapOptimisticUserMessage(optimisticMessageId: string, signalId: string): void {
-    if (optimisticMessageId === signalId) return;
-    const component = this.state.messageComponentsById.get(optimisticMessageId);
-    if (!component) return;
-    this.state.messageComponentsById.delete(optimisticMessageId);
-    this.state.messageComponentsById.set(signalId, component);
-  }
-
   private createPendingNewThread(): Promise<void> | undefined {
     if (!this.state.pendingNewThread) return undefined;
     this.state.pendingNewThread = false;
     return this.state.harness.createThread().then(() => undefined);
   }
 
-  private sendOptimisticSignal(
-    content: string,
-    images: Array<{ data: string; mimeType: string }> | undefined,
-    optimisticMessageId: string,
-    pendingNewThread: boolean,
-  ): void {
+  private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
+    const hasActiveRun = this.state.session.stream.isActive();
+    const pendingNewThread = this.state.pendingNewThread;
+
     const send = () => {
       this.clearIdleCounter();
       this.state.analytics?.capture('mastracode_prompt_submitted', {
@@ -437,49 +406,28 @@ export class MastraTUI {
         content: this.createUserSignalContent(content, images),
         ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
-      this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
-      signal.accepted.catch((error: unknown) => {
-        this.removeOptimisticUserMessage(signal.id);
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
-      });
-    };
+      addPendingUserMessage(this.state, signal.id, content, images, { isInterjection: hasActiveRun });
 
-    const pendingThread = this.createPendingNewThread();
-    if (!pendingThread) {
-      send();
-      return;
-    }
+      signal.accepted
+        .then(result => {
+          if (!result.accepted) {
+            removePendingUserMessage(this.state, signal.id);
+            showInfo(this.state, 'Thread is blocked by a suspended run. Resume or abort it first.');
+            return;
+          }
 
-    pendingThread.then(send).catch((error: unknown) => {
-      this.removeOptimisticUserMessage(optimisticMessageId);
-      showError(this.state, error instanceof Error ? error.message : 'Unknown error');
-    });
-  }
+          if (hasActiveRun) {
+            confirmPendingUserMessage(this.state, signal.id, content);
+            return;
+          }
 
-  private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
-    const hasActiveRun = this.state.session.stream.isActive();
-
-    const send = () => {
-      this.clearIdleCounter();
-      const signal = this.state.harness.sendSignal({
-        content: this.createUserSignalContent(content, images),
-        ...USER_SIGNAL_DELIVERY_OPTIONS,
-      });
-
-      if (hasActiveRun) {
-        addPendingUserMessage(this.state, signal.id, content, images, { isInterjection: true });
-      } else {
-        addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
-      }
-
-      signal.accepted.catch((error: unknown) => {
-        if (hasActiveRun) {
           removePendingUserMessage(this.state, signal.id);
-        } else {
-          this.removeOptimisticUserMessage(signal.id);
-        }
-        showError(this.state, error instanceof Error ? error.message : 'Unknown error');
-      });
+          addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
+        })
+        .catch((error: unknown) => {
+          removePendingUserMessage(this.state, signal.id);
+          showError(this.state, error instanceof Error ? error.message : 'Unknown error');
+        });
     };
 
     const pendingThread = this.createPendingNewThread();

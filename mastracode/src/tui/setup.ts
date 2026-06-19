@@ -544,16 +544,20 @@ export function setupKeyHandlers(
 // =============================================================================
 
 export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
-  const listener: HarnessEventListener = async event => {
-    try {
-      await handleEvent(event);
-    } catch (err) {
-      // Log but don't crash — individual event errors shouldn't kill the process
-      const msg = err instanceof Error ? err.message : String(err);
-      const stack = err instanceof Error ? err.stack : undefined;
-      process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
-      if (stack) process.stderr.write(stack + '\n');
-    }
+  let eventQueue = Promise.resolve();
+  const listener: HarnessEventListener = event => {
+    eventQueue = eventQueue.then(async () => {
+      try {
+        await handleEvent(event);
+      } catch (err) {
+        // Log but don't crash — individual event errors shouldn't kill the process
+        const msg = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+        if (stack) process.stderr.write(stack + '\n');
+      }
+    });
+    return eventQueue;
   };
   state.unsubscribe = state.harness.subscribe(listener);
 }
