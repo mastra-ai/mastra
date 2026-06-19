@@ -1,5 +1,17 @@
 # @mastra/voyageai
 
+## 0.2.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
 ## 0.1.1
 
 ### Patch Changes
