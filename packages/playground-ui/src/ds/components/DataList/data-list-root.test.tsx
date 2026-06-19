@@ -249,6 +249,7 @@ describe('DataListRoot', () => {
       expect(rowHeaderCell?.className).toContain('left-0');
       expect(rowHeaderCell?.querySelector('span')?.className).toContain('relative');
       expect(rowHeaderCell?.querySelector('span')?.className).toContain('z-10');
+      expect(rowHeaderCell?.querySelector('span')?.className).toContain('w-full');
     });
   });
 
