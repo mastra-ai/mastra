@@ -594,6 +594,47 @@ describe('RedisStreamsPubSub', () => {
       expect(renewed).toBe(false);
     });
 
+    it('transfers a lease from the current owner to a new owner', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 5000);
+      const transferred = await ps.transferLease!(key, 'owner-a', 'owner-b', 5000);
+      expect(transferred).toBe(true);
+      expect(await ps.getLeaseOwner(key)).toBe('owner-b');
+    });
+
+    it('does not transfer a lease the caller does not own', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 5000);
+      const transferred = await ps.transferLease!(key, 'someone-else', 'owner-b', 5000);
+      expect(transferred).toBe(false);
+      expect(await ps.getLeaseOwner(key)).toBe('owner-a');
+    });
+
+    it('does not transfer a lease that has expired', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 100);
+      await new Promise(r => setTimeout(r, 200));
+      const transferred = await ps.transferLease!(key, 'owner-a', 'owner-b', 5000);
+      expect(transferred).toBe(false);
+      expect(await ps.getLeaseOwner(key)).toBeUndefined();
+    });
+
+    it('resets the TTL to the full window on transfer', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 200);
+      // Transfer just before the original TTL would expire, with a fresh window.
+      await new Promise(r => setTimeout(r, 100));
+      const transferred = await ps.transferLease!(key, 'owner-a', 'owner-b', 1000);
+      expect(transferred).toBe(true);
+      // Past the original 200ms expiry but within the renewed 1000ms window.
+      await new Promise(r => setTimeout(r, 200));
+      expect(await ps.getLeaseOwner(key)).toBe('owner-b');
+    });
+
     it('returns undefined owner for a non-existent key', async () => {
       const ps = createPubSub();
       expect(await ps.getLeaseOwner(`lease-${randomUUID()}`)).toBeUndefined();

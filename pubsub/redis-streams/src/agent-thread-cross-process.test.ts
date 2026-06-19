@@ -14,6 +14,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { resolve } from 'node:path';
+import { createClient } from 'redis';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { flushRedis, REDIS_URL, waitFor, waitForLine } from '../test-fixtures/harness';
@@ -22,6 +23,14 @@ import type { ManagedProcess } from '../test-fixtures/harness';
 const PACKAGE_DIR = resolve(__dirname, '..');
 const TSX_BIN = resolve(PACKAGE_DIR, 'node_modules/.bin/tsx');
 const ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/agent-thread-worker.entry.ts');
+
+// Mirror RedisStreamsPubSub#leaseKey: `<keyPrefix>:lease:<threadKey>` where the
+// default keyPrefix is `mastra:topic` and the thread key joins resourceId and
+// threadId with a NUL separator (AGENT_THREAD_KEY_SEPARATOR).
+const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+function leaseKeyFor(resourceId: string, threadId: string): string {
+  return `mastra:topic:lease:${resourceId}${AGENT_THREAD_KEY_SEPARATOR}${threadId}`;
+}
 
 interface Worker extends ManagedProcess {
   proc: ChildProcess;
@@ -126,7 +135,12 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
     it('serializes rapid-fire signals through one lease winner with no dropped signals', async () => {
       const resourceId = `rapid-${Date.now()}`;
       const threadId = `thread-${Date.now()}`;
-      const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId, RUN_MS: '500' };
+      const env = {
+        RESOURCE_ID: resourceId,
+        THREAD_ID: threadId,
+        RUN_MS: '500',
+        MASTRA_AGENT_THREAD_LEASE_TTL_MS: '6000',
+      };
 
       const a = spawnWorker('worker-a', env);
       const b = spawnWorker('worker-b', env);
@@ -181,8 +195,16 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       const resourceId = `lambda-death-${Date.now()}`;
       const threadId = `thread-${Date.now()}`;
       // Hold the winner's run long enough for the losers to boot, subscribe,
-      // publish, and exit before run-completed releases the lease.
-      const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId, RUN_MS: '3000' };
+      // publish, and exit before run-completed releases the lease. The lease TTL
+      // is shortened (with renewal scaled to TTL/3) so the winner's heartbeat,
+      // not a 15s default, is what keeps the lease alive across the three runs —
+      // and so a genuinely dead owner's lease would lapse quickly.
+      const env = {
+        RESOURCE_ID: resourceId,
+        THREAD_ID: threadId,
+        RUN_MS: '1500',
+        MASTRA_AGENT_THREAD_LEASE_TTL_MS: '6000',
+      };
 
       // Winner stays alive for the duration of the test. It must boot first so
       // it acquires the lease before any losers fire.
@@ -208,7 +230,7 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       lambda3.send({ cmd: 'send-and-exit', sigId: 'sig-3' });
 
       // Both losers should exit after publishing — well before the winner's
-      // 10s run finishes, so their `signal-enqueued` must reach the winner
+      // first run finishes, so their `signal-enqueued` must reach the winner
       // through Redis while its run is still in flight.
       await waitFor(async () => lambda2.proc.exitCode !== null && lambda3.proc.exitCode !== null, 10_000);
 
@@ -220,6 +242,100 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       const finished = eventsByType(winner, 'run-finished');
       const finishedSigIds = new Set(finished.map(e => e.sigId));
       expect(finishedSigIds).toEqual(new Set(['sig-1', 'sig-2', 'sig-3']));
+    }, 60_000);
+
+    it('holds the thread lease across drained follow-up runs so a racing process cannot start a competing run', async () => {
+      const resourceId = `drain-race-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      // Each run is long enough that the lease-key poller captures many samples
+      // during the drained follow-up run, but short enough that completion (and
+      // the release/re-acquire transition) happens within the test.
+      const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId, RUN_MS: '900' };
+      const leaseKey = leaseKeyFor(resourceId, threadId);
+
+      // Poll the raw Redis lease key directly. A subscribed peer's local
+      // `activeThreadRunIds` is kept "active" by run-registered pub/sub events,
+      // which masks a freed lease — so peer-event assertions give false
+      // negatives. The Redis key is the single source of truth a *fresh* cold
+      // process consults via acquireLease, so we observe it directly.
+      const probe = createClient({ url: REDIS_URL });
+      await probe.connect();
+      let polling = true;
+      const samples: Array<{ t: number; owner: string | null }> = [];
+      const t0 = Date.now();
+      const poller = (async () => {
+        while (polling) {
+          const owner = await probe.get(leaseKey);
+          samples.push({ t: Date.now() - t0, owner });
+          await new Promise(r => setTimeout(r, 5));
+        }
+      })();
+
+      // Owner boots and acquires the lease for run 1. Declared outside the try
+      // so the post-finally lease-window assertions can read its events.
+      const owner = spawnWorker('owner', env);
+      try {
+        workers = [owner];
+        await waitForLine(owner, '"type":"ready"');
+        await new Promise(r => setTimeout(r, 300)); // let subscription settle
+
+        owner.send({ cmd: 'send', sigId: 'sig-1' });
+        await waitForLine(owner, '"type":"run-started"');
+
+        // While run 1 is in flight, enqueue a follow-up locally. This guarantees
+        // a drained run 2 fires the instant run 1 completes — the exact moment
+        // the lease is released and (without the fix) handed to agent.stream()
+        // again without re-acquiring.
+        owner.send({ cmd: 'send', sigId: 'sig-2' });
+
+        // Let the owner finish run 1, drain + finish run 2.
+        await waitFor(async () => eventsByType(owner, 'run-finished').length >= 2, 20_000);
+
+        // The owner ran both its own signal and the drained follow-up.
+        const ownerFinishedSigIds = new Set(eventsByType(owner, 'run-finished').map(e => e.sigId));
+        expect(ownerFinishedSigIds).toEqual(new Set(['sig-1', 'sig-2']));
+      } finally {
+        polling = false;
+        await poller;
+        await probe.quit();
+      }
+
+      // Bracket the drained follow-up run (run 2) by the run-started/run-finished
+      // timestamps the owner emitted for sig-2, then assert the lease was owned
+      // for the whole window. Without the fix, run 2 executes with the lease key
+      // empty — a fresh process firing `ifIdle: wake` would win it and start a
+      // competing concurrent run for the same thread.
+      const sig2Started = eventsByType(owner, 'run-started').find(e => e.sigId === 'sig-2');
+      const sig2Finished = eventsByType(owner, 'run-finished').find(e => e.sigId === 'sig-2');
+      expect(sig2Started).toBeDefined();
+      expect(sig2Finished).toBeDefined();
+
+      // Owners observed while the lease key held a value (any non-null run id).
+      const heldOwners = new Set(samples.filter(s => s.owner !== null).map(s => s.owner));
+      // The drained run 2 must run under a held lease — so we must have observed
+      // at least one owner id beyond run 1's. A single distinct owner across the
+      // whole test means run 2 ran leaseless after run 1 released.
+      expect(heldOwners.size).toBeGreaterThanOrEqual(2);
+
+      // No sustained freed window *after the lease is first acquired*: once the
+      // owner holds the lease, it must never be empty for an extended stretch
+      // while drained work is pending. We ignore the leading pre-acquire empties
+      // and tolerate brief atomic release→re-acquire blips, but not a run-length
+      // gap (~RUN_MS). Without the fix, run 2 leaves a ~900ms empty window.
+      let maxFreeRunMs = 0;
+      let freeStart: number | null = null;
+      let acquiredOnce = false;
+      for (const s of samples) {
+        if (s.owner !== null) {
+          acquiredOnce = true;
+          freeStart = null;
+          continue;
+        }
+        if (!acquiredOnce) continue; // skip pre-acquire empties
+        if (freeStart === null) freeStart = s.t;
+        maxFreeRunMs = Math.max(maxFreeRunMs, s.t - freeStart);
+      }
+      expect(maxFreeRunMs).toBeLessThan(300);
     }, 60_000);
   },
 );

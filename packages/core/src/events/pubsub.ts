@@ -152,6 +152,27 @@ export interface LeaseProvider {
    * `false` if the lease was lost (TTL expired or another owner took it).
    */
   renewLease(key: string, owner: string, ttlMs: number): Promise<boolean>;
+
+  /**
+   * Atomically hand a held lease from `fromOwner` to `toOwner`, refreshing
+   * its TTL, without ever releasing the key in between.
+   *
+   * This is the gap-free primitive used when one owner finishes but a
+   * follow-up owner must take over the *same* lease key immediately (e.g. a
+   * thread run completes and a queued follow-up run drains on the same
+   * thread). A naive release-then-acquire would briefly leave the key empty,
+   * letting a racing process win the freed lease and start a competing run.
+   *
+   * Returns `true` if `fromOwner` still held the lease and ownership moved to
+   * `toOwner`; `false` if the lease was already lost (expired or taken by a
+   * third owner), in which case the caller should fall back to a fresh
+   * `acquireLease`.
+   *
+   * Optional: backends that cannot implement this atomically simply omit it.
+   * Callers must feature-detect and fall back to release+acquire (which
+   * reopens the race window only for those backends).
+   */
+  transferLease?(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean>;
 }
 
 /**
@@ -189,6 +210,11 @@ export const NoopLeaseProvider: LeaseProvider = {
     return Promise.resolve();
   },
   renewLease(_key: string, _owner: string, _ttlMs: number): Promise<boolean> {
+    return Promise.resolve(true);
+  },
+  transferLease(_key: string, _fromOwner: string, _toOwner: string, _ttlMs: number): Promise<boolean> {
+    // Single-process: there is no competing holder, so the handoff always
+    // "succeeds" — the next owner is free to proceed.
     return Promise.resolve(true);
   },
 };

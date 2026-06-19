@@ -111,6 +111,42 @@ async function main() {
 
   emit({ type: 'ready' });
 
+  // Fire a single signal. Returns a promise that resolves once `accepted`
+  // settles, emitting `owner-stream-resolved` with whether this process became
+  // the lease winner (action === 'wake' with a real owner stream).
+  function fireSignal(sigId: string): Promise<void> {
+    const result = runtime.sendSignal(
+      agent as any,
+      { type: 'user-message', contents: sigId },
+      {
+        resourceId: RESOURCE_ID,
+        threadId: THREAD_ID,
+        ifIdle: {
+          behavior: 'wake' as const,
+          streamOptions: {
+            memory: { resource: RESOURCE_ID, thread: THREAD_ID },
+          },
+        },
+        ifActive: {
+          behavior: 'deliver' as const,
+        },
+      },
+      pubsub,
+    );
+    emit({ type: 'signal-result', sigId, accepted: true });
+    return result.accepted
+      .then(settled => {
+        emit({
+          type: 'owner-stream-resolved',
+          sigId,
+          defined: settled.action === 'wake' && Boolean(settled.output),
+        });
+      })
+      .catch(err => {
+        emit({ type: 'owner-stream-error', sigId, error: String(err) });
+      });
+  }
+
   const rl = createInterface({ input: process.stdin });
   rl.on('line', async (line: string) => {
     if (!line.trim()) return;
@@ -132,40 +168,7 @@ async function main() {
     if (cmd.cmd === 'send' || cmd.cmd === 'send-and-exit') {
       const sigId: string = cmd.sigId;
       try {
-        const result = runtime.sendSignal(
-          agent as any,
-          { type: 'user-message', contents: sigId },
-          {
-            resourceId: RESOURCE_ID,
-            threadId: THREAD_ID,
-            ifIdle: {
-              behavior: 'wake' as const,
-              streamOptions: {
-                memory: { resource: RESOURCE_ID, thread: THREAD_ID },
-              },
-            },
-            ifActive: {
-              behavior: 'deliver' as const,
-            },
-          },
-          pubsub,
-        );
-        emit({
-          type: 'signal-result',
-          sigId,
-          accepted: true,
-        });
-        const ownerSettled = result.accepted
-          .then(settled => {
-            emit({
-              type: 'owner-stream-resolved',
-              sigId,
-              defined: settled.action === 'wake' && Boolean(settled.output),
-            });
-          })
-          .catch(err => {
-            emit({ type: 'owner-stream-error', sigId, error: String(err) });
-          });
+        const ownerSettled = fireSignal(sigId);
 
         if (cmd.cmd === 'send-and-exit') {
           // Models a Vercel Lambda that waitUntil-defers the publish, then dies.
@@ -180,6 +183,24 @@ async function main() {
       } catch (err) {
         emit({ type: 'run-error', sigId, error: String(err) });
       }
+    }
+
+    if (cmd.cmd === 'send-idle-poll') {
+      // Repeatedly fire idle-wake signals to probe for any window where the
+      // thread lease is momentarily free. A correct runtime keeps the lease
+      // owned for as long as queued follow-up work is draining, so every probe
+      // must lose the lease (action 'deliver'). If the runtime releases the
+      // lease before re-acquiring for a drained run, one of these probes will
+      // win the freed lease and start a competing run for the same thread —
+      // exposing the cross-process race.
+      const count: number = cmd.count ?? 40;
+      const intervalMs: number = cmd.intervalMs ?? 25;
+      const prefix: string = cmd.sigPrefix ?? 'probe';
+      for (let i = 0; i < count; i++) {
+        void fireSignal(`${prefix}-${i}`);
+        await new Promise(r => setTimeout(r, intervalMs));
+      }
+      emit({ type: 'idle-poll-done', count });
     }
   });
 }
