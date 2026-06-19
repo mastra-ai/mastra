@@ -291,7 +291,10 @@ describe('MastraTUI queueing', () => {
       harness: {
         createThread,
         sendSignal,
-        session: { stream: { isActive: () => false }, displayState: { get: () => ({ isRunning: false }) } },
+        session: {
+          stream: { isActive: () => false },
+          displayState: { get: () => ({ isRunning: false }) },
+        },
       } as unknown as TUIState['harness'],
       chatContainer: new Container(),
     });
@@ -630,7 +633,9 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-456',
       harness: {
-        switchMode,
+        session: {
+          switchMode,
+        },
       } as any,
       goalManager: {
         applyEvaluation,
@@ -658,7 +663,9 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: undefined,
       harness: {
-        switchMode,
+        session: {
+          switchMode,
+        },
       } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
@@ -764,7 +771,9 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-failed',
       harness: {
-        switchMode,
+        session: {
+          switchMode,
+        },
       } as any,
       goalManager: {
         applyEvaluation: vi.fn(),

@@ -651,236 +651,6 @@ export class SessionRun {
   }
 }
 
-/**
- * Owns the session's currently-selected model. Source of truth for "which model
- * is active", plus the per-mode model memory persisted to the thread-settings
- * store (so each mode remembers the model it was last used with).
- */
-export class SessionModel {
-  #id = '';
-  readonly #store: () => ThreadSettingsStore | undefined;
-  /**
-   * Reads the active mode id. Injected by the Harness via {@link setResolver},
-   * since {@link switch} defaults a model change to the current mode.
-   */
-  #getCurrentModeId: (() => string) | undefined;
-  /** Emits Harness events (`model_changed`). Injected via {@link setResolver}. */
-  #emit: ((event: HarnessEvent) => void) | undefined;
-  /** App hook to track model usage for ranking. Injected via {@link setResolver}. */
-  #trackModelUse: ModelUseCountTracker | undefined;
-
-  constructor(store: () => ThreadSettingsStore | undefined) {
-    this.#store = store;
-  }
-
-  /**
-   * Attach the Harness-owned dependencies {@link switch} needs: the active-mode
-   * accessor, the event emitter, and the optional model-use tracker. The
-   * Harness injects these once.
-   */
-  setResolver(options: {
-    getCurrentModeId: () => string;
-    emit: (event: HarnessEvent) => void;
-    trackModelUse?: ModelUseCountTracker;
-  }): void {
-    this.#getCurrentModeId = options.getCurrentModeId;
-    this.#emit = options.emit;
-    this.#trackModelUse = options.trackModelUse;
-  }
-
-  /** The currently-selected model id ('' when none selected yet). */
-  get(): string {
-    return this.#id;
-  }
-
-  /** Whether a model is currently selected. */
-  hasSelection(): boolean {
-    return this.#id !== '';
-  }
-
-  /** Set the in-memory selected model id (no persistence). */
-  set({ modelId }: { modelId: string }): void {
-    this.#id = modelId;
-  }
-
-  /** Persist `modelId` as the last-used model for `modeId`. */
-  async saveForMode({ modeId, modelId }: { modeId: string; modelId: string }): Promise<void> {
-    await this.#store()?.set(modeModelKey(modeId), modelId);
-  }
-
-  /**
-   * Resolve the model for `modeId`: the persisted per-mode model if present,
-   * else `defaultModelId`, else null.
-   */
-  async resolveForMode({
-    modeId,
-    defaultModelId,
-  }: {
-    modeId: string;
-    defaultModelId?: string;
-  }): Promise<string | null> {
-    const stored = (await this.#store()?.get(modeModelKey(modeId))) as string | undefined;
-    if (stored) return stored;
-    return defaultModelId ?? null;
-  }
-
-  /**
-   * Switch to a different model at runtime.
-   *
-   * When `scope` is `'thread'` (the default), the model is persisted as the
-   * per-mode model for `modeId` so it's restored when switching back. The
-   * in-memory selection only updates when the target mode is the active mode.
-   * Reports the selection to the model-use tracker and emits `model_changed`.
-   */
-  async switch({
-    modelId,
-    scope = 'thread',
-    modeId,
-  }: {
-    modelId: string;
-    scope?: 'global' | 'thread';
-    modeId?: string;
-  }): Promise<void> {
-    const currentModeId = this.#getCurrentModeId?.() ?? '';
-    const targetModeId = modeId ?? currentModeId;
-
-    if (targetModeId === currentModeId) {
-      this.set({ modelId });
-    }
-
-    if (scope === 'thread') {
-      await this.saveForMode({ modeId: targetModeId, modelId });
-    }
-
-    try {
-      await Promise.resolve(this.#trackModelUse?.(modelId));
-    } catch (error) {
-      console.error('Failed to track model usage count', error);
-    }
-
-    this.#emit?.({ type: 'model_changed', modelId, scope, modeId: targetModeId });
-  }
-}
-
-/**
- * Owns the session's currently-selected mode and the logic for switching modes.
- * Holds the active mode id and runs the version-guarded switch sequence —
- * persisting the selection and coordinating the per-mode model with
- * {@link SessionModel}. The Harness still owns the mode *definitions*
- * (`config.modes`); this owns "which mode is active" and how a switch unfolds.
- */
-export class SessionMode {
-  /** Id of the currently-selected mode. Empty until the Harness resolves its default mode. */
-  #id = '';
-  /**
-   * Monotonically increasing counter bumped on each switch. A slower in-flight
-   * switch detects it was superseded by a newer one and bails.
-   */
-  #switchVersion = 0;
-  readonly #store: () => ThreadSettingsStore | undefined;
-  readonly #model: SessionModel;
-  /**
-   * Resolves a mode id to its full definition. Injected by the Harness via
-   * {@link setResolver}, since the mode *catalog* (`config.modes`) is host config.
-   */
-  #resolveMode: ((modeId: string) => HarnessMode | null) | undefined;
-  /**
-   * Aborts any in-progress generation before a switch. Injected by the Harness
-   * via {@link setResolver}, since aborting a run is Harness-owned orchestration.
-   */
-  #abort: (() => void) | undefined;
-  /**
-   * Emits Harness events (mode_changed / model_changed) during a switch.
-   * Injected by the Harness via {@link setResolver}.
-   */
-  #emit: ((event: HarnessEvent) => void) | undefined;
-
-  constructor(store: () => ThreadSettingsStore | undefined, model: SessionModel) {
-    this.#store = store;
-    this.#model = model;
-  }
-
-  /**
-   * Attach the resolver that maps a mode id to its definition, plus the
-   * Harness-owned orchestration callbacks ({@link switch} uses to abort the
-   * in-flight run and emit events). The Harness owns the mode catalog
-   * (`config.modes`) and injects these once.
-   */
-  setResolver(
-    resolve: (modeId: string) => HarnessMode | null,
-    options?: { abort?: () => void; emit?: (event: HarnessEvent) => void },
-  ): void {
-    this.#resolveMode = resolve;
-    this.#abort = options?.abort;
-    this.#emit = options?.emit;
-  }
-
-  /** The currently-selected mode id. */
-  get(): string {
-    return this.#id;
-  }
-
-  /**
-   * Resolve the currently-selected mode id to its full definition against the
-   * host's mode catalog. Throws if the selected mode id isn't in the catalog.
-   */
-  resolve(): HarnessMode {
-    const mode = this.#resolveMode?.(this.#id) ?? null;
-    if (!mode) {
-      throw new Error(`Mode not found: ${this.#id}`);
-    }
-    return mode;
-  }
-
-  /** Set the currently-selected mode id (on default resolution or hydration). */
-  set({ modeId }: { modeId: string }): void {
-    this.#id = modeId;
-  }
-
-  /**
-   * Switch to a different mode.
-   *
-   * Aborts any in-progress generation, emits `mode_changed`, then runs the
-   * version-guarded sequence: remember the outgoing mode's model, persist the
-   * new mode, then resolve and apply the incoming mode's model — emitting
-   * `model_changed` once applied. A newer switch starting mid-flight supersedes
-   * this one, which then bails before emitting `model_changed`.
-   */
-  async switch({ modeId }: { modeId: string }): Promise<void> {
-    const mode = this.#resolveMode?.(modeId) ?? null;
-    if (!mode) {
-      throw new Error(`Mode not found: ${modeId}`);
-    }
-
-    this.#abort?.();
-
-    const previousModeId = this.#id;
-    const previousModelId = this.#model.get();
-    const version = ++this.#switchVersion;
-    this.#id = modeId;
-
-    // Emit the mode change immediately so UIs can update without waiting for
-    // the storage round-trips below.
-    this.#emit?.({ type: 'mode_changed', modeId, previousModeId });
-
-    // Remember the outgoing mode's model before moving on.
-    if (previousModelId) {
-      await this.#model.saveForMode({ modeId: previousModeId, modelId: previousModelId });
-    }
-    if (this.#switchVersion !== version) return;
-
-    await this.#store()?.set(MODE_ID_KEY, modeId);
-    if (this.#switchVersion !== version) return;
-
-    const modelId = await this.#model.resolveForMode({ modeId, defaultModelId: mode.defaultModelId });
-    if (this.#switchVersion !== version) return;
-    if (modelId) {
-      this.#model.set({ modelId });
-      this.#emit?.({ type: 'model_changed', modelId } as HarnessEvent);
-    }
-  }
-}
-
 type SessionStateUpdater<TState, TResult> = HarnessRequestStateUpdater<TState, TResult>;
 
 interface SessionStateOptions<TState> {
@@ -1525,9 +1295,10 @@ export class Session<TState = unknown> {
   /** Resolves a subagent's display name from Harness config, injected via {@link setSubagentNameResolver}. */
   #resolveSubagentName: ((agentType: string) => string | undefined) | undefined;
   /** The session's currently-selected model (source of truth) + per-mode memory. */
-  readonly model = new SessionModel(() => this.#store);
+  model: string;
+  mode: HarnessMode;
+  readonly #availableModes: HarnessMode[];
   /** The session's currently-selected mode and switch sequence. */
-  readonly mode = new SessionMode(() => this.#store, this.model);
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
   /** Live subscription to the active thread's agent event stream. */
@@ -1547,14 +1318,26 @@ export class Session<TState = unknown> {
   /** The session-owned Harness state domain. */
   readonly state: HarnessRequestState<TState>;
   #listeners: HarnessEventListener[] = [];
+  #switchVersion = 0;
+  /** App hook to track model usage for ranking. */
+  #trackModelUse: ModelUseCountTracker | undefined;
+
   constructor({
     id,
     resourceId,
     state,
+    mode,
+    availableModes,
+    model,
+    trackModelUse,
   }: {
     id?: string;
     resourceId: string;
     state?: Omit<SessionStateOptions<TState>, 'emit'>;
+    mode: HarnessMode;
+    availableModes: HarnessMode[];
+    model: string;
+    trackModelUse: ModelUseCountTracker | undefined;
   }) {
     this.#id = id ?? `sess-${randomUUID()}`;
     this.identity = new SessionIdentity({ resourceId });
@@ -1569,14 +1352,18 @@ export class Session<TState = unknown> {
       state
         ? {
             ...state,
-            emit: this.#emit.bind(this),
+            emit: this.emit.bind(this),
           }
         : {
             initialState: {
-              emit: this.#emit.bind(this),
+              emit: this.emit.bind(this),
             } as TState,
           },
     );
+    this.#availableModes = availableModes;
+    this.mode = mode;
+    this.model = model;
+    this.#trackModelUse = trackModelUse;
   }
 
   /**
@@ -1634,6 +1421,79 @@ export class Session<TState = unknown> {
     this.approval.cancel();
     this.stream.abort();
     this.run.requestAbort();
+  }
+
+  async switchMode({ modeId }: { modeId: string }): Promise<void> {
+    const mode = this.#availableModes.find(mode => mode.id === modeId) ?? null;
+    if (!mode) {
+      throw new Error(`Mode not found: ${modeId}`);
+    }
+
+    this.abortRun();
+
+    const previousModeId = this.mode.id;
+    const previousModelId = this.model;
+    const version = ++this.#switchVersion;
+
+    // Emit the mode change immediately so UIs can update without waiting for
+    // the storage round-trips below.
+    this.emit({ type: 'mode_changed', modeId, previousModeId });
+
+    // Remember the outgoing mode's model before moving on.
+    if (previousModelId) {
+      await this.#store?.set(modeModelKey(previousModeId), previousModelId);
+    }
+    if (this.#switchVersion !== version) return;
+
+    await this.#store?.set(MODE_ID_KEY, modeId);
+    if (this.#switchVersion !== version) return;
+
+    this.mode = mode;
+    const savedModelId = await this.#store?.get(modeModelKey(modeId));
+    if (this.#switchVersion !== version) return;
+
+    const modelId = typeof savedModelId === 'string' && savedModelId ? savedModelId : mode.defaultModelId;
+    if (modelId) {
+      this.model = modelId;
+      this.emit({ type: 'model_changed', modelId } as HarnessEvent);
+    }
+  }
+
+  /**
+   * Switch to a different model at runtime.
+   *
+   * When `scope` is `'thread'` (the default), the model is persisted as the
+   * per-mode model for `modeId` so it's restored when switching back. The
+   * in-memory selection only updates when the target mode is the active mode.
+   * Reports the selection to the model-use tracker and emits `model_changed`.
+   */
+  async switchModel({
+    modelId,
+    scope = 'thread',
+    modeId,
+  }: {
+    modelId: string;
+    scope?: 'global' | 'thread';
+    modeId?: string;
+  }): Promise<void> {
+    const currentModeId = this.mode.id;
+    const targetModeId = modeId ?? currentModeId;
+
+    if (scope === 'thread') {
+      await this.#store?.set(modeModelKey(targetModeId), modelId);
+    }
+
+    if (targetModeId === currentModeId) {
+      this.model = modelId;
+    }
+
+    try {
+      await Promise.resolve(this.#trackModelUse?.(modelId));
+    } catch (error) {
+      console.error('Failed to track model usage count', error);
+    }
+
+    this.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId });
   }
 
   /**
@@ -1736,8 +1596,8 @@ export class Session<TState = unknown> {
     };
   }
 
-  #emit(event: HarnessEvent): void {
-    let eventWithSessionId = {
+  emit(event: HarnessEvent): void {
+    const eventWithSessionId = {
       ...event,
       sessionId: this.#id,
     };

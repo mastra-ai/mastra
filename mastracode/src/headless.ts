@@ -432,7 +432,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
       const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
       return failEarly(`Model "${args.model}" has no API key configured.${keyHint}`);
     }
-    await harness.session.model.switch({ modelId: args.model });
+    await harness.session.switchModel({ modelId: args.model });
     if (!emit) process.stderr.write(`[model] ${args.model}\n`);
   } else if (args.mode) {
     // --mode flag: look up model from effectiveDefaults (resolved from settings at startup)
@@ -447,7 +447,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
         const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
         return failEarly(`Model "${modelId}" (mode: ${args.mode}) has no API key configured.${keyHint}`);
       }
-      await harness.session.model.switch({ modelId });
+      await harness.session.switchModel({ modelId });
       if (!emit) process.stderr.write(`[model] ${modelId} (mode: ${args.mode})\n`);
     } else {
       const warnMsg = `--mode ${args.mode} has no configured model, using default`;

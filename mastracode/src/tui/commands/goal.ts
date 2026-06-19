@@ -261,7 +261,7 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
   }
 
   const settings = loadSettings();
-  const preselectedId = settings.models.goalJudgeModel ?? state.session.model.get() ?? undefined;
+  const preselectedId = settings.models.goalJudgeModel ?? state.session.model ?? undefined;
   const defaultMaxTurns =
     typeof settings.models.goalMaxTurns === 'number' && settings.models.goalMaxTurns > 0
       ? settings.models.goalMaxTurns

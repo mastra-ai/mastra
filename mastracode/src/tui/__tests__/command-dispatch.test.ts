@@ -100,7 +100,7 @@ describe('dispatchSlashCommand models routing', () => {
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => 'thread-1') },
-        mode: { get: vi.fn(() => 'build') },
+        mode: 'build',
       },
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
@@ -124,7 +124,7 @@ describe('dispatchSlashCommand models routing', () => {
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => 'thread-1') },
-        mode: { get: vi.fn(() => 'build') },
+        mode: 'build',
       },
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
@@ -499,7 +499,7 @@ describe('dispatchSlashCommand models routing', () => {
       session: {
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         thread: { getId: vi.fn(() => null) },
-        mode: { get: vi.fn(() => 'build') },
+        mode: 'build',
       },
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;

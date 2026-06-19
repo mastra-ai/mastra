@@ -44,7 +44,7 @@ import { createTUIState } from '../state.js';
 function createHarness() {
   return {
     session: {
-      mode: { resolve: vi.fn(() => ({ id: 'build', metadata: { color: '#7c3aed' } })) },
+      mode: { id: 'build', metadata: { color: '#7c3aed' } },
     },
   };
 }
@@ -129,6 +129,5 @@ describe('createTUIState', () => {
     expect(state.projectInfo).toEqual({ rootPath: '/tmp/mastra-code-project', gitBranch: 'main' });
 
     expect(state.editor.getModeColor?.()).toBe('#7c3aed');
-    expect(harness.session.mode.resolve).toHaveBeenCalled();
   });
 });

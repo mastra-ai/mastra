@@ -267,7 +267,7 @@ export class MastraTUI {
     if (this.state.options.initialMessage) {
       const msg = this.state.options.initialMessage;
 
-      if (!this.state.session.model.hasSelection()) {
+      if (!this.state.session.model) {
         showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
       } else {
         const messageId = `user-${Date.now()}`;
@@ -325,7 +325,7 @@ export class MastraTUI {
         }
 
         // Check if a model is selected (sync — fast, no reason to defer)
-        if (!this.state.session.model.hasSelection()) {
+        if (!this.state.session.model) {
           showInfo(this.state, 'No model selected. Use /models to select a model, or /login to authenticate.');
           continue;
         }
@@ -427,7 +427,7 @@ export class MastraTUI {
       this.state.analytics?.capture('mastracode_prompt_submitted', {
         threadId: this.state.session.thread.getId(),
         resourceId: this.state.session.identity.getResourceId(),
-        mode: this.state.session.mode.get(),
+        mode: this.state.session.mode,
         hasImages: Boolean(images?.length),
         isFirstPromptInThread: pendingNewThread,
         pendingNewThread,
@@ -753,7 +753,7 @@ export class MastraTUI {
         action: 'created',
         threadId: event.thread.id,
         resourceId: event.thread.resourceId,
-        mode: this.state.session.mode.get(),
+        mode: this.state.session.mode,
         hasTitle: Boolean(event.thread.title),
       });
       return;
@@ -765,7 +765,7 @@ export class MastraTUI {
         threadId: event.threadId,
         previousThreadId: event.previousThreadId,
         resourceId: this.state.session.identity.getResourceId(),
-        mode: this.state.session.mode.get(),
+        mode: this.state.session.mode,
       });
       return;
     }
@@ -774,7 +774,7 @@ export class MastraTUI {
       analytics.capture('mastracode_model_changed', {
         modelId: event.modelId,
         scope: event.scope,
-        mode: event.modeId ?? this.state.session.mode.get(),
+        mode: event.modeId ?? this.state.session.mode,
         threadId: this.state.session.thread.getId(),
         resourceId: this.state.session.identity.getResourceId(),
       });
@@ -1154,7 +1154,7 @@ export class MastraTUI {
           const { PROVIDER_DEFAULT_MODELS } = await import('../auth/storage.js');
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
-            await this.state.harness.session.model.switch({ modelId: defaultModel });
+            await this.state.harness.session.switchModel({ modelId: defaultModel });
             showInfo(this.state, `Logged in to ${providerName} - switched to ${defaultModel}`);
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);
@@ -1293,10 +1293,10 @@ export class MastraTUI {
       }
     }
 
-    const currentModeId = harness.session.mode.get();
+    const currentModeId = harness.session.mode.id;
     const currentModeModel = (modePack.models as Record<string, string>)[currentModeId];
     if (currentModeModel) {
-      await harness.session.model.switch({ modelId: currentModeModel });
+      await harness.session.switchModel({ modelId: currentModeModel });
     }
 
     const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
@@ -1386,7 +1386,7 @@ export class MastraTUI {
     const tools = this.state.allToolComponents.filter(
       (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
     );
-    const color = this.state.harness?.session.mode.resolve().metadata?.color;
+    const color = this.state.harness?.session.mode.metadata?.color;
     const modeColor = typeof color === 'string' ? color : undefined;
     for (const tool of tools) {
       tool.setCompactToolModeColor?.(modeColor);

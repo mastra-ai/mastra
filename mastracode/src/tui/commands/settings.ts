@@ -16,7 +16,7 @@ import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
 function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
-  const color = ctx.state.session.mode.resolve().metadata?.color;
+  const color = ctx.state.session.mode.metadata?.color;
   return typeof color === 'string' ? color : undefined;
 }
 
@@ -196,7 +196,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     notifications: (state?.notifications ?? 'off') as NotificationMode,
     yolo: state?.yolo === true,
     thinkingLevel: (state?.thinkingLevel ?? 'off') as string,
-    currentModelId: ctx.state.session.model.get() ?? '',
+    currentModelId: ctx.state.session.model ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
     quietMode: globalSettings.preferences.quietMode,
     quietModeMaxToolPreviewLines: globalSettings.preferences.quietModeMaxToolPreviewLines,
