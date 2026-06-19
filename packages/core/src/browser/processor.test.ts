@@ -656,6 +656,79 @@ describe('BrowserContextProcessor', () => {
           browser: snapshot!.metadata!.browser,
         },
       });
+      const latestBrowserStateMessage = createSignal({
+        type: 'state',
+        tagName: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1, mode: 'snapshot' },
+        },
+      }).toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com/pricing',
+            activeUrlChangeSource: 'user',
+          },
+          [activeSignal as any],
+          {
+            messageListMessages: [
+              latestBrowserStateMessage,
+              {
+                id: 'assistant-1',
+                role: 'assistant',
+                content: {
+                  format: 2,
+                  parts: [
+                    {
+                      type: 'tool-invocation',
+                      toolInvocation: {
+                        state: 'result',
+                        toolName: 'browser_click',
+                        result: { success: true, url: 'https://example.com/pricing' },
+                      },
+                    },
+                  ],
+                },
+              } as any,
+            ],
+          },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: agent changed active tab URL to https://example.com/pricing',
+          delta: { activeUrl: 'https://example.com/pricing', activeUrlChangeSource: 'agent' },
+        }),
+      );
+    });
+
+    it('does not use stale browser click history before the latest browser state signal', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+      const latestBrowserStateMessage = createSignal({
+        type: 'state',
+        tagName: 'state',
+        contents: 'changed: agent changed active tab URL to https://example.com/docs',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'latest-browser-state', version: 2, mode: 'delta' },
+        },
+      }).toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
 
       const result = await processor.computeStateSignal(
         createStateArgs(
@@ -685,6 +758,7 @@ describe('BrowserContextProcessor', () => {
                   ],
                 },
               } as any,
+              latestBrowserStateMessage,
             ],
           },
         ),
@@ -693,8 +767,8 @@ describe('BrowserContextProcessor', () => {
       expect(result).toEqual(
         expect.objectContaining({
           mode: 'delta',
-          contents: 'changed: agent changed active tab URL to https://example.com/pricing',
-          delta: { activeUrl: 'https://example.com/pricing', activeUrlChangeSource: 'agent' },
+          contents: 'changed: user changed active tab URL to https://example.com/pricing',
+          delta: { activeUrl: 'https://example.com/pricing', activeUrlChangeSource: 'user' },
         }),
       );
     });

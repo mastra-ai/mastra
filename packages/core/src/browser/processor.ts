@@ -237,6 +237,8 @@ function getMostRecentBrowserClickResultUrlFromMessageList(
 
 function getMostRecentBrowserClickResultUrlFromMessages(messages: ComputeStateSignalArgs['messages']): string | undefined {
   for (const message of [...messages].reverse()) {
+    if (isBrowserStateSignalMessage(message)) return undefined;
+
     const content = message.content;
     if (!content || typeof content !== 'object' || Array.isArray(content)) continue;
     const parts = (content as { parts?: unknown }).parts;
@@ -253,6 +255,18 @@ function getMostRecentBrowserClickResultUrlFromMessages(messages: ComputeStateSi
     }
   }
   return undefined;
+}
+
+function isBrowserStateSignalMessage(message: ComputeStateSignalArgs['messages'][number]): boolean {
+  const content = message.content;
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return false;
+  const signal = (content as { metadata?: { signal?: unknown } }).metadata?.signal;
+  if (!signal || typeof signal !== 'object' || Array.isArray(signal)) return false;
+  const metadata = (signal as { metadata?: unknown }).metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
+  const state = (metadata as { state?: unknown }).state;
+  if (!state || typeof state !== 'object' || Array.isArray(state)) return false;
+  return (state as { id?: unknown }).id === 'browser';
 }
 
 function getBrowserClickResultUrl(output: unknown): string | undefined {
