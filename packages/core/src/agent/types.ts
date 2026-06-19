@@ -60,6 +60,7 @@ import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { HeartbeatHooks } from './heartbeat/types';
 import type { MessageList } from './message-list/index';
 import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
@@ -802,6 +803,24 @@ interface AgentConfigBase<
    * serialized into display streams or user-visible transcripts.
    */
   transform?: ToolPayloadTransformPolicy;
+  /**
+   * Lifecycle hooks invoked by the {@link HeartbeatWorker} for heartbeats
+   * owned by this agent.
+   *
+   * - `prepare` resolves fire-time parameters (e.g. create a Slack thread
+   *   per fire and return `threadId`/`resourceId`), or returns `null` to
+   *   skip the fire entirely.
+   * - `onFinish` fires once per heartbeat trigger when the trigger reached
+   *   a non-error, non-abort terminal state (`succeeded`, `delivered`,
+   *   `persisted`, `discarded`, or `skipped`).
+   * - `onError` fires when `prepare`, `sendSignal`, or the agent run threw.
+   * - `onAbort` fires when the run was aborted mid-stream.
+   *
+   * User code branches on `heartbeat.name` for per-heartbeat behavior.
+   * Hook exceptions are caught and logged; they never re-route the worker
+   * or recurse into another hook.
+   */
+  heartbeat?: HeartbeatHooks<Mastra>;
 }
 
 /**

@@ -5,6 +5,23 @@ export * from './types';
 export * from './signals';
 export * from '../signals/signal-provider';
 export * from '../signals/webhook-signal-provider';
+export {
+  HEARTBEAT_SCHEDULE_PREFIX,
+  HeartbeatInputSchema,
+  HeartbeatOutputSchema,
+  HeartbeatBroadcastModeSchema,
+  Heartbeats,
+  toHeartbeat,
+  type HeartbeatInput,
+  type HeartbeatOutput,
+  type HeartbeatRunStatus,
+  type HeartbeatBroadcastMode,
+  type Heartbeat,
+  type CreateHeartbeatInput,
+  type UpdateHeartbeatInput,
+  type ListHeartbeatsFilter,
+  type HeartbeatTriggerRow,
+} from './heartbeat';
 export * from './agent';
 export * from './utils';
 

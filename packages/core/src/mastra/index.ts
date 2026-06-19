@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { Heartbeats } from '../agent/heartbeat/heartbeats';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -64,7 +65,7 @@ import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { computeNextFireAt } from '../workflows/scheduler';
-import type { WorkflowScheduleConfig, WorkflowSchedulerConfig, WorkflowScheduler } from '../workflows/scheduler';
+import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 import type { VersionOverrides, VersionSelector } from './types';
@@ -473,7 +474,7 @@ export interface Config<
    * `schedule` config or when `scheduler.enabled` is true. It requires a
    * storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`).
    */
-  scheduler?: WorkflowSchedulerConfig;
+  scheduler?: SchedulerConfig;
 
   /**
    * Notification runtime configuration. Notification dispatch is scheduled automatically by default.
@@ -618,7 +619,7 @@ export class Mastra<
   #pubsub: PubSub;
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
-  #schedulerConfig?: WorkflowSchedulerConfig;
+  #schedulerConfig?: SchedulerConfig;
   #notificationDispatchConfig?: NotificationDispatchConfig;
   /**
    * Tracks whether any registered workflow has declared a `schedule` config.
@@ -628,10 +629,26 @@ export class Mastra<
   #hasScheduledWorkflow = false;
   #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
+  #heartbeats?: Heartbeats;
   #environment?: string;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
+  /**
+   * Tracks whether `startWorkers()` has already run. Used to decide whether
+   * lazy scheduler injection (e.g. from `mastra.heartbeats.create()` after boot)
+   * needs to also `init`/`start` the worker, or whether the normal
+   * `startWorkers()` path will pick it up.
+   */
+  #workersStarted = false;
+  /**
+   * Set when something has signalled that the scheduler is needed at runtime
+   * (e.g. an agent registered a heartbeat via `__ensureHeartbeatRuntimeReady()`).
+   * Causes `#shouldEnableScheduler()` to return `true` even when there are no
+   * declarative scheduled workflows, unless the user explicitly set
+   * `scheduler: { enabled: false }`.
+   */
+  #schedulerRequested = false;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
   // (in-process EventEmitter listener, the /api/workers/events HTTP route).
@@ -778,7 +795,7 @@ export class Mastra<
    * SchedulerWorker (guarded by `#shouldEnableScheduler()`). Use it
    * to create, pause, resume, or delete schedules imperatively.
    */
-  get scheduler(): WorkflowScheduler | undefined {
+  get scheduler(): Scheduler | undefined {
     return this.#findSchedulerWorker()?.scheduler;
   }
 
@@ -850,6 +867,32 @@ export class Mastra<
    */
   public get channels(): TChannels {
     return (this.#channels ?? {}) as TChannels;
+  }
+
+  /**
+   * Canonical entrypoint for heartbeats — recurring agent runs persisted as
+   * schedule rows with `target.type === 'heartbeat'`. Use to create, list,
+   * update, pause/resume, manually fire, or inspect trigger history for
+   * heartbeats across any agent.
+   *
+   * Lazily constructed. Operates against `getStorage()?.getStore('schedules')`.
+   *
+   * @example
+   * ```ts
+   * const hb = await mastra.heartbeats.create({
+   *   agentId: 'pinger',
+   *   name: 'morning-checkin',
+   *   cron: '0 9 * * *',
+   *   prompt: 'good morning, anything to report?',
+   *   threadId: 't1',
+   *   resourceId: 'u1',
+   * });
+   * await mastra.heartbeats.list({ agentId: 'pinger' });
+   * ```
+   */
+  public get heartbeats(): Heartbeats {
+    this.#heartbeats ??= new Heartbeats(this as unknown as Mastra);
+    return this.#heartbeats;
   }
 
   /**
@@ -1558,7 +1601,7 @@ export class Mastra<
   #shouldEnableScheduler(): boolean {
     if (this.#schedulerConfig?.enabled === false) return false;
     if (this.#schedulerConfig?.enabled === true) return true;
-    return this.#hasScheduledWorkflow;
+    return this.#hasScheduledWorkflow || this.#schedulerRequested;
   }
 
   /**
@@ -1566,6 +1609,13 @@ export class Mastra<
    */
   #findSchedulerWorker(): SchedulerWorker | undefined {
     return this.#workers.find((w): w is SchedulerWorker => w.name === 'scheduler') as SchedulerWorker | undefined;
+  }
+
+  /**
+   * Find the HeartbeatWorker from the workers list (if present).
+   */
+  #findHeartbeatWorker(): MastraWorker | undefined {
+    return this.#workers.find(w => w.name === 'heartbeat');
   }
 
   /**
@@ -3698,6 +3748,82 @@ export class Mastra<
     }
   }
 
+  /**
+   * Signal that a heartbeat has been registered imperatively at runtime
+   * (e.g. `mastra.heartbeats.create()` after `startWorkers()`). Flips the
+   * scheduler-requested flag and, if workers are already running,
+   * lazily injects + starts both the scheduler and heartbeat workers.
+   *
+   * @internal
+   */
+  async __ensureHeartbeatRuntimeReady(): Promise<void> {
+    this.#schedulerRequested = true;
+    if (this.#workersStarted) {
+      await this.#ensureSchedulingWorkersStarted();
+    }
+  }
+
+  /**
+   * Lazily inject and start the SchedulerWorker (and HeartbeatWorker when
+   * needed) after `startWorkers()` has already run. Used by features that
+   * surface a need for the scheduler at runtime (e.g.
+   * `mastra.heartbeats.create()`). No-op when the scheduler is disabled, no
+   * storage is configured, or the workers are already present.
+   *
+   * @internal
+   */
+  async #ensureSchedulingWorkersStarted(): Promise<void> {
+    if (!this.#shouldEnableScheduler()) return;
+    if (!this.#storage) return;
+
+    const deps: WorkerDeps = {
+      pubsub: this.#pubsub,
+      storage: this.#storage,
+      logger: this.#logger as unknown as IMastraLogger,
+      mastra: this,
+    };
+
+    if (!this.#findSchedulerWorker()) {
+      const sw = new SchedulerWorker(this.#schedulerConfig);
+      sw.__registerMastra(this);
+      this.#workers.push(sw);
+      await sw.init(deps);
+      await sw.start();
+    }
+
+    if (!this.#findHeartbeatWorker()) {
+      const { HeartbeatWorker } = await import('../agent/heartbeat/worker');
+      const hw = new HeartbeatWorker();
+      hw.__registerMastra(this);
+      this.#workers.push(hw);
+      await hw.init(deps);
+      await hw.start();
+    }
+  }
+
+  /**
+   * Detect heartbeat schedule rows in storage on boot. Used by
+   * `#shouldEnableScheduler` to flip the scheduler-requested flag when
+   * imperative heartbeats persisted from a previous process exist —
+   * without this, a fresh boot with only DB-side heartbeats would skip
+   * starting the scheduler and heartbeat workers entirely.
+   *
+   * @internal
+   */
+  async #detectExistingHeartbeats(): Promise<void> {
+    if (this.#schedulerRequested) return;
+    if (!this.#storage) return;
+    try {
+      const schedulesStore = await this.#storage.getStore('schedules');
+      if (!schedulesStore) return;
+      const existing = await schedulesStore.listSchedules({ ownerType: 'agent' });
+      if (existing.length === 0) return;
+      this.#schedulerRequested = true;
+    } catch (err) {
+      this.#logger?.warn?.('Failed to detect existing heartbeats on boot', err as any);
+    }
+  }
+
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
     for (const step of Object.values(workflow.steps ?? {})) {
       const scorers = step.scorers;
@@ -4358,14 +4484,32 @@ export class Mastra<
    * user-defined event listeners.
    */
   public async startWorkers(name?: string): Promise<void> {
-    // Lazily inject the SchedulerWorker if the scheduler should be enabled
-    // and no scheduler worker is registered yet. This runs after all
-    // workflows have been registered (unlike the constructor's default-workers
-    // block), so #hasScheduledWorkflow is accurate.
-    if (!name && this.#shouldEnableScheduler() && this.#storage && !this.#findSchedulerWorker()) {
-      const sw = new SchedulerWorker(this.#schedulerConfig);
-      sw.__registerMastra(this);
-      this.#workers.push(sw);
+    // Flip the scheduler-requested flag if any heartbeat schedule rows
+    // exist in storage from a previous boot. Without this, a process
+    // that boots with only DB-side heartbeats (no in-code declarative
+    // schedules and no imperative `heartbeats.create()` calls yet) would
+    // skip injecting the scheduler + heartbeat workers entirely.
+    if (!name) {
+      await this.#detectExistingHeartbeats();
+    }
+
+    // Lazily inject the SchedulerWorker + HeartbeatWorker if the
+    // scheduler should be enabled and they're not already registered.
+    // This runs after all workflows have been registered (unlike the
+    // constructor's default-workers block), so #hasScheduledWorkflow is
+    // accurate.
+    if (!name && this.#shouldEnableScheduler() && this.#storage) {
+      if (!this.#findSchedulerWorker()) {
+        const sw = new SchedulerWorker(this.#schedulerConfig);
+        sw.__registerMastra(this);
+        this.#workers.push(sw);
+      }
+      if (!this.#findHeartbeatWorker()) {
+        const { HeartbeatWorker } = await import('../agent/heartbeat/worker');
+        const hw = new HeartbeatWorker();
+        hw.__registerMastra(this);
+        this.#workers.push(hw);
+      }
     }
 
     const deps: WorkerDeps = {
@@ -4499,6 +4643,11 @@ export class Mastra<
         }
       }
     }
+
+    // Track that the boot path has executed at least once so subsequent
+    // runtime signals (e.g. `mastra.heartbeats.create()`) know whether they need
+    // to lazily inject + start additional workers themselves.
+    this.#workersStarted = true;
   }
 
   /**
@@ -4527,6 +4676,7 @@ export class Mastra<
     this.#userEventSubscriptions = [];
 
     await this.#pubsub.flush();
+    this.#workersStarted = false;
   }
 
   /**

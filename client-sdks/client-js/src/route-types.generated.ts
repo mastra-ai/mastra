@@ -89417,17 +89417,42 @@ export type GetSchedules_QueryParams = {
 export type GetSchedules_Response = {
   schedules: {
     id: string;
-    target: {
-      type: 'workflow';
-      workflowId: string;
-      inputData?: unknown | undefined;
-      initialState?: unknown | undefined;
-      requestContext?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-    };
+    target:
+      | {
+          type: 'workflow';
+          workflowId: string;
+          inputData?: unknown | undefined;
+          initialState?: unknown | undefined;
+          requestContext?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+        }
+      | {
+          type: 'heartbeat';
+          agentId: string;
+          prompt: string;
+          threadId?: string | undefined;
+          resourceId?: string | undefined;
+          signalType?: string | undefined;
+          ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+          ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+          activeHours?:
+            | {
+                start: string;
+                end: string;
+                timezone?: string | undefined;
+              }
+            | undefined;
+          idleThresholdMs?: number | undefined;
+          broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+          requestContext?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+        };
     cron: string;
     timezone?: string | undefined;
     status: 'active' | 'paused';
@@ -89493,17 +89518,42 @@ export type GetSchedulesScheduleId_PathParams = {
 
 export type GetSchedulesScheduleId_Response = {
   id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
+  target:
+    | {
+        type: 'workflow';
+        workflowId: string;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }
+    | {
+        type: 'heartbeat';
+        agentId: string;
+        prompt: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        signalType?: string | undefined;
+        ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+        ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+        activeHours?:
+          | {
+              start: string;
+              end: string;
+              timezone?: string | undefined;
+            }
+          | undefined;
+        idleThresholdMs?: number | undefined;
+        broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
   cron: string;
   timezone?: string | undefined;
   status: 'active' | 'paused';
@@ -89575,19 +89625,9 @@ export type GetSchedulesScheduleIdTriggers_Response = {
     runId: string | null;
     scheduledFireAt: number;
     actualFireAt: number;
-    outcome:
-      | 'published'
-      | 'failed'
-      | 'skipped'
-      | 'acked'
-      | 'alerted'
-      | 'deferred'
-      | 'appended-from-queue'
-      | 'dropped-stale'
-      | 'dropped-superseded'
-      | 'dropped-busy';
+    outcome: 'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
     error?: string | undefined;
-    triggerKind?: ('schedule-fire' | 'queue-drain') | undefined;
+    triggerKind?: ('schedule-fire' | 'queue-drain' | 'manual') | undefined;
     parentTriggerId?: string | undefined;
     metadata?:
       | {
@@ -89646,17 +89686,42 @@ export type PostSchedulesScheduleIdPause_PathParams = {
 
 export type PostSchedulesScheduleIdPause_Response = {
   id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
+  target:
+    | {
+        type: 'workflow';
+        workflowId: string;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }
+    | {
+        type: 'heartbeat';
+        agentId: string;
+        prompt: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        signalType?: string | undefined;
+        ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+        ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+        activeHours?:
+          | {
+              start: string;
+              end: string;
+              timezone?: string | undefined;
+            }
+          | undefined;
+        idleThresholdMs?: number | undefined;
+        broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
   cron: string;
   timezone?: string | undefined;
   status: 'active' | 'paused';
@@ -89717,17 +89782,42 @@ export type PostSchedulesScheduleIdResume_PathParams = {
 
 export type PostSchedulesScheduleIdResume_Response = {
   id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
+  target:
+    | {
+        type: 'workflow';
+        workflowId: string;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }
+    | {
+        type: 'heartbeat';
+        agentId: string;
+        prompt: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        signalType?: string | undefined;
+        ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+        ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+        activeHours?:
+          | {
+              start: string;
+              end: string;
+              timezone?: string | undefined;
+            }
+          | undefined;
+        idleThresholdMs?: number | undefined;
+        broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
   cron: string;
   timezone?: string | undefined;
   status: 'active' | 'paused';
@@ -89776,6 +89866,756 @@ export interface PostSchedulesScheduleIdResume_RouteContract {
   body: never;
   request: PostSchedulesScheduleIdResume_Request;
   response: PostSchedulesScheduleIdResume_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /heartbeats
+// ============================================================================
+export type GetHeartbeats_QueryParams = {
+  agentId?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  name?: string | undefined;
+};
+
+export type GetHeartbeats_Response = {
+  heartbeats: {
+    id: string;
+    agentId: string;
+    name?: string | undefined;
+    threadId?: string | undefined;
+    resourceId?: string | undefined;
+    prompt: string;
+    cron: string;
+    timezone?: string | undefined;
+    status: 'active' | 'paused';
+    nextFireAt: number;
+    lastFireAt?: number | undefined;
+    lastRunId?: string | undefined;
+    lastRun?:
+      | {
+          status:
+            | 'running'
+            | 'success'
+            | 'failed'
+            | 'tripwire'
+            | 'suspended'
+            | 'waiting'
+            | 'pending'
+            | 'canceled'
+            | 'bailed'
+            | 'paused';
+          startedAt?: number | undefined;
+          completedAt?: number | undefined;
+          durationMs?: number | undefined;
+          error?: string | undefined;
+        }
+      | undefined;
+    signalType?: string | undefined;
+    ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+    ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+    activeHours?:
+      | {
+          start: string;
+          end: string;
+          timezone?: string | undefined;
+        }
+      | undefined;
+    idleThresholdMs?: number | undefined;
+    broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    createdAt: number;
+    updatedAt: number;
+  }[];
+};
+
+export type GetHeartbeats_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetHeartbeats_QueryParams extends never
+      ? {}
+      : {} extends GetHeartbeats_QueryParams
+        ? { query?: GetHeartbeats_QueryParams }
+        : { query: GetHeartbeats_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHeartbeats_RouteContract {
+  pathParams: never;
+  queryParams: GetHeartbeats_QueryParams;
+  body: never;
+  request: GetHeartbeats_Request;
+  response: GetHeartbeats_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agents/:agentId/heartbeats
+// ============================================================================
+export type GetAgentsAgentIdHeartbeats_PathParams = {
+  agentId: string;
+};
+
+export type GetAgentsAgentIdHeartbeats_QueryParams = {
+  agentId?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  name?: string | undefined;
+};
+
+export type GetAgentsAgentIdHeartbeats_Response = {
+  heartbeats: {
+    id: string;
+    agentId: string;
+    name?: string | undefined;
+    threadId?: string | undefined;
+    resourceId?: string | undefined;
+    prompt: string;
+    cron: string;
+    timezone?: string | undefined;
+    status: 'active' | 'paused';
+    nextFireAt: number;
+    lastFireAt?: number | undefined;
+    lastRunId?: string | undefined;
+    lastRun?:
+      | {
+          status:
+            | 'running'
+            | 'success'
+            | 'failed'
+            | 'tripwire'
+            | 'suspended'
+            | 'waiting'
+            | 'pending'
+            | 'canceled'
+            | 'bailed'
+            | 'paused';
+          startedAt?: number | undefined;
+          completedAt?: number | undefined;
+          durationMs?: number | undefined;
+          error?: string | undefined;
+        }
+      | undefined;
+    signalType?: string | undefined;
+    ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+    ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+    activeHours?:
+      | {
+          start: string;
+          end: string;
+          timezone?: string | undefined;
+        }
+      | undefined;
+    idleThresholdMs?: number | undefined;
+    broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    createdAt: number;
+    updatedAt: number;
+  }[];
+};
+
+export type GetAgentsAgentIdHeartbeats_Request = Simplify<
+  (GetAgentsAgentIdHeartbeats_PathParams extends never ? {} : { params: GetAgentsAgentIdHeartbeats_PathParams }) &
+    (GetAgentsAgentIdHeartbeats_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdHeartbeats_QueryParams
+        ? { query?: GetAgentsAgentIdHeartbeats_QueryParams }
+        : { query: GetAgentsAgentIdHeartbeats_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdHeartbeats_RouteContract {
+  pathParams: GetAgentsAgentIdHeartbeats_PathParams;
+  queryParams: GetAgentsAgentIdHeartbeats_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdHeartbeats_Request;
+  response: GetAgentsAgentIdHeartbeats_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agents/:agentId/heartbeats/:heartbeatId
+// ============================================================================
+export type GetAgentsAgentIdHeartbeatsHeartbeatId_PathParams = {
+  agentId: string;
+  heartbeatId: string;
+};
+
+export type GetAgentsAgentIdHeartbeatsHeartbeatId_Response = {
+  id: string;
+  agentId: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  prompt: string;
+  cron: string;
+  timezone?: string | undefined;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number | undefined;
+  lastRunId?: string | undefined;
+  lastRun?:
+    | {
+        status:
+          | 'running'
+          | 'success'
+          | 'failed'
+          | 'tripwire'
+          | 'suspended'
+          | 'waiting'
+          | 'pending'
+          | 'canceled'
+          | 'bailed'
+          | 'paused';
+        startedAt?: number | undefined;
+        completedAt?: number | undefined;
+        durationMs?: number | undefined;
+        error?: string | undefined;
+      }
+    | undefined;
+  signalType?: string | undefined;
+  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  activeHours?:
+    | {
+        start: string;
+        end: string;
+        timezone?: string | undefined;
+      }
+    | undefined;
+  idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GetAgentsAgentIdHeartbeatsHeartbeatId_Request = Simplify<
+  (GetAgentsAgentIdHeartbeatsHeartbeatId_PathParams extends never
+    ? {}
+    : { params: GetAgentsAgentIdHeartbeatsHeartbeatId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdHeartbeatsHeartbeatId_RouteContract {
+  pathParams: GetAgentsAgentIdHeartbeatsHeartbeatId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentsAgentIdHeartbeatsHeartbeatId_Request;
+  response: GetAgentsAgentIdHeartbeatsHeartbeatId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/heartbeats
+// ============================================================================
+export type PostAgentsAgentIdHeartbeats_PathParams = {
+  agentId: string;
+};
+
+export type PostAgentsAgentIdHeartbeats_Body = {
+  cron: string;
+  timezone?: string | undefined;
+  prompt: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  signalType?: string | undefined;
+  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  activeHours?:
+    | {
+        start: string;
+        end: string;
+        timezone?: string | undefined;
+      }
+    | undefined;
+  idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PostAgentsAgentIdHeartbeats_Response = {
+  id: string;
+  agentId: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  prompt: string;
+  cron: string;
+  timezone?: string | undefined;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number | undefined;
+  lastRunId?: string | undefined;
+  lastRun?:
+    | {
+        status:
+          | 'running'
+          | 'success'
+          | 'failed'
+          | 'tripwire'
+          | 'suspended'
+          | 'waiting'
+          | 'pending'
+          | 'canceled'
+          | 'bailed'
+          | 'paused';
+        startedAt?: number | undefined;
+        completedAt?: number | undefined;
+        durationMs?: number | undefined;
+        error?: string | undefined;
+      }
+    | undefined;
+  signalType?: string | undefined;
+  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  activeHours?:
+    | {
+        start: string;
+        end: string;
+        timezone?: string | undefined;
+      }
+    | undefined;
+  idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PostAgentsAgentIdHeartbeats_Request = Simplify<
+  (PostAgentsAgentIdHeartbeats_PathParams extends never ? {} : { params: PostAgentsAgentIdHeartbeats_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdHeartbeats_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdHeartbeats_Body
+        ? { body?: PostAgentsAgentIdHeartbeats_Body }
+        : { body: PostAgentsAgentIdHeartbeats_Body })
+>;
+
+export interface PostAgentsAgentIdHeartbeats_RouteContract {
+  pathParams: PostAgentsAgentIdHeartbeats_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdHeartbeats_Body;
+  request: PostAgentsAgentIdHeartbeats_Request;
+  response: PostAgentsAgentIdHeartbeats_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PATCH /agents/:agentId/heartbeats/:heartbeatId
+// ============================================================================
+export type PatchAgentsAgentIdHeartbeatsHeartbeatId_PathParams = {
+  agentId: string;
+  heartbeatId: string;
+};
+
+export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Body = {
+  cron?: string | undefined;
+  timezone?: string | undefined;
+  prompt?: string | undefined;
+  name?: string | undefined;
+  signalType?: string | undefined;
+  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  activeHours?:
+    | {
+        start: string;
+        end: string;
+        timezone?: string | undefined;
+      }
+    | undefined;
+  idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Response = {
+  id: string;
+  agentId: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  prompt: string;
+  cron: string;
+  timezone?: string | undefined;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number | undefined;
+  lastRunId?: string | undefined;
+  lastRun?:
+    | {
+        status:
+          | 'running'
+          | 'success'
+          | 'failed'
+          | 'tripwire'
+          | 'suspended'
+          | 'waiting'
+          | 'pending'
+          | 'canceled'
+          | 'bailed'
+          | 'paused';
+        startedAt?: number | undefined;
+        completedAt?: number | undefined;
+        durationMs?: number | undefined;
+        error?: string | undefined;
+      }
+    | undefined;
+  signalType?: string | undefined;
+  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  activeHours?:
+    | {
+        start: string;
+        end: string;
+        timezone?: string | undefined;
+      }
+    | undefined;
+  idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Request = Simplify<
+  (PatchAgentsAgentIdHeartbeatsHeartbeatId_PathParams extends never
+    ? {}
+    : { params: PatchAgentsAgentIdHeartbeatsHeartbeatId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchAgentsAgentIdHeartbeatsHeartbeatId_Body extends never
+      ? {}
+      : {} extends PatchAgentsAgentIdHeartbeatsHeartbeatId_Body
+        ? { body?: PatchAgentsAgentIdHeartbeatsHeartbeatId_Body }
+        : { body: PatchAgentsAgentIdHeartbeatsHeartbeatId_Body })
+>;
+
+export interface PatchAgentsAgentIdHeartbeatsHeartbeatId_RouteContract {
+  pathParams: PatchAgentsAgentIdHeartbeatsHeartbeatId_PathParams;
+  queryParams: never;
+  body: PatchAgentsAgentIdHeartbeatsHeartbeatId_Body;
+  request: PatchAgentsAgentIdHeartbeatsHeartbeatId_Request;
+  response: PatchAgentsAgentIdHeartbeatsHeartbeatId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /agents/:agentId/heartbeats/:heartbeatId
+// ============================================================================
+export type DeleteAgentsAgentIdHeartbeatsHeartbeatId_PathParams = {
+  agentId: string;
+  heartbeatId: string;
+};
+
+export type DeleteAgentsAgentIdHeartbeatsHeartbeatId_Response = {
+  message: string;
+};
+
+export type DeleteAgentsAgentIdHeartbeatsHeartbeatId_Request = Simplify<
+  (DeleteAgentsAgentIdHeartbeatsHeartbeatId_PathParams extends never
+    ? {}
+    : { params: DeleteAgentsAgentIdHeartbeatsHeartbeatId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteAgentsAgentIdHeartbeatsHeartbeatId_RouteContract {
+  pathParams: DeleteAgentsAgentIdHeartbeatsHeartbeatId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteAgentsAgentIdHeartbeatsHeartbeatId_Request;
+  response: DeleteAgentsAgentIdHeartbeatsHeartbeatId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/heartbeats/:heartbeatId/pause
+// ============================================================================
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_PathParams = {
+  agentId: string;
+  heartbeatId: string;
+};
+
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Response = {
+  id: string;
+  agentId: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  prompt: string;
+  cron: string;
+  timezone?: string | undefined;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number | undefined;
+  lastRunId?: string | undefined;
+  lastRun?:
+    | {
+        status:
+          | 'running'
+          | 'success'
+          | 'failed'
+          | 'tripwire'
+          | 'suspended'
+          | 'waiting'
+          | 'pending'
+          | 'canceled'
+          | 'bailed'
+          | 'paused';
+        startedAt?: number | undefined;
+        completedAt?: number | undefined;
+        durationMs?: number | undefined;
+        error?: string | undefined;
+      }
+    | undefined;
+  signalType?: string | undefined;
+  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  activeHours?:
+    | {
+        start: string;
+        end: string;
+        timezone?: string | undefined;
+      }
+    | undefined;
+  idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Request = Simplify<
+  (PostAgentsAgentIdHeartbeatsHeartbeatIdPause_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdHeartbeatsHeartbeatIdPause_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentsAgentIdHeartbeatsHeartbeatIdPause_RouteContract {
+  pathParams: PostAgentsAgentIdHeartbeatsHeartbeatIdPause_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Request;
+  response: PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/heartbeats/:heartbeatId/resume
+// ============================================================================
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_PathParams = {
+  agentId: string;
+  heartbeatId: string;
+};
+
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Response = {
+  id: string;
+  agentId: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  prompt: string;
+  cron: string;
+  timezone?: string | undefined;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number | undefined;
+  lastRunId?: string | undefined;
+  lastRun?:
+    | {
+        status:
+          | 'running'
+          | 'success'
+          | 'failed'
+          | 'tripwire'
+          | 'suspended'
+          | 'waiting'
+          | 'pending'
+          | 'canceled'
+          | 'bailed'
+          | 'paused';
+        startedAt?: number | undefined;
+        completedAt?: number | undefined;
+        durationMs?: number | undefined;
+        error?: string | undefined;
+      }
+    | undefined;
+  signalType?: string | undefined;
+  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
+  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  activeHours?:
+    | {
+        start: string;
+        end: string;
+        timezone?: string | undefined;
+      }
+    | undefined;
+  idleThresholdMs?: number | undefined;
+  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Request = Simplify<
+  (PostAgentsAgentIdHeartbeatsHeartbeatIdResume_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentsAgentIdHeartbeatsHeartbeatIdResume_RouteContract {
+  pathParams: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Request;
+  response: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agents/:agentId/heartbeats/:heartbeatId/run
+// ============================================================================
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams = {
+  agentId: string;
+  heartbeatId: string;
+};
+
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Response = {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
+};
+
+export type PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Request = Simplify<
+  (PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract {
+  pathParams: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Request;
+  response: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agents/:agentId/heartbeats/:heartbeatId/triggers
+// ============================================================================
+export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_PathParams = {
+  agentId: string;
+  heartbeatId: string;
+};
+
+export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams = {
+  limit?: number | undefined;
+  fromActualFireAt?: number | undefined;
+  toActualFireAt?: number | undefined;
+};
+
+export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_Response = {
+  triggers: {
+    id?: string | undefined;
+    scheduleId: string;
+    runId: string | null;
+    scheduledFireAt: number;
+    actualFireAt: number;
+    outcome: 'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
+    error?: string | undefined;
+    triggerKind?: ('schedule-fire' | 'queue-drain' | 'manual') | undefined;
+    parentTriggerId?: string | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    run?:
+      | {
+          status:
+            | 'running'
+            | 'success'
+            | 'failed'
+            | 'tripwire'
+            | 'suspended'
+            | 'waiting'
+            | 'pending'
+            | 'canceled'
+            | 'bailed'
+            | 'paused';
+          startedAt?: number | undefined;
+          completedAt?: number | undefined;
+          durationMs?: number | undefined;
+          error?: string | undefined;
+        }
+      | undefined;
+  }[];
+};
+
+export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_Request = Simplify<
+  (GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_PathParams extends never
+    ? {}
+    : { params: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_PathParams }) &
+    (GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams
+        ? { query?: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams }
+        : { query: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_RouteContract {
+  pathParams: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_PathParams;
+  queryParams: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_Request;
+  response: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_Response;
   responseType: 'json';
 }
 
@@ -91546,6 +92386,16 @@ export interface RouteTypes {
   'GET /schedules/:scheduleId/triggers': GetSchedulesScheduleIdTriggers_RouteContract;
   'POST /schedules/:scheduleId/pause': PostSchedulesScheduleIdPause_RouteContract;
   'POST /schedules/:scheduleId/resume': PostSchedulesScheduleIdResume_RouteContract;
+  'GET /heartbeats': GetHeartbeats_RouteContract;
+  'GET /agents/:agentId/heartbeats': GetAgentsAgentIdHeartbeats_RouteContract;
+  'GET /agents/:agentId/heartbeats/:heartbeatId': GetAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
+  'POST /agents/:agentId/heartbeats': PostAgentsAgentIdHeartbeats_RouteContract;
+  'PATCH /agents/:agentId/heartbeats/:heartbeatId': PatchAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
+  'DELETE /agents/:agentId/heartbeats/:heartbeatId': DeleteAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
+  'POST /agents/:agentId/heartbeats/:heartbeatId/pause': PostAgentsAgentIdHeartbeatsHeartbeatIdPause_RouteContract;
+  'POST /agents/:agentId/heartbeats/:heartbeatId/resume': PostAgentsAgentIdHeartbeatsHeartbeatIdResume_RouteContract;
+  'POST /agents/:agentId/heartbeats/:heartbeatId/run': PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract;
+  'GET /agents/:agentId/heartbeats/:heartbeatId/triggers': GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
@@ -91687,6 +92537,27 @@ export interface Client {
   };
   '/agents/:agentId/generate/vnext': {
     POST: PostAgentsAgentIdGenerateVnext_RouteContract;
+  };
+  '/agents/:agentId/heartbeats': {
+    GET: GetAgentsAgentIdHeartbeats_RouteContract;
+    POST: PostAgentsAgentIdHeartbeats_RouteContract;
+  };
+  '/agents/:agentId/heartbeats/:heartbeatId': {
+    DELETE: DeleteAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
+    GET: GetAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
+    PATCH: PatchAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
+  };
+  '/agents/:agentId/heartbeats/:heartbeatId/pause': {
+    POST: PostAgentsAgentIdHeartbeatsHeartbeatIdPause_RouteContract;
+  };
+  '/agents/:agentId/heartbeats/:heartbeatId/resume': {
+    POST: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_RouteContract;
+  };
+  '/agents/:agentId/heartbeats/:heartbeatId/run': {
+    POST: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract;
+  };
+  '/agents/:agentId/heartbeats/:heartbeatId/triggers': {
+    GET: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_RouteContract;
   };
   '/agents/:agentId/instructions/enhance': {
     POST: PostAgentsAgentIdInstructionsEnhance_RouteContract;
@@ -92015,6 +92886,9 @@ export interface Client {
   };
   '/harness/:harnessId/workspace': {
     GET: GetHarnessHarnessIdWorkspace_RouteContract;
+  };
+  '/heartbeats': {
+    GET: GetHeartbeats_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;

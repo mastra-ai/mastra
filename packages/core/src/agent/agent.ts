@@ -124,6 +124,14 @@ import type {
 } from './agent.types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
+import type {
+  CreateHeartbeatInput,
+  Heartbeat,
+  HeartbeatTriggerRow,
+  ListHeartbeatsFilter,
+  UpdateHeartbeatInput,
+} from './heartbeat/heartbeats';
+import type { HeartbeatHooks } from './heartbeat/types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -398,6 +406,7 @@ export class Agent<
   #goal?: GoalConfig;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #editorConfig?: AgentEditorConfig;
+  #heartbeatHooks?: HeartbeatHooks<Mastra>;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
    * scope on this Agent instance. A new call for the same scope aborts the
@@ -536,6 +545,10 @@ export class Agent<
       }
     } else {
       this.#voice = new DefaultVoice();
+    }
+
+    if (config.heartbeat) {
+      this.#heartbeatHooks = config.heartbeat;
     }
 
     if (config.channels) {
@@ -843,6 +856,17 @@ export class Agent<
     if (typeof this.#agents === 'function') return true;
     const record = this.#agents as Record<string, SubAgent> | undefined;
     return !!record && Object.keys(record).length > 0;
+  }
+
+  /**
+   * Returns the heartbeat lifecycle hooks configured on this agent, if any.
+   * Internal: consumed by {@link HeartbeatWorker} to invoke `prepare`,
+   * `onFinish`, `onError`, and `onAbort` around heartbeat-driven runs.
+   *
+   * @internal
+   */
+  __getHeartbeatHooks(): HeartbeatHooks<Mastra> | undefined {
+    return this.#heartbeatHooks;
   }
 
   /**
@@ -7359,6 +7383,95 @@ export class Agent<
       target,
       this.getPubSub(),
     );
+  }
+
+  /**
+   * @experimental Agent heartbeats are experimental and may change in a future release.
+   *
+   * Scoped heartbeats sugar. Calls delegate to `mastra.heartbeats.*` with
+   * `agentId` pre-bound to this agent. See {@link Heartbeats}.
+   *
+   * @example
+   * ```ts
+   * await agent.heartbeats.create({
+   *   name: 'morning-checkin',
+   *   cron: '0 9 * * *',
+   *   prompt: 'good morning, anything to report?',
+   *   threadId: 't1',
+   *   resourceId: 'u1',
+   * });
+   * await agent.heartbeats.list();
+   * ```
+   */
+  get heartbeats() {
+    const agentId = this.id;
+    const requireHeartbeats = () => {
+      if (!this.#mastra) {
+        throw new MastraError({
+          id: 'AGENT_HEARTBEAT_NO_MASTRA',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Agent "${agentId}" must be registered with a Mastra instance before using heartbeats.`,
+        });
+      }
+      return this.#mastra.heartbeats;
+    };
+    const requireOwned = async (id: string): Promise<Heartbeat> => {
+      const hb = await requireHeartbeats().get(id);
+      if (!hb || hb.agentId !== agentId) {
+        throw new MastraError({
+          id: 'AGENT_HEARTBEAT_OWNER_MISMATCH',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Heartbeat "${id}" is not owned by agent "${agentId}".`,
+        });
+      }
+      return hb;
+    };
+    return {
+      create: async (input: Omit<CreateHeartbeatInput, 'agentId'>): Promise<Heartbeat> =>
+        requireHeartbeats().create({ ...input, agentId }),
+      list: async (filter: Omit<ListHeartbeatsFilter, 'agentId'> = {}): Promise<Heartbeat[]> =>
+        requireHeartbeats().list({ ...filter, agentId }),
+      get: async (id: string): Promise<Heartbeat | null> => {
+        const hb = await requireHeartbeats().get(id);
+        if (!hb || hb.agentId !== agentId) return null;
+        return hb;
+      },
+      update: async (id: string, patch: UpdateHeartbeatInput): Promise<Heartbeat> => {
+        await requireOwned(id);
+        return requireHeartbeats().update(id, patch);
+      },
+      delete: async (id: string): Promise<void> => {
+        const hb = await requireHeartbeats().get(id);
+        if (!hb) return;
+        if (hb.agentId !== agentId) {
+          throw new MastraError({
+            id: 'AGENT_HEARTBEAT_OWNER_MISMATCH',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `Heartbeat "${id}" is not owned by agent "${agentId}".`,
+          });
+        }
+        await requireHeartbeats().delete(id);
+      },
+      pause: async (id: string): Promise<Heartbeat> => {
+        await requireOwned(id);
+        return requireHeartbeats().pause(id);
+      },
+      resume: async (id: string): Promise<Heartbeat> => {
+        await requireOwned(id);
+        return requireHeartbeats().resume(id);
+      },
+      run: async (id: string) => {
+        await requireOwned(id);
+        return requireHeartbeats().run(id);
+      },
+      listTriggers: async (id: string): Promise<HeartbeatTriggerRow[]> => {
+        await requireOwned(id);
+        return requireHeartbeats().listTriggers(id);
+      },
+    };
   }
 
   async stream<
