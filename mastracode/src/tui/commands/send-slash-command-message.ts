@@ -12,7 +12,7 @@ export async function sendSlashCommandMessage(
   options: { renderIdleUserMessage?: boolean } = {},
 ): Promise<void> {
   if (ctx.state.pendingNewThread) {
-    await ctx.harness.createThread();
+    await ctx.harness.session.thread.create();
     ctx.state.pendingNewThread = false;
   }
 

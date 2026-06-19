@@ -57,13 +57,13 @@ describe('Harness.getObservationalMemoryRecord', () => {
   });
 
   it('returns null when no OM record exists for the thread', async () => {
-    await harness.createThread();
+    await harness.session.thread.create();
     const record = await harness.getObservationalMemoryRecord();
     expect(record).toBeNull();
   });
 
   it('returns the OM record with activeObservations when one exists', async () => {
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
     const resourceId = harness.session.identity.getResourceId();
     const observationText = '- User prefers dark mode\n- User is building a web UI';
 
@@ -78,8 +78,8 @@ describe('Harness.getObservationalMemoryRecord', () => {
   });
 
   it('returns record for the current thread after switching threads', async () => {
-    const threadA = await harness.createThread();
-    const threadB = await harness.createThread();
+    const threadA = await harness.session.thread.create();
+    const threadB = await harness.session.thread.create();
     const resourceId = harness.session.identity.getResourceId();
 
     await seedObservationalMemory(storage, threadA.id, resourceId, 'Thread A observations');
@@ -91,7 +91,7 @@ describe('Harness.getObservationalMemoryRecord', () => {
     expect(record!.activeObservations).toBe('Thread B observations');
 
     // Switch to thread A
-    await harness.switchThread({ threadId: threadA.id });
+    await harness.session.thread.switch({ threadId: threadA.id });
     record = await harness.getObservationalMemoryRecord();
     expect(record).not.toBeNull();
     expect(record!.activeObservations).toBe('Thread A observations');

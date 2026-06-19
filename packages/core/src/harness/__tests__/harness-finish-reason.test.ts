@@ -62,7 +62,7 @@ async function buildHarness(id: string, stream: () => ReadableStream) {
   });
 
   await harness.init();
-  await harness.createThread();
+  await harness.session.thread.create();
   return harness;
 }
 

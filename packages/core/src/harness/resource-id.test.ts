@@ -57,21 +57,21 @@ describe('Harness resource ID', () => {
 
     it('returns unique resource IDs from threads', async () => {
       // Create threads under different resource IDs
-      await harness.createThread({ title: 'thread-1' });
+      await harness.session.thread.create({ title: 'thread-1' });
 
       harness.setResourceId({ resourceId: 'user-2' });
-      await harness.createThread({ title: 'thread-2' });
+      await harness.session.thread.create({ title: 'thread-2' });
 
       harness.setResourceId({ resourceId: 'user-3' });
-      await harness.createThread({ title: 'thread-3' });
+      await harness.session.thread.create({ title: 'thread-3' });
 
       const ids = await harness.getKnownResourceIds();
       expect(ids.sort()).toEqual(['test-harness', 'user-2', 'user-3'].sort());
     });
 
     it('does not return duplicate resource IDs', async () => {
-      await harness.createThread({ title: 'thread-1' });
-      await harness.createThread({ title: 'thread-2' });
+      await harness.session.thread.create({ title: 'thread-1' });
+      await harness.session.thread.create({ title: 'thread-2' });
 
       const ids = await harness.getKnownResourceIds();
       expect(ids).toEqual(['test-harness']);

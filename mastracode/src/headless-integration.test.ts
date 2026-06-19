@@ -1084,7 +1084,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const thread = await harness.createThread({ title: 'target-thread' });
+    const thread = await harness.session.thread.create({ title: 'target-thread' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -1115,7 +1115,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const thread = await harness.createThread({ title: 'my-feature' });
+    const thread = await harness.session.thread.create({ title: 'my-feature' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -1164,7 +1164,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    await harness.createThread({ title: 'original-title' });
+    await harness.session.thread.create({ title: 'original-title' });
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
@@ -1188,12 +1188,12 @@ describe('headless mode — thread control', () => {
 
     await harness.init();
     harness.setResourceId({ resourceId: 'resource-a' });
-    const alphaOlderThread = await harness.createThread({ title: 'older-alpha' });
+    const alphaOlderThread = await harness.session.thread.create({ title: 'older-alpha' });
     harness.setResourceId({ resourceId: 'resource-b' });
-    const betaThread = await harness.createThread({ title: 'shared-title' });
+    const betaThread = await harness.session.thread.create({ title: 'shared-title' });
     await new Promise(resolve => setTimeout(resolve, 5));
     harness.setResourceId({ resourceId: 'resource-a' });
-    const alphaThread = await harness.createThread({ title: 'shared-title' });
+    const alphaThread = await harness.session.thread.create({ title: 'shared-title' });
 
     let exitCode = await runHeadless(harness, {
       prompt: 'Hello beta',
@@ -1264,7 +1264,7 @@ describe('headless mode — thread control', () => {
     (harness as any).getAgentForMode = () => registeredAgent;
 
     await harness.init();
-    const sourceThread = await harness.createThread({ title: 'source-thread' });
+    const sourceThread = await harness.session.thread.create({ title: 'source-thread' });
 
     const events: any[] = [];
     const originalWrite = process.stdout.write;

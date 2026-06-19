@@ -290,7 +290,7 @@ export class MastraTUI {
         } else {
           try {
             if (this.state.pendingNewThread) {
-              await this.state.harness.createThread();
+              await this.state.harness.session.thread.create();
               this.state.pendingNewThread = false;
             }
             this.fireMessage(msg);
@@ -413,7 +413,7 @@ export class MastraTUI {
   private createPendingNewThread(): Promise<void> | undefined {
     if (!this.state.pendingNewThread) return undefined;
     this.state.pendingNewThread = false;
-    return this.state.harness.createThread().then(() => undefined);
+    return this.state.harness.session.thread.create().then(() => undefined);
   }
 
   private sendOptimisticSignal(

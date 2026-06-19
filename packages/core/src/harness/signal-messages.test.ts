@@ -123,7 +123,7 @@ describe('Harness signal messages', () => {
   it('renders persisted user-message signal attributes', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
 
     await storage.stores.memory!.saveMessages({
       messages: [
@@ -151,7 +151,7 @@ describe('Harness signal messages', () => {
   it('renders persisted system-reminder signals from signal attributes', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
 
     await storage.stores.memory!.saveMessages({
       messages: [
@@ -189,7 +189,7 @@ describe('Harness signal messages', () => {
   it('normalizes system-reminder contents from text-part arrays', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
 
     await storage.stores.memory!.saveMessages({
       messages: [
@@ -230,7 +230,7 @@ describe('Harness signal messages', () => {
   it('renders persisted generic reactive signals', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
 
     await storage.stores.memory!.saveMessages({
       messages: [
@@ -268,7 +268,7 @@ describe('Harness signal messages', () => {
   it('renders persisted notification summary signals', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
 
     await storage.stores.memory!.saveMessages({
       messages: [
@@ -317,7 +317,7 @@ describe('Harness signal messages', () => {
   it('renders persisted full notification signals', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
 
     await storage.stores.memory!.saveMessages({
       messages: [
@@ -394,7 +394,7 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    await harness.createThread();
+    await harness.session.thread.create();
     await harness.sendMessage({ content: 'hello' });
     await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
 
@@ -427,7 +427,7 @@ describe('Harness signal messages', () => {
       abort: vi.fn(),
       activeRunId: () => 'active-run-id',
     });
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
 
     // Simulate an active run from the harness consumer's perspective
     harness.session.run.setRunId({ runId: 'active-run-id' });
@@ -494,7 +494,7 @@ describe('Harness signal messages', () => {
       signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
     });
     const sendSignal = vi.spyOn(agent, 'sendSignal');
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
     harness.session.run.ensureAbortController();
 
     await harness.followUp({ content: 'queued follow-up' });
@@ -555,7 +555,7 @@ describe('Harness signal messages', () => {
       abort,
       activeRunId: () => 'active-run-id',
     });
-    await harness.createThread();
+    await harness.session.thread.create();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',
@@ -594,7 +594,7 @@ describe('Harness signal messages', () => {
         abort: vi.fn(),
         activeRunId: () => null,
       });
-    await harness.createThread();
+    await harness.session.thread.create();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'active-run-id',
@@ -605,7 +605,7 @@ describe('Harness signal messages', () => {
     await signal.accepted;
     expect(harness.session.getCurrentRunId()).toBe('active-run-id');
 
-    await harness.createThread();
+    await harness.session.thread.create();
 
     expect(abort).toHaveBeenCalled();
     expect(unsubscribe).toHaveBeenCalled();
@@ -635,7 +635,7 @@ describe('Harness signal messages', () => {
       abort: vi.fn(),
       activeRunId: () => 'run-1',
     });
-    await harness.createThread();
+    await harness.session.thread.create();
 
     await waitFor(() => events.some(event => event.type === 'agent_end' && event.reason === 'error'));
 
@@ -680,7 +680,7 @@ describe('Harness signal messages', () => {
       abort,
       activeRunId: () => activeRunId,
     });
-    await harness.createThread();
+    await harness.session.thread.create();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: true,
       runId: 'run-1',
@@ -706,7 +706,7 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    await harness.createThread();
+    await harness.session.thread.create();
     await harness.sendMessage({ content: 'hi' });
 
     const signal = harness.sendSignal({ content: 'hows it going' });
@@ -773,7 +773,7 @@ describe('Harness signal messages', () => {
       signal: createSignal({ type: 'user-message', contents: 'run tool' }),
     });
 
-    await harness.createThread();
+    await harness.session.thread.create();
     const signal = harness.sendSignal({ content: 'run tool' });
     await signal.accepted;
     await waitFor(() =>
@@ -803,7 +803,7 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    await harness.createThread();
+    await harness.session.thread.create();
     const signal = harness.sendSignal({ content: 'hello from signal' });
     await signal.accepted;
     await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
@@ -829,7 +829,7 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    await harness.createThread();
+    await harness.session.thread.create();
     harness.abort();
     const signal = harness.sendSignal({ content: 'hello after stale abort' });
     await signal.accepted;
@@ -887,7 +887,7 @@ describe('Harness signal messages', () => {
       }),
     });
     const harness = createHarness(storage, agent);
-    await harness.createThread();
+    await harness.session.thread.create();
 
     const firstIdle = harness.sendSignal({ content: 'start first idle stream' });
     await firstIdle.accepted;

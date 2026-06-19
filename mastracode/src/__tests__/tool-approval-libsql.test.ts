@@ -126,7 +126,7 @@ describe('tool approval with LibSQLStore via Harness', () => {
     });
 
     // Create a thread
-    await harness.createThread();
+    await harness.session.thread.create();
 
     // Send message — should hit tool-call-approval and auto-approve (policy = 'ask')
     // We need to respond to the approval prompt

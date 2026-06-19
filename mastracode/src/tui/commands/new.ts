@@ -7,7 +7,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   // don't leak into the new conversation. Unlike bare abort(), this also
   // unsubscribes from the PubSub topic — preventing another mc instance
   // on the same thread from pushing output into this TUI.
-  state.harness.detachFromCurrentThread();
+  state.harness.session.thread.detachFromCurrent();
 
   state.pendingNewThread = true;
   state.chatContainer.clear();

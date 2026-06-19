@@ -24,7 +24,7 @@ import type { ObservationalMemoryRecord } from '../storage/types';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
-import { Session, SessionStream } from './session';
+import { Session } from './session';
 import type { ThreadDataStore } from './session';
 import {
   getRecordValue,
@@ -46,7 +46,6 @@ import {
   taskUpdateTool,
   taskWriteTool,
 } from './tools';
-import { createEmptyTokenUsage } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
@@ -58,7 +57,6 @@ import type {
   HarnessSession,
   HarnessThread,
   ModelAuthStatus,
-  TokenUsage,
   ToolCategory,
 } from './types';
 
@@ -297,7 +295,7 @@ export class Harness<TState = {}> {
       setState: updates => void session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
     });
-    session.thread.connect(this.createThreadDataStore());
+    session.thread.connect(this.createThreadDataStore(), session as Session);
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(),
       subscribeToThread: ({ resourceId, threadId }) => this.getCurrentAgent().subscribeToThread({ resourceId, threadId }),
@@ -458,15 +456,15 @@ export class Harness<TState = {}> {
     const threads = await this.#session.thread.list();
 
     if (threads.length === 0) {
-      return await this.createThread();
+      return await this.#session.thread.create();
     }
 
     const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     const mostRecent = sortedThreads[0]!;
     await this.config.threadLock?.acquire(mostRecent.id);
     this.#session.thread.set({ threadId: mostRecent.id });
-    await this.loadThreadMetadata();
-    await this.ensureCurrentAgentThreadSubscription();
+    await this.#session.thread.loadMetadata();
+    await this.#session.thread.ensureCurrentSubscription();
 
     return mostRecent;
   }
@@ -497,6 +495,62 @@ export class Harness<TState = {}> {
       getMetadata: ({ threadId, key }) => this.readThreadMetadataValue({ threadId, key }),
       setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
       deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
+      hasStorage: () => !!this.config.storage,
+      saveThread: ({ thread }) => this.persistThreadRow(thread),
+      deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
+      cloneThread: ({ sourceThreadId, resourceId, title }) =>
+        this.cloneThreadRow({ sourceThreadId, resourceId, title }),
+      acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
+      releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
+      getModeIds: () => this.config.modes.map(m => m.id),
+    };
+  }
+
+  /** Persist a thread row to memory storage (gateway primitive for the Session thread domain). */
+  private async persistThreadRow(thread: HarnessThread): Promise<void> {
+    if (!this.config.storage) return;
+    const memoryStorage = await this.getMemoryStorage();
+    await memoryStorage.saveThread({
+      thread: {
+        id: thread.id,
+        resourceId: thread.resourceId,
+        title: thread.title ?? '',
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+        metadata: thread.metadata,
+      },
+    });
+  }
+
+  /** Delete a thread row from memory storage (gateway primitive for the Session thread domain). */
+  private async deleteThreadRow(threadId: string): Promise<void> {
+    if (!this.config.storage) return;
+    const memoryStorage = await this.getMemoryStorage();
+    await memoryStorage.deleteThread({ threadId });
+  }
+
+  /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
+  private async cloneThreadRow({
+    sourceThreadId,
+    resourceId,
+    title,
+  }: {
+    sourceThreadId: string;
+    resourceId: string;
+    title?: string;
+  }): Promise<HarnessThread> {
+    if (!this.config.memory) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    const memory = await this.resolveMemory();
+    const result = await memory.cloneThread({ sourceThreadId, resourceId, title });
+    return {
+      id: result.thread.id,
+      resourceId: result.thread.resourceId,
+      title: result.thread.title ?? 'Cloned Thread',
+      createdAt: result.thread.createdAt,
+      updatedAt: result.thread.updatedAt,
+      metadata: result.thread.metadata,
     };
   }
 
@@ -862,7 +916,7 @@ export class Harness<TState = {}> {
    * the active thread — since those are Harness-owned.
    */
   setResourceId({ resourceId }: { resourceId: string }): void {
-    this.cleanupAgentThreadSubscription();
+    this.#session.thread.cleanupSubscription();
     this.#session.identity.setResourceId({ resourceId });
     this.#session.thread.clear();
   }
@@ -871,362 +925,6 @@ export class Harness<TState = {}> {
     const threads = await this.#session.thread.list({ allResources: true });
     const ids = new Set(threads.map(t => t.resourceId));
     return [...ids].sort();
-  }
-
-  async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
-    this.cleanupAgentThreadSubscription();
-    const now = new Date();
-    const thread: HarnessThread = {
-      id: this.generateId(),
-      resourceId: this.#session.identity.getResourceId(),
-      title: title || '',
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const currentStateModel = this.#session.model.get();
-    const currentMode = this.#session.mode.resolve();
-    const modelId = currentStateModel || currentMode.defaultModelId;
-
-    const metadata: Record<string, unknown> = {};
-    if (modelId) {
-      metadata.currentModelId = modelId;
-      metadata[`modeModelId_${this.#session.mode.get()}`] = modelId;
-    }
-
-    // Auto-tag with projectPath from state so threads are scoped to the working directory
-    const projectPath = (this.#session.state.get() as any).projectPath;
-    if (projectPath) {
-      metadata.projectPath = projectPath;
-    }
-
-    // Acquire lock on new thread before releasing old one.
-    // If acquire fails, attempt to re-acquire the old lock before rethrowing.
-    const oldThreadId = this.#session.thread.getId();
-    if (this.config.threadLock) {
-      try {
-        await this.config.threadLock.acquire(thread.id);
-      } catch (err) {
-        if (oldThreadId) {
-          try {
-            await this.config.threadLock.acquire(oldThreadId);
-          } catch {
-            // Best-effort re-acquire; original error is more important
-          }
-        }
-        throw err;
-      }
-      if (oldThreadId) {
-        await this.config.threadLock.release(oldThreadId);
-      }
-    }
-
-    if (this.config.storage) {
-      const memoryStorage = await this.getMemoryStorage();
-      try {
-        await memoryStorage.saveThread({
-          thread: {
-            id: thread.id,
-            resourceId: thread.resourceId,
-            title: thread.title!,
-            createdAt: thread.createdAt,
-            updatedAt: thread.updatedAt,
-            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-          },
-        });
-      } catch (err) {
-        // saveThread failed after lock was swapped; restore previous lock state
-        let reacquired = false;
-        if (this.config.threadLock) {
-          try {
-            await this.config.threadLock.release(thread.id);
-          } catch {
-            // Best-effort release of new thread lock
-          }
-          if (oldThreadId) {
-            try {
-              await this.config.threadLock.acquire(oldThreadId);
-              reacquired = true;
-            } catch {
-              // Re-acquire failed; no lock is held
-            }
-          }
-        }
-        if (reacquired && oldThreadId) {
-          this.#session.thread.set({ threadId: oldThreadId });
-        } else {
-          this.#session.thread.clear();
-        }
-        throw err;
-      }
-    }
-
-    this.#session.thread.set({ threadId: thread.id });
-
-    if (modelId && !currentStateModel) {
-      this.#session.model.set({ modelId });
-    }
-
-    this.#session.resetTokenUsage();
-    this.#session.emit({ type: 'thread_created', thread });
-    await this.ensureCurrentAgentThreadSubscription();
-
-    return thread;
-  }
-
-  /**
-   * Returns a memory accessor with thread and message management methods.
-   */
-  get memory() {
-    return {
-      createThread: this.createThread.bind(this),
-      switchThread: this.switchThread.bind(this),
-      listThreads: (options?: { allResources?: boolean; includeForkedSubagents?: boolean }) =>
-        this.#session.thread.list(options),
-      renameThread: this.renameThread.bind(this),
-      deleteThread: this.deleteThread.bind(this),
-    };
-  }
-
-  private async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    if (!this.config.storage) return;
-
-    const memoryStorage = await this.getMemoryStorage();
-    const thread = await memoryStorage.getThreadById({ threadId });
-    if (!thread) {
-      throw new Error(`Thread not found: ${threadId}`);
-    }
-
-    const isDeletingCurrentThread = this.#session.thread.getId() === threadId;
-
-    await memoryStorage.deleteThread({ threadId });
-
-    if (isDeletingCurrentThread) {
-      try {
-        await this.config.threadLock?.release(threadId);
-      } catch {
-        // Lock release failed; proceed with state cleanup regardless
-      }
-      this.cleanupAgentThreadSubscription();
-      this.#session.thread.clear();
-      this.#session.resetTokenUsage();
-    }
-
-    this.#session.emit({ type: 'thread_deleted', threadId });
-  }
-
-  async renameThread({ title }: { title: string }): Promise<void> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId || !this.config.storage) return;
-
-    const memoryStorage = await this.getMemoryStorage();
-    const thread = await memoryStorage.getThreadById({ threadId });
-    if (thread) {
-      await memoryStorage.saveThread({
-        thread: { ...thread, title, updatedAt: new Date() },
-      });
-    }
-  }
-
-  async cloneThread({
-    sourceThreadId,
-    title,
-    resourceId,
-  }: {
-    sourceThreadId?: string;
-    title?: string;
-    resourceId?: string;
-  } = {}): Promise<HarnessThread> {
-    const sourceId = sourceThreadId ?? this.#session.thread.getId();
-    if (!sourceId) {
-      throw new Error('No source thread to clone');
-    }
-    if (!this.config.memory) {
-      throw new Error('Memory is not configured on this Harness');
-    }
-
-    const memory = await this.resolveMemory();
-
-    const result = await memory.cloneThread({
-      sourceThreadId: sourceId,
-      resourceId: resourceId ?? this.#session.identity.getResourceId(),
-      title,
-    });
-
-    const clonedThread: HarnessThread = {
-      id: result.thread.id,
-      resourceId: result.thread.resourceId,
-      title: result.thread.title ?? 'Cloned Thread',
-      createdAt: result.thread.createdAt,
-      updatedAt: result.thread.updatedAt,
-      metadata: result.thread.metadata,
-    };
-
-    // Acquire lock on new thread before releasing old one
-    const oldThreadId = this.#session.thread.getId();
-    if (this.config.threadLock) {
-      try {
-        await this.config.threadLock.acquire(clonedThread.id);
-      } catch (err) {
-        if (oldThreadId) {
-          try {
-            await this.config.threadLock.acquire(oldThreadId);
-          } catch {
-            // Best-effort re-acquire; original error is more important
-          }
-        }
-        throw err;
-      }
-      if (oldThreadId) {
-        await this.config.threadLock.release(oldThreadId);
-      }
-    }
-
-    this.cleanupAgentThreadSubscription();
-    this.#session.thread.set({ threadId: clonedThread.id });
-    await this.loadThreadMetadata();
-    this.#session.resetTokenUsage();
-    this.#session.emit({ type: 'thread_created', thread: clonedThread });
-    await this.ensureCurrentAgentThreadSubscription();
-
-    return clonedThread;
-  }
-
-  async switchThread({ threadId }: { threadId: string }): Promise<void> {
-    this.abort();
-    this.cleanupAgentThreadSubscription();
-
-    // Acquire lock on new thread before releasing old one.
-    // Lock operations must be adjacent (no intermediate awaits) so callers
-    // can rely on a single microtask tick to observe both acquire and release.
-    await this.config.threadLock?.acquire(threadId);
-    const previousThreadId = this.#session.thread.getId();
-    if (previousThreadId) {
-      await this.config.threadLock?.release(previousThreadId);
-    }
-
-    if (this.config.storage) {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread not found: ${threadId}`);
-      }
-    }
-
-    this.#session.thread.set({ threadId });
-
-    await this.loadThreadMetadata();
-
-    this.#session.emit({ type: 'thread_changed', threadId, previousThreadId });
-    await this.ensureCurrentAgentThreadSubscription();
-  }
-
-  private async loadThreadMetadata(): Promise<void> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId || !this.config.storage) {
-      this.#session.resetTokenUsage();
-      return;
-    }
-
-    try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-
-      // Load token usage
-      const savedUsage = thread?.metadata?.tokenUsage as TokenUsage | undefined;
-      if (savedUsage) {
-        this.#session.setTokenUsage({
-          ...createEmptyTokenUsage(),
-          ...savedUsage,
-          promptTokens: savedUsage.promptTokens ?? 0,
-          completionTokens: savedUsage.completionTokens ?? 0,
-          totalTokens: savedUsage.totalTokens ?? 0,
-          cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
-          cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
-        });
-      } else {
-        this.#session.resetTokenUsage();
-      }
-
-      const meta = thread?.metadata as Record<string, unknown> | undefined;
-      const updates: Record<string, unknown> = {};
-
-      // Restore the saved mode FIRST so we resolve currentModelId for the
-      // correct mode. Otherwise we'd look up modeModelId_<defaultMode> first
-      // and then never overwrite it when the saved mode has no per-mode
-      // override persisted (e.g. user only ever used the mode's default
-      // model), leaving the wrong mode's model active on restart.
-      let previousModeIdForEmit: string | undefined;
-      if (meta?.currentModeId) {
-        const savedModeId = meta.currentModeId as string;
-        const modeExists = this.config.modes.some(m => m.id === savedModeId);
-        if (modeExists && savedModeId !== this.#session.mode.get()) {
-          previousModeIdForEmit = this.#session.mode.get();
-          this.#session.mode.set({ modeId: savedModeId });
-        }
-      }
-
-      // Resolve the model for the (now-restored) current mode and apply it to
-      // the session (source of truth for the selected model).
-      // Order: per-mode thread metadata → mode's defaultModelId → legacy
-      // global currentModelId (set by createThread).
-      const currentModeId = this.#session.mode.get();
-      const modeModelKey = `modeModelId_${currentModeId}`;
-      if (meta?.[modeModelKey]) {
-        this.#session.model.set({ modelId: meta[modeModelKey] as string });
-      } else {
-        const currentMode = this.config.modes.find(m => m.id === currentModeId);
-        if (currentMode?.defaultModelId) {
-          this.#session.model.set({ modelId: currentMode.defaultModelId });
-        } else if (meta?.currentModelId) {
-          this.#session.model.set({ modelId: meta.currentModelId as string });
-        }
-      }
-
-      if (previousModeIdForEmit !== undefined) {
-        this.#session.emit({
-          type: 'mode_changed',
-          modeId: this.#session.mode.get(),
-          previousModeId: previousModeIdForEmit,
-        });
-      }
-
-      // Restore observer/reflector model IDs
-      if (meta?.observerModelId) {
-        updates.observerModelId = meta.observerModelId;
-      }
-      if (meta?.reflectorModelId) {
-        updates.reflectorModelId = meta.reflectorModelId;
-      }
-      const hasObservationThreshold = typeof meta?.observationThreshold === 'number';
-      const hasReflectionThreshold = typeof meta?.reflectionThreshold === 'number';
-
-      if (hasObservationThreshold) {
-        updates.observationThreshold = meta.observationThreshold;
-      }
-      if (hasReflectionThreshold) {
-        updates.reflectionThreshold = meta.reflectionThreshold;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await this.#session.state.set(updates as unknown as Partial<TState>);
-      }
-
-      if (!hasObservationThreshold) {
-        const observationThreshold = this.#session.om.observer.threshold();
-        if (observationThreshold !== undefined) {
-          await this.#session.thread.setSetting({ key: 'observationThreshold', value: observationThreshold });
-        }
-      }
-      if (!hasReflectionThreshold) {
-        const reflectionThreshold = this.#session.om.reflector.threshold();
-        if (reflectionThreshold !== undefined) {
-          await this.#session.thread.setSetting({ key: 'reflectionThreshold', value: reflectionThreshold });
-        }
-      }
-    } catch {
-      this.#session.resetTokenUsage();
-    }
   }
 
   // ===========================================================================
@@ -1375,30 +1073,6 @@ export class Harness<TState = {}> {
   // ===========================================================================
   // Message Handling
   // ===========================================================================
-
-  private cleanupAgentThreadSubscription(): void {
-    this.#session.stream.cleanup();
-    this.#session.run.reset();
-  }
-
-  private async ensureAgentThreadSubscription(agent: Agent, threadId: string): Promise<void> {
-    const key = SessionStream.keyFor({ agent, resourceId: this.#session.identity.getResourceId(), threadId });
-    if (this.#session.stream.matches({ key })) return;
-
-    this.cleanupAgentThreadSubscription();
-    const subscription = await agent.subscribeToThread({
-      resourceId: this.#session.identity.getResourceId(),
-      threadId,
-    });
-    this.#session.stream.attach({ subscription, key });
-    void this.#session.processSubscribedThreadStream(subscription);
-  }
-
-  private async ensureCurrentAgentThreadSubscription(): Promise<void> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId) return;
-    await this.ensureAgentThreadSubscription(this.getCurrentAgent(), threadId);
-  }
 
   private createMessageInput({
     content,
@@ -1571,13 +1245,13 @@ export class Harness<TState = {}> {
     );
     const accepted = Promise.resolve().then(async () => {
       if (!this.#session.thread.getId()) {
-        const thread = await this.createThread();
+        const thread = await this.#session.thread.create();
         this.#session.thread.set({ threadId: thread.id });
       }
       const threadId = this.#session.thread.getId()!;
 
       const agent = this.getCurrentAgent();
-      await this.ensureAgentThreadSubscription(agent, threadId);
+      await this.#session.thread.ensureSubscription(threadId);
 
       if (this.#session.run.getRunId() && this.#session.stream.activeRunId()) {
         const result = agent.sendSignal(signal, {
@@ -1616,13 +1290,13 @@ export class Harness<TState = {}> {
   ): Promise<SendAgentNotificationSignalResult> {
     const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
     if (!this.#session.thread.getId()) {
-      const thread = await this.createThread();
+      const thread = await this.#session.thread.create();
       this.#session.thread.set({ threadId: thread.id });
     }
     const threadId = this.#session.thread.getId()!;
 
     const agent = this.getCurrentAgent();
-    await this.ensureAgentThreadSubscription(agent, threadId);
+    await this.#session.thread.ensureSubscription(threadId);
 
     if (this.#session.run.getRunId() && this.#session.stream.activeRunId()) {
       return agent.sendNotificationSignal(input, {
@@ -2074,19 +1748,6 @@ export class Harness<TState = {}> {
     this.#session.abort();
   }
 
-  /**
-   * Detach from the current thread's event stream without switching to another
-   * thread. Used by the TUI `/new` command to stop receiving cross-process
-   * events from the old thread while the new thread creation is deferred until
-   * the first user message.
-   *
-   * The current thread ID is preserved so that {@link createThread} can still
-   * release the thread lock (when configured) for the previous thread.
-   */
-  detachFromCurrentThread(): void {
-    this.abort();
-    this.cleanupAgentThreadSubscription();
-  }
 
   /**
    * Steer the agent mid-stream: aborts current run and sends a new message.
@@ -2696,7 +2357,7 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   async destroy(): Promise<void> {
-    this.cleanupAgentThreadSubscription();
+    this.#session.thread.cleanupSubscription();
     await this.stopHeartbeats();
     await this.destroyWorkspace();
   }

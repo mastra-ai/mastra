@@ -21,7 +21,7 @@ describe('Harness signal history rendering', () => {
     });
 
     await harness.init();
-    const thread = await harness.createThread({ title: 'Signal thread' });
+    const thread = await harness.session.thread.create({ title: 'Signal thread' });
     const memoryStorage = await storage.getStore('memory');
     if (!memoryStorage) throw new Error('Expected memory storage');
 

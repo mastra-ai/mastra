@@ -523,13 +523,13 @@ export async function runHeadless<TState extends Record<string, unknown>>(
         if (timeoutId) clearTimeout(timeoutId);
         return 1;
       }
-      await harness.switchThread({ threadId: result.threadId });
+      await harness.session.thread.switch({ threadId: result.threadId });
       if (!emit) process.stderr.write(`[thread] resumed ${result.threadId} (matched by ${result.matchType})\n`);
     } else if (args.continue_) {
       const threads = await harness.session.thread.list();
       if (threads.length > 0) {
         const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-        await harness.switchThread({ threadId: sorted[0]!.id });
+        await harness.session.thread.switch({ threadId: sorted[0]!.id });
         if (!emit) process.stderr.write(`[continued] thread ${sorted[0]!.id}\n`);
       } else if (!emit) {
         process.stderr.write(`[info] No existing threads found, starting new thread\n`);
@@ -547,7 +547,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
   // --- Clone ---
   if (args.cloneThread) {
     try {
-      const cloned = await harness.cloneThread();
+      const cloned = await harness.session.thread.clone();
       if (emit) emit({ type: 'thread_cloned', threadId: cloned.id });
       else process.stderr.write(`[cloned] thread ${cloned.id}\n`);
     } catch (err) {
@@ -562,7 +562,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
   // --- Title ---
   if (args.title) {
     try {
-      await harness.renameThread({ title: args.title });
+      await harness.session.thread.rename({ title: args.title });
       if (!emit) process.stderr.write(`[title] "${args.title}"\n`);
     } catch (err) {
       const msg = `Failed to set thread title: ${(err as Error).message}`;

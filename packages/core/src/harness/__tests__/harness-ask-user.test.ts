@@ -87,7 +87,7 @@ async function buildHarness(id: string, input: string) {
   });
 
   await harness.init();
-  await harness.createThread();
+  await harness.session.thread.create();
   return { harness, registeredAgent };
 }
 
@@ -320,7 +320,7 @@ describe('Harness: ask_user native suspension', () => {
       initialState: { yolo: true } as any,
     });
     await harness.init();
-    await harness.createThread();
+    await harness.session.thread.create();
 
     const events: any[] = [];
     harness.session.subscribe(event => events.push(event));

@@ -38,7 +38,7 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
   const latest = [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
 
   if (latest) {
-    await harness.switchThread({ threadId: latest.id });
+    await harness.session.thread.switch({ threadId: latest.id });
     state.chatContainer.clear();
     state.pendingTools.clear();
     state.pendingTaskToolIds?.clear();

@@ -77,7 +77,7 @@ describe('session.om', () => {
     const events: HarnessEvent[] = [];
     const harness = createHarness({ storage, onEvent: event => events.push(event) });
     await harness.init();
-    await harness.createThread();
+    await harness.session.thread.create();
 
     await harness.session.om.observer.switchModel({ modelId: 'anthropic/claude-sonnet-4' });
 
@@ -94,7 +94,7 @@ describe('session.om', () => {
     const events: HarnessEvent[] = [];
     const harness = createHarness({ storage, onEvent: event => events.push(event) });
     await harness.init();
-    await harness.createThread();
+    await harness.session.thread.create();
 
     await harness.session.om.reflector.switchModel({ modelId: 'openai/gpt-4o-mini' });
 

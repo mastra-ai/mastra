@@ -97,7 +97,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    await harness.createThread();
+    await harness.session.thread.create();
 
     await harness.sendMessage({ content: 'Hello' });
 
@@ -170,7 +170,7 @@ describe('Harness: tool suspension and resumption', () => {
       events.push(event);
     });
 
-    await harness.createThread();
+    await harness.session.thread.create();
 
     // Send a message — the tool should execute and call suspend()
     await harness.sendMessage({ content: 'Deploy to production' });
@@ -230,7 +230,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    await harness.createThread();
+    await harness.session.thread.create();
     await harness.sendMessage({ content: 'Do it' });
 
     const ds = harness.session.displayState.get();
@@ -298,7 +298,7 @@ describe('Harness: tool suspension and resumption', () => {
       events.push(event);
     });
 
-    await harness.createThread();
+    await harness.session.thread.create();
 
     // First message triggers suspension
     await harness.sendMessage({ content: 'Deploy to production' });
@@ -374,7 +374,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    await harness.createThread();
+    await harness.session.thread.create();
 
     await harness.sendMessage({ content: 'Deploy to production' });
     await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
@@ -441,7 +441,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    await harness.createThread();
+    await harness.session.thread.create();
 
     await harness.sendMessage({ content: 'Deploy to production' });
     await harness.respondToToolSuspension({ resumeData: { confirmed: true } });

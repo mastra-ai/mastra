@@ -32,15 +32,15 @@ describe('Harness OM threshold persistence', () => {
     });
     await harness.init();
 
-    const threadA = await harness.createThread();
+    const threadA = await harness.session.thread.create();
     await harness.session.state.set({ observationThreshold: 12000, reflectionThreshold: 21000 } as any);
     await harness.session.thread.setSetting({ key: 'observationThreshold', value: 12000 });
     await harness.session.thread.setSetting({ key: 'reflectionThreshold', value: 21000 });
 
-    await harness.createThread();
+    await harness.session.thread.create();
     await harness.session.state.set({ observationThreshold: 33000, reflectionThreshold: 44000 } as any);
 
-    await harness.switchThread({ threadId: threadA.id });
+    await harness.session.thread.switch({ threadId: threadA.id });
 
     expect((harness.session.state.get() as any).observationThreshold).toBe(12000);
     expect((harness.session.state.get() as any).reflectionThreshold).toBe(21000);
@@ -53,10 +53,10 @@ describe('Harness OM threshold persistence', () => {
     });
     await harness.init();
 
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
     await harness.session.state.set({ observationThreshold: 18000, reflectionThreshold: 28000 } as any);
 
-    await harness.switchThread({ threadId: thread.id });
+    await harness.session.thread.switch({ threadId: thread.id });
 
     expect((harness.session.state.get() as any).observationThreshold).toBe(18000);
     expect((harness.session.state.get() as any).reflectionThreshold).toBe(28000);

@@ -40,7 +40,7 @@ describe('session.subagents.model', () => {
     const events: HarnessEvent[] = [];
     const harness = createHarness({ storage, onEvent: event => events.push(event) });
     await harness.init();
-    await harness.createThread();
+    await harness.session.thread.create();
 
     await harness.session.subagents.model.set({ modelId: 'anthropic/claude-sonnet-4' });
 
@@ -57,7 +57,7 @@ describe('session.subagents.model', () => {
   it('set (per agentType) persists under an agentType-scoped key', async () => {
     const harness = createHarness({ storage });
     await harness.init();
-    await harness.createThread();
+    await harness.session.thread.create();
 
     await harness.session.subagents.model.set({ modelId: 'openai/gpt-4o-mini', agentType: 'explore' });
 
@@ -68,7 +68,7 @@ describe('session.subagents.model', () => {
   it('prefers the per-agentType value over the global value', async () => {
     const harness = createHarness({ storage });
     await harness.init();
-    await harness.createThread();
+    await harness.session.thread.create();
 
     await harness.session.subagents.model.set({ modelId: 'anthropic/claude-sonnet-4' });
     await harness.session.subagents.model.set({ modelId: 'openai/gpt-4o-mini', agentType: 'explore' });

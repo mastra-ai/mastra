@@ -110,7 +110,7 @@ describe('step-finish token usage extraction', () => {
     const storage = new InMemoryStore();
     harness = createHarness(storage);
     await harness.init();
-    const thread = await harness.createThread();
+    const thread = await harness.session.thread.create();
     const usage = {
       inputTokens: 100,
       outputTokens: 50,

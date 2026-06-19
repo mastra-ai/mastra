@@ -604,7 +604,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   if (sortedThreads.length === 1) {
     const thread = sortedThreads[0]!;
     try {
-      await state.harness.switchThread({ threadId: thread.id });
+      await state.harness.session.thread.switch({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
         await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }
@@ -624,7 +624,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   // Multiple threads — try each in order until one is unlocked
   for (const thread of sortedThreads) {
     try {
-      await state.harness.switchThread({ threadId: thread.id });
+      await state.harness.session.thread.switch({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
         await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }

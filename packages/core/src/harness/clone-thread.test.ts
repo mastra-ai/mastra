@@ -41,7 +41,7 @@ describe('Harness cloneThread', () => {
 
     await harness.init();
 
-    const cloned = await harness.cloneThread({
+    const cloned = await harness.session.thread.clone({
       sourceThreadId: 'source-thread-id',
       title: 'New title',
       resourceId: 'target-resource',
@@ -77,7 +77,7 @@ describe('Harness cloneThread', () => {
 
     await harness.init();
 
-    await expect(harness.cloneThread({ sourceThreadId: 'source-thread-id' })).rejects.toThrow(
+    await expect(harness.session.thread.clone({ sourceThreadId: 'source-thread-id' })).rejects.toThrow(
       'Dynamic memory factory returned empty value',
     );
   });

@@ -54,7 +54,7 @@ describe('Harness mode-model persistence across restarts', () => {
     // the same thread.
     const harness1 = createHarness(storage);
     await harness1.init();
-    const thread = await harness1.createThread();
+    const thread = await harness1.session.thread.create();
     expect(harness1.session.mode.get()).toBe('build');
 
     await harness1.session.mode.switch({ modeId: 'fast' });
@@ -64,7 +64,7 @@ describe('Harness mode-model persistence across restarts', () => {
     // Harness 2: reopen and resume the same thread.
     const harness2 = createHarness(storage);
     await harness2.init();
-    await harness2.switchThread({ threadId: thread.id });
+    await harness2.session.thread.switch({ threadId: thread.id });
 
     expect(harness2.session.mode.get()).toBe('fast');
     expect(harness2.session.model.get()).toBe('cerebras/zai-glm-4.7');
@@ -73,7 +73,7 @@ describe('Harness mode-model persistence across restarts', () => {
   it('restores an explicitly chosen per-mode model on reopen', async () => {
     const harness1 = createHarness(storage);
     await harness1.init();
-    const thread = await harness1.createThread();
+    const thread = await harness1.session.thread.create();
 
     await harness1.session.mode.switch({ modeId: 'fast' });
     await harness1.session.model.switch({ modelId: 'cerebras/qwen-3-coder-480b' });
@@ -81,7 +81,7 @@ describe('Harness mode-model persistence across restarts', () => {
 
     const harness2 = createHarness(storage);
     await harness2.init();
-    await harness2.switchThread({ threadId: thread.id });
+    await harness2.session.thread.switch({ threadId: thread.id });
 
     expect(harness2.session.mode.get()).toBe('fast');
     expect(harness2.session.model.get()).toBe('cerebras/qwen-3-coder-480b');
@@ -90,12 +90,12 @@ describe('Harness mode-model persistence across restarts', () => {
   it('keeps the default mode and its persisted model on reopen when the user never switched modes', async () => {
     const harness1 = createHarness(storage);
     await harness1.init();
-    const thread = await harness1.createThread();
+    const thread = await harness1.session.thread.create();
     await harness1.session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
 
     const harness2 = createHarness(storage);
     await harness2.init();
-    await harness2.switchThread({ threadId: thread.id });
+    await harness2.session.thread.switch({ threadId: thread.id });
 
     expect(harness2.session.mode.get()).toBe('build');
     expect(harness2.session.model.get()).toBe('anthropic/claude-opus-4-6');
@@ -104,7 +104,7 @@ describe('Harness mode-model persistence across restarts', () => {
   it('emits mode_changed with the correct previousModeId when restoring a mode from thread metadata', async () => {
     const harness1 = createHarness(storage);
     await harness1.init();
-    const thread = await harness1.createThread();
+    const thread = await harness1.session.thread.create();
     await harness1.session.mode.switch({ modeId: 'plan' });
 
     const harness2 = createHarness(storage);
@@ -121,7 +121,7 @@ describe('Harness mode-model persistence across restarts', () => {
       }
     });
 
-    await harness2.switchThread({ threadId: thread.id });
+    await harness2.session.thread.switch({ threadId: thread.id });
 
     const restoreEvent = events.find(e => e.modeId === 'plan');
     expect(restoreEvent).toBeDefined();
@@ -131,7 +131,7 @@ describe('Harness mode-model persistence across restarts', () => {
   it('approving a submit_plan suspension switches to the default mode and clears the suspension', async () => {
     const session = createHarness(storage);
     await session.init();
-    await session.createThread();
+    await session.session.thread.create();
     await session.session.mode.switch({ modeId: 'plan' });
 
     const controller = session.session.run.ensureAbortController();
