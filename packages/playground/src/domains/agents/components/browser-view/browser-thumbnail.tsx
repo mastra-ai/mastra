@@ -1,5 +1,5 @@
 import { Button, StatusBadge, cn } from '@mastra/playground-ui';
-import { Monitor, ChevronUp, ChevronDown, Maximize2, PanelRight, X } from 'lucide-react';
+import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
 import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
@@ -8,8 +8,6 @@ import { BrowserViewFrame } from './browser-view-frame';
 
 interface BrowserThumbnailProps {
   agentName?: string;
-  /** Hide the "Open in sidebar" button (e.g. when no sidebar is available) */
-  hideSidebar?: boolean;
 }
 
 /**
@@ -17,9 +15,9 @@ interface BrowserThumbnailProps {
  *
  * Has two states:
  * - Collapsed: Small thumbnail bar (click to expand)
- * - Expanded: Larger view with screencast + actions, with buttons to switch to modal or sidebar
+ * - Expanded: Larger view with screencast + actions, with a button to switch to modal
  */
-export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: BrowserThumbnailProps) {
+export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps) {
   const { hasSession, viewMode, status, currentUrl, setViewMode, closeBrowser } = useBrowserSession();
   const { latestFrame } = useBrowserFrame();
   const { toolCalls } = useBrowserToolCalls();
@@ -67,10 +65,6 @@ export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: B
     setViewMode('modal');
   }, [setViewMode]);
 
-  const handleOpenSidebar = useCallback(() => {
-    setViewMode('sidebar');
-  }, [setViewMode]);
-
   const handleClose = useCallback(async () => {
     await closeBrowser();
   }, [closeBrowser]);
@@ -85,7 +79,7 @@ export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: B
   }, [currentUrl]);
 
   // Don't render if no browser session or if showing in other modes
-  if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') {
+  if (!hasSession || viewMode === 'modal') {
     return null;
   }
 
@@ -156,17 +150,6 @@ export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: B
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
-                {!hideSidebar && (
-                  <Button
-                    variant="default"
-                    size="icon-sm"
-                    tooltip="Open in sidebar"
-                    onClick={handleOpenSidebar}
-                    className="bg-surface1/80 backdrop-blur-sm"
-                  >
-                    <PanelRight className="h-3.5 w-3.5" />
-                  </Button>
-                )}
                 <Button
                   variant="default"
                   size="icon-sm"

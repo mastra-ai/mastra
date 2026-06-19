@@ -6,7 +6,7 @@ export async function handleNameCommand(ctx: SlashCommandContext, args: string[]
     ctx.showInfo('Usage: /name <title>');
     return;
   }
-  if (!ctx.harness.getCurrentThreadId()) {
+  if (!ctx.state.session.thread.getId()) {
     ctx.showInfo('No active thread. Send a message first.');
     return;
   }

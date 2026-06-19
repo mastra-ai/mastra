@@ -48,6 +48,7 @@ const workingMemoryResponse = () =>
 
 const baseHandlers = () => [
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
   http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
   http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
@@ -220,6 +221,49 @@ describe('Thread', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
+    expect(captured).toHaveLength(0);
+  });
+
+  it('attaches a URL from the popover without sending the chat message', async () => {
+    const captured: Captured[] = [];
+    server.use(
+      ...baseHandlers(),
+      http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+        captured.push({ url: request.url, body: await captureBody(request) });
+        return sseResponse();
+      }),
+      http.head(
+        'https://files.example.com/pic.png',
+        () => new HttpResponse(null, { status: 200, headers: { 'content-type': 'image/png' } }),
+      ),
+    );
+
+    await act(async () => {
+      renderThread([]);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+    });
+
+    const urlInput = await screen.findByLabelText('Public URL');
+    await act(async () => {
+      fireEvent.change(urlInput, { target: { value: 'https://files.example.com/pic.png' } });
+    });
+
+    await act(async () => {
+      fireEvent.submit(urlInput.closest('form') as HTMLFormElement);
+      await new Promise(resolve => setTimeout(resolve, 80));
+    });
+
+    // The attachment chip row appears and the popover closes.
+    await waitFor(() => {
+      expect(document.querySelector('[data-attachments-row]')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Public URL')).toBeFalsy();
+    });
+    // Submitting the popover form must not bubble into the composer form and send a chat message.
     expect(captured).toHaveLength(0);
   });
 
