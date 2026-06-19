@@ -1006,20 +1006,19 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
       recording: browserRecordingOptions(),
     };
 
-    // When the user has an active OpenAI subscription (OAuth) and no explicit
-    // OPENAI_API_KEY is set, configure Stagehand's model to use the subscription.
+    // When the user has an active OpenAI subscription (OAuth), configure
+    // Stagehand's model to use the subscription. The subscription takes priority
+    // over OPENAI_API_KEY since it provides access through the user's plan.
     // The custom fetch rewrites requests to the Codex endpoint and injects the
     // OAuth access token as the Bearer credential.
-    if (!process.env.OPENAI_API_KEY) {
-      const authStorage = new AuthStorage();
-      const cred = authStorage.get('openai-codex');
-      if (cred?.type === 'oauth') {
-        stagehandOpts.model = {
-          modelName: 'openai/gpt-4.1-mini',
-          apiKey: 'codex-oauth',
-          fetch: buildOpenAICodexOAuthFetch({ authStorage }),
-        };
-      }
+    const authStorage = new AuthStorage();
+    const cred = authStorage.get('openai-codex');
+    if (cred?.type === 'oauth') {
+      stagehandOpts.model = {
+        modelName: 'openai/gpt-4.1-mini',
+        apiKey: 'codex-oauth',
+        fetch: buildOpenAICodexOAuthFetch({ authStorage }),
+      };
     }
 
     return cdpUrl
