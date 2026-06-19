@@ -50,7 +50,7 @@ function formatSlackLabel(
   subscription: SlackSubscriptionBadge,
 ): { plain: string; styled: string } {
   const label = subscription.workspaceName ? `Slack:${subscription.workspaceName}` : 'Slack';
-  const color = mastra.purple;
+  const color = extendedColors.lavender;
   if (state.slackPollingActive && state.githubPrGradientAnimator?.isRunning()) {
     return {
       plain: label,
