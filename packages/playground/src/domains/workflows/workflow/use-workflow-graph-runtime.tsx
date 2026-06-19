@@ -39,9 +39,33 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
       edges.map(edge => {
         const previousStepId = getScopedStepId(edge.data?.previousStepId as string | undefined, workflowName);
         const nextStepId = getScopedStepId(edge.data?.nextStepId as string | undefined, workflowName);
-        const isFinishedEdge =
-          (steps[previousStepId ?? '']?.status === 'success' && Boolean(steps[nextStepId ?? ''])) ||
-          (edge.data?.conditionNode && !steps[previousStepId ?? ''] && Boolean(steps[nextStepId ?? '']?.status));
+        const previousStepSucceeded = steps[previousStepId ?? '']?.status === 'success';
+        const nextStepStatus = steps[nextStepId ?? '']?.status as string | undefined;
+        // A conditional arm edge must only light when that specific arm was actually taken — i.e.
+        // the arm step has run (any status other than the un-taken `skipped`). Lighting it purely
+        // off the shared predecessor would falsely show the un-taken branch as active, since both
+        // arms share the same (successful) condition predecessor.
+        if (edge.data?.conditionNode) {
+          const armTaken = Boolean(nextStepStatus) && nextStepStatus !== 'skipped';
+          const isFinishedEdge = armTaken;
+
+          return {
+            ...edge,
+            type: WORKFLOW_DATA_EDGE_TYPE,
+            animated: isFinishedEdge ? false : edge.animated,
+            data: { ...edge.data, edgeStatus: isFinishedEdge ? 'success' : 'idle' },
+            style: {
+              ...edge.style,
+              stroke: isFinishedEdge ? '#22c55e' : '#8e8e8e',
+              strokeDasharray: isFinishedEdge ? 'none' : edge.style?.strokeDasharray,
+            },
+          };
+        }
+        // A normal edge is green when data flowed out of a successful predecessor; the next step's
+        // own running/idle state does not matter, so the taken path stays continuous mid-run. The
+        // only suppression is an explicitly `skipped` next step (the un-taken arm of a resolved
+        // conditional reached through a non-condition edge).
+        const isFinishedEdge = previousStepSucceeded && nextStepStatus !== 'skipped';
 
         return {
           ...edge,

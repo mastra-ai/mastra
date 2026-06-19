@@ -134,24 +134,23 @@ test('takes the condition-selected branch after a HARD reload of the paused :run
   const runId = href?.split('/').pop();
   expect(runId, 'expected a runId in the recent-runs link href').toBeTruthy();
 
+  // Navigate to the paused run page, advance the conditional, then HARD reload so the run
+  // page rehydrates purely from the persisted snapshot.
   await page.goto(`/workflows/complexWorkflow/graph/${runId}`);
   await runNextStep(page);
   await page.reload();
   await page.waitForTimeout(1000);
 
-  // // ACT: advance the undecided conditional purely from the hard-reloaded snapshot.
-  // // await runNextStepButton(page).click();
-
-  // // ASSERT: the engine-selected arm (long-text) runs; short-text must NOT run.
+  // The engine-selected arm (long-text) must be the one that ran; short-text never ran.
   await expect(stepNode(page, 'long-text')).toHaveAttribute('data-workflow-step-status', 'success', {
     timeout: 20000,
   });
   await expect(stepNode(page, 'short-text')).not.toHaveAttribute('data-workflow-step-status', 'success');
 
-  const el = await page.locator("[id='eshort-text-condition-short-text']");
-  console.log('lol');
-
-  await expect(await el.getAttribute('data-edge-status')).not.toBe('success');
+  // The un-taken arm's incoming edge must stay neutral: short-text was skipped, so the run
+  // never flowed through it even though the snapshot carries a status for the step.
+  const skippedArmEdge = page.locator("[id='eshort-text-condition-short-text']");
+  await expect(skippedArmEdge).not.toHaveAttribute('data-edge-status', 'success');
 });
 
 test('takes the condition-selected branch when the conditional is reloaded then advanced', async ({ page }) => {
@@ -245,4 +244,21 @@ test('takes the condition-selected branch on the live graph page (no reload)', a
     timeout: 20000,
   });
   await expect(stepNode(page, 'short-text')).not.toHaveAttribute('data-workflow-step-status', 'success');
+
+  await runNextStep(page);
+});
+
+test('check edges', async ({ page }) => {
+  await page.goto('/workflows/complexWorkflow/graph');
+  await page.getByRole('textbox', { name: 'Text' }).fill('HELLO');
+
+  await runButton(page).click();
+
+  await page.waitForTimeout(10000);
+
+  const edgeMap = await page.locator('[id="emapping_b637d0ca-35c1-4aeb-b6da-4044be8ace93-nested-text-processor"]');
+  const finalEge = await page.locator('[id="efinal-step-__workflow-end__"]');
+
+  await expect(await edgeMap.getAttribute('data-edge-status')).toBe('success');
+  await expect(await finalEge.getAttribute('data-edge-status')).toBe('success');
 });

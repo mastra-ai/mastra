@@ -86,4 +86,46 @@ describe('useWorkflowGraphRuntime', () => {
     expect(result.current.styledEdges[0].animated).toBe(false);
     expect(result.current.styledEdges[0].data?.edgeStatus).toBe('success');
   });
+
+  it('does not light the conditional edge of a skipped branch arm', () => {
+    // After a conditional resolves, the un-taken arm is persisted as `skipped`. Its incoming
+    // condition edge must stay idle (grey) so the graph does not show the wrong branch as taken.
+    const conditionalContext = {
+      result: {
+        status: 'paused',
+        steps: {
+          'short-text': { status: 'skipped', startedAt: Date.now() },
+          'long-text': { status: 'success', output: { text: 'HELLOABHELLOAC' }, startedAt: Date.now() },
+        },
+      },
+      debugMode: false,
+    } as React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
+
+    const conditionalWrapper = ({ children }: PropsWithChildren) => (
+      <WorkflowRunContext.Provider value={conditionalContext}>{children}</WorkflowRunContext.Provider>
+    );
+
+    const edges: Edge[] = [
+      {
+        id: 'e-condition-short-text',
+        source: 'condition',
+        target: 'short-text',
+        data: { nextStepId: 'short-text', conditionNode: true },
+      },
+      {
+        id: 'e-condition-long-text',
+        source: 'condition',
+        target: 'long-text',
+        data: { nextStepId: 'long-text', conditionNode: true },
+      },
+    ];
+
+    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper: conditionalWrapper });
+
+    const shortEdge = result.current.styledEdges.find(edge => edge.id === 'e-condition-short-text');
+    const longEdge = result.current.styledEdges.find(edge => edge.id === 'e-condition-long-text');
+
+    expect(shortEdge?.data?.edgeStatus).toBe('idle');
+    expect(longEdge?.data?.edgeStatus).toBe('success');
+  });
 });
