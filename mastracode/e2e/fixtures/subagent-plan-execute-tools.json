@@ -1,0 +1,88 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "sequenceIndex": 0,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Delegate plan and execute subagents for workspace tool boundary verification.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_subagent_plan_e2e",
+            "name": "subagent",
+            "arguments": {
+              "agentType": "plan",
+              "task": "Draft a plan for verifying SUBAGENT_PLAN_E2E without editing files.",
+              "modelId": "openai/gpt-5.4-mini"
+            }
+          },
+          {
+            "id": "call_subagent_execute_e2e",
+            "name": "subagent",
+            "arguments": {
+              "agentType": "execute",
+              "task": "Create the subagent execute output file with SUBAGENT_EXECUTE_E2E content.",
+              "modelId": "openai/gpt-5.4-mini"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Draft a plan for verifying SUBAGENT_PLAN_E2E without editing files."
+      },
+      "response": {
+        "content": "Plan subagent e2e result: inspect the execute output file after the Execute subagent writes it."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Create the subagent execute output file with SUBAGENT_EXECUTE_E2E content.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_subagent_execute_write_file",
+            "name": "write_file",
+            "arguments": {
+              "path": "subagent-execute-output.txt",
+              "content": "SUBAGENT_EXECUTE_FILE_WRITTEN_E2E\n",
+              "overwrite": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "hasToolResult": true,
+        "toolCallId": "call_subagent_execute_write_file"
+      },
+      "response": {
+        "content": "Execute subagent e2e result: wrote subagent-execute-output.txt with SUBAGENT_EXECUTE_E2E."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "hasToolResult": true,
+        "toolCallId": "call_subagent_execute_e2e"
+      },
+      "response": {
+        "content": "Parent received Plan and Execute subagent results."
+      }
+    }
+  ]
+}

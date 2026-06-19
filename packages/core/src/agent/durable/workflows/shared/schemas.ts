@@ -99,6 +99,9 @@ export const baseIterationStateSchema = z.object({
   lastStepResult: z.any().optional(),
   // Background task tracking
   backgroundTaskPending: z.boolean().optional(),
+  // Span data, carried unchanged so every iteration shares one trace
+  agentSpanData: z.any().optional(),
+  modelSpanData: z.any().optional(),
 });
 
 /**

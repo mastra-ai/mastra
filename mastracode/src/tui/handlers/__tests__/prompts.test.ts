@@ -14,7 +14,7 @@ function createCtx() {
     options: { inlineQuestions: true },
     harness: {
       respondToToolSuspension: vi.fn(),
-      getDisplayState: vi.fn(() => ({ isRunning: false })),
+      session: { displayState: { get: vi.fn(() => ({ isRunning: false })) } },
     },
     pendingInlineQuestions: [],
     gradientAnimator: {
@@ -88,9 +88,11 @@ function createPlanApprovalCtx() {
     accepted: Promise.resolve({ accepted: true, runId: 'run-1' }),
   });
   const state = {
+    session: {
+      state: { set: vi.fn().mockResolvedValue(undefined) },
+      identity: { getResourceId: vi.fn(() => 'resource-1') },
+    },
     harness: {
-      setState: vi.fn().mockResolvedValue(undefined),
-      getResourceId: vi.fn(() => 'resource-1'),
       respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
       sendSignal,
     },

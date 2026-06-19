@@ -222,6 +222,8 @@ export function createWorkflowInput(params: {
   options: Parameters<typeof serializeDurableOptions>[0];
   state: Parameters<typeof serializeDurableState>[0];
   messageId: string;
+  agentSpanData?: unknown;
+  modelSpanData?: unknown;
 }): DurableAgenticWorkflowInput {
   return {
     __workflowKind: 'durable-agent',
@@ -236,6 +238,8 @@ export function createWorkflowInput(params: {
     options: serializeDurableOptions(params.options),
     state: serializeDurableState(params.state),
     messageId: params.messageId,
+    agentSpanData: params.agentSpanData,
+    modelSpanData: params.modelSpanData,
   };
 }
 

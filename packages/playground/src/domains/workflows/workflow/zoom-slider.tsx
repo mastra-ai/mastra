@@ -4,12 +4,13 @@ import { Panel, useViewport, useReactFlow } from '@xyflow/react';
 import { Maximize, Minus, Plus } from 'lucide-react';
 import { forwardRef } from 'react';
 
-export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'>>(({ className, ...props }) => {
+export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'>>(({ className, ...props }, ref) => {
   const { zoom } = useViewport();
   const { zoomTo, zoomIn, zoomOut, fitView } = useReactFlow();
 
   return (
     <Panel
+      ref={ref}
       className={cn(
         'flex items-center gap-1 rounded-full border border-border1 bg-surface2 p-1 text-neutral6',
         className,

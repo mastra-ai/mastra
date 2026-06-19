@@ -1,3 +1,4 @@
+import { cva } from 'class-variance-authority';
 import { buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
@@ -53,6 +54,29 @@ export function comboboxTriggerClass({
   );
 }
 
+export const comboboxItemClass = cva(
+  cn(
+    'relative flex cursor-pointer select-none items-center rounded-md',
+    'py-1.5 min-h-8',
+    'text-ui-smd leading-ui-sm text-neutral4',
+    'outline-none focus:outline-none focus-visible:outline-none',
+    transitions.colors,
+    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
+    'data-selected:text-neutral6',
+  ),
+  {
+    variants: {
+      multiple: {
+        false: 'gap-2 pl-2.5 pr-2',
+        true: 'gap-2 pl-2.5 pr-2',
+      },
+    },
+    defaultVariants: {
+      multiple: false,
+    },
+  },
+);
+
 export const comboboxStyles = {
   /** Root wrapper */
   root: 'flex flex-col gap-1.5',
@@ -97,50 +121,19 @@ export const comboboxStyles = {
   list: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1',
 
   /** Option item base — rounded-md sits concentrically inside rounded-xl + p-1. */
-  item: cn(
-    'group/item relative flex cursor-pointer select-none items-center gap-2 rounded-md',
-    'pl-2.5 pr-2 py-1.5 min-h-8',
-    'text-ui-smd leading-ui-sm text-neutral4',
-    'outline-none focus:outline-none focus-visible:outline-none',
-    transitions.colors,
-    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
-    'data-selected:text-neutral6',
-  ),
+  item: comboboxItemClass({ multiple: false }),
 
-  /** Multi-select item — keeps the left checkbox slot, no right indicator. */
-  itemMulti: cn(
-    'relative flex cursor-pointer select-none items-center gap-2.5 rounded-md',
-    'pl-2 pr-2.5 py-1.5 min-h-8',
-    'text-ui-smd leading-ui-sm text-neutral4',
-    'outline-none focus:outline-none focus-visible:outline-none',
-    transitions.colors,
-    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
-    'data-selected:text-neutral6',
-  ),
+  /** Multi-select item — same item rhythm with a right-aligned selected check. */
+  itemMulti: comboboxItemClass({ multiple: true }),
 
   /** Right-aligned slot grouping end content + selection check. */
   itemRightSlot: 'ml-auto flex items-center gap-2 shrink-0',
 
   /** Check indicator container — inline, fixed 16x16, shown only when item is selected. */
-  checkContainer: 'flex h-4 w-4 shrink-0 items-center justify-center text-accent1',
+  checkContainer: 'flex h-4 w-4 shrink-0 items-center justify-center text-neutral6',
 
   /** Check icon (single select) */
   checkIcon: 'h-3.5 w-3.5',
-
-  /** Checkbox container (multi select) */
-  checkbox: 'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border',
-
-  /** Checkbox selected state */
-  checkboxSelected: 'bg-accent1 border-accent1',
-
-  /** Checkbox unselected state */
-  checkboxUnselected: 'border-border2',
-
-  /** Check icon for checkbox (multi select) */
-  checkboxIcon: 'h-3 w-3 text-surface1',
-
-  /** Option content wrapper */
-  optionContent: 'flex items-center gap-2 w-full min-w-0',
 
   /** Option label/description wrapper */
   optionText: 'flex flex-col gap-0.5 min-w-0',

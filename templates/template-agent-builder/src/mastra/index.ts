@@ -8,10 +8,9 @@ import { SlackProvider } from '@mastra/slack';
 import { StagehandBrowser } from '@mastra/stagehand';
 
 import { initWorkOS } from './auth';
-import { getEnv, hasEnv, requireEnterpriseLicense } from './env';
+import { getEnv, hasEnv } from './env';
 import { workspace } from './workspace';
 
-requireEnterpriseLicense();
 const workos = await initWorkOS();
 
 const storage = new LibSQLStore({
@@ -27,7 +26,7 @@ const editor = new MastraEditor({
   ...(hasComposio
     ? {
         toolProviders: {
-          composio: new ComposioToolProvider({ apiKey: getEnv('COMPOSIO_API_KEY')! }),
+          composio: new ComposioToolProvider({ apiKey: getEnv('COMPOSIO_API_KEY')!, allowedToolkits: ['gmail'] }),
         },
       }
     : {}),
@@ -50,32 +49,27 @@ const editor = new MastraEditor({
     : {}),
   builder: {
     enabled: true,
-    features: {
-      agent: {
-        tools: true,
-        agents: true,
-        workflows: true,
-        favorites: true,
-        skills: true,
-        model: true,
-        browser: hasBrowserbase,
-        avatarUpload: true,
-      },
-    },
     configuration: {
       agent: {
         workspace: { type: 'id', workspaceId: workspace.id },
         memory: {
-          observationalMemory: true,
+          observationalMemory: {
+            model: 'openai/gpt-5.4-mini',
+          },
           options: {
             lastMessages: 10,
           },
         },
         models: {
-          allowed: [{ provider: 'openai' }, { provider: 'anthropic', modelId: 'claude-sonnet-4-6' }],
+          allowed: [
+            { provider: 'openai', modelId: 'gpt-5.4-nano' },
+            { provider: 'openai', modelId: 'gpt-5.4-mini' },
+            { provider: 'openai', modelId: 'gpt-5.4' },
+            { provider: 'openai', modelId: 'gpt-5.4-pro' },
+          ],
           default: {
             provider: 'openai',
-            modelId: 'gpt-5',
+            modelId: 'gpt-5.4-nano',
           },
         },
         ...(hasBrowserbase
@@ -103,8 +97,12 @@ export const mastra = new Mastra({
     sourcemap: true,
   },
   server: {
-    auth: workos.mastraAuth,
-    rbac: workos.rbacProvider,
+    ...(workos
+      ? {
+          auth: workos.mastraAuth,
+          rbac: workos.rbacProvider,
+        }
+      : {}),
     build: {
       swaggerUI: true,
     },

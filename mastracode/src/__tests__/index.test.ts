@@ -112,23 +112,34 @@ vi.mock('@mastra/core/harness', () => ({
     subscribe(eventHandler: unknown) {
       harnessSubscribeMock(eventHandler);
     }
-    getCurrentThreadId() {
-      return harnessGetCurrentThreadIdMock();
-    }
-    getResourceId() {
-      return 'project-resource';
+    get session() {
+      return {
+        identity: {
+          getResourceId: () => 'project-resource',
+        },
+        thread: {
+          getId: () => harnessGetCurrentThreadIdMock(),
+          list: (options: unknown) => harnessListThreadsMock(options),
+          setSetting: (setting: unknown) => harnessSetThreadSettingMock(setting),
+        },
+        mode: { get: () => 'build' },
+        model: { get: () => 'anthropic/claude-opus-4-6' },
+        state: {
+          get: () => harnessStateMock,
+          set: (state: unknown) => harnessSetStateMock(state),
+          update: async (updater: any) => {
+            const result = await updater(harnessStateMock);
+            if (result?.updates) harnessSetStateMock(result.updates);
+            return result?.result;
+          },
+        },
+      };
     }
     getState() {
       return harnessStateMock;
     }
-    listThreads(options: unknown) {
-      return harnessListThreadsMock(options);
-    }
     setState(state: unknown) {
       return harnessSetStateMock(state);
-    }
-    setThreadSetting(setting: unknown) {
-      return harnessSetThreadSettingMock(setting);
     }
   },
   taskWriteTool: {},
@@ -444,7 +455,7 @@ describe('createMastraCode', () => {
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
-    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
   });
 
   it('passes custom workspace config through to Harness without using the default factory', async () => {
@@ -556,7 +567,7 @@ describe('createMastraCode', () => {
     expect(getResourceIdOverrideMock).toHaveBeenCalledWith(projectPath, '.acme-code');
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
-    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;

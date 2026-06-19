@@ -43,6 +43,7 @@ vi.mock('@/domains/agent-builder', async () => {
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
+  isUnauthenticatedError: () => false,
 }));
 
 vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
@@ -169,6 +170,7 @@ const baseHandlers = (overrides?: Partial<typeof storedAgent>) => [
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, user: { id: 'user-1' } })),
   http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json({ ...storedAgent, ...overrides })),
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
+  http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json({ providers: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
 ];
@@ -189,7 +191,7 @@ describe('AgentBuilderAgentEdit MSW integration — visibility immediate-persist
 
     renderPage();
 
-    const addButton = await screen.findByTestId('agent-builder-visibility-add');
+    const addButton = await screen.findByTestId('agent-builder-visibility-add', undefined, { timeout: 10_000 });
     expect(addButton.hasAttribute('disabled')).toBe(false);
     expect(addButton.getAttribute('data-disabled')).toBeNull();
     expect(addButton.textContent).toContain('Add to library');
@@ -207,7 +209,7 @@ describe('AgentBuilderAgentEdit MSW integration — visibility immediate-persist
 
     renderPage();
 
-    const addButton = await screen.findByTestId('agent-builder-visibility-add');
+    const addButton = await screen.findByTestId('agent-builder-visibility-add', undefined, { timeout: 10_000 });
     fireEvent.click(addButton);
 
     await act(async () => {

@@ -70,6 +70,42 @@ function createTextStream() {
 }
 
 describe('Harness: tool suspension and resumption', () => {
+  it('should not inject default model settings when sending a message', async () => {
+    const agent = new Agent({
+      id: 'test-agent-default-model-settings',
+      name: 'Test Agent Default Model Settings',
+      instructions: 'You answer directly.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: createTextStream() }),
+      }),
+    });
+
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({
+      agents: { 'test-agent-default-model-settings': agent },
+      logger: false,
+      storage,
+    });
+
+    const registeredAgent = mastra.getAgent('test-agent-default-model-settings');
+    const streamSpy = vi.spyOn(registeredAgent, 'stream');
+
+    const harness = new Harness({
+      id: 'test-harness-default-model-settings',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+    });
+
+    await harness.init();
+    await harness.createThread();
+
+    await harness.sendMessage({ content: 'Hello' });
+
+    expect(streamSpy).toHaveBeenCalled();
+    const [, streamOptions] = streamSpy.mock.calls[0] as [any, any];
+    expect(streamOptions.modelSettings).toBeUndefined();
+  });
+
   it('should emit a suspension-related event when a tool calls suspend(), not silently complete', async () => {
     // Tool that suspends mid-execution waiting for external input
     const confirmTool = createTool({
@@ -197,7 +233,7 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.createThread();
     await harness.sendMessage({ content: 'Do it' });
 
-    const ds = harness.getDisplayState();
+    const ds = harness.session.displayState.get();
     expect(ds.pendingSuspensions.size).toBe(1);
     const suspension = Array.from(ds.pendingSuspensions.values())[0];
     expect(suspension!.toolName).toBe('confirmAction');
@@ -286,7 +322,7 @@ describe('Harness: tool suspension and resumption', () => {
     expect(events.some((e: any) => e.type === 'error')).toBe(false);
 
     // pending suspensions should be cleared after resume
-    const ds = harness.getDisplayState();
+    const ds = harness.session.displayState.get();
     expect(ds.pendingSuspensions.size).toBe(0);
   });
 
@@ -415,5 +451,6 @@ describe('Harness: tool suspension and resumption', () => {
     // Must match the budget used for the initial stream, not the agent default.
     expect(resumeOptions.maxSteps).toBe(1000);
     expect(resumeOptions.savePerStep).toBe(false);
+    expect(resumeOptions.modelSettings).toBeUndefined();
   });
 });

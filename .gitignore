@@ -70,3 +70,4 @@ om-reflector-fixture.json
 .notion
 .dev/lima
 .mastracode/
+.tmp-mc-e2e-vitest/
