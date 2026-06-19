@@ -305,7 +305,9 @@ describe('headless mode — event-driven auto-resolution', () => {
     // chunks, not a fresh start chunk. The subscribed thread stream must own that
     // output; otherwise this waits forever or produces duplicate resume events.
     await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
-    await waitFor(() => events.slice(resumeStartIndex).some(e => e.type === 'agent_end' && (e as any).reason === 'complete'));
+    await waitFor(() =>
+      events.slice(resumeStartIndex).some(e => e.type === 'agent_end' && (e as any).reason === 'complete'),
+    );
 
     const resumeEvents = events.slice(resumeStartIndex);
     expect(callCount).toBe(2);
@@ -314,8 +316,8 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(
       resumeEvents.some(e =>
         e.type === 'message_update'
-          ? (e as any).message?.content?.some((part: any) =>
-              part.type === 'text' && part.text?.includes('Deployment confirmed'),
+          ? (e as any).message?.content?.some(
+              (part: any) => part.type === 'text' && part.text?.includes('Deployment confirmed'),
             )
           : false,
       ),

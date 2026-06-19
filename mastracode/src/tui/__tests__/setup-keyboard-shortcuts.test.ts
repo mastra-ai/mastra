@@ -58,7 +58,7 @@ vi.mock('../status-line.js', () => ({
 
 import { showError, showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
+import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyHandlers, setupKeyboardShortcuts } from '../setup.js';
 
 const originalPlatform = process.platform;
 
@@ -434,6 +434,53 @@ describe('setupKeyboardShortcuts', () => {
     expect(state.harness.abort).toHaveBeenCalledTimes(1);
     expect(state.userInitiatedAbort).toBe(true);
     expect(editor.setText).not.toHaveBeenCalled();
+  });
+
+  it('declines a pending approval dialog without aborting the resumed run', () => {
+    const { state, editor, actions } = createState(true);
+    editor.getText.mockReturnValue('');
+    state.pendingApprovalDismiss = vi.fn(() => {
+      state.pendingApprovalDismiss = null;
+    });
+    state.activeInlineQuestion = { handleInput: vi.fn() } as any;
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(state.pendingApprovalDismiss).toBeNull();
+    expect(state.activeInlineQuestion).toBeUndefined();
+    expect(state.harness.abort).not.toHaveBeenCalled();
+    expect(state.userInitiatedAbort).toBe(false);
+    expect(editor.setText).not.toHaveBeenCalled();
+  });
+
+  it('does not abort from SIGINT after dismissing a pending approval dialog', () => {
+    const { state } = createState(true);
+    const dismissApproval = vi.fn(() => {
+      state.pendingApprovalDismiss = null;
+    });
+    state.pendingApprovalDismiss = dismissApproval;
+    let sigintHandler: (() => void) | undefined;
+    const onSpy = vi.spyOn(process, 'on').mockImplementation((event, listener) => {
+      if (event === 'SIGINT') sigintHandler = listener as () => void;
+      return process;
+    });
+    const offSpy = vi.spyOn(process, 'off').mockImplementation(() => process);
+
+    const cleanup = setupKeyHandlers(state, { stop: vi.fn(), doubleCtrlCMs: 500 });
+    sigintHandler?.();
+    cleanup();
+
+    expect(dismissApproval).toHaveBeenCalledTimes(1);
+    expect(state.harness.abort).not.toHaveBeenCalled();
+    expect(state.userInitiatedAbort).toBe(false);
+    expect(onSpy).toHaveBeenCalledWith('SIGINT', expect.any(Function));
+    expect(offSpy).toHaveBeenCalledWith('SIGINT', expect.any(Function));
   });
 
   it('aborts the harness and persists a paused goal when clearing during goal judge evaluation', () => {

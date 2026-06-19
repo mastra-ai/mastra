@@ -256,7 +256,7 @@ describe('MastraTUI queueing', () => {
     expect(resolution).toEqual({ resolved: false, value: undefined });
   });
 
-  it('keeps active steering pending until acceptance and then renders one steer message', async () => {
+  it('keeps active steering pending after acceptance until the subscription echoes it', async () => {
     const accepted = createDeferred<{ accepted: true; runId: string }>();
     const sendSignal = vi.fn().mockReturnValue({ id: 'signal-1', accepted: accepted.promise });
     const state = createQueueState({
@@ -291,10 +291,8 @@ describe('MastraTUI queueing', () => {
     accepted.resolve({ accepted: true, runId: 'run-1' });
     await Promise.resolve();
 
-    expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(false);
-    const rendered = state.messageComponentsById.get('signal-1');
-    expect(rendered).toBeDefined();
-    expect(rendered?.render?.(80).join('\n')).toContain('steer');
+    expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(true);
+    expect(state.messageComponentsById.has('signal-1')).toBe(false);
     expect(state.chatContainer.children).toHaveLength(1);
   });
 

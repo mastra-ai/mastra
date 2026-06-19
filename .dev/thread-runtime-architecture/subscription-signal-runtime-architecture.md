@@ -39,7 +39,7 @@ Location: `packages/core/src/agent/thread-stream-runtime.ts`
 Runtime uses a string key:
 
 ```ts
-resourceId + '\u0000' + threadId
+resourceId + '\u0000' + threadId;
 ```
 
 Every active-state decision goes through this key. Any caller that omits either thread or resource can accidentally lose precise routing and fall back to run-id-only behavior or idle behavior.
@@ -57,7 +57,7 @@ Every active-state decision goes through this key. Any caller that omits either 
 At baseline, `#isThreadBlockingRun()` is:
 
 ```ts
-record.output.status === 'running' || approvalSuspendedRunIds.has(record.runId)
+record.output.status === 'running' || approvalSuspendedRunIds.has(record.runId);
 ```
 
 That means:
@@ -218,10 +218,7 @@ If the active record exists but no longer blocks the thread, runtime clears it.
 A signal is an active target when:
 
 ```ts
-runId && (
-  activeRecord?.output.status === 'running' ||
-  (key && activeThreadRunIds.get(key) === runId)
-)
+runId && (activeRecord?.output.status === 'running' || (key && activeThreadRunIds.get(key) === runId));
 ```
 
 This is broader than `#isThreadBlockingRun()` in one way: if the key points at the run id, it may count as active even before the record exists.
@@ -359,7 +356,7 @@ For a TUI or app deciding whether user input is a steering signal vs a new user 
 Core Harness active-path signal routing additionally requires both:
 
 ```ts
-session.run.getRunId() && session.stream.activeRunId()
+session.run.getRunId() && session.stream.activeRunId();
 ```
 
 If either side is stale/null, Harness builds idle options and the signal can wake a new run.

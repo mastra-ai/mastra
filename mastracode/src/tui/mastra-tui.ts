@@ -54,7 +54,6 @@ import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 import {
   addPendingUserMessage,
   addUserMessage,
-  confirmPendingUserMessage,
   removePendingUserMessage,
   renderClearedTasksInline,
   renderExistingMessages,
@@ -417,7 +416,6 @@ export class MastraTUI {
           }
 
           if (hasActiveRun) {
-            confirmPendingUserMessage(this.state, signal.id, content);
             return;
           }
 

@@ -1849,12 +1849,13 @@ export class Harness<TState = {}> {
 
     try {
       for await (const chunk of subscription.stream) {
+        const chunkRunId = 'runId' in chunk ? chunk.runId : null;
+
         if (!this.#session.stream.isCurrent({ subscription })) {
           subscription.unsubscribe();
           break;
         }
 
-        const chunkRunId = 'runId' in chunk ? chunk.runId : null;
         // Normal completed/errored runs can leave trailing stream parts behind; skip those
         // until a fresh `start` boundary appears. Suspended runs intentionally clear this
         // guard below because tool resumes reuse the same runId and may restart at
@@ -1868,6 +1869,10 @@ export class Harness<TState = {}> {
         }
 
         if (!currentRun) {
+          // A new run starting means we are past the old run's trailing data.
+          // Clear the guard so null-runId chunks from the new run are not
+          // incorrectly filtered as trailing data from the previous run.
+          lastFinishedRunId = null;
           currentRun = this.createStreamState();
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();

@@ -48,13 +48,13 @@ export function setupKeyboardShortcuts(
     }
 
     if (state.pendingApprovalDismiss) {
-      // Dismiss active approval dialog and abort
+      // Dismiss active approval dialogs by declining the gated tool. Do not abort
+      // the run: the decline is delivered through the normal approval resume path.
       state.pendingApprovalDismiss();
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
-      state.userInitiatedAbort = true;
-      state.harness.abort();
+      return;
     } else if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
       // Clean up active inline components on abort. suspensions.hasPending() covers
       // the case where the run is parked in a tool suspend() (e.g. ask_user) —
@@ -518,6 +518,11 @@ export function setupKeyHandlers(
     }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
+      return;
     }
     state.activeInlinePlanApproval = undefined;
     state.activeInlineQuestion = undefined;

@@ -62,7 +62,7 @@ Harness should have a first-class path for runs whose output is owned by the thr
 For example, conceptually:
 
 ```ts
-agent.sendStreamResume({ threadId, resourceId, runId, resumeData, toolCallId, streamOptions })
+agent.sendStreamResume({ threadId, resourceId, runId, resumeData, toolCallId, streamOptions });
 ```
 
 or an internal runtime-level primitive with equivalent semantics.
@@ -382,7 +382,7 @@ Semantics:
 ### Agent helper
 
 ```ts
-agent.sendStreamResume({ threadId, resourceId, runId, toolCallId, resumeData, streamOptions })
+agent.sendStreamResume({ threadId, resourceId, runId, toolCallId, resumeData, streamOptions });
 ```
 
 This covers any resumable suspended stream/run, including generic suspended tools and approval, without implying that only tools can suspend.

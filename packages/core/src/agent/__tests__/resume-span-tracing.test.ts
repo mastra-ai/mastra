@@ -318,7 +318,12 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
       expect('runId' in accepted && accepted.runId).toBeTruthy();
       const runId = 'runId' in accepted ? accepted.runId : '';
       const sendStreamResumeSpy = vi.spyOn(agent, 'sendStreamResume');
-      const acknowledgement = await agent.sendToolApproval({ resourceId, threadId, toolCallId: toolCallId!, approved: true });
+      const acknowledgement = await agent.sendToolApproval({
+        resourceId,
+        threadId,
+        toolCallId: toolCallId!,
+        approved: true,
+      });
 
       expect(sendStreamResumeSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -373,7 +378,12 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
       expect('runId' in accepted && accepted.runId).toBeTruthy();
       const runId = 'runId' in accepted ? accepted.runId : '';
       const sendStreamResumeSpy = vi.spyOn(agent, 'sendStreamResume');
-      const acknowledgement = await agent.sendToolApproval({ resourceId, threadId, toolCallId: toolCallId!, approved: false });
+      const acknowledgement = await agent.sendToolApproval({
+        resourceId,
+        threadId,
+        toolCallId: toolCallId!,
+        approved: false,
+      });
 
       expect(sendStreamResumeSpy).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -61,6 +61,20 @@ function createReminderMessage(
 }
 
 describe('addUserMessage', () => {
+  it('replaces pending active steering only when the subscription echoes the user message', () => {
+    const state = createState();
+    addPendingUserMessage(state, 'signal-1', 'steer me', undefined, { isInterjection: true });
+    const pendingComponent = state.chatContainer.children[0];
+
+    addUserMessage(state, createUserMessage('steer me', 'signal-1'));
+
+    expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(false);
+    const rendered = state.messageComponentsById.get('signal-1');
+    expect(rendered).toBeInstanceOf(UserMessageComponent);
+    expect(rendered).not.toBe(pendingComponent);
+    expect(rendered?.render(80).join('\n')).toContain('steer');
+  });
+
   it('renders state signals as inline state components', () => {
     const state = createState();
 

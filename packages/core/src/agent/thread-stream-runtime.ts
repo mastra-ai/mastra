@@ -655,7 +655,8 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(pubsub);
     const key = this.#threadKey(options.resourceId, options.threadId);
     const record = state.threadRunsById.get(options.runId);
-    if (!record || state.threadKeysByRunId.get(options.runId) !== key || !this.#isSuspendedRun(state, options.runId)) {
+    const isSuspended = this.#isSuspendedRun(state, options.runId);
+    if (!record || state.threadKeysByRunId.get(options.runId) !== key || !isSuspended) {
       return undefined;
     }
 
@@ -1534,7 +1535,9 @@ export class AgentThreadStreamRuntime {
             try {
               while (true) {
                 const { value: part, done: streamDone } = await reader.read();
-                if (streamDone) break;
+                if (streamDone) {
+                  break;
+                }
                 const typedPart = part as any;
                 yield typedPart;
                 if (done) break;
