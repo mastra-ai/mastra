@@ -193,11 +193,6 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'editor/agent-builder/create-builder-agent',
-              label: 'createBuilderAgent()',
-            },
-            {
-              type: 'doc',
               id: 'editor/agent-builder/agent-builder-options',
               label: 'AgentBuilderOptions',
             },
@@ -205,6 +200,11 @@ const sidebars = {
               type: 'doc',
               id: 'editor/agent-builder/builder-agent-defaults',
               label: 'BuilderAgentDefaults',
+            },
+            {
+              type: 'doc',
+              id: 'editor/agent-builder/create-builder-agent',
+              label: 'createBuilderAgent()',
             },
             { type: 'doc', id: 'editor/agent-builder/builder-models', label: 'Models default' },
           ],
