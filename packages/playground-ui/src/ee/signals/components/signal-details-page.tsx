@@ -1,26 +1,18 @@
-import {
-  Badge,
-  Checkbox,
-  ScatterPlotChart,
-  stringToColor,
-  Tab,
-  TabContent,
-  TabList,
-  Tabs,
-  TopicTraceDetailsPanel,
-  TopicTraceSummaryList,
-  TopicsLayout,
-  useTraces,
-} from '@mastra/playground-ui';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router';
-import { getSignalChartData } from './signals-chart-data';
-import { signals } from './signals-data';
-import type { Facet, Signal } from './signals-data';
+import { Badge } from '../../../ds/components/Badge';
+import { Checkbox } from '../../../ds/components/Checkbox';
+import { ScatterPlotChart } from '../../../ds/components/ScatterPlotChart';
+import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
+import { stringToColor } from '../../../lib/colors';
+import { useTraces } from '../../../domains/traces/hooks';
+import { TopicTraceDetailsPanel, TopicTraceSummaryList, TopicsLayout } from '../../topics';
+import { getSignalChartData } from '../signals-chart-data';
+import { signals } from '../signals-data';
+import type { Signal, SignalFacet } from '../types';
 
 const SignalTraceSummaryList = TopicTraceSummaryList;
-const SignalTraceDetailsPanel = TopicTraceDetailsPanel;
+export const SignalTraceDetailsPanel = TopicTraceDetailsPanel;
 const SignalsLayout = TopicsLayout;
 
 type SignalTab = 'trace-list' | 'chart';
@@ -28,6 +20,10 @@ type SignalTab = 'trace-list' | 'chart';
 function findFacetByTraceId(signal: Signal | undefined, traceId: string | undefined) {
   if (!signal || !traceId) return undefined;
   return signal.facets.find(facet => facet.traceSummaries.some(trace => trace.id === traceId));
+}
+
+export function getSignalName(signalId: string) {
+  return signals.find(signal => signal.id === signalId)?.name ?? signalId;
 }
 
 interface SignalFacetSidebarProps {
@@ -38,10 +34,7 @@ interface SignalFacetSidebarProps {
 
 export function SignalFacetSidebar({ signal, selectedFacetId, onFacetSelect }: SignalFacetSidebarProps) {
   return (
-    <aside
-      className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4"
-      aria-label="Signal facets"
-    >
+    <aside className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4" aria-label="Signal facets">
       <ul className="space-y-1">
         {signal.facets.map(facet => {
           const selected = facet.id === selectedFacetId;
@@ -54,10 +47,7 @@ export function SignalFacetSidebar({ signal, selectedFacetId, onFacetSelect }: S
                 onClick={() => onFacetSelect(facet.id)}
               >
                 <span className="flex items-start gap-2">
-                  <span
-                    className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: stringToColor(facet.name) }}
-                  />
+                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: stringToColor(facet.name) }} />
                   <span className="min-w-0 space-y-1">
                     <span className="block text-sm font-medium text-neutral5">{facet.name}</span>
                     <span className="line-clamp-2 block text-sm text-neutral2">{facet.description}</span>
@@ -77,17 +67,11 @@ export function SignalTraceListTab({
   selectedTraceId,
   onTraceSelect,
 }: {
-  facet: Facet;
+  facet: SignalFacet;
   selectedTraceId: string | null;
   onTraceSelect: () => void;
 }) {
-  return (
-    <SignalTraceSummaryList
-      traces={facet.traceSummaries}
-      selectedTraceId={selectedTraceId}
-      onTraceSelect={onTraceSelect}
-    />
-  );
+  return <SignalTraceSummaryList traces={facet.traceSummaries} selectedTraceId={selectedTraceId} onTraceSelect={onTraceSelect} />;
 }
 
 interface SignalChartTabProps {
@@ -109,15 +93,8 @@ export function SignalChartTab({ signal, selectedFacetIds, onFacetToggle }: Sign
         {signal.facets.map(facet => {
           const selected = selectedFacetIds.includes(facet.id);
           return (
-            <label
-              key={facet.id}
-              className="flex cursor-pointer items-center gap-2 rounded-full border border-border1/70 bg-surface2 px-3 py-1.5 text-ui-sm text-neutral5 transition-colors hover:bg-surface3"
-            >
-              <Checkbox
-                checked={selected}
-                onCheckedChange={() => onFacetToggle(facet.id)}
-                aria-label={`Toggle ${facet.name}`}
-              />
+            <label key={facet.id} className="flex cursor-pointer items-center gap-2 rounded-full border border-border1/70 bg-surface2 px-3 py-1.5 text-ui-sm text-neutral5 transition-colors hover:bg-surface3">
+              <Checkbox checked={selected} onCheckedChange={() => onFacetToggle(facet.id)} aria-label={`Toggle ${facet.name}`} />
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: stringToColor(facet.name) }} />
               <span>{facet.name}</span>
               <Badge variant="default">
@@ -148,7 +125,7 @@ export function SignalChartTab({ signal, selectedFacetIds, onFacetToggle }: Sign
 
 interface SignalFacetTabsProps {
   signal: Signal;
-  selectedFacet: Facet;
+  selectedFacet: SignalFacet;
   selectedTraceId: string | null;
   selectedChartFacetIds: string[];
   onFacetSelect: (facetId: string) => void;
@@ -156,15 +133,7 @@ interface SignalFacetTabsProps {
   onTraceSelect: () => void;
 }
 
-export function SignalFacetTabs({
-  signal,
-  selectedFacet,
-  selectedTraceId,
-  selectedChartFacetIds,
-  onFacetSelect,
-  onChartFacetToggle,
-  onTraceSelect,
-}: SignalFacetTabsProps) {
+export function SignalFacetTabs({ signal, selectedFacet, selectedTraceId, selectedChartFacetIds, onFacetSelect, onChartFacetToggle, onTraceSelect }: SignalFacetTabsProps) {
   return (
     <Tabs<SignalTab> defaultTab="trace-list" className="flex h-full min-h-0 flex-col overflow-hidden">
       <TabList variant="line">
@@ -186,20 +155,18 @@ export function SignalFacetTabs({
   );
 }
 
-interface SignalDetailsContentProps {
+export interface SignalDetailsPageProps {
+  signalId?: string;
   selectedTraceId: string | null;
   tracePanel?: ReactNode;
+  onTraceSelect: (signalId: string, traceId: string) => void;
 }
 
-function SignalDetailsContent({ selectedTraceId, tracePanel }: SignalDetailsContentProps) {
-  const navigate = useNavigate();
-  const { signalId } = useParams();
+export function SignalDetailsPage({ signalId, selectedTraceId, tracePanel, onTraceSelect }: SignalDetailsPageProps) {
   const selectedSignal = useMemo(() => signals.find(signal => signal.id === signalId), [signalId]);
   const initialFacet = findFacetByTraceId(selectedSignal, selectedTraceId ?? undefined) ?? selectedSignal?.facets[0];
   const [selectedFacetId, setSelectedFacetId] = useState<string | null>(() => initialFacet?.id ?? null);
-  const [selectedChartFacetIds, setSelectedChartFacetIds] = useState<string[]>(
-    () => selectedSignal?.facets.map(facet => facet.id) ?? [],
-  );
+  const [selectedChartFacetIds, setSelectedChartFacetIds] = useState<string[]>(() => selectedSignal?.facets.map(facet => facet.id) ?? []);
   const selectedFacet = selectedSignal?.facets.find(facet => facet.id === selectedFacetId) ?? initialFacet;
   const { data: tracesData } = useTraces({});
   const resolvedTraceId = tracesData?.spans[0]?.traceId ?? null;
@@ -207,13 +174,11 @@ function SignalDetailsContent({ selectedTraceId, tracePanel }: SignalDetailsCont
   const handleTraceSelect = () => {
     if (!selectedSignal || !resolvedTraceId) return;
 
-    void navigate(`/signals/${selectedSignal.id}/traces/${resolvedTraceId}`);
+    onTraceSelect(selectedSignal.id, resolvedTraceId);
   };
 
   const handleChartFacetToggle = (facetId: string) => {
-    setSelectedChartFacetIds(current =>
-      current.includes(facetId) ? current.filter(id => id !== facetId) : [...current, facetId],
-    );
+    setSelectedChartFacetIds(current => (current.includes(facetId) ? current.filter(id => id !== facetId) : [...current, facetId]));
   };
 
   if (!selectedSignal || !selectedFacet) {
@@ -242,36 +207,3 @@ function SignalDetailsContent({ selectedTraceId, tracePanel }: SignalDetailsCont
     </SignalsLayout>
   );
 }
-
-export function SignalDetailsPage() {
-  return <SignalDetailsContent selectedTraceId={null} />;
-}
-
-export function SignalTraceIdPage() {
-  const navigate = useNavigate();
-  const { signalId, traceId } = useParams();
-  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
-
-  const handleTraceClose = () => {
-    setSelectedSpanId(null);
-    void navigate(signalId ? `/signals/${signalId}` : '/signals');
-  };
-
-  return (
-    <SignalDetailsContent
-      selectedTraceId={traceId ?? null}
-      tracePanel={
-        traceId ? (
-          <SignalTraceDetailsPanel
-            traceId={traceId}
-            selectedSpanId={selectedSpanId}
-            onSpanSelect={spanId => setSelectedSpanId(spanId ?? null)}
-            onClose={handleTraceClose}
-          />
-        ) : null
-      }
-    />
-  );
-}
-
-export default SignalDetailsPage;

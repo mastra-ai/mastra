@@ -1,7 +1,9 @@
-import { Button, Txt } from '@mastra/playground-ui';
 import { X } from 'lucide-react';
 import type { ElementType, MouseEvent, ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+
+import { Button } from '../Button';
+import { Txt } from '../Txt';
+import { cn } from '../../../lib/utils';
 
 export interface ThreadListProps {
   children: ReactNode;

@@ -1,12 +1,14 @@
-import { Badge, Button, stringToColor, TopicsLayout } from '@mastra/playground-ui';
 import { ArrowUpRight } from 'lucide-react';
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router';
-import { signals } from './signals-data';
-import type { Facet, Signal } from './signals-data';
+import { Badge } from '../../../ds/components/Badge';
+import { Button } from '../../../ds/components/Button';
+import { stringToColor } from '../../../lib/colors';
+import { TopicsLayout } from '../../topics';
+import { signals } from '../signals-data';
+import type { Signal, SignalFacet } from '../types';
 
-interface FacetCardProps {
-  facet: Facet;
+interface SignalFacetCardProps {
+  facet: SignalFacet;
   totalTraceCount: number;
 }
 
@@ -16,7 +18,7 @@ const getTraceShare = (traceCount: number, totalTraceCount: number) => {
   return Math.round((traceCount / totalTraceCount) * 100);
 };
 
-export function FacetCard({ facet, totalTraceCount }: FacetCardProps) {
+export function SignalFacetCard({ facet, totalTraceCount }: SignalFacetCardProps) {
   const traceCount = facet.traceSummaries.length;
   const traceShare = getTraceShare(traceCount, totalTraceCount);
   const traceLabel = traceCount === 1 ? 'trace' : 'traces';
@@ -98,31 +100,27 @@ export function SignalSection({ signal, onSeeDetails }: SignalSectionProps) {
       </header>
       <div className="grid gap-6 md:grid-cols-2">
         {signal.facets.map(facet => (
-          <FacetCard key={facet.id} facet={facet} totalTraceCount={totalTraceCount} />
+          <SignalFacetCard key={facet.id} facet={facet} totalTraceCount={totalTraceCount} />
         ))}
       </div>
     </section>
   );
 }
 
-export function SignalsOverviewPage() {
-  const navigate = useNavigate();
+export interface SignalsOverviewPageProps {
+  onSignalSelect: (signal: Signal) => void;
+}
 
-  const handleSeeDetails = (signal: Signal) => {
-    void navigate(`/signals/${signal.id}`, { viewTransition: true });
-  };
-
+export function SignalsOverviewPage({ onSignalSelect }: SignalsOverviewPageProps) {
   return (
     <TopicsLayout sidebar={null} contentPadding={false}>
       <nav className="h-full min-w-0 overflow-y-auto p-6" aria-label="Signals">
         <div className="mx-auto flex max-w-6xl flex-col gap-12">
           {signals.map(signal => (
-            <SignalSection key={signal.id} signal={signal} onSeeDetails={handleSeeDetails} />
+            <SignalSection key={signal.id} signal={signal} onSeeDetails={onSignalSelect} />
           ))}
         </div>
       </nav>
     </TopicsLayout>
   );
 }
-
-export default SignalsOverviewPage;

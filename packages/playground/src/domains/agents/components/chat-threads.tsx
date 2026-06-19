@@ -9,7 +9,7 @@ import {
   ThreadListItems,
   ThreadListNewItem,
   ThreadListSeparator,
-} from '@/components/thread-list';
+} from '@mastra/playground-ui';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useLinkComponent } from '@/lib/framework';
 

@@ -1,5 +1,5 @@
-import { stringToColor } from '@mastra/playground-ui';
-import type { Facet } from './signals-data';
+import { stringToColor } from '../../lib/colors';
+import type { SignalFacet } from './types';
 
 const SIGNAL_CHART_CLUSTERS = [
   { label: 'Fast paths', count: 27, duration: 120, spans: 5 },
@@ -16,7 +16,7 @@ export type SignalChartPoint = {
   color: string;
 };
 
-export function getSignalChartData(facets: Facet[]): SignalChartPoint[] {
+export function getSignalChartData(facets: SignalFacet[]): SignalChartPoint[] {
   return facets.flatMap((facet, facetIndex) =>
     SIGNAL_CHART_CLUSTERS.flatMap(cluster =>
       Array.from({ length: cluster.count }, (_, index) => {

@@ -1,18 +1,4 @@
-import type { TopicTraceSummary } from '@mastra/playground-ui';
-
-export type Facet = {
-  id: string;
-  name: string;
-  description: string;
-  traceSummaries: TopicTraceSummary[];
-};
-
-export type Signal = {
-  id: string;
-  name: string;
-  description: string;
-  facets: Facet[];
-};
+import type { Signal } from './types';
 
 export const signals: Signal[] = [
   {

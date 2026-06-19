@@ -57,6 +57,7 @@ export * from './ds/components/ThemeProvider';
 export * from './ds/components/ThemeToggle';
 export * from './ds/components/Tooltip';
 export * from './ds/components/Truncate';
+export * from './ds/components/ThreadList';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';

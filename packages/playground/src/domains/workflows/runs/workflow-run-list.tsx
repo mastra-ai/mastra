@@ -10,7 +10,7 @@ import {
   ThreadListItems,
   ThreadListNewItem,
   ThreadListSeparator,
-} from '@/components/thread-list';
+} from '@mastra/playground-ui';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';
