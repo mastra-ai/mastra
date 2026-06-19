@@ -298,7 +298,7 @@ await harness.session.mode.switch({ modeId: 'build' })
 
 ## Model
 
-`session.model` owns the active model selection, including per-mode model memory. Switching models is performed on the [`Harness`](/reference/harness/harness-class#switchmodel-modelid-scope-modeid-).
+`session.model` owns the active model selection, including per-mode model memory.
 
 ### `session.model.get()`
 
@@ -316,6 +316,18 @@ Check whether a model is currently selected.
 if (harness.session.model.hasSelection()) {
   // Ready to send messages
 }
+```
+
+### `session.model.switch({ modelId, scope?, modeId? })`
+
+Switch the active model. When `scope` is `'thread'` (the default), the model ID is persisted as the per-mode model so it's restored when switching back. Reports the selection to the harness's `modelUseCountTracker` and emits a `model_changed` event.
+
+```typescript
+// Set for the current session only
+await harness.session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__', scope: 'global' })
+
+// Persist to the current thread (default)
+await harness.session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 ```
 
 ## Run
