@@ -61,6 +61,33 @@ function loadClaudeSettings(projectDir: string): McpConfig {
 }
 
 /**
+ * Expand `${VAR}` and `${VAR:-default}` references in a string from the
+ * environment, matching how Claude Code resolves values in `.mcp.json`.
+ * A referenced variable that is unset or empty falls back to its default,
+ * or to an empty string when no default is given.
+ */
+export function expandEnvVars(value: string, env: NodeJS.ProcessEnv = process.env): string {
+  return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_match, name, fallback) => {
+    const resolved = env[name];
+    if (resolved !== undefined && resolved !== '') return resolved;
+    return fallback ?? '';
+  });
+}
+
+/**
+ * Expand `${VAR}` references in every string-valued HTTP header so that
+ * secrets like API keys can be referenced from the environment instead of
+ * being hardcoded in `mcp.json`.
+ */
+function expandHeaderEnvVars(headers: Record<string, unknown>): Record<string, string> {
+  const expanded: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value === 'string') expanded[key] = expandEnvVars(value);
+  }
+  return expanded;
+}
+
+/**
  * Classify a raw server entry as stdio, http, or skip (with reason).
  */
 export function classifyServerEntry(raw: unknown): { kind: 'stdio' | 'http' | 'skip'; reason?: string } {
@@ -122,7 +149,9 @@ export function validateConfig(raw: unknown): McpConfig {
       servers[name] = {
         url: e.url as string,
         headers:
-          typeof e.headers === 'object' && e.headers !== null ? (e.headers as Record<string, string>) : undefined,
+          typeof e.headers === 'object' && e.headers !== null
+            ? expandHeaderEnvVars(e.headers as Record<string, unknown>)
+            : undefined,
         oauth: oauthResult.config,
       };
     } else {
