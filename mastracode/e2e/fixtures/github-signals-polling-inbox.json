@@ -1,0 +1,45 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "hasToolResult": true,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "GitHub polling inbox notification read completed."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Read the GitHub polling notification from the inbox."
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_github_polling_inbox_read_e2e",
+            "name": "notification_inbox",
+            "arguments": {
+              "action": "read",
+              "status": "delivered",
+              "priority": "medium",
+              "source": "github",
+              "limit": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "github-signals-polling-inbox notification context acknowledged."
+      }
+    }
+  ]
+}

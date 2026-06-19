@@ -58,7 +58,7 @@ export function McpServersList({ mcpServers, isLoading, search = '' }: McpServer
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto auto">
+    <EntityList columns="auto 1fr auto auto auto" variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>URL</EntityList.TopCell>

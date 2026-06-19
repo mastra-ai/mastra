@@ -3,6 +3,7 @@ import type { Client } from '@libsql/client';
 import type { StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
+import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
@@ -89,6 +90,19 @@ export type LibSQLBaseConfig = {
    */
   initialBackoffMs?: number;
   /**
+   * SQLite `busy_timeout` (in milliseconds) applied to the underlying connection
+   * for local (`file:`/`:memory:`) databases. When a write hits a locked
+   * database, the driver waits up to this long for the lock to clear instead of
+   * failing immediately with `SQLITE_BUSY`. Requires `@libsql/client` >= 0.17.4,
+   * which also ensures the timeout survives connections created after
+   * `transaction()` (see libsql-client-ts#288/#345).
+   *
+   * Has no effect for remote (`libsql://`/`https://`) clients or when an existing
+   * `client` is supplied.
+   * @default 5000
+   */
+  connectionTimeoutMs?: number;
+  /**
    * Overrides local SQLite PRAGMA values used for startup/read performance.
    * Only applies to local file and in-memory databases.
    */
@@ -146,6 +160,7 @@ export class LibSQLStore extends MastraCompositeStore {
   private client: Client;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;
+  private readonly connectionTimeoutMs: number;
   private readonly pragmasReady: Promise<void>;
   private readonly isLocalDb: boolean;
   private readonly localPragmas: Required<LibSQLLocalPragmaOptions>;
@@ -160,6 +175,7 @@ export class LibSQLStore extends MastraCompositeStore {
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;
+    this.connectionTimeoutMs = config.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
     this.localPragmas = {
       cacheSize: config.localPragmas?.cacheSize ?? DEFAULT_LOCAL_CACHE_SIZE,
       mmapSize: config.localPragmas?.mmapSize ?? DEFAULT_LOCAL_MMAP_SIZE,
@@ -171,12 +187,15 @@ export class LibSQLStore extends MastraCompositeStore {
         this.shouldCacheInit = false;
       }
 
+      this.isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
+
       this.client = createClient({
         url: config.url,
         ...(config.authToken ? { authToken: config.authToken } : {}),
+        // `busy_timeout` only applies to local sqlite3 connections; remote
+        // contention is handled server-side. See libsql-client-ts#288/#345.
+        ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
       });
-
-      this.isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
       this.client = config.client;
@@ -242,7 +261,9 @@ export class LibSQLStore extends MastraCompositeStore {
   private async applyLocalPragmas(): Promise<void> {
     const pragmas = [
       ['journal_mode=WAL', 'PRAGMA journal_mode=WAL;'],
-      ['busy_timeout=5000', 'PRAGMA busy_timeout=5000;'],
+      // Keep in sync with the connection-level `timeout` passed to createClient
+      // so a custom connectionTimeoutMs isn't clobbered back to a hardcoded value.
+      [`busy_timeout=${this.connectionTimeoutMs}`, `PRAGMA busy_timeout=${this.connectionTimeoutMs};`],
       ['synchronous=NORMAL', 'PRAGMA synchronous=NORMAL;'],
       ['temp_store=MEMORY', 'PRAGMA temp_store=MEMORY;'],
       [`cache_size=${this.localPragmas.cacheSize}`, `PRAGMA cache_size=${this.localPragmas.cacheSize};`],

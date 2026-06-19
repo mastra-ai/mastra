@@ -7,8 +7,6 @@
  */
 import type { HarnessMode } from '@mastra/core/harness';
 
-import { MC_TOOLS } from '../../tool-names.js';
-
 export const fastMode: HarnessMode = {
   id: 'fast',
   name: 'Explore',
@@ -41,5 +39,4 @@ End with a structured summary:
 . **Details**: Additional context if needed
 
 Keep your summary under 300 words.`,
-  allowedWorkspaceTools: [MC_TOOLS.VIEW, MC_TOOLS.SEARCH_CONTENT, MC_TOOLS.FIND_FILES],
 };

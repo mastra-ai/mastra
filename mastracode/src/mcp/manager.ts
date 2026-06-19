@@ -242,16 +242,17 @@ export function createMcpManager(
 
     try {
       const { toolsets, errors } = await client.listToolsetsWithErrors();
+      const typedToolsets = toolsets as Record<string, Record<string, any>>;
 
       // Flatten toolsets into the namespaced tools map (serverName_toolName)
-      for (const [serverName, serverTools] of Object.entries(toolsets)) {
+      for (const [serverName, serverTools] of Object.entries(typedToolsets)) {
         for (const [toolName, toolConfig] of Object.entries(serverTools)) {
           tools[`${serverName}_${toolName}`] = toolConfig;
         }
       }
 
       for (const name of serverNames) {
-        const serverTools = toolsets[name];
+        const serverTools = typedToolsets[name];
         if (serverTools && Object.keys(serverTools).length > 0) {
           const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
           serverStatuses.set(name, {

@@ -1,9 +1,10 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { NotificationSummaryComponent } from '../components/notification-summary.js';
 import { NotificationComponent } from '../components/notification.js';
 import { ReactiveSignalComponent } from '../components/reactive-signal.js';
@@ -30,7 +31,7 @@ function createState(): TUIState {
     pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],
     harness: {
-      getDisplayState: () => ({ isRunning: false }),
+      session: { displayState: { get: () => ({ isRunning: false }) } },
     },
   } as unknown as TUIState;
 }
@@ -330,10 +331,11 @@ describe('addUserMessage', () => {
       }),
     );
 
-    expect(state.chatContainer.children).toHaveLength(2);
+    // 3 children: TemporalGap, boundary-spacer, UserMessage
+    expect(state.chatContainer.children).toHaveLength(3);
     expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
-    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[1]);
+    expect(state.chatContainer.children[2]).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[2]);
   });
 
   it('renders a legacy persisted temporal-gap marker from whole-message XML', () => {
@@ -371,6 +373,47 @@ describe('addUserMessage', () => {
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(rendered).toContain('Goal');
     expect(rendered).toContain('Continue & handle <tags>');
+  });
+
+  it('renders persisted goal-judge evaluations as judge display components', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createReminderMessage(
+        {
+          type: 'system_reminder',
+          reminderType: 'goal-judge',
+          message: '[Goal attempt 2/20] The goal is not yet complete. Judge feedback: Need another fact.',
+          goalEvaluation: {
+            objective: 'List whale facts',
+            iteration: 2,
+            maxRuns: 20,
+            passed: false,
+            status: 'active',
+            results: [],
+            reason: 'Need another fact.',
+            duration: 0,
+            timedOut: false,
+            maxRunsReached: false,
+            suppressFeedback: false,
+          },
+        } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>,
+        'goal-judge-1',
+      ),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(JudgeDisplayComponent);
+    expect(state.allSystemReminderComponents).toHaveLength(0);
+    expect(state.messageComponentsById.get('goal-judge-1')).toBe(state.chatContainer.children[0]);
+    const rendered = (state.chatContainer.children[0] as JudgeDisplayComponent)
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('continue');
+    expect(rendered).toContain('(2/20)');
+    expect(rendered).toContain('Need another fact.');
   });
 
   it('renders canonical initial goal reminders as system reminders', () => {
@@ -526,13 +569,20 @@ describe('renderExistingMessages signals', () => {
     const state = createState();
     addPendingUserMessage(state, 'stale-signal', 'stale preview', undefined, { isInterjection: true });
 
+    state.session = {
+      ...state.session,
+      thread: {
+        listActiveMessages: vi
+          .fn()
+          .mockResolvedValue([
+            createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
+          ]),
+      },
+    } as unknown as TUIState['session'];
     state.harness = {
-      listMessages: vi
-        .fn()
-        .mockResolvedValue([
-          createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
-        ]),
-      getDisplayState: () => ({ isRunning: false }),
+      session: {
+        displayState: { get: () => ({ isRunning: false }) },
+      },
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -580,10 +630,15 @@ describe('renderExistingMessages subagents', () => {
     };
     const state = createState();
     state.quietMode = true;
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue([message]),
-      getDisplayState: () => ({ isRunning: false }),
-      getFullModelId: () => 'openai/gpt-5.5',
+      session: {
+        displayState: { get: () => ({ isRunning: false }) },
+        model: { get: () => 'openai/gpt-5.5' },
+      },
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);

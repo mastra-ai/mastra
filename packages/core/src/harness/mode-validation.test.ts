@@ -59,4 +59,14 @@ describe('Harness mode validation', () => {
         }),
     ).toThrow('Mode "plan" transitionsTo references unknown mode "build"');
   });
+
+  it('rejects modes that transition to themselves', () => {
+    expect(
+      () =>
+        new Harness({
+          id: 'test-harness',
+          modes: [{ id: 'plan', defaultModelId: 'test/plan-model', transitionsTo: 'plan' }],
+        }),
+    ).toThrow('Mode "plan" transitionsTo cannot reference itself');
+  });
 });

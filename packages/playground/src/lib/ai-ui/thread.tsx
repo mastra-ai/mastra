@@ -2,10 +2,10 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { Avatar, Button, ButtonsGroup, cn, PendingIndicator, ScrollArea, useAutoscroll } from '@mastra/playground-ui';
 import type { MessageFactoryPart } from '@mastra/react';
 import { CLIENT_MESSAGE_ID_KEY, useSpeechRecognition } from '@mastra/react';
-import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
+import { ArrowUp, Mic } from 'lucide-react';
 import { startTransition, useEffect, useRef, useState } from 'react';
 
-import { AttachFileDialog } from './attachments/attach-file-dialog';
+import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
@@ -19,7 +19,6 @@ import { ComposerModelSettings } from '@/domains/agents/components/composer-mode
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
-import { Link } from '@/lib/link';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
@@ -68,12 +67,20 @@ export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   threadId?: string;
-  hasMemory?: boolean;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
+  /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
+  runOptionsSlot?: React.ReactNode;
 }
 
-export const Thread = ({ agentName, agentId, threadId, hasModelList, hideModelSwitcher }: ThreadProps) => {
+export const Thread = ({
+  agentName,
+  agentId,
+  threadId,
+  hasModelList,
+  hideModelSwitcher,
+  runOptionsSlot,
+}: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
@@ -83,8 +90,8 @@ export const Thread = ({ agentName, agentId, threadId, hasModelList, hideModelSw
   const { requestContext } = usePlaygroundStore();
   const { isSpeaking, readAloud, stop: stopSpeaking } = useReadAloud(agentId, requestContext);
 
-  const { hasSession, viewMode, isInSidebar } = useBrowserSession();
-  const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded') && !isInSidebar;
+  const { hasSession, viewMode } = useBrowserSession();
+  const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded');
 
   const isEmpty = messages.length === 0;
   const lastMessage = messages[messages.length - 1];
@@ -139,10 +146,10 @@ export const Thread = ({ agentName, agentId, threadId, hasModelList, hideModelSw
         )}
 
         <Composer
-          threadId={threadId}
           agentId={agentId}
           hasModelList={hasModelList}
           hideModelSwitcher={hideModelSwitcher}
+          runOptionsSlot={runOptionsSlot}
         />
       </div>
     </ComposerAttachmentsProvider>
@@ -163,13 +170,13 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 };
 
 interface ComposerProps {
-  threadId?: string;
   agentId?: string;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
+  runOptionsSlot?: React.ReactNode;
 }
 
-const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: ComposerProps) => {
+const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
@@ -195,7 +202,9 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
   };
 
   return (
-    <div className="relative px-2 pb-2">
+    // Named so the chat/settings view transition can slide the composer toward
+    // the bottom edge independently of the root crossfade.
+    <div className="relative px-2 pb-2" style={{ viewTransitionName: 'agent-chat-composer' }}>
       <form
         onSubmit={e => {
           e.preventDefault();
@@ -246,7 +255,7 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
             <ComposerActionRow
               canExecute={canExecuteAgent}
               agentId={agentId}
-              threadId={threadId}
+              runOptionsSlot={runOptionsSlot}
               showModelSwitcher={Boolean(agentId && !hasModelList && !hideModelSwitcher)}
               isEmpty={isEmpty}
               isRunning={isRunning}
@@ -256,7 +265,6 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
                 setText(value);
                 setThreadInput?.(value);
               }}
-              hasMessages={!isEmpty || threadId !== undefined}
             />
           </div>
         </div>
@@ -314,79 +322,56 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
 interface ComposerActionRowProps {
   canExecute?: boolean;
   agentId?: string;
-  threadId?: string;
   showModelSwitcher?: boolean;
+  runOptionsSlot?: React.ReactNode;
   isEmpty: boolean;
   isRunning: boolean;
   canSendWhileStreaming: boolean;
   onCancel: () => void;
   onSetText: (text: string) => void;
-  hasMessages: boolean;
 }
 
 const ComposerActionRow = ({
   canExecute = true,
   agentId,
-  threadId,
   showModelSwitcher,
+  runOptionsSlot,
   isEmpty,
   isRunning,
   canSendWhileStreaming,
   onCancel,
   onSetText,
-  hasMessages,
 }: ComposerActionRowProps) => {
-  const [isAddAttachmentDialogOpen, setIsAddAttachmentDialogOpen] = useState(false);
-
   return (
-    <>
-      <div className="flex flex-wrap-reverse justify-between items-center gap-2 px-1.5 pb-1.5">
-        {showModelSwitcher && agentId && (
-          <div className="flex items-center gap-1.5 shrink-0 max-w-full">
-            <div className="rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
-              <ComposerModelSwitcher agentId={agentId} />
-            </div>
-            <ComposerModelSettings agentId={agentId} />
-          </div>
-        )}
-
-        {threadId && hasMessages && (
-          <Button
-            as={Link}
-            variant="default"
-            tooltip="View thread traces"
-            href={`/observability?filterThreadId=${encodeURIComponent(threadId)}`}
-          >
-            <EyeIcon className="h-5 w-5 text-neutral3 hover:text-neutral6" /> Traces
-          </Button>
-        )}
-
-        <div className="flex shrink-0 items-center gap-1.5">
-          <ButtonsGroup spacing="close">
-            {canExecute && (
-              <Button
-                variant="default"
-                size="icon-md"
-                type="button"
-                tooltip="Add attachment"
-                onClick={() => setIsAddAttachmentDialogOpen(true)}
-              >
-                <PlusIcon className="h-5 w-5 text-neutral3 hover:text-neutral6" />
-              </Button>
-            )}
-            {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
-          </ButtonsGroup>
-          <ComposerSendButton
-            canExecute={canExecute}
-            isEmpty={isEmpty}
-            isRunning={isRunning}
-            canSendWhileStreaming={canSendWhileStreaming}
-            onCancel={onCancel}
-          />
+    <div className="flex flex-wrap-reverse justify-between items-center gap-2 px-1.5 pb-1.5">
+      {((showModelSwitcher && agentId) || runOptionsSlot) && (
+        <div className="flex items-center gap-1.5 shrink-0 max-w-full">
+          {showModelSwitcher && agentId && (
+            <>
+              <div className="rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
+                <ComposerModelSwitcher agentId={agentId} />
+              </div>
+              <ComposerModelSettings agentId={agentId} />
+            </>
+          )}
+          {runOptionsSlot}
         </div>
+      )}
+
+      <div className="flex shrink-0 items-center gap-1.5">
+        <ButtonsGroup spacing="close">
+          {canExecute && <AttachFilePopover />}
+          {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
+        </ButtonsGroup>
+        <ComposerSendButton
+          canExecute={canExecute}
+          isEmpty={isEmpty}
+          isRunning={isRunning}
+          canSendWhileStreaming={canSendWhileStreaming}
+          onCancel={onCancel}
+        />
       </div>
-      <AttachFileDialog open={isAddAttachmentDialogOpen} onOpenChange={setIsAddAttachmentDialogOpen} />
-    </>
+    </div>
   );
 };
 

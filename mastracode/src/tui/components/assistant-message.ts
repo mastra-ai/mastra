@@ -4,8 +4,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { Container, Markdown, Spacer, Text } from '@mariozechner/pi-tui';
-import type { MarkdownTheme } from '@mariozechner/pi-tui';
+import { Container, Markdown, Spacer, Text } from '@earendil-works/pi-tui';
+import type { MarkdownTheme } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { CHAT_INDENT, getMarkdownTheme, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';

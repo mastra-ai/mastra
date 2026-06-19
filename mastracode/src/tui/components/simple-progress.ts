@@ -3,7 +3,7 @@
  * Shows a compact progress display with spinner and status text.
  */
 
-import { Container, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import { theme } from '../theme.js';
 
 export interface SimpleProgressOptions {

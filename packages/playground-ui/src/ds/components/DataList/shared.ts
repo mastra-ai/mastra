@@ -23,11 +23,36 @@ export const dataListRowStyles = ['mx-1', ...dataListRowInteractiveStyles, ...da
 
 export const dataListRowStaticStyles = ['mx-1 grid grid-cols-subgrid gap-8 px-5', ...dataListRowOuterStyles] as const;
 
+import { cva } from 'class-variance-authority';
+
+/** Tone for a single row. `error` lays a subtle, theme-aware destructive tint
+ *  over whatever background the row already has. */
+export type DataListRowVariant = 'default' | 'error';
+
+/**
+ * Per-row tone. Kept as a `.ts` cva (safe to export — no react-refresh concern).
+ * The error tint uses `!` so it wins over borderless table root-level styling
+ * (higher-specificity descendant rules) and over the base row hover.
+ */
+export const dataListRowVariants = cva('', {
+  variants: {
+    variant: {
+      default: '',
+      error: 'bg-notice-destructive/10! hover:bg-notice-destructive/15!',
+    },
+  },
+  defaultVariants: {
+    variant: 'default',
+  },
+});
+
 /**
  * Layout/state modifiers shared by interactive row primitives
  * (`DataList.RowButton`, `DataList.RowLink`).
  */
 export type DataListRowSharedProps = {
+  /** Row tone — `error` applies a subtle destructive background tint. */
+  variant?: DataListRowVariant;
   /**
    * Drop the row's default left margin. Use when the row is wrapped in a
    * `DataList.RowWrapper` that owns the leading inset (e.g. for selection rows where

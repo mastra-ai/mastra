@@ -53,6 +53,7 @@ import type {
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -237,6 +238,8 @@ async function executeToolCallAndRespond<OUTPUT>({
           },
         });
 
+        const modelOutput = await getClientToolModelOutput(clientTool, result);
+
         // Build the tool-result content block. If we have observability
         // data (carrier + buffered spans/logs), attach it directly on
         // the result so it travels with the specific tool call it
@@ -246,6 +249,9 @@ async function executeToolCallAndRespond<OUTPUT>({
           toolCallId: toolCall.payload.toolCallId,
           toolName: toolCall.payload.toolName,
           result,
+          // Carry the client-side toModelOutput result so the server uses it
+          // when building the model prompt, while result keeps the raw value.
+          ...(modelOutput != null ? { providerOptions: { mastra: { modelOutput } } } : {}),
         };
 
         if (observability) {
@@ -715,6 +721,7 @@ export class Agent extends BaseResource {
             if (!clientTool || typeof clientTool.execute !== 'function') continue;
 
             let result: unknown;
+            let modelOutput: unknown;
             let observability: ClientToolObservabilityEnvelope | undefined;
             try {
               const execution = await executeClientToolWithObservability({
@@ -737,8 +744,16 @@ export class Agent extends BaseResource {
               });
               result = execution.result;
               observability = execution.observability;
+              try {
+                modelOutput = await getClientToolModelOutput(clientTool, result);
+              } catch {
+                // A failing toModelOutput shouldn't discard a successful tool
+                // execution; continue with the raw result only.
+                modelOutput = undefined;
+              }
             } catch (error) {
               result = { error: String(error) };
+              modelOutput = undefined;
             }
 
             const toolResultContent = {
@@ -770,6 +785,11 @@ export class Agent extends BaseResource {
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
               output: { type: 'json', value: result as JSONValue },
+              // Carry the client-side toModelOutput result so the server uses it
+              // when building the model prompt, while output keeps the raw result.
+              ...(modelOutput != null
+                ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
+                : {}),
               ...(observability ? { __mastraObservability: observability } : {}),
             } satisfies AIV5Type.ToolResultPart & { __mastraObservability?: ClientToolObservabilityEnvelope };
 
@@ -2115,6 +2135,7 @@ export class Agent extends BaseResource {
                 // a terminal chunk for client-executed tools.
                 const runId: string = streamRunId ?? toolCall.toolCallId;
                 let result: unknown;
+                let modelOutput: unknown;
                 let observability: ClientToolObservabilityEnvelope | undefined;
                 let synthetic:
                   | {
@@ -2161,6 +2182,8 @@ export class Agent extends BaseResource {
                       },
                     },
                   }));
+
+                  modelOutput = await getClientToolModelOutput(clientTool, result);
 
                   synthetic = {
                     type: 'tool-result',
@@ -2238,6 +2261,22 @@ export class Agent extends BaseResource {
                     result,
                     ...(observability ? { __mastraObservability: observability } : {}),
                   };
+                  if (modelOutput != null) {
+                    // Carry the client-side toModelOutput result so the server
+                    // uses it when building the model prompt; part-level
+                    // providerMetadata survives UI message ingestion. Merge
+                    // into any existing mastra metadata instead of replacing it.
+                    const partWithMetadata = toolInvocationPart as { providerMetadata?: Record<string, unknown> };
+                    const existingMastra =
+                      partWithMetadata.providerMetadata?.mastra != null &&
+                      typeof partWithMetadata.providerMetadata.mastra === 'object'
+                        ? (partWithMetadata.providerMetadata.mastra as Record<string, unknown>)
+                        : {};
+                    partWithMetadata.providerMetadata = {
+                      ...partWithMetadata.providerMetadata,
+                      mastra: { ...existingMastra, modelOutput },
+                    };
+                  }
                 }
 
                 const toolInvocation = lastMessage?.toolInvocations?.find(
