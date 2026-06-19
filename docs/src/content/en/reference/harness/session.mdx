@@ -324,7 +324,10 @@ Switch the active model. When `scope` is `'thread'` (the default), the model ID 
 
 ```typescript
 // Set for the current session only
-await harness.session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__', scope: 'global' })
+await harness.session.model.switch({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  scope: 'global',
+})
 
 // Persist to the current thread (default)
 await harness.session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
