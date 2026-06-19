@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DataList } from './data-list';
+
+beforeAll(() => {
+  if (typeof window.PointerEvent === 'undefined') {
+    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+  }
+});
 
 afterEach(() => {
   cleanup();
@@ -191,6 +197,33 @@ describe('DataListRoot', () => {
       const cell = container.querySelector<HTMLElement>('.data-list-top > *');
       expect(cell?.querySelector('span.truncate')).toBeNull();
       expect(cell?.querySelector('[data-testid="icon"]')).not.toBeNull();
+    });
+  });
+
+  describe('selection header layout', () => {
+    it('keeps grouped header cells from covering the select-all checkbox', () => {
+      const onToggle = vi.fn();
+      const { container } = render(
+        <DataList columns="auto 1fr 1fr">
+          <DataList.Top hasLeadingCell>
+            <DataList.TopSelectCell checked={false} onToggle={onToggle} aria-label="Select all" />
+            <DataList.TopCells colStart={2} data-testid="header-cells">
+              <DataList.TopCell>Name</DataList.TopCell>
+              <DataList.TopCell>Description</DataList.TopCell>
+            </DataList.TopCells>
+          </DataList.Top>
+        </DataList>,
+      );
+
+      const headerCells = container.querySelector<HTMLElement>('[data-testid="header-cells"]');
+      expect(headerCells?.style.gridColumn).toBe('2 / -1');
+      expect(headerCells?.className).toContain('pointer-events-none');
+      expect(headerCells?.className).toContain('[&>*]:pointer-events-auto');
+      expect(headerCells?.className).not.toContain('col-span-full');
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }));
+
+      expect(onToggle).toHaveBeenCalledTimes(1);
     });
   });
 
