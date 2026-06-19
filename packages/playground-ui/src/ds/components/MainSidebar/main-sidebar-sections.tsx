@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { useId } from 'react';
 import { MainSidebarNavHeader } from './main-sidebar-nav-header';
 import { MainSidebarNavLink } from './main-sidebar-nav-link';
@@ -19,29 +18,46 @@ export type MainSidebarSectionsProps = {
   className?: string;
 };
 
+type MainSidebarSectionLinkProps = {
+  link: NavLink;
+  siblings: NavLink[];
+  level?: number;
+  isActive?: MainSidebarSectionsProps['isActive'];
+};
+
+function getLinkKey(link: NavLink) {
+  return `${link.url}:${link.name}`;
+}
+
+function MainSidebarSectionLink({ link, siblings, level = 0, isActive }: MainSidebarSectionLinkProps) {
+  const childLinks = link.children ?? [];
+
+  return (
+    <MainSidebarNavLink
+      link={link}
+      isActive={isActive?.(link, siblings) ?? link.isActive}
+      level={level}
+      subItems={
+        childLinks.length > 0 ? (
+          <MainSidebarNavList className="mt-0.5">
+            {childLinks.map(child => (
+              <MainSidebarSectionLink
+                key={getLinkKey(child)}
+                link={child}
+                siblings={childLinks}
+                level={level + 1}
+                isActive={isActive}
+              />
+            ))}
+          </MainSidebarNavList>
+        ) : null
+      }
+    />
+  );
+}
+
 export function MainSidebarSections({ sections, isActive, className }: MainSidebarSectionsProps) {
   const baseId = useId();
-
-  const renderLink = (link: NavLink, siblings: NavLink[], level = 0): ReactNode => {
-    const childLinks = link.children ?? [];
-    const linkKey = `${link.url}:${link.name}`;
-
-    return (
-      <MainSidebarNavLink
-        key={linkKey}
-        link={link}
-        isActive={isActive?.(link, siblings) ?? link.isActive}
-        level={level}
-        subItems={
-          childLinks.length > 0 ? (
-            <MainSidebarNavList className="mt-0.5">
-              {childLinks.map(child => renderLink(child, childLinks, level + 1))}
-            </MainSidebarNavList>
-          ) : null
-        }
-      />
-    );
-  };
 
   return (
     <>
@@ -63,7 +79,16 @@ export function MainSidebarSections({ sections, isActive, className }: MainSideb
                 {section.title}
               </MainSidebarNavHeader>
             ) : null}
-            <MainSidebarNavList>{section.links.map(link => renderLink(link, section.links))}</MainSidebarNavList>
+            <MainSidebarNavList>
+              {section.links.map(link => (
+                <MainSidebarSectionLink
+                  key={getLinkKey(link)}
+                  link={link}
+                  siblings={section.links}
+                  isActive={isActive}
+                />
+              ))}
+            </MainSidebarNavList>
           </MainSidebarNavSection>
         );
       })}
