@@ -4,7 +4,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowDebugStepControls } from '../workflow-debug-step-controls';
-import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
+import {
+  branchWorkflow,
+  nestedWorkflow,
+  parallelWorkflow,
+  twoStepWorkflow,
+} from './fixtures/workflow-debug-step-controls';
 
 afterEach(() => cleanup());
 
@@ -62,7 +67,7 @@ describe('WorkflowDebugStepControls', () => {
     expect(screen.getByRole('button', { name: /continue full run/i })).not.toBeNull();
   });
 
-  it('runs the resolved next step with perStep semantics when clicking Run next step', () => {
+  it('finishes the run when Run next step targets the last step so the end output is shown', () => {
     const timeTravelWorkflowStream = vi.fn().mockResolvedValue(undefined);
     renderControls(buildContext({ timeTravelWorkflowStream }));
 
@@ -74,7 +79,9 @@ describe('WorkflowDebugStepControls', () => {
     expect(payload.runId).toBe('run-1');
     expect(payload.workflowId).toBe('two-step-workflow');
     expect(payload.inputData).toEqual({ customerId: 'cus_123' });
-    expect(payload.perStep).toBeUndefined();
+    // transform is the last step, so the run must finish (per-step disabled) rather than
+    // pause again, otherwise the user never sees the workflow's end output.
+    expect(payload.perStep).toBe(false);
   });
 
   it('continues the full run and disables debug mode when clicking Continue full run', () => {
@@ -115,6 +122,143 @@ describe('WorkflowDebugStepControls', () => {
 
     const button = screen.getByRole('button', { name: /run next step/i }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
+  });
+
+  it('skips the un-taken branch arm and targets the post-branch map step', () => {
+    // start + short-text succeeded; long-text was never taken (absent from steps).
+    // The next runnable step must be the post-branch map join, not the dead arm.
+    const branchResult = {
+      status: 'paused',
+      input: { text: 'A' },
+      steps: {
+        start: {
+          status: 'success',
+          payload: { text: 'A' },
+          output: { text: 'A' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+        'short-text': {
+          status: 'success',
+          payload: { text: 'A' },
+          output: { text: 'AS' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+      },
+    } as ContextValue['result'];
+
+    const timeTravelWorkflowStream = vi.fn().mockResolvedValue(undefined);
+    renderControls(
+      buildContext({
+        workflowId: 'branch-workflow',
+        workflow: branchWorkflow,
+        result: branchResult,
+        timeTravelWorkflowStream,
+      }),
+    );
+
+    const button = screen.getByRole('button', { name: /run next step/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    fireEvent.click(button);
+
+    expect(timeTravelWorkflowStream).toHaveBeenCalledTimes(1);
+    const payload = timeTravelWorkflowStream.mock.calls[0][0];
+    expect(payload.step).toBe('mapping_join');
+    // Only the taken arm's output is forwarded as the join context.
+    expect(payload.context).toEqual({ 'short-text': { output: { text: 'AS' } } });
+    expect(payload.perStep).toBeUndefined();
+  });
+
+  it('advances to a still-idle parallel sibling instead of skipping it as a bypassed arm', () => {
+    // start + add-letter-b succeeded; add-letter-c is still idle. Both arms share the
+    // mapping_join successor, but parallel arms must each run, so the next runnable step
+    // must be add-letter-c, NOT the join (which would strand the idle arm forever).
+    const parallelResult = {
+      status: 'paused',
+      input: { letter: 'A' },
+      steps: {
+        start: {
+          status: 'success',
+          payload: { letter: 'A' },
+          output: { letter: 'A' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+        'add-letter-b': {
+          status: 'success',
+          payload: { letter: 'A' },
+          output: { letter: 'AB' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+      },
+    } as ContextValue['result'];
+
+    const timeTravelWorkflowStream = vi.fn().mockResolvedValue(undefined);
+    renderControls(
+      buildContext({
+        workflowId: 'parallel-workflow',
+        workflow: parallelWorkflow,
+        result: parallelResult,
+        timeTravelWorkflowStream,
+      }),
+    );
+
+    const button = screen.getByRole('button', { name: /run next step/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    fireEvent.click(button);
+
+    expect(timeTravelWorkflowStream).toHaveBeenCalledTimes(1);
+    const payload = timeTravelWorkflowStream.mock.calls[0][0];
+    expect(payload.step).toBe('add-letter-c');
+    expect(payload.perStep).toBeUndefined();
+  });
+
+  it('runs a nested workflow step atomically (perStep disabled) without leaving debug mode', () => {
+    // start succeeded; nested-text-processor is the next runnable step. A nested workflow is
+    // atomic from the parent's perspective, so "Run next step" must run it to completion by
+    // disabling per-step for this single advance, while keeping debug mode on.
+    const nestedResult = {
+      status: 'paused',
+      input: { text: 'A' },
+      steps: {
+        start: {
+          status: 'success',
+          payload: { text: 'A' },
+          output: { text: 'A' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+      },
+    } as ContextValue['result'];
+
+    const timeTravelWorkflowStream = vi.fn().mockResolvedValue(undefined);
+    const setDebugMode = vi.fn();
+    renderControls(
+      buildContext({
+        workflowId: 'nested-workflow',
+        workflow: nestedWorkflow,
+        result: nestedResult,
+        timeTravelWorkflowStream,
+        setDebugMode,
+      }),
+    );
+
+    const button = screen.getByRole('button', { name: /run next step/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    fireEvent.click(button);
+
+    expect(timeTravelWorkflowStream).toHaveBeenCalledTimes(1);
+    const payload = timeTravelWorkflowStream.mock.calls[0][0];
+    expect(payload.step).toBe('nested-text-processor');
+    // Atomic: per-step disabled for this advance so the nested run completes...
+    expect(payload.perStep).toBe(false);
+    // ...but debug mode stays on for subsequent top-level steps.
+    expect(setDebugMode).not.toHaveBeenCalled();
   });
 
   it('disables both buttons while streaming', () => {

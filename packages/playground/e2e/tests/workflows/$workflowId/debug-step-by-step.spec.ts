@@ -84,16 +84,21 @@ test('runs complexWorkflow one step at a time in debug mode until it finishes', 
   await runNextStep(page);
   await expectStepSuccess(page, 8);
 
-  // Step 9: nested-text-processor
-  await runNextStep(page);
-  await expectStepSuccess(page, 9);
+  // Step 9: nested-text-processor.
+  // A nested workflow can't be paused inside per-step mode without core support, so we
+  // run it atomically. This single advance completes the nested workflow AND any following
+  // top-level steps (the doUntil body) until the run reaches the next natural pause boundary
+  // — the suspend/resume step. We therefore expect the nested step, step 10, and the suspend
+  // all to settle from one click here.
+  const button = runNextStepButton(page);
+  await expect(button).toBeEnabled({ timeout: 20000 });
+  await button.click();
 
-  // Step 10: add-letter-with-count (doUntil body)
-  await runNextStep(page);
+  // The atomic advance runs through the nested workflow and the doUntil body...
+  await expectStepSuccess(page, 9);
   await expectStepSuccess(page, 10);
 
-  // Step 12: suspend-resume — advancing here suspends the run for user input.
-  await runNextStep(page);
+  // ...and stops at suspend-resume, which suspends the run for user input.
   await expect(nodes(page).nth(12)).toHaveAttribute('data-workflow-step-status', 'suspended', { timeout: 20000 });
 
   // Resume the suspended step to continue the per-step run.
@@ -102,8 +107,12 @@ test('runs complexWorkflow one step at a time in debug mode until it finishes', 
   await suspendedSteps.getByRole('button', { name: 'Resume' }).click();
   await expectStepSuccess(page, 12);
 
-  // Step 13: final-step — the very end.
-  await runNextStep(page);
+  // Step 13: final-step — the very end. This is the last step, so advancing it FINISHES the
+  // whole run (rather than pausing again) so the user can see the run's end output. We click
+  // once and assert the final step succeeds.
+  const finalButton = runNextStepButton(page);
+  await expect(finalButton).toBeEnabled({ timeout: 20000 });
+  await finalButton.click();
   await expectStepSuccess(page, 13);
 
   // ASSERT: the run finished end-to-end. The final step output carries the "-ENDED" suffix.
