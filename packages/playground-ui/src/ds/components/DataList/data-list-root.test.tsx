@@ -258,10 +258,14 @@ describe('DataListRoot', () => {
       expect(topCell?.className).toContain('sticky');
       expect(topCell?.className).toContain('left-0');
       expect(topCell?.className).toContain('z-20');
+      expect(topCell?.className).toContain('isolate');
+      expect(topCell?.className).toContain('bg-[var(--data-list-sticky-header-background)]');
       expect(topCell?.className).not.toContain('bg-surface2');
       expect(rowHeaderCell?.className).toContain('data-list-sticky-start');
       expect(rowHeaderCell?.className).toContain('w-full');
       expect(rowHeaderCell?.className).toContain('self-stretch');
+      expect(rowHeaderCell?.className).toContain('isolate');
+      expect(rowHeaderCell?.className).toContain('bg-[var(--data-list-sticky-header-background)]');
       expect(rowHeaderCell?.className).toContain('text-neutral2');
       expect(rowHeaderCell?.className).toContain('font-semibold');
       expect(rowHeaderCell?.className).toContain('tracking-tight');
