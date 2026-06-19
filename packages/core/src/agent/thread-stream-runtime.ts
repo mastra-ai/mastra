@@ -692,6 +692,8 @@ export class AgentThreadStreamRuntime {
       preparedRun.abortController.abort();
       preparedRun.cleanup();
     });
+    state.leaseRenewalTimers.forEach(timer => clearInterval(timer));
+    state.leaseRenewalTimers.clear();
     state.threadRunsById.clear();
     state.threadRunsByStreamId.clear();
     state.threadKeysByRunId.clear();
