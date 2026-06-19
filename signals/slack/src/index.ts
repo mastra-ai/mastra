@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Agent } from '@mastra/core/agent';
 import type { AgentSignalInput } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { StorageThreadType } from '@mastra/core/memory';
 import type { InputProcessorOrWorkflow, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core/processors';
-import { SignalProvider, type SignalSubscription } from '@mastra/core/signals';
+import { SignalProvider } from '@mastra/core/signals';
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
@@ -515,16 +514,6 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   readonly #include: Required<SlackSignalsIncludeConfig>;
   readonly #filters: NormalizedSlackSignalsFilterConfig;
   readonly #syncClient: SlackSignalsSyncClient;
-  #pollingChangedHandler?: (event: { threadId: string; resourceId: string; running: boolean }) => void;
-  readonly #pollingThreads = new Map<string, boolean>();
-
-  onPollingChanged(handler: (event: { threadId: string; resourceId: string; running: boolean }) => void): void {
-    this.#pollingChangedHandler = handler;
-  }
-
-  isPollingThread(input: SlackPollingThread): boolean {
-    return this.#pollingThreads.get(`${input.resourceId}:${input.threadId}`) ?? false;
-  }
 
   constructor(options: SlackSignalsProviderConfig) {
     super();
@@ -543,54 +532,8 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     return getSlackConversationTypes(this.#include);
   }
 
-  override connect(agent: Agent<any, any, any, any>): void {
-    super.connect(agent);
-    // Restore subscriptions from persisted thread metadata so that
-    // startPolling() (called after connect) has subscriptions to poll.
-    // The in-memory registry is empty on restart — only thread metadata
-    // was persisted by #subscribe(). Fire-and-forget: the first poll
-    // won't happen until pollInterval ms later, giving plenty of time.
-    void this.#restoreSubscriptions();
-  }
-
-  async #restoreSubscriptions(): Promise<void> {
-    try {
-      const threadStore = await this.#resolveThreadStore();
-      if (threadStore && typeof (threadStore as unknown as { listThreads?: unknown }).listThreads === 'function') {
-        const result = await (threadStore as unknown as { listThreads: (args: { perPage: number | false }) => Promise<{ threads: StorageThreadType[] }> }).listThreads({ perPage: false });
-        for (const thread of result.threads) {
-          const metadata = getSlackSignalsMetadata(thread.metadata);
-          const subscription = metadata.subscription;
-          if (subscription) {
-            this.subscribe(
-              { threadId: thread.id, resourceId: thread.resourceId! },
-              getWorkspaceExternalResourceId(subscription.workspaceId),
-              { workspaceId: subscription.workspaceId, ...(subscription.workspaceName ? { workspaceName: subscription.workspaceName } : {}) },
-            );
-          }
-        }
-      }
-    } catch {
-      // Best-effort restoration — don't block on storage errors
-    }
-  }
-
   get token(): string {
     return this.#options.token;
-  }
-
-  async poll(subscriptions: SignalSubscription[]): Promise<void> {
-    const seen = new Set<string>();
-    for (const subscription of subscriptions) {
-      const key = `${subscription.resourceId}:${subscription.threadId}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      await this.#pollThread({ threadId: subscription.threadId, resourceId: subscription.resourceId });
-    }
-  }
-
-  async pollThreadNow(input: SlackPollingThread): Promise<SlackPollResult> {
-    return this.#pollThread(input);
   }
 
   getInputProcessors(): InputProcessorOrWorkflow[] {
@@ -637,19 +580,7 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     return this.#unsubscribe({ id: `slack-command-unsubscribe-${randomUUID()}`, ...input });
   }
 
-  async #pollThread(input: SlackPollingThread): Promise<SlackPollResult> {
-    const key = `${input.resourceId}:${input.threadId}`;
-    this.#pollingThreads.set(key, true);
-    this.#pollingChangedHandler?.({ ...input, running: true });
-    try {
-      return await this.#doPollThread(input);
-    } finally {
-      this.#pollingThreads.set(key, false);
-      this.#pollingChangedHandler?.({ ...input, running: false });
-    }
-  }
-
-  async #doPollThread(input: SlackPollingThread): Promise<SlackPollResult> {
+  async pollThread(input: SlackPollingThread): Promise<SlackPollResult> {
     const { threadStore, loadedThread } = await this.#loadThread(input);
     const slackMetadata = getSlackSignalsMetadata(loadedThread.metadata);
     const subscription = slackMetadata.subscription;

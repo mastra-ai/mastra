@@ -345,11 +345,12 @@ describe('SlackSignalsProvider', () => {
     expect(getSavedSlackMetadata(threadStore).subscription).toBeUndefined();
   });
 
-  it('does no sync work when no subscriptions are passed to poll', async () => {
+  it('does no sync work when thread has no subscription', async () => {
+    const thread = createThread();
     const syncClient = createSyncClient();
-    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore: createThreadStore(createThread()), syncClient });
+    const provider = new SlackSignalsProvider({ token: 'xoxp-test', threadStore: createThreadStore(thread), syncClient });
 
-    await provider.poll([]);
+    await provider.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
 
     expect(syncClient.listConversations).not.toHaveBeenCalled();
     expect(syncClient.listMessages).not.toHaveBeenCalled();

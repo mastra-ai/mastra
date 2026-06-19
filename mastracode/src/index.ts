@@ -764,6 +764,32 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     void startGithubPollingForCurrentThread(harness.session.thread.getId());
   }
 
+  if (slackSignals) {
+    const startSlackPollingForCurrentThread = async (threadId?: string | null) => {
+      if (!threadId) return;
+      slackSignals.stopAllPolling();
+      try {
+        const threads = await harness.session.thread.list({ allResources: true });
+        const thread = threads.find((item: { id: string }) => item.id === threadId);
+        await slackSignals.startPollingForThread(
+          {
+            threadId,
+            resourceId: thread?.resourceId ?? harness.session.identity.getResourceId(),
+          },
+          { pollImmediately: true },
+        );
+      } catch (error) {
+        console.warn('Failed to start Slack polling:', error);
+      }
+    };
+
+    harness.subscribe((event: HarnessEvent) => {
+      if (event.type === 'thread_changed') void startSlackPollingForCurrentThread(event.threadId);
+      else if (event.type === 'thread_created') void startSlackPollingForCurrentThread(event.thread.id);
+    });
+    void startSlackPollingForCurrentThread(harness.session.thread.getId());
+  }
+
   // Persist MastraCode-owned /om settings per-thread (mastracode-only concern;
   // intentionally not in core's harness loadThreadMetadata).
   const omThreadStateHarness = harness as unknown as Harness<Record<string, unknown>>;
