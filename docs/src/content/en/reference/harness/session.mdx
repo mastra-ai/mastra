@@ -341,6 +341,45 @@ await harness.session.model.switch({
 await harness.session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 ```
 
+## Observational Memory
+
+The observational-memory model selection, grouped by role under `session.om.observer` and `session.om.reflector`. Both roles expose the same methods. Reads return the value from session state when set, falling back to the harness's `omConfig` defaults.
+
+### `session.om.observer.modelId()` / `session.om.reflector.modelId()`
+
+Return the role's model ID, or `undefined` when neither session state nor `omConfig` provides one.
+
+```typescript
+const observer = harness.session.om.observer.modelId()
+const reflector = harness.session.om.reflector.modelId()
+```
+
+### `session.om.observer.threshold()` / `session.om.reflector.threshold()`
+
+Return the role's threshold in tokens (observation threshold for the observer, reflection threshold for the reflector), or `undefined` when unset.
+
+```typescript
+const observationThreshold = harness.session.om.observer.threshold()
+const reflectionThreshold = harness.session.om.reflector.threshold()
+```
+
+### `session.om.observer.switchModel({ modelId })` / `session.om.reflector.switchModel({ modelId })`
+
+Switch the role's model. Persists the setting to thread metadata and emits an `om_model_changed` event.
+
+```typescript
+await harness.session.om.observer.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
+await harness.session.om.reflector.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
+```
+
+### `session.om.observer.resolvedModel()` / `session.om.reflector.resolvedModel()`
+
+Resolve the role's model ID to a model instance via the harness's `resolveModel`, or `undefined` when no model ID is set or no resolver is configured.
+
+```typescript
+const observerModel = harness.session.om.observer.resolvedModel()
+```
+
 ## Run
 
 `session.run` owns run and trace identity plus abort state for the in-flight run.

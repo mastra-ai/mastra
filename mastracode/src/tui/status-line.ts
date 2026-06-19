@@ -141,8 +141,8 @@ export function updateStatusLine(state: TUIState): void {
       ? state.activeGoalJudge?.modelId
       : showOMMode
         ? isObserving
-          ? state.harness.getObserverModelId()
-          : state.harness.getReflectorModelId()
+          ? state.harness.session.om.observer.modelId()
+          : state.harness.session.om.reflector.modelId()
         : state.harness.session.model.get()) ?? '';
   // Rewrite Fireworks AI long paths: fireworks-ai/accounts/fireworks/models/<name> → fireworks/<name>
   let fullModelId = rawModelId.startsWith('fireworks-ai/accounts/fireworks/models/')
