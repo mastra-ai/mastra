@@ -8,7 +8,7 @@ function createHarness() {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
-    model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+    model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' } as any,
   });
 
   return new Harness({
@@ -18,27 +18,41 @@ function createHarness() {
   });
 }
 
+async function processSubscribedChunks(harness: Harness, chunks: any[]) {
+  const subscription = {
+    stream: (async function* () {
+      for (const chunk of chunks) yield chunk;
+    })(),
+    activeRunId: () => 'om-run',
+    abort: () => {},
+    unsubscribe: () => {},
+  };
+
+  harness.session.stream.attach({ subscription: subscription as any, key: 'test-agent:test-resource:test-thread' });
+  await (harness as any).processSubscribedThreadStream(subscription);
+}
+
 describe('Harness OM failure abort behavior', () => {
   it('aborts stream and emits an error when OM buffering fails', async () => {
     const harness = createHarness();
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     harness.session.run.ensureAbortController();
 
-    await (harness as any).processStream({
-      fullStream: (async function* () {
-        yield {
-          type: 'data-om-buffering-failed',
-          data: {
-            cycleId: 'c1',
-            operationType: 'observation',
-            error: 'Bad Request',
-          },
-        };
-        yield { type: 'text-start', payload: { id: 't1' } };
-      })(),
-    });
+    await processSubscribedChunks(harness, [
+      {
+        type: 'data-om-buffering-failed',
+        data: {
+          cycleId: 'c1',
+          operationType: 'observation',
+          error: 'Bad Request',
+        },
+      },
+      { type: 'text-start', payload: { id: 't1' } },
+    ]);
 
     expect(events.some(e => e.type === 'om_buffering_failed')).toBe(true);
     const errorEvent = events.find(e => e.type === 'error');
@@ -55,24 +69,24 @@ describe('Harness OM failure abort behavior', () => {
   it('aborts stream and emits an error when OM observation run fails', async () => {
     const harness = createHarness();
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     harness.session.run.ensureAbortController();
 
-    await (harness as any).processStream({
-      fullStream: (async function* () {
-        yield {
-          type: 'data-om-observation-failed',
-          data: {
-            cycleId: 'c2',
-            operationType: 'reflection',
-            error: 'Model unavailable',
-            durationMs: 50,
-          },
-        };
-        yield { type: 'text-start', payload: { id: 't2' } };
-      })(),
-    });
+    await processSubscribedChunks(harness, [
+      {
+        type: 'data-om-observation-failed',
+        data: {
+          cycleId: 'c2',
+          operationType: 'reflection',
+          error: 'Model unavailable',
+          durationMs: 50,
+        },
+      },
+      { type: 'text-start', payload: { id: 't2' } },
+    ]);
 
     expect(events.some(e => e.type === 'om_reflection_failed')).toBe(true);
     const errorEvent = events.find(e => e.type === 'error');

@@ -915,6 +915,71 @@ describe('Agent signals', () => {
     }
   });
 
+  it('keeps subscriber streams open across tool-call finish boundaries until tool results arrive', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'tool-call-boundary-agent' } as Agent<any, any, any, any>;
+    const threadId = 'tool-call-boundary-thread';
+    const resourceId = 'tool-call-boundary-user';
+    const runId = 'tool-call-boundary-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    const fullStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: 'start', runId });
+        controller.enqueue({ type: 'tool-call', runId, payload: { toolCallId: 'tool-1', toolName: 'testTool' } });
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          payload: { finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        });
+        controller.enqueue({ type: 'tool-result', runId, payload: { toolCallId: 'tool-1', result: 'tool output' } });
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          payload: { finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        });
+        controller.close();
+        finish();
+      },
+    });
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for boundary start')).resolves.toMatchObject({
+        value: { type: 'start', runId },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for boundary tool call')).resolves.toMatchObject({
+        value: { type: 'tool-call', runId },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for tool-call finish')).resolves.toMatchObject({
+        value: { type: 'finish', runId, payload: expect.objectContaining({ finishReason: 'tool-calls' }) },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for live tool result')).resolves.toMatchObject({
+        value: { type: 'tool-result', runId, payload: expect.objectContaining({ toolCallId: 'tool-1' }) },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for final finish')).resolves.toMatchObject({
+        value: { type: 'finish', runId, payload: expect.objectContaining({ finishReason: 'stop' }) },
+      });
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
   it('assigns a new stream identity to same-run registrations without stale cleanup clearing the active stream', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new EventEmitterPubSub();

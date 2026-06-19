@@ -1511,16 +1511,15 @@ export class AgentThreadStreamRuntime {
                 const typedPart = part as any;
                 yield typedPart;
                 if (done) break;
-                if (
-                  typedPart.type === 'finish' ||
+                const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
+                const terminalBoundary =
                   typedPart.type === 'error' ||
                   typedPart.type === 'abort' ||
-                  typedPart.type === 'tool-call-suspended'
-                ) {
-                  // After a terminal chunk, drain remaining stream data in the
-                  // background to prevent backpressure from blocking upstream
-                  // processing (e.g. OM), while allowing the generator to
-                  // immediately serve subsequent runs.
+                  (typedPart.type === 'finish' && finishReason !== 'tool-calls');
+                if (terminalBoundary) {
+                  // After a final terminal chunk, drain any non-visible trailing
+                  // data in the background to prevent upstream backpressure while
+                  // allowing the generator to immediately serve subsequent runs.
                   readerReleased = true;
                   void (async () => {
                     try {
