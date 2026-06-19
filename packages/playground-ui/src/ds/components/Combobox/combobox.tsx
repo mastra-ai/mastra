@@ -126,18 +126,13 @@ export function Combobox(props: ComboboxProps) {
                   <BaseCombobox.Item key={option.value} value={option} className={comboboxItemClass({ multiple })}>
                     {multiple ? (
                       <>
-                        <span
-                          className={cn(
-                            comboboxStyles.checkbox,
-                            isSelected ? comboboxStyles.checkboxSelected : comboboxStyles.checkboxUnselected,
-                          )}
-                        >
-                          {isSelected && <Check className={comboboxStyles.checkboxIcon} />}
-                        </span>
-                        <span className={comboboxStyles.optionContent}>
-                          {option.start}
-                          <ComboboxOptionText option={option} />
+                        {option.start}
+                        <ComboboxOptionText option={option} />
+                        <span className={comboboxStyles.itemRightSlot}>
                           {option.end ? <div className={comboboxStyles.optionEnd}>{option.end}</div> : null}
+                          <span className={comboboxStyles.checkContainer}>
+                            {isSelected ? <Check className={comboboxStyles.checkIcon} /> : null}
+                          </span>
                         </span>
                       </>
                     ) : (

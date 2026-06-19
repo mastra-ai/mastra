@@ -199,8 +199,8 @@ export const Sizes: Story = {
   ),
 };
 
-export const MultiCombobox: Story = {
-  render: function MultiComboboxStory() {
+export const Multiple: Story = {
+  render: function MultipleStory() {
     const [value, setValue] = useState<string[]>(['logs', 'traces', 'metrics']);
     const selectedCapabilities = capabilityOptions.filter(option => value.includes(option.value));
 

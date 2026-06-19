@@ -1,4 +1,5 @@
-import { Collapsible, CollapsibleTrigger, CollapsibleContent, Combobox, ToolsIcon } from '@mastra/playground-ui';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent, ToolsIcon } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';

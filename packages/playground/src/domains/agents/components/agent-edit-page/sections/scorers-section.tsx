@@ -2,7 +2,6 @@ import {
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
-  Combobox,
   Button,
   Input,
   Label,
@@ -12,6 +11,7 @@ import {
   JudgeIcon,
   Icon,
 } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Trash2, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';

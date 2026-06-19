@@ -1,4 +1,5 @@
-import { Combobox, Label } from '@mastra/playground-ui';
+import { Label } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { useMemo } from 'react';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
