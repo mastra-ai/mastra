@@ -57,7 +57,7 @@ describe('step-finish token usage extraction', () => {
 
     await (harness as any).processStream({ fullStream: mockStream(usage) });
 
-    const tokenUsage = harness.getTokenUsage();
+    const tokenUsage = harness.session.getTokenUsage();
     expect(tokenUsage.promptTokens).toBe(100);
     expect(tokenUsage.completionTokens).toBe(50);
     expect(tokenUsage.totalTokens).toBe(150);
@@ -68,7 +68,7 @@ describe('step-finish token usage extraction', () => {
 
     await (harness as any).processStream({ fullStream: mockStream(usage) });
 
-    const tokenUsage = harness.getTokenUsage();
+    const tokenUsage = harness.session.getTokenUsage();
     expect(tokenUsage.promptTokens).toBe(200);
     expect(tokenUsage.completionTokens).toBe(80);
     expect(tokenUsage.totalTokens).toBe(280);
@@ -98,8 +98,8 @@ describe('step-finish token usage extraction', () => {
       cacheCreationInputTokens: 5,
       raw: { provider: 'test-provider' },
     };
-    expect(harness.getTokenUsage()).toEqual(expectedUsage);
-    expect(harness.getDisplayState().tokenUsage).toEqual(expectedUsage);
+    expect(harness.session.getTokenUsage()).toEqual(expectedUsage);
+    expect(harness.session.displayState.get().tokenUsage).toEqual(expectedUsage);
     expect(events.find(event => event.type === 'usage_update')).toEqual({
       type: 'usage_update',
       usage: expectedUsage,
@@ -179,7 +179,7 @@ describe('step-finish token usage extraction', () => {
 
     await (harness as any).processStream({ fullStream: multiStepStream() });
 
-    const tokenUsage = harness.getTokenUsage();
+    const tokenUsage = harness.session.getTokenUsage();
     expect(tokenUsage.promptTokens).toBe(250);
     expect(tokenUsage.completionTokens).toBe(120);
     expect(tokenUsage.totalTokens).toBe(370);
@@ -238,7 +238,7 @@ describe('step-finish token usage extraction', () => {
 
     await (harness as any).processStream({ fullStream: multiStepStream() });
 
-    expect(harness.getTokenUsage()).toEqual({
+    expect(harness.session.getTokenUsage()).toEqual({
       promptTokens: 250,
       completionTokens: 120,
       totalTokens: 440,
@@ -254,7 +254,7 @@ describe('step-finish token usage extraction', () => {
 
     await (harness as any).processStream({ fullStream: mockStream(usage) });
 
-    const tokenUsage = harness.getTokenUsage();
+    const tokenUsage = harness.session.getTokenUsage();
     expect(tokenUsage.cachedInputTokens).toBe(0);
     expect(tokenUsage.cacheCreationInputTokens).toBe(0);
   });

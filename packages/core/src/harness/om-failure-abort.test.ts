@@ -24,7 +24,7 @@ describe('Harness OM failure abort behavior', () => {
     const events: HarnessEvent[] = [];
     harness.subscribe(event => events.push(event));
 
-    (harness as any).abortController = new AbortController();
+    harness.session.run.ensureAbortController();
 
     await (harness as any).processStream({
       fullStream: (async function* () {
@@ -47,8 +47,8 @@ describe('Harness OM failure abort behavior', () => {
       'Observational memory observation buffering failed: Bad Request',
     );
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
-    expect((harness as any).abortRequested).toBe(false);
-    expect((harness as any).abortController).toBeNull();
+    expect(harness.session.run.isAbortRequested()).toBe(false);
+    expect(harness.session.run.hasAbortController()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
 
@@ -57,7 +57,7 @@ describe('Harness OM failure abort behavior', () => {
     const events: HarnessEvent[] = [];
     harness.subscribe(event => events.push(event));
 
-    (harness as any).abortController = new AbortController();
+    harness.session.run.ensureAbortController();
 
     await (harness as any).processStream({
       fullStream: (async function* () {
@@ -81,7 +81,7 @@ describe('Harness OM failure abort behavior', () => {
       'Observational memory reflection run failed: Model unavailable',
     );
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
-    expect((harness as any).abortRequested).toBe(false);
+    expect(harness.session.run.isAbortRequested()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
 });

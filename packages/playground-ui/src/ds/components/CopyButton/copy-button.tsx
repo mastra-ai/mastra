@@ -12,6 +12,7 @@ export type CopyButtonProps = {
   tooltip?: string;
   className?: string;
   size?: ButtonProps['size'];
+  variant?: ButtonProps['variant'];
 };
 
 export function CopyButton({
@@ -19,6 +20,7 @@ export function CopyButton({
   copyMessage,
   tooltip = 'Copy to clipboard',
   size = 'sm',
+  variant,
   className,
 }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
@@ -40,6 +42,7 @@ export function CopyButton({
           onClick={handleCopy}
           type="button"
           size={size}
+          variant={variant}
           className={className}
           aria-label={copied ? 'Copied!' : tooltip}
         >
