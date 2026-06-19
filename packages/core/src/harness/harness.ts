@@ -874,37 +874,6 @@ export class Harness<TState = {}> {
   }
 
   // ===========================================================================
-  // State Management
-  // ===========================================================================
-
-  /**
-   * Get current harness state (read-only snapshot).
-   * @deprecated Prefer `harness.session.state.get()`.
-   */
-  getState(): Readonly<TState> {
-    return this.#session.state.get();
-  }
-
-  /**
-   * Update harness state. Validates against schema if provided.
-   * Emits state_changed event.
-   * @deprecated Prefer `harness.session.state.set(...)`.
-   */
-  async setState(updates: Partial<TState>): Promise<void> {
-    return this.#session.state.set(updates);
-  }
-
-  private async updateState<TResult>(
-    updater: (
-      state: Readonly<TState>,
-    ) =>
-      | { updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }
-      | Promise<{ updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }>,
-  ): Promise<TResult> {
-    return this.#session.state.update(updater);
-  }
-
-  // ===========================================================================
   // Mode Management
   // ===========================================================================
 
@@ -1462,7 +1431,7 @@ export class Harness<TState = {}> {
       }
 
       if (Object.keys(updates).length > 0) {
-        await this.setState(updates as unknown as Partial<TState>);
+        await this.#session.state.set(updates as unknown as Partial<TState>);
       }
 
       if (!hasObservationThreshold) {

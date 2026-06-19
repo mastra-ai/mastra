@@ -1250,8 +1250,7 @@ class SessionState<TState = unknown> {
  *
  * Currently owns:
  * - the live Harness state (`session.state`): schema-validated snapshots and
- *   serialized updates that emit `state_changed`. `Harness.getState()` /
- *   `Harness.setState()` are compatibility wrappers over this domain.
+ *   serialized updates that emit `state_changed`.
  * - session-scoped permission grants — the "allow for this session" approvals a
  *   user makes when a tool or tool category is gated behind the permission check.
  * - the live token-usage counter for the active thread. The Session holds the
