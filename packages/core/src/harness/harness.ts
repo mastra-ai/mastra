@@ -1932,7 +1932,6 @@ export class Harness<TState = {}> {
       maxSteps: HARNESS_MAX_STEPS,
       savePerStep: false,
       requireToolApproval: !isYolo,
-      modelSettings: { temperature: 1 },
     };
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
