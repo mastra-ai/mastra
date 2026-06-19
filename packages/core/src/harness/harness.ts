@@ -59,6 +59,10 @@ import type {
   ToolCategory,
 } from './types';
 
+type HarnessSignalAcceptance =
+  | { accepted: true; runId?: string }
+  | { accepted: false; runId: string; reason: 'thread-blocked' };
+
 type HarnessStreamState = {
   currentMessage: HarnessMessage;
   lastFinishedMessage?: HarnessMessage;
@@ -1939,15 +1943,25 @@ export class Harness<TState = {}> {
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
         },
-  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId?: string }> } {
-    const settleRunId = async <T>(result: {
+  ): {
+    id: string;
+    type: AgentSignalInput['type'];
+    accepted: Promise<HarnessSignalAcceptance>;
+  } {
+    const settleAcceptance = async <T>(result: {
       accepted: Promise<SendAgentSignalAccepted<T>>;
-    }): Promise<string | undefined> => {
+    }): Promise<HarnessSignalAcceptance> => {
       // Best-effort run id for telemetry. A wake whose stream setup fails rejects
       // `accepted`; that error surfaces to the harness through the thread subscription
       // as an error event, so we must not let it reject the harness send here.
       const settled = await result.accepted.catch(() => undefined);
-      return settled && 'runId' in settled ? settled.runId : undefined;
+      if (settled?.action === 'blocked') {
+        return { accepted: false as const, runId: settled.runId, reason: settled.reason };
+      }
+      return {
+        accepted: true as const,
+        runId: settled && 'runId' in settled ? settled.runId : undefined,
+      };
     };
     const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
     const ifActive = 'content' in input ? input.ifActive : undefined;
@@ -1955,24 +1969,29 @@ export class Harness<TState = {}> {
     const signal = createSignal(
       'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
     );
+    const agent = this.getCurrentAgent();
+    const submittedThreadId = this.#session.thread.getId();
+    const submittedActiveRunId = this.#session.stream.activeRunId();
+    const submittedRunId = this.#session.run.getRunId();
+    const shouldUseActivePath = Boolean(submittedThreadId && (submittedActiveRunId || submittedRunId));
+
     const accepted = Promise.resolve().then(async () => {
       if (!this.#session.thread.getId()) {
         const thread = await this.createThread();
         this.#session.thread.set({ threadId: thread.id });
       }
-      const threadId = this.#session.thread.getId()!;
+      const threadId = submittedThreadId ?? this.#session.thread.getId()!;
 
-      const agent = this.getCurrentAgent();
       await this.ensureAgentThreadSubscription(agent, threadId);
 
-      if (this.#session.run.getRunId() && this.#session.stream.activeRunId()) {
+      if (shouldUseActivePath) {
         const result = agent.sendSignal(signal, {
           resourceId: this.#session.identity.getResourceId(),
           threadId,
           ifActive,
           ifIdle,
         });
-        return { accepted: true as const, runId: await settleRunId(result) };
+        return settleAcceptance(result);
       }
 
       const streamOptions = await this.buildAgentMessageStreamOptions({
@@ -1987,7 +2006,7 @@ export class Harness<TState = {}> {
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
-      return { accepted: true as const, runId: await settleRunId(result) };
+      return settleAcceptance(result);
     });
 
     return { id: signal.id, type: signal.type, accepted };
