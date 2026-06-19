@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import type { AgentThreadSubscription } from '../agent/types';
 import type { RequestContext } from '../request-context';
@@ -9,6 +10,7 @@ import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } fr
 import type {
   HarnessDisplayState,
   HarnessEvent,
+  HarnessEventListener,
   HarnessMessage,
   HarnessMode,
   HarnessRequestState,
@@ -1509,6 +1511,7 @@ export class SessionDisplayState {
 }
 
 export class Session<TState = unknown> {
+  readonly #id: string;
   /** Tool categories the user has granted "allow" for the lifetime of this session. */
   readonly #grantedCategories = new Set<string>();
   /** Individual tool names the user has granted "allow" for the lifetime of this session. */
@@ -1543,8 +1546,17 @@ export class Session<TState = unknown> {
   readonly displayState: SessionDisplayState;
   /** The session-owned Harness state domain. */
   readonly state: HarnessRequestState<TState>;
-
-  constructor({ resourceId, state }: { resourceId: string; state?: SessionStateOptions<TState> }) {
+  #listeners: HarnessEventListener[] = [];
+  constructor({
+    id,
+    resourceId,
+    state,
+  }: {
+    id?: string;
+    resourceId: string;
+    state?: Omit<SessionStateOptions<TState>, 'emit'>;
+  }) {
+    this.#id = id ?? `sess-${randomUUID()}`;
     this.identity = new SessionIdentity({ resourceId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.displayState = new SessionDisplayState({
@@ -1553,7 +1565,18 @@ export class Session<TState = unknown> {
       getThreadId: () => this.thread.getId(),
       clearFollowUps: () => this.followUps.clear(),
     });
-    this.state = new SessionState(state ?? { initialState: {} as TState });
+    this.state = new SessionState(
+      state
+        ? {
+            ...state,
+            emit: this.#emit.bind(this),
+          }
+        : {
+            initialState: {
+              emit: this.#emit.bind(this),
+            } as TState,
+          },
+    );
   }
 
   /**
@@ -1693,6 +1716,63 @@ export class Session<TState = unknown> {
     addOptionalUsageField(this.#tokenUsage, 'cacheCreationInputTokens', stepUsage.cacheCreationInputTokens);
     if (stepUsage.raw !== undefined) {
       this.#tokenUsage.raw = stepUsage.raw;
+    }
+  }
+
+  // ===========================================================================
+  // Event System
+  // ===========================================================================
+
+  /**
+   * Subscribe to harness events. Returns an unsubscribe function.
+   */
+  subscribe(listener: HarnessEventListener): () => void {
+    this.#listeners.push(listener);
+    return () => {
+      const index = this.#listeners.indexOf(listener);
+      if (index !== -1) {
+        this.#listeners.splice(index, 1);
+      }
+    };
+  }
+
+  #emit(event: HarnessEvent): void {
+    let eventWithSessionId = {
+      ...event,
+      sessionId: this.#id,
+    };
+    // The Session owns the display-state reducer; fold the event into the
+    // canonical snapshot before dispatching to listeners. The Harness still owns
+    // the event bus (listeners) and the display_state_changed fan-out.
+    this.displayState.apply(eventWithSessionId);
+
+    this.#dispatchToListeners(eventWithSessionId);
+
+    if (eventWithSessionId.type !== 'display_state_changed') {
+      this.#dispatchDisplayStateChanged();
+    }
+  }
+
+  #dispatchDisplayStateChanged(): void {
+    // After every event, emit display_state_changed so UIs that prefer a single
+    // subscribe-and-render pattern can do so. We dispatch directly to listeners
+    // (not through emit()) to avoid infinite recursion.
+    this.#dispatchToListeners({
+      type: 'display_state_changed',
+      displayState: this.displayState.get(),
+    });
+  }
+
+  #dispatchToListeners(event: HarnessEvent): void {
+    for (const listener of this.#listeners) {
+      try {
+        const result = listener(event);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(err => console.error('Error in harness event listener:', err));
+        }
+      } catch (err) {
+        console.error('Error in harness event listener:', err);
+      }
     }
   }
 }

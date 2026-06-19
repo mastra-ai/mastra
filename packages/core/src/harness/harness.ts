@@ -476,7 +476,6 @@ export class Harness<TState = {}> {
       state: {
         initialState: config.initialState,
         stateSchema: config.stateSchema,
-        emit: event => this.emit(event),
       },
     });
 
@@ -3535,7 +3534,10 @@ export class Harness<TState = {}> {
    */
   subscribe(listener: HarnessEventListener): () => void {
     this.listeners.push(listener);
+    const sessionListener = this.#session?.subscribe(listener);
+
     return () => {
+      sessionListener?.();
       const index = this.listeners.indexOf(listener);
       if (index !== -1) {
         this.listeners.splice(index, 1);
