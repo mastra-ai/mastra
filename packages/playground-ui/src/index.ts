@@ -100,7 +100,6 @@ export * from './ds/components/DateTimeRangePicker';
 export * from './ds/components/HorizontalBars';
 export * from './ds/components/MetricsDataTable';
 export * from './ds/components/MetricsLineChart';
-export * from './ds/components/ScrollableContainer';
 export * from './ds/components/StatusBadge';
 
 // DS Icons
