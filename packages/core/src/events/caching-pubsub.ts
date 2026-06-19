@@ -1,6 +1,7 @@
 import type { MastraServerCache } from '../cache/base';
 import type { IMastraLogger } from '../logger';
-import { PubSub } from './pubsub';
+import { isLeaseProvider, PubSub } from './pubsub';
+import type { LeaseProvider } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 /**
@@ -265,6 +266,20 @@ export class CachingPubSub extends PubSub {
    */
   async flush(): Promise<void> {
     await this.inner.flush();
+  }
+
+  /**
+   * Expose the inner's {@link LeaseProvider} when it has one, otherwise
+   * `undefined`. Leasing is a capability of the underlying backend
+   * (e.g. Redis), not of the caching decorator itself — so rather than
+   * unconditionally declaring lease methods (which would make
+   * {@link isLeaseProvider} report `true` even when the inner can't
+   * coordinate a lock), we surface the inner's capability directly. The
+   * signals runtime unwraps this so wrapping with caching preserves real
+   * distributed lease semantics without faking them.
+   */
+  getLeaseProvider(): LeaseProvider | undefined {
+    return isLeaseProvider(this.inner) ? this.inner : undefined;
   }
 
   /**
