@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import type { ElementType, ReactNode } from 'react';
-import { MetricsCard } from '../../../ds/components/MetricsCard';
-import { MetricsDataTable } from '../../../ds/components/MetricsDataTable';
-import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
+import { DataList } from '../../../ds/components/DataList/data-list';
+import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
+import { TabContent } from '../../../ds/components/Tabs/tabs-content';
+import { TabList } from '../../../ds/components/Tabs/tabs-list';
+import { Tabs } from '../../../ds/components/Tabs/tabs-root';
+import { Tab } from '../../../ds/components/Tabs/tabs-tab';
+import type { LinkComponent as DataListLinkComponent } from '../../../ds/types/link-component';
 import type { ActiveThreadRow } from '../hooks/use-top-active-threads-metrics';
 import type { ResourceThreadsRow } from '../hooks/use-top-resources-by-threads-metrics';
 import { formatCompact, formatCost } from './metrics-utils';
@@ -53,6 +57,7 @@ export function MemoryCardView({
   LinkComponent,
 }: MemoryCardViewProps) {
   const [activeTab, setActiveTab] = useState<MemoryTab>('threads');
+  const RowLinkComponent = (LinkComponent ?? 'a') as DataListLinkComponent;
 
   const threadRows: ThreadTableRow[] = threads.data?.map(r => ({ ...r, key: r.threadId })) ?? [];
   const resourceRows: ResourceTableRow[] = resources.data?.map(r => ({ ...r, key: r.resourceId })) ?? [];
@@ -98,35 +103,107 @@ export function MemoryCardView({
             </TabList>
             <TabContent value="threads">
               {hasThreadData ? (
-                <MetricsDataTable
-                  columns={[
-                    { label: 'Thread ID', value: row => shortId(row.threadId) },
-                    { label: 'Resource ID', value: row => (row.resourceId ? shortId(row.resourceId) : '—') },
-                    { label: 'Runs', value: row => row.runs.toLocaleString(), highlight: true },
-                    { label: 'Tokens', value: row => (row.tokens > 0 ? formatCompact(row.tokens) : '—') },
-                    { label: 'Cost', value: row => (row.cost != null ? formatCost(row.cost, row.costUnit) : '—') },
-                  ]}
-                  data={threadRows}
-                  LinkComponent={LinkComponent}
-                  getRowHref={getThreadRowHref ? row => getThreadRowHref(row) : undefined}
-                />
+                <DataList columns="auto auto auto auto auto" variant="lined" className="max-h-80">
+                  <DataList.Top>
+                    <DataList.TopCell sticky="start">Thread ID</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Resource ID</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Runs</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Tokens</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Cost</DataList.TopCell>
+                  </DataList.Top>
+                  {threadRows.map(row => {
+                    const href = getThreadRowHref?.(row);
+                    const rowCells = (
+                      <>
+                        <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+                          {shortId(row.threadId)}
+                        </DataList.RowHeaderCell>
+                        <DataList.Cell
+                          height="compact"
+                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                        >
+                          {row.resourceId ? shortId(row.resourceId) : '—'}
+                        </DataList.Cell>
+                        <DataList.Cell
+                          height="compact"
+                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral4 font-semibold"
+                        >
+                          {row.runs.toLocaleString()}
+                        </DataList.Cell>
+                        <DataList.Cell
+                          height="compact"
+                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                        >
+                          {row.tokens > 0 ? formatCompact(row.tokens) : '—'}
+                        </DataList.Cell>
+                        <DataList.Cell
+                          height="compact"
+                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                        >
+                          {row.cost != null ? formatCost(row.cost, row.costUnit) : '—'}
+                        </DataList.Cell>
+                      </>
+                    );
+
+                    return href ? (
+                      <DataList.RowLink key={row.key} to={href} LinkComponent={RowLinkComponent}>
+                        {rowCells}
+                      </DataList.RowLink>
+                    ) : (
+                      <DataList.RowStatic key={row.key}>{rowCells}</DataList.RowStatic>
+                    );
+                  })}
+                </DataList>
               ) : (
                 <MetricsCard.NoData message="No thread activity yet" />
               )}
             </TabContent>
             <TabContent value="resources">
               {hasResourceData ? (
-                <MetricsDataTable
-                  columns={[
-                    { label: 'Resource ID', value: row => shortId(row.resourceId) },
-                    { label: 'Threads', value: row => row.threadCount.toLocaleString(), highlight: true },
-                    { label: 'Tokens', value: row => (row.tokens > 0 ? formatCompact(row.tokens) : '—') },
-                    { label: 'Cost', value: row => (row.cost != null ? formatCost(row.cost, row.costUnit) : '—') },
-                  ]}
-                  data={resourceRows}
-                  LinkComponent={LinkComponent}
-                  getRowHref={getResourceRowHref ? row => getResourceRowHref(row) : undefined}
-                />
+                <DataList columns="auto auto auto auto" variant="lined" className="max-h-80">
+                  <DataList.Top>
+                    <DataList.TopCell sticky="start">Resource ID</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Threads</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Tokens</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Cost</DataList.TopCell>
+                  </DataList.Top>
+                  {resourceRows.map(row => {
+                    const href = getResourceRowHref?.(row);
+                    const rowCells = (
+                      <>
+                        <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+                          {shortId(row.resourceId)}
+                        </DataList.RowHeaderCell>
+                        <DataList.Cell
+                          height="compact"
+                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral4 font-semibold"
+                        >
+                          {row.threadCount.toLocaleString()}
+                        </DataList.Cell>
+                        <DataList.Cell
+                          height="compact"
+                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                        >
+                          {row.tokens > 0 ? formatCompact(row.tokens) : '—'}
+                        </DataList.Cell>
+                        <DataList.Cell
+                          height="compact"
+                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                        >
+                          {row.cost != null ? formatCost(row.cost, row.costUnit) : '—'}
+                        </DataList.Cell>
+                      </>
+                    );
+
+                    return href ? (
+                      <DataList.RowLink key={row.key} to={href} LinkComponent={RowLinkComponent}>
+                        {rowCells}
+                      </DataList.RowLink>
+                    ) : (
+                      <DataList.RowStatic key={row.key}>{rowCells}</DataList.RowStatic>
+                    );
+                  })}
+                </DataList>
               ) : (
                 <MetricsCard.NoData message="No resource activity yet" />
               )}

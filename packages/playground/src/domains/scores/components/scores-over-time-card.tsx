@@ -1,4 +1,4 @@
-import { MetricsCard, MetricsDataTable, MetricsLineChart, Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui';
+import { DataList, MetricsCard, MetricsLineChart, Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui';
 import { useMemo } from 'react';
 import type { ScorerSummary, ScoresOverTimePoint } from '../hooks/use-score-metrics';
 
@@ -71,16 +71,46 @@ export function ScoresOverTimeCard({
                 )}
               </TabContent>
               <TabContent value="summary">
-                <MetricsDataTable
-                  columns={[
-                    { label: 'Scorer', value: row => row.scorer },
-                    { label: 'Avg', value: row => row.avg.toFixed(2), highlight: true },
-                    { label: 'Min', value: row => row.min.toFixed(2) },
-                    { label: 'Max', value: row => row.max.toFixed(2) },
-                    { label: 'Count', value: row => row.count.toLocaleString() },
-                  ]}
-                  data={summaryData.map(row => ({ ...row, key: row.scorer }))}
-                />
+                <DataList columns="auto auto auto auto auto" variant="lined" className="max-h-80">
+                  <DataList.Top>
+                    <DataList.TopCell sticky="start">Scorer</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Avg</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Min</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Max</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Count</DataList.TopCell>
+                  </DataList.Top>
+                  {summaryData.map(row => (
+                    <DataList.RowStatic key={row.scorer}>
+                      <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+                        {row.scorer}
+                      </DataList.RowHeaderCell>
+                      <DataList.Cell
+                        height="compact"
+                        className="justify-items-end text-right text-ui-sm tabular-nums text-neutral4 font-semibold"
+                      >
+                        {row.avg.toFixed(2)}
+                      </DataList.Cell>
+                      <DataList.Cell
+                        height="compact"
+                        className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                      >
+                        {row.min.toFixed(2)}
+                      </DataList.Cell>
+                      <DataList.Cell
+                        height="compact"
+                        className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                      >
+                        {row.max.toFixed(2)}
+                      </DataList.Cell>
+                      <DataList.Cell
+                        height="compact"
+                        className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                      >
+                        {row.count.toLocaleString()}
+                      </DataList.Cell>
+                    </DataList.RowStatic>
+                  ))}
+                </DataList>
               </TabContent>
             </Tabs>
           )}

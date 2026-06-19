@@ -1,6 +1,7 @@
 import type { ElementType, ReactNode } from 'react';
-import { MetricsCard } from '../../../ds/components/MetricsCard';
-import { MetricsDataTable } from '../../../ds/components/MetricsDataTable';
+import { DataList } from '../../../ds/components/DataList/data-list';
+import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
+import type { LinkComponent as DataListLinkComponent } from '../../../ds/types/link-component';
 import type { ModelUsageRow } from '../hooks/use-model-usage-cost-metrics';
 import { formatCost } from './metrics-utils';
 
@@ -25,6 +26,7 @@ export function ModelUsageCostCardView({
   LinkComponent,
 }: ModelUsageCostCardViewProps) {
   const hasData = !!rows && rows.length > 0;
+  const RowLinkComponent = (LinkComponent ?? 'a') as DataListLinkComponent;
 
   return (
     <MetricsCard>
@@ -33,7 +35,12 @@ export function ModelUsageCostCardView({
         {hasData &&
           (() => {
             const totalCost = rows.reduce((sum, r) => sum + (r.cost ?? 0), 0);
-            const units = new Set(rows.filter(r => r.cost != null && r.costUnit).map(r => r.costUnit as string));
+            const units = new Set<string>();
+            for (const row of rows) {
+              if (row.cost != null && row.costUnit) {
+                units.add(row.costUnit);
+              }
+            }
             let value: string;
             if (units.size === 0) {
               value = totalCost > 0 ? formatCost(totalCost) : '—';
@@ -55,23 +62,64 @@ export function ModelUsageCostCardView({
           {!hasData ? (
             <MetricsCard.NoData message="No model usage data yet" />
           ) : (
-            <MetricsDataTable
-              columns={[
-                { label: 'Model', value: row => row.model },
-                { label: 'Input', value: row => row.input },
-                { label: 'Output', value: row => row.output },
-                { label: 'Cache Read', value: row => row.cacheRead },
-                { label: 'Cache Write', value: row => row.cacheWrite },
-                {
-                  label: 'Cost',
-                  value: row => (row.cost != null ? formatCost(row.cost, row.costUnit) : '—'),
-                  highlight: true,
-                },
-              ]}
-              data={rows.map(row => ({ ...row, key: row.model }))}
-              getRowHref={getRowHref}
-              LinkComponent={LinkComponent}
-            />
+            <DataList columns="auto auto auto auto auto auto" variant="lined" className="max-h-80">
+              <DataList.Top>
+                <DataList.TopCell sticky="start">Model</DataList.TopCell>
+                <DataList.TopCell className="justify-end text-right">Input</DataList.TopCell>
+                <DataList.TopCell className="justify-end text-right">Output</DataList.TopCell>
+                <DataList.TopCell className="justify-end text-right">Cache Read</DataList.TopCell>
+                <DataList.TopCell className="justify-end text-right">Cache Write</DataList.TopCell>
+                <DataList.TopCell className="justify-end text-right">Cost</DataList.TopCell>
+              </DataList.Top>
+              {rows.map(row => {
+                const href = getRowHref?.(row);
+                const rowCells = (
+                  <>
+                    <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+                      {row.model}
+                    </DataList.RowHeaderCell>
+                    <DataList.Cell
+                      height="compact"
+                      className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                    >
+                      {row.input}
+                    </DataList.Cell>
+                    <DataList.Cell
+                      height="compact"
+                      className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                    >
+                      {row.output}
+                    </DataList.Cell>
+                    <DataList.Cell
+                      height="compact"
+                      className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                    >
+                      {row.cacheRead}
+                    </DataList.Cell>
+                    <DataList.Cell
+                      height="compact"
+                      className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
+                    >
+                      {row.cacheWrite}
+                    </DataList.Cell>
+                    <DataList.Cell
+                      height="compact"
+                      className="justify-items-end text-right text-ui-sm tabular-nums text-neutral4 font-semibold"
+                    >
+                      {row.cost != null ? formatCost(row.cost, row.costUnit) : '—'}
+                    </DataList.Cell>
+                  </>
+                );
+
+                return href ? (
+                  <DataList.RowLink key={row.model} to={href} LinkComponent={RowLinkComponent}>
+                    {rowCells}
+                  </DataList.RowLink>
+                ) : (
+                  <DataList.RowStatic key={row.model}>{rowCells}</DataList.RowStatic>
+                );
+              })}
+            </DataList>
           )}
         </MetricsCard.Content>
       )}

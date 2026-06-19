@@ -12,6 +12,7 @@ export * from './ds/components/PermissionDenied';
 export * from './ds/components/SessionExpired';
 export * from './ds/components/Header/index';
 export * from './ds/components/Logo/index';
+export * from './ds/components/Table/index';
 export * from './ds/components/Textarea';
 export * from './ds/components/Txt/index';
 
@@ -97,7 +98,6 @@ export * from './ds/components/DataKeysAndValues';
 export * from './ds/components/DataPanel';
 export * from './ds/components/DateTimeRangePicker';
 export * from './ds/components/HorizontalBars';
-export * from './ds/components/MetricsDataTable';
 export * from './ds/components/MetricsLineChart';
 export * from './ds/components/ScrollableContainer';
 export * from './ds/components/StatusBadge';
