@@ -527,7 +527,7 @@ describe('OtelBridge', () => {
         logExporter.reset();
         expect(logExporter.getFinishedLogRecords()).toHaveLength(0);
 
-        bridge.shutdown();
+        await bridge.shutdown();
         await customLoggerProvider.shutdown();
       } finally {
         otelLogs.setGlobalLoggerProvider(loggerProvider);
@@ -589,7 +589,7 @@ describe('OtelBridge', () => {
         expect(logs[0]?.spanContext?.traceId).toBe(ids?.traceId);
         expect(logs[0]?.spanContext?.spanId).toBe(ids?.spanId);
 
-        bridge.shutdown();
+        await bridge.shutdown();
         await customTracerProvider.shutdown();
         await customLoggerProvider.shutdown();
       } finally {
@@ -636,7 +636,7 @@ describe('OtelBridge', () => {
         expect(spans.length).toBe(1);
         expect(spans[0]!.spanContext().spanId).toBe(ids!.spanId);
 
-        bridge.shutdown();
+        await bridge.shutdown();
         await customProvider.shutdown();
       } finally {
         trace.setGlobalTracerProvider(tracerProvider);
