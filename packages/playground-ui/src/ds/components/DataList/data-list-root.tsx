@@ -75,7 +75,7 @@ const stickyStartStyles = [
   '[&_.data-list-row:focus-within_.data-list-sticky-start]:bg-surface4',
 ] as const;
 
-const dataListRootVariants = cva(cn('grid w-full min-w-0 max-w-full content-start', ...stickyStartStyles), {
+const dataListRootVariants = cva(cn('grid w-max min-w-full max-w-none content-start', ...stickyStartStyles), {
   variants: {
     variant: {
       striped: cn(

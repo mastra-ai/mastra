@@ -43,7 +43,9 @@ describe('DataListRoot', () => {
       expect(grid).not.toBeNull();
       expect(grid).not.toBe(container.firstElementChild);
       expect(grid?.className).not.toContain('overflow-auto');
-      expect(grid?.className).toContain('w-full');
+      expect(grid?.className).toContain('w-max');
+      expect(grid?.className).toContain('min-w-full');
+      expect(grid?.className).toContain('max-w-none');
       expect(grid?.className).toContain('gap-y-px');
       expect(grid?.className).toContain('[&_.data-list-row]:after:absolute');
       expect(grid?.className).toContain('[&_.data-list-row]:after:content-[""]');
