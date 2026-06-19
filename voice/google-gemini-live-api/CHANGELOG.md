@@ -1,5 +1,27 @@
 # @mastra/voice-google-gemini-live
 
+## 0.13.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Updated dependencies [[`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756)]:
+  - @mastra/schema-compat@1.3.0
+
+## 0.13.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Updated dependencies [[`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756)]:
+  - @mastra/schema-compat@1.3.0-alpha.0
+
 ## 0.12.4
 
 ### Patch Changes

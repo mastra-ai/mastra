@@ -57,7 +57,7 @@ describe('Harness mode-model persistence across restarts', () => {
     const thread = await session1.createThread();
     expect(session1.session.mode.get()).toBe('build');
 
-    await session1.switchMode({ modeId: 'fast' });
+    await session1.session.mode.switch({ modeId: 'fast' });
     expect(session1.session.mode.get()).toBe('fast');
     expect(session1.session.model.get()).toBe('cerebras/zai-glm-4.7');
 
@@ -75,8 +75,8 @@ describe('Harness mode-model persistence across restarts', () => {
     await session1.init();
     const thread = await session1.createThread();
 
-    await session1.switchMode({ modeId: 'fast' });
-    await session1.switchModel({ modelId: 'cerebras/qwen-3-coder-480b' });
+    await session1.session.mode.switch({ modeId: 'fast' });
+    await session1.session.model.switch({ modelId: 'cerebras/qwen-3-coder-480b' });
     expect(session1.session.model.get()).toBe('cerebras/qwen-3-coder-480b');
 
     const session2 = createHarness(storage);
@@ -91,7 +91,7 @@ describe('Harness mode-model persistence across restarts', () => {
     const session1 = createHarness(storage);
     await session1.init();
     const thread = await session1.createThread();
-    await session1.switchModel({ modelId: 'anthropic/claude-opus-4-6' });
+    await session1.session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
 
     const session2 = createHarness(storage);
     await session2.init();
@@ -105,7 +105,7 @@ describe('Harness mode-model persistence across restarts', () => {
     const session1 = createHarness(storage);
     await session1.init();
     const thread = await session1.createThread();
-    await session1.switchMode({ modeId: 'plan' });
+    await session1.session.mode.switch({ modeId: 'plan' });
 
     const session2 = createHarness(storage);
     await session2.init();
@@ -132,7 +132,7 @@ describe('Harness mode-model persistence across restarts', () => {
     const session = createHarness(storage);
     await session.init();
     await session.createThread();
-    await session.switchMode({ modeId: 'plan' });
+    await session.session.mode.switch({ modeId: 'plan' });
 
     const controller = session.session.run.ensureAbortController();
 

@@ -630,7 +630,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-456',
       harness: {
-        switchMode,
+        session: { mode: { switch: switchMode } },
       } as any,
       goalManager: {
         applyEvaluation,
@@ -658,7 +658,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: undefined,
       harness: {
-        switchMode,
+        session: { mode: { switch: switchMode } },
       } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
@@ -683,7 +683,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-123',
       harness: {
-        switchMode,
+        session: { mode: { switch: switchMode } },
       } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
@@ -710,7 +710,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-321',
       harness: {
-        switchMode,
+        session: { mode: { switch: switchMode } },
       } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
@@ -737,7 +737,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-xyz',
       harness: {
-        switchMode,
+        session: { mode: { switch: switchMode } },
       } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
@@ -764,7 +764,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-failed',
       harness: {
-        switchMode,
+        session: { mode: { switch: switchMode } },
       } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
@@ -796,7 +796,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: originalGoalId,
       harness: {
-        switchMode,
+        session: { mode: { switch: switchMode } },
       } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
@@ -823,7 +823,7 @@ describe('MastraTUI queueing', () => {
     const state = createQueueState({
       planStartedGoalId: originalGoalId,
       harness: {
-        switchMode,
+        session: { mode: { switch: switchMode } },
       } as any,
       goalManager: {
         applyEvaluation: vi.fn(),

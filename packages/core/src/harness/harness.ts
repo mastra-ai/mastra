@@ -55,7 +55,6 @@ import type {
   HarnessThread,
   ModelAuthStatus,
   PermissionPolicy,
-  PermissionRules,
   TokenUsage,
   ToolCategory,
 } from './types';
@@ -498,7 +497,33 @@ export class Harness<TState = {}> {
     });
     this.#session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     this.#session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
-    this.#session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
+    this.#session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null, {
+      abort: () => this.abort(),
+      emit: event => this.emit(event),
+    });
+    this.#session.model.setResolver({
+      getCurrentModeId: () => this.#session.mode.get(),
+      emit: event => this.emit(event),
+      trackModelUse: this.config.modelUseCountTracker,
+    });
+    this.#session.om.setResolver({
+      getState: () => this.#session.state.get() as Record<string, unknown>,
+      setState: updates => this.#session.state.set(updates as Partial<TState>),
+      setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
+      emit: event => this.emit(event),
+      omConfig: this.config.omConfig,
+      resolveModel: this.config.resolveModel,
+    });
+    this.#session.permissions.setResolver({
+      getState: () => this.#session.state.get() as Record<string, unknown>,
+      setState: updates => this.#session.state.set(updates as Partial<TState>),
+    });
+    this.#session.subagents.setResolver({
+      getState: () => this.#session.state.get() as Record<string, unknown>,
+      setState: updates => this.#session.state.set(updates as Partial<TState>),
+      setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
+      emit: event => this.emit(event),
+    });
     this.#session.thread.connect(this.createThreadDataStore());
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
@@ -850,70 +875,11 @@ export class Harness<TState = {}> {
   }
 
   // ===========================================================================
-  // State Management
-  // ===========================================================================
-
-  /**
-   * Get current harness state (read-only snapshot).
-   * @deprecated Prefer `harness.session.state.get()`.
-   */
-  getState(): Readonly<TState> {
-    return this.#session.state.get();
-  }
-
-  /**
-   * Update harness state. Validates against schema if provided.
-   * Emits state_changed event.
-   * @deprecated Prefer `harness.session.state.set(...)`.
-   */
-  async setState(updates: Partial<TState>): Promise<void> {
-    return this.#session.state.set(updates);
-  }
-
-  private async updateState<TResult>(
-    updater: (
-      state: Readonly<TState>,
-    ) =>
-      | { updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }
-      | Promise<{ updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }>,
-  ): Promise<TResult> {
-    return this.#session.state.update(updater);
-  }
-
-  // ===========================================================================
   // Mode Management
   // ===========================================================================
 
   listModes(): HarnessMode[] {
     return this.config.modes;
-  }
-
-  /**
-   * Switch to a different mode.
-   * Aborts any in-progress generation and switches to the mode's default model.
-   */
-  async switchMode({ modeId }: { modeId: string }): Promise<void> {
-    const mode = this.config.modes.find(m => m.id === modeId);
-    if (!mode) {
-      throw new Error(`Mode not found: ${modeId}`);
-    }
-
-    this.abort();
-
-    const previousModeId = this.#session.mode.get();
-
-    // Emit the mode change immediately so UIs can update without waiting for
-    // the storage round-trips inside session.mode.switch().
-    this.emit({ type: 'mode_changed', modeId, previousModeId });
-
-    // The session owns the version-guarded switch sequence: remember the
-    // outgoing mode's model, persist the new mode, then resolve and apply the
-    // incoming mode's model. It returns the resolved model (or null if a newer
-    // switch superseded this one) so we can emit model_changed.
-    const { modelId } = await this.#session.mode.switch({ modeId, defaultModelId: mode.defaultModelId });
-    if (modelId) {
-      this.emit({ type: 'model_changed', modelId } as HarnessEvent);
-    }
   }
 
   private propagateRuntimeServicesToAgent(agent: Agent): Agent {
@@ -1023,54 +989,6 @@ export class Harness<TState = {}> {
     const mode = this.#session.mode.resolve();
 
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
-  }
-
-  /**
-   * Get a short display name from the current model ID.
-   */
-  getModelName(): string {
-    const modelId = this.#session.model.get();
-    if (!modelId || modelId === 'unknown') return modelId || 'unknown';
-    const parts = modelId.split('/');
-    return parts[parts.length - 1] || modelId;
-  }
-
-  /**
-   * Get the full model ID (e.g., "anthropic/claude-sonnet-4").
-   */
-  getFullModelId(): string {
-    return this.#session.model.get();
-  }
-
-  /**
-   * Switch to a different model at runtime.
-   */
-  async switchModel({
-    modelId,
-    scope = 'thread',
-    modeId,
-  }: {
-    modelId: string;
-    scope?: 'global' | 'thread';
-    modeId?: string;
-  }): Promise<void> {
-    const targetModeId = modeId ?? this.#session.mode.get();
-
-    if (targetModeId === this.#session.mode.get()) {
-      this.#session.model.set({ modelId });
-    }
-
-    if (scope === 'thread') {
-      await this.#session.model.saveForMode({ modeId: targetModeId, modelId });
-    }
-
-    try {
-      await Promise.resolve(this.config.modelUseCountTracker?.(modelId));
-    } catch (error) {
-      console.error('Failed to track model usage count', error);
-    }
-
-    this.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId } as HarnessEvent);
   }
 
   /**
@@ -1514,17 +1432,17 @@ export class Harness<TState = {}> {
       }
 
       if (Object.keys(updates).length > 0) {
-        await this.setState(updates as unknown as Partial<TState>);
+        await this.#session.state.set(updates as unknown as Partial<TState>);
       }
 
       if (!hasObservationThreshold) {
-        const observationThreshold = this.getObservationThreshold();
+        const observationThreshold = this.#session.om.observer.threshold();
         if (observationThreshold !== undefined) {
           await this.#session.thread.setSetting({ key: 'observationThreshold', value: observationThreshold });
         }
       }
       if (!hasReflectionThreshold) {
-        const reflectionThreshold = this.getReflectionThreshold();
+        const reflectionThreshold = this.#session.om.reflector.threshold();
         if (reflectionThreshold !== undefined) {
           await this.#session.thread.setSetting({ key: 'reflectionThreshold', value: reflectionThreshold });
         }
@@ -1669,115 +1587,12 @@ export class Harness<TState = {}> {
     }
   }
 
-  /**
-   * Returns the observer model ID from state, falling back to omConfig defaults.
-   */
-  getObserverModelId(): string | undefined {
-    return (this.#session.state.get() as any).observerModelId ?? this.config.omConfig?.defaultObserverModelId;
-  }
-
-  /**
-   * Returns the reflector model ID from state, falling back to omConfig defaults.
-   */
-  getReflectorModelId(): string | undefined {
-    return (this.#session.state.get() as any).reflectorModelId ?? this.config.omConfig?.defaultReflectorModelId;
-  }
-
-  /**
-   * Returns the observation threshold from state, falling back to omConfig defaults.
-   */
-  getObservationThreshold(): number | undefined {
-    return (this.#session.state.get() as any).observationThreshold ?? this.config.omConfig?.defaultObservationThreshold;
-  }
-
-  /**
-   * Returns the reflection threshold from state, falling back to omConfig defaults.
-   */
-  getReflectionThreshold(): number | undefined {
-    return (this.#session.state.get() as any).reflectionThreshold ?? this.config.omConfig?.defaultReflectionThreshold;
-  }
-
-  /**
-   * Resolves the observer model ID to a language model instance via the configured resolver.
-   */
-  getResolvedObserverModel() {
-    const modelId = this.getObserverModelId();
-    if (!modelId || !this.config.resolveModel) return undefined;
-    return this.config.resolveModel(modelId);
-  }
-
-  /**
-   * Resolves the reflector model ID to a language model instance via the configured resolver.
-   */
-  getResolvedReflectorModel() {
-    const modelId = this.getReflectorModelId();
-    if (!modelId || !this.config.resolveModel) return undefined;
-    return this.config.resolveModel(modelId);
-  }
-
-  /**
-   * Switch the Observer model.
-   */
-  async switchObserverModel({ modelId }: { modelId: string }): Promise<void> {
-    void this.setState({ observerModelId: modelId } as unknown as Partial<TState>);
-    await this.#session.thread.setSetting({ key: 'observerModelId', value: modelId });
-    this.emit({ type: 'om_model_changed', role: 'observer', modelId } as HarnessEvent);
-  }
-
-  /**
-   * Switch the Reflector model.
-   */
-  async switchReflectorModel({ modelId }: { modelId: string }): Promise<void> {
-    void this.setState({ reflectorModelId: modelId } as unknown as Partial<TState>);
-    await this.#session.thread.setSetting({ key: 'reflectorModelId', value: modelId });
-    this.emit({ type: 'om_model_changed', role: 'reflector', modelId } as HarnessEvent);
-  }
-
-  // ===========================================================================
-  // Subagent Model Management
-  // ===========================================================================
-
-  getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
-    const state = this.#session.state.get() as Record<string, unknown>;
-    if (agentType) {
-      const perType = state[`subagentModelId_${agentType}`];
-      if (typeof perType === 'string') return perType;
-    }
-    const global = state.subagentModelId;
-    return typeof global === 'string' ? global : null;
-  }
-
-  async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
-    const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
-    void this.setState({ [key]: modelId } as unknown as Partial<TState>);
-    await this.#session.thread.setSetting({ key, value: modelId });
-    this.emit({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType } as HarnessEvent);
-  }
-
   // ===========================================================================
   // Permissions
   // ===========================================================================
 
   getToolCategory({ toolName }: { toolName: string }): ToolCategory | null {
     return this.config.toolCategoryResolver?.(toolName) ?? null;
-  }
-
-  setPermissionForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): void {
-    const rules = this.getPermissionRules();
-    rules.categories[category] = policy;
-    void this.setState({ permissionRules: rules } as unknown as Partial<TState>);
-  }
-
-  setPermissionForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): void {
-    const rules = this.getPermissionRules();
-    rules.tools[toolName] = policy;
-    void this.setState({ permissionRules: rules } as unknown as Partial<TState>);
-  }
-
-  getPermissionRules(): PermissionRules {
-    const state = this.#session.state.get() as Record<string, unknown>;
-    const rules = state.permissionRules as PermissionRules | undefined;
-    return rules ?? { categories: {}, tools: {} };
   }
 
   /**
@@ -1787,7 +1602,7 @@ export class Harness<TState = {}> {
    */
   private resolveToolApproval(toolName: string): PermissionPolicy {
     const state = this.#session.state.get() as Record<string, unknown>;
-    const rules = this.getPermissionRules();
+    const rules = this.#session.permissions.getRules();
 
     const toolPolicy = rules.tools[toolName];
     if (toolPolicy === 'deny') return 'deny';
@@ -1933,7 +1748,6 @@ export class Harness<TState = {}> {
       maxSteps: HARNESS_MAX_STEPS,
       savePerStep: false,
       requireToolApproval: !isYolo,
-      modelSettings: { temperature: 1 },
     };
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
@@ -3448,7 +3262,7 @@ export class Harness<TState = {}> {
    * - On **rejection**, the plan-mode run is resumed with the feedback so the agent can
    *   revise and submit again. This is an ordinary tool resume.
    * - On **approval**, the parked plan-mode suspension is abandoned and the Harness
-   *   switches to its default (execution) mode. switchMode aborts the plan-mode run, so
+   *   switches to its default (execution) mode. The mode switch aborts the plan-mode run, so
    *   there is no point resuming it first; the next signal/message drives the fresh
    *   default-mode run. The model still sees the "approved" tool result on the rebuilt
    *   message history when the default-mode run starts.
@@ -3484,8 +3298,8 @@ export class Harness<TState = {}> {
     const transitionMode = this.listModes().find(mode => mode.id === transitionModeId);
     if (transitionMode && transitionMode.id !== this.#session.mode.get()) {
       await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-      await this.switchMode({ modeId: transitionMode.id });
-      // switchMode aborts the in-flight run but does not wait for it to
+      await this.#session.mode.switch({ modeId: transitionMode.id });
+      // The mode switch aborts the in-flight run but does not wait for it to
       // finalize. If the caller (e.g. mastracode's plan-approval handler)
       // immediately fires a system-reminder signal, that signal can land in
       // the dying run's pending queue and later get drained with the run's
@@ -3735,7 +3549,7 @@ export class Harness<TState = {}> {
       }
     }
 
-    const permissionRules = this.getPermissionRules();
+    const permissionRules = this.#session.permissions.getRules();
     for (const [toolId, policy] of Object.entries(permissionRules.tools)) {
       if (policy === 'deny') {
         delete builtInTools[toolId];
@@ -3794,7 +3608,7 @@ export class Harness<TState = {}> {
       abortSignal: this.#session.run.getAbortSignal(),
       workspace: this.workspace,
       emitEvent: event => this.emit(event),
-      getSubagentModelId: params => this.getSubagentModelId(params),
+      getSubagentModelId: params => this.#session.subagents.model.get(params ?? {}),
     };
 
     requestContext.set('harness', harnessContext);

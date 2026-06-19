@@ -1,10 +1,17 @@
 import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
+import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import * as React from 'react';
 
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { cn } from '@/lib/utils';
 
 type Orientation = 'vertical' | 'horizontal' | 'both';
+type ScrollButtonDirection = 'left' | 'right';
+
+const DEFAULT_SCROLL_BUTTON_SPEED = 100;
+const DEFAULT_SCROLL_BUTTON_INTERVAL_TIME = 20;
+const MIN_SCROLL_BUTTON_SPEED = 1;
+const MIN_SCROLL_BUTTON_INTERVAL_TIME = 16;
 
 export type MaskSides = {
   top?: boolean;
@@ -24,11 +31,24 @@ export type MaskSides = {
  */
 export type ScrollAreaMask = boolean | MaskSides;
 
+export type ScrollAreaScrollButtons =
+  | boolean
+  | {
+      /** Pixels to scroll per repeated interval. */
+      scrollSpeed?: number;
+      /** Milliseconds between repeated scroll steps while the button is held. */
+      scrollIntervalTime?: number;
+      leftLabel?: string;
+      rightLabel?: string;
+    };
+
 export type ScrollAreaProps = React.ComponentPropsWithoutRef<typeof ScrollAreaPrimitive.Root> & {
   viewPortClassName?: string;
   maxHeight?: string;
   autoScroll?: boolean;
   orientation?: Orientation;
+  /** Show left/right controls for horizontal overflow. Only applies to `horizontal` and `both` orientations. */
+  scrollButtons?: ScrollAreaScrollButtons;
   /** Fade content at the edges where it's clipped by overflow. Defaults to the axes matching `orientation`. */
   mask?: ScrollAreaMask;
   /** @deprecated Use `mask` instead. Retained for backward compatibility. */
@@ -77,6 +97,129 @@ function maskClasses(sides: ResolvedMask) {
   );
 }
 
+function clampScrollButtonNumber(value: number | undefined, fallback: number, min: number) {
+  const resolvedValue = value ?? fallback;
+  return Number.isFinite(resolvedValue) ? Math.max(min, resolvedValue) : Math.max(min, fallback);
+}
+
+type ScrollButtonProps = {
+  direction: ScrollButtonDirection;
+  label: string;
+  onStartScrolling: (direction: ScrollButtonDirection, event?: React.PointerEvent<HTMLButtonElement>) => void;
+  onStopScrolling: () => void;
+  onKeyboardScroll: (direction: ScrollButtonDirection) => void;
+};
+
+const ScrollButton = ({ direction, label, onStartScrolling, onStopScrolling, onKeyboardScroll }: ScrollButtonProps) => {
+  const Icon = direction === 'left' ? ChevronLeftIcon : ChevronRightIcon;
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className={cn(
+        'absolute top-1 bottom-1 z-10 hidden w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-neutral3 transition-colors duration-normal ease-out-custom hover:bg-neutral6/5 hover:text-neutral6 active:bg-neutral6/10',
+        'outline-hidden focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55',
+        direction === 'left'
+          ? 'left-1 group-data-[overflow-x-start]/scroll-area:flex'
+          : 'right-1 group-data-[overflow-x-end]/scroll-area:flex',
+      )}
+      onPointerDown={event => onStartScrolling(direction, event)}
+      onPointerUp={onStopScrolling}
+      onPointerLeave={onStopScrolling}
+      onPointerCancel={onStopScrolling}
+      onBlur={onStopScrolling}
+      onClick={event => {
+        if (event.detail === 0) onKeyboardScroll(direction);
+      }}
+    >
+      <Icon aria-hidden="true" className="size-4" />
+    </button>
+  );
+};
+
+type ScrollButtonsProps = {
+  areaRef: React.RefObject<HTMLDivElement | null>;
+  scrollButtons: Exclude<ScrollAreaScrollButtons, false | undefined>;
+};
+
+const ScrollButtons = ({ areaRef, scrollButtons }: ScrollButtonsProps) => {
+  const scrollButtonInterval = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const scrollButtonOptions = typeof scrollButtons === 'object' ? scrollButtons : undefined;
+  const scrollButtonSpeed = clampScrollButtonNumber(
+    scrollButtonOptions?.scrollSpeed,
+    DEFAULT_SCROLL_BUTTON_SPEED,
+    MIN_SCROLL_BUTTON_SPEED,
+  );
+  const scrollButtonIntervalTime = clampScrollButtonNumber(
+    scrollButtonOptions?.scrollIntervalTime,
+    DEFAULT_SCROLL_BUTTON_INTERVAL_TIME,
+    MIN_SCROLL_BUTTON_INTERVAL_TIME,
+  );
+  const leftScrollButtonLabel = scrollButtonOptions?.leftLabel ?? 'Scroll left';
+  const rightScrollButtonLabel = scrollButtonOptions?.rightLabel ?? 'Scroll right';
+
+  const stopScrollButtonScrolling = React.useCallback(() => {
+    if (!scrollButtonInterval.current) return;
+    clearInterval(scrollButtonInterval.current);
+    scrollButtonInterval.current = null;
+  }, []);
+
+  const scrollByDirection = React.useCallback(
+    (direction: ScrollButtonDirection, multiplier = 1) => {
+      const viewport = areaRef.current;
+      if (!viewport) return;
+
+      viewport.scrollBy({
+        left: direction === 'right' ? scrollButtonSpeed * multiplier : -scrollButtonSpeed * multiplier,
+        behavior: 'smooth',
+      });
+    },
+    [areaRef, scrollButtonSpeed],
+  );
+
+  const startScrollButtonScrolling = React.useCallback(
+    (direction: ScrollButtonDirection, event?: React.PointerEvent<HTMLButtonElement>) => {
+      event?.preventDefault();
+      event?.stopPropagation();
+      event?.currentTarget.setPointerCapture?.(event.pointerId);
+
+      stopScrollButtonScrolling();
+      scrollByDirection(direction, 2);
+
+      scrollButtonInterval.current = setInterval(() => {
+        scrollByDirection(direction);
+      }, scrollButtonIntervalTime);
+    },
+    [scrollButtonIntervalTime, scrollByDirection, stopScrollButtonScrolling],
+  );
+
+  React.useEffect(() => {
+    return () => {
+      stopScrollButtonScrolling();
+    };
+  }, [stopScrollButtonScrolling]);
+
+  return (
+    <>
+      <ScrollButton
+        direction="left"
+        label={leftScrollButtonLabel}
+        onStartScrolling={startScrollButtonScrolling}
+        onStopScrolling={stopScrollButtonScrolling}
+        onKeyboardScroll={direction => scrollByDirection(direction, 2)}
+      />
+      <ScrollButton
+        direction="right"
+        label={rightScrollButtonLabel}
+        onStartScrolling={startScrollButtonScrolling}
+        onStopScrolling={stopScrollButtonScrolling}
+        onKeyboardScroll={direction => scrollByDirection(direction, 2)}
+      />
+    </>
+  );
+};
+
 const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
   (
     {
@@ -86,6 +229,7 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
       maxHeight,
       autoScroll = false,
       orientation = 'vertical',
+      scrollButtons,
       mask,
       showMask,
       viewportRef,
@@ -132,7 +276,11 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
           : undefined;
 
     return (
-      <ScrollAreaPrimitive.Root ref={ref} className={cn('relative overflow-hidden', className)} {...props}>
+      <ScrollAreaPrimitive.Root
+        ref={ref}
+        className={cn('group/scroll-area relative overflow-hidden', className)}
+        {...props}
+      >
         <ScrollAreaPrimitive.Viewport
           ref={setViewportRef}
           className={cn('h-full w-full rounded-[inherit]', maskClasses(sides), viewPortClassName)}
@@ -140,6 +288,9 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
         >
           <ScrollAreaPrimitive.Content style={contentStyle}>{children}</ScrollAreaPrimitive.Content>
         </ScrollAreaPrimitive.Viewport>
+        {scrollButtons && orientation !== 'vertical' && (
+          <ScrollButtons areaRef={areaRef} scrollButtons={scrollButtons} />
+        )}
         {(orientation === 'vertical' || orientation === 'both') && <ScrollBar orientation="vertical" />}
         {(orientation === 'horizontal' || orientation === 'both') && <ScrollBar orientation="horizontal" />}
         {orientation === 'both' && <ScrollAreaPrimitive.Corner />}
