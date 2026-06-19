@@ -1,5 +1,11 @@
 # @mastra/voice-murf
 
+## 0.13.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
 ## 0.12.5
 
 ### Patch Changes
