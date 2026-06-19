@@ -698,33 +698,6 @@ harness.respondToToolSuspension({
 
 ### Permissions
 
-The harness owns the permission _policy_ — the rules that decide when a tool requires approval. Session-scoped _grants_ (which tools and categories are auto-approved for the current conversation) live on the session: see [`session.grantCategory()`](/reference/harness/session#permissions), [`session.grantTool()`](/reference/harness/session#permissions), and [`session.getGrants()`](/reference/harness/session#permissions).
-
-#### `setPermissionForCategory({ category, policy })`
-
-Set the permission policy for a tool category.
-
-```typescript
-harness.setPermissionForCategory({ category: 'execute', policy: 'ask' })
-```
-
-#### `setPermissionForTool({ toolName, policy })`
-
-Set the permission policy for a specific tool. Per-tool policies take precedence over category policies.
-
-```typescript
-harness.setPermissionForTool({ toolName: 'dangerous_tool', policy: 'deny' })
-```
-
-#### `getPermissionRules()`
-
-Return the current permission rules.
-
-```typescript
-const rules = harness.getPermissionRules()
-// { categories: { execute: 'ask' }, tools: { dangerous_tool: 'deny' } }
-```
-
 #### `getToolCategory({ toolName })`
 
 Resolve a tool's category using the configured `toolCategoryResolver`.

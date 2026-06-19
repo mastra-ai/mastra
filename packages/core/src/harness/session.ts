@@ -17,6 +17,8 @@ import type {
   HarnessRequestStateUpdater,
   HarnessThread,
   ModelUseCountTracker,
+  PermissionPolicy,
+  PermissionRules,
   TokenUsage,
   ToolCategory,
 } from './types';
@@ -1011,6 +1013,49 @@ class SessionOM {
   }
 }
 
+/**
+ * Owns the session's tool-permission rules: the per-category and per-tool
+ * approval policies persisted in session state under `permissionRules`. The
+ * Harness injects the session-state read/write once via {@link setResolver}.
+ *
+ * These are the persisted rules consulted during tool-approval resolution; they
+ * are distinct from the in-memory "allow for this session" grants on the
+ * Session.
+ */
+class SessionPermissions {
+  #getState: (() => Record<string, unknown>) | undefined;
+  #setState: ((updates: Record<string, unknown>) => Promise<void>) | undefined;
+
+  /** Attach the session-state read/write. The Harness injects these once. */
+  setResolver(options: {
+    getState: () => Record<string, unknown>;
+    setState: (updates: Record<string, unknown>) => Promise<void>;
+  }): void {
+    this.#getState = options.getState;
+    this.#setState = options.setState;
+  }
+
+  /** The current permission rules, or empty rules when none are set. */
+  getRules(): PermissionRules {
+    const rules = this.#getState?.().permissionRules as PermissionRules | undefined;
+    return rules ?? { categories: {}, tools: {} };
+  }
+
+  /** Set the approval policy for a tool category. Resolves once persisted. */
+  setForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): Promise<void> {
+    const rules = this.getRules();
+    rules.categories[category] = policy;
+    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+  }
+
+  /** Set the approval policy for an individual tool. Resolves once persisted. */
+  setForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): Promise<void> {
+    const rules = this.getRules();
+    rules.tools[toolName] = policy;
+    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+  }
+}
+
 type SessionStateUpdater<TState, TResult> = HarnessRequestStateUpdater<TState, TResult>;
 
 interface SessionStateOptions<TState> {
@@ -1659,6 +1704,8 @@ export class Session<TState = unknown> {
   readonly mode = new SessionMode(() => this.#store, this.model);
   /** The session's observational-memory model selection (observer/reflector). */
   readonly om = new SessionOM();
+  /** The session's persisted tool-permission rules (per-category / per-tool). */
+  readonly permissions = new SessionPermissions();
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
   /** Live subscription to the active thread's agent event stream. */

@@ -380,6 +380,35 @@ Resolve the role's model ID to a model instance via the harness's `resolveModel`
 const observerModel = harness.session.om.observer.resolvedModel()
 ```
 
+## Permissions
+
+`session.permissions` owns the persisted tool-approval _policy_ — the per-category and per-tool rules consulted during approval resolution. These are distinct from the in-memory session _grants_ documented under [Methods → Permissions](#permissions); grants reset each session, whereas these rules are persisted in session state.
+
+### `session.permissions.getRules()`
+
+Return the current permission rules, or empty rules (`{ categories: {}, tools: {} }`) when none are set.
+
+```typescript
+const rules = harness.session.permissions.getRules()
+// { categories: { execute: 'ask' }, tools: { dangerous_tool: 'deny' } }
+```
+
+### `session.permissions.setForCategory({ category, policy })`
+
+Set the approval policy (`'allow' | 'ask' | 'deny'`) for a tool category. Resolves once the change is persisted to session state.
+
+```typescript
+await harness.session.permissions.setForCategory({ category: 'execute', policy: 'ask' })
+```
+
+### `session.permissions.setForTool({ toolName, policy })`
+
+Set the approval policy for a specific tool. Per-tool policies take precedence over category policies. Resolves once persisted.
+
+```typescript
+await harness.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' })
+```
+
 ## Run
 
 `session.run` owns run and trace identity plus abort state for the in-flight run.
