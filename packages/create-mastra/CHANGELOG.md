@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.15.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
 ## 1.15.0-alpha.0
 
 ### Minor Changes
