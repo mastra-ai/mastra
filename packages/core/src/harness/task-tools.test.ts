@@ -277,8 +277,8 @@ describe('task tool permissions', () => {
     expect(toolsets.harnessBuiltIn.task_update).toBeUndefined();
     expect(toolsets.harnessBuiltIn.task_complete).toBeDefined();
     expect(toolsets.harness.custom_tool).toBeUndefined();
-    expect((harness as any).resolveToolApproval('task_update')).toBe('deny');
-    expect((harness as any).resolveToolApproval('task_complete')).toBe('allow');
+    expect(harness.session.resolveToolApproval('task_update')).toBe('deny');
+    expect(harness.session.resolveToolApproval('task_complete')).toBe('allow');
   });
 });
 

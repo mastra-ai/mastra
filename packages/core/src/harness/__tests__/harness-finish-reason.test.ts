@@ -16,7 +16,8 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 
-import { Harness, describeNonSuccessFinishReason } from '../harness';
+import { Harness } from '../harness';
+import { describeNonSuccessFinishReason } from '../stream-content';
 
 vi.setConfig({ testTimeout: 30_000 });
 

@@ -6,6 +6,7 @@ import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import { safeStringify } from '../utils';
+import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 import type {
@@ -156,6 +157,21 @@ export interface SessionMachinery {
   persistTokenUsage(): Promise<void>;
   /** Generate a new id (thread ids, message ids) using the host's id strategy. */
   generateId(): string;
+  /**
+   * Approve a parked tool call: drive the agent to execute it. Run-control
+   * machinery (resolves the agent, request context, toolsets) — still
+   * Harness-owned pending the run-control move.
+   */
+  approveToolCall(input: { toolCallId?: string; requestContext?: RequestContext }): Promise<void>;
+  /** Decline a parked tool call: drive the agent to reject it. Run-control machinery. */
+  declineToolCall(input: { toolCallId?: string; requestContext?: RequestContext }): Promise<void>;
+  /**
+   * Resume a suspended tool call with resume data, then process the resulting
+   * stream. Run-control machinery (re-supplies the shared run budget).
+   */
+  resumeToolCall(input: { resumeData: any; toolCallId: string; requestContext?: RequestContext }): Promise<void>;
+  /** Send the next queued follow-up message after a run finishes. Run-control machinery. */
+  drainFollowUpQueue(): Promise<void>;
 }
 
 /**
@@ -1870,6 +1886,8 @@ export class Session<TState = unknown> {
   #resolveSubagentName: ((agentType: string) => string | undefined) | undefined;
   /** Harness-owned run machinery (agent, run/stream option builders, …), injected via {@link setMachinery}. */
   #machinery: SessionMachinery | undefined;
+  /** The per-session agent run engine, constructed once machinery is wired via {@link setMachinery}. */
+  #engine: SessionRunEngine | undefined;
   /** The session's currently-selected model (source of truth) + per-mode memory. */
   readonly model = new SessionModel(() => this.#store, this.#bus);
   /** The session's currently-selected mode and switch sequence. */
@@ -1971,6 +1989,7 @@ export class Session<TState = unknown> {
    */
   setMachinery(machinery: SessionMachinery): void {
     this.#machinery = machinery;
+    this.#engine = new SessionRunEngine(this as Session, machinery);
   }
 
   /**
@@ -1982,6 +2001,34 @@ export class Session<TState = unknown> {
       throw new Error('Session run machinery has not been wired by the Harness');
     }
     return this.#machinery;
+  }
+
+  /** The per-session run engine, throwing when accessed before machinery is wired. */
+  get runEngine(): SessionRunEngine {
+    if (!this.#engine) {
+      throw new Error('Session run engine has not been wired by the Harness');
+    }
+    return this.#engine;
+  }
+
+  /**
+   * Consume an agent stream response, folding chunks into this session's display
+   * messages and usage and driving tool approval. Delegates to the per-session
+   * run engine. Used by the initial run path and tool resume.
+   */
+  processStream(
+    response: { fullStream: AsyncIterable<any> },
+    requestContext?: RequestContext,
+  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
+    return this.runEngine.processStream(response, requestContext);
+  }
+
+  /**
+   * Drive the run loop for a subscribed thread stream: process each run's chunks
+   * and finalize it. Delegates to the per-session run engine.
+   */
+  processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {
+    return this.runEngine.processSubscribedThreadStream(subscription);
   }
 
   /**
@@ -2012,6 +2059,55 @@ export class Session<TState = unknown> {
     this.approval.cancel();
     this.stream.abort();
     this.run.requestAbort();
+  }
+
+  /**
+   * Abort the session's active run and clear the display-state mirror of any
+   * parked tool suspensions. {@link abortRun} drops the parked suspensions (so a
+   * run sitting in a tool suspend() like ask_user / request_access isn't left
+   * orphaned), aborts the live subscription, and marks the run as aborting; this
+   * additionally clears the display-state mirror of those suspensions and
+   * notifies subscribers so stale suspension UI doesn't linger.
+   */
+  abort(): void {
+    const hadPendingSuspensions = this.displayState.get().pendingSuspensions.size > 0;
+    this.displayState.clearPendingSuspensions();
+    this.abortRun();
+    // Clearing the suspension mirror is a direct mutation, so it doesn't flow
+    // through the display-state reducer. Notify subscribers explicitly when we
+    // actually removed something, otherwise stale suspension UI can linger.
+    if (hadPendingSuspensions) {
+      this.emit({ type: 'display_state_changed', displayState: this.displayState.get() });
+    }
+  }
+
+  /**
+   * Resolve the effective approval policy for a tool: explicit per-tool deny
+   * wins, then session-wide yolo, then an explicit per-tool policy, then a
+   * session-scoped grant, then the tool's category grant/policy, falling back to
+   * "ask". Pure session state plus the injected category resolver.
+   */
+  resolveToolApproval(toolName: string): PermissionPolicy {
+    const state = this.state.get() as Record<string, unknown>;
+    const rules = this.permissions.getRules();
+
+    const toolPolicy = rules.tools[toolName];
+    if (toolPolicy === 'deny') return 'deny';
+
+    if (state.yolo === true) return 'allow';
+
+    if (toolPolicy) return toolPolicy;
+
+    if (this.hasToolGrant(toolName)) return 'allow';
+
+    const category = this.#resolveCategory?.(toolName);
+    if (category) {
+      if (this.hasCategoryGrant(category)) return 'allow';
+      const categoryPolicy = rules.categories[category];
+      if (categoryPolicy) return categoryPolicy;
+    }
+
+    return 'ask';
   }
 
   /**

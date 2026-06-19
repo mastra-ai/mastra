@@ -916,8 +916,8 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    await (harness as any).processStreamChunk(
-      (harness as any).createStreamState(),
+    await harness.session.runEngine.processStreamChunk(
+      harness.session.runEngine.createStreamState(),
       {
         type: 'data-user-message',
         data: {
@@ -955,8 +955,8 @@ describe('Harness signal messages', () => {
       events.push(event);
     });
 
-    await (harness as any).processStreamChunk(
-      (harness as any).createStreamState(),
+    await harness.session.runEngine.processStreamChunk(
+      harness.session.runEngine.createStreamState(),
       {
         type: 'data-user-message',
         data: {
@@ -1001,16 +1001,16 @@ describe('Harness signal messages', () => {
     harness.session.subscribe(event => {
       events.push(event);
     });
-    const state = (harness as any).createStreamState();
+    const state = harness.session.runEngine.createStreamState();
     const requestContext = new RequestContext();
 
-    await (harness as any).processStreamChunk(state, { type: 'text-start', payload: { id: 'text-1' } }, requestContext);
-    await (harness as any).processStreamChunk(
+    await harness.session.runEngine.processStreamChunk(state, { type: 'text-start', payload: { id: 'text-1' } }, requestContext);
+    await harness.session.runEngine.processStreamChunk(
       state,
       { type: 'text-delta', payload: { id: 'text-1', text: 'Fact 1' } },
       requestContext,
     );
-    await (harness as any).processStreamChunk(
+    await harness.session.runEngine.processStreamChunk(
       state,
       {
         type: 'goal',
@@ -1030,8 +1030,8 @@ describe('Harness signal messages', () => {
       },
       requestContext,
     );
-    await (harness as any).processStreamChunk(state, { type: 'text-start', payload: { id: 'text-2' } }, requestContext);
-    await (harness as any).processStreamChunk(
+    await harness.session.runEngine.processStreamChunk(state, { type: 'text-start', payload: { id: 'text-2' } }, requestContext);
+    await harness.session.runEngine.processStreamChunk(
       state,
       { type: 'text-delta', payload: { id: 'text-2', text: 'Fact 2' } },
       requestContext,
@@ -1057,9 +1057,9 @@ describe('Harness signal messages', () => {
     harness.session.subscribe(event => {
       events.push(event);
     });
-    const state = (harness as any).createStreamState();
+    const state = harness.session.runEngine.createStreamState();
 
-    await (harness as any).processStreamChunk(
+    await harness.session.runEngine.processStreamChunk(
       state,
       {
         type: 'data-signal',
@@ -1101,9 +1101,9 @@ describe('Harness signal messages', () => {
     harness.session.subscribe(event => {
       events.push(event);
     });
-    const state = (harness as any).createStreamState();
+    const state = harness.session.runEngine.createStreamState();
 
-    await (harness as any).processStreamChunk(
+    await harness.session.runEngine.processStreamChunk(
       state,
       {
         type: 'data-signal',
@@ -1155,9 +1155,9 @@ describe('Harness signal messages', () => {
     harness.session.subscribe(event => {
       events.push(event);
     });
-    const state = (harness as any).createStreamState();
+    const state = harness.session.runEngine.createStreamState();
 
-    await (harness as any).processStreamChunk(
+    await harness.session.runEngine.processStreamChunk(
       state,
       {
         type: 'data-signal',
@@ -1233,9 +1233,9 @@ describe('Harness signal messages', () => {
     harness.session.subscribe(event => {
       events.push(event);
     });
-    const state = (harness as any).createStreamState();
+    const state = harness.session.runEngine.createStreamState();
 
-    await (harness as any).processStreamChunk(
+    await harness.session.runEngine.processStreamChunk(
       state,
       {
         type: 'data-signal',

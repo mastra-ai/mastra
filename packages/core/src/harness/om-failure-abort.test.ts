@@ -26,7 +26,7 @@ describe('Harness OM failure abort behavior', () => {
 
     harness.session.run.ensureAbortController();
 
-    await (harness as any).processStream({
+    await (harness.session as any).processStream({
       fullStream: (async function* () {
         yield {
           type: 'data-om-buffering-failed',
@@ -59,7 +59,7 @@ describe('Harness OM failure abort behavior', () => {
 
     harness.session.run.ensureAbortController();
 
-    await (harness as any).processStream({
+    await (harness.session as any).processStream({
       fullStream: (async function* () {
         yield {
           type: 'data-om-observation-failed',

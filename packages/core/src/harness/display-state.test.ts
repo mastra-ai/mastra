@@ -330,7 +330,7 @@ describe('tool lifecycle', () => {
     const events: HarnessEvent[] = [];
     harness.session.subscribe(event => events.push(event));
 
-    const result = await (harness as any).processStream(
+    const result = await (harness.session as any).processStream(
       {
         fullStream: new ReadableStream({
           start(controller) {
@@ -401,7 +401,7 @@ describe('tool lifecycle', () => {
     const events: HarnessEvent[] = [];
     harness.session.subscribe(event => events.push(event));
 
-    const result = await (harness as any).processStream(
+    const result = await (harness.session as any).processStream(
       {
         fullStream: new ReadableStream({
           start(controller) {
