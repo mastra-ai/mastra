@@ -134,7 +134,6 @@ export function AppSidebar() {
             link={{
               name: 'Search',
               url: '#',
-              icon: <Search />,
             }}
           >
             <button
