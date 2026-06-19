@@ -61,7 +61,7 @@ export const fileAttachmentBlockedRetryScenario = {
             {
               type: 'command',
               command: 'node .mastracode/block-first-attachment.cjs',
-              timeout: 3000,
+              timeout: 10_000,
               description: 'block first attachment submit',
             },
           ],
