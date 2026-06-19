@@ -128,14 +128,26 @@ interface SignalFacetTabsProps {
   selectedFacet: SignalFacet;
   selectedTraceId: string | null;
   selectedChartFacetIds: string[];
+  activeTab: SignalTab;
+  onActiveTabChange: (tab: SignalTab) => void;
   onFacetSelect: (facetId: string) => void;
   onChartFacetToggle: (facetId: string) => void;
   onTraceSelect: () => void;
 }
 
-export function SignalFacetTabs({ signal, selectedFacet, selectedTraceId, selectedChartFacetIds, onFacetSelect, onChartFacetToggle, onTraceSelect }: SignalFacetTabsProps) {
+export function SignalFacetTabs({
+  signal,
+  selectedFacet,
+  selectedTraceId,
+  selectedChartFacetIds,
+  activeTab,
+  onActiveTabChange,
+  onFacetSelect,
+  onChartFacetToggle,
+  onTraceSelect,
+}: SignalFacetTabsProps) {
   return (
-    <Tabs<SignalTab> defaultTab="trace-list" className="flex h-full min-h-0 flex-col overflow-hidden">
+    <Tabs<SignalTab> defaultTab="trace-list" value={activeTab} onValueChange={onActiveTabChange} className="flex h-full min-h-0 flex-col overflow-hidden">
       <TabList variant="line">
         <Tab value="trace-list">Trace list</Tab>
         <Tab value="chart">Chart</Tab>
@@ -167,6 +179,7 @@ export function SignalDetailsPage({ signalId, selectedTraceId, tracePanel, onTra
   const initialFacet = findFacetByTraceId(selectedSignal, selectedTraceId ?? undefined) ?? selectedSignal?.facets[0];
   const [selectedFacetId, setSelectedFacetId] = useState<string | null>(() => initialFacet?.id ?? null);
   const [selectedChartFacetIds, setSelectedChartFacetIds] = useState<string[]>(() => selectedSignal?.facets.map(facet => facet.id) ?? []);
+  const [activeTab, setActiveTab] = useState<SignalTab>('trace-list');
   const selectedFacet = selectedSignal?.facets.find(facet => facet.id === selectedFacetId) ?? initialFacet;
   const { data: tracesData } = useTraces({});
   const resolvedTraceId = tracesData?.spans[0]?.traceId ?? null;
@@ -186,7 +199,7 @@ export function SignalDetailsPage({ signalId, selectedTraceId, tracePanel, onTra
   }
 
   return (
-    <SignalsLayout sidebar={null} tracePanel={tracePanel}>
+    <SignalsLayout sidebar={null} tracePanel={activeTab === 'trace-list' ? tracePanel : undefined}>
       <section className="flex h-full min-w-0 flex-col gap-4">
         <header className="space-y-1">
           <h1 className="text-icon-xl font-semibold text-neutral6">{selectedSignal.name}</h1>
@@ -198,6 +211,8 @@ export function SignalDetailsPage({ signalId, selectedTraceId, tracePanel, onTra
             selectedFacet={selectedFacet}
             selectedTraceId={selectedTraceId}
             selectedChartFacetIds={selectedChartFacetIds}
+            activeTab={activeTab}
+            onActiveTabChange={setActiveTab}
             onFacetSelect={setSelectedFacetId}
             onChartFacetToggle={handleChartFacetToggle}
             onTraceSelect={handleTraceSelect}
