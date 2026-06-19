@@ -64,7 +64,9 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   // The missing `undefined` case was the bug: the old `=== true`-only check made an editor-unset
   // code agent send an empty instructions array on save, wiping the prompt.
   const ownsInstructions =
-    !isCodeAgentOverride || editorConfig === undefined || (editorConfig !== false && editorConfig?.instructions === true);
+    !isCodeAgentOverride ||
+    editorConfig === undefined ||
+    (editorConfig !== false && editorConfig?.instructions === true);
   const ownsTools = !isCodeAgentOverride || (editorConfig !== false && editorConfig?.tools === true);
   const ownsToolDescriptions =
     !isCodeAgentOverride ||
