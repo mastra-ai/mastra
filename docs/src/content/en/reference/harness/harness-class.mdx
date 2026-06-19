@@ -779,31 +779,6 @@ if (record) {
 
 The observer/reflector model selection and observation/reflection thresholds live on the Session under [`session.om`](/reference/harness/session#observational-memory), grouped by role. Read them with `session.om.observer.modelId()` / `session.om.reflector.modelId()` and `session.om.observer.threshold()` / `session.om.reflector.threshold()`, and change a role's model with `session.om.observer.switchModel()` / `session.om.reflector.switchModel()`.
 
-### Subagents
-
-#### `getSubagentModelId({ agentType? })`
-
-Retrieve the subagent model ID. Prioritizes per-type settings over the global setting.
-
-```typescript
-const modelId = harness.getSubagentModelId({ agentType: 'explore' })
-```
-
-#### `setSubagentModelId({ modelId, agentType? })`
-
-Set the subagent model ID. Pass an `agentType` to set a per-type override, or omit it to set the global default. Persists to thread settings and emits a `subagent_model_changed` event.
-
-```typescript
-// Set global subagent model
-await harness.setSubagentModelId({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
-
-// Set per-type model
-await harness.setSubagentModelId({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
-  agentType: 'explore',
-})
-```
-
 ### Forked subagents
 
 By default, a subagent runs with a fresh context — it doesn't see the parent conversation. **Forked subagents** opt into a different model: the subagent runs on a clone of the parent thread and reuses the parent agent's full configuration. This is useful when the subagent needs the full context of the conversation so far (e.g., recalling earlier user-supplied facts), and when prompt-cache hit rates matter.
