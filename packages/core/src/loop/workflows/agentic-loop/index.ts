@@ -9,13 +9,7 @@ import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '.
 import type { OutputWriter } from '../../../workflows/types';
 import type { RunScopeContext } from '../../run-scope-access';
 import { readScoped, writeScoped } from '../../run-scope-access';
-import {
-  DELEGATION_BAILED_KEY,
-  DRAIN_PENDING_SIGNALS_KEY,
-  GENERATE_ID_KEY,
-  RESOURCE_ID_KEY,
-  THREAD_ID_KEY,
-} from '../../run-scope-keys';
+import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from '../../run-scope-keys';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';

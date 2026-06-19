@@ -2,7 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { ChunkType } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
 import { readScoped } from '../../run-scope-access';
-import { DRAIN_PENDING_SIGNALS_KEY, GENERATE_ID_KEY } from '../../run-scope-keys';
+import { DRAIN_PENDING_SIGNALS_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
