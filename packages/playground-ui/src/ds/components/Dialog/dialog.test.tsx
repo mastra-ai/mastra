@@ -45,6 +45,44 @@ describe('Dialog', () => {
     expect(screen.getByText('Body content')).toBeDefined();
   });
 
+  it('renders the overlay by default and allows it to be disabled', () => {
+    const { rerender } = render(
+      <Dialog defaultOpen>
+        <DialogContent>
+          <DialogTitle>With overlay</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(document.querySelector('.dialog-overlay-anim')).not.toBeNull();
+
+    rerender(
+      <Dialog defaultOpen>
+        <DialogContent showOverlay={false}>
+          <DialogTitle>No overlay</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(document.querySelector('.dialog-overlay-anim')).toBeNull();
+  });
+
+  it('applies custom classes to the overlay', () => {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent overlayClassName="custom-overlay bg-surface1/40 backdrop-blur-none">
+          <DialogTitle>Custom overlay</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    const overlay = document.querySelector('.dialog-overlay-anim');
+    expect(overlay?.className).toContain('custom-overlay');
+    expect(overlay?.className).toContain('bg-surface1/40');
+    expect(overlay?.className).toContain('backdrop-blur-none');
+    expect(overlay?.className).not.toContain('backdrop-blur-xs');
+  });
+
   it('renders an asChild Trigger as the child element without nesting buttons', () => {
     render(
       <Dialog>
