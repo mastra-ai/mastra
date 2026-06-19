@@ -111,7 +111,7 @@ describe('Harness: non-success finish reasons', () => {
     );
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -136,7 +136,7 @@ describe('Harness: non-success finish reasons', () => {
     const harness = await buildHarness('content-filter-no-details', () => createFinishReasonStream('content-filter'));
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -152,7 +152,7 @@ describe('Harness: non-success finish reasons', () => {
     const harness = await buildHarness('length', () => createFinishReasonStream('length'));
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -177,7 +177,7 @@ describe('Harness: non-success finish reasons', () => {
     );
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -197,7 +197,7 @@ describe('Harness: non-success finish reasons', () => {
     const harness = await buildHarness('stop', () => createFinishReasonStream('stop'));
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 

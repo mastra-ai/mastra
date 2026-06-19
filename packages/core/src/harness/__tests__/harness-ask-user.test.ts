@@ -102,7 +102,7 @@ describe('Harness: ask_user native suspension', () => {
     );
 
     const events: any[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     await harness.sendMessage({ content: 'Ask me where to deploy' });
 
@@ -123,7 +123,7 @@ describe('Harness: ask_user native suspension', () => {
     const { harness } = await buildHarness('resume', JSON.stringify({ question: 'Your name?' }));
 
     const events: any[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     await harness.sendMessage({ content: 'Ask my name' });
 
@@ -155,7 +155,7 @@ describe('Harness: ask_user native suspension', () => {
     );
 
     const events: any[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     await harness.sendMessage({ content: 'Ask me to pick' });
 
@@ -323,7 +323,7 @@ describe('Harness: ask_user native suspension', () => {
     await harness.createThread();
 
     const events: any[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.session.subscribe(event => events.push(event));
 
     await harness.sendMessage({ content: 'Ask me three things' });
 

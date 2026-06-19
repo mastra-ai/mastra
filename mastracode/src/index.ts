@@ -708,7 +708,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Sync hookManager session ID on thread changes
   if (hookManager) {
-    harness.subscribe((event: HarnessEvent) => {
+    harness.session.subscribe((event: HarnessEvent) => {
       if (event.type === 'thread_changed') {
         hookManager.setSessionId(event.threadId);
       } else if (event.type === 'thread_created') {
@@ -736,7 +736,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       }
     };
 
-    harness.subscribe((event: HarnessEvent) => {
+    harness.session.subscribe((event: HarnessEvent) => {
       if (event.type === 'thread_changed') void startGithubPollingForCurrentThread(event.threadId);
       else if (event.type === 'thread_created') void startGithubPollingForCurrentThread(event.thread.id);
     });

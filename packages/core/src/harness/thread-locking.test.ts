@@ -279,7 +279,7 @@ describe('Harness thread locking', () => {
 
     it('emits thread_deleted event', async () => {
       const events: string[] = [];
-      harness.subscribe(event => {
+      harness.session.subscribe(event => {
         if (event.type === 'thread_deleted') events.push(event.threadId);
       });
 

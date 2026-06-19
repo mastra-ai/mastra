@@ -121,7 +121,7 @@ describe('tool approval with LibSQLStore via Harness', () => {
 
     // Collect events
     const events: any[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -131,7 +131,7 @@ describe('tool approval with LibSQLStore via Harness', () => {
     // Send message — should hit tool-call-approval and auto-approve (policy = 'ask')
     // We need to respond to the approval prompt
     const approvalPromise = new Promise<void>(resolve => {
-      harness.subscribe(event => {
+      harness.session.subscribe(event => {
         if (event.type === 'tool_approval_required') {
           // Must be async — the approval gate is armed after emit returns
           queueMicrotask(() => {

@@ -25,7 +25,7 @@ function createHarness(options: {
     resolveModel: options.resolveModel,
   });
 
-  if (options.onEvent) harness.subscribe(options.onEvent);
+  if (options.onEvent) harness.session.subscribe(options.onEvent);
 
   return harness;
 }

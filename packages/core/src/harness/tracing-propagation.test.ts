@@ -113,7 +113,7 @@ describe('Harness tracing propagation', () => {
 
   it('starts a new message with a clean abort state after a stale operation was aborted', async () => {
     const events: Array<{ type: string; reason?: string }> = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event as { type: string; reason?: string });
     });
     harness.session.run.requestAbort();

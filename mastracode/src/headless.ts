@@ -470,7 +470,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
   const streamCtx = { lastTextLength: 0 };
 
   const done = new Promise<number>(resolve => {
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       const result = autoResolve(harness, event);
       if (result.resolved) {
         if (emit) emit(result.json);

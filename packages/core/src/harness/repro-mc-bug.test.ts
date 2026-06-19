@@ -90,7 +90,7 @@ describe('mc send-message reproduction', () => {
     await harness.createThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    harness.session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
 
@@ -133,7 +133,7 @@ describe('mc send-message reproduction', () => {
     await harness.createThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    harness.session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
 
@@ -186,7 +186,7 @@ describe('mc send-message reproduction', () => {
     await harness.createThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    harness.session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
 

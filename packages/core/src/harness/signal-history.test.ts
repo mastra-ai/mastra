@@ -64,7 +64,7 @@ describe('Harness signal history rendering', () => {
   it('emits agent_end when a system-reminder signal starts an idle run', async () => {
     const { harness } = await createHarnessWithThread();
     const events: Array<{ type: string; reason?: string }> = [];
-    const unsubscribe = harness.subscribe(event => {
+    const unsubscribe = harness.session.subscribe(event => {
       events.push(event as { type: string; reason?: string });
     });
 

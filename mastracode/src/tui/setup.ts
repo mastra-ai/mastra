@@ -555,7 +555,7 @@ export function subscribeToHarness(state: TUIState, handleEvent: (event: any) =>
       if (stack) process.stderr.write(stack + '\n');
     }
   };
-  state.unsubscribe = state.harness.subscribe(listener);
+  state.unsubscribe = state.harness.session.subscribe(listener);
 }
 
 // =============================================================================

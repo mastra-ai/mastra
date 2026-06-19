@@ -390,7 +390,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -456,7 +456,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -479,7 +479,7 @@ describe('Harness signal messages', () => {
     });
     const harness = createHarness(storage, agent);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
     vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
@@ -526,7 +526,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
     const sendMessage = vi.spyOn(harness, 'sendMessage').mockResolvedValue(undefined);
@@ -622,7 +622,7 @@ describe('Harness signal messages', () => {
     });
     const harness = createHarness(storage, agent);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -654,7 +654,7 @@ describe('Harness signal messages', () => {
     });
     const harness = createHarness(storage, agent);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -702,7 +702,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -738,7 +738,7 @@ describe('Harness signal messages', () => {
       initialState: { yolo: true } as any,
     });
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -799,7 +799,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -825,7 +825,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -912,7 +912,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -951,7 +951,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
 
@@ -998,7 +998,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
     const state = (harness as any).createStreamState();
@@ -1054,7 +1054,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
     const state = (harness as any).createStreamState();
@@ -1098,7 +1098,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
     const state = (harness as any).createStreamState();
@@ -1152,7 +1152,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
     const state = (harness as any).createStreamState();
@@ -1230,7 +1230,7 @@ describe('Harness signal messages', () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    harness.session.subscribe(event => {
       events.push(event);
     });
     const state = (harness as any).createStreamState();
