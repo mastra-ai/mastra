@@ -26,13 +26,14 @@ const mockLogger: IMastraLogger = {
   listLogsByRunId: vi.fn(() => []),
 } as any;
 
-function createThreadStore(thread: StorageThreadType): SlackSignalsThreadStore {
+function createThreadStore(thread: StorageThreadType, allThreads: StorageThreadType[] = [thread]): SlackSignalsThreadStore {
   return {
     getThreadById: vi.fn(async () => thread),
     saveThread: vi.fn(async ({ thread: nextThread }: { thread: StorageThreadType }) => {
       thread = nextThread;
       return nextThread;
     }),
+    listThreads: vi.fn(async () => ({ threads: allThreads })),
   };
 }
 
@@ -93,11 +94,12 @@ function createMockRtmClient() {
 
 function createProviderWithRtm(options?: {
   thread?: StorageThreadType;
+  allThreads?: StorageThreadType[];
   syncClient?: SlackSignalsSyncClient;
   filters?: Record<string, unknown>;
 }) {
   const thread = options?.thread ?? createThread();
-  const threadStore = createThreadStore(thread);
+  const threadStore = createThreadStore(thread, options?.allThreads ?? [thread]);
   const syncClient = options?.syncClient ?? createSyncClient();
   const rtmClient = createMockRtmClient();
   const sendNotificationSignal = vi.fn(async () => undefined);
@@ -467,6 +469,24 @@ describe('SlackSignalsProvider', () => {
     rtmClient.receive({ ts: '129.000', channel: 'G1', channelType: 'group', user: 'U1', text: 'private channel' });
     await vi.waitFor(() => expect(sendNotificationSignal).toHaveBeenCalledTimes(1));
     expect((sendNotificationSignal.mock.calls as any[]).at(0)?.[0].priority).toBe('low');
+  });
+
+  it('restores subscribed threads from storage on connect', async () => {
+    const subscribedThread = createSubscribedThread({ id: 'thread-restored', resourceId: 'resource-restored' });
+    const unsubscribedThread = createThread({ id: 'thread-other', resourceId: 'resource-other' });
+    const { rtmClient, sendNotificationSignal } = createProviderWithRtm({
+      thread: subscribedThread,
+      allThreads: [subscribedThread, unsubscribedThread],
+    });
+
+    // Wait for async #restoreSubscriptions to complete, then send RTM message
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // RTM message should dispatch to the restored thread without calling subscribeThreadToSlack
+    rtmClient.receive({ ts: '130.000', channel: 'C1', channelType: 'channel', user: 'U1', text: 'restored notification' });
+
+    await vi.waitFor(() => expect(sendNotificationSignal).toHaveBeenCalledTimes(1));
+    expect((sendNotificationSignal.mock.calls as any[]).at(0)?.[0].summary).toContain('restored notification');
   });
 
   it('processes subscribe and unsubscribe signals and emits useful status', async () => {

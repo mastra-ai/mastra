@@ -188,6 +188,7 @@ export type SlackNotificationPayload = {
 export type SlackSignalsThreadStore = {
   getThreadById(input: { threadId: string; resourceId: string }): Promise<StorageThreadType | null | undefined>;
   saveThread(input: { thread: StorageThreadType }): Promise<StorageThreadType>;
+  listThreads?(input?: { perPage?: number | false }): Promise<{ threads: StorageThreadType[] }>;
 };
 
 export type SlackSignalsProviderConfig = {
@@ -546,6 +547,7 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   override connect(agent: any): void {
     super.connect(agent);
     this.#startRtm();
+    void this.#restoreSubscriptions();
   }
 
   disconnect(): void {
@@ -569,6 +571,25 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     void this.#rtmClient.connect().catch(error => {
       console.warn(`[slack-signals] RTM connection failed:`, error);
     });
+  }
+
+  async #restoreSubscriptions(): Promise<void> {
+    const threadStore = await this.#resolveThreadStore();
+    if (!threadStore?.listThreads) return;
+
+    try {
+      const { threads } = await threadStore.listThreads({ perPage: false });
+      for (const thread of threads) {
+        const subscription = getSlackSignalsMetadata(thread.metadata).subscription;
+        if (!subscription) continue;
+        const key = `${thread.resourceId}:${thread.id}`;
+        if (!this.#subscribedThreads.has(key) && thread.id && thread.resourceId) {
+          this.#subscribedThreads.set(key, { threadId: thread.id, resourceId: thread.resourceId });
+        }
+      }
+    } catch (error) {
+      console.warn('[slack-signals] Failed to restore subscriptions from storage:', error);
+    }
   }
 
   async #handleRtmMessage(event: SlackRtmMessageEvent): Promise<void> {
