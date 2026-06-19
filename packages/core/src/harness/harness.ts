@@ -54,7 +54,6 @@ import type {
   HarnessThread,
   ModelAuthStatus,
   PermissionPolicy,
-  PermissionRules,
   TokenUsage,
   ToolCategory,
 } from './types';
@@ -513,6 +512,10 @@ export class Harness<TState = {}> {
       emit: event => this.emit(event),
       omConfig: this.config.omConfig,
       resolveModel: this.config.resolveModel,
+    });
+    this.#session.permissions.setResolver({
+      getState: () => this.#session.state.get() as Record<string, unknown>,
+      setState: updates => this.#session.state.set(updates as Partial<TState>),
     });
     this.#session.thread.connect(this.createThreadDataStore());
 
@@ -1637,24 +1640,6 @@ export class Harness<TState = {}> {
     return this.config.toolCategoryResolver?.(toolName) ?? null;
   }
 
-  setPermissionForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): void {
-    const rules = this.getPermissionRules();
-    rules.categories[category] = policy;
-    void this.setState({ permissionRules: rules } as unknown as Partial<TState>);
-  }
-
-  setPermissionForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): void {
-    const rules = this.getPermissionRules();
-    rules.tools[toolName] = policy;
-    void this.setState({ permissionRules: rules } as unknown as Partial<TState>);
-  }
-
-  getPermissionRules(): PermissionRules {
-    const state = this.#session.state.get() as Record<string, unknown>;
-    const rules = state.permissionRules as PermissionRules | undefined;
-    return rules ?? { categories: {}, tools: {} };
-  }
-
   /**
    * Resolve whether a tool call should be auto-approved, denied, or asked.
    * Resolution chain: per-tool deny → yolo → per-tool policy → session tool grant →
@@ -1662,7 +1647,7 @@ export class Harness<TState = {}> {
    */
   private resolveToolApproval(toolName: string): PermissionPolicy {
     const state = this.#session.state.get() as Record<string, unknown>;
-    const rules = this.getPermissionRules();
+    const rules = this.#session.permissions.getRules();
 
     const toolPolicy = rules.tools[toolName];
     if (toolPolicy === 'deny') return 'deny';
@@ -3594,7 +3579,7 @@ export class Harness<TState = {}> {
       }
     }
 
-    const permissionRules = this.getPermissionRules();
+    const permissionRules = this.#session.permissions.getRules();
     for (const [toolId, policy] of Object.entries(permissionRules.tools)) {
       if (policy === 'deny') {
         delete builtInTools[toolId];

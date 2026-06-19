@@ -23,10 +23,10 @@ Set policies per-category or per-tool. Per-tool policies take precedence over ca
 
 ```typescript
 // Category-level: all execute tools require approval
-harness.setPermissionForCategory({ category: 'execute', policy: 'ask' })
+await harness.session.permissions.setForCategory({ category: 'execute', policy: 'ask' })
 
 // Tool-level: this specific tool is always blocked
-harness.setPermissionForTool({ toolName: 'dangerous_tool', policy: 'deny' })
+await harness.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' })
 ```
 
 ### Tool categories
