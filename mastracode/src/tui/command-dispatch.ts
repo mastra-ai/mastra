@@ -70,9 +70,9 @@ export async function dispatchSlashCommand(
     if (!TRACKED_COMMANDS.has(command)) return;
     ctx.analytics?.trackCommand(command, {
       action: 'attempted',
-      threadId: state.harness.getCurrentThreadId(),
-      resourceId: state.harness.getResourceId(),
-      mode: state.harness.getCurrentModeId(),
+      threadId: state.session.thread.getId(),
+      resourceId: state.session.identity.getResourceId(),
+      mode: state.session.mode.get(),
     });
   };
   const trimmedInput = input.trim();

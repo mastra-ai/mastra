@@ -398,6 +398,45 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Harness',
+      customProps: {
+        tags: ['alpha'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'harness/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'harness/session',
+          label: 'Session',
+        },
+        {
+          type: 'doc',
+          id: 'harness/modes',
+          label: 'Modes',
+        },
+        {
+          type: 'doc',
+          id: 'harness/threads-and-state',
+          label: 'Threads and State',
+        },
+        {
+          type: 'doc',
+          id: 'harness/subagents',
+          label: 'Subagents',
+        },
+        {
+          type: 'doc',
+          id: 'harness/tool-approvals',
+          label: 'Tool Approvals',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Workspaces',
       items: [
         {
@@ -854,6 +893,19 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/server',
           label: 'Server',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/github',
+          label: 'GitHub integration',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/database',
+          label: 'Hosted databases',
         },
         {
           type: 'doc',

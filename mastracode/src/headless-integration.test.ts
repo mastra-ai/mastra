@@ -14,7 +14,6 @@ import { Memory } from '@mastra/memory';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import z from 'zod';
 
-import { HarnessCompat } from './HarnessCompat.js';
 import { runHeadless } from './headless.js';
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -595,7 +594,7 @@ describe('headless mode — --output-format contracts', () => {
         } as HarnessEvent);
         listener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
       }),
-      getCurrentThreadId: vi.fn(() => 'thread-state'),
+      session: { thread: { getId: vi.fn(() => 'thread-state') } },
     } as unknown as Harness<Record<string, unknown>>;
 
     const {
@@ -667,7 +666,7 @@ describe('headless mode — --model flag', () => {
     expect(modelChanged.modelId).toBe('anthropic/claude-haiku-4-5');
 
     // Verify the harness state was updated
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
+    expect(harness.session.model.get()).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('returns exit code 1 for an unknown model', async () => {
@@ -848,7 +847,7 @@ describe('headless mode — --model flag', () => {
 
     expect(exitCode).toBe(0);
     expect(stderrCalls.join('')).toContain('--model overrides --mode');
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
+    expect(harness.session.model.get()).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('emits structured warning in JSON mode when --model and --mode are both provided', async () => {
@@ -931,7 +930,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     );
 
     expect(exitCode).toBe(0);
-    expect(harness.getCurrentModelId()).toBe('cerebras/zai-glm-4.7');
+    expect(harness.session.model.get()).toBe('cerebras/zai-glm-4.7');
   });
 
   it('--model still overrides effectiveDefaults', async () => {
@@ -960,7 +959,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
 
     expect(exitCode).toBe(0);
     // --model should win over effectiveDefaults
-    expect(harness.getCurrentModelId()).toBe('anthropic/claude-haiku-4-5');
+    expect(harness.session.model.get()).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('--mode returns exit code 1 when resolved model is not available', async () => {
@@ -1102,7 +1101,7 @@ describe('headless mode — thread control', () => {
     await new Promise(resolve => setTimeout(resolve, 300));
 
     // Verify the targeted thread was actually used (updatedAt advanced)
-    const threads = await harness.listThreads();
+    const threads = await harness.session.thread.list();
     const targeted = threads.find(t => t.id === thread.id);
     expect(targeted).toBeDefined();
     expect(targeted!.updatedAt.getTime()).toBeGreaterThan(updatedAtBefore);
@@ -1133,7 +1132,7 @@ describe('headless mode — thread control', () => {
     await new Promise(resolve => setTimeout(resolve, 300));
 
     // Verify the titled thread was actually used
-    const threads = await harness.listThreads();
+    const threads = await harness.session.thread.list();
     const targeted = threads.find(t => t.id === thread.id);
     expect(targeted).toBeDefined();
     expect(targeted!.updatedAt.getTime()).toBeGreaterThan(updatedAtBefore);
@@ -1175,7 +1174,7 @@ describe('headless mode — thread control', () => {
 
     expect(exitCode).toBe(0);
 
-    const threads = await harness.listThreads();
+    const threads = await harness.session.thread.list();
     const titled = threads.find(t => t.title === 'my-new-title');
     expect(titled).toBeDefined();
   });
@@ -1204,8 +1203,8 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(harness.getResourceId()).toBe('resource-b');
-    expect(harness.getCurrentThreadId()).toBe(betaThread.id);
+    expect(harness.session.identity.getResourceId()).toBe('resource-b');
+    expect(harness.session.thread.getId()).toBe(betaThread.id);
 
     exitCode = await runHeadless(harness, {
       prompt: 'Hello alpha',
@@ -1216,86 +1215,9 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(harness.getResourceId()).toBe('resource-a');
-    expect(harness.getCurrentThreadId()).toBe(alphaThread.id);
-    expect(harness.getCurrentThreadId()).not.toBe(alphaOlderThread.id);
-  });
-
-  it('resumes a Harness v1 prefilled thread by title in headless mode', async () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are a test agent.',
-      model: new MastraLanguageModelV2Mock({
-        doStream: async () => ({ stream: createTextStream('V1 title resumed!') }),
-      }) as any,
-      tools: {},
-    });
-    const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-v1-title-'));
-    const storePath = join(tempDir, 'test.db');
-    tempStorePaths.push(storePath, tempDir);
-    const storage = new LibSQLStore({ id: 'test-store', url: `file:${storePath}` });
-    const memory = new Memory({ storage });
-    const session = {
-      id: 'sess-prefilled-title',
-      threadId: '',
-      resourceId: '',
-      createdAt: new Date('2026-01-01T00:00:00.000Z'),
-      lastActivityAt: new Date('2026-01-02T00:00:00.000Z'),
-      modeId: 'default',
-      modelId: 'openai/custom-thread-model',
-      getMode: vi.fn(() => ({ id: 'default', description: 'Default', metadata: { agentId: 'test-agent' } })),
-      getModelId: vi.fn(() => 'openai/custom-thread-model'),
-      setModelId: vi.fn(),
-      getState: vi.fn(() => ({})),
-      setState: vi.fn(async () => {}),
-    };
-    const harnessV1 = {
-      listSessions: vi.fn(async () => [session]),
-      session: vi.fn(async () => session),
-      getMode: vi.fn(() => ({ id: 'default', description: 'Default', metadata: { agentId: 'test-agent' } })),
-    };
-    const harness = new HarnessCompat(
-      {
-        id: 'test-harness',
-        storage,
-        memory,
-        modes: [{ id: 'default', name: 'Default', default: true, defaultModelId: 'mock-model', agent }],
-        initialState: { yolo: true } as any,
-      },
-      harnessV1 as any,
-    );
-    (harness as any).getAgentForMode = () => agent;
-
-    await harness.init();
-    const thread = await harness.createThread({ title: 'prefilled-title' });
-    session.threadId = thread.id;
-    session.resourceId = thread.resourceId!;
-
-    const exitCode = await runHeadless(harness, {
-      prompt: 'Hello',
-      format: 'default',
-      continue_: false,
-      cloneThread: false,
-      thread: 'prefilled-title',
-    });
-
-    expect(exitCode).toBe(0);
-    expect(harness.getCurrentThreadId()).toBe(thread.id);
-    expect(harnessV1.session).toHaveBeenCalledWith({ threadId: thread.id, resourceId: thread.resourceId });
-    // Main's #17558 carries the harness's current model onto the session at
-    // switchThread, so the startup model overrides the prefilled session model.
-    expect(session.setModelId).toHaveBeenCalledWith('mock-model');
-    const threads = await harness.listThreads();
-    const matchingThreads = threads.filter(t => t.id === thread.id);
-    expect(matchingThreads).toHaveLength(1);
-    const targeted = matchingThreads[0]!;
-    expect(targeted.title).toBe('prefilled-title');
-    expect(targeted.metadata).toMatchObject({
-      sessionId: 'sess-prefilled-title',
-      modeId: 'default',
-      modelId: 'openai/custom-thread-model',
-    });
+    expect(harness.session.identity.getResourceId()).toBe('resource-a');
+    expect(harness.session.thread.getId()).toBe(alphaThread.id);
+    expect(harness.session.thread.getId()).not.toBe(alphaOlderThread.id);
   });
 
   it('emits thread_cloned event with new thread ID when cloning a named thread', async () => {

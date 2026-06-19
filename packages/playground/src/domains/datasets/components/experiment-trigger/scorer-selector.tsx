@@ -1,4 +1,5 @@
-import { MultiCombobox, Label } from '@mastra/playground-ui';
+import { Label } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { useMemo } from 'react';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
@@ -29,7 +30,8 @@ export function ScorerSelector({
   return (
     <div className="grid gap-2">
       <Label>Scorers (Optional)</Label>
-      <MultiCombobox
+      <Combobox
+        multiple
         options={options}
         value={selectedScorers}
         onValueChange={setSelectedScorers}

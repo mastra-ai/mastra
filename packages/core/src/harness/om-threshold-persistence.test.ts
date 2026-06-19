@@ -33,17 +33,17 @@ describe('Harness OM threshold persistence', () => {
     await harness.init();
 
     const threadA = await harness.createThread();
-    await harness.setState({ observationThreshold: 12000, reflectionThreshold: 21000 } as any);
-    await harness.setThreadSetting({ key: 'observationThreshold', value: 12000 });
-    await harness.setThreadSetting({ key: 'reflectionThreshold', value: 21000 });
+    await harness.session.state.set({ observationThreshold: 12000, reflectionThreshold: 21000 } as any);
+    await harness.session.thread.setSetting({ key: 'observationThreshold', value: 12000 });
+    await harness.session.thread.setSetting({ key: 'reflectionThreshold', value: 21000 });
 
     await harness.createThread();
-    await harness.setState({ observationThreshold: 33000, reflectionThreshold: 44000 } as any);
+    await harness.session.state.set({ observationThreshold: 33000, reflectionThreshold: 44000 } as any);
 
     await harness.switchThread({ threadId: threadA.id });
 
-    expect((harness.getState() as any).observationThreshold).toBe(12000);
-    expect((harness.getState() as any).reflectionThreshold).toBe(21000);
+    expect((harness.session.state.get() as any).observationThreshold).toBe(12000);
+    expect((harness.session.state.get() as any).reflectionThreshold).toBe(21000);
   });
 
   it('persists current thresholds onto an existing thread when metadata does not define overrides', async () => {
@@ -54,12 +54,12 @@ describe('Harness OM threshold persistence', () => {
     await harness.init();
 
     const thread = await harness.createThread();
-    await harness.setState({ observationThreshold: 18000, reflectionThreshold: 28000 } as any);
+    await harness.session.state.set({ observationThreshold: 18000, reflectionThreshold: 28000 } as any);
 
     await harness.switchThread({ threadId: thread.id });
 
-    expect((harness.getState() as any).observationThreshold).toBe(18000);
-    expect((harness.getState() as any).reflectionThreshold).toBe(28000);
+    expect((harness.session.state.get() as any).observationThreshold).toBe(18000);
+    expect((harness.session.state.get() as any).reflectionThreshold).toBe(28000);
 
     const memory = await storage.getStore('memory');
     const savedThread = await memory?.getThreadById({ threadId: thread.id });
