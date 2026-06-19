@@ -185,6 +185,11 @@ export function getCurrentGitBranchAsync(cwd: string): Promise<string | undefine
  * - Windows: %APPDATA%/mastracode
  */
 export function getAppDataDir(): string {
+  if (process.env.MASTRA_APP_DATA_DIR) {
+    fs.mkdirSync(process.env.MASTRA_APP_DATA_DIR, { recursive: true });
+    return process.env.MASTRA_APP_DATA_DIR;
+  }
+
   const platform = os.platform();
   let baseDir: string;
 

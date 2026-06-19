@@ -33,6 +33,7 @@ vi.mock('@/domains/auth/hooks/use-permissions', () => ({
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
+  isUnauthenticatedError: () => false,
 }));
 
 // The starter renders a chat-driven builder that boots an SSE stream. Stub it
