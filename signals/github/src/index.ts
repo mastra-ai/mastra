@@ -196,14 +196,7 @@ export type GithubSubscriptionsChangedEvent = {
   subscriptions: GithubPRSubscription[];
 };
 
-export type GithubPollingChangedEvent = {
-  threadId: string;
-  resourceId: string;
-  running: boolean;
-};
-
 type GithubSubscriptionsChangedHandler = (event: GithubSubscriptionsChangedEvent) => void;
-type GithubPollingChangedHandler = (event: GithubPollingChangedEvent) => void;
 
 type GithubPRSignal = {
   id: string;
@@ -269,11 +262,6 @@ type GithubPollingThread = {
   threadId: string;
   resourceId: string;
   agentId?: string;
-};
-
-type GithubPollingState = GithubPollingThread & {
-  timer: ReturnType<typeof setInterval>;
-  running: boolean;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1112,16 +1100,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly #options: GithubSignalsOptions;
   readonly #syncClient: GithubSignalsSyncClient;
   readonly #repositoryResolver: GithubRepositoryResolver;
-  readonly #polling = new Map<string, GithubPollingState>();
+  override readonly pollInterval?: number;
   readonly #permissionCache = new Map<string, { permission: GithubPermission; expiresAt: number }>();
   #agent?: GithubSignalAgent;
   #agentOptions: GithubSignalAgentOptions = {};
   #subscriptionsChangedHandler?: GithubSubscriptionsChangedHandler;
-  #pollingChangedHandler?: GithubPollingChangedHandler;
 
   constructor(options: GithubSignalsOptions = {}) {
     super();
     this.#options = options;
+    this.pollInterval = options.pollIntervalMs ?? 300_000;
     this.#syncClient = options.syncClient ?? new GitcrawlSyncClient({ command: options.gitcrawlCommand });
     this.#repositoryResolver = options.repositoryResolver ?? new GitRemoteRepositoryResolver();
     if (options.getNotificationStreamOptions) {
@@ -1159,17 +1147,13 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     this.#subscriptionsChangedHandler = handler;
   }
 
-  onPollingChanged(handler: GithubPollingChangedHandler): void {
-    this.#pollingChangedHandler = handler;
-  }
-
   override __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
     super.__registerMastra(mastra);
     this.#ghMastra = mastra as unknown as GithubSignalsMastra;
   }
 
   async syncThreadNow(input: GithubPollingThread): Promise<number> {
-    return this.#pollThread(input, { includeComments: true });
+    return (await this.pollThreadNow(input)) as number;
   }
 
   async subscribeThreadToPR(input: GithubPollingThread & { pr: GithubPRSignalInput }): Promise<GithubOperationResult> {
@@ -1194,66 +1178,12 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     });
   }
 
-  async startPollingForThread(
-    input: GithubPollingThread,
-    options: { pollImmediately?: boolean } = {},
-  ): Promise<boolean> {
-    const subscriptions = await this.#getThreadSubscriptions(input);
-    if (subscriptions.length === 0) {
-      this.stopPollingForThread(input);
-      return false;
-    }
-
-    const key = this.#pollingKey(input);
-    for (const [pollingKey, state] of this.#polling.entries()) {
-      if (pollingKey === key) continue;
-      clearInterval(state.timer);
-      this.#polling.delete(pollingKey);
-    }
-
-    if (this.#polling.has(key)) return true;
-
-    const runPoll = (pollOptions: { includeComments?: boolean } = {}) => {
-      void this.#pollThread(input, pollOptions).catch(error => {
-        console.warn('GitHub PR polling failed:', error);
-      });
-    };
-    const timer = setInterval(() => {
-      runPoll({ includeComments: true });
-    }, this.#options.pollIntervalMs ?? 300_000);
-    if (options.pollImmediately) runPoll({ includeComments: true });
-    timer.unref?.();
-    this.#polling.set(key, { ...input, timer, running: false });
-    return true;
-  }
-
-  stopPollingForThread(input: GithubPollingThread): void {
-    const key = this.#pollingKey(input);
-    const state = this.#polling.get(key);
-    if (!state) return;
-    clearInterval(state.timer);
-    this.#polling.delete(key);
-  }
-
-  isPollingThread(input: GithubPollingThread): boolean {
-    return this.#polling.has(this.#pollingKey(input));
-  }
-
-  isPollingThreadRunning(input: GithubPollingThread): boolean {
-    return this.#polling.get(this.#pollingKey(input))?.running ?? false;
-  }
-
   getPollIntervalMs(): number {
-    return this.#options.pollIntervalMs ?? 300_000;
+    return this.pollInterval ?? 300_000;
   }
 
-  stopAllPolling(): void {
-    for (const state of this.#polling.values()) clearInterval(state.timer);
-    this.#polling.clear();
-  }
-
-  async pollThreadNow(input: GithubPollingThread): Promise<number> {
-    return this.#pollThread(input, { includeComments: true });
+  override async pollThreadNow(input: GithubPollingThread): Promise<number> {
+    return (await super.pollThreadNow(input)) as number;
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
@@ -1463,152 +1393,123 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     return { threadStore, loadedThread };
   }
 
-  #pollingKey(input: GithubPollingThread): string {
-    return `${input.resourceId}:${input.threadId}`;
-  }
-
   #getNotificationAgent(_input?: { agentId?: string }): GithubSignalAgent | undefined {
     if (this.#agent) return this.#agent;
     const agentId = _input?.agentId ?? this.#options.agentId;
     return agentId ? this.#ghMastra?.getAgentById?.(agentId) : undefined;
   }
 
-  async #getThreadSubscriptions(input: GithubPollingThread): Promise<GithubPRSubscription[]> {
-    const { loadedThread } = await this.#loadThread(input);
-    return getGithubMetadata(loadedThread.metadata).subscriptions;
-  }
-
   #notifySubscriptionsChanged(input: GithubSubscriptionsChangedEvent): void {
     this.#subscriptionsChangedHandler?.(input);
   }
 
-  #notifyPollingChanged(input: GithubPollingChangedEvent): void {
-    this.#pollingChangedHandler?.(input);
-  }
-
-  async #pollThread(input: GithubPollingThread, options: { includeComments?: boolean } = {}): Promise<number> {
-    const key = this.#pollingKey(input);
-    const state = this.#polling.get(key);
-    if (state?.running) {
+  async pollThread(input: GithubPollingThread): Promise<number> {
+    const { threadStore, loadedThread } = await this.#loadThread(input);
+    const githubMetadata = getGithubMetadata(loadedThread.metadata);
+    if (githubMetadata.subscriptions.length === 0) {
+      this.stopPollingForThread(input);
       return 0;
     }
-    if (state) state.running = true;
-    this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: true });
 
-    try {
-      const { threadStore, loadedThread } = await this.#loadThread(input);
-      const githubMetadata = getGithubMetadata(loadedThread.metadata);
-      if (githubMetadata.subscriptions.length === 0) {
-        this.stopPollingForThread(input);
-        return 0;
-      }
+    const now = new Date().toISOString();
+    const subscriptions: GithubPRSubscription[] = [];
+    for (const subscription of githubMetadata.subscriptions) {
+      const syncInput = {
+        owner: subscription.owner,
+        repo: subscription.repo,
+        number: subscription.number,
+        cwd: this.#options.cwd,
+        includeComments: true,
+      };
+      const syncResult = await this.#syncClient.syncPullRequest(syncInput);
+      let snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;
+      if (snapshot)
+        snapshot = await this.#filterUnauthorizedLatestComment(subscription.owner, subscription.repo, snapshot);
+      const nextSubscription: GithubPRSubscription = {
+        ...subscription,
+        updatedAt: now,
+        lastSyncAt: now,
+        lastSyncStatus: syncResult.ok ? 'success' : 'error',
+      };
+      if (syncResult.error) nextSubscription.lastSyncError = syncResult.error;
+      else delete nextSubscription.lastSyncError;
 
-      const now = new Date().toISOString();
-      const subscriptions: GithubPRSubscription[] = [];
-      for (const subscription of githubMetadata.subscriptions) {
-        const syncInput = {
-          owner: subscription.owner,
-          repo: subscription.repo,
-          number: subscription.number,
-          cwd: this.#options.cwd,
-          includeComments: options.includeComments,
-        };
-        const syncResult = await this.#syncClient.syncPullRequest(syncInput);
-        let snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;
-        if (snapshot)
-          snapshot = await this.#filterUnauthorizedLatestComment(subscription.owner, subscription.repo, snapshot);
-        const nextSubscription: GithubPRSubscription = {
-          ...subscription,
-          updatedAt: now,
-          lastSyncAt: now,
-          lastSyncStatus: syncResult.ok ? 'success' : 'error',
-        };
-        if (syncResult.error) nextSubscription.lastSyncError = syncResult.error;
-        else delete nextSubscription.lastSyncError;
+      const previousGithubUpdatedAt = subscription.lastObservedGithubUpdatedAt;
+      const previousContentHash = subscription.lastObservedContentHash;
+      const previousThreadContentHash = subscription.lastObservedThreadContentHash;
+      const previousHeadSha = subscription.lastObservedHeadSha;
+      const latestCommentChanged =
+        !!previousGithubUpdatedAt &&
+        !!snapshot?.latestCommentUpdatedAt &&
+        Date.parse(snapshot.latestCommentUpdatedAt) > Date.parse(previousGithubUpdatedAt);
+      if (snapshot) applySnapshotCursor(nextSubscription, snapshot);
 
-        const previousGithubUpdatedAt = subscription.lastObservedGithubUpdatedAt;
-        const previousContentHash = subscription.lastObservedContentHash;
-        const previousThreadContentHash = subscription.lastObservedThreadContentHash;
-        const previousHeadSha = subscription.lastObservedHeadSha;
-        const latestCommentChanged =
-          !!previousGithubUpdatedAt &&
-          !!snapshot?.latestCommentUpdatedAt &&
-          Date.parse(snapshot.latestCommentUpdatedAt) > Date.parse(previousGithubUpdatedAt);
-        if (snapshot) applySnapshotCursor(nextSubscription, snapshot);
+      // First observation (no previous cursor) always counts as changed so we
+      // emit a baseline notification with the PR's current state.
+      const isFirstObservation = syncResult.ok && snapshot && !previousGithubUpdatedAt && !previousContentHash;
 
-        // First observation (no previous cursor) always counts as changed so we
-        // emit a baseline notification with the PR's current state.
-        const isFirstObservation = syncResult.ok && snapshot && !previousGithubUpdatedAt && !previousContentHash;
-
-        const legacyAggregateChanged =
-          previousContentHash &&
-          snapshot?.contentHash &&
-          previousContentHash !== snapshot.contentHash &&
-          !previousThreadContentHash &&
-          !previousHeadSha;
-        const changed =
-          isFirstObservation ||
-          (syncResult.ok &&
-            snapshot &&
-            (legacyAggregateChanged ||
-              latestCommentChanged ||
-              (previousThreadContentHash &&
-                snapshot.threadContentHash &&
-                previousThreadContentHash !== snapshot.threadContentHash) ||
-              (previousHeadSha && snapshot.headSha && previousHeadSha !== snapshot.headSha) ||
-              (subscription.lastObservedState && snapshot.state && subscription.lastObservedState !== snapshot.state) ||
-              (subscription.lastObservedMergeableState &&
-                snapshot.mergeableState &&
-                subscription.lastObservedMergeableState !== snapshot.mergeableState) ||
-              (subscription.lastObservedCiState &&
-                snapshot.ciState &&
-                subscription.lastObservedCiState !== snapshot.ciState) ||
-              (subscription.lastObservedReviewStateHash &&
-                snapshot.reviewStateHash &&
-                subscription.lastObservedReviewStateHash !== snapshot.reviewStateHash)));
-        let shouldKeepSubscription = true;
-        if (changed && snapshot) {
-          const notifications = await this.#sendActivityNotifications({
-            polling: input,
-            subscription,
-            snapshot,
-            previousGithubUpdatedAt,
-            previousContentHash,
-            latestCommentChanged,
-          });
-          const primaryNotification = notifications[0];
-          if (primaryNotification) {
-            nextSubscription.lastNotificationAt = now;
-            nextSubscription.lastNotificationKind = primaryNotification.kind;
-            nextSubscription.lastNotificationPriority = primaryNotification.priority;
-            nextSubscription.lastNotificationSummary = primaryNotification.summary;
-            shouldKeepSubscription = notifications.every(notification => notification.kind !== 'pull-request-merged');
-          }
+      const legacyAggregateChanged =
+        previousContentHash &&
+        snapshot?.contentHash &&
+        previousContentHash !== snapshot.contentHash &&
+        !previousThreadContentHash &&
+        !previousHeadSha;
+      const changed =
+        isFirstObservation ||
+        (syncResult.ok &&
+          snapshot &&
+          (legacyAggregateChanged ||
+            latestCommentChanged ||
+            (previousThreadContentHash &&
+              snapshot.threadContentHash &&
+              previousThreadContentHash !== snapshot.threadContentHash) ||
+            (previousHeadSha && snapshot.headSha && previousHeadSha !== snapshot.headSha) ||
+            (subscription.lastObservedState && snapshot.state && subscription.lastObservedState !== snapshot.state) ||
+            (subscription.lastObservedMergeableState &&
+              snapshot.mergeableState &&
+              subscription.lastObservedMergeableState !== snapshot.mergeableState) ||
+            (subscription.lastObservedCiState &&
+              snapshot.ciState &&
+              subscription.lastObservedCiState !== snapshot.ciState) ||
+            (subscription.lastObservedReviewStateHash &&
+              snapshot.reviewStateHash &&
+              subscription.lastObservedReviewStateHash !== snapshot.reviewStateHash)));
+      let shouldKeepSubscription = true;
+      if (changed && snapshot) {
+        const notifications = await this.#sendActivityNotifications({
+          polling: input,
+          subscription,
+          snapshot,
+          previousGithubUpdatedAt,
+          previousContentHash,
+          latestCommentChanged,
+        });
+        const primaryNotification = notifications[0];
+        if (primaryNotification) {
+          nextSubscription.lastNotificationAt = now;
+          nextSubscription.lastNotificationKind = primaryNotification.kind;
+          nextSubscription.lastNotificationPriority = primaryNotification.priority;
+          nextSubscription.lastNotificationSummary = primaryNotification.summary;
+          shouldKeepSubscription = notifications.every(notification => notification.kind !== 'pull-request-merged');
         }
-
-        if (shouldKeepSubscription) subscriptions.push(nextSubscription);
       }
 
-      await threadStore.saveThread({
-        thread: {
-          ...loadedThread,
-          id: input.threadId,
-          resourceId: input.resourceId,
-          createdAt: loadedThread.createdAt ?? new Date(),
-          updatedAt: new Date(),
-          metadata: setGithubMetadata(loadedThread.metadata, { subscriptions }),
-        },
-      });
-      this.#notifySubscriptionsChanged({ threadId: input.threadId, resourceId: input.resourceId, subscriptions });
-      if (subscriptions.length === 0) this.stopPollingForThread(input);
-      return subscriptions.length;
-    } catch (error) {
-      throw error;
-    } finally {
-      const latestState = this.#polling.get(key);
-      if (latestState) latestState.running = false;
-      this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: false });
+      if (shouldKeepSubscription) subscriptions.push(nextSubscription);
     }
+
+    await threadStore.saveThread({
+      thread: {
+        ...loadedThread,
+        id: input.threadId,
+        resourceId: input.resourceId,
+        createdAt: loadedThread.createdAt ?? new Date(),
+        updatedAt: new Date(),
+        metadata: setGithubMetadata(loadedThread.metadata, { subscriptions }),
+      },
+    });
+    this.#notifySubscriptionsChanged({ threadId: input.threadId, resourceId: input.resourceId, subscriptions });
+    if (subscriptions.length === 0) this.stopPollingForThread(input);
+    return subscriptions.length;
   }
 
   #createGithubNotificationInput(input: {

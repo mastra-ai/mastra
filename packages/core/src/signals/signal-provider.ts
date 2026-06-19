@@ -84,17 +84,44 @@ export type SignalProviderWebhookRequest = {
  * Extend this class, implement the abstract `id` field, and override
  * whichever hooks your provider needs:
  *
+ * ### Global polling (server deployments)
+ *
  * ```ts
- * class SlackSignals extends SignalProvider<'slack-signals'> {
- *   readonly id = 'slack-signals';
- *   readonly pollInterval = 30_000; // poll every 30s
+ * class MyProvider extends SignalProvider<'my'> {
+ *   readonly id = 'my';
+ *   readonly pollInterval = 30_000;
  *
  *   async poll(subscriptions: SignalSubscription[]) {
  *     for (const sub of subscriptions) {
- *       // check Slack, emit notifications for changes
+ *       // check external source, emit notifications
  *     }
  *   }
  * }
+ * ```
+ *
+ * The Agent automatically starts the global polling timer after `connect()`.
+ *
+ * ### Per-thread polling (interactive CLI tools)
+ *
+ * ```ts
+ * class MyProvider extends SignalProvider<'my'> {
+ *   readonly id = 'my';
+ *   readonly pollInterval = 30_000;
+ *
+ *   async pollThread(target: SignalProviderTarget) {
+ *     // load subscription from storage for this thread,
+ *     // check external source, emit notifications
+ *   }
+ * }
+ * ```
+ *
+ * An external caller (e.g., a CLI harness) drives per-thread polling:
+ * ```ts
+ * await provider.startPollingForThread({ threadId, resourceId }, { pollImmediately: true });
+ * // ... later, when user switches threads:
+ * await provider.startPollingForThread({ threadId: newThreadId, resourceId });
+ * // ... on shutdown:
+ * provider.stopAllPolling();
  * ```
  *
  * @experimental Agent signals are experimental and may change in a future release.
@@ -409,6 +436,158 @@ export abstract class SignalProvider<TId extends string = string> {
     }
   }
 
+  // ── Per-thread polling ─────────────────────────────────────────────
+
+  /**
+   * Per-thread polling timers.
+   * Key: `${resourceId}:${threadId}`
+   *
+   * Unlike the global `poll()` timer (which iterates all subscriptions),
+   * per-thread polling is driven by an external caller (e.g., a CLI harness)
+   * that calls `startPollingForThread()` for the thread the user is actively
+   * viewing. This avoids polling threads the user isn't looking at and
+   * prevents duplicate work across multiple process instances.
+   */
+  readonly #perThreadPolling = new Map<
+    string,
+    { target: SignalProviderTarget; timer: ReturnType<typeof setInterval>; running: boolean }
+  >();
+
+  /**
+   * Handler called when polling state changes for any thread.
+   */
+  #pollingChangedHandler?: (event: { threadId: string; resourceId: string; running: boolean }) => void;
+
+  #pollingKey(target: SignalProviderTarget): string {
+    return `${target.resourceId}:${target.threadId}`;
+  }
+
+  /**
+   * Per-thread poll hook. Override to check the external source for a single
+   * thread and emit notifications.
+   *
+   * Unlike `poll()` (which receives all subscriptions), this method receives
+   * only the target thread and is expected to load its own subscription state
+   * (e.g., from thread metadata in storage). This makes it stateless across
+   * restarts — storage is the source of truth, not the in-memory registry.
+   *
+   * @param target - The thread to poll
+   */
+  pollThread?(target: SignalProviderTarget): Promise<unknown>;
+
+  /**
+   * Register a handler called when polling starts or stops for any thread.
+   * Useful for UI indicators that show polling activity.
+   */
+  onPollingChanged(handler: (event: { threadId: string; resourceId: string; running: boolean }) => void): void {
+    this.#pollingChangedHandler = handler;
+  }
+
+  /**
+   * Internal wrapper that manages the `running` flag and fires
+   * `onPollingChanged` events around the subclass's `pollThread` hook.
+   */
+  async #runPollThread(target: SignalProviderTarget): Promise<unknown> {
+    const key = this.#pollingKey(target);
+    const state = this.#perThreadPolling.get(key);
+    if (state?.running) return; // skip overlapping cycle
+    if (state) state.running = true;
+    this.#pollingChangedHandler?.({ threadId: target.threadId, resourceId: target.resourceId, running: true });
+    try {
+      return await this.pollThread?.(target);
+    } catch (error) {
+      console.warn(`[${this.id}] pollThread failed:`, error);
+    } finally {
+      const s = this.#perThreadPolling.get(key);
+      if (s) s.running = false;
+      this.#pollingChangedHandler?.({ threadId: target.threadId, resourceId: target.resourceId, running: false });
+    }
+  }
+
+  /**
+   * Start polling for a specific thread.
+   *
+   * Stops polling for all other threads (only one thread is polled at a time).
+   * This is the right model for interactive CLI tools where the user is
+   * viewing one thread at a time. For server deployments that need to poll
+   * all threads, use the global `startPolling()` / `poll()` model instead.
+   *
+   * Requires `pollThread` to be implemented and `pollInterval` to be set.
+   *
+   * @returns `true` if polling started (or was already running for this thread),
+   *   `false` if the provider doesn't implement `pollThread` or has no `pollInterval`.
+   */
+  async startPollingForThread(target: SignalProviderTarget, options: { pollImmediately?: boolean } = {}): Promise<boolean> {
+    if (typeof this.pollThread !== 'function') return false;
+
+    const key = this.#pollingKey(target);
+
+    // Stop all other threads' polling (single-thread model)
+    for (const [pollingKey, state] of this.#perThreadPolling.entries()) {
+      if (pollingKey === key) continue;
+      clearInterval(state.timer);
+      this.#perThreadPolling.delete(pollingKey);
+    }
+
+    // Already polling this thread
+    if (this.#perThreadPolling.has(key)) return true;
+
+    const interval = this.pollInterval;
+    if (!interval || interval <= 0) return false;
+
+    const timer = setInterval(() => {
+      void this.#runPollThread(target);
+    }, interval);
+    timer.unref?.();
+
+    this.#perThreadPolling.set(key, { target, timer, running: false });
+
+    if (options.pollImmediately) void this.#runPollThread(target);
+
+    return true;
+  }
+
+  /**
+   * Stop polling for a specific thread.
+   */
+  stopPollingForThread(target: SignalProviderTarget): void {
+    const key = this.#pollingKey(target);
+    const state = this.#perThreadPolling.get(key);
+    if (!state) return;
+    clearInterval(state.timer);
+    this.#perThreadPolling.delete(key);
+  }
+
+  /**
+   * Stop polling for all threads.
+   */
+  stopAllPolling(): void {
+    for (const state of this.#perThreadPolling.values()) clearInterval(state.timer);
+    this.#perThreadPolling.clear();
+  }
+
+  /**
+   * Whether a specific thread is being polled (has an active timer).
+   */
+  isPollingThread(target: SignalProviderTarget): boolean {
+    return this.#perThreadPolling.has(this.#pollingKey(target));
+  }
+
+  /**
+   * Whether a poll cycle is currently running for a specific thread.
+   */
+  isPollingThreadRunning(target: SignalProviderTarget): boolean {
+    return this.#perThreadPolling.get(this.#pollingKey(target))?.running ?? false;
+  }
+
+  /**
+   * Run a one-off poll for a specific thread immediately, bypassing the timer.
+   * Still fires `onPollingChanged` events and respects the `running` guard.
+   */
+  async pollThreadNow(target: SignalProviderTarget): Promise<unknown> {
+    return this.#runPollThread(target);
+  }
+
   // ── Webhook ────────────────────────────────────────────────────────
 
   /**
@@ -430,10 +609,11 @@ export abstract class SignalProvider<TId extends string = string> {
 
   /**
    * Called on shutdown. Override to clean up resources.
-   * Default implementation stops polling and clears all subscriptions.
+   * Default implementation stops all polling and clears all subscriptions.
    */
   stop(): void {
     this.stopPolling();
+    this.stopAllPolling();
     this.#subscriptions.clear();
     this.#subscriptionsByResource.clear();
     this.#subscriptionsByThread.clear();
