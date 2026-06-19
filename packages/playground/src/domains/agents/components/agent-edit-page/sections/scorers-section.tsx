@@ -2,7 +2,7 @@ import {
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
-  MultiCombobox,
+  Combobox,
   Button,
   Input,
   Label,
@@ -102,7 +102,8 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                 <CollapsibleContent>
                   <div className="p-3 border-t border-border1">
                     <div className="flex flex-col gap-2">
-                      <MultiCombobox
+                      <Combobox
+                        multiple
                         options={options}
                         value={selectedIds}
                         onValueChange={handleValueChange}

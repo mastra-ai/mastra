@@ -1,3 +1,4 @@
+import { cva } from 'class-variance-authority';
 import { buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
@@ -53,6 +54,29 @@ export function comboboxTriggerClass({
   );
 }
 
+export const comboboxItemClass = cva(
+  cn(
+    'relative flex cursor-pointer select-none items-center rounded-md',
+    'py-1.5 min-h-8',
+    'text-ui-smd leading-ui-sm text-neutral4',
+    'outline-none focus:outline-none focus-visible:outline-none',
+    transitions.colors,
+    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
+    'data-selected:text-neutral6',
+  ),
+  {
+    variants: {
+      multiple: {
+        false: 'gap-2 pl-2.5 pr-2',
+        true: 'gap-2.5 pl-2 pr-2.5',
+      },
+    },
+    defaultVariants: {
+      multiple: false,
+    },
+  },
+);
+
 export const comboboxStyles = {
   /** Root wrapper */
   root: 'flex flex-col gap-1.5',
@@ -97,26 +121,10 @@ export const comboboxStyles = {
   list: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1',
 
   /** Option item base — rounded-md sits concentrically inside rounded-xl + p-1. */
-  item: cn(
-    'group/item relative flex cursor-pointer select-none items-center gap-2 rounded-md',
-    'pl-2.5 pr-2 py-1.5 min-h-8',
-    'text-ui-smd leading-ui-sm text-neutral4',
-    'outline-none focus:outline-none focus-visible:outline-none',
-    transitions.colors,
-    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
-    'data-selected:text-neutral6',
-  ),
+  item: comboboxItemClass({ multiple: false }),
 
   /** Multi-select item — keeps the left checkbox slot, no right indicator. */
-  itemMulti: cn(
-    'relative flex cursor-pointer select-none items-center gap-2.5 rounded-md',
-    'pl-2 pr-2.5 py-1.5 min-h-8',
-    'text-ui-smd leading-ui-sm text-neutral4',
-    'outline-none focus:outline-none focus-visible:outline-none',
-    transitions.colors,
-    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
-    'data-selected:text-neutral6',
-  ),
+  itemMulti: comboboxItemClass({ multiple: true }),
 
   /** Right-aligned slot grouping end content + selection check. */
   itemRightSlot: 'ml-auto flex items-center gap-2 shrink-0',
