@@ -22,6 +22,7 @@ import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enh
 import { UserMessageComponent } from '../components/user-message.js';
 import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
+import { formatToolResult } from './tool.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -448,8 +449,29 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   }
 
   state.streamingMessage = message;
-  // Check for new tool calls
+  // Check for new tool calls and completed tool results
   for (const content of message.content) {
+    if (content.type === 'tool_result') {
+      const component = state.pendingTools.get(content.id);
+      if (component) {
+        component.updateResult(
+          {
+            content: [
+              {
+                type: 'text',
+                text: formatToolResult(content.result),
+              },
+            ],
+            isError: content.isError,
+          },
+          false,
+        );
+        state.pendingTools.delete(content.id);
+        reconcileChatBoundarySpacers(state.chatContainer);
+      }
+      continue;
+    }
+
     if (content.type === 'tool_call') {
       // For subagent calls, freeze the current streaming component
       // with content before the tool call, then create a new one.

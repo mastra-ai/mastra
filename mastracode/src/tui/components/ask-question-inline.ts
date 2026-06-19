@@ -280,6 +280,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   private onSubmit?: (answer: string) => void;
   private onSubmitMulti?: (answers: string[]) => void;
   private onCancel?: () => void;
+  private formatResult?: (answer: string) => string;
   private isNegativeAnswer?: (answer: string) => boolean;
   private allowEmptyInput = false;
   private multiline = false;
@@ -355,6 +356,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       this.onSubmit = options.onSubmit;
       this.onSubmitMulti = options.onSubmitMulti;
       this.onCancel = options.onCancel;
+      this.formatResult = options.formatResult;
       this.isNegativeAnswer = options.isNegativeAnswer;
       this.allowEmptyInput = Boolean(options.allowEmptyInput);
       this.multiline = Boolean(options.multiline);
@@ -416,6 +418,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     question: string;
     options?: Array<{ label: string; description?: string }>;
     selectionMode?: AskQuestionSelectionMode;
+    formatResult?: (answer: string) => string;
     isNegativeAnswer?: (answer: string) => boolean;
     allowEmptyInput?: boolean;
     allowCustomResponse?: boolean;
@@ -430,6 +433,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.onSubmit = options.onSubmit;
     this.onSubmitMulti = options.onSubmitMulti;
     this.onCancel = options.onCancel;
+    this.formatResult = options.formatResult;
     this.isNegativeAnswer = options.isNegativeAnswer;
     this.allowEmptyInput = Boolean(options.allowEmptyInput);
     this.allowCustomResponse = options.allowCustomResponse ?? true;
@@ -564,7 +568,11 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   private handleAnswer(answer: string): void {
     if (this.answered) return;
     const isNegative = this.isNegativeAnswer?.(answer) ?? false;
-    this.answer(answer, isNegative);
+    const displayAnswer = this.formatResult?.(answer) ?? answer;
+    if (displayAnswer !== answer) {
+      this.borderedBox.items = [];
+    }
+    this.answer(displayAnswer, isNegative);
 
     this.onSubmit?.(answer);
   }
