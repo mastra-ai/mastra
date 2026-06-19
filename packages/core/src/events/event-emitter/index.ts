@@ -397,4 +397,17 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
     existing.expiresAt = Date.now() + ttlMs;
     return Promise.resolve(true);
   }
+
+  // Atomic owner-guarded handoff: only the current owner can transfer, and the
+  // key is never empty during the swap (mirrors the Redis GET==from -> SET to
+  // Lua). Lets a finishing run hand the lease to its drain run without a
+  // release/acquire gap, even on the in-process backend.
+  transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean> {
+    const existing = this.leases.get(key);
+    if (!existing || existing.owner !== fromOwner || existing.expiresAt <= Date.now()) {
+      return Promise.resolve(false);
+    }
+    this.leases.set(key, { owner: toOwner, expiresAt: Date.now() + ttlMs });
+    return Promise.resolve(true);
+  }
 }

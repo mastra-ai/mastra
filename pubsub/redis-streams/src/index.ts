@@ -393,6 +393,33 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   /**
+   * Atomically hand the lease from `fromOwner` to `toOwner`, refreshing the
+   * TTL to the full `ttlMs`, without the key ever going empty.
+   *
+   * Implemented as a single Lua script (GET == fromOwner -> SET toOwner PX)
+   * so a racing process cannot win the key between a release and a re-acquire.
+   * Returns false if `fromOwner` no longer holds the lease (expired or taken),
+   * in which case the caller should fall back to a fresh `acquireLease`.
+   */
+  async transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean> {
+    if (this.#closed) return false;
+    await this.#ensureWriterConnected();
+    const script = `
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        redis.call("SET", KEYS[1], ARGV[2], "PX", ARGV[3])
+        return 1
+      else
+        return 0
+      end
+    `;
+    const result = await this.#writeClient.eval(script, {
+      keys: [this.#leaseKey(key)],
+      arguments: [fromOwner, toOwner, String(ttlMs)],
+    });
+    return result === 1;
+  }
+
+  /**
    * Disconnect all clients and stop all subscription loops.
    */
   async close(): Promise<void> {
