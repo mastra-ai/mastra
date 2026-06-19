@@ -30,8 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "agent-browser": "0.19.0",
-    "playwright-chromium": "^1.60.0"
+    "agent-browser": "0.19.0"
   },
   "devDependencies": {
     "@internal/browser-test-utils": "workspace:*",
@@ -39,6 +38,7 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.19.21",
+    "playwright-chromium": "^1.60.0",
     "playwright-core": "^1.60.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -50,7 +50,13 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.22.0-0 <2.0.0-0",
+    "playwright-chromium": "^1.60.0",
     "zod": "^3.25.0 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright-chromium": {
+      "optional": true
+    }
   },
   "homepage": "https://mastra.ai",
   "repository": {
