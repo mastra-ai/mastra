@@ -132,6 +132,7 @@ declare global {
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
     MASTRA_EXPERIMENTAL_UI?: string;
     MASTRA_AGENT_SIGNALS?: string;
+    MASTRA_SIGNALS_UI?: string;
   }
 }
 
@@ -216,6 +217,9 @@ const MinimalRootLayout = () => {
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
+
+// Signals is an opt-in experimental UI, gated by the server-injected `MASTRA_SIGNALS_UI` flag.
+const isSignalsEnabled = window.MASTRA_SIGNALS_UI === 'true';
 
 const agentCmsChildRoutes = [
   { index: true, element: <CmsAgentInformationPage /> },
@@ -378,38 +382,42 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
-      {
-        path: '/signals',
-        handle: {
-          ...navHandle('/signals'),
-          crumbs: [navCrumb('/signals')],
-        },
-        children: [
-          { index: true, element: <SignalsOverviewPage /> },
-          {
-            path: ':signalId',
-            element: <SignalDetailsPage />,
-            handle: {
-              crumbs: [{ id: 'signal', Component: SignalCrumb, heading: 'Signal' }],
-            } satisfies RouteHeaderHandle,
-          },
-          {
-            path: ':signalId/traces/:traceId',
-            element: <SignalTraceIdPage />,
-            handle: {
-              crumbs: ({ params }) => [
+      ...(isSignalsEnabled
+        ? [
+            {
+              path: '/signals',
+              handle: {
+                ...navHandle('/signals'),
+                crumbs: [navCrumb('/signals')],
+              },
+              children: [
+                { index: true, element: <SignalsOverviewPage /> },
                 {
-                  id: 'signal',
-                  Component: SignalCrumb,
-                  heading: 'Signal',
-                  to: params.signalId ? `/signals/${encodeURIComponent(params.signalId)}` : '/signals',
+                  path: ':signalId',
+                  element: <SignalDetailsPage />,
+                  handle: {
+                    crumbs: [{ id: 'signal', Component: SignalCrumb, heading: 'Signal' }],
+                  } satisfies RouteHeaderHandle,
                 },
-                { id: 'trace', Component: TraceCrumb, heading: 'Trace' },
+                {
+                  path: ':signalId/traces/:traceId',
+                  element: <SignalTraceIdPage />,
+                  handle: {
+                    crumbs: ({ params }) => [
+                      {
+                        id: 'signal',
+                        Component: SignalCrumb,
+                        heading: 'Signal',
+                        to: params.signalId ? `/signals/${encodeURIComponent(params.signalId)}` : '/signals',
+                      },
+                      { id: 'trace', Component: TraceCrumb, heading: 'Trace' },
+                    ],
+                  } satisfies RouteHeaderHandle,
+                },
               ],
-            } satisfies RouteHeaderHandle,
-          },
-        ],
-      },
+            },
+          ]
+        : []),
       { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
       {
         path: '/traces/:traceId',

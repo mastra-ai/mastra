@@ -12,19 +12,16 @@ import { SignalDetailsPage } from './signal-details-page';
 const BASE_URL = 'http://localhost:4111';
 const server = setupServer();
 
-vi.mock('../../../ds/components/ScatterPlotChart', () => ({
-  ScatterPlotChart: () => <div>Signal chart</div>,
-}));
-
-vi.mock('../../topics', () => ({
-  TopicTraceDetailsPanel: () => null,
-  TopicTraceSummaryList: () => <div>Trace summaries</div>,
-  TopicsLayout: ({ children, tracePanel }: { children: ReactNode; tracePanel?: ReactNode }) => (
-    <main>
-      {children}
-      {tracePanel}
-    </main>
-  ),
+// `react-resizable-panels` drives its layout through a ResizeObserver-backed
+// group controller whose `mountGroup` throws (`n is not a constructor`) under
+// jsdom. It is a third-party DOM boundary, so we stub it to plain elements and
+// keep every first-party component (TopicsLayout, the trace panel, the chart)
+// real per the package testing rules.
+vi.mock('react-resizable-panels', () => ({
+  Group: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Panel: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Separator: () => null,
+  usePanelRef: () => ({ current: null }),
 }));
 
 function renderSignalDetailsPage(tracePanel: ReactNode = <aside aria-label="Trace details">Trace panel</aside>) {
@@ -66,7 +63,7 @@ describe('SignalDetailsPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Chart' }));
 
     expect(screen.queryByRole('complementary', { name: 'Trace details' })).toBeNull();
-    expect(screen.getByText('Signal chart')).not.toBeNull();
+    expect(screen.getByLabelText('Chart facet filters')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Trace list' }));
 

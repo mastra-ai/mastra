@@ -110,6 +110,7 @@ export const HEAD = handle(app);
       requestContextPresets: `''`,
       experimentalUI: `'false'`,
       agentSignals: process.env.MASTRA_AGENT_SIGNALS === 'false' ? `'false'` : `'true'`,
+      signalsUI: process.env.MASTRA_SIGNALS_UI === 'true' ? `'true'` : `'false'`,
     });
 
     writeFileSync(indexPath, html);

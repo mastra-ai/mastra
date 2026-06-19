@@ -37,6 +37,19 @@ export interface NavSection {
   items: NavItem[];
 }
 
+// Signals is an opt-in experimental UI, gated by the server-injected `MASTRA_SIGNALS_UI` flag.
+const isSignalsEnabled =
+  typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
+
+const signalsNavItem: NavItem = {
+  name: 'Signals',
+  url: '/signals',
+  activePaths: ['/signals'],
+  Icon: LayoutGrid,
+  docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Signals documentation' },
+  isOnMastraPlatform: true,
+};
+
 export const mainNav: NavSection[] = [
   {
     key: 'primitives',
@@ -157,14 +170,7 @@ export const mainNav: NavSection[] = [
         docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Traces documentation' },
         isOnMastraPlatform: true,
       },
-      {
-        name: 'Signals',
-        url: '/signals',
-        activePaths: ['/signals'],
-        Icon: LayoutGrid,
-        docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Signals documentation' },
-        isOnMastraPlatform: true,
-      },
+      ...(isSignalsEnabled ? [signalsNavItem] : []),
       {
         name: 'Logs',
         url: '/logs',
