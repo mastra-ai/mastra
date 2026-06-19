@@ -606,10 +606,28 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Map subagent types to mode models: explore→fast, plan→plan, execute→build.
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-  const subagents = (config?.subagents ?? defaultSubagents).map(subagent => ({
-    ...subagent,
-    defaultModelId: subagent.defaultModelId ?? effectiveDefaults[subagentModeMap[subagent.id] ?? subagent.id],
-  }));
+  const subagents = (config?.subagents ?? defaultSubagents).map(subagent => {
+    const modeId = subagentModeMap[subagent.id];
+    const model = modeId ? effectiveDefaults[modeId] : undefined;
+    let filtered = subagent;
+    if (config?.disabledTools?.length) {
+      if (subagent.allowedWorkspaceTools) {
+        filtered = {
+          ...filtered,
+          allowedWorkspaceTools: subagent.allowedWorkspaceTools.filter(tool => !config.disabledTools!.includes(tool)),
+        };
+      }
+      if (subagent.tools) {
+        filtered = {
+          ...filtered,
+          tools: Object.fromEntries(
+            Object.entries(subagent.tools).filter(([tool]) => !config.disabledTools!.includes(tool)),
+          ),
+        };
+      }
+    }
+    return model ? { ...filtered, defaultModelId: model } : filtered;
+  });
 
   // Build initial state with global preferences
   const globalInitialState: Partial<MastraCodeState> = {};
