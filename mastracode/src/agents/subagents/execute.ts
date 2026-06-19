@@ -7,6 +7,8 @@
  */
 import type { HarnessSubagent } from '@mastra/core/harness';
 
+import { MC_TOOLS } from '../../tool-names.js';
+
 export const executeSubagent: HarnessSubagent = {
   id: 'execute',
   name: 'Execute',
@@ -44,4 +46,12 @@ End with a structured summary:
 . **Changes**: Files modified/created
 . **Verification**: How you verified it works
 . **Notes**: Follow-up needed (if any)`,
+  allowedWorkspaceTools: [
+    MC_TOOLS.VIEW,
+    MC_TOOLS.SEARCH_CONTENT,
+    MC_TOOLS.FIND_FILES,
+    MC_TOOLS.STRING_REPLACE_LSP,
+    MC_TOOLS.WRITE_FILE,
+    MC_TOOLS.EXECUTE_COMMAND,
+  ],
 };

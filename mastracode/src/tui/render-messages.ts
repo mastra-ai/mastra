@@ -108,7 +108,7 @@ function renderCompletedTasksInline(state: TUIState, completedTasks: TaskItemSna
   );
   for (const task of completedTasks) {
     const icon = chalk.hex(mastra.green)('✓');
-    const text = chalk.hex(theme.getTheme().success).strikethrough(task.content);
+    const text = chalk.hex(theme.getTheme().success)(task.content);
     container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
   }
   insertTaskHistoryComponent(state, container, insertIndex);
