@@ -6,20 +6,6 @@
  * API for fast reads/writes and `exec` for POSIX operations.
  */
 
-import { Archil, Disk, getDisk, createDisk } from 'disk';
-import type {
-  CreateDiskRequest,
-  ExecResult,
-  GrepOptions,
-  GrepResult,
-  ArchilOptions,
-  ListObjectsOptions,
-  ListObjectsResult,
-  ObjectMetadata,
-  ShareUrlOptions,
-  ShareUrlResult,
-} from 'disk';
-
 import type {
   FileContent,
   FileStat,
@@ -35,6 +21,20 @@ import type {
   MastraFilesystemOptions,
 } from '@mastra/core/workspace';
 import { MastraFilesystem, FileNotFoundError, FileExistsError } from '@mastra/core/workspace';
+import { Archil } from 'disk';
+import type {
+  Disk,
+  CreateDiskRequest,
+  ExecResult,
+  GrepOptions,
+  GrepResult,
+  ArchilOptions,
+  ListObjectsOptions,
+  ListObjectsResult,
+  ObjectMetadata,
+  ShareUrlOptions,
+  ShareUrlResult,
+} from 'disk';
 
 // =============================================================================
 // Configuration
@@ -488,8 +488,6 @@ export class ArchilFilesystem extends MastraFilesystem {
       throw new Error('Cannot remove root directory');
     }
 
-    const flags = options?.recursive ? '-rf' : '-d';
-    const forceFlag = options?.force ? 'f' : '';
     const cmd = options?.recursive ? `rm -rf ${shellEscape(key)}` : `rmdir ${shellEscape(key)}`;
     const result = await this.disk.exec(options?.force ? `${cmd} 2>/dev/null; true` : cmd);
     if (result.exitCode !== 0 && !options?.force) {
