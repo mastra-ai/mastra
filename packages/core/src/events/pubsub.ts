@@ -168,11 +168,14 @@ export interface LeaseProvider {
    * third owner), in which case the caller should fall back to a fresh
    * `acquireLease`.
    *
-   * Optional: backends that cannot implement this atomically simply omit it.
-   * Callers must feature-detect and fall back to release+acquire (which
-   * reopens the race window only for those backends).
+   * Backends that cannot perform this atomically must still implement it —
+   * as a best-effort `releaseLease(from)` followed by `acquireLease(to)` — and
+   * document that the swap is non-atomic (a racing process can win the key in
+   * the gap). Keeping it required means callers have a single code path and the
+   * atomicity guarantee is an explicit per-backend decision rather than a
+   * silent caller-side fallback.
    */
-  transferLease?(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean>;
+  transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean>;
 }
 
 /**
@@ -189,7 +192,8 @@ export function isLeaseProvider(value: unknown): value is LeaseProvider {
     typeof candidate.acquireLease === 'function' &&
     typeof candidate.getLeaseOwner === 'function' &&
     typeof candidate.releaseLease === 'function' &&
-    typeof candidate.renewLease === 'function'
+    typeof candidate.renewLease === 'function' &&
+    typeof candidate.transferLease === 'function'
   );
 }
 

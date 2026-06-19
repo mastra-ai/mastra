@@ -252,11 +252,11 @@ export class AgentThreadStreamRuntime {
    * without the lease key ever going empty.
    *
    * The previous owner releases its renewal timer and the new owner starts
-   * its own; the lease key is re-stamped atomically by `transferLease` (with
-   * a full fresh TTL), so a racing process cannot win a freed key between a
-   * release and a re-acquire. Backends that cannot transfer atomically fall
-   * back to release-then-acquire (which reopens the race window only for those
-   * backends). Returns `true` if the new owner now holds the lease.
+   * its own; the lease key is re-stamped by `transferLease` (with a full fresh
+   * TTL). On atomic backends (Redis, in-memory) a racing process cannot win a
+   * freed key between a release and a re-acquire. Backends that can't transfer
+   * atomically implement `transferLease` as release+acquire internally and own
+   * that race cost. Returns `true` if the new owner now holds the lease.
    */
   async #transferThreadLease(
     pubsub: PubSub | undefined,
@@ -266,19 +266,12 @@ export class AgentThreadStreamRuntime {
   ): Promise<boolean> {
     const resolved = this.#getPubSub(pubsub);
     const leaseProvider = this.#getLeaseProvider(resolved);
-    let held = false;
-    if (typeof leaseProvider.transferLease === 'function') {
-      held = await leaseProvider.transferLease(key, fromRunId, toRunId, AGENT_THREAD_LEASE_TTL_MS).catch(() => false);
-    } else {
-      // Best-effort fallback: release the old owner then acquire for the new.
-      // This briefly empties the key — only backends lacking atomic transfer
-      // pay this race cost.
-      await leaseProvider.releaseLease(key, fromRunId).catch(() => {});
-      const result = await leaseProvider.acquireLease(key, toRunId, AGENT_THREAD_LEASE_TTL_MS).catch(() => ({
-        acquired: false as boolean,
-      }));
-      held = result.acquired === true;
-    }
+    // `transferLease` is a required `LeaseProvider` method. Atomic backends
+    // (Redis, in-memory) swap the key gap-free; backends that can't be atomic
+    // implement it as release+acquire internally and own that race cost.
+    const held = await leaseProvider
+      .transferLease(key, fromRunId, toRunId, AGENT_THREAD_LEASE_TTL_MS)
+      .catch(() => false);
     // Move the renewal timer to the new owner regardless: the old timer is
     // owner-guarded and would only no-op now, and the new owner needs its
     // own keep-alive for long drains.
