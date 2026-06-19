@@ -102,8 +102,8 @@ function createState() {
           get: vi.fn(() => 'anthropic/claude-sonnet-4-20250514'),
         },
         om: {
-          observerModelId: vi.fn(() => 'openai/gpt-4o'),
-          reflectorModelId: vi.fn(() => 'openai/gpt-4o-mini'),
+          observer: { modelId: vi.fn(() => 'openai/gpt-4o') },
+          reflector: { modelId: vi.fn(() => 'openai/gpt-4o-mini') },
         },
       },
     },

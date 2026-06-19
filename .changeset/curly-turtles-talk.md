@@ -15,9 +15,11 @@ await harness.switchObserverModel({ modelId: 'openai/gpt-4o' });
 **After**
 
 ```typescript
-const observer = harness.session.om.observerModelId();
-await harness.session.om.switchObserverModel({ modelId: 'openai/gpt-4o' });
+const observer = harness.session.om.observer.modelId();
+await harness.session.om.observer.switchModel({ modelId: 'openai/gpt-4o' });
 ```
+
+The accessors are grouped by role under `session.om.observer` and `session.om.reflector`, each exposing `modelId()`, `threshold()`, `resolvedModel()`, and `switchModel({ modelId })`.
 
 Removed `Harness.getObserverModelId`, `getReflectorModelId`, `getObservationThreshold`, `getReflectionThreshold`, `getResolvedObserverModel`, `getResolvedReflectorModel`, `switchObserverModel`, and `switchReflectorModel`.
 

@@ -1457,13 +1457,13 @@ export class Harness<TState = {}> {
       }
 
       if (!hasObservationThreshold) {
-        const observationThreshold = this.#session.om.observationThreshold();
+        const observationThreshold = this.#session.om.observer.threshold();
         if (observationThreshold !== undefined) {
           await this.#session.thread.setSetting({ key: 'observationThreshold', value: observationThreshold });
         }
       }
       if (!hasReflectionThreshold) {
-        const reflectionThreshold = this.#session.om.reflectionThreshold();
+        const reflectionThreshold = this.#session.om.reflector.threshold();
         if (reflectionThreshold !== undefined) {
           await this.#session.thread.setSetting({ key: 'reflectionThreshold', value: reflectionThreshold });
         }

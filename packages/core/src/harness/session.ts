@@ -893,17 +893,28 @@ export class SessionMode {
   }
 }
 
+/** Per-role wiring + state/config keys a {@link SessionOMRole} reads and writes. */
+interface SessionOMRoleConfig {
+  /** The event `role` and `om_model_changed` discriminator for this role. */
+  role: 'observer' | 'reflector';
+  /** Session-state / thread-settings key holding this role's model id. */
+  modelIdKey: 'observerModelId' | 'reflectorModelId';
+  /** Session-state key holding this role's threshold. */
+  thresholdKey: 'observationThreshold' | 'reflectionThreshold';
+  /** Resolve this role's default model id from `omConfig`. */
+  defaultModelId: (omConfig: HarnessOMConfig | undefined) => string | undefined;
+  /** Resolve this role's default threshold from `omConfig`. */
+  defaultThreshold: (omConfig: HarnessOMConfig | undefined) => number | undefined;
+}
+
 /**
- * Owns the session's observational-memory model selection: the observer and
- * reflector model ids and observation/reflection thresholds.
- *
- * Reads return the session-state value when set, falling back to the Harness's
- * `omConfig` defaults. Switching a role's model persists to thread settings and
- * emits `om_model_changed`. The Harness owns `omConfig` and the model resolver,
- * so it injects them — plus the session-state read/write and thread-settings
- * persistence — once via {@link setResolver}.
+ * One observational-memory role (observer or reflector): its model id, resolved
+ * model instance, threshold, and model switch. Reads return the session-state
+ * value when set, falling back to the Harness's `omConfig` defaults. The shared
+ * wiring is injected by {@link SessionOM.setResolver}.
  */
-class SessionOM {
+class SessionOMRole {
+  readonly #config: SessionOMRoleConfig;
   #getState: (() => Record<string, unknown>) | undefined;
   #setState: ((updates: Record<string, unknown>) => void) | undefined;
   #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
@@ -911,10 +922,81 @@ class SessionOM {
   #omConfig: HarnessOMConfig | undefined;
   #resolveModel: ((modelId: string) => MastraModelConfig) | undefined;
 
+  constructor(config: SessionOMRoleConfig) {
+    this.#config = config;
+  }
+
+  /** @internal Injected by {@link SessionOM.setResolver}. */
+  setWiring(wiring: {
+    getState: () => Record<string, unknown>;
+    setState: (updates: Record<string, unknown>) => void;
+    setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    emit: (event: HarnessEvent) => void;
+    omConfig?: HarnessOMConfig;
+    resolveModel?: (modelId: string) => MastraModelConfig;
+  }): void {
+    this.#getState = wiring.getState;
+    this.#setState = wiring.setState;
+    this.#setSetting = wiring.setSetting;
+    this.#emit = wiring.emit;
+    this.#omConfig = wiring.omConfig;
+    this.#resolveModel = wiring.resolveModel;
+  }
+
+  /** This role's model id from session state, falling back to `omConfig`. */
+  modelId(): string | undefined {
+    const fromState = this.#getState?.()[this.#config.modelIdKey];
+    return (typeof fromState === 'string' ? fromState : undefined) ?? this.#config.defaultModelId(this.#omConfig);
+  }
+
+  /** This role's threshold from session state, falling back to `omConfig`. */
+  threshold(): number | undefined {
+    const fromState = this.#getState?.()[this.#config.thresholdKey];
+    return (typeof fromState === 'number' ? fromState : undefined) ?? this.#config.defaultThreshold(this.#omConfig);
+  }
+
+  /** Resolve this role's model id to a model instance, or undefined when unset. */
+  resolvedModel(): MastraModelConfig | undefined {
+    const modelId = this.modelId();
+    if (!modelId || !this.#resolveModel) return undefined;
+    return this.#resolveModel(modelId);
+  }
+
+  /** Switch this role's model: update session state, persist, and emit. */
+  async switchModel({ modelId }: { modelId: string }): Promise<void> {
+    this.#setState?.({ [this.#config.modelIdKey]: modelId });
+    await this.#setSetting?.({ key: this.#config.modelIdKey, value: modelId });
+    this.#emit?.({ type: 'om_model_changed', role: this.#config.role, modelId });
+  }
+}
+
+/**
+ * Owns the session's observational-memory model selection, grouped by role:
+ * {@link SessionOM.observer} and {@link SessionOM.reflector}. The Harness owns
+ * `omConfig` and the model resolver, so it injects them — plus the session-state
+ * read/write and thread-settings persistence — once via {@link setResolver},
+ * which fans the wiring out to both roles.
+ */
+class SessionOM {
+  readonly observer = new SessionOMRole({
+    role: 'observer',
+    modelIdKey: 'observerModelId',
+    thresholdKey: 'observationThreshold',
+    defaultModelId: omConfig => omConfig?.defaultObserverModelId,
+    defaultThreshold: omConfig => omConfig?.defaultObservationThreshold,
+  });
+  readonly reflector = new SessionOMRole({
+    role: 'reflector',
+    modelIdKey: 'reflectorModelId',
+    thresholdKey: 'reflectionThreshold',
+    defaultModelId: omConfig => omConfig?.defaultReflectorModelId,
+    defaultThreshold: omConfig => omConfig?.defaultReflectionThreshold,
+  });
+
   /**
    * Attach the session-state read/write, thread-settings persistence, event
    * emitter, and the Harness-owned `omConfig` defaults plus model resolver. The
-   * Harness injects these once.
+   * Harness injects these once; the wiring is shared by both roles.
    */
   setResolver(options: {
     getState: () => Record<string, unknown>;
@@ -924,64 +1006,8 @@ class SessionOM {
     omConfig?: HarnessOMConfig;
     resolveModel?: (modelId: string) => MastraModelConfig;
   }): void {
-    this.#getState = options.getState;
-    this.#setState = options.setState;
-    this.#setSetting = options.setSetting;
-    this.#emit = options.emit;
-    this.#omConfig = options.omConfig;
-    this.#resolveModel = options.resolveModel;
-  }
-
-  /** The observer model id from session state, falling back to `omConfig`. */
-  observerModelId(): string | undefined {
-    const fromState = this.#getState?.().observerModelId;
-    return (typeof fromState === 'string' ? fromState : undefined) ?? this.#omConfig?.defaultObserverModelId;
-  }
-
-  /** The reflector model id from session state, falling back to `omConfig`. */
-  reflectorModelId(): string | undefined {
-    const fromState = this.#getState?.().reflectorModelId;
-    return (typeof fromState === 'string' ? fromState : undefined) ?? this.#omConfig?.defaultReflectorModelId;
-  }
-
-  /** The observation threshold from session state, falling back to `omConfig`. */
-  observationThreshold(): number | undefined {
-    const fromState = this.#getState?.().observationThreshold;
-    return (typeof fromState === 'number' ? fromState : undefined) ?? this.#omConfig?.defaultObservationThreshold;
-  }
-
-  /** The reflection threshold from session state, falling back to `omConfig`. */
-  reflectionThreshold(): number | undefined {
-    const fromState = this.#getState?.().reflectionThreshold;
-    return (typeof fromState === 'number' ? fromState : undefined) ?? this.#omConfig?.defaultReflectionThreshold;
-  }
-
-  /** Resolve the observer model id to a model instance, or undefined when unset. */
-  resolvedObserverModel(): MastraModelConfig | undefined {
-    const modelId = this.observerModelId();
-    if (!modelId || !this.#resolveModel) return undefined;
-    return this.#resolveModel(modelId);
-  }
-
-  /** Resolve the reflector model id to a model instance, or undefined when unset. */
-  resolvedReflectorModel(): MastraModelConfig | undefined {
-    const modelId = this.reflectorModelId();
-    if (!modelId || !this.#resolveModel) return undefined;
-    return this.#resolveModel(modelId);
-  }
-
-  /** Switch the observer model: update session state, persist, and emit. */
-  async switchObserverModel({ modelId }: { modelId: string }): Promise<void> {
-    this.#setState?.({ observerModelId: modelId });
-    await this.#setSetting?.({ key: 'observerModelId', value: modelId });
-    this.#emit?.({ type: 'om_model_changed', role: 'observer', modelId });
-  }
-
-  /** Switch the reflector model: update session state, persist, and emit. */
-  async switchReflectorModel({ modelId }: { modelId: string }): Promise<void> {
-    this.#setState?.({ reflectorModelId: modelId });
-    await this.#setSetting?.({ key: 'reflectorModelId', value: modelId });
-    this.#emit?.({ type: 'om_model_changed', role: 'reflector', modelId });
+    this.observer.setWiring(options);
+    this.reflector.setWiring(options);
   }
 }
 

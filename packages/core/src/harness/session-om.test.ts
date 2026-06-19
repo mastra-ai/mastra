@@ -48,19 +48,19 @@ describe('session.om', () => {
       },
     });
 
-    expect(harness.session.om.observerModelId()).toBe('openai/gpt-4o');
-    expect(harness.session.om.reflectorModelId()).toBe('openai/gpt-4o-mini');
-    expect(harness.session.om.observationThreshold()).toBe(30_000);
-    expect(harness.session.om.reflectionThreshold()).toBe(40_000);
+    expect(harness.session.om.observer.modelId()).toBe('openai/gpt-4o');
+    expect(harness.session.om.reflector.modelId()).toBe('openai/gpt-4o-mini');
+    expect(harness.session.om.observer.threshold()).toBe(30_000);
+    expect(harness.session.om.reflector.threshold()).toBe(40_000);
   });
 
   it('returns undefined when no state value and no omConfig default exist', () => {
     const harness = createHarness({ storage });
 
-    expect(harness.session.om.observerModelId()).toBeUndefined();
-    expect(harness.session.om.reflectorModelId()).toBeUndefined();
-    expect(harness.session.om.observationThreshold()).toBeUndefined();
-    expect(harness.session.om.reflectionThreshold()).toBeUndefined();
+    expect(harness.session.om.observer.modelId()).toBeUndefined();
+    expect(harness.session.om.reflector.modelId()).toBeUndefined();
+    expect(harness.session.om.observer.threshold()).toBeUndefined();
+    expect(harness.session.om.reflector.threshold()).toBeUndefined();
   });
 
   it('prefers session-state values over omConfig defaults', async () => {
@@ -70,18 +70,18 @@ describe('session.om', () => {
     });
     await harness.session.state.set({ observerModelId: 'anthropic/claude-sonnet-4' } as any);
 
-    expect(harness.session.om.observerModelId()).toBe('anthropic/claude-sonnet-4');
+    expect(harness.session.om.observer.modelId()).toBe('anthropic/claude-sonnet-4');
   });
 
-  it('switchObserverModel persists to thread settings and emits om_model_changed', async () => {
+  it('observer.switchModel persists to thread settings and emits om_model_changed', async () => {
     const events: HarnessEvent[] = [];
     const harness = createHarness({ storage, onEvent: event => events.push(event) });
     await harness.init();
     await harness.createThread();
 
-    await harness.session.om.switchObserverModel({ modelId: 'anthropic/claude-sonnet-4' });
+    await harness.session.om.observer.switchModel({ modelId: 'anthropic/claude-sonnet-4' });
 
-    expect(harness.session.om.observerModelId()).toBe('anthropic/claude-sonnet-4');
+    expect(harness.session.om.observer.modelId()).toBe('anthropic/claude-sonnet-4');
     expect(await harness.session.thread.getSetting({ key: 'observerModelId' })).toBe('anthropic/claude-sonnet-4');
     expect(events).toContainEqual({
       type: 'om_model_changed',
@@ -90,15 +90,15 @@ describe('session.om', () => {
     });
   });
 
-  it('switchReflectorModel persists to thread settings and emits om_model_changed', async () => {
+  it('reflector.switchModel persists to thread settings and emits om_model_changed', async () => {
     const events: HarnessEvent[] = [];
     const harness = createHarness({ storage, onEvent: event => events.push(event) });
     await harness.init();
     await harness.createThread();
 
-    await harness.session.om.switchReflectorModel({ modelId: 'openai/gpt-4o-mini' });
+    await harness.session.om.reflector.switchModel({ modelId: 'openai/gpt-4o-mini' });
 
-    expect(harness.session.om.reflectorModelId()).toBe('openai/gpt-4o-mini');
+    expect(harness.session.om.reflector.modelId()).toBe('openai/gpt-4o-mini');
     expect(await harness.session.thread.getSetting({ key: 'reflectorModelId' })).toBe('openai/gpt-4o-mini');
     expect(events).toContainEqual({
       type: 'om_model_changed',
@@ -115,7 +115,7 @@ describe('session.om', () => {
       resolveModel,
     });
 
-    expect(harness.session.om.resolvedObserverModel()).toMatchObject({ modelId: 'openai/gpt-4o' });
+    expect(harness.session.om.observer.resolvedModel()).toMatchObject({ modelId: 'openai/gpt-4o' });
     expect(resolveModel).toHaveBeenCalledWith('openai/gpt-4o');
   });
 
@@ -123,7 +123,7 @@ describe('session.om', () => {
     const resolveModel = vi.fn((modelId: string) => ({ modelId }));
     const harness = createHarness({ storage, resolveModel });
 
-    expect(harness.session.om.resolvedObserverModel()).toBeUndefined();
+    expect(harness.session.om.observer.resolvedModel()).toBeUndefined();
     expect(resolveModel).not.toHaveBeenCalled();
   });
 });
