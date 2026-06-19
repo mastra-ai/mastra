@@ -261,6 +261,36 @@ export function removePendingUserMessage(state: TUIState, messageId: string): vo
   state.ui.requestRender();
 }
 
+export function confirmPendingSlashCommandMessage(
+  state: TUIState,
+  messageId: string,
+  commandName: string,
+  commandContent: string,
+): void {
+  const pending = state.pendingSignalMessageComponentsById.get(messageId);
+  if (!pending) return;
+
+  const existingSlashComp = state.allSlashCommandComponents.find(
+    component =>
+      component.matches(commandName, commandContent) && state.chatContainer.children.includes(component as never),
+  );
+  const slashComp = existingSlashComp ?? new SlashCommandComponent(commandName, commandContent);
+  if (!existingSlashComp) {
+    state.allSlashCommandComponents.push(slashComp);
+  }
+
+  const idx = state.chatContainer.children.indexOf(pending.component as never);
+  if (idx >= 0) {
+    (state.chatContainer.children as unknown[]).splice(idx, 1, slashComp);
+    reconcileChatBoundarySpacers(state.chatContainer);
+  } else if (!existingSlashComp) {
+    addChildBeforeFollowUps(state, slashComp);
+  }
+
+  state.pendingSignalMessageComponentsById.delete(messageId);
+  state.ui.requestRender();
+}
+
 export function clearPendingUserMessages(state: TUIState): void {
   for (const pending of state.pendingSignalMessageComponentsById.values()) {
     state.chatContainer.removeChild(pending.component as never);

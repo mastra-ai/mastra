@@ -432,9 +432,10 @@ describe('dispatchSlashCommand models routing', () => {
       content: '<slash-command name="deploy">\ncustom output\n</slash-command>',
     });
     expect(state.harness.sendMessage).not.toHaveBeenCalled();
-    expect(state.pendingSignalMessageComponentsById.get('signal-custom-1')?.text).toBe('//deploy staging');
-    expect(state.allSlashCommandComponents).toHaveLength(0);
-    expect(state.chatContainer.children.length).toBe(1);
+    expect(state.pendingSignalMessageComponentsById.has('signal-custom-1')).toBe(false);
+    expect(state.allSlashCommandComponents).toHaveLength(1);
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(SlashCommandComponent);
   });
 
   it('removes the pending message when custom slash command signal delivery fails', async () => {

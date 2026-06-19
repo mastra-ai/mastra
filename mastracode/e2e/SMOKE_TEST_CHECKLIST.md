@@ -62,6 +62,13 @@ Use this checklist to manually verify the restored Mastra Code behavior on the `
   - Verify the command starts a goal using the custom command template output.
   - Verify it does not send `goal/<command-name>` as a normal user message.
 
+- [ ] **Steered custom slash command rendering**
+  - Start a slow/streaming agent response.
+  - While it is still active, submit a custom slash command such as `//steer-render`.
+  - Verify the command appears while pending/delivering.
+  - After delivery, verify it remains visible as a slash-command component with its expanded template content and `/command-name` footer.
+  - Verify it does not disappear from the chat once the agent responds to the steered command.
+
 - [ ] **Persistent goal resume/judge decision**
   - Start a goal with a judge model.
   - Pause it.

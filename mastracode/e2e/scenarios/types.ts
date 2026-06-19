@@ -91,6 +91,7 @@ export type ScenarioName =
   | 'state-signal-browser-processor'
   | 'state-signal-reload'
   | 'state-signal-rendering'
+  | 'steered-slash-command-rendering'
   | 'setup-completion-persistence'
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'
