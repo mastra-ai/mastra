@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { Agent } from '@mastra/core/agent';
 import type { AgentSignalInput } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { StorageThreadType } from '@mastra/core/memory';
@@ -540,6 +541,38 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
 
   get conversationTypes(): SlackConversationType[] {
     return getSlackConversationTypes(this.#include);
+  }
+
+  override connect(agent: Agent<any, any, any, any>): void {
+    super.connect(agent);
+    // Restore subscriptions from persisted thread metadata so that
+    // startPolling() (called after connect) has subscriptions to poll.
+    // The in-memory registry is empty on restart — only thread metadata
+    // was persisted by #subscribe(). Fire-and-forget: the first poll
+    // won't happen until pollInterval ms later, giving plenty of time.
+    void this.#restoreSubscriptions();
+  }
+
+  async #restoreSubscriptions(): Promise<void> {
+    try {
+      const threadStore = await this.#resolveThreadStore();
+      if (threadStore && typeof (threadStore as unknown as { listThreads?: unknown }).listThreads === 'function') {
+        const result = await (threadStore as unknown as { listThreads: (args: { perPage: number | false }) => Promise<{ threads: StorageThreadType[] }> }).listThreads({ perPage: false });
+        for (const thread of result.threads) {
+          const metadata = getSlackSignalsMetadata(thread.metadata);
+          const subscription = metadata.subscription;
+          if (subscription) {
+            this.subscribe(
+              { threadId: thread.id, resourceId: thread.resourceId! },
+              getWorkspaceExternalResourceId(subscription.workspaceId),
+              { workspaceId: subscription.workspaceId, ...(subscription.workspaceName ? { workspaceName: subscription.workspaceName } : {}) },
+            );
+          }
+        }
+      }
+    } catch {
+      // Best-effort restoration — don't block on storage errors
+    }
   }
 
   get token(): string {
