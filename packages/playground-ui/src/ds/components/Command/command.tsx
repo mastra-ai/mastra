@@ -3,6 +3,8 @@ import { Search } from 'lucide-react';
 import * as React from 'react';
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
+import { ScrollArea } from '@/ds/components/ScrollArea';
+import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -22,12 +24,20 @@ type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'c
   children?: React.ReactNode;
   title?: string;
   description?: string;
+  contentClassName?: string;
+  commandClassName?: string;
+  showOverlay?: boolean;
+  overlayClassName?: string;
 };
 
 const CommandDialog = ({
   children,
   title = 'Command Palette',
   description = 'Search for commands and actions',
+  contentClassName,
+  commandClassName,
+  showOverlay = false,
+  overlayClassName,
   ...props
 }: CommandDialogProps) => {
   // Custom filter that preserves DOM order by returning 1 for all matches
@@ -52,7 +62,11 @@ const CommandDialog = ({
 
   return (
     <Dialog {...props}>
-      <DialogContent showOverlay={false} className="overflow-hidden p-0">
+      <DialogContent
+        showOverlay={showOverlay}
+        overlayClassName={overlayClassName}
+        className={cn('overflow-hidden p-0', contentClassName)}
+      >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">{description}</DialogDescription>
         <Command
@@ -65,6 +79,7 @@ const CommandDialog = ({
             '**:[[cmdk-input]]:h-12',
             '**:[[cmdk-item]]:px-2 **:[[cmdk-item]]:py-3',
             '[&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5',
+            commandClassName,
           )}
         >
           {children}
@@ -76,13 +91,14 @@ const CommandDialog = ({
 
 type CommandInputProps = React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input> & {
   rightSlot?: React.ReactNode;
+  wrapperClassName?: string;
 };
 
 const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Input>, CommandInputProps>(
-  ({ className, rightSlot, ...props }, ref) => (
+  ({ className, rightSlot, wrapperClassName, ...props }, ref) => (
     <div
       data-slot="command-input-wrapper"
-      className={cn('flex items-center border-b border-border1 px-3', transitions.colors)}
+      className={cn('flex items-center border-b border-border1 px-3', transitions.colors, wrapperClassName)}
     >
       <Search className={cn('mr-2 h-4 w-4 shrink-0 text-neutral3', transitions.colors)} />
       <CommandPrimitive.Input
@@ -106,16 +122,43 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
 );
 CommandInput.displayName = CommandPrimitive.Input.displayName;
 
-const CommandList = React.forwardRef<
-  React.ElementRef<typeof CommandPrimitive.List>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.List>
->(({ className, ...props }, ref) => (
-  <CommandPrimitive.List
-    ref={ref}
-    className={cn('max-h-dropdown-max-height overflow-y-auto overflow-x-hidden', className)}
-    {...props}
-  />
-));
+type CommandListProps = React.ComponentPropsWithoutRef<typeof CommandPrimitive.List> & {
+  scrollArea?: boolean;
+  scrollAreaClassName?: string;
+  scrollAreaViewportClassName?: string;
+  scrollAreaMask?: ScrollAreaMask;
+};
+
+const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.List>, CommandListProps>(
+  (
+    { className, scrollArea = false, scrollAreaClassName, scrollAreaViewportClassName, scrollAreaMask, ...props },
+    ref,
+  ) => {
+    const list = (
+      <CommandPrimitive.List
+        ref={ref}
+        className={cn(
+          'outline-none focus:outline-none focus-visible:outline-none',
+          scrollArea ? 'overflow-visible' : 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden',
+          className,
+        )}
+        {...props}
+      />
+    );
+
+    if (!scrollArea) return list;
+
+    return (
+      <ScrollArea
+        className={cn('min-h-0', scrollAreaClassName)}
+        viewPortClassName={scrollAreaViewportClassName}
+        mask={scrollAreaMask}
+      >
+        {list}
+      </ScrollArea>
+    );
+  },
+);
 CommandList.displayName = CommandPrimitive.List.displayName;
 
 const CommandEmpty = React.forwardRef<

@@ -82,6 +82,19 @@ describe('Command', () => {
     expect(document.querySelector('.dialog-overlay-anim')).toBeNull();
   });
 
+  it('renders a custom CommandDialog overlay when requested', () => {
+    render(
+      <CommandDialog open onOpenChange={() => {}} showOverlay overlayClassName="bg-surface1/40 backdrop-blur-none">
+        <CommandInput placeholder="Search commands" />
+      </CommandDialog>,
+    );
+
+    const overlay = document.querySelector('.dialog-overlay-anim');
+    expect(overlay?.className).toContain('bg-surface1/40');
+    expect(overlay?.className).toContain('backdrop-blur-none');
+    expect(overlay?.className).not.toContain('backdrop-blur-xs');
+  });
+
   it('renders CommandInput rightSlot without replacing the input', () => {
     render(
       <Command>
@@ -91,6 +104,57 @@ describe('Command', () => {
 
     expect(screen.getByPlaceholderText('Search commands')).toBeDefined();
     expect(screen.getByText('Esc')).toBeDefined();
+  });
+
+  it('applies CommandInput wrapperClassName to the input wrapper', () => {
+    render(
+      <Command>
+        <CommandInput placeholder="Search commands" wrapperClassName="custom-wrapper" />
+      </Command>,
+    );
+
+    expect(screen.getByPlaceholderText('Search commands').parentElement?.classList.contains('custom-wrapper')).toBe(
+      true,
+    );
+  });
+
+  it('renders CommandList inside ScrollArea when requested', () => {
+    render(
+      <Command>
+        <CommandList
+          scrollArea
+          scrollAreaClassName="scroll-root"
+          scrollAreaViewportClassName="scroll-viewport"
+          className="custom-list"
+        >
+          <CommandGroup heading="Navigation">
+            <CommandItem value="settings">Settings</CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </Command>,
+    );
+
+    const list = screen.getByRole('listbox', { name: 'Suggestions' });
+    const viewport = document.querySelector('.scroll-viewport');
+
+    expect(list.classList.contains('custom-list')).toBe(true);
+    expect(document.querySelector('.scroll-root')?.contains(list)).toBe(true);
+    expect(viewport?.contains(list)).toBe(true);
+  });
+
+  it('removes the browser focus outline from CommandList', () => {
+    render(
+      <Command>
+        <CommandList>
+          <CommandGroup heading="Navigation">
+            <CommandItem value="settings">Settings</CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </Command>,
+    );
+
+    const list = screen.getByRole('listbox', { name: 'Suggestions' });
+    expect(list.classList.contains('focus-visible:outline-none')).toBe(true);
   });
 
   it('preserves DOM order while filtering matching items', async () => {

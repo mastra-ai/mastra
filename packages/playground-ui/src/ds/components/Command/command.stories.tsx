@@ -104,7 +104,12 @@ export const InlineVercelStyle: Story = {
             </Kbd>
           }
         />
-        <CommandList className="max-h-[22rem] p-1.5">
+        <CommandList
+          scrollArea
+          scrollAreaClassName="max-h-[22rem]"
+          scrollAreaViewportClassName="rounded-[inherit]"
+          className="p-1.5"
+        >
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Projects">
             <InlineResult

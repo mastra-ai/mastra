@@ -58,12 +58,13 @@ DialogOverlay.displayName = 'DialogOverlay';
 type DialogContentProps = Omit<DialogPrimitive.Popup.Props, 'className'> & {
   className?: string;
   showOverlay?: boolean;
+  overlayClassName?: string;
 };
 
 const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, showOverlay = true, ...props }, ref) => (
+  ({ className, children, showOverlay = true, overlayClassName, ...props }, ref) => (
     <DialogPortal>
-      {showOverlay && <DialogOverlay />}
+      {showOverlay && <DialogOverlay className={overlayClassName} />}
       <DialogPrimitive.Popup
         ref={ref}
         data-slot="dialog-content"
