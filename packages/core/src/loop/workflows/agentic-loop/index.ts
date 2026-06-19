@@ -9,6 +9,7 @@ import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '.
 import type { OutputWriter } from '../../../workflows/types';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
+import { processSignalInput } from '../agentic-execution/process-signal-input';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 
@@ -85,13 +86,25 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       const pendingSignals = _internal.drainPendingSignals?.(runId) ?? [];
       if (pendingSignals.length > 0) {
-        typedInputData.messageId = _internal?.generateId?.() ?? randomUUID();
-        for (const pendingSignal of pendingSignals) {
-          messageList.add(pendingSignal.toLLMMessage(), 'input');
-          safeEnqueue(controller, pendingSignal.toDataPart() as any);
-        }
-        if (typedInputData.stepResult) {
-          typedInputData.stepResult.isContinued = true;
+        // Run input processors on signals so security guardrails
+        // (moderation, injection detection, etc.) apply to mid-run signals.
+        const approvedSignals = await processSignalInput({
+          signals: pendingSignals,
+          inputProcessors: rest.inputProcessors,
+          logger: rest.logger,
+          agentId: rest.agentId,
+          processorStates: rest.processorStates,
+          requestContext: rest.requestContext,
+        });
+        if (approvedSignals.length > 0) {
+          typedInputData.messageId = _internal?.generateId?.() ?? randomUUID();
+          for (const pendingSignal of approvedSignals) {
+            messageList.add(pendingSignal.toLLMMessage(), 'input');
+            safeEnqueue(controller, pendingSignal.toDataPart() as any);
+          }
+          if (typedInputData.stepResult) {
+            typedInputData.stepResult.isContinued = true;
+          }
         }
       }
 

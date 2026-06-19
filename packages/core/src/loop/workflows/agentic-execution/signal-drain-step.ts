@@ -4,6 +4,7 @@ import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
+import { processSignalInput } from './process-signal-input';
 
 export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   _internal,
@@ -11,6 +12,11 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
   runId,
   messageList,
   mastra,
+  inputProcessors,
+  logger,
+  agentId,
+  processorStates,
+  requestContext,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'signalDrainStep',
@@ -23,8 +29,24 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
         return typedInput;
       }
 
+      // Run input processors on signals before adding them to the message list.
+      // This ensures security guardrails (moderation, injection detection, etc.)
+      // that only implement processInput are applied to mid-run signals.
+      const approvedSignals = await processSignalInput({
+        signals: pendingSignals,
+        inputProcessors,
+        logger,
+        agentId,
+        processorStates,
+        requestContext,
+      });
+
+      if (approvedSignals.length === 0) {
+        return typedInput;
+      }
+
       messageList.markResponseMessageBoundary(typedInput.stepResult?.messageId ?? typedInput.messageId);
-      for (const pendingSignal of pendingSignals) {
+      for (const pendingSignal of approvedSignals) {
         const signalForTranscript = messageList.addSignal(pendingSignal);
         controller.enqueue(signalForTranscript.toDataPart() as unknown as ChunkType<OUTPUT>);
       }
