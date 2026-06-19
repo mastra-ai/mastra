@@ -1232,7 +1232,10 @@ export class GeminiLiveVoice extends MastraVoice<
     } else if (data.usageMetadata) {
       this.log('Processing usage metadata message');
       this.handleUsageUpdate(data);
-    } else if (data.sessionResumptionUpdate) {
+      // sessionResumptionUpdate may arrive in the same frame as usageMetadata
+      // so we handle it here too, not in a separate else-if branch
+    }
+    if (data.sessionResumptionUpdate) {
       this.log('Processing session resumption update', data.sessionResumptionUpdate);
       if (data.sessionResumptionUpdate.resumable && data.sessionResumptionUpdate.newHandle) {
         this.sessionHandle = data.sessionResumptionUpdate.newHandle;

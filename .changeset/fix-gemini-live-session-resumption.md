@@ -2,4 +2,4 @@
 "@mastra/voice-google-gemini-live": patch
 ---
 
-Fix resumeSession() always timing out. The provider now implements Gemini Live's real session-resumption protocol: the setup frame includes session_resumption to request server-issued tokens, inbound sessionResumptionUpdate frames store the real handle, and resumeSession() routes through the setup frame instead of emitting a non-standard event.
+Fix resumeSession() always timing out. Session resumption now works end-to-end: new sessions request server-issued tokens, inbound handles are stored and emitted, and resuming reconnects with the correct handle in the setup frame.
