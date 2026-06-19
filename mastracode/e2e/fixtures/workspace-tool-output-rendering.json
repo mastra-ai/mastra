@@ -3,8 +3,8 @@
     {
       "match": {
         "model": "gpt-5.4-mini",
-        "endpoint": "chat",
-        "userMessage": "Render workspace shell and lsp outputs."
+        "userMessage": "Render workspace shell and lsp outputs.",
+        "sequenceIndex": 0
       },
       "response": {
         "toolCalls": [
@@ -34,8 +34,8 @@
     {
       "match": {
         "model": "gpt-5.4-mini",
-        "endpoint": "chat",
-        "hasToolResult": true
+        "userMessage": "Render workspace shell and lsp outputs.",
+        "sequenceIndex": 1
       },
       "response": {
         "content": "Workspace tool output rendering complete."
