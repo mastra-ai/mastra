@@ -148,7 +148,8 @@ export class BrowserContextProcessor {
       const recentClickUrl =
         getMostRecentBrowserClickResultUrl(args.steps) ??
         getMostRecentBrowserClickResultUrlFromMessageList(args.messageList);
-      const activeUrlChangeSource = recentClickUrl === browserState.activeUrl ? 'agent' : browserState.activeUrlChangeSource ?? 'user';
+      const activeUrlChangeSource =
+        recentClickUrl === browserState.activeUrl ? 'agent' : (browserState.activeUrlChangeSource ?? 'user');
       browserState = {
         ...browserState,
         activeUrlChangeSource,
@@ -235,7 +236,9 @@ function getMostRecentBrowserClickResultUrlFromMessageList(
   }
 }
 
-function getMostRecentBrowserClickResultUrlFromMessages(messages: ComputeStateSignalArgs['messages']): string | undefined {
+function getMostRecentBrowserClickResultUrlFromMessages(
+  messages: ComputeStateSignalArgs['messages'],
+): string | undefined {
   for (const message of [...messages].reverse()) {
     if (isBrowserStateSignalMessage(message)) return undefined;
 
