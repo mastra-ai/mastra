@@ -121,6 +121,16 @@ async function subscribeSlackThread(ctx: SlashCommandContext): Promise<void> {
     } else {
       ctx.showInfo(`Subscribed this thread to Slack workspace ${result.workspaceName ?? result.workspaceId}.`);
     }
+    // Update statusline badge immediately
+    if (result.workspaceId) {
+      ctx.state.activeSlackSubscription = {
+        workspaceId: result.workspaceId,
+        ...(result.workspaceName ? { workspaceName: result.workspaceName } : {}),
+        conversationTypes: result.subscription?.conversationTypes ?? [],
+        channelCount: Object.keys(result.subscription?.channels ?? {}).length,
+      };
+      ctx.updateStatusLine();
+    }
   } catch (error) {
     ctx.showError(`Failed to subscribe to Slack: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -146,6 +156,9 @@ async function unsubscribeSlackThread(ctx: SlashCommandContext): Promise<void> {
     } else {
       ctx.showInfo('This thread is not subscribed to Slack.');
     }
+    // Clear statusline badge immediately
+    ctx.state.activeSlackSubscription = undefined;
+    ctx.updateStatusLine();
   } catch (error) {
     ctx.showError(`Failed to unsubscribe from Slack: ${error instanceof Error ? error.message : String(error)}`);
   }

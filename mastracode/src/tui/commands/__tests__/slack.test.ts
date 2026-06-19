@@ -49,6 +49,7 @@ function createContext(overrides?: {
     state: {
       ui: { requestRender: vi.fn() },
       options: slackSignals ? { slackSignals } : {},
+      activeSlackSubscription: undefined as { workspaceId: string; workspaceName?: string; conversationTypes: string[]; channelCount: number } | undefined,
     },
     harness: {
       session: {
@@ -72,6 +73,7 @@ function createContext(overrides?: {
     },
     showInfo: vi.fn(),
     showError: vi.fn(),
+    updateStatusLine: vi.fn(),
   } as unknown as SlashCommandContext;
   return { ctx, subscribeThreadToSlack, unsubscribeThreadFromSlack, getStoredApiKey, setStoredApiKey, removeApiKey };
 }
@@ -125,6 +127,29 @@ describe('handleSlackCommand', () => {
 
     expect(unsubscribeThreadFromSlack).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1' });
     expect(ctx.showInfo).toHaveBeenCalledWith('Unsubscribed this thread from Slack workspace Test Workspace.');
+  });
+
+  it('updates statusline badge immediately on subscribe', async () => {
+    const { ctx } = createContext();
+
+    await handleSlackCommand(ctx, ['subscribe']);
+
+    expect(ctx.state.activeSlackSubscription).toEqual({
+      workspaceId: 'T123456',
+      workspaceName: 'Test Workspace',
+      conversationTypes: [],
+      channelCount: 0,
+    });
+    expect(ctx.updateStatusLine).toHaveBeenCalled();
+  });
+
+  it('clears statusline badge immediately on unsubscribe', async () => {
+    const { ctx } = createContext();
+
+    await handleSlackCommand(ctx, ['unsubscribe']);
+
+    expect(ctx.state.activeSlackSubscription).toBeUndefined();
+    expect(ctx.updateStatusLine).toHaveBeenCalled();
   });
 
   it('supports the "unsub" alias', async () => {

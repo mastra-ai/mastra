@@ -72,7 +72,7 @@ import {
 } from './setup.js';
 import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
-import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
+import { createTUIState, getGithubPrSubscriptionsFromMetadata, getSlackSubscriptionFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
 
 // =============================================================================
@@ -117,6 +117,7 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   }
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
   state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
+  state.activeSlackSubscription = getSlackSubscriptionFromMetadata(metadata);
   // Prefer the durable ThreadState objective; fall back to the legacy
   // thread-metadata goal for threads created before the migration.
   await state.goalManager.loadFromThread(state);
