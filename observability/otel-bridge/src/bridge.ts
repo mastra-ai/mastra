@@ -23,18 +23,16 @@ import type {
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter, getExternalParentId } from '@mastra/observability';
+import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter, convertLog, getSpanKind } from '@mastra/otel-exporter';
 import { trace as otelTrace, context as otelContext, isSpanContextValid, TraceFlags } from '@opentelemetry/api';
-import type { Span as OtelSpan, Context as OtelContext } from '@opentelemetry/api';
+import type { Span as OtelSpan, Context as OtelContext, TracerProvider } from '@opentelemetry/api';
 import { logs as otelLogs } from '@opentelemetry/api-logs';
-import type { Logger as OtelLogger } from '@opentelemetry/api-logs';
+import type { Logger as OtelLogger, LoggerProvider } from '@opentelemetry/api-logs';
 
-/**
- * Configuration for the OtelBridge
- */
-
-export type OtelBridgeConfig = {
-  // Currently no configuration options - placeholder for future options
+export type OtelBridgeConfig = BaseExporterConfig & {
+  tracerProvider?: TracerProvider;
+  loggerProvider?: LoggerProvider;
 };
 
 /**
@@ -63,13 +61,19 @@ export type OtelBridgeConfig = {
  */
 export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   name = 'otel';
-  private otelTracer = otelTrace.getTracer('@mastra/otel-bridge', '1.0.0');
-  private otelLogger: OtelLogger = otelLogs.getLogger('@mastra/otel-bridge', '1.0.0');
+  private tracerProvider: TracerProvider;
+  private loggerProvider: LoggerProvider;
+  private otelTracer;
+  private otelLogger: OtelLogger;
   private otelSpanMap = new Map<string, { otelSpan: OtelSpan; otelContext: OtelContext }>();
   private spanConverter?: SpanConverter;
 
   constructor(config: OtelBridgeConfig = {}) {
     super(config);
+    this.tracerProvider = config.tracerProvider ?? otelTrace.getTracerProvider();
+    this.otelTracer = this.tracerProvider.getTracer('@mastra/otel-bridge', '1.0.0');
+    this.loggerProvider = config.loggerProvider ?? otelLogs.getLoggerProvider();
+    this.otelLogger = this.loggerProvider.getLogger('@mastra/otel-bridge', '1.0.0');
   }
 
   /**
@@ -356,8 +360,8 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
    * instance is terminated.
    */
   async flush(): Promise<void> {
-    await this.flushProvider(otelTrace.getTracerProvider(), 'tracer');
-    await this.flushProvider(otelLogs.getLoggerProvider(), 'logger');
+    await this.flushProvider(this.tracerProvider, 'tracer');
+    await this.flushProvider(this.loggerProvider, 'logger');
   }
 
   private async flushProvider(provider: unknown, label: 'tracer' | 'logger'): Promise<void> {
