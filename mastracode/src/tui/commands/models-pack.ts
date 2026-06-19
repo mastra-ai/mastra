@@ -398,7 +398,7 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
   for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
     const saModelId = (pack.models as Record<string, string>)[modeId];
     if (saModelId) {
-      await harness.setSubagentModelId({ modelId: saModelId, agentType });
+      await harness.session.subagents.model.set({ modelId: saModelId, agentType });
     }
   }
 
