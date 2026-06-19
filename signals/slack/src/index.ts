@@ -515,9 +515,14 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   readonly #filters: NormalizedSlackSignalsFilterConfig;
   readonly #syncClient: SlackSignalsSyncClient;
   #pollingChangedHandler?: (event: { threadId: string; resourceId: string; running: boolean }) => void;
+  readonly #pollingThreads = new Map<string, boolean>();
 
   onPollingChanged(handler: (event: { threadId: string; resourceId: string; running: boolean }) => void): void {
     this.#pollingChangedHandler = handler;
+  }
+
+  isPollingThread(input: SlackPollingThread): boolean {
+    return this.#pollingThreads.get(`${input.resourceId}:${input.threadId}`) ?? false;
   }
 
   constructor(options: SlackSignalsProviderConfig) {
@@ -600,10 +605,13 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   }
 
   async #pollThread(input: SlackPollingThread): Promise<SlackPollResult> {
+    const key = `${input.resourceId}:${input.threadId}`;
+    this.#pollingThreads.set(key, true);
     this.#pollingChangedHandler?.({ ...input, running: true });
     try {
       return await this.#doPollThread(input);
     } finally {
+      this.#pollingThreads.set(key, false);
       this.#pollingChangedHandler?.({ ...input, running: false });
     }
   }

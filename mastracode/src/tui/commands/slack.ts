@@ -263,6 +263,46 @@ async function manageSlackPollInterval(ctx: SlashCommandContext): Promise<void> 
   ctx.showInfo(`Poll interval changed to ${formatPollInterval(newMs)}. Restart MastraCode for it to take effect.`);
 }
 
+async function describeSlackDebug(ctx: SlashCommandContext): Promise<string> {
+  const { threadId, resourceId, metadata } = await getCurrentSlackThread(ctx);
+  if (!threadId) return 'Slack Signals debug: no current thread.';
+
+  const slackSignalsProcessor = ctx.state.options?.slackSignals;
+  const pollingActive = resourceId
+    ? (slackSignalsProcessor?.isPollingThread?.({ threadId, resourceId }) ?? false)
+    : false;
+  const pollIntervalMs = slackSignalsProcessor?.pollInterval;
+  const { token, source } = getTokenSource(ctx);
+
+  const slackMetadata = getSlackSignalsMetadata(metadata);
+  const subscription = slackMetadata.subscription;
+  if (!subscription) {
+    return `Slack Signals debug for ${threadId}: not subscribed, polling=${pollingActive ? 'active' : 'inactive'}${pollIntervalMs ? `, interval=${formatPollInterval(pollIntervalMs)}` : ''}, token=${token ? source : 'none'}`;
+  }
+
+  const channelEntries = Object.entries(subscription.channels ?? {});
+  const channelDebugLines = channelEntries.length > 0
+    ? channelEntries.map(([channelId, ch]) => {
+        const name = ch.name ?? channelId;
+        const type = ch.type ?? 'unknown';
+        const latestTs = ch.latestTs ?? 'none';
+        const syncStatus = ch.lastSyncStatus ?? 'unknown';
+        return `- ${name} (${type}) latestTs=${latestTs} sync=${syncStatus}`;
+      }).join('\n')
+    : '  No channels tracked yet.';
+
+  return `Slack Signals debug for ${threadId}:
+  Workspace: ${subscription.workspaceName ?? subscription.workspaceId}
+  Conversation types: ${subscription.conversationTypes.join(', ') || 'default'}
+  Channels tracked: ${channelEntries.length}
+  Polling: ${pollingActive ? 'active' : 'inactive'}${pollIntervalMs ? `, interval=${formatPollInterval(pollIntervalMs)}` : ''}
+  Token: ${token ? `${maskToken(token)} (${source})` : 'none'}
+  Subscribed at: ${formatLocalTimestamp(subscription.subscribedAt) ?? 'unknown'}
+  Last sync: ${subscription.lastSyncAt ? formatLocalTimestamp(subscription.lastSyncAt) : 'never'}${subscription.lastSyncStatus ? ` (${subscription.lastSyncStatus})` : ''}${subscription.lastSyncError ? `\n  Last error: ${subscription.lastSyncError}` : ''}
+  Channels:
+${channelDebugLines}`;
+}
+
 export async function handleSlackCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
   if (!loadSettings().signals.experimentalSlackSignals) {
     ctx.showError('Experimental Slack signals are disabled. Enable them in /settings and restart MastraCode.');
@@ -287,10 +327,14 @@ export async function handleSlackCommand(ctx: SlashCommandContext, args: string[
     await manageSlackPollInterval(ctx);
     return;
   }
+  if (action === 'debug') {
+    ctx.showInfo(await describeSlackDebug(ctx));
+    return;
+  }
   if (action === 'config' || action === 'status' || !action) {
     ctx.showInfo(await describeSlackSubscription(ctx));
     return;
   }
 
-  ctx.showError('Usage: /slack subscribe, /slack unsubscribe, /slack config, /slack token, /slack poll');
+  ctx.showError('Usage: /slack subscribe, /slack unsubscribe, /slack config, /slack token, /slack poll, /slack debug');
 }

@@ -38,6 +38,7 @@ function createContext(overrides?: {
         pollInterval: 60_000,
         subscribeThreadToSlack,
         unsubscribeThreadFromSlack,
+        isPollingThread: vi.fn(() => false),
         ...overrides?.slackSignals,
       };
 
@@ -223,12 +224,49 @@ describe('handleSlackCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('not subscribed'));
   });
 
+  it('shows debug info when not subscribed', async () => {
+    const { ctx } = createContext({ threadMetadata: undefined });
+
+    await handleSlackCommand(ctx, ['debug']);
+
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('not subscribed'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('polling=inactive'));
+  });
+
+  it('shows debug info with subscription details', async () => {
+    const { ctx } = createContext({
+      threadMetadata: {
+        mastra: {
+          slackSignals: {
+            subscription: {
+              workspaceId: 'T123',
+              workspaceName: 'Test Workspace',
+              conversationTypes: ['public_channel', 'im'],
+              subscribedAt: '2024-01-01T00:00:00.000Z',
+              updatedAt: '2024-01-01T00:00:00.000Z',
+              lastSubscribeSignalId: 'sig-1',
+              channels: {
+                C001: { id: 'C001', name: 'general', type: 'public_channel', latestTs: '1700000000.000000', lastSyncStatus: 'success' },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await handleSlackCommand(ctx, ['debug']);
+
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Test Workspace'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('general'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('latestTs=1700000000.000000'));
+  });
+
   it('shows usage hint for unknown subcommands', async () => {
     const { ctx } = createContext();
 
     await handleSlackCommand(ctx, ['bogus']);
 
-    expect(ctx.showError).toHaveBeenCalledWith('Usage: /slack subscribe, /slack unsubscribe, /slack config, /slack token, /slack poll');
+    expect(ctx.showError).toHaveBeenCalledWith('Usage: /slack subscribe, /slack unsubscribe, /slack config, /slack token, /slack poll, /slack debug');
   });
 
   it('shows error when experimental Slack signals are disabled', async () => {
