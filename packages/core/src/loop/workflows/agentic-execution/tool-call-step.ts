@@ -513,8 +513,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // resumeStream instead of stream (otherwise the sub-agent restarts from scratch)
         const isAgentTool = inputData.toolName?.startsWith('agent-');
         const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
+        const isApprovalOnlyResumeData =
+          typeof resumeData === 'object' &&
+          resumeData !== null &&
+          'approved' in resumeData &&
+          Object.keys(resumeData).every(key => key === 'approved' || key === 'reason');
         const resumeDataToPassToToolOptions =
-          !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+          !isAgentTool && toolRequiresApproval && isApprovalOnlyResumeData
             ? undefined
             : resumeData;
 
@@ -583,19 +588,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: inputData.args,
                 type: 'approval',
                 suspendedToolRunId: options.runId,
-                resumeSchema: JSON.stringify(
-                  standardSchemaToJSONSchema(
-                    toStandardSchema(
-                      z.object({
-                        approved: z
-                          .boolean()
-                          .describe(
-                            'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                          ),
-                      }),
-                    ),
-                  ),
-                ),
+                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
                 metadata: approvalChunk.metadata,
               });
 
