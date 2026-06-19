@@ -28,11 +28,53 @@ export type SlackSignalsIncludeConfig = {
   groupDms?: boolean;
 };
 
+export type SlackNotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export type SlackSignalsFilterConfig = {
+  includeChannelIds?: string[];
+  excludeChannelIds?: string[];
+  includeChannelNames?: string[];
+  excludeChannelNames?: string[];
+  keywords?: string[];
+  ignoreBotMessages?: boolean;
+  ignoredBotIds?: string[];
+  ignoredUserIds?: string[];
+  maxPreviewLength?: number;
+  priority?: {
+    channels?: SlackNotificationPriority;
+    dms?: SlackNotificationPriority;
+    groupDms?: SlackNotificationPriority;
+    mentions?: SlackNotificationPriority;
+  };
+};
+
+type NormalizedSlackSignalsFilterConfig = Required<Omit<SlackSignalsFilterConfig, 'priority'>> & {
+  priority: Required<NonNullable<SlackSignalsFilterConfig['priority']>>;
+};
+
 export const DEFAULT_SLACK_SIGNALS_INCLUDE: Required<SlackSignalsIncludeConfig> = {
   publicChannels: true,
   privateChannels: true,
   dms: true,
   groupDms: true,
+};
+
+export const DEFAULT_SLACK_SIGNALS_FILTERS: NormalizedSlackSignalsFilterConfig = {
+  includeChannelIds: [],
+  excludeChannelIds: [],
+  includeChannelNames: [],
+  excludeChannelNames: [],
+  keywords: [],
+  ignoreBotMessages: false,
+  ignoredBotIds: [],
+  ignoredUserIds: [],
+  maxPreviewLength: 240,
+  priority: {
+    channels: 'low',
+    dms: 'high',
+    groupDms: 'high',
+    mentions: 'high',
+  },
 };
 
 export type SlackSignalsWorkspace = {
@@ -148,6 +190,7 @@ export type SlackSignalsProviderConfig = {
   token: string;
   pollIntervalMs?: number;
   include?: SlackSignalsIncludeConfig;
+  filters?: SlackSignalsFilterConfig;
   syncClient?: SlackSignalsSyncClient;
   threadStore?: SlackSignalsThreadStore;
   maxMessagesPerChannel?: number;
@@ -185,6 +228,30 @@ function normalizeIncludeConfig(include: SlackSignalsIncludeConfig = {}): Requir
     privateChannels: include.privateChannels ?? DEFAULT_SLACK_SIGNALS_INCLUDE.privateChannels,
     dms: include.dms ?? DEFAULT_SLACK_SIGNALS_INCLUDE.dms,
     groupDms: include.groupDms ?? DEFAULT_SLACK_SIGNALS_INCLUDE.groupDms,
+  };
+}
+
+function normalizeStringList(values: string[] | undefined): string[] {
+  return values?.map(value => value.trim()).filter(Boolean) ?? [];
+}
+
+function normalizeSlackFilters(filters: SlackSignalsFilterConfig = {}): NormalizedSlackSignalsFilterConfig {
+  return {
+    includeChannelIds: normalizeStringList(filters.includeChannelIds),
+    excludeChannelIds: normalizeStringList(filters.excludeChannelIds),
+    includeChannelNames: normalizeStringList(filters.includeChannelNames).map(value => value.toLowerCase()),
+    excludeChannelNames: normalizeStringList(filters.excludeChannelNames).map(value => value.toLowerCase()),
+    keywords: normalizeStringList(filters.keywords).map(value => value.toLowerCase()),
+    ignoreBotMessages: filters.ignoreBotMessages ?? DEFAULT_SLACK_SIGNALS_FILTERS.ignoreBotMessages,
+    ignoredBotIds: normalizeStringList(filters.ignoredBotIds),
+    ignoredUserIds: normalizeStringList(filters.ignoredUserIds),
+    maxPreviewLength: filters.maxPreviewLength ?? DEFAULT_SLACK_SIGNALS_FILTERS.maxPreviewLength,
+    priority: {
+      channels: filters.priority?.channels ?? DEFAULT_SLACK_SIGNALS_FILTERS.priority.channels,
+      dms: filters.priority?.dms ?? DEFAULT_SLACK_SIGNALS_FILTERS.priority.dms,
+      groupDms: filters.priority?.groupDms ?? DEFAULT_SLACK_SIGNALS_FILTERS.priority.groupDms,
+      mentions: filters.priority?.mentions ?? DEFAULT_SLACK_SIGNALS_FILTERS.priority.mentions,
+    },
   };
 }
 
@@ -319,14 +386,64 @@ function getMessageDedupeKey(subscription: SlackSignalsSubscription, message: Sl
   return `${subscription.workspaceId}:${message.channelId}:${message.ts}`;
 }
 
-function getMessageSummary(message: SlackSignalsMessage): string {
+function truncateText(text: string, maxLength: number): string {
+  if (maxLength <= 0 || text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function getMessageSummary(message: SlackSignalsMessage, filters: NormalizedSlackSignalsFilterConfig): string {
   const channel = message.channelName ? `#${message.channelName}` : message.channelId;
   const author = message.username ?? message.user ?? message.botId ?? 'Someone';
   const text = message.text?.trim();
-  return text ? `${author} in ${channel}: ${text}` : `${author} posted in ${channel}.`;
+  return text ? `${author} in ${channel}: ${truncateText(text, filters.maxPreviewLength)}` : `${author} posted in ${channel}.`;
 }
 
-function createSlackNotificationInput(subscription: SlackSignalsSubscription, message: SlackSignalsMessage) {
+function isMention(subscription: SlackSignalsSubscription, message: SlackSignalsMessage): boolean {
+  const text = message.text ?? '';
+  return Boolean(
+    (subscription.userId && text.includes(`<@${subscription.userId}>`)) ||
+      (subscription.botId && text.includes(`<@${subscription.botId}>`)),
+  );
+}
+
+function getMessagePriority(
+  subscription: SlackSignalsSubscription,
+  message: SlackSignalsMessage,
+  filters: NormalizedSlackSignalsFilterConfig,
+): SlackNotificationPriority {
+  if (isMention(subscription, message)) return filters.priority.mentions;
+  if (message.channelType === 'im') return filters.priority.dms;
+  if (message.channelType === 'mpim') return filters.priority.groupDms;
+  return filters.priority.channels;
+}
+
+function shouldNotifyMessage(message: SlackSignalsMessage, filters: NormalizedSlackSignalsFilterConfig): boolean {
+  if (filters.includeChannelIds.length > 0 && !filters.includeChannelIds.includes(message.channelId)) return false;
+  if (filters.excludeChannelIds.includes(message.channelId)) return false;
+
+  const channelName = message.channelName?.toLowerCase();
+  if (filters.includeChannelNames.length > 0 && (!channelName || !filters.includeChannelNames.includes(channelName))) {
+    return false;
+  }
+  if (channelName && filters.excludeChannelNames.includes(channelName)) return false;
+
+  if (message.user && filters.ignoredUserIds.includes(message.user)) return false;
+  if (message.botId && filters.ignoredBotIds.includes(message.botId)) return false;
+  if (filters.ignoreBotMessages && message.botId) return false;
+
+  if (filters.keywords.length > 0) {
+    const text = message.text?.toLowerCase() ?? '';
+    if (!filters.keywords.some(keyword => text.includes(keyword))) return false;
+  }
+
+  return true;
+}
+
+function createSlackNotificationInput(
+  subscription: SlackSignalsSubscription,
+  message: SlackSignalsMessage,
+  filters: NormalizedSlackSignalsFilterConfig,
+) {
   const dedupeKey = getMessageDedupeKey(subscription, message);
   const payload: SlackNotificationPayload = {
     teamId: subscription.workspaceId,
@@ -346,8 +463,8 @@ function createSlackNotificationInput(subscription: SlackSignalsSubscription, me
   return {
     source: 'slack',
     kind: 'slack-message',
-    summary: getMessageSummary(message),
-    priority: 'medium' as const,
+    summary: getMessageSummary(message, filters),
+    priority: getMessagePriority(subscription, message, filters),
     sourceId: dedupeKey,
     dedupeKey,
     coalesceKey: `${subscription.workspaceId}:${message.channelId}`,
@@ -395,12 +512,14 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
 
   readonly #options: SlackSignalsProviderConfig;
   readonly #include: Required<SlackSignalsIncludeConfig>;
+  readonly #filters: NormalizedSlackSignalsFilterConfig;
   readonly #syncClient: SlackSignalsSyncClient;
 
   constructor(options: SlackSignalsProviderConfig) {
     super();
     this.#options = options;
     this.#include = normalizeIncludeConfig(options.include);
+    this.#filters = normalizeSlackFilters(options.filters);
     this.#syncClient = options.syncClient ?? new SlackWebApiSyncClient({ token: options.token });
     this.pollInterval = options.pollIntervalMs ?? DEFAULT_SLACK_SIGNALS_POLL_INTERVAL_MS;
   }
@@ -541,7 +660,8 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
         }
 
         for (const message of newMessages) {
-          await this.notify(createSlackNotificationInput(subscription, message), input);
+          if (!shouldNotifyMessage(message, this.#filters)) continue;
+          await this.notify(createSlackNotificationInput(subscription, message, this.#filters), input);
           notificationsSent += 1;
         }
 
