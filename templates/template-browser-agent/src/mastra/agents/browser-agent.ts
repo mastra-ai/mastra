@@ -42,6 +42,7 @@ async function installPlaywrightLinuxDeps() {
     });
 
     const timeout = setTimeout(() => {
+      installDepsPromise = undefined;
       child.kill('SIGTERM');
       reject(new Error('Timed out installing Playwright Chromium system dependencies'));
     }, 120_000);
