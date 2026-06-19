@@ -73,7 +73,7 @@ export function createNextRouteHandler(options: NextRouteHandlerOptions): NextRo
   }
 
   // Build a handler for each HTTP method
-  const handler: NextRouteHandler = async (req) => {
+  const handler: NextRouteHandler = async req => {
     const app = await getApp();
     const honoHandler = handle(app);
     return honoHandler(req);
