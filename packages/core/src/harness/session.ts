@@ -1056,6 +1056,86 @@ class SessionPermissions {
   }
 }
 
+/** The session-state / thread-settings key holding a subagent model id. */
+function subagentModelKey(agentType?: string): string {
+  return agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
+}
+
+/**
+ * The subagent model selection. Reads prefer the per-`agentType` value and fall
+ * back to the global subagent model; writes persist to thread settings and emit
+ * a `subagent_model_changed` event. Wiring is injected by
+ * {@link SessionSubagents.setResolver}.
+ */
+class SessionSubagentModel {
+  #getState: (() => Record<string, unknown>) | undefined;
+  #setState: ((updates: Record<string, unknown>) => void) | undefined;
+  #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
+  #emit: ((event: HarnessEvent) => void) | undefined;
+
+  /** @internal Injected by {@link SessionSubagents.setResolver}. */
+  setWiring(wiring: {
+    getState: () => Record<string, unknown>;
+    setState: (updates: Record<string, unknown>) => void;
+    setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    emit: (event: HarnessEvent) => void;
+  }): void {
+    this.#getState = wiring.getState;
+    this.#setState = wiring.setState;
+    this.#setSetting = wiring.setSetting;
+    this.#emit = wiring.emit;
+  }
+
+  /**
+   * The subagent model id, preferring the `agentType`-specific value when one is
+   * given, then the global subagent model, or `null` when neither is set.
+   */
+  get({ agentType }: { agentType?: string } = {}): string | null {
+    const state = this.#getState?.() ?? {};
+    if (agentType) {
+      const perType = state[subagentModelKey(agentType)];
+      if (typeof perType === 'string') return perType;
+    }
+    const global = state.subagentModelId;
+    return typeof global === 'string' ? global : null;
+  }
+
+  /**
+   * Set the subagent model id (per-`agentType` when given, otherwise global).
+   * Persists to thread settings and emits `subagent_model_changed`.
+   */
+  async set({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
+    const key = subagentModelKey(agentType);
+    this.#setState?.({ [key]: modelId });
+    await this.#setSetting?.({ key, value: modelId });
+    this.#emit?.({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType });
+  }
+}
+
+/**
+ * The session's subagent configuration. Currently exposes the subagent model
+ * selection under {@link SessionSubagents.model}; grouped under `subagents` to
+ * leave room for additional subagent settings. The Harness injects the
+ * session-state read/write, thread-settings persistence, and event emitter once
+ * via {@link setResolver}.
+ */
+class SessionSubagents {
+  readonly model = new SessionSubagentModel();
+
+  /**
+   * Attach the session-state read/write, thread-settings persistence, and event
+   * emitter. The Harness injects these once.
+   */
+  setResolver(options: {
+    getState: () => Record<string, unknown>;
+    setState: (updates: Record<string, unknown>) => void;
+    setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    emit: (event: HarnessEvent) => void;
+  }): void {
+    this.model.setWiring(options);
+  }
+}
+
 type SessionStateUpdater<TState, TResult> = HarnessRequestStateUpdater<TState, TResult>;
 
 interface SessionStateOptions<TState> {
@@ -1706,6 +1786,8 @@ export class Session<TState = unknown> {
   readonly om = new SessionOM();
   /** The session's persisted tool-permission rules (per-category / per-tool). */
   readonly permissions = new SessionPermissions();
+  /** The session's subagent configuration (currently the subagent model). */
+  readonly subagents = new SessionSubagents();
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
   /** Live subscription to the active thread's agent event stream. */
