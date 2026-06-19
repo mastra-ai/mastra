@@ -7,7 +7,7 @@ Use this checklist to manually verify the restored Mastra Code behavior on the `
 - [ ] **Request access approval prompt**
   - Trigger a `request_access` flow for a path outside the project root.
   - Approve the prompt.
-  - Verify the resolved inline prompt says something like `✓ Granted access to /some/path`, not just `✓ Yes`.
+  - Verify the resolved inline prompt says `✓ Granted`, not `✓ Yes` or a repeated path.
   - Verify the follow-up tool call can read the granted path.
 
 - [ ] **Blocked prompt attachments restore**

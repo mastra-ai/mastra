@@ -210,7 +210,7 @@ export async function handleSandboxAccessRequest(
           },
           formatResult: answer => {
             const approved = answer.toLowerCase().startsWith('y');
-            return approved ? `Granted access to ${requestedPath}` : `Denied access to ${requestedPath}`;
+            return approved ? 'Granted' : 'Denied';
           },
           isNegativeAnswer: answer => !answer.toLowerCase().startsWith('y'),
         },

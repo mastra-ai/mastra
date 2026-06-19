@@ -35,7 +35,7 @@ export const requestAccessModalScenario: McE2eScenario = {
 
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Granted access to \/tmp\/mastracode-request-access-e2e/i, terminal);
+    await runtime.waitForScreenText(/✓\s+Granted/i, terminal);
     await runtime.waitForScreenText(/view \/tmp\/mastracode-request-access-e2e\/allowed\.txt/i, terminal);
     await runtime.waitForScreenText(/REQUEST_ACCESS_E2E_GRANTED_FILE/i, terminal);
     await runtime.waitForScreenText(/Request access e2e complete\./i, terminal);

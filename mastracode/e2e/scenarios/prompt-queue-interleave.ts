@@ -31,7 +31,7 @@ export const promptQueueInterleaveScenario: McE2eScenario = {
 
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Granted access to \/tmp\/mastracode-prompt-queue-e2e/i, terminal);
+    await runtime.waitForScreenText(/✓\s+Granted/i, terminal);
     await runtime.waitForScreenText(/Prompt queue interleave e2e complete\./i, terminal);
     runtime.printScreen('after queued prompts answered', terminal);
 
