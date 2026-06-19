@@ -23,7 +23,7 @@ new MastraEditor({
   builder: {
     enabled: true,
     features: {
-      agent: { browser: false },
+      agent: { skills: false },
     },
     configuration: {
       agent: {
@@ -34,7 +34,7 @@ new MastraEditor({
 })
 ```
 
-This hides the browser tab in the Builder UI and pins observational memory as the default for every Builder-created agent.
+This hides the skills section in the Builder UI and pins observational memory as the default for every Builder-created agent.
 
 ## Feature toggles
 
@@ -46,13 +46,9 @@ new MastraEditor({
     enabled: true,
     features: {
       agent: {
-        tools: true,
         agents: true,
         workflows: true,
-        scorers: true,
         skills: true,
-        memory: true,
-        variables: true,
         favorites: true,
         avatarUpload: true,
         model: true,
@@ -131,6 +127,20 @@ new MastraEditor({
   },
 })
 ```
+
+## Disabling the Builder
+
+Set `enabled: false` to keep the config in place but turn the surface off:
+
+```typescript title="src/mastra/index.ts"
+new MastraEditor({
+  builder: {
+    enabled: false,
+  },
+})
+```
+
+Omitting the `builder` field has the same effect.
 
 ## Related
 
