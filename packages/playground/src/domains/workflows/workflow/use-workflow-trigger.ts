@@ -54,13 +54,14 @@ export function useWorkflowSchemas(workflow?: GetWorkflowResponse) {
 }
 
 export function useNextPerStep() {
-  const { result, runId, workflowId, workflow, debugMode, setDebugMode, timeTravelWorkflowStream } =
+  const { result, runId, workflowId, workflow, setDebugMode, timeTravelWorkflowStream } =
     useContext(WorkflowRunContext);
   const requestContext = useMergedRequestContext();
 
   const stepGraph = workflow?.stepGraph;
 
-  const { stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds, nestedWorkflowStepIds } = useMemo(() => {
+  const { stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds, nestedWorkflowStepIds } =
+    useMemo(() => {
     const { nodes, edges } = constructNodesAndEdges({ stepGraph });
     const orderedStepIds = nodes
       .filter(node => node.type === WORKFLOW_STEP_NODE_TYPE && node.data?.nodeRole !== 'condition' && node.data?.stepId)
@@ -112,11 +113,21 @@ export function useNextPerStep() {
       collectStepFlags(entry);
     }
 
-    return { stepNodesInOrder: orderedStepIds, stepsFlow, stepSuccessors, conditionalStepIds, nestedWorkflowStepIds };
+    return {
+      stepNodesInOrder: orderedStepIds,
+      stepsFlow,
+      stepSuccessors,
+      conditionalStepIds,
+      nestedWorkflowStepIds,
+    };
   }, [stepGraph]);
 
   const nextStepKey = useMemo(() => {
-    if (!debugMode || result?.status !== 'paused') return undefined;
+    // A run only reaches the 'paused' status when it was started in per-step (debug) mode, so
+    // a paused run is always steppable regardless of the in-memory debugMode flag. This lets
+    // the step controls work when landing directly on a paused run's :runId page, where the
+    // debugMode flag starts out false.
+    if (result?.status !== 'paused') return undefined;
 
     const isSuccess = (stepId: string) => result?.steps?.[stepId]?.status === 'success';
 
@@ -132,7 +143,7 @@ export function useNextPerStep() {
     };
 
     return stepNodesInOrder.find(stepId => !isSuccess(stepId) && !isBypassed(stepId));
-  }, [debugMode, result?.status, result?.steps, stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds]);
+  }, [result?.status, result?.steps, stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds]);
 
   const stepPayload = useMemo(() => {
     if (!nextStepKey) return undefined;
@@ -204,7 +215,10 @@ export function useNextPerStep() {
         step: nextStepKey,
         inputData: stepPayload.hasMultiSteps ? undefined : stepPayload.input,
         requestContext,
-        ...(runToFinish ? { perStep: false } : {}),
+        // Drive per-step explicitly off the paused-run intent rather than the in-memory
+        // debugMode flag. On the :runId page debugMode starts false, so omitting perStep
+        // would let timeTravelStream default to a full run instead of re-pausing.
+        perStep: !runToFinish,
         ...(stepPayload.hasMultiSteps
           ? {
               context: Object.keys(stepPayload.input).reduce(
@@ -233,6 +247,7 @@ export function useNextPerStep() {
       setDebugMode,
       timeTravelWorkflowStream,
       nestedWorkflowStepIds,
+      result?.steps,
       isLastStep,
     ],
   );

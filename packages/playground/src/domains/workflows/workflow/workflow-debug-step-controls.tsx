@@ -10,10 +10,13 @@ export interface WorkflowDebugStepControlsProps {
 }
 
 export function WorkflowDebugStepControls({ isStreaming }: WorkflowDebugStepControlsProps) {
-  const { debugMode, result } = useContext(WorkflowRunContext);
+  const { result } = useContext(WorkflowRunContext);
   const { canRunNextStep, runNextStep, continueFullRun } = useNextPerStep();
 
-  if (!debugMode || result?.status !== 'paused') {
+  // A run only reaches the 'paused' status when it was started in per-step (debug) mode, so a
+  // paused run always shows the step controls — including when landing directly on a paused
+  // run's :runId page, where the in-memory debugMode flag starts out false.
+  if (result?.status !== 'paused') {
     return null;
   }
 

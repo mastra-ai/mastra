@@ -13,6 +13,7 @@ export interface WorkflowDataEdgeData {
   nextStepId?: string;
   conditionNode?: boolean;
   boundaryPayload?: 'workflow-input' | 'workflow-output';
+  edgeStatus?: 'success' | 'idle';
 }
 
 export interface WorkflowDataEdgeProps extends EdgeProps {
@@ -48,7 +49,15 @@ const WorkflowDataEdgeComponent = (props: WorkflowDataEdgeProps) => {
 
   return (
     <>
-      <BaseEdge id={props.id} path={edgePath} markerEnd={props.markerEnd} style={props.style} />
+      <BaseEdge
+        id={props.id}
+        path={edgePath}
+        markerEnd={props.markerEnd}
+        style={props.style}
+        data-edge-status={data?.edgeStatus ?? 'idle'}
+        data-edge-from={data?.previousStepId}
+        data-edge-to={data?.nextStepId}
+      />
       <EdgeLabelRenderer>
         <div
           className="nodrag nopan"

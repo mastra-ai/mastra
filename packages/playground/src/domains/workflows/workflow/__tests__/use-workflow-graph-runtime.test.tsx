@@ -64,6 +64,7 @@ describe('useWorkflowGraphRuntime', () => {
     const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper });
 
     expect(result.current.styledEdges[0].style?.stroke).toBe('#8e8e8e');
+    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('idle');
   });
 
   it('renders finished green edges as solid instead of animated', () => {
@@ -83,5 +84,6 @@ describe('useWorkflowGraphRuntime', () => {
     expect(result.current.styledEdges[0].style?.stroke).toBe('#22c55e');
     expect(result.current.styledEdges[0].style?.strokeDasharray).toBe('none');
     expect(result.current.styledEdges[0].animated).toBe(false);
+    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('success');
   });
 });

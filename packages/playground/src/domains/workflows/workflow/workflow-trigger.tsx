@@ -220,7 +220,6 @@ export function WorkflowTrigger({
     setRunId: setContextRunId,
     runId: contextRunId,
     runSnapshot,
-    debugMode,
   } = useContext(WorkflowRunContext);
   useSyncStreamResultToWorkflowRunContext(streamResult);
   const { canExecute } = usePermissions();
@@ -238,7 +237,10 @@ export function WorkflowTrigger({
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
 
   const hasFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResultToUse?.status ?? '');
-  const isPausedDebug = !!debugMode && streamResultToUse?.status === 'paused';
+  // A run only reaches the 'paused' status when it was started in per-step (debug) mode, so a
+  // paused run always exposes the step controls — including when viewing a paused run directly
+  // on its :runId page, where the in-memory debugMode flag starts out false.
+  const isPausedDebug = streamResultToUse?.status === 'paused';
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -396,10 +398,10 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {(result?.status === 'running' || isSuspendedSteps || isPausedDebug) && (
+        {(streamResultToUse?.status === 'running' || isSuspendedSteps || isPausedDebug) && (
           <div data-testid="workflow-cancel-action" className="px-5 pb-4 pt-3">
             <WorkflowCancelButton
-              status={isSuspendedSteps ? 'suspended' : result?.status}
+              status={isSuspendedSteps ? 'suspended' : streamResultToUse?.status}
               cancelMessage={cancelResponse?.message ?? null}
               isCancelling={isCancellingWorkflowRun}
               onCancel={handleCancelWorkflowRun}

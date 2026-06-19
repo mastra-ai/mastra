@@ -49,14 +49,17 @@ const renderControls = (value: ContextValue, props = {}) =>
   );
 
 describe('WorkflowDebugStepControls', () => {
-  it('renders nothing when not in debug mode', () => {
-    renderControls(buildContext({ debugMode: false }));
-    expect(screen.queryByTestId('workflow-debug-step-controls')).toBeNull();
-  });
-
   it('renders nothing when the run is not paused', () => {
     renderControls(buildContext({ result: { ...pausedResult, status: 'running' } as ContextValue['result'] }));
     expect(screen.queryByTestId('workflow-debug-step-controls')).toBeNull();
+  });
+
+  it('shows controls for a paused run even when the debugMode flag is false', () => {
+    // Landing directly on a paused run's :runId page starts with debugMode=false, but a run
+    // can only be paused when it was started in per-step mode, so the controls must still show.
+    renderControls(buildContext({ debugMode: false }));
+    expect(screen.getByTestId('workflow-debug-step-controls')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /run next step/i })).not.toBeNull();
   });
 
   it('shows Run next step and Continue full run buttons while paused in debug mode', () => {
@@ -168,7 +171,54 @@ describe('WorkflowDebugStepControls', () => {
     expect(payload.step).toBe('mapping_join');
     // Only the taken arm's output is forwarded as the join context.
     expect(payload.context).toEqual({ 'short-text': { output: { text: 'AS' } } });
-    expect(payload.perStep).toBeUndefined();
+    // A normal advance re-pauses, so per-step is explicitly enabled regardless of the
+    // in-memory debug flag (which is false when landing on a paused run's :runId page).
+    expect(payload.perStep).toBe(true);
+  });
+
+  it('forwards the predecessor output as inputData when paused before an undecided branch', () => {
+    // Paused right before the conditional: only `start` succeeded, neither branch arm has run
+    // yet. The UI targets the conditional via the first arm id, but the branch decision is NOT
+    // made client-side: it forwards the predecessor output as inputData so core re-evaluates the
+    // condition at execution time and runs the correct (truthy) arm. Passing multiple arm ids
+    // would make core treat it as nested travel and drop the conditional input, so a single arm
+    // id plus the predecessor output is the correct payload shape.
+    const undecidedBranchResult = {
+      status: 'paused',
+      input: { text: 'A' },
+      steps: {
+        start: {
+          status: 'success',
+          payload: { text: 'A' },
+          output: { text: 'A' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+      },
+    } as ContextValue['result'];
+
+    const timeTravelWorkflowStream = vi.fn().mockResolvedValue(undefined);
+    renderControls(
+      buildContext({
+        workflowId: 'branch-workflow',
+        workflow: branchWorkflow,
+        result: undecidedBranchResult,
+        timeTravelWorkflowStream,
+      }),
+    );
+
+    const button = screen.getByRole('button', { name: /run next step/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+
+    fireEvent.click(button);
+
+    expect(timeTravelWorkflowStream).toHaveBeenCalledTimes(1);
+    const payload = timeTravelWorkflowStream.mock.calls[0][0];
+    // Target a single arm id and forward the predecessor output; core re-evaluates the
+    // condition from this input and runs the correct (truthy) arm, not necessarily this one.
+    expect(payload.step).toBe('short-text');
+    expect(payload.inputData).toEqual({ text: 'A' });
+    expect(payload.perStep).toBe(true);
   });
 
   it('advances to a still-idle parallel sibling instead of skipping it as a bypassed arm', () => {
@@ -214,7 +264,8 @@ describe('WorkflowDebugStepControls', () => {
     expect(timeTravelWorkflowStream).toHaveBeenCalledTimes(1);
     const payload = timeTravelWorkflowStream.mock.calls[0][0];
     expect(payload.step).toBe('add-letter-c');
-    expect(payload.perStep).toBeUndefined();
+    // A normal advance re-pauses, so per-step is explicitly enabled.
+    expect(payload.perStep).toBe(true);
   });
 
   it('runs a nested workflow step atomically (perStep disabled) without leaving debug mode', () => {

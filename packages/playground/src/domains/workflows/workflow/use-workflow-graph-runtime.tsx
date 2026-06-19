@@ -47,6 +47,10 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
           ...edge,
           type: WORKFLOW_DATA_EDGE_TYPE,
           animated: isFinishedEdge ? false : edge.animated,
+          data: {
+            ...edge.data,
+            edgeStatus: isFinishedEdge ? 'success' : 'idle',
+          },
           style: {
             ...edge.style,
             stroke: isFinishedEdge ? '#22c55e' : '#8e8e8e',
