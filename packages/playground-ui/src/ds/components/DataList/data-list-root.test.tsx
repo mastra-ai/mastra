@@ -226,20 +226,29 @@ describe('DataListRoot', () => {
       const rowHeaderCell = container.querySelector<HTMLElement>('.data-list-row-header');
 
       expect(grid?.className).toContain('[&_.data-list-top]:bg-neutral6/10');
-      expect(grid?.className).toContain('[&_.data-list-top>.data-list-sticky-start]:bg-inherit!');
-      expect(grid?.className).toContain('[&_.data-list-row_.data-list-sticky-start]:rounded-l-md');
-      expect(grid?.className).toContain('[&_.data-list-row_.data-list-sticky-start]:bg-neutral6/10!');
-      expect(grid?.className).toContain('[&_.data-list-row:hover_.data-list-sticky-start]:bg-surface-overlay-strong!');
+      expect(grid?.className).not.toContain('[&_.data-list-sticky-start]:bg-surface2');
+      expect(grid?.className).toContain(
+        '[&_.data-list-row_.data-list-row-header]:before:absolute [&_.data-list-row_.data-list-row-header]:before:inset-0',
+      );
+      expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:before:bg-neutral6/10');
+      expect(grid?.className).toContain(
+        '[&_.data-list-row:hover_.data-list-row-header]:before:bg-surface-overlay-strong',
+      );
       expect(top?.className).toContain('z-20');
       expect(topCell?.className).toContain('sticky');
       expect(topCell?.className).toContain('left-0');
       expect(topCell?.className).toContain('z-20');
+      expect(topCell?.className).not.toContain('bg-surface2');
       expect(rowHeaderCell?.className).toContain('data-list-sticky-start');
+      expect(rowHeaderCell?.className).toContain('w-full');
+      expect(rowHeaderCell?.className).toContain('self-stretch');
       expect(rowHeaderCell?.className).toContain('text-neutral2');
       expect(rowHeaderCell?.className).toContain('font-semibold');
       expect(rowHeaderCell?.className).toContain('tracking-tight');
       expect(rowHeaderCell?.className).toContain('sticky');
       expect(rowHeaderCell?.className).toContain('left-0');
+      expect(rowHeaderCell?.querySelector('span')?.className).toContain('relative');
+      expect(rowHeaderCell?.querySelector('span')?.className).toContain('z-10');
     });
   });
 

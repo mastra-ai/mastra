@@ -110,7 +110,7 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
       className={cn('data-list-row-header text-left text-ui-sm font-semibold tracking-tight text-neutral2', className)}
       {...rest}
     >
-      <span className={dataListTruncateContentStyles}>
+      <span className={cn(dataListTruncateContentStyles, 'relative z-10')}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
     </DataListCell>
