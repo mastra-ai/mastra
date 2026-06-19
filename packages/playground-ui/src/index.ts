@@ -22,7 +22,6 @@ export * from './ds/components/Checkbox';
 export * from './ds/components/Collapsible';
 export * from './ds/components/Combobox';
 export * from './ds/components/Command';
-export * from './ds/components/ContextMenu';
 export * from './ds/components/Code';
 export * from './ds/components/CodeBlock';
 export * from './ds/components/CopyButton';
@@ -45,8 +44,10 @@ export * from './ds/components/Popover';
 export * from './ds/components/PropertyFilter';
 export * from './ds/components/RadioGroup';
 export * from './ds/components/ScrollArea';
+export * from './ds/components/PendingIndicator';
 export * from './ds/components/Searchbar';
 export * from './ds/components/Select';
+export * from './ds/components/Shimmer';
 export * from './ds/components/Skeleton';
 export * from './ds/components/Slider';
 export * from './ds/components/Spinner';
@@ -71,8 +72,6 @@ export * from './ds/components/MainSidebar';
 export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
 export * from './ds/components/SectionCard';
-export * from './ds/components/SettingsRow';
-export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
 export * from './ds/components/Text';
@@ -100,9 +99,7 @@ export * from './ds/components/DataPanel';
 export * from './ds/components/DateTimeRangePicker';
 export * from './ds/components/HorizontalBars';
 export * from './ds/components/MetricsDataTable';
-export * from './ds/components/MetricsKpiCard';
 export * from './ds/components/MetricsLineChart';
-export * from './ds/components/PrevNextNav';
 export * from './ds/components/ScrollableContainer';
 export * from './ds/components/StatusBadge';
 
@@ -121,6 +118,8 @@ export * from './ds/primitives/transitions';
 export * from './hooks/use-copy-to-clipboard';
 export * from './hooks/use-in-view';
 export * from './hooks/use-autoscroll';
+export * from './hooks/use-is-mobile';
+export * from './hooks/use-keyboard-shortcut-label';
 
 // Pure lib utilities
 export { cn } from './lib/utils';
@@ -137,7 +136,9 @@ export * from './lib/toast';
 // Pure lib modules
 export * from './lib/rule-engine';
 export * from './lib/json-schema';
-export * from './lib/resize';
+export * from './lib/resize/collapsible-panel';
+export * from './lib/resize/separator';
+export * from './lib/resize/panel-drawer';
 export * from './lib/file';
 export * from './lib/template';
 

@@ -37,7 +37,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
   };
 
   return (
-    <div className="rounded-full bg-surface3 p-1 scale-125" style={{ viewTransitionName: 'agent-avatar' }}>
+    <div className="rounded-full bg-surface3 p-1 scale-[1.65]" style={{ viewTransitionName: 'agent-avatar' }}>
       {interactive ? (
         <>
           <button

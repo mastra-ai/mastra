@@ -16,9 +16,11 @@ function createMockState() {
     allShellComponents: [{}],
     taskProgress: { updateTasks: vi.fn() },
     taskToolInsertIndex: 5,
+    session: { state: { set: vi.fn(async () => {}) } },
     harness: {
       abort: vi.fn(),
-      getDisplayState: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })),
+      detachFromCurrentThread: vi.fn(),
+      session: { displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) } },
       setState: vi.fn(async () => {}),
     },
     ui: { requestRender: vi.fn() },
@@ -34,13 +36,13 @@ function createCtx(state: ReturnType<typeof createMockState>): SlashCommandConte
 }
 
 describe('handleNewCommand', () => {
-  it('aborts the harness before setting pendingNewThread', async () => {
+  it('detaches from current thread before setting pendingNewThread', async () => {
     const state = createMockState();
     const ctx = createCtx(state);
     const callOrder: string[] = [];
 
-    state.harness.abort.mockImplementation(() => {
-      callOrder.push('abort');
+    state.harness.detachFromCurrentThread.mockImplementation(() => {
+      callOrder.push('detach');
     });
     const origPendingNewThread = Object.getOwnPropertyDescriptor(state, 'pendingNewThread');
     Object.defineProperty(state, 'pendingNewThread', {
@@ -56,8 +58,8 @@ describe('handleNewCommand', () => {
 
     await handleNewCommand(ctx);
 
-    expect(state.harness.abort).toHaveBeenCalledOnce();
-    expect(callOrder).toEqual(['abort', 'pendingNewThread']);
+    expect(state.harness.detachFromCurrentThread).toHaveBeenCalledOnce();
+    expect(callOrder).toEqual(['detach', 'pendingNewThread']);
   });
 
   it('clears UI state and ephemeral thread state', async () => {
@@ -73,7 +75,7 @@ describe('handleNewCommand', () => {
     expect(state.allSystemReminderComponents).toEqual([]);
     expect(state.messageComponentsById.size).toBe(0);
     expect(state.allShellComponents).toEqual([]);
-    expect(state.harness.setState).toHaveBeenCalledWith({
+    expect(state.session.state.set).toHaveBeenCalledWith({
       tasks: [],
       activePlan: null,
       sandboxAllowedPaths: [],

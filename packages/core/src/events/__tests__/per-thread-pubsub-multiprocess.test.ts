@@ -440,11 +440,31 @@ parentPort.postMessage({ type: 'ready', data: { started: true } });
 
     await waitForElectedThreadBroker(clients);
 
+    // After re-election, `remoteClientCount === clientCount` only confirms TCP
+    // accept; in-flight `subscribe` frames may still be pending in the new
+    // broker's read buffer. A publish at that exact instant fans out only to
+    // already-registered subscribers, so quietly drops on a racing client.
+    // Pump warm-up publishes from one client until every client (including the
+    // publisher) confirms receipt — proving every subscription is registered.
+    const publisher = clients[clients.length - 1]!;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const warmupType = `warmup-${attempt}`;
+      const warmupPromises = clients.map(worker =>
+        waitForMessage(worker, 'event-received', 100, msg => msg.data?.eventType === warmupType).catch(() => undefined),
+      );
+      publisher.postMessage({ type: 'publish', eventType: warmupType });
+      await waitForMessage(publisher, 'ready');
+      const results = await Promise.all(warmupPromises);
+      if (results.every(result => result !== undefined)) break;
+      if (attempt === 49) {
+        throw new Error('Timed out warming up subscriptions after broker re-election');
+      }
+    }
+
     const eventPromises = clients.map(worker =>
       waitForMessage(worker, 'event-received', 5000, msg => msg.data?.eventType === 'split-brain-check'),
     );
 
-    const publisher = clients[clients.length - 1]!;
     publisher.postMessage({ type: 'publish', eventType: 'split-brain-check' });
     await waitForMessage(publisher, 'ready');
 

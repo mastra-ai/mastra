@@ -11,7 +11,7 @@ packages:
 
 Use it when several local processes need to share a stream, such as coordinating thread streams across the Mastra Code terminal interface. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For distributed delivery across hosts, use [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
-`UnixSocketPubSub` is a push transport: events arrive without a read loop, so Mastra does not run a pull worker for it.
+`UnixSocketPubSub` is a push transport: events arrive without a read loop, so Mastra doesn't run a pull worker for it.
 
 ## Usage example
 

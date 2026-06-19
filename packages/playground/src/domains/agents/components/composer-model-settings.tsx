@@ -194,7 +194,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
             <Sliders className="h-5 w-5 text-neutral3 hover:text-neutral6" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-80 p-4">
+        <PopoverContent align="start" className="w-80 p-4">
           {isLoading || isMemoryLoading ? (
             <Skeleton className="h-40 w-full" data-testid="composer-model-settings-skeleton" />
           ) : (

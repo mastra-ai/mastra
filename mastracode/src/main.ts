@@ -24,6 +24,18 @@ let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 
+function isTruthyEnv(name: string): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(process.env[name]?.trim().toLowerCase() ?? '');
+}
+
+function resolveInitialStateFromEnv() {
+  const currentModelId = process.env.MASTRACODE_MODEL_ID?.trim();
+  const initialState: Record<string, unknown> = {};
+  if (currentModelId) initialState.currentModelId = currentModelId;
+  if (isTruthyEnv('MASTRACODE_YOLO')) initialState.yolo = true;
+  return Object.keys(initialState).length > 0 ? initialState : undefined;
+}
+
 // Global safety nets — catch any uncaught errors from storage init, etc.
 process.on('uncaughtException', error => {
   // ERR_STREAM_DESTROYED is non-fatal — happens routinely when streams close
@@ -44,7 +56,14 @@ async function tuiMain(pipedInput?: string | null) {
     return browserPromise;
   };
 
-  const result = await createMastraCode({ unixSocketPubSub: true });
+  const initialState = resolveInitialStateFromEnv();
+  const result = await createMastraCode({
+    unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
+    disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
+    disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
+    ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
+    ...(initialState ? { initialState: initialState as never } : {}),
+  });
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
@@ -86,8 +105,8 @@ async function tuiMain(pipedInput?: string | null) {
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
   analytics.capture('mastracode_session_started', {
-    mode: harness.getCurrentModeId(),
-    resourceId: harness.getResourceId(),
+    mode: harness.session.mode.get(),
+    resourceId: harness.session.identity.getResourceId(),
     hasAuthStorage: Boolean(authStorage),
     hasMcp: Boolean(mcpManager),
     theme: themeMode,
@@ -114,7 +133,7 @@ async function tuiMain(pipedInput?: string | null) {
       .then(browser => {
         if (!browser) return;
         harness.setBrowser(browser);
-        void harness.setState({ activeBrowserSettings: settings.browser } as any).catch(() => {});
+        void harness.session.state.set({ activeBrowserSettings: settings.browser } as any).catch(() => {});
       })
       .catch(() => {});
   }

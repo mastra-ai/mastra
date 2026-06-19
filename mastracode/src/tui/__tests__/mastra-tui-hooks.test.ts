@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('node:child_process', () => ({
+  execFile: vi.fn(),
   spawn: mocks.mockSpawn,
 }));
 

@@ -1,0 +1,126 @@
+.navigation-command-popup[data-open] {
+  animation: none !important;
+}
+
+.navigation-command-popup[data-closed] {
+  animation: navigation-command-popup-hold 260ms linear both !important;
+}
+
+.navigation-command-surface {
+  --navigation-command-enter-delay: 0ms;
+  --navigation-command-exit-delay: 0ms;
+  transform-origin: center;
+  will-change: opacity, transform;
+}
+
+.navigation-command-surface-input {
+  --navigation-command-enter-delay: 20ms;
+  --navigation-command-exit-delay: 80ms;
+}
+
+.navigation-command-surface-rail {
+  --navigation-command-enter-delay: 60ms;
+  --navigation-command-exit-delay: 40ms;
+}
+
+.navigation-command-surface-results {
+  --navigation-command-enter-delay: 100ms;
+  --navigation-command-exit-delay: 0ms;
+}
+
+.navigation-command-results-panel {
+  --navigation-command-footer-height: 4.75rem;
+  isolation: isolate;
+}
+
+.navigation-command-results-panel::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  height: var(--navigation-command-footer-height);
+  pointer-events: none;
+  content: '';
+  background: linear-gradient(
+    to top,
+    var(--surface2) 0%,
+    var(--surface2) 28%,
+    color-mix(in oklab, var(--surface2) 94%, transparent) 68%,
+    transparent 100%
+  );
+  border-bottom-right-radius: 1rem;
+  border-bottom-left-radius: 1rem;
+}
+
+.navigation-command-list {
+  padding: 0.5rem 0.5rem var(--navigation-command-footer-height);
+}
+
+.navigation-command-scroll-viewport {
+  scroll-padding-bottom: var(--navigation-command-footer-height);
+}
+
+.navigation-command-footer {
+  min-height: calc(var(--navigation-command-footer-height) - 1.25rem);
+  border-bottom-right-radius: 1rem;
+  border-bottom-left-radius: 1rem;
+}
+
+.navigation-command-popup[data-open] .navigation-command-surface {
+  animation: navigation-command-surface-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--navigation-command-enter-delay);
+}
+
+.navigation-command-popup[data-closed] .navigation-command-surface {
+  animation: navigation-command-surface-out 180ms cubic-bezier(0.5, 0, 0.75, 0) both;
+  animation-delay: var(--navigation-command-exit-delay);
+}
+
+@keyframes navigation-command-surface-in {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes navigation-command-surface-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.01);
+  }
+}
+
+@keyframes navigation-command-popup-hold {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navigation-command-popup[data-open],
+  .navigation-command-popup[data-closed],
+  .navigation-command-popup[data-open] .navigation-command-surface,
+  .navigation-command-popup[data-closed] .navigation-command-surface {
+    animation: none !important;
+  }
+
+  .navigation-command-surface {
+    opacity: 1;
+    transform: none;
+  }
+}
