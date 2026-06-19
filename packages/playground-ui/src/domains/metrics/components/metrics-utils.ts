@@ -11,7 +11,7 @@ export function formatCost(value: number, unit?: string | null): string {
   return `${value.toFixed(4)} ${unit}`;
 }
 
-export const METRICS_DATA_LIST_CLASS_NAME = 'max-h-80 [--data-list-sticky-row-bg:var(--surface1)]';
+export const METRICS_DATA_LIST_CLASS_NAME = 'max-h-80';
 
 export const CHART_COLORS = {
   green: '#22c55e',

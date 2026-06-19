@@ -44,10 +44,9 @@ export type DataListRootProps = {
  */
 const borderlessTableStyles = [
   'gap-y-px',
-  // The header is sticky, so it must be opaque to occlude rows scrolling
-  // behind it (a translucent overlay would show ghosted content through it).
-  // Row fills, when present, stay translucent — only the header needs to be solid.
-  '[&_.data-list-top]:mx-0 [&_.data-list-top]:bg-surface4 [&_.data-list-top]:after:hidden',
+  // A neutral tint gives both column headers and sticky row headers the same
+  // treatment while still adapting to the card or page surface behind them.
+  '[&_.data-list-top]:mx-0 [&_.data-list-top]:bg-neutral6/15 [&_.data-list-top]:after:hidden',
   '[&_.data-list-top]:rounded-t-xl [&_.data-list-top]:rounded-b-md',
   // header column separators: a short, faint vertical line centered in the gap
   // to the left of every header cell but the first. A `before` pseudo (not a
@@ -61,7 +60,7 @@ const borderlessTableStyles = [
   '[&_.data-list-row]:hover:bg-surface-overlay-strong!',
   '[&_.data-list-row]:focus-visible:bg-surface-overlay-strong!',
   '[&_.data-list-top>.data-list-sticky-start]:bg-inherit',
-  '[&_.data-list-row_.data-list-sticky-start]:bg-[var(--data-list-sticky-row-bg,var(--surface2))]',
+  '[&_.data-list-row_.data-list-sticky-start]:bg-neutral6/15',
   '[&_.data-list-row:hover_.data-list-sticky-start]:bg-surface-overlay-strong!',
   '[&_.data-list-row:focus-visible_.data-list-sticky-start]:bg-surface-overlay-strong!',
   '[&_.data-list-row:focus-within_.data-list-sticky-start]:bg-surface-overlay-strong!',
