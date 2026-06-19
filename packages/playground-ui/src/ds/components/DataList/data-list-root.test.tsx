@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DataList } from './data-list';
+
+beforeAll(() => {
+  if (typeof window.PointerEvent === 'undefined') {
+    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+  }
+});
 
 afterEach(() => {
   cleanup();
@@ -17,13 +23,37 @@ const Header = () => (
 );
 
 describe('DataListRoot', () => {
-  /**
-   * Virtualization (traces/logs) relies on `scrollRef` pointing at the scrolling
-   * grid in the default variant. These guard the wiring so the striped/ScrollArea
-   * work can't silently break it.
-   */
-  describe('default variant — native scroll (virtualization path)', () => {
-    it('forwards scrollRef to the scrollable grid, not a wrapper', () => {
+  describe('lined default variant — ScrollArea (overlay scrollbar + horizontal mask)', () => {
+    it('uses lined styling when no variant is provided', () => {
+      const { container } = render(
+        <DataList columns="1fr 1fr">
+          <Header />
+          <DataList.RowButton>
+            <DataList.Cell>one</DataList.Cell>
+            <DataList.Cell>first row</DataList.Cell>
+          </DataList.RowButton>
+          <DataList.RowButton>
+            <DataList.Cell>two</DataList.Cell>
+            <DataList.Cell>second row</DataList.Cell>
+          </DataList.RowButton>
+        </DataList>,
+      );
+
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid).not.toBeNull();
+      expect(grid).not.toBe(container.firstElementChild);
+      expect(grid?.className).not.toContain('overflow-auto');
+      expect(grid?.className).toContain('gap-y-px');
+      expect(grid?.className).toContain('[&_.data-list-row]:after:absolute');
+      expect(grid?.className).toContain('[&_.data-list-row]:after:content-[""]');
+      expect(grid?.className).toContain('[&_.data-list-row]:after:inset-x-2');
+      expect(grid?.className).toContain('[&_.data-list-row]:after:-bottom-px');
+      expect(grid?.className).toContain('[&_.data-list-row]:after:bg-neutral6/10');
+      expect(grid?.className).not.toContain('[&_.data-list-row]:even:bg-surface-overlay-soft');
+      expect(grid?.className).not.toContain('[&_.data-list-row]:after:hidden');
+    });
+
+    it('forwards scrollRef to the scrolling viewport that contains the grid', () => {
       const scrollRef = createRef<HTMLDivElement>();
       const { container } = render(
         <DataList columns="1fr 1fr" scrollRef={scrollRef}>
@@ -32,21 +62,10 @@ describe('DataListRoot', () => {
       );
 
       expect(scrollRef.current).not.toBeNull();
-      // the ref'd element is the grid itself and is the scroll container
-      expect(scrollRef.current).toBe(container.firstElementChild);
-      expect(scrollRef.current?.className).toContain('overflow-auto');
-      expect(scrollRef.current?.style.gridTemplateColumns).toBe('1fr 1fr');
-    });
-
-    it('does not introduce an intermediate scroll wrapper', () => {
-      const { container } = render(
-        <DataList columns="1fr 1fr">
-          <Header />
-        </DataList>,
-      );
-      // grid is the top-level node — no ScrollArea viewport/content above it
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid).toBe(container.firstElementChild);
+      expect(grid).not.toBeNull();
+      expect(scrollRef.current).not.toBe(grid);
+      expect(scrollRef.current?.contains(grid)).toBe(true);
     });
   });
 
@@ -210,6 +229,33 @@ describe('DataListRoot', () => {
       expect(rowHeaderCell?.className).toContain('data-list-sticky-start');
       expect(rowHeaderCell?.className).toContain('sticky');
       expect(rowHeaderCell?.className).toContain('left-0');
+    });
+  });
+
+  describe('selection header layout', () => {
+    it('keeps grouped header cells from covering the select-all checkbox', () => {
+      const onToggle = vi.fn();
+      const { container } = render(
+        <DataList columns="auto 1fr 1fr">
+          <DataList.Top hasLeadingCell>
+            <DataList.TopSelectCell checked={false} onToggle={onToggle} aria-label="Select all" />
+            <DataList.TopCells colStart={2} data-testid="header-cells">
+              <DataList.TopCell>Name</DataList.TopCell>
+              <DataList.TopCell>Description</DataList.TopCell>
+            </DataList.TopCells>
+          </DataList.Top>
+        </DataList>,
+      );
+
+      const headerCells = container.querySelector<HTMLElement>('[data-testid="header-cells"]');
+      expect(headerCells?.style.gridColumn).toBe('2 / -1');
+      expect(headerCells?.className).toContain('pointer-events-none');
+      expect(headerCells?.className).toContain('[&>*]:pointer-events-auto');
+      expect(headerCells?.className).not.toContain('col-span-full');
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }));
+
+      expect(onToggle).toHaveBeenCalledTimes(1);
     });
   });
 

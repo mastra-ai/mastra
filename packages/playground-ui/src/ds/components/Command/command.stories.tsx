@@ -27,6 +27,8 @@ const meta: Meta<typeof Command> = {
 export default meta;
 type Story = StoryObj<typeof Command>;
 
+const iconClassName = 'shrink-0 text-neutral3';
+
 const InlineResult = ({
   icon,
   title,
@@ -57,32 +59,32 @@ export const Default: Story = {
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Suggestions">
           <CommandItem>
-            <Calendar className="mr-2" />
+            <Calendar className={iconClassName} />
             <span>Calendar</span>
           </CommandItem>
           <CommandItem>
-            <Smile className="mr-2" />
+            <Smile className={iconClassName} />
             <span>Search Emoji</span>
           </CommandItem>
           <CommandItem>
-            <Calculator className="mr-2" />
+            <Calculator className={iconClassName} />
             <span>Calculator</span>
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Settings">
           <CommandItem>
-            <User className="mr-2" />
+            <User className={iconClassName} />
             <span>Profile</span>
             <CommandShortcut>⌘P</CommandShortcut>
           </CommandItem>
           <CommandItem>
-            <CreditCard className="mr-2" />
+            <CreditCard className={iconClassName} />
             <span>Billing</span>
             <CommandShortcut>⌘B</CommandShortcut>
           </CommandItem>
           <CommandItem>
-            <Settings className="mr-2" />
+            <Settings className={iconClassName} />
             <span>Settings</span>
             <CommandShortcut>⌘S</CommandShortcut>
           </CommandItem>
@@ -189,32 +191,32 @@ export const WithDialog: Story = {
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup heading="Suggestions">
               <CommandItem onSelect={() => setOpen(false)}>
-                <Calendar className="mr-2" />
+                <Calendar className={iconClassName} />
                 <span>Calendar</span>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <Smile className="mr-2" />
+                <Smile className={iconClassName} />
                 <span>Search Emoji</span>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <Calculator className="mr-2" />
+                <Calculator className={iconClassName} />
                 <span>Calculator</span>
               </CommandItem>
             </CommandGroup>
             <CommandSeparator />
             <CommandGroup heading="Settings">
               <CommandItem onSelect={() => setOpen(false)}>
-                <User className="mr-2" />
+                <User className={iconClassName} />
                 <span>Profile</span>
                 <CommandShortcut>⌘P</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <CreditCard className="mr-2" />
+                <CreditCard className={iconClassName} />
                 <span>Billing</span>
                 <CommandShortcut>⌘B</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <Settings className="mr-2" />
+                <Settings className={iconClassName} />
                 <span>Settings</span>
                 <CommandShortcut>⌘S</CommandShortcut>
               </CommandItem>

@@ -501,23 +501,7 @@ To read the active mode, use [`session.mode.get()`](/reference/harness/session#m
 
 ### Models
 
-To read the active model ID, use [`session.model.get()`](/reference/harness/session#model); to check whether a model is selected, use [`session.model.hasSelection()`](/reference/harness/session#model).
-
-#### `getModelName()`
-
-Return a short display name from the current model ID. For example, `"claude-sonnet-4"` from `"anthropic/claude-sonnet-4"`.
-
-```typescript
-const name = harness.getModelName()
-```
-
-#### `getFullModelId()`
-
-Return the complete model ID string.
-
-```typescript
-const fullId = harness.getFullModelId()
-```
+To read the active model ID, use [`session.model.get()`](/reference/harness/session#model); for a short display name, use [`session.model.displayName()`](/reference/harness/session#model); to check whether a model is selected, use [`session.model.hasSelection()`](/reference/harness/session#model).
 
 #### `getCurrentModelAuthStatus()`
 
@@ -714,33 +698,6 @@ harness.respondToToolSuspension({
 
 ### Permissions
 
-The harness owns the permission _policy_ — the rules that decide when a tool requires approval. Session-scoped _grants_ (which tools and categories are auto-approved for the current conversation) live on the session: see [`session.grantCategory()`](/reference/harness/session#permissions), [`session.grantTool()`](/reference/harness/session#permissions), and [`session.getGrants()`](/reference/harness/session#permissions).
-
-#### `setPermissionForCategory({ category, policy })`
-
-Set the permission policy for a tool category.
-
-```typescript
-harness.setPermissionForCategory({ category: 'execute', policy: 'ask' })
-```
-
-#### `setPermissionForTool({ toolName, policy })`
-
-Set the permission policy for a specific tool. Per-tool policies take precedence over category policies.
-
-```typescript
-harness.setPermissionForTool({ toolName: 'dangerous_tool', policy: 'deny' })
-```
-
-#### `getPermissionRules()`
-
-Return the current permission rules.
-
-```typescript
-const rules = harness.getPermissionRules()
-// { categories: { execute: 'ask' }, tools: { dangerous_tool: 'deny' } }
-```
-
 #### `getToolCategory({ toolName })`
 
 Resolve a tool's category using the configured `toolCategoryResolver`.
@@ -820,78 +777,7 @@ if (record) {
 }
 ```
 
-#### `getObserverModelId()`
-
-Return the observer model ID from state or the default from `omConfig`.
-
-```typescript
-const modelId = harness.getObserverModelId()
-```
-
-#### `getReflectorModelId()`
-
-Return the reflector model ID from state or the default from `omConfig`.
-
-```typescript
-const modelId = harness.getReflectorModelId()
-```
-
-#### `switchObserverModel({ modelId })`
-
-Switch the observer model. Persists the setting to thread metadata and emits an `om_model_changed` event.
-
-```typescript
-await harness.switchObserverModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
-```
-
-#### `switchReflectorModel({ modelId })`
-
-Switch the reflector model. Persists the setting to thread metadata and emits an `om_model_changed` event.
-
-```typescript
-await harness.switchReflectorModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
-```
-
-#### `getObservationThreshold()`
-
-Return the observation threshold in tokens from state or the default from `omConfig`.
-
-```typescript
-const threshold = harness.getObservationThreshold()
-```
-
-#### `getReflectionThreshold()`
-
-Return the reflection threshold in tokens from state or the default from `omConfig`.
-
-```typescript
-const threshold = harness.getReflectionThreshold()
-```
-
-### Subagents
-
-#### `getSubagentModelId({ agentType? })`
-
-Retrieve the subagent model ID. Prioritizes per-type settings over the global setting.
-
-```typescript
-const modelId = harness.getSubagentModelId({ agentType: 'explore' })
-```
-
-#### `setSubagentModelId({ modelId, agentType? })`
-
-Set the subagent model ID. Pass an `agentType` to set a per-type override, or omit it to set the global default. Persists to thread settings and emits a `subagent_model_changed` event.
-
-```typescript
-// Set global subagent model
-await harness.setSubagentModelId({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
-
-// Set per-type model
-await harness.setSubagentModelId({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
-  agentType: 'explore',
-})
-```
+The observer/reflector model selection and observation/reflection thresholds live on the Session under [`session.om`](/reference/harness/session#observational-memory), grouped by role. Read them with `session.om.observer.modelId()` / `session.om.reflector.modelId()` and `session.om.observer.threshold()` / `session.om.reflector.threshold()`, and change a role's model with `session.om.observer.switchModel()` / `session.om.reflector.switchModel()`.
 
 ### Forked subagents
 
