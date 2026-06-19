@@ -35,9 +35,7 @@ export function isEditorEffectivelyReadOnly(
   isCodeAgentOverride: boolean | undefined,
   editorConfig: AgentEditorConfig | undefined,
 ): boolean {
-  return (
-    isInstructionsLocked(isCodeAgentOverride, editorConfig) && isToolsLocked(isCodeAgentOverride, editorConfig)
-  );
+  return isInstructionsLocked(isCodeAgentOverride, editorConfig) && isToolsLocked(isCodeAgentOverride, editorConfig);
 }
 
 interface AgentEditFormContextValue {
