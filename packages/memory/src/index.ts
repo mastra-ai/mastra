@@ -951,16 +951,37 @@ ${workingMemory}`;
     const chunks: string[] = [];
     let currentChunk = '';
 
-    // Split text into words to avoid breaking words
+    // Split text into words to avoid breaking words where possible.
     const words = text.split(/\s+/);
 
     for (const word of words) {
+      // A single word can be longer than the chunk budget (e.g. a base64 data URI,
+      // a minified JS/JSON blob, a long URL, or spaceless CJK text where the entire
+      // message is one "word"). The whitespace split can't break these, so hard-split
+      // the oversized word by character count to guarantee every chunk stays under the
+      // embedder's token limit instead of emitting one oversized chunk it would reject.
+      if (word.length > charSize) {
+        // Flush whatever we've accumulated so far before the oversized word.
+        if (currentChunk) {
+          chunks.push(currentChunk);
+          currentChunk = '';
+        }
+        for (let i = 0; i < word.length; i += charSize) {
+          chunks.push(word.slice(i, i + charSize));
+        }
+        continue;
+      }
+
       // Add space before word unless it's the first word in the chunk
       const wordWithSpace = currentChunk ? ' ' + word : word;
 
       // If adding this word would exceed the chunk size, start a new chunk
       if (currentChunk.length + wordWithSpace.length > charSize) {
-        chunks.push(currentChunk);
+        // Guard against pushing an empty leading chunk: if the very first word
+        // already filled/exceeded the budget, currentChunk is still '' here.
+        if (currentChunk) {
+          chunks.push(currentChunk);
+        }
         currentChunk = word;
       } else {
         currentChunk += wordWithSpace;
