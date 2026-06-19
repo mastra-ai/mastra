@@ -1999,6 +1999,9 @@ importers:
 
   mastracode:
     dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: ^0.21.0
+        version: 0.21.0(zod@4.4.3)
       '@ai-sdk/anthropic':
         specifier: ^3.0.82
         version: 3.0.82(zod@4.4.3)

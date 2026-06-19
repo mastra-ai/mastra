@@ -210,6 +210,11 @@ async function main() {
     return headlessMain();
   }
 
+  if (process.argv.includes('--acp')) {
+    const { acpMain } = await import('./acp/index.js');
+    return acpMain();
+  }
+
   // When stdin is piped (e.g. `cat foo | mastracode`), drain the pipe fully
   // before starting the TUI.  The drain blocks until the sender process exits
   // and closes its stdout, so we never see partial output.
