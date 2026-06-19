@@ -289,6 +289,16 @@ export class DurableAgent<
       // Caching explicitly disabled
       this.#cachingPubsub = this.#innerPubsub;
       this.#resolvedCache = null;
+    } else if (this.#innerPubsub instanceof CachingPubSub) {
+      // The inner pubsub already provides caching/replay. This happens when the
+      // user passes a CachingPubSub to `new Mastra({ pubsub })`: on registration
+      // the agent adopts mastra.pubsub as its inner transport. Wrapping it again
+      // in a second CachingPubSub that shares the same cache would store every
+      // event twice (once per layer, with consecutive indices), so observe()/
+      // replay would deliver the buffered prefix doubled (issue #18148). Reuse
+      // the existing instance instead of double-wrapping.
+      this.#cachingPubsub = this.#innerPubsub;
+      this.#resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? null;
     } else {
       // Resolve cache: user-provided > mastra's cache > default InMemoryServerCache
       const resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
