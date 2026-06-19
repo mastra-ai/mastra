@@ -8,6 +8,10 @@ import { SignalProvider } from '@mastra/core/signals';
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
+import { SlackWebApiSyncClient } from './slack-client.js';
+export { SlackSignalsApiError, SlackWebApiSyncClient } from './slack-client.js';
+export type { SlackWebApiSyncClientOptions } from './slack-client.js';
+
 export const SLACK_SIGNALS_PROVIDER_ID = 'slack-signals';
 export const SLACK_SIGNALS_METADATA_KEY = 'slackSignals';
 export const SLACK_SUBSCRIBE_TAG = 'slack-subscribe';
@@ -291,20 +295,6 @@ export function setSlackSignalsMetadata(
   };
 }
 
-class UnconfiguredSlackSignalsSyncClient implements SlackSignalsSyncClient {
-  async getWorkspace(): Promise<SlackSignalsWorkspace> {
-    throw new Error('SlackSignalsProvider requires a syncClient until the Slack Web API client is implemented.');
-  }
-
-  async listConversations(): Promise<SlackListConversationsResult> {
-    throw new Error('SlackSignalsProvider requires a syncClient until the Slack Web API client is implemented.');
-  }
-
-  async listMessages(): Promise<SlackListMessagesResult> {
-    throw new Error('SlackSignalsProvider requires a syncClient until the Slack Web API client is implemented.');
-  }
-}
-
 export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   readonly id = SLACK_SIGNALS_PROVIDER_ID;
   override readonly name = 'Slack Signals';
@@ -345,7 +335,7 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     super();
     this.#options = options;
     this.#include = normalizeIncludeConfig(options.include);
-    this.#syncClient = options.syncClient ?? new UnconfiguredSlackSignalsSyncClient();
+    this.#syncClient = options.syncClient ?? new SlackWebApiSyncClient({ token: options.token });
     this.pollInterval = options.pollIntervalMs ?? DEFAULT_SLACK_SIGNALS_POLL_INTERVAL_MS;
   }
 
