@@ -46,7 +46,9 @@ export const goalCustomSlashAutocompleteScenario: McE2eScenario = {
   },
   verifyAimockRequests(requests) {
     if (requests.length < 1) {
-      throw new Error(`Expected at least one AIMock request for custom goal slash command, received ${requests.length}`);
+      throw new Error(
+        `Expected at least one AIMock request for custom goal slash command, received ${requests.length}`,
+      );
     }
 
     const body = JSON.stringify(requests);
