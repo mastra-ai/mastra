@@ -118,7 +118,7 @@ async function initApp(mastra: Mastra, tools: ToolsInput, prefix: string): Promi
     taskStore,
     bodyLimitOptions: {
       maxSize: bodySizeLimit,
-      onError: () => ({ error: 'Request body too large' }),
+      onError: (_err: unknown) => ({ error: 'Request body too large' }),
     },
     customRouteAuthConfig,
     customApiRoutes: apiRoutes,
