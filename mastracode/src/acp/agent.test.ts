@@ -1,29 +1,12 @@
-import { describe, it, expect } from 'vitest';
 import type { ContentBlock } from '@agentclientprotocol/sdk';
 
-// Import the functions we need to test
-// Since they're not exported, we'll test them via the public interface
-// But for unit testing, let's extract and test the logic
+import { describe, it, expect } from 'vitest';
+
+import { extractTextFromContentBlocks, mapStopReason } from './agent.js';
 
 describe('ACP Agent - Text Extraction', () => {
-  function extractTextFromContentBlocks(blocks: ContentBlock[]): string {
-    const parts: string[] = [];
-    for (const block of blocks) {
-      if (block.type === 'text') {
-        parts.push(block.text);
-      } else if (block.type === 'resource_link') {
-        parts.push(`[resource: ${block.uri}]`);
-      } else if (block.type === 'resource') {
-        parts.push(`[resource: ${block.resource.uri}]`);
-      }
-    }
-    return parts.join('\n');
-  }
-
   it('extracts text from text blocks', () => {
-    const blocks: ContentBlock[] = [
-      { type: 'text', text: 'Hello, world!' },
-    ];
+    const blocks: ContentBlock[] = [{ type: 'text', text: 'Hello, world!' }];
 
     expect(extractTextFromContentBlocks(blocks)).toBe('Hello, world!');
   });
@@ -44,9 +27,7 @@ describe('ACP Agent - Text Extraction', () => {
       { type: 'resource_link', uri: 'file:///path/to/file.ts', name: 'file.ts' },
     ];
 
-    expect(extractTextFromContentBlocks(blocks)).toBe(
-      'Check this file:\n[resource: file:///path/to/file.ts]',
-    );
+    expect(extractTextFromContentBlocks(blocks)).toBe('Check this file:\n[resource: file:///path/to/file.ts]');
   });
 
   it('handles resource blocks', () => {
@@ -94,21 +75,6 @@ describe('ACP Agent - Text Extraction', () => {
 });
 
 describe('ACP Agent - StopReason Mapping', () => {
-  function mapStopReason(
-    reason: 'complete' | 'aborted' | 'error' | 'suspended',
-  ): 'end_turn' | 'cancelled' | 'max_tokens' | 'max_turn_requests' | 'refusal' {
-    switch (reason) {
-      case 'complete':
-        return 'end_turn';
-      case 'aborted':
-        return 'cancelled';
-      case 'error':
-        return 'end_turn';
-      case 'suspended':
-        return 'end_turn';
-    }
-  }
-
   it('maps complete to end_turn', () => {
     expect(mapStopReason('complete')).toBe('end_turn');
   });

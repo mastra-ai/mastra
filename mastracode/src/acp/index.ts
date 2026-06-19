@@ -1,15 +1,18 @@
-import { createMastraCode } from '../index.js';
-import { runAcpServer } from './server.js';
-import { releaseAllThreadLocks } from '../utils/thread-lock.js';
 import type { HarnessMode } from '@mastra/core/harness';
+
+import { createMastraCode } from '../index.js';
+import { releaseAllThreadLocks } from '../utils/thread-lock.js';
+import { runAcpServer } from './server.js';
 
 /**
  * Entry point for ACP server mode.
  * Initializes mastracode and runs the ACP protocol over stdio.
  */
 export async function acpMain(): Promise<void> {
-  // Redirect all logging to stderr to avoid polluting the JSON-RPC stream
+  // Redirect console.log to stderr to avoid polluting the JSON-RPC stream on stdout.
+  // eslint-disable-next-line no-console
   const originalConsoleLog = console.log;
+  // eslint-disable-next-line no-console
   console.log = (...args: unknown[]) => {
     process.stderr.write(args.map(String).join(' ') + '\n');
   };
@@ -44,6 +47,7 @@ export async function acpMain(): Promise<void> {
       ]);
 
       // Restore console.log
+      // eslint-disable-next-line no-console
       console.log = originalConsoleLog;
     };
 
@@ -59,6 +63,7 @@ export async function acpMain(): Promise<void> {
     await runAcpServer(harness, modes, cleanup);
   } catch (error) {
     process.stderr.write(`[acp] Fatal error: ${error}\n`);
+    // eslint-disable-next-line no-console
     console.log = originalConsoleLog;
     process.exit(1);
   }

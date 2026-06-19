@@ -1,7 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AgentSideConnection } from '@agentclientprotocol/sdk';
-import type { HarnessEvent, Harness } from '@mastra/core/harness';
-import { handleHarnessEvent, type PromptState } from './event-mapper.js';
+import type { Harness, HarnessEvent } from '@mastra/core/harness';
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import type { PromptState } from './event-mapper.js';
+import { handleHarnessEvent } from './event-mapper.js';
 
 describe('ACP Event Mapper', () => {
   let mockConnection: AgentSideConnection;

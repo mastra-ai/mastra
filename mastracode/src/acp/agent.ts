@@ -12,7 +12,8 @@ import type {
 } from '@agentclientprotocol/sdk';
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
 import type { Harness, HarnessMode } from '@mastra/core/harness';
-import { handleHarnessEvent, type PromptState } from './event-mapper.js';
+import { handleHarnessEvent } from './event-mapper.js';
+import type { PromptState } from './event-mapper.js';
 
 /**
  * ACP Agent implementation that wraps a mastracode Harness.
@@ -181,7 +182,7 @@ export class MastraCodeAcpAgent implements Agent {
   }
 }
 
-function extractTextFromContentBlocks(blocks: ContentBlock[]): string {
+export function extractTextFromContentBlocks(blocks: ContentBlock[]): string {
   const parts: string[] = [];
   for (const block of blocks) {
     if (block.type === 'text') {
@@ -195,7 +196,7 @@ function extractTextFromContentBlocks(blocks: ContentBlock[]): string {
   return parts.join('\n');
 }
 
-function mapStopReason(reason: 'complete' | 'aborted' | 'error' | 'suspended'): 'end_turn' | 'cancelled' | 'max_tokens' | 'max_turn_requests' | 'refusal' {
+export function mapStopReason(reason: 'complete' | 'aborted' | 'error' | 'suspended'): 'end_turn' | 'cancelled' | 'max_tokens' | 'max_turn_requests' | 'refusal' {
   switch (reason) {
     case 'complete':
       return 'end_turn';

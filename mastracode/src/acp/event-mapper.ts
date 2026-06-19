@@ -90,11 +90,15 @@ export function handleHarnessEvent(
       break;
 
     case 'tool_approval_required':
-      handleToolApproval(state, connection, harness, event);
+      void handleToolApproval(state, connection, harness, event).catch(err => {
+        process.stderr.write(`[acp] handleToolApproval error: ${err}\n`);
+      });
       break;
 
     case 'tool_suspended':
-      handleToolSuspended(state, connection, harness, event);
+      void handleToolSuspended(state, connection, harness, event).catch(err => {
+        process.stderr.write(`[acp] handleToolSuspended error: ${err}\n`);
+      });
       break;
 
     case 'usage_update':
