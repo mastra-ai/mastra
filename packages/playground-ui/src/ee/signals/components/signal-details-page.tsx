@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Badge } from '../../../ds/components/Badge';
-import { Checkbox } from '../../../ds/components/Checkbox';
 import { ScatterPlotChart } from '../../../ds/components/ScatterPlotChart';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
 import { stringToColor } from '../../../lib/colors';
+import { cn } from '../../../lib/utils';
 import { useTraces } from '../../../domains/traces/hooks';
 import { TopicTraceDetailsPanel, TopicTraceSummaryList, TopicsLayout } from '../../topics';
 import { getSignalChartData } from '../signals-chart-data';
@@ -28,29 +27,56 @@ export function getSignalName(signalId: string) {
 
 interface SignalFacetSidebarProps {
   signal: Signal;
-  selectedFacetId: string | null;
+  selectedFacetIds: string[];
   onFacetSelect: (facetId: string) => void;
+  multiple?: boolean;
+  ariaLabel?: string;
 }
 
-export function SignalFacetSidebar({ signal, selectedFacetId, onFacetSelect }: SignalFacetSidebarProps) {
+export function SignalFacetSidebar({
+  signal,
+  selectedFacetIds,
+  onFacetSelect,
+  multiple = false,
+  ariaLabel = 'Signal facets',
+}: SignalFacetSidebarProps) {
   return (
-    <aside className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4" aria-label="Signal facets">
-      <ul className="space-y-1">
+    <aside className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4" aria-label={ariaLabel}>
+      <ul className="space-y-1" role={multiple ? 'group' : undefined}>
         {signal.facets.map(facet => {
-          const selected = facet.id === selectedFacetId;
+          const selected = selectedFacetIds.includes(facet.id);
           return (
             <li key={facet.id}>
               <button
                 type="button"
-                aria-pressed={selected}
-                className="cursor-pointer w-full rounded-xl px-3 py-2 text-left transition-colors hover:bg-surface3 aria-pressed:bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
+                role={multiple ? 'checkbox' : undefined}
+                aria-checked={multiple ? selected : undefined}
+                aria-pressed={multiple ? undefined : selected}
+                className="group cursor-pointer w-full rounded-xl px-3 py-2 text-left transition-colors hover:bg-surface3 aria-pressed:bg-surface3 aria-checked:bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
                 onClick={() => onFacetSelect(facet.id)}
               >
                 <span className="flex items-start gap-2">
-                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: stringToColor(facet.name) }} />
+                  <span
+                    className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', multiple && !selected && 'invisible')}
+                    style={{ backgroundColor: stringToColor(facet.name) }}
+                  />
                   <span className="min-w-0 space-y-1">
-                    <span className="block text-sm font-medium text-neutral5">{facet.name}</span>
-                    <span className="line-clamp-2 block text-sm text-neutral2">{facet.description}</span>
+                    <span
+                      className={cn(
+                        'block text-sm font-medium',
+                        multiple && !selected ? 'text-neutral3' : 'text-neutral5',
+                      )}
+                    >
+                      {facet.name}
+                    </span>
+                    <span
+                      className={cn(
+                        'line-clamp-2 block text-sm',
+                        multiple && !selected ? 'text-neutral1' : 'text-neutral2',
+                      )}
+                    >
+                      {facet.description}
+                    </span>
                   </span>
                 </span>
               </button>
@@ -88,23 +114,15 @@ export function SignalChartTab({ signal, selectedFacetIds, onFacetToggle }: Sign
   const chartData = useMemo(() => getSignalChartData(selectedFacets), [selectedFacets]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="flex shrink-0 flex-wrap items-center gap-2" aria-label="Chart facet filters">
-        {signal.facets.map(facet => {
-          const selected = selectedFacetIds.includes(facet.id);
-          return (
-            <label key={facet.id} className="flex cursor-pointer items-center gap-2 rounded-full border border-border1/70 bg-surface2 px-3 py-1.5 text-ui-sm text-neutral5 transition-colors hover:bg-surface3">
-              <Checkbox checked={selected} onCheckedChange={() => onFacetToggle(facet.id)} aria-label={`Toggle ${facet.name}`} />
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: stringToColor(facet.name) }} />
-              <span>{facet.name}</span>
-              <Badge variant="default">
-                {facet.traceSummaries.length} {facet.traceSummaries.length === 1 ? 'trace' : 'traces'}
-              </Badge>
-            </label>
-          );
-        })}
-      </div>
-      <div className="min-h-0 flex-1">
+    <div className="flex h-full min-w-0 gap-6">
+      <SignalFacetSidebar
+        signal={signal}
+        selectedFacetIds={selectedFacetIds}
+        onFacetSelect={onFacetToggle}
+        multiple
+        ariaLabel="Chart facet filters"
+      />
+      <div className="min-h-0 min-w-0 flex-1 py-4">
         <ScatterPlotChart
           data={chartData}
           xKey="duration"
@@ -154,13 +172,13 @@ export function SignalFacetTabs({
       </TabList>
       <TabContent value="trace-list" className="min-h-0 flex-1 overflow-hidden py-0">
         <div className="flex h-full min-w-0 gap-6">
-          <SignalFacetSidebar signal={signal} selectedFacetId={selectedFacet.id} onFacetSelect={onFacetSelect} />
+          <SignalFacetSidebar signal={signal} selectedFacetIds={[selectedFacet.id]} onFacetSelect={onFacetSelect} />
           <div className="min-w-0 flex-1 overflow-hidden py-4">
             <SignalTraceListTab facet={selectedFacet} selectedTraceId={selectedTraceId} onTraceSelect={onTraceSelect} />
           </div>
         </div>
       </TabContent>
-      <TabContent value="chart" className="min-h-0 flex-1 overflow-hidden py-4">
+      <TabContent value="chart" className="min-h-0 flex-1 overflow-hidden py-0">
         <SignalChartTab signal={signal} selectedFacetIds={selectedChartFacetIds} onFacetToggle={onChartFacetToggle} />
       </TabContent>
     </Tabs>
