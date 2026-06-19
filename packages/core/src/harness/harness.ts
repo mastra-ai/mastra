@@ -547,6 +547,16 @@ export class Harness<TState = {}> {
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
     });
     session.thread.connect(this.createThreadDataStore());
+    session.setMachinery({
+      getAgent: () => this.getCurrentAgent(),
+      subscribeToThread: ({ resourceId, threadId }) => this.getCurrentAgent().subscribeToThread({ resourceId, threadId }),
+      buildStreamOptions: input => this.buildAgentMessageStreamOptions(input),
+      buildSharedRunOptions: () => this.buildSharedRunOptions(),
+      buildToolsets: requestContext => this.buildToolsets(requestContext),
+      buildRequestContext: requestContext => this.buildRequestContext(requestContext),
+      persistTokenUsage: () => this.persistTokenUsage(),
+      generateId: () => this.generateId(),
+    });
 
     // Seed the selected model: an explicit initialState.currentModelId wins,
     // otherwise fall back to the default mode's model. The model lives on the

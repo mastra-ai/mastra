@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
-import type { AgentThreadSubscription } from '../agent/types';
+import type { AgentThreadSubscription, ToolsetsInput } from '../agent/types';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
@@ -118,6 +119,43 @@ export interface ThreadDataStore {
   setMetadata(input: { threadId: string; key: string; value: unknown }): Promise<void>;
   /** Delete a value from a thread's metadata. */
   deleteMetadata(input: { threadId: string; key: string }): Promise<void>;
+}
+
+/**
+ * The Harness-owned machinery a Session leverages to drive an agent run. In the
+ * multi-user host one Harness serves many sessions; the run loop, run state, and
+ * thread stream are per-session (they cannot be shared) and so belong on the
+ * Session. But *how* a run is produced — which agent answers, the config-backed
+ * run/stream options, the toolset, the request context, the tool-approval
+ * policy, usage persistence, id generation — is shared infrastructure the
+ * Harness owns. The Harness injects this machinery into each Session it
+ * constructs (via {@link Session.setMachinery}); the Session calls into it but
+ * never reaches back into the Harness or another session.
+ *
+ * This is the formalized DI boundary: the Session receives exactly the
+ * capabilities it is allowed to use, nothing more.
+ */
+export interface SessionMachinery {
+  /** Resolve the agent that should answer for the session's current mode/model. */
+  getAgent(): Agent;
+  /** Open a fresh subscription to a thread's agent event stream. */
+  subscribeToThread(input: { resourceId: string; threadId: string }): Promise<AgentThreadSubscription<any>>;
+  /** Build the per-call stream options (instructions, memory, toolsets, abort signal, tracing). */
+  buildStreamOptions(input: {
+    requestContext?: RequestContext;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  }): Promise<Record<string, unknown>>;
+  /** The run budget every initial stream and resume must carry (maxSteps, provider fallbacks, …). */
+  buildSharedRunOptions(): Record<string, unknown>;
+  /** Resolve the toolset (built-in harness tools + user/subagent tools) for a run. */
+  buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
+  /** Resolve the effective request context for a run, layering harness defaults. */
+  buildRequestContext(requestContext?: RequestContext): Promise<RequestContext>;
+  /** Persist the session's running token usage to thread metadata. */
+  persistTokenUsage(): Promise<void>;
+  /** Generate a new id (thread ids, message ids) using the host's id strategy. */
+  generateId(): string;
 }
 
 /**
@@ -1830,6 +1868,8 @@ export class Session<TState = unknown> {
   #resolveCategory: ((toolName: string) => ToolCategory | null) | undefined;
   /** Resolves a subagent's display name from Harness config, injected via {@link setSubagentNameResolver}. */
   #resolveSubagentName: ((agentType: string) => string | undefined) | undefined;
+  /** Harness-owned run machinery (agent, run/stream option builders, …), injected via {@link setMachinery}. */
+  #machinery: SessionMachinery | undefined;
   /** The session's currently-selected model (source of truth) + per-mode memory. */
   readonly model = new SessionModel(() => this.#store, this.#bus);
   /** The session's currently-selected mode and switch sequence. */
@@ -1919,6 +1959,29 @@ export class Session<TState = unknown> {
    */
   setSubagentNameResolver(resolveSubagentName: (agentType: string) => string | undefined): void {
     this.#resolveSubagentName = resolveSubagentName;
+  }
+
+  /**
+   * Attach the Harness-owned run machinery this session leverages to drive agent
+   * runs (resolve the agent, build run/stream options + toolsets + request
+   * context, persist usage, generate ids). The Harness injects this once when it
+   * constructs the session. The run loop, run state, and thread stream live on
+   * the session; this is the narrow set of shared capabilities it reaches back
+   * into the host for — see {@link SessionMachinery}.
+   */
+  setMachinery(machinery: SessionMachinery): void {
+    this.#machinery = machinery;
+  }
+
+  /**
+   * The Harness-owned run machinery injected via {@link setMachinery}, throwing
+   * when accessed before wiring (a run can never be driven without it).
+   */
+  get machinery(): SessionMachinery {
+    if (!this.#machinery) {
+      throw new Error('Session run machinery has not been wired by the Harness');
+    }
+    return this.#machinery;
   }
 
   /**
