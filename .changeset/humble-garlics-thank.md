@@ -23,4 +23,6 @@ Use `sticky="start"` on the leading `DataList.TopCell` and `DataList.RowHeaderCe
 
 Metrics tables now render directly through DataList so sticky row headers share the same header colors and hover treatment as the rest of the list system. Metrics tables also follow the default DataList variant, and sticky row headers use the same neutral header treatment as column headers.
 
+DataList now exposes `stickyHeaderBackground` to keep the top header and sticky row-header fill in sync, and forwards `mask` to the underlying ScrollArea so sticky-start tables can disable the left edge fade.
+
 The metrics-specific `MetricsDataTable` wrapper was removed. Use DataList for DS-owned metrics table layouts.

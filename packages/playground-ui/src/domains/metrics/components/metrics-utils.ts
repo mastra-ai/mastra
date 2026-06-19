@@ -1,3 +1,5 @@
+import type { DataListRootProps } from '@/ds/components/DataList';
+
 export function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
@@ -11,7 +13,11 @@ export function formatCost(value: number, unit?: string | null): string {
   return `${value.toFixed(4)} ${unit}`;
 }
 
-export const METRICS_DATA_LIST_CLASS_NAME = 'max-h-80';
+export const METRICS_DATA_LIST_PROPS = {
+  className: 'max-h-80',
+  mask: { left: false },
+  stickyHeaderBackground: 'tinted',
+} satisfies Pick<DataListRootProps, 'className' | 'mask' | 'stickyHeaderBackground'>;
 
 export const CHART_COLORS = {
   green: '#22c55e',

@@ -46,6 +46,9 @@ describe('DataListRoot', () => {
       expect(grid?.className).toContain('w-max');
       expect(grid?.className).toContain('min-w-full');
       expect(grid?.className).toContain('max-w-none');
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe(
+        'color-mix(in oklch, var(--surface1), var(--neutral6) 10%)',
+      );
       expect(grid?.className).toContain('gap-y-px');
       expect(grid?.className).toContain('[&_.data-list-row]:after:absolute');
       expect(grid?.className).toContain('[&_.data-list-row]:after:content-[""]');
@@ -69,6 +72,19 @@ describe('DataListRoot', () => {
       expect(grid).not.toBeNull();
       expect(scrollRef.current).not.toBe(grid);
       expect(scrollRef.current?.contains(grid)).toBe(true);
+    });
+
+    it('allows callers to disable the left mask while keeping the right overflow mask', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask={{ left: false }} scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).not.toContain('mask-l-from');
+      expect(scrollRef.current?.className).toContain('mask-r-from');
+      expect(scrollRef.current?.className).not.toContain('mask-t-from');
     });
   });
 
@@ -225,14 +241,16 @@ describe('DataListRoot', () => {
       const topCell = container.querySelector<HTMLElement>('.data-list-top .data-list-sticky-start');
       const rowHeaderCell = container.querySelector<HTMLElement>('.data-list-row-header');
 
-      expect(grid?.className).toContain('[&_.data-list-top]:bg-neutral6/10');
+      expect(grid?.className).toContain('[&_.data-list-top]:bg-[var(--data-list-sticky-header-background)]');
       expect(grid?.className).not.toContain('[&_.data-list-sticky-start]:bg-surface2');
       expect(grid?.className).toContain(
         '[&_.data-list-row_.data-list-row-header]:before:absolute [&_.data-list-row_.data-list-row-header]:before:inset-y-0',
       );
       expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:before:-left-5');
       expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:before:-right-4');
-      expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:before:bg-neutral6/10');
+      expect(grid?.className).toContain(
+        '[&_.data-list-row_.data-list-row-header]:before:bg-[var(--data-list-sticky-header-background)]',
+      );
       expect(grid?.className).toContain(
         '[&_.data-list-row:hover_.data-list-row-header]:before:bg-surface-overlay-strong',
       );
@@ -252,6 +270,24 @@ describe('DataListRoot', () => {
       expect(rowHeaderCell?.querySelector('span')?.className).toContain('relative');
       expect(rowHeaderCell?.querySelector('span')?.className).toContain('z-10');
       expect(rowHeaderCell?.querySelector('span')?.className).toContain('w-full');
+    });
+
+    it('can switch sticky header surfaces to an opaque surface token', () => {
+      const { container } = render(
+        <DataList columns="auto auto" stickyHeaderBackground="surface">
+          <DataList.Top>
+            <DataList.TopCell sticky="start">Model</DataList.TopCell>
+            <DataList.TopCell>Input</DataList.TopCell>
+          </DataList.Top>
+          <DataList.RowStatic>
+            <DataList.RowHeaderCell height="compact">__GATEWAY_OPENAI_MODEL_BASE__</DataList.RowHeaderCell>
+            <DataList.Cell height="compact">1,200</DataList.Cell>
+          </DataList.RowStatic>
+        </DataList>,
+      );
+
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe('var(--surface2)');
     });
   });
 

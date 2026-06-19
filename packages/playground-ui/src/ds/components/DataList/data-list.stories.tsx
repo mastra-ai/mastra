@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Pencil, Trash2 } from 'lucide-react';
 import { forwardRef, useState } from 'react';
 import { DataList } from './data-list';
-import type { DataListVariant } from './data-list-root';
+import type { DataListStickyHeaderBackground, DataListVariant } from './data-list-root';
 import { DataListSkeleton } from './data-list-skeleton';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
@@ -10,9 +10,11 @@ import type { LinkComponent } from '@/ds/types/link-component';
 
 type DataListStoryArgs = {
   variant: DataListVariant;
+  stickyHeaderBackground: DataListStickyHeaderBackground;
 };
 
 const VARIANT_OPTIONS: DataListVariant[] = ['lined', 'striped'];
+const STICKY_HEADER_BACKGROUND_OPTIONS: DataListStickyHeaderBackground[] = ['tinted', 'surface', 'transparent'];
 
 const meta: Meta<DataListStoryArgs> = {
   title: 'DataDisplay/DataList',
@@ -21,11 +23,16 @@ const meta: Meta<DataListStoryArgs> = {
   },
   args: {
     variant: 'lined',
+    stickyHeaderBackground: 'tinted',
   },
   argTypes: {
     variant: {
       control: 'inline-radio',
       options: VARIANT_OPTIONS,
+    },
+    stickyHeaderBackground: {
+      control: 'inline-radio',
+      options: STICKY_HEADER_BACKGROUND_OPTIONS,
     },
   },
 };
@@ -419,9 +426,15 @@ export const WideColumnsOverflow: Story = {
 
 /** Sticky row headers keep the first column visible while wide metric-like grids scroll horizontally. */
 export const StickyRowHeaders: Story = {
-  render: ({ variant }) => (
+  render: ({ variant, stickyHeaderBackground }) => (
     <div className="max-w-[760px]">
-      <DataList columns="minmax(12rem,auto) auto auto auto auto auto auto auto" variant={variant} className="max-h-80">
+      <DataList
+        columns="minmax(12rem,auto) auto auto auto auto auto auto auto"
+        variant={variant}
+        stickyHeaderBackground={stickyHeaderBackground}
+        mask={{ left: false }}
+        className="max-h-80"
+      >
         <DataList.Top>
           <DataList.TopCell sticky="start">Model</DataList.TopCell>
           <DataList.TopCell className="justify-end text-right">Input</DataList.TopCell>

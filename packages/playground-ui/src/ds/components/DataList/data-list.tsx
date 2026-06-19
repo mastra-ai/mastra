@@ -30,6 +30,8 @@ import {
 } from './data-list-top-cell';
 import { DataListTopCells } from './data-list-top-cells';
 
+export type { DataListRootProps, DataListStickyHeaderBackground, DataListVariant } from './data-list-root';
+
 export const DataList = Object.assign(DataListRoot, {
   Top: DataListTop,
   TopCells: DataListTopCells,

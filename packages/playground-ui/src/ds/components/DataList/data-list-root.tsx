@@ -1,6 +1,7 @@
 import { cva } from 'class-variance-authority';
-import type { ReactNode, RefObject } from 'react';
+import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
+import type { ScrollAreaMask } from '@/ds/components/ScrollArea/scroll-area';
 import { cn } from '@/lib/utils';
 
 /**
@@ -12,6 +13,7 @@ import { cn } from '@/lib/utils';
  *   and use subtle separators instead of zebra tints.
  */
 export type DataListVariant = 'striped' | 'lined';
+export type DataListStickyHeaderBackground = 'tinted' | 'surface' | 'transparent';
 
 export type DataListRootProps = {
   children: ReactNode;
@@ -19,12 +21,40 @@ export type DataListRootProps = {
   className?: string;
   variant?: DataListVariant;
   /**
+   * Shared fill for the sticky top header and sticky row-header column.
+   * `tinted` is an opaque equivalent of the former `neutral6/10` tint, so sticky
+   * headers do not reveal scrolled content beneath them.
+   */
+  stickyHeaderBackground?: DataListStickyHeaderBackground;
+  /**
+   * Edge fades from the underlying ScrollArea. DataList keeps the top fade off
+   * by default so it does not fade the sticky top header.
+   */
+  mask?: ScrollAreaMask;
+  /**
    * Ref to the scroll container — pass this to TanStack Virtual's
    * `getScrollElement` when virtualizing. Without it, the ScrollArea viewport
    * scrolls normally.
    */
   scrollRef?: RefObject<HTMLDivElement | null>;
 };
+
+const stickyHeaderBackgroundValues = {
+  tinted: 'color-mix(in oklch, var(--surface1), var(--neutral6) 10%)',
+  surface: 'var(--surface2)',
+  transparent: 'transparent',
+} satisfies Record<DataListStickyHeaderBackground, string>;
+
+type DataListRootStyle = CSSProperties & {
+  '--data-list-sticky-header-background'?: string;
+};
+
+function getDataListMask(mask: ScrollAreaMask | undefined): ScrollAreaMask {
+  if (mask === undefined) return { top: false };
+  if (typeof mask === 'object') return { top: false, ...mask };
+
+  return mask;
+}
 
 /**
  * Root grid styling per `variant`. Kept module-private (an exported cva in a
@@ -44,9 +74,9 @@ export type DataListRootProps = {
  */
 const borderlessTableStyles = [
   'gap-y-px',
-  // A neutral tint gives both column headers and sticky row headers the same
-  // treatment while still adapting to the card or page surface behind them.
-  '[&_.data-list-top]:mx-0 [&_.data-list-top]:bg-neutral6/10 [&_.data-list-top]:after:hidden',
+  // A shared opaque tint gives both column headers and sticky row headers the
+  // same treatment without revealing scrolled content beneath sticky surfaces.
+  '[&_.data-list-top]:mx-0 [&_.data-list-top]:bg-[var(--data-list-sticky-header-background)] [&_.data-list-top]:after:hidden',
   '[&_.data-list-top]:rounded-t-xl [&_.data-list-top]:rounded-b-md',
   // header column separators: a short, faint vertical line centered in the gap
   // to the left of every header cell but the first. A `before` pseudo (not a
@@ -59,7 +89,7 @@ const borderlessTableStyles = [
   '[&_.data-list-row]:mx-0 [&_.data-list-row]:my-0 [&_.data-list-row]:rounded-md',
   '[&_.data-list-row]:hover:bg-surface-overlay-strong!',
   '[&_.data-list-row]:focus-visible:bg-surface-overlay-strong!',
-  '[&_.data-list-row_.data-list-row-header]:before:absolute [&_.data-list-row_.data-list-row-header]:before:inset-y-0 [&_.data-list-row_.data-list-row-header]:before:-left-5 [&_.data-list-row_.data-list-row-header]:before:-right-4 [&_.data-list-row_.data-list-row-header]:before:rounded-l-md [&_.data-list-row_.data-list-row-header]:before:bg-neutral6/10 [&_.data-list-row_.data-list-row-header]:before:content-[""] [&_.data-list-row_.data-list-row-header]:before:pointer-events-none',
+  '[&_.data-list-row_.data-list-row-header]:before:absolute [&_.data-list-row_.data-list-row-header]:before:inset-y-0 [&_.data-list-row_.data-list-row-header]:before:-left-5 [&_.data-list-row_.data-list-row-header]:before:-right-4 [&_.data-list-row_.data-list-row-header]:before:rounded-l-md [&_.data-list-row_.data-list-row-header]:before:bg-[var(--data-list-sticky-header-background)] [&_.data-list-row_.data-list-row-header]:before:content-[""] [&_.data-list-row_.data-list-row-header]:before:pointer-events-none',
   '[&_.data-list-row:hover_.data-list-row-header]:before:bg-surface-overlay-strong',
   '[&_.data-list-row:focus-visible_.data-list-row-header]:before:bg-surface-overlay-strong',
   '[&_.data-list-row:focus-within_.data-list-row-header]:before:bg-surface-overlay-strong',
@@ -86,12 +116,25 @@ const dataListRootVariants = cva(cn('grid w-max min-w-full max-w-none content-st
   },
 });
 
-export function DataListRoot({ children, columns, className, variant = 'lined', scrollRef }: DataListRootProps) {
+export function DataListRoot({
+  children,
+  columns,
+  className,
+  variant = 'lined',
+  stickyHeaderBackground = 'tinted',
+  mask,
+  scrollRef,
+}: DataListRootProps) {
+  const gridStyle: DataListRootStyle = {
+    '--data-list-sticky-header-background': stickyHeaderBackgroundValues[stickyHeaderBackground],
+    gridTemplateColumns: columns,
+  };
+
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
       className={dataListRootVariants({ variant })}
-      style={{ gridTemplateColumns: columns }}
+      style={gridStyle}
     >
       {children}
     </div>
@@ -108,7 +151,7 @@ export function DataListRoot({ children, columns, className, variant = 'lined', 
   return (
     <ScrollArea
       orientation="both"
-      mask={{ top: false }}
+      mask={getDataListMask(mask)}
       viewportRef={scrollRef}
       className={cn('h-full w-full rounded-t-xl', className)}
     >

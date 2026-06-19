@@ -3,7 +3,7 @@ import { DataList } from '../../../ds/components/DataList/data-list';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
 import type { LinkComponent as DataListLinkComponent } from '../../../ds/types/link-component';
 import type { ModelUsageRow } from '../hooks/use-model-usage-cost-metrics';
-import { formatCost, METRICS_DATA_LIST_CLASS_NAME } from './metrics-utils';
+import { formatCost, METRICS_DATA_LIST_PROPS } from './metrics-utils';
 
 export interface ModelUsageCostCardViewProps {
   rows: ModelUsageRow[] | undefined;
@@ -62,7 +62,7 @@ export function ModelUsageCostCardView({
           {!hasData ? (
             <MetricsCard.NoData message="No model usage data yet" />
           ) : (
-            <DataList columns="auto auto auto auto auto auto" className={METRICS_DATA_LIST_CLASS_NAME}>
+            <DataList columns="auto auto auto auto auto auto" {...METRICS_DATA_LIST_PROPS}>
               <DataList.Top>
                 <DataList.TopCell sticky="start">Model</DataList.TopCell>
                 <DataList.TopCell className="justify-end text-right">Input</DataList.TopCell>
