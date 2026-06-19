@@ -470,15 +470,6 @@ export class Harness<TState = {}> {
     this.config = config;
     this.#instructions = config.instructions;
 
-    this.#session = new Session({
-      resourceId: config.resourceId ?? config.id,
-      state: {
-        initialState: config.initialState,
-        stateSchema: config.stateSchema,
-        emit: event => this.emit(event),
-      },
-    });
-
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
       : (config.modes.find(mode => mode.default || mode.metadata?.default === true) ?? config.modes[0]);
@@ -489,41 +480,18 @@ export class Harness<TState = {}> {
           : 'Harness requires at least one agent mode',
       );
     }
-    this.#session.mode.set({ modeId: defaultMode.id });
-    this.#session.setStore({
-      get: key => this.#session.thread.getSetting({ key }),
-      set: (key, value) => this.#session.thread.setSetting({ key, value }),
-    });
-    this.#session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
-    this.#session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
-    this.#session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null, {
-      abort: () => this.abort(),
-      emit: event => this.emit(event),
-    });
-    this.#session.model.setResolver({
-      getCurrentModeId: () => this.#session.mode.get(),
-      emit: event => this.emit(event),
-      trackModelUse: this.config.modelUseCountTracker,
-    });
-    this.#session.om.setResolver({
-      getState: () => this.#session.state.get() as Record<string, unknown>,
-      setState: updates => void this.#session.state.set(updates as Partial<TState>),
-      setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
-      emit: event => this.emit(event),
-      omConfig: this.config.omConfig,
-      resolveModel: this.config.resolveModel,
-    });
-    this.#session.permissions.setResolver({
-      getState: () => this.#session.state.get() as Record<string, unknown>,
-      setState: updates => this.#session.state.set(updates as Partial<TState>),
-    });
-    this.#session.subagents.setResolver({
-      getState: () => this.#session.state.get() as Record<string, unknown>,
-      setState: updates => void this.#session.state.set(updates as Partial<TState>),
-      setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
-      emit: event => this.emit(event),
-    });
-    this.#session.thread.connect(this.createThreadDataStore());
+
+    this.#session = this.#wireSession(
+      new Session({
+        resourceId: config.resourceId ?? config.id,
+        state: {
+          initialState: config.initialState,
+          stateSchema: config.stateSchema,
+          emit: event => this.emit(event),
+        },
+      }),
+      defaultMode,
+    );
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
     if (config.workspace instanceof Workspace) {
@@ -538,17 +506,67 @@ export class Harness<TState = {}> {
     } else if (typeof config.browser === 'function') {
       this.browserFn = config.browser;
     }
+  }
+
+  /**
+   * Wire a freshly-constructed {@link Session} to this Harness: install the
+   * thread-settings store, resolvers (mode/model/om/permissions/subagents),
+   * thread data store, and seed the initial mode + model. Returns the same
+   * session for convenient assignment.
+   *
+   * All wiring routes through the Harness (`this.emit`, `this.config`), so the
+   * Harness remains the owner of config and the event bus. Extracted from the
+   * constructor so additional sessions can be wired the same way.
+   */
+  #wireSession(session: Session<TState>, defaultMode: HarnessMode): Session<TState> {
+    session.mode.set({ modeId: defaultMode.id });
+    session.setStore({
+      get: key => session.thread.getSetting({ key }),
+      set: (key, value) => session.thread.setSetting({ key, value }),
+    });
+    session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
+    session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
+    session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null, {
+      abort: () => this.abort(),
+      emit: event => this.emit(event),
+    });
+    session.model.setResolver({
+      getCurrentModeId: () => session.mode.get(),
+      emit: event => this.emit(event),
+      trackModelUse: this.config.modelUseCountTracker,
+    });
+    session.om.setResolver({
+      getState: () => session.state.get() as Record<string, unknown>,
+      setState: updates => void session.state.set(updates as Partial<TState>),
+      setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
+      emit: event => this.emit(event),
+      omConfig: this.config.omConfig,
+      resolveModel: this.config.resolveModel,
+    });
+    session.permissions.setResolver({
+      getState: () => session.state.get() as Record<string, unknown>,
+      setState: updates => session.state.set(updates as Partial<TState>),
+    });
+    session.subagents.setResolver({
+      getState: () => session.state.get() as Record<string, unknown>,
+      setState: updates => void session.state.set(updates as Partial<TState>),
+      setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
+      emit: event => this.emit(event),
+    });
+    session.thread.connect(this.createThreadDataStore());
 
     // Seed the selected model: an explicit initialState.currentModelId wins,
     // otherwise fall back to the default mode's model. The model lives on the
     // session, not in persisted state, so initialState.currentModelId is read
     // here as a construction-time input only.
-    const initialModelId = (config.initialState as { currentModelId?: string } | undefined)?.currentModelId;
+    const initialModelId = (this.config.initialState as { currentModelId?: string } | undefined)?.currentModelId;
     if (initialModelId) {
-      this.#session.model.set({ modelId: initialModelId });
+      session.model.set({ modelId: initialModelId });
     } else if (defaultMode.defaultModelId) {
-      this.#session.model.set({ modelId: defaultMode.defaultModelId });
+      session.model.set({ modelId: defaultMode.defaultModelId });
     }
+
+    return session;
   }
 
   // ===========================================================================
