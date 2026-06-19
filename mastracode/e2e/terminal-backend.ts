@@ -167,6 +167,16 @@ class EmulatedTerminal implements Terminal {
     }
     return { view: lines.join('\n') };
   }
+
+  serializeHistory(): { output: string } {
+    const lines: string[] = [];
+    const buffer = this.xterm.buffer.active;
+    for (let index = 0; index < buffer.length; index += 1) {
+      const line = buffer.getLine(index);
+      lines.push(line?.translateToString(true) ?? '');
+    }
+    return { output: lines.join('\n') };
+  }
 }
 
 function countMatches(text: string, pattern: string | RegExp): number {
@@ -207,6 +217,9 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
     serialize() {
       return terminal.serialize();
     },
+    serializeHistory() {
+      return terminal.serializeHistory();
+    },
     submit(text: string) {
       terminal.sendInput(`${text}\r`);
     },
@@ -240,6 +253,21 @@ async function waitForScreenTextAbsent(pattern: RegExp, terminal: McE2eTerminal,
   await emulatedTerminal?.();
   if (!pattern.test(terminal.serialize().view)) return;
   throw new Error('Timed out waiting for ' + pattern + ' to disappear\n\n' + terminal.serialize().view);
+}
+
+async function waitForOutputText(pattern: RegExp, terminal: McE2eTerminal, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  const emulatedTerminal = (terminal as { flushInput?: () => Promise<void> }).flushInput;
+  const getOutput = () => terminal.serializeHistory?.().output ?? terminal.serialize().view;
+  while (Date.now() < deadline) {
+    await emulatedTerminal?.();
+    if (pattern.test(getOutput())) return;
+    await sleep(100);
+  }
+  await emulatedTerminal?.();
+  const output = getOutput();
+  if (pattern.test(output)) return;
+  throw new Error('Timed out waiting for ' + pattern + '\n\n' + output);
 }
 
 function writeConsoleLineToTerminal(terminal: Terminal, values: unknown[]): void {
@@ -393,6 +421,7 @@ export async function runTerminalBackend(runConfig: TerminalRunConfig): Promise<
     },
     sleep,
     startLiveOutput() {},
+    waitForOutputText,
     waitForScreenText,
     waitForScreenTextAbsent,
   };
