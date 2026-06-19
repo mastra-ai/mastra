@@ -228,8 +228,10 @@ describe('DataListRoot', () => {
       expect(grid?.className).toContain('[&_.data-list-top]:bg-neutral6/10');
       expect(grid?.className).not.toContain('[&_.data-list-sticky-start]:bg-surface2');
       expect(grid?.className).toContain(
-        '[&_.data-list-row_.data-list-row-header]:before:absolute [&_.data-list-row_.data-list-row-header]:before:inset-0',
+        '[&_.data-list-row_.data-list-row-header]:before:absolute [&_.data-list-row_.data-list-row-header]:before:inset-y-0',
       );
+      expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:before:-left-5');
+      expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:before:-right-4');
       expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:before:bg-neutral6/10');
       expect(grid?.className).toContain(
         '[&_.data-list-row:hover_.data-list-row-header]:before:bg-surface-overlay-strong',

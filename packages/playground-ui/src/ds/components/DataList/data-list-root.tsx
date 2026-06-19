@@ -59,7 +59,7 @@ const borderlessTableStyles = [
   '[&_.data-list-row]:mx-0 [&_.data-list-row]:my-0 [&_.data-list-row]:rounded-md',
   '[&_.data-list-row]:hover:bg-surface-overlay-strong!',
   '[&_.data-list-row]:focus-visible:bg-surface-overlay-strong!',
-  '[&_.data-list-row_.data-list-row-header]:before:absolute [&_.data-list-row_.data-list-row-header]:before:inset-0 [&_.data-list-row_.data-list-row-header]:before:rounded-l-md [&_.data-list-row_.data-list-row-header]:before:bg-neutral6/10 [&_.data-list-row_.data-list-row-header]:before:content-[""] [&_.data-list-row_.data-list-row-header]:before:pointer-events-none',
+  '[&_.data-list-row_.data-list-row-header]:before:absolute [&_.data-list-row_.data-list-row-header]:before:inset-y-0 [&_.data-list-row_.data-list-row-header]:before:-left-5 [&_.data-list-row_.data-list-row-header]:before:-right-4 [&_.data-list-row_.data-list-row-header]:before:rounded-l-md [&_.data-list-row_.data-list-row-header]:before:bg-neutral6/10 [&_.data-list-row_.data-list-row-header]:before:content-[""] [&_.data-list-row_.data-list-row-header]:before:pointer-events-none',
   '[&_.data-list-row:hover_.data-list-row-header]:before:bg-surface-overlay-strong',
   '[&_.data-list-row:focus-visible_.data-list-row-header]:before:bg-surface-overlay-strong',
   '[&_.data-list-row:focus-within_.data-list-row-header]:before:bg-surface-overlay-strong',
