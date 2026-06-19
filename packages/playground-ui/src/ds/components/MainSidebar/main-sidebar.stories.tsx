@@ -1,16 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import {
+  Brain,
+  CalendarClock,
   Home,
   Bot,
   Workflow,
   Settings,
   Database,
   FileText,
+  History,
   Users,
   Bell,
   LifeBuoy,
   BookOpen,
+  Radio,
   Search,
+  Sparkles,
   Wrench,
 } from 'lucide-react';
 import { useState, forwardRef } from 'react';
@@ -77,10 +82,10 @@ const DefaultFrame = ({ children }: { children: React.ReactNode }) => (
 );
 
 const StudioFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex h-[720px] w-[1080px] overflow-hidden rounded-lg border border-border1 bg-surface1">
+  <div className="flex h-[720px] w-[1080px] overflow-hidden bg-surface1">
     {children}
     <main className="flex min-w-0 flex-1 flex-col">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border1 px-5">
+      <header className="mx-2 mt-1.5 flex h-12 shrink-0 items-center justify-between px-3">
         <div className="min-w-0">
           <p className="truncate text-ui-lg font-semibold text-neutral6">Traces</p>
           <p className="truncate text-ui-xs text-neutral4">Observability / Traces</p>
@@ -89,57 +94,59 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
           Live
         </span>
       </header>
-      <section className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            ['Trace volume', '1,284'],
-            ['p95 latency', '428ms'],
-            ['Error rate', '0.8%'],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-md border border-border1 bg-surface2 p-4">
-              <p className="text-ui-xs font-medium uppercase text-neutral3">{label}</p>
-              <p className="mt-2 text-2xl font-semibold text-neutral6">{value}</p>
-            </div>
-          ))}
-        </div>
-        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_280px] gap-4">
-          <div className="min-h-0 rounded-md border border-border1 bg-surface2 p-4">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-ui-md font-semibold text-neutral6">Recent spans</p>
-              <p className="text-ui-xs text-neutral4">Updated now</p>
-            </div>
-            <div className="grid gap-2">
-              {['agent.generate', 'tool.weather.lookup', 'workflow.evaluate', 'llm.call'].map((name, index) => (
-                <div
-                  key={name}
-                  className="grid grid-cols-[minmax(0,1fr)_80px_64px] items-center gap-3 rounded-md border border-border1 bg-surface3 px-3 py-2"
-                >
-                  <span className="truncate text-ui-sm text-neutral6">{name}</span>
-                  <span className="text-right text-ui-xs text-neutral4">
-                    {index === 1 ? '91ms' : `${220 + index * 56}ms`}
-                  </span>
-                  <span className="text-right text-ui-xs font-medium text-accent1">ok</span>
-                </div>
-              ))}
-            </div>
+      <section className="mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
+        <div className="grid min-h-full grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              ['Trace volume', '1,284'],
+              ['p95 latency', '428ms'],
+              ['Error rate', '0.8%'],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-studio-panel border border-border1 bg-surface3 p-4">
+                <p className="text-ui-xs font-medium uppercase text-neutral3">{label}</p>
+                <p className="mt-2 text-2xl font-semibold text-neutral6">{value}</p>
+              </div>
+            ))}
           </div>
-          <aside className="min-h-0 rounded-md border border-border1 bg-surface2 p-4">
-            <p className="text-ui-md font-semibold text-neutral6">Trace detail</p>
-            <dl className="mt-4 grid gap-3 text-ui-sm">
-              <div>
-                <dt className="text-neutral3">Service</dt>
-                <dd className="mt-1 text-neutral6">studio</dd>
+          <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_280px] gap-4">
+            <div className="min-h-0 rounded-studio-panel border border-border1 bg-surface3 p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-ui-md font-semibold text-neutral6">Recent spans</p>
+                <p className="text-ui-xs text-neutral4">Updated now</p>
               </div>
-              <div>
-                <dt className="text-neutral3">Environment</dt>
-                <dd className="mt-1 text-neutral6">development</dd>
+              <div className="grid gap-2">
+                {['agent.generate', 'tool.weather.lookup', 'workflow.evaluate', 'llm.call'].map((name, index) => (
+                  <div
+                    key={name}
+                    className="grid grid-cols-[minmax(0,1fr)_80px_64px] items-center gap-3 rounded-md border border-border1 bg-surface2 px-3 py-2"
+                  >
+                    <span className="truncate text-ui-sm text-neutral6">{name}</span>
+                    <span className="text-right text-ui-xs text-neutral4">
+                      {index === 1 ? '91ms' : `${220 + index * 56}ms`}
+                    </span>
+                    <span className="text-right text-ui-xs font-medium text-accent1">ok</span>
+                  </div>
+                ))}
               </div>
-              <div>
-                <dt className="text-neutral3">Status</dt>
-                <dd className="mt-1 text-neutral6">Completed</dd>
-              </div>
-            </dl>
-          </aside>
+            </div>
+            <aside className="min-h-0 rounded-studio-panel border border-border1 bg-surface3 p-4">
+              <p className="text-ui-md font-semibold text-neutral6">Trace detail</p>
+              <dl className="mt-4 grid gap-3 text-ui-sm">
+                <div>
+                  <dt className="text-neutral3">Service</dt>
+                  <dd className="mt-1 text-neutral6">studio</dd>
+                </div>
+                <div>
+                  <dt className="text-neutral3">Environment</dt>
+                  <dd className="mt-1 text-neutral6">development</dd>
+                </div>
+                <div>
+                  <dt className="text-neutral3">Status</dt>
+                  <dd className="mt-1 text-neutral6">Completed</dd>
+                </div>
+              </dl>
+            </aside>
+          </div>
         </div>
       </section>
     </main>
@@ -217,7 +224,7 @@ const StudioSidebarBody = () => {
   const activePath = '/observability/traces/live';
 
   return (
-    <MainSidebar className="border-r border-border1 bg-surface2">
+    <MainSidebar>
       <div className="mb-2 pt-2">
         {state === 'collapsed' ? (
           <div className="flex flex-col items-center gap-2">
@@ -377,7 +384,7 @@ export const WithNestedItems: Story = {
     docs: {
       description: {
         story:
-          '`MainSidebar.Sections` accepts `children` on a link for nested navigation. Parent rows remain real links, child rows render as subitems, and `getIsLinkActive` keeps descendant routes from highlighting the parent at the same time.',
+          '`MainSidebar.Sections` accepts `children` on a link for nested navigation. Parent rows remain real links, child rows render as subitems, nested rows can include their own icons, and `getIsLinkActive` keeps descendant routes from highlighting the parent at the same time.',
       },
     },
   },
@@ -396,9 +403,9 @@ export const WithNestedItems: Story = {
                     url: '/agents',
                     icon: <Bot />,
                     children: [
-                      { name: 'Templates', url: '/agents/templates' },
-                      { name: 'Memory', url: '/agents/memory' },
-                      { name: 'Channels', url: '/agents/channels' },
+                      { name: 'Templates', url: '/agents/templates', icon: <Sparkles /> },
+                      { name: 'Memory', url: '/agents/memory', icon: <Brain /> },
+                      { name: 'Channels', url: '/agents/channels', icon: <Radio /> },
                     ],
                   },
                   {
@@ -406,8 +413,8 @@ export const WithNestedItems: Story = {
                     url: '/workflows',
                     icon: <Workflow />,
                     children: [
-                      { name: 'Runs', url: '/workflows/runs' },
-                      { name: 'Schedules', url: '/workflows/schedules' },
+                      { name: 'Runs', url: '/workflows/runs', icon: <History /> },
+                      { name: 'Schedules', url: '/workflows/schedules', icon: <CalendarClock /> },
                     ],
                   },
                 ],
