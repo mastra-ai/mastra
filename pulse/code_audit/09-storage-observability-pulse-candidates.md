@@ -9,6 +9,8 @@ This file continues the Pulse candidate audit with two related areas:
 
 Working heuristic: capture persistence boundaries, store selection, feature support decisions, fallback behavior, and lossy record-building conversions.
 
+Applicability note: this file is mostly raw discovery. For initial Pulse scope, most storage/query/admin items here should be skipped or emitted only by the primitive-level caller. See `11-pulse-applicability-review.md`.
+
 ## `observability`
 
 Files inspected:
