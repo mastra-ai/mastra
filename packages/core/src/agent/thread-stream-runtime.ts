@@ -163,6 +163,30 @@ export class AgentThreadStreamRuntime {
     return signal;
   }
 
+  #generateSignalMessageId(
+    agent: Agent<any, any, any, any>,
+    target: { threadId?: string; resourceId?: string },
+  ): string {
+    return (
+      agent.getMastraInstance?.()?.generateId({
+        idType: 'message',
+        source: 'agent',
+        entityId: agent.id,
+        threadId: target.threadId,
+        resourceId: target.resourceId,
+      }) ?? randomUUID()
+    );
+  }
+
+  #createMessageSignalInput(message: AgentMessageInput): AgentSignal {
+    const normalizedMessage = typeof message === 'string' || Array.isArray(message) ? { contents: message } : message;
+    return {
+      ...normalizedMessage,
+      type: 'user',
+      tagName: 'user',
+    };
+  }
+
   getThreadState(options: { resourceId?: string; threadId: string }, pubsub?: PubSub): AgentThreadState {
     const state = this.#getState(pubsub);
     const key = this.#threadKey(options.resourceId, options.threadId);
@@ -1123,7 +1147,7 @@ export class AgentThreadStreamRuntime {
     target: SendAgentMessageOptions<OUTPUT>,
     pubsub?: PubSub,
   ): SendAgentMessageResult {
-    return this.sendSignal(agent, createMessageSignal(message, { acceptedAt: new Date() }), target, pubsub);
+    return this.sendSignal(agent, this.#createMessageSignalInput(message), target, pubsub);
   }
 
   queueMessage<OUTPUT = unknown>(
@@ -1133,7 +1157,7 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
   ): QueueAgentMessageResult {
     const state = this.#getState(pubsub);
-    const signal = createMessageSignal(message, { acceptedAt: new Date() });
+    const acceptedAt = new Date();
     let key: string | undefined;
     let runId = target.runId;
     let activeRecord: AgentThreadRunRecord<any> | undefined;
@@ -1163,6 +1187,10 @@ export class AgentThreadStreamRuntime {
     }
 
     key ??= this.#threadKey(resourceId, threadId);
+    const signal = createMessageSignal(message, {
+      id: this.#generateSignalMessageId(agent, { resourceId, threadId }),
+      acceptedAt,
+    });
     const queuedRunId = randomUUID();
     const queuedStreamOptions = target.ifIdle?.streamOptions ?? activeRecord?.streamOptions;
 
@@ -1251,7 +1279,6 @@ export class AgentThreadStreamRuntime {
     pubsub?: PubSub,
   ): SendAgentSignalResult {
     const state = this.#getState(pubsub);
-    let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
@@ -1278,11 +1305,27 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    if (runId) {
+      activeRecord ??= state.threadRunsById.get(runId);
+      if (activeRecord) {
+        key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
+      }
+    }
+
+    const resourceId = target.resourceId ?? activeRecord?.resourceId;
+    const threadId = target.threadId ?? activeRecord?.threadId;
+    if (!resourceId || !threadId) {
+      throw new Error('No active agent run found for signal target');
+    }
+
     const isActiveTarget = Boolean(
       runId && (activeRecord?.output.status === 'running' || (key && state.activeThreadRunIds.get(key) === runId)),
     );
-    const resourceId = target.resourceId ?? activeRecord?.resourceId;
-    const threadId = target.threadId ?? activeRecord?.threadId;
+    let signal = createSignal({
+      ...signalInput,
+      id: signalInput.id ?? this.#generateSignalMessageId(agent, { resourceId, threadId }),
+      acceptedAt: new Date(),
+    });
 
     // Resolve conditional delivery attributes now that we know the delivery path.
     signal = resolveDeliveryAttributes(
@@ -1309,7 +1352,6 @@ export class AgentThreadStreamRuntime {
     }
 
     if (runId) {
-      activeRecord ??= state.threadRunsById.get(runId);
       // A run is "blocking" while it is running or suspended awaiting tool approval. Both
       // states mean the run has already made model requests, so a follow-up signal must be
       // queued as a pending (next-turn) signal rather than folded into a not-yet-started
@@ -1354,10 +1396,6 @@ export class AgentThreadStreamRuntime {
         });
         return { accepted: true, runId, signal };
       }
-    }
-
-    if (!resourceId || !threadId) {
-      throw new Error('No active agent run found for signal target');
     }
 
     runId = randomUUID();
