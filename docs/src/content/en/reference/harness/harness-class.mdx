@@ -499,14 +499,6 @@ const modes = harness.listModes()
 
 To read the active mode, use [`session.mode.get()`](/reference/harness/session#mode); to resolve it to a full `HarnessMode`, use [`session.mode.resolve()`](/reference/harness/session#mode).
 
-#### `switchMode({ modeId })`
-
-Switch to a different mode. Aborts any in-progress generation, saves the current model to the outgoing mode, loads the incoming mode's model, and emits `mode_changed` and `model_changed` events.
-
-```typescript
-await harness.switchMode({ modeId: 'build' })
-```
-
 ### Models
 
 To read the active model ID, use [`session.model.get()`](/reference/harness/session#model); to check whether a model is selected, use [`session.model.hasSelection()`](/reference/harness/session#model).

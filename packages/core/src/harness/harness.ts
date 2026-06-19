@@ -497,7 +497,10 @@ export class Harness<TState = {}> {
     });
     this.#session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     this.#session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
-    this.#session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
+    this.#session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null, {
+      abort: () => this.abort(),
+      emit: event => this.emit(event),
+    });
     this.#session.thread.connect(this.createThreadDataStore());
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
@@ -885,34 +888,6 @@ export class Harness<TState = {}> {
 
   listModes(): HarnessMode[] {
     return this.config.modes;
-  }
-
-  /**
-   * Switch to a different mode.
-   * Aborts any in-progress generation and switches to the mode's default model.
-   */
-  async switchMode({ modeId }: { modeId: string }): Promise<void> {
-    const mode = this.config.modes.find(m => m.id === modeId);
-    if (!mode) {
-      throw new Error(`Mode not found: ${modeId}`);
-    }
-
-    this.abort();
-
-    const previousModeId = this.#session.mode.get();
-
-    // Emit the mode change immediately so UIs can update without waiting for
-    // the storage round-trips inside session.mode.switch().
-    this.emit({ type: 'mode_changed', modeId, previousModeId });
-
-    // The session owns the version-guarded switch sequence: remember the
-    // outgoing mode's model, persist the new mode, then resolve and apply the
-    // incoming mode's model. It returns the resolved model (or null if a newer
-    // switch superseded this one) so we can emit model_changed.
-    const { modelId } = await this.#session.mode.switch({ modeId, defaultModelId: mode.defaultModelId });
-    if (modelId) {
-      this.emit({ type: 'model_changed', modelId } as HarnessEvent);
-    }
   }
 
   private propagateRuntimeServicesToAgent(agent: Agent): Agent {
@@ -3432,7 +3407,7 @@ export class Harness<TState = {}> {
    * - On **rejection**, the plan-mode run is resumed with the feedback so the agent can
    *   revise and submit again. This is an ordinary tool resume.
    * - On **approval**, the parked plan-mode suspension is abandoned and the Harness
-   *   switches to its default (execution) mode. switchMode aborts the plan-mode run, so
+   *   switches to its default (execution) mode. The mode switch aborts the plan-mode run, so
    *   there is no point resuming it first; the next signal/message drives the fresh
    *   default-mode run. The model still sees the "approved" tool result on the rebuilt
    *   message history when the default-mode run starts.
@@ -3468,8 +3443,8 @@ export class Harness<TState = {}> {
     const transitionMode = this.listModes().find(mode => mode.id === transitionModeId);
     if (transitionMode && transitionMode.id !== this.#session.mode.get()) {
       await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-      await this.switchMode({ modeId: transitionMode.id });
-      // switchMode aborts the in-flight run but does not wait for it to
+      await this.#session.mode.switch({ modeId: transitionMode.id });
+      // The mode switch aborts the in-flight run but does not wait for it to
       // finalize. If the caller (e.g. mastracode's plan-approval handler)
       // immediately fires a system-reminder signal, that signal can land in
       // the dying run's pending queue and later get drained with the run's

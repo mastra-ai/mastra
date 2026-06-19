@@ -270,7 +270,7 @@ await harness.session.thread.deleteSetting({ key: 'omThreshold' })
 
 ## Mode
 
-`session.mode` owns the active mode selection. Switching modes is performed on the [`Harness`](/reference/harness/harness-class#switchmode-modeid-) because it emits events and rebinds the stream.
+`session.mode` owns the active mode selection.
 
 ### `session.mode.get()`
 
@@ -286,6 +286,14 @@ Return the full `HarnessMode` object for the active mode, resolved against the h
 
 ```typescript
 const mode = harness.session.mode.resolve()
+```
+
+### `session.mode.switch({ modeId })`
+
+Switch to a different mode. Aborts any in-progress generation, saves the current model to the outgoing mode, loads the incoming mode's model, and emits `mode_changed` and `model_changed` events.
+
+```typescript
+await harness.session.mode.switch({ modeId: 'build' })
 ```
 
 ## Model
