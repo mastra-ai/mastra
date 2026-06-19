@@ -490,7 +490,7 @@ const getStepNodeAndEdge = ({
 export const constructNodesAndEdges = ({
   stepGraph,
 }: {
-  stepGraph: Workflow['serializedStepGraph'];
+  stepGraph?: Workflow['serializedStepGraph'];
 }): { nodes: Node[]; edges: Edge[] } => {
   if (!stepGraph) {
     return { nodes: [], edges: [] };
@@ -583,3 +583,25 @@ export const constructNodesAndEdges = ({
 
   return { nodes: layoutedNodes, edges: layoutedEdges };
 };
+
+export const buildStepsFlow = (edges: Edge[]): Record<string, string[]> =>
+  edges.reduce(
+    (acc, edge) => {
+      if (!edge.data || edge.data.boundaryPayload) {
+        return acc;
+      }
+
+      const stepId = edge.data.nextStepId as string;
+      const prevStepId = edge.data.previousStepId as string;
+
+      if (!stepId || !prevStepId) {
+        return acc;
+      }
+
+      return {
+        ...acc,
+        [stepId]: [...new Set([...(acc[stepId] || []), prevStepId])],
+      };
+    },
+    {} as Record<string, string[]>,
+  );

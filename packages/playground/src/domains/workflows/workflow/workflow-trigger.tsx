@@ -10,6 +10,7 @@ import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
+import { WorkflowDebugStepControls } from './workflow-debug-step-controls';
 import { WorkflowJsonDialog } from './workflow-json-dialog';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -219,6 +220,7 @@ export function WorkflowTrigger({
     setRunId: setContextRunId,
     runId: contextRunId,
     runSnapshot,
+    debugMode,
   } = useContext(WorkflowRunContext);
   useSyncStreamResultToWorkflowRunContext(streamResult);
   const { canExecute } = usePermissions();
@@ -236,6 +238,7 @@ export function WorkflowTrigger({
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
 
   const hasFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResultToUse?.status ?? '');
+  const isPausedDebug = !!debugMode && streamResultToUse?.status === 'paused';
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -337,8 +340,8 @@ export function WorkflowTrigger({
                 setPayload(data);
                 void handleExecuteWorkflow(data);
               }}
-              isViewingRun={!!paramsRunId || hasFinished}
-              isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps}
+              isViewingRun={!!paramsRunId || hasFinished || isPausedDebug}
+              isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps || isPausedDebug}
               disableSubmit={isSuspendedSteps}
               isProcessorWorkflow={workflow?.isProcessorWorkflow}
               collapsible={false}
@@ -387,7 +390,13 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {(result?.status === 'running' || isSuspendedSteps) && (
+        {isPausedDebug && (
+          <div className="px-5 pb-4 pt-3">
+            <WorkflowDebugStepControls isStreaming={isStreamingWorkflow} />
+          </div>
+        )}
+
+        {(result?.status === 'running' || isSuspendedSteps || isPausedDebug) && (
           <div data-testid="workflow-cancel-action" className="px-5 pb-4 pt-3">
             <WorkflowCancelButton
               status={isSuspendedSteps ? 'suspended' : result?.status}

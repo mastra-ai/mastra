@@ -21,6 +21,14 @@ describe('WorkflowCancelButton', () => {
     expect((button as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('renders an enabled cancel button while paused', () => {
+    render(<WorkflowCancelButton status="paused" cancelMessage={null} isCancelling={false} onCancel={() => {}} />);
+
+    const button = screen.getByRole('button', { name: /cancel workflow run/i });
+    expect(button).not.toBeNull();
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('renders a visible but disabled cancel button while suspended', () => {
     const onCancel = vi.fn();
     render(

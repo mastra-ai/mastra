@@ -7,31 +7,10 @@ import { WorkflowBoundaryNode } from './workflow-boundary-node';
 import { WorkflowGraphNode } from './workflow-graph-node';
 import { WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
 import type { WorkflowBoundaryNode as WorkflowBoundaryNodeType, WorkflowStepNode } from './workflow-step-node-utils';
+import { buildStepsFlow } from './utils';
 
 const getScopedStepId = (stepId: string | undefined, workflowName?: string) =>
   stepId && workflowName ? `${workflowName}.${stepId}` : stepId;
-
-const buildStepsFlow = (edges: Edge[]) =>
-  edges.reduce(
-    (acc, edge) => {
-      if (!edge.data || edge.data.boundaryPayload) {
-        return acc;
-      }
-
-      const stepId = edge.data.nextStepId as string;
-      const prevStepId = edge.data.previousStepId as string;
-
-      if (!stepId || !prevStepId) {
-        return acc;
-      }
-
-      return {
-        ...acc,
-        [stepId]: [...new Set([...(acc[stepId] || []), prevStepId])],
-      };
-    },
-    {} as Record<string, string[]>,
-  );
 
 export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]; workflowName?: string }) => {
   const { steps } = useCurrentRun();
