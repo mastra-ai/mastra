@@ -1291,7 +1291,7 @@ describe('Agent signals', () => {
       expect(result.record).toMatchObject({
         status: 'pending',
         deliveryAttempts: 1,
-        lastDeliveryError: 'Notification signal was rejected',
+        lastDeliveryError: 'signal rejected',
       });
       expect(result.record.deliveredSignalId).toBeUndefined();
       const stored = await notifications.getNotification({ threadId: 'notification-thread', id: result.record.id });
