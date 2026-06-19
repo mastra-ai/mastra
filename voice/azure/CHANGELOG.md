@@ -1,5 +1,11 @@
 # @mastra/voice-azure
 
+## 0.12.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
 ## 0.11.4
 
 ### Patch Changes

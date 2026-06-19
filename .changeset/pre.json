@@ -157,5 +157,21 @@
     "@mastra/s3": "0.5.3",
     "@mastra/vercel": "1.0.3"
   },
-  "changesets": []
+  "changesets": [
+    "bright-points-move",
+    "builder-toolkit-connect-no-auth",
+    "builder-user-context-no-auth",
+    "clear-brooms-know",
+    "cuddly-ears-grab",
+    "fine-mugs-train",
+    "fix-signal-drain-response-rotation",
+    "fix-workos-oauth-pkce",
+    "green-birds-knock",
+    "nice-tables-tickle",
+    "quick-walls-thank",
+    "shaggy-parents-design",
+    "signal-system-prompt-guidance",
+    "slow-lizards-grin",
+    "true-jobs-lose"
+  ]
 }

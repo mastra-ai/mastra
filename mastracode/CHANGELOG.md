@@ -1,5 +1,32 @@
 # mastracode
 
+## 0.24.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Improved Mastra Code responsiveness in large threads by speeding up chat rendering and keeping the initial thread render window bounded. ([#18181](https://github.com/mastra-ai/mastra/pull/18181))
+
+- Fixed plan mode not calling submit_plan tool by removing conflicting subagent-style output instructions from mode definition ([#18157](https://github.com/mastra-ai/mastra/pull/18157))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3)]:
+  - @mastra/core@1.45.0-alpha.0
+  - @mastra/agent-browser@0.4.0-alpha.0
+  - @mastra/stagehand@0.3.0-alpha.0
+  - @mastra/tavily@1.1.0-alpha.0
+  - @mastra/observability@1.15.0-alpha.0
+  - @mastra/fastembed@1.2.0-alpha.0
+  - @mastra/mcp@1.11.0-alpha.0
+  - @mastra/memory@1.21.0-alpha.0
+  - @mastra/schema-compat@1.3.0-alpha.0
+  - @mastra/github-signals@0.2.0-alpha.0
+  - @mastra/duckdb@1.5.0-alpha.0
+  - @mastra/libsql@1.14.0-alpha.0
+  - @mastra/pg@1.14.0-alpha.0
+
 ## 0.23.1
 
 ### Patch Changes
