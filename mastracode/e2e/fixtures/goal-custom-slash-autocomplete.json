@@ -1,0 +1,26 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "systemMessage": "You are the goal judge",
+        "userMessage": "Goal: Run the custom goal slash autocomplete objective."
+      },
+      "response": {
+        "content": {
+          "decision": "waiting",
+          "reason": "pursuing goal"
+        }
+      }
+    },
+    {
+      "match": {
+        "systemMessage": "You are Mastra Code",
+        "userMessage": "Run the custom goal slash autocomplete objective.",
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "Custom goal autocomplete e2e acknowledged."
+      }
+    }
+  ]
+}

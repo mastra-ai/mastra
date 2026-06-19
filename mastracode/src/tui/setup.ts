@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
-import type { SlashCommand } from '@earendil-works/pi-tui';
+import type { AutocompleteItem, SlashCommand } from '@earendil-works/pi-tui';
 import type { HarnessEventListener } from '@mastra/core/harness';
 
 import { getUserId } from '../utils/project.js';
@@ -313,6 +313,39 @@ function detectFdPath(): string | null {
   return null;
 }
 
+class MastraCodeAutocompleteProvider extends CombinedAutocompleteProvider {
+  applyCompletion(
+    lines: string[],
+    cursorLine: number,
+    cursorCol: number,
+    item: AutocompleteItem,
+    prefix: string,
+  ): ReturnType<CombinedAutocompleteProvider['applyCompletion']> {
+    const result = super.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
+    const currentLine = lines[cursorLine] || '';
+    const beforePrefix = currentLine.slice(0, cursorCol - prefix.length);
+    const completedLine = result.lines[cursorLine] || '';
+
+    if (
+      prefix.startsWith('/') &&
+      beforePrefix.trim() === '' &&
+      item.value.includes('/') &&
+      !completedLine.startsWith('/')
+    ) {
+      const updatedLines = [...result.lines];
+      const suffix = currentLine.slice(cursorCol) ? '' : ' ';
+      updatedLines[cursorLine] = `/${completedLine}${suffix}`;
+      return {
+        ...result,
+        lines: updatedLines,
+        cursorCol: result.cursorCol + 1 + suffix.length,
+      };
+    }
+
+    return result;
+  }
+}
+
 export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
@@ -428,7 +461,7 @@ export function setupAutocomplete(state: TUIState): void {
   }
 
   const fdPath = detectFdPath();
-  state.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd(), fdPath);
+  state.autocompleteProvider = new MastraCodeAutocompleteProvider(slashCommands, process.cwd(), fdPath);
   state.editor.setAutocompleteProvider(state.autocompleteProvider);
 }
 

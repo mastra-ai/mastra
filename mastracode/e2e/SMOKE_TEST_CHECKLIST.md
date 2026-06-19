@@ -53,6 +53,15 @@ Use this checklist to manually verify the restored Mastra Code behavior on the `
   - Verify the status line/goal UI reflects active goal state.
   - Verify no structured-output scorer error appears.
 
+- [ ] **Custom goal slash autocomplete**
+  - Create or use a custom slash command with `goal: true` in its frontmatter.
+  - Type enough of `/goal/<command-name>` to trigger autocomplete, for example `/goal/custom-go`.
+  - Press Tab to accept the autocomplete suggestion.
+  - Verify the editor keeps the leading slash and shows `/goal/<command-name>`, not `goal/<command-name>`.
+  - Press Enter.
+  - Verify the command starts a goal using the custom command template output.
+  - Verify it does not send `goal/<command-name>` as a normal user message.
+
 - [ ] **Persistent goal resume/judge decision**
   - Start a goal with a judge model.
   - Pause it.

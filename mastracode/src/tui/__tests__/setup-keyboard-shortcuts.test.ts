@@ -33,6 +33,23 @@ vi.mock('@earendil-works/pi-tui', () => ({
     ) {
       autocompleteProviders.push({ commands, cwd, fdPath });
     }
+
+    applyCompletion(lines: string[], cursorLine: number, cursorCol: number, item: { value: string }, prefix: string) {
+      const currentLine = lines[cursorLine] || '';
+      const beforePrefix = currentLine.slice(0, cursorCol - prefix.length);
+      const afterCursor = currentLine.slice(cursorCol);
+      const isSlashCommand = prefix.startsWith('/') && beforePrefix.trim() === '' && !prefix.slice(1).includes('/');
+      const newLine = isSlashCommand
+        ? `${beforePrefix}/${item.value} ${afterCursor}`
+        : `${beforePrefix}${item.value}${afterCursor}`;
+      const newLines = [...lines];
+      newLines[cursorLine] = newLine;
+      return {
+        lines: newLines,
+        cursorLine,
+        cursorCol: newLine.length,
+      };
+    }
   },
   Container: class {},
   Spacer: class {},
@@ -180,6 +197,25 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames).toContain('goal/deploy');
     expect(commandNames).toContain('goal/review');
     expect(commandNames.slice(-5)).toEqual(['/deploy', 'goal/deploy', '/ship', 'skill/lint-fix', 'goal/review']);
+  });
+
+  it('preserves the leading slash when completing nested slash commands', () => {
+    autocompleteProviders.length = 0;
+    const { state } = createState(false);
+    state.customSlashCommands = [
+      { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '', goal: true },
+    ];
+
+    setupAutocomplete(state);
+
+    const result = state.autocompleteProvider.applyCompletion(
+      ['/goal/depl'],
+      0,
+      '/goal/depl'.length,
+      { value: 'goal/deploy', label: 'goal/deploy' },
+      '/goal/depl',
+    );
+    expect(result.lines[0]).toBe('/goal/deploy ');
   });
 
   it('passes detected fd path and cwd into the autocomplete provider', () => {
