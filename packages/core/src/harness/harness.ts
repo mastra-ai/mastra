@@ -517,6 +517,12 @@ export class Harness<TState = {}> {
       getState: () => this.#session.state.get() as Record<string, unknown>,
       setState: updates => this.#session.state.set(updates as Partial<TState>),
     });
+    this.#session.subagents.setResolver({
+      getState: () => this.#session.state.get() as Record<string, unknown>,
+      setState: updates => void this.#session.state.set(updates as Partial<TState>),
+      setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
+      emit: event => this.emit(event),
+    });
     this.#session.thread.connect(this.createThreadDataStore());
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
@@ -1609,27 +1615,6 @@ export class Harness<TState = {}> {
     } catch {
       return null;
     }
-  }
-
-  // ===========================================================================
-  // Subagent Model Management
-  // ===========================================================================
-
-  getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
-    const state = this.#session.state.get() as Record<string, unknown>;
-    if (agentType) {
-      const perType = state[`subagentModelId_${agentType}`];
-      if (typeof perType === 'string') return perType;
-    }
-    const global = state.subagentModelId;
-    return typeof global === 'string' ? global : null;
-  }
-
-  async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
-    const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
-    void this.setState({ [key]: modelId } as unknown as Partial<TState>);
-    await this.#session.thread.setSetting({ key, value: modelId });
-    this.emit({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType } as HarnessEvent);
   }
 
   // ===========================================================================
@@ -3638,7 +3623,7 @@ export class Harness<TState = {}> {
       abortSignal: this.#session.run.getAbortSignal(),
       workspace: this.workspace,
       emitEvent: event => this.emit(event),
-      getSubagentModelId: params => this.getSubagentModelId(params),
+      getSubagentModelId: params => this.#session.subagents.model.get(params ?? {}),
     };
 
     requestContext.set('harness', harnessContext);

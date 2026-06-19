@@ -409,6 +409,33 @@ Set the approval policy for a specific tool. Per-tool policies take precedence o
 await harness.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' })
 ```
 
+## Subagents
+
+`session.subagents` owns subagent configuration. It currently exposes the subagent model selection under `session.subagents.model`.
+
+### `session.subagents.model.get({ agentType? })`
+
+Return the subagent model ID, preferring the per-`agentType` value when one is given, then the global subagent model, or `null` when neither is set.
+
+```typescript
+const modelId = harness.session.subagents.model.get({ agentType: 'explore' })
+```
+
+### `session.subagents.model.set({ modelId, agentType? })`
+
+Set the subagent model ID. Pass an `agentType` to set a per-type override, or omit it to set the global default. Persists to thread settings and emits a `subagent_model_changed` event.
+
+```typescript
+// Set the global subagent model
+await harness.session.subagents.model.set({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
+
+// Set a per-type override
+await harness.session.subagents.model.set({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+  agentType: 'explore',
+})
+```
+
 ## Run
 
 `session.run` owns run and trace identity plus abort state for the in-flight run.

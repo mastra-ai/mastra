@@ -1303,7 +1303,7 @@ export class MastraTUI {
     for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
       const saModelId = (modePack.models as Record<string, string>)[modeId];
       if (saModelId) {
-        await harness.setSubagentModelId({ modelId: saModelId, agentType });
+        await harness.session.subagents.model.set({ modelId: saModelId, agentType });
       }
     }
 
