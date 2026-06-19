@@ -1,5 +1,5 @@
 ---
-"@mastra/playground-ui": major
+"@mastra/playground-ui": minor
 ---
 
 Added sticky row headers to DataList.
