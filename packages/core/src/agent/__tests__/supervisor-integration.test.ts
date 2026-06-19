@@ -1060,7 +1060,7 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
     const subAgentResult = toolResults.find(tr => tr.payload?.toolName === 'agent-approvalDeclineSubAgent');
     expect(subAgentResult).toBeDefined();
     expect(subAgentResult?.payload?.result).toBeDefined();
-    expect(toolDeclinedMessage).toBe('Tool call was not approved by the user');
+    expect(toolDeclinedMessage).toMatchObject({ status: 'denied', approved: false });
   });
 });
 

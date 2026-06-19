@@ -314,7 +314,11 @@ export function createDurableToolCallStep() {
         if (!(resumeData as { approved: boolean }).approved) {
           return {
             ...typedInput,
-            result: 'Tool call was not approved by the user',
+            result: {
+              status: 'denied',
+              approved: false,
+              reason: typeof (resumeData as any).reason === 'string' ? (resumeData as any).reason : null,
+            },
           };
         }
       }

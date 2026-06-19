@@ -4188,7 +4188,7 @@ describe('Agent - network - tool approval and suspension', () => {
         resumeChunks.push(chunk);
         if (chunk.type === 'tool-execution-end') {
           const result = chunk.payload?.result;
-          if (result === 'Tool call was not approved by the user') {
+          if (result && typeof result === 'object' && (result as Record<string, unknown>).approved === false) {
             rejectionFound = true;
           }
         }
@@ -4269,7 +4269,7 @@ describe('Agent - network - tool approval and suspension', () => {
         resumeChunks.push(chunk);
         if (chunk.type === 'agent-execution-event-tool-result') {
           if (chunk.payload.type === 'tool-result') {
-            expect(chunk.payload.payload?.result).toBe('Tool call was not approved by the user');
+            expect(chunk.payload.payload?.result).toMatchObject({ status: 'denied', approved: false });
           } else {
             throw new Error(`Unexpected chunk type: ${chunk.type}`);
           }

@@ -427,7 +427,7 @@ describe('createToolCallStep tool approval workflow', () => {
     const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
 
     expect(result).toEqual({
-      result: 'Tool call was not approved by the user',
+      result: { status: 'denied', approved: false, reason: null },
       ...inputData,
     });
     expectNoToolExecution();

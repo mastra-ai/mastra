@@ -956,8 +956,6 @@ export async function createNetworkLoop({
       let requireApprovalMetadata: Record<string, any> | undefined;
       let suspendedTools: Record<string, any> | undefined;
 
-      let toolCallDeclined = false;
-
       let agentCallAborted = false;
 
       for await (const chunk of result.fullStream) {
@@ -1002,12 +1000,6 @@ export async function createNetworkLoop({
           };
         }
 
-        if (chunk.type === 'tool-result') {
-          if (chunk.payload.result === 'Tool call was not approved by the user') {
-            toolCallDeclined = true;
-          }
-        }
-
         if (chunk.type === 'abort') {
           agentCallAborted = true;
         }
@@ -1017,10 +1009,7 @@ export async function createNetworkLoop({
 
       const messages = result.messageList.get.all.v1();
 
-      let finalText = await result.text;
-      if (toolCallDeclined) {
-        finalText = finalText + '\n\nTool call was not approved by the user';
-      }
+      const finalText = await result.text;
 
       // When the sub-agent was aborted, skip saving partial results to memory
       // and return immediately with the abort event
@@ -1684,7 +1673,11 @@ export async function createNetworkLoop({
           });
         } else {
           if (!resumeData.approved) {
-            const rejectionResult = 'Tool call was not approved by the user';
+            const rejectionResult = {
+              status: 'denied',
+              approved: false,
+              reason: typeof resumeData.reason === 'string' ? resumeData.reason : null,
+            };
             await saveMessagesWithProcessors(
               memory,
               [

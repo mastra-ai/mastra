@@ -492,7 +492,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
             if (!resumeData.approved) {
               return {
-                result: 'Tool call was not approved by the user',
+                result: {
+                  status: 'denied',
+                  approved: false,
+                  reason: typeof resumeData.reason === 'string' ? resumeData.reason : null,
+                },
                 ...inputData,
               };
             }
