@@ -141,7 +141,7 @@ const CopyButton = ({ text }: { text: string }) => {
   return (
     <Button
       variant="ghost"
-      size="xs"
+      size="icon-xs"
       tooltip="Copy"
       aria-label="Copy"
       onClick={() => {
@@ -179,13 +179,13 @@ const AssistantActionBar = ({
     )}
     {(onReadAloud || onStopSpeaking) &&
       (isSpeaking ? (
-        <Button variant="ghost" size="xs" tooltip="Stop" aria-label="Stop" onClick={() => onStopSpeaking?.()}>
+        <Button variant="ghost" size="icon-xs" tooltip="Stop" aria-label="Stop" onClick={() => onStopSpeaking?.()}>
           <StopCircleIcon />
         </Button>
       ) : (
         <Button
           variant="ghost"
-          size="xs"
+          size="icon-xs"
           tooltip="Read aloud"
           aria-label="Read aloud"
           onClick={() => onReadAloud?.(text)}
