@@ -1005,23 +1005,6 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Get a short display name from the current model ID.
-   */
-  getModelName(): string {
-    const modelId = this.#session.model.get();
-    if (!modelId || modelId === 'unknown') return modelId || 'unknown';
-    const parts = modelId.split('/');
-    return parts[parts.length - 1] || modelId;
-  }
-
-  /**
-   * Get the full model ID (e.g., "anthropic/claude-sonnet-4").
-   */
-  getFullModelId(): string {
-    return this.#session.model.get();
-  }
-
-  /**
    * Check if the current model's provider has authentication configured.
    * Uses app-provided catalog/auth hooks; Harness does not resolve gateway auth itself.
    */

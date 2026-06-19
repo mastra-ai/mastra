@@ -696,6 +696,18 @@ export class SessionModel {
     return this.#id !== '';
   }
 
+  /**
+   * A short display name for the selected model: the last segment of the model
+   * id (e.g. `anthropic/claude-sonnet-4` -> `claude-sonnet-4`). Returns
+   * `'unknown'` when no model is selected.
+   */
+  displayName(): string {
+    const modelId = this.#id;
+    if (!modelId || modelId === 'unknown') return modelId || 'unknown';
+    const parts = modelId.split('/');
+    return parts[parts.length - 1] || modelId;
+  }
+
   /** Set the in-memory selected model id (no persistence). */
   set({ modelId }: { modelId: string }): void {
     this.#id = modelId;

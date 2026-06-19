@@ -308,6 +308,14 @@ Return the active model ID.
 const modelId = harness.session.model.get()
 ```
 
+### `session.model.displayName()`
+
+Return a short display name for the active model: the last segment of the model ID (for example, `claude-sonnet-4` from `anthropic/claude-sonnet-4`). Returns `'unknown'` when no model is selected.
+
+```typescript
+const name = harness.session.model.displayName()
+```
+
 ### `session.model.hasSelection()`
 
 Check whether a model is currently selected.

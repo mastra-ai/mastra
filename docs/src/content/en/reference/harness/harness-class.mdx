@@ -501,23 +501,7 @@ To read the active mode, use [`session.mode.get()`](/reference/harness/session#m
 
 ### Models
 
-To read the active model ID, use [`session.model.get()`](/reference/harness/session#model); to check whether a model is selected, use [`session.model.hasSelection()`](/reference/harness/session#model).
-
-#### `getModelName()`
-
-Return a short display name from the current model ID. For example, `"claude-sonnet-4"` from `"anthropic/claude-sonnet-4"`.
-
-```typescript
-const name = harness.getModelName()
-```
-
-#### `getFullModelId()`
-
-Return the complete model ID string.
-
-```typescript
-const fullId = harness.getFullModelId()
-```
+To read the active model ID, use [`session.model.get()`](/reference/harness/session#model); for a short display name, use [`session.model.displayName()`](/reference/harness/session#model); to check whether a model is selected, use [`session.model.hasSelection()`](/reference/harness/session#model).
 
 #### `getCurrentModelAuthStatus()`
 

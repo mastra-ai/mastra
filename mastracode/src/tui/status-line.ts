@@ -143,7 +143,7 @@ export function updateStatusLine(state: TUIState): void {
         ? isObserving
           ? state.harness.getObserverModelId()
           : state.harness.getReflectorModelId()
-        : state.harness.getFullModelId()) ?? '';
+        : state.harness.session.model.get()) ?? '';
   // Rewrite Fireworks AI long paths: fireworks-ai/accounts/fireworks/models/<name> → fireworks/<name>
   let fullModelId = rawModelId.startsWith('fireworks-ai/accounts/fireworks/models/')
     ? 'fireworks/' + rawModelId.slice('fireworks-ai/accounts/fireworks/models/'.length)
