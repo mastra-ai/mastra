@@ -91,9 +91,9 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
 
   if (mode === 'login') {
     ctx.analytics?.trackInteractivePrompt('login_provider_selector', {
-      threadId: ctx.state.harness.getCurrentThreadId(),
-      resourceId: ctx.state.harness.getResourceId(),
-      mode: ctx.state.harness.getCurrentModeId(),
+      threadId: ctx.state.session.thread.getId(),
+      resourceId: ctx.state.session.identity.getResourceId(),
+      mode: ctx.state.session.mode.get(),
     });
   }
 

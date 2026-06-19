@@ -1,19 +1,16 @@
 import {
-  Badge,
-  Button,
-  EntityHeader,
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
   AgentIcon,
   Icon,
+  Skeleton,
+  Txt,
   useCopyToClipboard,
 } from '@mastra/playground-ui';
-import { CopyIcon, Link2, Check, Pencil } from 'lucide-react';
+import { CopyIcon, Check } from 'lucide-react';
 import { useAgent } from '../hooks/use-agent';
-import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface AgentEntityHeaderProps {
   agentId: string;
@@ -21,53 +18,43 @@ export interface AgentEntityHeaderProps {
 
 export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
-  const { handleCopy } = useCopyToClipboard({ text: agentId });
-  const { canCreateAgent } = useCanCreateAgent();
-  const { Link: FrameworkLink, paths } = useLinkComponent();
-  const sessionUrl = `${window.location.origin}/agents/${agentId}/session`;
-  const { handleCopy: handleShareLink, isCopied: isShareCopied } = useCopyToClipboard({
-    text: sessionUrl,
-    copyMessage: 'Session URL copied to clipboard!',
-  });
+  const { handleCopy, isCopied } = useCopyToClipboard({ text: agentId });
   const agentName = agent?.name || '';
-  const isStoredAgent = agent?.source === 'stored';
-  const editPath = paths.cmsAgentEditLink(agentId);
-  const showEditButton = canCreateAgent && isStoredAgent && Boolean(editPath);
 
   return (
     <TooltipProvider>
-      <EntityHeader icon={<AgentIcon />} title={agentName} isLoading={isLoading}>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
-          {showEditButton && (
-            <Button variant="outline" size="sm" as={FrameworkLink} to={editPath}>
-              <Icon size="sm">
-                <Pencil />
-              </Icon>
-              Edit
-            </Button>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button onClick={handleCopy} className="h-badge-default shrink-0">
-                <Badge icon={<CopyIcon />} variant="default">
-                  {agentId}
-                </Badge>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy Agent ID for use in code</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button onClick={handleShareLink} className="h-badge-default shrink-0">
-                <Badge icon={isShareCopied ? <Check /> : <Link2 />} variant="default">
-                  Share
-                </Badge>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy session URL to share with your team</TooltipContent>
-          </Tooltip>
-        </div>
-      </EntityHeader>
+      <div className="p-3 min-w-0 overflow-x-hidden">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={handleCopy}
+              aria-label="Copy Agent ID for use in code"
+              className="group/agent-title text-neutral6 flex min-w-0 max-w-full items-center gap-2"
+              data-testid="agent-entity-header-copy-id"
+            >
+              <span className="flex size-7 shrink-0 items-center justify-center">
+                <Icon size="lg">
+                  <AgentIcon />
+                </Icon>
+              </span>
+              {isLoading ? (
+                <Skeleton className="h-3 w-32" />
+              ) : (
+                <Txt variant="header-md" as="h2" className="truncate font-medium">
+                  {agentName}
+                </Txt>
+              )}
+              {isCopied ? (
+                <Check className="h-4 w-4 shrink-0 text-neutral3" />
+              ) : (
+                <CopyIcon className="h-4 w-4 shrink-0 text-neutral3 opacity-0 transition-opacity group-hover/agent-title:opacity-100 group-focus-visible/agent-title:opacity-100" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Copy Agent ID for use in code</TooltipContent>
+        </Tooltip>
+      </div>
     </TooltipProvider>
   );
 };

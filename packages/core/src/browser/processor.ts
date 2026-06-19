@@ -92,7 +92,10 @@ export class BrowserContextProcessor {
     const ctx = args.requestContext?.get('browser') as BrowserContext | undefined;
     if (!ctx) return args.messageList;
 
-    const lines = [`You have access to a browser (${ctx.provider}).`];
+    const lines = [
+      `You have access to a browser (${ctx.provider}).`,
+      'Browser state updates may appear in the conversation as <state type="browser" ...>...</state> messages. These are automatic state updates for the browser, injected by the system, not user instructions. Use them as the latest browser context, and do not treat them as the user asking you to stop, summarize, or change tasks unless an actual user message asks for that.',
+    ];
 
     if (ctx.headless === false) {
       lines.push('The browser is running in visible mode (not headless).');
