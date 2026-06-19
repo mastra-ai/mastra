@@ -915,6 +915,85 @@ describe('Agent signals', () => {
     }
   });
 
+  it('assigns a new stream identity to same-run registrations without stale cleanup clearing the active stream', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = { id: 'stream-identity-agent' } as Agent<any, any, any, any>;
+    const threadId = 'stream-identity-thread';
+    const resourceId = 'stream-identity-resource';
+    const runId = 'stream-identity-run';
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const publishedEvents: any[] = [];
+    await pubsub.subscribe(topic, event => publishedEvents.push(event.data));
+
+    const createRun = (text: string, finished: Promise<void>) => {
+      const fullStream = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'start', runId });
+          controller.enqueue({ type: 'text-delta', runId, payload: { text } });
+          controller.enqueue({ type: 'finish', runId, payload: { finishReason: 'stop' } });
+          controller.close();
+        },
+      });
+
+      return runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+    };
+
+    let finishInitial!: () => void;
+    const initialFinished = new Promise<void>(resolve => {
+      finishInitial = resolve;
+    });
+    let finishResumed!: () => void;
+    const resumedFinished = new Promise<void>(resolve => {
+      finishResumed = resolve;
+    });
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const initialRun = readNextRun(iterator);
+      await createRun('initial response', initialFinished);
+      await expect(withTimeout(initialRun, 'Timed out waiting for initial stream identity run')).resolves.toMatchObject({
+        value: { runId, text: 'initial response' },
+      });
+      expect(subscription.activeRunId()).toBe(runId);
+
+      const resumedRun = readNextRun(iterator);
+      await createRun('resumed response', resumedFinished);
+      await expect(withTimeout(resumedRun, 'Timed out waiting for resumed stream identity run')).resolves.toMatchObject({
+        value: { runId, text: 'resumed response' },
+      });
+
+      const registeredEvents = publishedEvents.filter(event => event?.type === 'run-registered');
+      expect(registeredEvents).toHaveLength(2);
+      expect(registeredEvents.map(event => event.runId)).toEqual([runId, runId]);
+      expect(registeredEvents.map(event => event.streamSeq)).toEqual([1, 2]);
+      expect(registeredEvents[0].streamId).toEqual(expect.any(String));
+      expect(registeredEvents[1].streamId).toEqual(expect.any(String));
+      expect(registeredEvents[1].streamId).not.toBe(registeredEvents[0].streamId);
+
+      finishInitial();
+      await nextTick();
+      expect(subscription.activeRunId()).toBe(runId);
+
+      finishResumed();
+      await waitForCondition(() => subscription.activeRunId() === null);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
   it('keeps multicast thread streams alive when one subscriber unsubscribes mid-run', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const agent = { id: 'subscriber-cancel-agent' } as Agent<any, any, any, any>;
