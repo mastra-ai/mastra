@@ -55,6 +55,7 @@ import {
   addPendingUserMessage,
   addUserMessage,
   removePendingUserMessage,
+  removeUserMessage,
   renderClearedTasksInline,
   renderExistingMessages,
 } from './render-messages.js';
@@ -74,6 +75,11 @@ import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
+
+const USER_MESSAGE_APPROVAL_INTERRUPT = {
+  reason: 'interrupted_by_user_message',
+  message: 'The pending tool approval was declined because the user sent a new message.',
+};
 
 // =============================================================================
 // Types
@@ -401,16 +407,26 @@ export class MastraTUI {
         pendingNewThread,
       });
 
+      if (hasActiveRun) {
+        this.state.pendingApprovalDismiss?.(USER_MESSAGE_APPROVAL_INTERRUPT);
+      }
+
       const signal = this.state.harness.sendSignal({
         content: this.createUserSignalContent(content, images),
         ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
-      addPendingUserMessage(this.state, signal.id, content, images, { isInterjection: hasActiveRun });
+
+      if (hasActiveRun) {
+        addPendingUserMessage(this.state, signal.id, content, images, { isInterjection: true });
+      } else {
+        addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
+      }
 
       signal.accepted
         .then(result => {
           if (!result.accepted) {
-            removePendingUserMessage(this.state, signal.id);
+            if (hasActiveRun) removePendingUserMessage(this.state, signal.id);
+            else removeUserMessage(this.state, signal.id);
             showInfo(this.state, 'Thread is blocked by a suspended run. Resume or abort it first.');
             return;
           }
@@ -418,12 +434,10 @@ export class MastraTUI {
           if (hasActiveRun) {
             return;
           }
-
-          removePendingUserMessage(this.state, signal.id);
-          addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
         })
         .catch((error: unknown) => {
-          removePendingUserMessage(this.state, signal.id);
+          if (hasActiveRun) removePendingUserMessage(this.state, signal.id);
+          else removeUserMessage(this.state, signal.id);
           showError(this.state, error instanceof Error ? error.message : 'Unknown error');
         });
     };

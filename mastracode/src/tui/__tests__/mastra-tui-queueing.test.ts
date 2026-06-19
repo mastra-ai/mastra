@@ -259,6 +259,7 @@ describe('MastraTUI queueing', () => {
   it('keeps active steering pending after acceptance until the subscription echoes it', async () => {
     const accepted = createDeferred<{ accepted: true; runId: string }>();
     const sendSignal = vi.fn().mockReturnValue({ id: 'signal-1', accepted: accepted.promise });
+    const pendingApprovalDismiss = vi.fn();
     const state = createQueueState({
       session: { getCurrentRunId: () => null, stream: { isActive: () => true } } as any,
       harness: {
@@ -269,6 +270,7 @@ describe('MastraTUI queueing', () => {
           displayState: { get: () => ({ isRunning: true }) },
         },
       } as unknown as TUIState['harness'],
+      pendingApprovalDismiss,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -283,6 +285,10 @@ describe('MastraTUI queueing', () => {
     expect(sendSignal).toHaveBeenCalledWith({
       content: 'stay pending',
       ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
+    });
+    expect(pendingApprovalDismiss).toHaveBeenCalledWith({
+      reason: 'interrupted_by_user_message',
+      message: 'The pending tool approval was declined because the user sent a new message.',
     });
     expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(true);
     expect(state.messageComponentsById.has('signal-1')).toBe(false);
@@ -332,7 +338,7 @@ describe('MastraTUI queueing', () => {
     expect(state.pendingNewThread).toBe(false);
   });
 
-  it('does not render idle signal messages until acceptance resolves', async () => {
+  it('renders idle signal messages optimistically while awaiting acceptance', async () => {
     const accepted = createDeferred<{ accepted: true; runId: string }>();
     const sendSignal = vi.fn().mockReturnValue({ id: 'signal-after-hook', accepted: accepted.promise });
     const state = createQueueState({
@@ -356,12 +362,6 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage('wait for acceptance');
     await Promise.resolve();
 
-    expect(state.pendingSignalMessageComponentsById.has('signal-after-hook')).toBe(true);
-    expect(mocks.addUserMessage).not.toHaveBeenCalled();
-
-    accepted.resolve({ accepted: true, runId: 'run-1' });
-    await Promise.resolve();
-
     expect(state.pendingSignalMessageComponentsById.has('signal-after-hook')).toBe(false);
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-after-hook',
@@ -369,6 +369,11 @@ describe('MastraTUI queueing', () => {
       content: [{ type: 'text', text: 'wait for acceptance' }],
       createdAt: expect.any(Date),
     });
+
+    accepted.resolve({ accepted: true, runId: 'run-1' });
+    await Promise.resolve();
+
+    expect(mocks.addUserMessage).toHaveBeenCalledTimes(1);
   });
 
   it('creates a pending new thread before sending an idle signal message', async () => {
@@ -446,16 +451,23 @@ describe('MastraTUI queueing', () => {
       ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
     });
     expect(state.pendingSignalMessageComponentsById.has('signal-idle-1')).toBe(false);
-    expect(mocks.addUserMessage).not.toHaveBeenCalled();
+    expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
+      id: 'signal-idle-1',
+      role: 'user',
+      content: [{ type: 'text', text: 'blocked while suspended' }],
+      createdAt: expect.any(Date),
+    });
     expect(mocks.showInfo).toHaveBeenCalledWith(
       state,
       'Thread is blocked by a suspended run. Resume or abort it first.',
     );
   });
 
-  it('renders idle image signals after acceptance with the signal id so they dedupe', async () => {
-    const accepted = createDeferred<{ accepted: true; runId: string }>();
-    const sendSignal = vi.fn().mockReturnValue({ id: 'signal-image-1', accepted: accepted.promise });
+  it('renders idle image signals optimistically with the signal id so they dedupe', async () => {
+    const sendSignal = vi.fn().mockReturnValue({
+      id: 'signal-image-1',
+      accepted: Promise.resolve({ accepted: true, runId: 'run-1' }),
+    });
     const state = createQueueState({
       session: { getCurrentRunId: () => null, stream: { isActive: () => false } } as any,
       harness: {
@@ -484,11 +496,6 @@ describe('MastraTUI queueing', () => {
       ],
       ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
     });
-    expect(mocks.addUserMessage).not.toHaveBeenCalled();
-
-    accepted.resolve({ accepted: true, runId: 'run-1' });
-    await Promise.resolve();
-
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-image-1',
       role: 'user',

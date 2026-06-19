@@ -30,7 +30,7 @@ import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
 import { Session, SessionStream } from './session';
-import type { ThreadDataStore } from './session';
+import type { ApprovalDeclineContext, ThreadDataStore } from './session';
 import {
   askUserTool,
   createSubagentTool,
@@ -62,6 +62,11 @@ import type {
 type HarnessSignalAcceptance =
   | { accepted: true; runId?: string }
   | { accepted: false; runId: string; reason: 'thread-blocked' };
+
+const USER_MESSAGE_APPROVAL_INTERRUPT: ApprovalDeclineContext = {
+  reason: 'interrupted_by_user_message',
+  message: 'The pending tool approval was declined because the user sent a new message.',
+};
 
 type HarnessStreamState = {
   currentMessage: HarnessMessage;
@@ -1987,6 +1992,10 @@ export class Harness<TState = {}> {
       }
       const threadId = submittedThreadId ?? this.#session.thread.getId()!;
 
+      if (shouldUseActivePath && signal.type === 'user' && this.#session.approval.isArmed()) {
+        this.#session.respondToToolApproval({ decision: 'decline', declineContext: USER_MESSAGE_APPROVAL_INTERRUPT });
+      }
+
       await this.ensureAgentThreadSubscription(agent, threadId);
 
       if (shouldUseActivePath) {
@@ -2675,7 +2684,11 @@ export class Harness<TState = {}> {
         if (approval.decision === 'approve') {
           await this.handleToolApprove({ toolCallId, requestContext: approval.requestContext ?? requestContext });
         } else {
-          await this.handleToolDecline({ toolCallId, requestContext: approval.requestContext ?? requestContext });
+          await this.handleToolDecline({
+            toolCallId,
+            requestContext: approval.requestContext ?? requestContext,
+            declineContext: approval.declineContext,
+          });
         }
         break;
       }
@@ -3333,9 +3346,11 @@ export class Harness<TState = {}> {
   private async handleToolDecline({
     toolCallId,
     requestContext: requestContextInput,
+    declineContext,
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
+    declineContext?: ApprovalDeclineContext;
   }): Promise<void> {
     const runId = this.#session.run.getRunId();
     if (!runId) {
@@ -3352,6 +3367,7 @@ export class Harness<TState = {}> {
       runId,
       toolCallId,
       approved: false,
+      declineContext,
       threadId: threadId!,
       resourceId,
       requireToolApproval: !isYolo,

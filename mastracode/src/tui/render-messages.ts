@@ -255,6 +255,15 @@ export function removePendingUserMessage(state: TUIState, messageId: string): vo
   state.ui.requestRender();
 }
 
+export function removeUserMessage(state: TUIState, messageId: string): void {
+  const component = state.messageComponentsById.get(messageId);
+  if (!component) return;
+  state.chatContainer.removeChild(component as never);
+  state.messageComponentsById.delete(messageId);
+  reconcileChatBoundarySpacers(state.chatContainer);
+  state.ui.requestRender();
+}
+
 export function clearPendingUserMessages(state: TUIState): void {
   for (const pending of state.pendingSignalMessageComponentsById.values()) {
     state.chatContainer.removeChild(pending.component as never);

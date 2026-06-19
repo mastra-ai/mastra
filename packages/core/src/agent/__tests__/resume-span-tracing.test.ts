@@ -383,6 +383,10 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
         threadId,
         toolCallId: toolCallId!,
         approved: false,
+        declineContext: {
+          reason: 'interrupted_by_user_message',
+          message: 'The pending tool approval was declined because the user sent a new message.',
+        },
       });
 
       expect(sendStreamResumeSpy).toHaveBeenCalledWith(
@@ -391,7 +395,11 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
           threadId,
           runId,
           toolCallId,
-          resumeData: { approved: false },
+          resumeData: {
+            approved: false,
+            reason: 'interrupted_by_user_message',
+            message: 'The pending tool approval was declined because the user sent a new message.',
+          },
         }),
       );
       expect(acknowledgement).toEqual({ accepted: true, runId, toolCallId });
