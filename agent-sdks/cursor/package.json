@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cursor",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Cursor SDK package for Mastra",
   "type": "module",
   "main": "dist/index.js",

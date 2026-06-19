@@ -1,5 +1,39 @@
 # mastra
 
+## 1.15.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Fixed the Connect button for Composio and other tool provider toolkits not appearing in the Agent Builder tools picker when authentication is turned off. The picker expected a signed-in user that never exists in projects without authentication, so it never finished loading existing connections. Toolkit connections now load and the Connect button appears whether or not authentication is configured. ([#18180](https://github.com/mastra-ai/mastra/pull/18180))
+
+- Fixed agents created in the Agent Builder failing to respond to their first message when authentication is turned off. New agents were expecting a signed-in user even in projects without authentication, so the first message errored out. Agents created without authentication now work straight away. ([#18168](https://github.com/mastra-ai/mastra/pull/18168))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3)]:
+  - @mastra/core@1.45.0
+  - @mastra/deployer@1.45.0
+  - @mastra/loggers@1.2.0
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Fixed the Connect button for Composio and other tool provider toolkits not appearing in the Agent Builder tools picker when authentication is turned off. The picker expected a signed-in user that never exists in projects without authentication, so it never finished loading existing connections. Toolkit connections now load and the Connect button appears whether or not authentication is configured. ([#18180](https://github.com/mastra-ai/mastra/pull/18180))
+
+- Fixed agents created in the Agent Builder failing to respond to their first message when authentication is turned off. New agents were expecting a signed-in user even in projects without authentication, so the first message errored out. Agents created without authentication now work straight away. ([#18168](https://github.com/mastra-ai/mastra/pull/18168))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3)]:
+  - @mastra/core@1.45.0-alpha.0
+  - @mastra/deployer@1.45.0-alpha.0
+  - @mastra/loggers@1.2.0-alpha.0
+
 ## 1.14.1
 
 ### Patch Changes

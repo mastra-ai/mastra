@@ -93,16 +93,16 @@ Set a global or per-type subagent model at runtime:
 
 ```typescript
 // Global subagent model
-await harness.setSubagentModelId({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
+await harness.session.subagents.model.set({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 
 // Per-type override
-await harness.setSubagentModelId({
+await harness.session.subagents.model.set({
   modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
   agentType: 'explore',
 })
 
 // Read current model
-const modelId = harness.getSubagentModelId({ agentType: 'explore' })
+const modelId = harness.session.subagents.model.get({ agentType: 'explore' })
 ```
 
 ## Related

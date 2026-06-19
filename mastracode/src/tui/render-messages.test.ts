@@ -171,7 +171,7 @@ describe('renderExistingMessages startup history loading', () => {
 
     await renderExistingMessages(state);
 
-    expect(listActiveMessages).toHaveBeenCalledWith({ limit: 40 });
+    expect(listActiveMessages).toHaveBeenCalledWith({ limit: 200 });
     const children = visibleChildren(state);
     expect(children).toHaveLength(2);
     expect(state.messageComponentsById.get('user-1')).toBe(children[0]);
@@ -231,7 +231,7 @@ describe('renderExistingMessages startup history loading', () => {
 
     await renderExistingMessages(state);
 
-    expect(listActiveMessages).toHaveBeenCalledWith({ limit: 40 });
+    expect(listActiveMessages).toHaveBeenCalledWith({ limit: 200 });
     expect(updateTasks).not.toHaveBeenCalled();
     expect(setState).not.toHaveBeenCalled();
     expect(restoreDisplayTasks).not.toHaveBeenCalled();
@@ -274,8 +274,8 @@ describe('renderExistingMessages subagents', () => {
       session: {
         thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
+        model: { get: () => 'openai/gpt-5.5' },
       },
-      getFullModelId: () => 'openai/gpt-5.5',
       setState: vi.fn().mockResolvedValue(undefined),
     } as unknown as TUIState['harness'];
 
@@ -681,7 +681,7 @@ describe('renderExistingMessages task tools', () => {
     await renderExistingMessages(state);
 
     const expectedTasks = [{ id: 'tests', content: 'Write tests', status: 'in_progress', activeForm: 'Writing tests' }];
-    expect(listActiveMessages).toHaveBeenCalledWith({ limit: 40 });
+    expect(listActiveMessages).toHaveBeenCalledWith({ limit: 200 });
     expect(updateTasks).toHaveBeenCalledWith(expectedTasks);
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
     expect(visibleChildren(state)).toHaveLength(39);

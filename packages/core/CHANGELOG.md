@@ -1,5 +1,39 @@
 # @mastra/core
 
+## 1.45.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Improved state signal restoration so long threads can resume without scanning every message. ([#18182](https://github.com/mastra-ai/mastra/pull/18182))
+
+- Fix agent signal drains so pending signals are recorded through the canonical signal transcript path and consistently rotate the response message id. This prevents follow-up signal turns from being attached to the previous assistant response and helps the agent see the latest completed step before continuing. ([#18105](https://github.com/mastra-ai/mastra/pull/18105))
+
+- Add system guidance explaining that browser and task-list state signals are automatic context updates, not user instructions. ([#18163](https://github.com/mastra-ai/mastra/pull/18163))
+
+- Updated dependencies [[`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756)]:
+  - @mastra/schema-compat@1.3.0
+
+## 1.45.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Improved state signal restoration so long threads can resume without scanning every message. ([#18182](https://github.com/mastra-ai/mastra/pull/18182))
+
+- Fix agent signal drains so pending signals are recorded through the canonical signal transcript path and consistently rotate the response message id. This prevents follow-up signal turns from being attached to the previous assistant response and helps the agent see the latest completed step before continuing. ([#18105](https://github.com/mastra-ai/mastra/pull/18105))
+
+- Add system guidance explaining that browser and task-list state signals are automatic context updates, not user instructions. ([#18163](https://github.com/mastra-ai/mastra/pull/18163))
+
+- Updated dependencies [[`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756)]:
+  - @mastra/schema-compat@1.3.0-alpha.0
+
 ## 1.44.0
 
 ### Minor Changes

@@ -29,14 +29,6 @@ export function insertChatComponentWithBoundarySpacing(
   reconcileChatBoundarySpacers(chatContainer);
 }
 
-function findNextSpacingComponentInList(components: Component[], index: number): Component | undefined {
-  for (let i = index + 1; i < components.length; i++) {
-    const child = components[i];
-    if (child && getChatSpacingKind(child)) return child;
-  }
-  return undefined;
-}
-
 /**
  * Rebuild the spacing layout for a chat container.
  *
@@ -56,6 +48,16 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
   // where possible, reducing object churn.
   const spacerPool = children.filter(isChatBoundarySpacer);
   let poolIndex = 0;
+
+  const nextCompactToolGroupKeys = new Array<string | undefined>(components.length);
+  let nextSpacingComponentGroupKey: string | undefined;
+  for (let i = components.length - 1; i >= 0; i--) {
+    nextCompactToolGroupKeys[i] = nextSpacingComponentGroupKey;
+    const component = components[i];
+    if (component && getChatSpacingKind(component)) {
+      nextSpacingComponentGroupKey = (component as CompactToolGroupingParticipant).getCompactToolGroupKey?.();
+    }
+  }
 
   const nextChildren: Component[] = [];
   let previousCompactToolGroupKey: string | undefined;
@@ -78,9 +80,7 @@ export function reconcileChatBoundarySpacers(chatContainer: Container): void {
     const participant = component as CompactToolGroupingParticipant;
     const compactToolGroupKey = participant.getCompactToolGroupKey?.();
     const compactToolGroupSummary = participant.getCompactToolGroupSummary?.();
-    const next = findNextSpacingComponentInList(components, i);
-    const nextParticipant = next as CompactToolGroupingParticipant | undefined;
-    const nextCompactToolGroupKey = nextParticipant?.getCompactToolGroupKey?.();
+    const nextCompactToolGroupKey = nextCompactToolGroupKeys[i];
     const isContinuation = !!compactToolGroupKey && compactToolGroupKey === previousCompactToolGroupKey;
     participant.setCompactToolContinuation?.(isContinuation, isContinuation ? previousCompactToolSummary : undefined);
     participant.setCompactToolHasFollowingContinuation?.(
