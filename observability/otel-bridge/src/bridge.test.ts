@@ -476,7 +476,7 @@ describe('OtelBridge', () => {
   });
 
   describe('custom providers', () => {
-    it('should use a custom tracerProvider to create spans without touching the global', () => {
+    it('should use a custom tracerProvider to create spans without touching the global', async () => {
       trace.disable();
       try {
         const customProvider = new tracing.BasicTracerProvider();
@@ -494,8 +494,8 @@ describe('OtelBridge', () => {
         expect(result?.spanId).not.toBe(INVALID_SPAN_ID);
         expect(result?.traceId).not.toBe(INVALID_TRACE_ID);
 
-        bridge.shutdown();
-        customProvider.shutdown();
+        await bridge.shutdown();
+        await customProvider.shutdown();
       } finally {
         trace.setGlobalTracerProvider(tracerProvider);
       }
@@ -548,7 +548,7 @@ describe('OtelBridge', () => {
 
       expect(flushed).toBe(true);
 
-      bridge.shutdown();
+      await bridge.shutdown();
       await customProvider.shutdown();
     });
 

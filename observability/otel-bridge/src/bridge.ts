@@ -26,7 +26,7 @@ import { BaseExporter, getExternalParentId } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter, convertLog, getSpanKind } from '@mastra/otel-exporter';
 import { trace as otelTrace, context as otelContext, isSpanContextValid, TraceFlags } from '@opentelemetry/api';
-import type { Span as OtelSpan, Context as OtelContext, TracerProvider } from '@opentelemetry/api';
+import type { Span as OtelSpan, Context as OtelContext, TracerProvider, Tracer } from '@opentelemetry/api';
 import { logs as otelLogs } from '@opentelemetry/api-logs';
 import type { Logger as OtelLogger, LoggerProvider } from '@opentelemetry/api-logs';
 
@@ -63,7 +63,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   name = 'otel';
   private tracerProvider: TracerProvider;
   private loggerProvider: LoggerProvider;
-  private otelTracer;
+  private otelTracer: Tracer;
   private otelLogger: OtelLogger;
   private otelSpanMap = new Map<string, { otelSpan: OtelSpan; otelContext: OtelContext }>();
   private spanConverter?: SpanConverter;
