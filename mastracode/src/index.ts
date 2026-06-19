@@ -47,9 +47,9 @@ import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
 import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions.js';
-// import { executeSubagent } from './agents/subagents/execute.js';
-// import { exploreSubagent } from './agents/subagents/explore.js';
-// import { planSubagent } from './agents/subagents/plan.js';
+import { executeSubagent } from './agents/subagents/execute.js';
+import { exploreSubagent } from './agents/subagents/explore.js';
+import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
 
@@ -505,8 +505,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });
 
-  // const defaultSubAgents: Array<HarnessSubagent> = [];
-  // const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
+  const defaultSubagents: HarnessSubagent[] = [exploreSubagent, planSubagent, executeSubagent];
 
   const defaultModes: HarnessMode[] = [
     {
@@ -605,11 +604,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     throw new Error('MastraCode requires at least one mode');
   }
 
-  // Map subagent types to mode models: explore→fast, plan→plan, execute→build
-  // const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
-  // Subagents inherit workspace tools from the parent agent's workspace automatically.
-  // Apply disabledTools filter to both default and custom subagents.
-  // const subagents = [];
+  // Map subagent types to mode models: explore→fast, plan→plan, execute→build.
+  const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  const subagents = (config?.subagents ?? defaultSubagents).map(subagent => ({
+    ...subagent,
+    defaultModelId: subagent.defaultModelId ?? effectiveDefaults[subagentModeMap[subagent.id] ?? subagent.id],
+  }));
 
   // Build initial state with global preferences
   const globalInitialState: Partial<MastraCodeState> = {};
@@ -667,7 +667,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     pubsub: signalsPubSub,
     stateSchema: typedStateSchema,
     agent: codeAgent,
-    subagents: config?.subagents ?? [],
+    subagents,
     gateways: [mastraCodeGateway],
     toolCategoryResolver: getToolCategory,
     initialState: {

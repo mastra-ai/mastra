@@ -16,13 +16,14 @@ import { NotificationSummaryComponent } from '../components/notification-summary
 import { NotificationComponent } from '../components/notification.js';
 import { ReactiveSignalComponent } from '../components/reactive-signal.js';
 import { StateSignalComponent } from '../components/state-signal.js';
+import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import { UserMessageComponent } from '../components/user-message.js';
 import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
-import { formatToolResult } from './tool.js';
+import { formatToolResult, isToolResultError } from './tool.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -452,6 +453,15 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   // Check for new tool calls and completed tool results
   for (const content of message.content) {
     if (content.type === 'tool_result') {
+      const subagentComponent = state.pendingSubagents.get(content.id);
+      if (subagentComponent) {
+        const effectiveIsError = content.isError || isToolResultError(content.result);
+        subagentComponent.finish(effectiveIsError, 0, formatToolResult(content.result));
+        state.pendingSubagents.delete(content.id);
+        reconcileChatBoundarySpacers(state.chatContainer);
+        state.ui.requestRender();
+      }
+
       const component = state.pendingTools.get(content.id);
       if (component) {
         component.updateResult(
@@ -487,12 +497,28 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
           ...message,
           content: preContent,
         });
+
+        const subArgs = content.args as
+          | { agentType?: string; task?: string; modelId?: string; forked?: boolean }
+          | undefined;
+        const component = new SubagentExecutionComponent(
+          subArgs?.agentType ?? 'unknown',
+          subArgs?.task ?? '',
+          state.ui,
+          subArgs?.modelId,
+          { collapseOnComplete: false, expandOnComplete: state.quietMode, forked: subArgs?.forked },
+        );
+        ctx.addChildBeforeFollowUps(component);
+        state.pendingSubagents.set(content.id, component);
+        state.allToolComponents.push(component as never);
+
         state.streamingComponent = new AssistantMessageComponent(
           undefined,
           state.hideThinkingBlock,
           getMarkdownTheme(),
         );
         ctx.addChildBeforeFollowUps(state.streamingComponent);
+        reconcileChatBoundarySpacers(state.chatContainer);
         createdStreamingComponent = true;
         continue;
       }
