@@ -316,8 +316,75 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
       );
       const accepted = await result.accepted;
       expect('runId' in accepted && accepted.runId).toBeTruthy();
-      await agent.sendToolApproval({ resourceId, threadId, toolCallId: toolCallId!, approved: true });
+      const runId = 'runId' in accepted ? accepted.runId : '';
+      const sendStreamResumeSpy = vi.spyOn(agent, 'sendStreamResume');
+      const acknowledgement = await agent.sendToolApproval({ resourceId, threadId, toolCallId: toolCallId!, approved: true });
 
+      expect(sendStreamResumeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resourceId,
+          threadId,
+          runId,
+          toolCallId,
+          resumeData: { approved: true },
+        }),
+      );
+      expect(acknowledgement).toEqual({ accepted: true, runId, toolCallId });
+      await expect(resumedSubscriptionRun).resolves.toBe('User found');
+    } finally {
+      subscription.unsubscribe();
+    }
+  }, 30000);
+
+  it('sendToolApproval declines through sendStreamResume and delivers resumed output through the subscription', async () => {
+    const agent = createRegisteredAgent();
+    const threadId = 'approval-decline-thread';
+    const resourceId = 'approval-decline-resource';
+    const subscription = await agent.subscribeToThread({ threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const approvalToolCallId = withTimeout(
+        readApprovalToolCallId(iterator),
+        'Timed out waiting for subscribed approval chunk',
+      );
+      const result = agent.sendSignal(
+        { type: 'user-message', contents: 'Find Dero Israel' },
+        {
+          resourceId,
+          threadId,
+          ifIdle: {
+            streamOptions: {
+              requireToolApproval: true,
+              memory: { thread: threadId, resource: resourceId },
+            },
+          },
+        },
+      );
+
+      const toolCallId = await approvalToolCallId;
+      expect(toolCallId).toBeTruthy();
+
+      const resumedSubscriptionRun = withTimeout(
+        readRunText(iterator),
+        'Timed out waiting for subscribed declined approval continuation',
+      );
+      const accepted = await result.accepted;
+      expect('runId' in accepted && accepted.runId).toBeTruthy();
+      const runId = 'runId' in accepted ? accepted.runId : '';
+      const sendStreamResumeSpy = vi.spyOn(agent, 'sendStreamResume');
+      const acknowledgement = await agent.sendToolApproval({ resourceId, threadId, toolCallId: toolCallId!, approved: false });
+
+      expect(sendStreamResumeSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resourceId,
+          threadId,
+          runId,
+          toolCallId,
+          resumeData: { approved: false },
+        }),
+      );
+      expect(acknowledgement).toEqual({ accepted: true, runId, toolCallId });
       await expect(resumedSubscriptionRun).resolves.toBe('User found');
     } finally {
       subscription.unsubscribe();
@@ -349,27 +416,30 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
         readRunText(iterator),
         'Timed out waiting for subscribed generic resume continuation',
       );
+      const accepted = await result.accepted;
+      expect('runId' in accepted && accepted.runId).toBeTruthy();
+      const runId = 'runId' in accepted ? accepted.runId : '';
       const acknowledgement = await agent.sendStreamResume({
         resourceId,
         threadId,
-        runId: result.runId,
+        runId,
         toolCallId: suspension!.toolCallId,
         resumeData: { name: 'Dero Israel' },
         streamOptions: { memory: { thread: threadId, resource: resourceId } },
       });
 
-      expect(acknowledgement).toEqual({ accepted: true, runId: result.runId, toolCallId: suspension!.toolCallId });
+      expect(acknowledgement).toEqual({ accepted: true, runId, toolCallId: suspension!.toolCallId });
       expect(acknowledgement).not.toHaveProperty('fullStream');
       await expect(
         agent.sendStreamResume({
           resourceId,
           threadId,
-          runId: result.runId,
+          runId,
           toolCallId: suspension!.toolCallId,
           resumeData: { name: 'Dero Israel' },
           streamOptions: { memory: { thread: threadId, resource: resourceId } },
         }),
-      ).rejects.toThrow(`could not find a suspended run "${result.runId}"`);
+      ).rejects.toThrow(`could not find a suspended run "${runId}"`);
       await expect(resumedSubscriptionRun).resolves.toBe('User found');
     } finally {
       subscription.unsubscribe();

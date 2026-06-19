@@ -3372,18 +3372,24 @@ export class Harness<TState = {}> {
 
     try {
       // Thread subscriptions are the sole consumer for harness agent output. Resumed
-      // tools reuse the suspended runId, so consuming the returned stream here would
-      // race or duplicate the subscription stream and leave other subscribers behind.
-      await agent.resumeStream(resumeData, {
-        // Re-supply the shared run budget (maxSteps, etc). Without it the resumed
-        // run merges over the agent's small default maxSteps and stops mid-task.
-        ...this.buildSharedRunOptions(),
+      // tools reuse the suspended runId, so resume through the subscription-owned
+      // acknowledgement API instead of touching the direct resume stream here.
+      const resourceId = this.#session.identity.getResourceId();
+      await agent.sendStreamResume({
+        threadId,
+        resourceId,
         runId: suspension.runId,
         toolCallId,
-        memory: threadId ? { thread: threadId, resource: this.#session.identity.getResourceId() } : undefined,
-        abortSignal: this.#session.run.ensureAbortController().signal,
-        requestContext,
-        toolsets: await this.buildToolsets(requestContext),
+        resumeData,
+        streamOptions: {
+          // Re-supply the shared run budget (maxSteps, etc). Without it the resumed
+          // run merges over the agent's small default maxSteps and stops mid-task.
+          ...this.buildSharedRunOptions(),
+          memory: { thread: threadId, resource: resourceId },
+          abortSignal: this.#session.run.ensureAbortController().signal,
+          requestContext,
+          toolsets: await this.buildToolsets(requestContext),
+        },
       });
       await resumedSubscriptionBoundary.promise;
     } finally {

@@ -5,7 +5,7 @@
  *   1. Emit a 'tool_suspended' event to subscribers
  *   2. Report agent_end with reason 'suspended'
  *   3. Allow the caller to resume via respondToToolSuspension()
- *   4. Call agent.resumeStream() and continue processing
+ *   4. Call agent.sendStreamResume() and continue processing via the thread subscription
  */
 import { describe, it, expect, vi } from 'vitest';
 import z from 'zod';
@@ -316,23 +316,7 @@ describe('Harness: tool suspension and resumption', () => {
     const suspendEnd = events.find((e: any) => e.type === 'agent_end');
     expect(suspendEnd?.reason).toBe('suspended');
 
-    const originalResumeStream = registeredAgent.resumeStream.bind(registeredAgent);
-    let returnedResumeStreamReadCount = 0;
-    vi.spyOn(registeredAgent, 'resumeStream').mockImplementation(async (...args: Parameters<typeof registeredAgent.resumeStream>) => {
-      const output = await originalResumeStream(...args);
-      const originalFullStream = output.fullStream;
-      Object.defineProperty(output, 'fullStream', {
-        value: {
-          async *[Symbol.asyncIterator]() {
-            for await (const chunk of originalFullStream) {
-              returnedResumeStreamReadCount++;
-              yield chunk;
-            }
-          },
-        },
-      });
-      return output;
-    });
+    const sendStreamResumeSpy = vi.spyOn(registeredAgent, 'sendStreamResume');
 
     // Clear events for resume phase
     events.length = 0;
@@ -340,9 +324,11 @@ describe('Harness: tool suspension and resumption', () => {
     // Resume with data
     await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
     await waitFor(() => events.some((e: any) => e.type === 'agent_end' && e.reason === 'complete'));
-    // Threaded harness sessions should let the existing thread subscription consume
-    // resumed output instead of directly reading the resumeStream return value.
-    expect(returnedResumeStreamReadCount).toBe(0);
+    expect(sendStreamResumeSpy).toHaveBeenCalledTimes(1);
+    expect(sendStreamResumeSpy.mock.calls[0]?.[0]).toMatchObject({
+      toolCallId: expect.any(String),
+      resumeData: { confirmed: true },
+    });
 
     // Should emit agent_start + agent_end(complete) for the resumed run
     const resumeStart = events.find((e: any) => e.type === 'agent_start');
@@ -358,7 +344,7 @@ describe('Harness: tool suspension and resumption', () => {
     expect(ds.pendingSuspensions.size).toBe(0);
   });
 
-  it('should forward requireToolApproval=false to resumeStream when harness is in yolo mode', async () => {
+  it('should forward requireToolApproval=false to sendStreamResume streamOptions when harness is in yolo mode', async () => {
     const confirmTool = createTool({
       id: 'confirm-action',
       description: 'Confirms an action with the user',
@@ -396,7 +382,7 @@ describe('Harness: tool suspension and resumption', () => {
 
     const registeredAgent = mastra.getAgent('test-agent-yolo-resume');
 
-    const resumeStreamSpy = vi.spyOn(registeredAgent, 'resumeStream');
+    const sendStreamResumeSpy = vi.spyOn(registeredAgent, 'sendStreamResume');
 
     const harness = new Harness({
       id: 'test-harness-yolo-resume',
@@ -411,14 +397,14 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.sendMessage({ content: 'Deploy to production' });
     await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
 
-    expect(resumeStreamSpy).toHaveBeenCalled();
-    const [, resumeOptions] = resumeStreamSpy.mock.calls[0] as [any, any];
+    expect(sendStreamResumeSpy).toHaveBeenCalled();
+    const [resumeOptions] = sendStreamResumeSpy.mock.calls[0] as [any];
     // Yolo mode should disable tool approval gating on resume, matching sendMessage's behavior
-    expect(resumeOptions.requireToolApproval).toBe(false);
+    expect(resumeOptions.streamOptions.requireToolApproval).toBe(false);
   });
 
-  it('should forward the full run budget (maxSteps) to resumeStream so the resumed run does not stop mid-task', async () => {
-    // Regression: resumeStream previously omitted maxSteps, so the resumed run
+  it('should forward the full run budget (maxSteps) to sendStreamResume so the resumed run does not stop mid-task', async () => {
+    // Regression: resume previously omitted maxSteps, so the resumed run
     // merged over the agent's small default budget and ended with reason
     // "complete" after a few steps — the agent stopped mid-task after ask_user.
     const confirmTool = createTool({
@@ -463,7 +449,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     const registeredAgent = mastra.getAgent('test-agent-budget-resume');
-    const resumeStreamSpy = vi.spyOn(registeredAgent, 'resumeStream');
+    const sendStreamResumeSpy = vi.spyOn(registeredAgent, 'sendStreamResume');
 
     const harness = new Harness({
       id: 'test-harness-budget-resume',
@@ -478,11 +464,11 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.sendMessage({ content: 'Deploy to production' });
     await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
 
-    expect(resumeStreamSpy).toHaveBeenCalled();
-    const [, resumeOptions] = resumeStreamSpy.mock.calls[0] as [any, any];
+    expect(sendStreamResumeSpy).toHaveBeenCalled();
+    const [resumeOptions] = sendStreamResumeSpy.mock.calls[0] as [any];
     // Must match the budget used for the initial stream, not the agent default.
-    expect(resumeOptions.maxSteps).toBe(1000);
-    expect(resumeOptions.savePerStep).toBe(false);
-    expect(resumeOptions.modelSettings).toBeUndefined();
+    expect(resumeOptions.streamOptions.maxSteps).toBe(1000);
+    expect(resumeOptions.streamOptions.savePerStep).toBe(false);
+    expect(resumeOptions.streamOptions.modelSettings).toBeUndefined();
   });
 });
