@@ -41,7 +41,6 @@ export const fileAttachmentBlockedRetryScenario = {
   name: 'file-attachment-blocked-retry',
   description: 'Preserves a pasted image when a user prompt hook blocks the first submit and succeeds on retry.',
   testName: 'preserves pasted image attachments after a blocked submit retry',
-  skipReason: 'current main no longer restores editor attachments after a UserPromptSubmit hook block',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
   aimockFixture: 'file-attachment-blocked-retry.json',

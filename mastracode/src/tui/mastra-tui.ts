@@ -337,6 +337,9 @@ export class MastraTUI {
         const allowed = await this.runUserPromptHook(userInput);
         if (!allowed) {
           this.removeOptimisticUserMessage(optimisticMessageId);
+          this.state.editor.setText(userInput);
+          this.state.pendingImages = images ?? [];
+          this.state.ui.requestRender();
           continue;
         }
 
