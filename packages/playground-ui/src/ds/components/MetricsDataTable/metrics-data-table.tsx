@@ -1,6 +1,11 @@
-import { Fragment, useState } from 'react';
 import type { ElementType } from 'react';
-import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
+import { DataListCell, DataListRowHeaderCell } from '@/ds/components/DataList/data-list-cells';
+import { DataListRoot } from '@/ds/components/DataList/data-list-root';
+import { DataListRowLink } from '@/ds/components/DataList/data-list-row-link';
+import { DataListRowStatic } from '@/ds/components/DataList/data-list-row-static';
+import { DataListTop } from '@/ds/components/DataList/data-list-top';
+import { DataListTopCell } from '@/ds/components/DataList/data-list-top-cell';
+import type { LinkComponent as DataListLinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 type Column<T> = {
@@ -27,86 +32,60 @@ export function MetricsDataTable<T extends { key: string }>({
    *  next/link) to keep navigation in-app. */
   LinkComponent?: ElementType;
 }) {
-  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
-
   if (columns.length === 0) return null;
 
+  const gridTemplateColumns = columns.map(() => 'auto').join(' ');
+  const RowLinkComponent = LinkComponent as DataListLinkComponent;
+
   return (
-    <ScrollArea className={cn('w-full h-full', className)} maxHeight="20rem" orientation="both">
-      <div
-        className="grid items-center"
-        style={{
-          gridTemplateColumns: `auto ${columns
-            .slice(1)
-            .map(() => 'auto')
-            .join(' ')}`,
-        }}
-      >
-        {/* Header */}
+    <DataListRoot columns={gridTemplateColumns} variant="lined" className={cn('max-h-80', className)}>
+      <DataListTop>
         {columns.map((col, i) => (
-          <span
-            key={`${i}-${col.label}`}
-            className={cn(
-              'h-9 py-1 flex items-center border-b border-surface5 uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs sticky top-0 z-10 bg-surface3',
-              i === 0
-                ? 'text-left sticky left-0 z-20 bg-surface3 pr-4 after:absolute after:right-1 after:top-1/2 after:-translate-y-1/2 after:h-3/5 after:w-px after:bg-surface5'
-                : 'px-4 text-right',
-            )}
+          <DataListTopCell
+            key={col.label}
+            sticky={i === 0 ? 'start' : undefined}
+            className={i === 0 ? 'text-left' : 'justify-end text-right'}
           >
             {col.label}
-          </span>
+          </DataListTopCell>
         ))}
+      </DataListTop>
 
-        {/* Data rows */}
-        {data.map((row, rowIndex) => {
-          const href = getRowHref?.(row);
-          const isHovered = hoveredRow === row.key;
-          const rowHandlers = href
-            ? {
-                onMouseEnter: () => setHoveredRow(row.key),
-                onMouseLeave: () => setHoveredRow(prev => (prev === row.key ? null : prev)),
-              }
-            : undefined;
+      {data.map(row => {
+        const href = getRowHref?.(row);
+        const rowCells = columns.map((col, i) => {
+          const value = col.value(row);
+          const columnKey = `${row.key}-${col.label}`;
+          if (i === 0) {
+            return (
+              <DataListRowHeaderCell key={columnKey} height="compact" className="text-ui-sm">
+                {value}
+              </DataListRowHeaderCell>
+            );
+          }
+
           return (
-            <Fragment key={row.key}>
-              {columns.map((col, i) => {
-                const cellClasses = cn(
-                  'h-10 flex items-center text-ui-sm whitespace-nowrap border-t border-surface5',
-                  rowIndex === 0 && 'border-t-transparent',
-                  i === 0
-                    ? 'text-left text-neutral3 sticky left-0 z-10 bg-surface3 pr-4 after:absolute after:right-1 after:top-1/2 after:-translate-y-1/2 after:h-3/5 after:w-px after:bg-surface5'
-                    : cn(
-                        'px-4 text-right tabular-nums',
-                        col.highlight ? 'text-neutral4 font-semibold' : 'text-neutral3',
-                      ),
-                  href && 'cursor-pointer outline-none transition-colors',
-                  href && isHovered && 'bg-surface3',
-                );
-
-                if (href) {
-                  return (
-                    <LinkComponent
-                      key={`${row.key}-${i}`}
-                      href={href}
-                      className={cellClasses}
-                      onFocus={() => setHoveredRow(row.key)}
-                      onBlur={() => setHoveredRow(prev => (prev === row.key ? null : prev))}
-                      {...rowHandlers}
-                    >
-                      {col.value(row)}
-                    </LinkComponent>
-                  );
-                }
-                return (
-                  <span key={`${row.key}-${i}`} className={cellClasses}>
-                    {col.value(row)}
-                  </span>
-                );
-              })}
-            </Fragment>
+            <DataListCell
+              key={columnKey}
+              height="compact"
+              className={cn(
+                'justify-items-end text-right text-ui-sm tabular-nums',
+                col.highlight ? 'text-neutral4 font-semibold' : 'text-neutral3',
+              )}
+            >
+              {value}
+            </DataListCell>
           );
-        })}
-      </div>
-    </ScrollArea>
+        });
+
+        return href ? (
+          <DataListRowLink key={row.key} to={href} LinkComponent={RowLinkComponent}>
+            {rowCells}
+          </DataListRowLink>
+        ) : (
+          <DataListRowStatic key={row.key}>{rowCells}</DataListRowStatic>
+        );
+      })}
+    </DataListRoot>
   );
 }

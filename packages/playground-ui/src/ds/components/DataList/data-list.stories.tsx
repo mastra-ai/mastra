@@ -417,6 +417,60 @@ export const WideColumnsOverflow: Story = {
   ),
 };
 
+/** Sticky row headers keep the first column visible while wide metric-like grids scroll horizontally. */
+export const StickyRowHeaders: Story = {
+  render: ({ variant }) => (
+    <div className="max-w-[760px]">
+      <DataList columns="minmax(12rem,auto) auto auto auto auto auto auto auto" variant={variant} className="max-h-80">
+        <DataList.Top>
+          <DataList.TopCell sticky="start">Model</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Input</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Output</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Cache read</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Cache write</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Latency</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Runs</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Cost</DataList.TopCell>
+        </DataList.Top>
+        {Array.from({ length: 12 }, (_, index) => {
+          const model = MODEL_TOKEN_PLACEHOLDERS[index % MODEL_TOKEN_PLACEHOLDERS.length];
+          return (
+            <DataList.RowButton key={`${model}-${index}`} onClick={() => {}}>
+              <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+                {model}
+              </DataList.RowHeaderCell>
+              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
+                {(index * 1300 + 6200).toLocaleString()}
+              </DataList.Cell>
+              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
+                {(index * 840 + 2100).toLocaleString()}
+              </DataList.Cell>
+              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
+                {(index * 260 + 900).toLocaleString()}
+              </DataList.Cell>
+              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
+                {(index * 120 + 300).toLocaleString()}
+              </DataList.Cell>
+              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
+                {180 + index * 24}ms
+              </DataList.Cell>
+              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
+                {(index + 1) * 17}
+              </DataList.Cell>
+              <DataList.Cell
+                height="compact"
+                className="justify-items-end text-right tabular-nums text-ui-sm font-semibold text-neutral4"
+              >
+                ${(index * 0.014 + 0.008).toFixed(3)}
+              </DataList.Cell>
+            </DataList.RowButton>
+          );
+        })}
+      </DataList>
+    </div>
+  ),
+};
+
 /** Loading placeholder for any column layout. Pass the same `columns` string the real list uses. */
 export const Loading: Story = {
   parameters: {

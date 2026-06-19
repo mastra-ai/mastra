@@ -181,6 +181,38 @@ describe('DataListRoot', () => {
     });
   });
 
+  describe('sticky start column', () => {
+    it('applies DataList-owned sticky backgrounds and start-cell classes', () => {
+      const { container } = render(
+        <DataList columns="auto auto auto" variant="lined">
+          <DataList.Top>
+            <DataList.TopCell sticky="start">Model</DataList.TopCell>
+            <DataList.TopCell>Input</DataList.TopCell>
+            <DataList.TopCell>Output</DataList.TopCell>
+          </DataList.Top>
+          <DataList.RowStatic>
+            <DataList.RowHeaderCell height="compact">__GATEWAY_OPENAI_MODEL_BASE__</DataList.RowHeaderCell>
+            <DataList.Cell height="compact">1,200</DataList.Cell>
+            <DataList.Cell height="compact">800</DataList.Cell>
+          </DataList.RowStatic>
+        </DataList>,
+      );
+
+      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      const topCell = container.querySelector<HTMLElement>('.data-list-top .data-list-sticky-start');
+      const rowHeaderCell = container.querySelector<HTMLElement>('.data-list-row-header');
+
+      expect(grid?.className).toContain('[&_.data-list-sticky-start]:bg-surface4');
+      expect(grid?.className).toContain('[&_.data-list-row:hover_.data-list-sticky-start]:bg-surface-overlay-strong!');
+      expect(topCell?.className).toContain('sticky');
+      expect(topCell?.className).toContain('left-0');
+      expect(topCell?.className).toContain('z-20');
+      expect(rowHeaderCell?.className).toContain('data-list-sticky-start');
+      expect(rowHeaderCell?.className).toContain('sticky');
+      expect(rowHeaderCell?.className).toContain('left-0');
+    });
+  });
+
   describe('per-row error variant', () => {
     it('applies a destructive tint to error rows and nothing to default rows', () => {
       const { container } = render(

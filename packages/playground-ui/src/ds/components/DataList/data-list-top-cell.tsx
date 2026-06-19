@@ -1,5 +1,7 @@
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { forwardRef } from 'react';
+import { dataListStickyStartStyles } from './shared';
+import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
@@ -12,10 +14,12 @@ export type DataListTopCellProps = {
    * when the cell wraps a labelable control (e.g. a select-all Checkbox).
    */
   as?: ElementType;
+  /** Pins the top cell to the horizontal start edge while the list scrolls sideways. */
+  sticky?: DataListSticky;
 } & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className' | 'ref'>;
 
 export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>(
-  ({ children, className, as, ...rest }, ref) => {
+  ({ children, className, as, sticky, ...rest }, ref) => {
     const Component = as || 'span';
     const isText = typeof children === 'string' || typeof children === 'number';
     return (
@@ -23,6 +27,8 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
         ref={ref}
         className={cn(
           'h-8 min-w-0 max-w-full overflow-hidden py-1 flex items-center whitespace-nowrap text-neutral2 font-semibold tracking-tight text-ui-sm',
+          sticky === 'start' && dataListStickyStartStyles,
+          sticky === 'start' && 'z-20',
           className,
         )}
         {...rest}
