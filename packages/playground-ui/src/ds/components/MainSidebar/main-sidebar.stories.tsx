@@ -1,9 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Home, Bot, Workflow, Settings, Database, FileText, Users, Bell, LifeBuoy, BookOpen } from 'lucide-react';
+import {
+  Home,
+  Bot,
+  Workflow,
+  Settings,
+  Database,
+  FileText,
+  Users,
+  Bell,
+  LifeBuoy,
+  BookOpen,
+  Search,
+  Wrench,
+} from 'lucide-react';
 import { useState, forwardRef } from 'react';
 import { TooltipProvider } from '../Tooltip';
-import { MainSidebar, MainSidebarProvider } from './main-sidebar';
-import type { MainSidebarProviderProps } from './main-sidebar';
+import { getIsLinkActive, MainSidebar, MainSidebarProvider, useMainSidebar } from './main-sidebar';
+import type { MainSidebarProviderProps, NavSection } from './main-sidebar';
 import {
   Dialog,
   DialogContent,
@@ -12,7 +25,27 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/ds/components/Dialog';
+import { LogoWithoutText } from '@/ds/components/Logo';
+import {
+  AgentIcon,
+  DatasetsIcon,
+  ExperimentsIcon,
+  HomeIcon,
+  LogsIcon,
+  McpServerIcon,
+  MetricsIcon,
+  ProcessorIcon,
+  PromptIcon,
+  RequestContextIcon,
+  ScorersIcon,
+  SettingsIcon,
+  ToolsIcon,
+  TraceIcon,
+  WorkflowIcon,
+  WorkspacesIcon,
+} from '@/ds/icons';
 import type { LinkComponentProps } from '@/ds/types/link-component';
+import { cn } from '@/lib/utils';
 
 const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, children, ...props }, ref) => (
   <a ref={ref} href={href} {...props}>
@@ -40,6 +73,76 @@ const DefaultFrame = ({ children }: { children: React.ReactNode }) => (
     <div className="flex-1 min-w-0 p-6">
       <HelperCopy />
     </div>
+  </div>
+);
+
+const StudioFrame = ({ children }: { children: React.ReactNode }) => (
+  <div className="flex h-[720px] w-[1080px] overflow-hidden rounded-lg border border-border1 bg-surface1">
+    {children}
+    <main className="flex min-w-0 flex-1 flex-col">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border1 px-5">
+        <div className="min-w-0">
+          <p className="truncate text-ui-lg font-semibold text-neutral6">Traces</p>
+          <p className="truncate text-ui-xs text-neutral4">Observability / Traces</p>
+        </div>
+        <span className="rounded-md border border-border1 bg-surface3 px-2.5 py-1 text-ui-xs font-medium text-neutral5">
+          Live
+        </span>
+      </header>
+      <section className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            ['Trace volume', '1,284'],
+            ['p95 latency', '428ms'],
+            ['Error rate', '0.8%'],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-md border border-border1 bg-surface2 p-4">
+              <p className="text-ui-xs font-medium uppercase text-neutral3">{label}</p>
+              <p className="mt-2 text-2xl font-semibold text-neutral6">{value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_280px] gap-4">
+          <div className="min-h-0 rounded-md border border-border1 bg-surface2 p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-ui-md font-semibold text-neutral6">Recent spans</p>
+              <p className="text-ui-xs text-neutral4">Updated now</p>
+            </div>
+            <div className="grid gap-2">
+              {['agent.generate', 'tool.weather.lookup', 'workflow.evaluate', 'llm.call'].map((name, index) => (
+                <div
+                  key={name}
+                  className="grid grid-cols-[minmax(0,1fr)_80px_64px] items-center gap-3 rounded-md border border-border1 bg-surface3 px-3 py-2"
+                >
+                  <span className="truncate text-ui-sm text-neutral6">{name}</span>
+                  <span className="text-right text-ui-xs text-neutral4">
+                    {index === 1 ? '91ms' : `${220 + index * 56}ms`}
+                  </span>
+                  <span className="text-right text-ui-xs font-medium text-accent1">ok</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <aside className="min-h-0 rounded-md border border-border1 bg-surface2 p-4">
+            <p className="text-ui-md font-semibold text-neutral6">Trace detail</p>
+            <dl className="mt-4 grid gap-3 text-ui-sm">
+              <div>
+                <dt className="text-neutral3">Service</dt>
+                <dd className="mt-1 text-neutral6">studio</dd>
+              </div>
+              <div>
+                <dt className="text-neutral3">Environment</dt>
+                <dd className="mt-1 text-neutral6">development</dd>
+              </div>
+              <div>
+                <dt className="text-neutral3">Status</dt>
+                <dd className="mt-1 text-neutral6">Completed</dd>
+              </div>
+            </dl>
+          </aside>
+        </div>
+      </section>
+    </main>
   </div>
 );
 
@@ -72,6 +175,137 @@ const withProvider = (provider?: Omit<MainSidebarProviderProps, 'children'>) => 
     </MainSidebarProvider>
   </TooltipProvider>
 );
+
+const studioSections: NavSection[] = [
+  {
+    key: 'primitives',
+    title: 'Primitives',
+    links: [
+      { name: 'Agents', url: '/agents', icon: <AgentIcon /> },
+      { name: 'Prompts', url: '/prompts', icon: <PromptIcon /> },
+      { name: 'Workflows', url: '/workflows', icon: <WorkflowIcon /> },
+      { name: 'Processors', url: '/processors', icon: <ProcessorIcon /> },
+      { name: 'MCP Servers', url: '/mcps', icon: <McpServerIcon /> },
+      { name: 'Tools', url: '/tools', icon: <ToolsIcon /> },
+      { name: 'Workspaces', url: '/workspaces', icon: <WorkspacesIcon /> },
+      { name: 'Request Context', url: '/request-context', icon: <RequestContextIcon /> },
+    ],
+  },
+  {
+    key: 'evaluation',
+    title: 'Evaluation',
+    links: [
+      { name: 'Overview', url: '/evaluation', icon: <HomeIcon /> },
+      { name: 'Scorers', url: '/scorers', icon: <ScorersIcon /> },
+      { name: 'Datasets', url: '/datasets', icon: <DatasetsIcon /> },
+      { name: 'Experiments', url: '/experiments', icon: <ExperimentsIcon /> },
+    ],
+  },
+  {
+    key: 'observability',
+    title: 'Observability',
+    links: [
+      { name: 'Metrics', url: '/metrics', icon: <MetricsIcon /> },
+      { name: 'Traces', url: '/observability', icon: <TraceIcon /> },
+      { name: 'Logs', url: '/logs', icon: <LogsIcon /> },
+    ],
+  },
+];
+
+const StudioSidebarBody = () => {
+  const { state, isMobile } = useMainSidebar();
+  const activePath = '/observability/traces/live';
+
+  return (
+    <MainSidebar className="border-r border-border1 bg-surface2">
+      <div className="mb-2 pt-2">
+        {state === 'collapsed' ? (
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative grid size-9 place-items-center">
+              <LogoWithoutText
+                className={cn(
+                  'h-[1.5rem] w-[1.5rem] shrink-0 transition-opacity duration-150',
+                  !isMobile && 'group-hover/sidebar:opacity-0',
+                )}
+              />
+              {!isMobile && (
+                <div className="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
+                  <MainSidebar.Trigger />
+                </div>
+              )}
+            </div>
+            <span className="size-6 rounded-full border border-border1 bg-surface4" aria-label="Signed in" />
+          </div>
+        ) : (
+          <span className="flex items-center justify-between pl-3 pr-2">
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
+              <span className="truncate whitespace-nowrap font-display text-sm font-semibold tracking-tight">
+                Mastra Studio
+              </span>
+              {!isMobile && <MainSidebar.Trigger />}
+            </span>
+            <span className="size-7 rounded-full border border-border1 bg-surface4" aria-label="Signed in" />
+          </span>
+        )}
+      </div>
+
+      <div className="mb-2">
+        <MainSidebar.NavList>
+          <MainSidebar.NavLink asChild state={state} link={{ name: 'Search', url: '#', icon: <Search /> }}>
+            <button
+              type="button"
+              aria-label="Search and navigate"
+              className="border border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5"
+            >
+              <Search />
+              <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
+              {state !== 'collapsed' && (
+                <kbd
+                  aria-hidden="true"
+                  className="ml-auto rounded border border-border1 bg-surface4 px-1.5 py-0.5 font-mono text-[10px] leading-none text-neutral3"
+                >
+                  ⌘K
+                </kbd>
+              )}
+            </button>
+          </MainSidebar.NavLink>
+        </MainSidebar.NavList>
+      </div>
+
+      <div className="mb-1">
+        <MainSidebar.NavList>
+          <MainSidebar.NavLink
+            state={state}
+            link={{ name: 'Agent Builder', url: '/agent-builder', icon: <Wrench /> }}
+          />
+        </MainSidebar.NavList>
+      </div>
+
+      <MainSidebar.Nav>
+        <MainSidebar.Sections
+          sections={studioSections}
+          isActive={(link, siblings) => getIsLinkActive(link, activePath, siblings)}
+        />
+      </MainSidebar.Nav>
+
+      <MainSidebar.Bottom className="pb-3">
+        <MainSidebar.NavList>
+          <MainSidebar.NavLink state={state} link={{ name: 'Settings', url: '/settings', icon: <SettingsIcon /> }} />
+          <MainSidebar.NavLink state={state} link={{ name: 'Resources', url: '/resources', icon: <BookOpen /> }} />
+        </MainSidebar.NavList>
+        {state !== 'collapsed' && (
+          <>
+            <hr className="mx-6 my-2 h-px border-0 bg-border1" />
+            <span className="ml-3 inline-flex h-5 items-center rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs font-semibold leading-none text-black/80 dark:text-neutral6">
+              v0.0.0
+            </span>
+          </>
+        )}
+      </MainSidebar.Bottom>
+    </MainSidebar>
+  );
+};
 
 const meta: Meta<typeof MainSidebar> = {
   title: 'Layout/MainSidebar',
@@ -138,6 +372,64 @@ export const WithSections: Story = {
   ),
 };
 
+export const WithNestedItems: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`MainSidebar.Sections` accepts `children` on a link for nested navigation. Parent rows remain real links, child rows render as subitems, and `getIsLinkActive` keeps descendant routes from highlighting the parent at the same time.',
+      },
+    },
+  },
+  render: () => (
+    <DefaultFrame>
+      <MainSidebar className="border-r border-border1 bg-surface2">
+        <MainSidebar.Nav>
+          <MainSidebar.Sections
+            sections={[
+              {
+                key: 'workspace',
+                title: 'Workspace',
+                links: [
+                  {
+                    name: 'Agents',
+                    url: '/agents',
+                    icon: <Bot />,
+                    children: [
+                      { name: 'Templates', url: '/agents/templates' },
+                      { name: 'Memory', url: '/agents/memory' },
+                      { name: 'Channels', url: '/agents/channels' },
+                    ],
+                  },
+                  {
+                    name: 'Workflows',
+                    url: '/workflows',
+                    icon: <Workflow />,
+                    children: [
+                      { name: 'Runs', url: '/workflows/runs' },
+                      { name: 'Schedules', url: '/workflows/schedules' },
+                    ],
+                  },
+                ],
+              },
+              {
+                key: 'settings',
+                title: 'Admin',
+                separator: true,
+                links: [{ name: 'Settings', url: '/settings', icon: <Settings /> }],
+              },
+            ]}
+            isActive={(link, siblings) => getIsLinkActive(link, '/agents/templates', siblings)}
+          />
+        </MainSidebar.Nav>
+        <MainSidebar.Bottom>
+          <MainSidebar.Trigger />
+        </MainSidebar.Bottom>
+      </MainSidebar>
+    </DefaultFrame>
+  ),
+};
+
 export const WithBottom: Story = {
   render: () => (
     <DefaultFrame>
@@ -166,39 +458,20 @@ export const WithBottom: Story = {
 };
 
 export const FullSidebar: Story = {
+  name: 'Studio full sidebar',
+  decorators: [withProvider({ defaultWidth: 272, minWidth: 232, maxWidth: 420, collapseBelow: 200 })],
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Full Studio shell using the same sidebar composition pattern as `AppSidebar`: brand header, command search, Agent Builder link, primary sections, bottom links, and main content layout.',
+      },
+    },
+  },
   render: () => (
-    <DefaultFrame>
-      <MainSidebar className="border-r border-border1 bg-surface2">
-        <MainSidebar.Nav>
-          <MainSidebar.NavSection>
-            <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
-            <MainSidebar.NavList>
-              <MainSidebar.NavLink link={{ name: 'Overview', url: '/', icon: <Home /> }} isActive />
-              <MainSidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <Bot /> }} />
-              <MainSidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
-            </MainSidebar.NavList>
-          </MainSidebar.NavSection>
-
-          <MainSidebar.NavSeparator />
-
-          <MainSidebar.NavSection>
-            <MainSidebar.NavHeader>Resources</MainSidebar.NavHeader>
-            <MainSidebar.NavList>
-              <MainSidebar.NavLink link={{ name: 'Storage', url: '/storage', icon: <Database /> }} />
-              <MainSidebar.NavLink link={{ name: 'Logs', url: '/logs', icon: <FileText /> }} />
-            </MainSidebar.NavList>
-          </MainSidebar.NavSection>
-        </MainSidebar.Nav>
-
-        <MainSidebar.Bottom>
-          <MainSidebar.NavSeparator />
-          <MainSidebar.NavList>
-            <MainSidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <Settings /> }} />
-          </MainSidebar.NavList>
-          <MainSidebar.Trigger />
-        </MainSidebar.Bottom>
-      </MainSidebar>
-    </DefaultFrame>
+    <StudioFrame>
+      <StudioSidebarBody />
+    </StudioFrame>
   ),
 };
 

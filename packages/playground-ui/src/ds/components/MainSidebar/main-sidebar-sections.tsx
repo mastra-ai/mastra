@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useId } from 'react';
 import { MainSidebarNavHeader } from './main-sidebar-nav-header';
 import { MainSidebarNavLink } from './main-sidebar-nav-link';
@@ -20,6 +21,28 @@ export type MainSidebarSectionsProps = {
 
 export function MainSidebarSections({ sections, isActive, className }: MainSidebarSectionsProps) {
   const baseId = useId();
+
+  const renderLink = (link: NavLink, siblings: NavLink[], level = 0): ReactNode => {
+    const childLinks = link.children ?? [];
+    const linkKey = `${link.url}:${link.name}`;
+
+    return (
+      <MainSidebarNavLink
+        key={linkKey}
+        link={link}
+        isActive={isActive?.(link, siblings) ?? link.isActive}
+        level={level}
+        subItems={
+          childLinks.length > 0 ? (
+            <MainSidebarNavList className="mt-0.5">
+              {childLinks.map(child => renderLink(child, childLinks, level + 1))}
+            </MainSidebarNavList>
+          ) : null
+        }
+      />
+    );
+  };
+
   return (
     <>
       {sections.map(section => {
@@ -40,15 +63,7 @@ export function MainSidebarSections({ sections, isActive, className }: MainSideb
                 {section.title}
               </MainSidebarNavHeader>
             ) : null}
-            <MainSidebarNavList>
-              {section.links.map(link => (
-                <MainSidebarNavLink
-                  key={link.name}
-                  link={link}
-                  isActive={isActive?.(link, section.links) ?? link.isActive}
-                />
-              ))}
-            </MainSidebarNavList>
+            <MainSidebarNavList>{section.links.map(link => renderLink(link, section.links))}</MainSidebarNavList>
           </MainSidebarNavSection>
         );
       })}
@@ -63,6 +78,12 @@ export function MainSidebarSections({ sections, isActive, className }: MainSideb
  */
 export function getIsLinkActive(link: NavLink, pathname: string, siblings: NavLink[] = []): boolean {
   const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
+  const flattenLinks = (links: NavLink[]): NavLink[] =>
+    links.flatMap(item => [item, ...flattenLinks(item.children ?? [])]);
+
   if (!matches(link.url)) return false;
-  return !siblings.some(other => other.url !== link.url && other.url.length > link.url.length && matches(other.url));
+  const competingLinks = [...flattenLinks(link.children ?? []), ...flattenLinks(siblings)];
+  return !competingLinks.some(
+    other => other.url !== link.url && other.url.length > link.url.length && matches(other.url),
+  );
 }
