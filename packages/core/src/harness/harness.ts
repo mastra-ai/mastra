@@ -507,7 +507,7 @@ export class Harness<TState = {}> {
     });
     this.#session.om.setResolver({
       getState: () => this.#session.state.get() as Record<string, unknown>,
-      setState: updates => void this.#session.state.set(updates as Partial<TState>),
+      setState: updates => this.#session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
       emit: event => this.emit(event),
       omConfig: this.config.omConfig,
@@ -519,7 +519,7 @@ export class Harness<TState = {}> {
     });
     this.#session.subagents.setResolver({
       getState: () => this.#session.state.get() as Record<string, unknown>,
-      setState: updates => void this.#session.state.set(updates as Partial<TState>),
+      setState: updates => this.#session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
       emit: event => this.emit(event),
     });
