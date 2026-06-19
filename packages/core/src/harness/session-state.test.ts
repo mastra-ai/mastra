@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { Harness } from './harness';
 import type { HarnessConfig, HarnessEvent } from './types';
@@ -28,7 +28,7 @@ describe('Harness session state', () => {
     });
 
     expect(harness.session.state.get()).toEqual({ count: 1, label: 'ready' });
-    expect(harness.getState()).toEqual({ count: 1, label: 'ready' });
+    expect(harness.session.state.get()).toEqual({ count: 1, label: 'ready' });
   });
 
   it('get() returns a shallow snapshot', () => {
@@ -101,20 +101,6 @@ describe('Harness session state', () => {
     expect(harness.session.state.get()).toEqual({ count: 2 });
   });
 
-  it('keeps Harness compatibility wrappers delegated to session.state', async () => {
-    const harness = createHarness<{ count: number }>({ initialState: { count: 0 } });
-    const setSpy = vi.spyOn(harness.session.state, 'set');
-
-    await harness.setState({ count: 2 });
-    const result = await (
-      harness as unknown as { updateState: Harness<{ count: number }>['session']['state']['update'] }
-    ).updateState(state => ({ updates: { count: state.count + 1 }, result: state.count }));
-
-    expect(setSpy).toHaveBeenCalledWith({ count: 2 });
-    expect(result).toBe(2);
-    expect(harness.getState()).toEqual({ count: 3 });
-    expect(harness.session.state.get()).toEqual({ count: 3 });
-  });
 
   it('exposes session.state and deprecated flattened state accessors in request context', async () => {
     const harness = createHarness<{ count: number }>({ initialState: { count: 0 } });
