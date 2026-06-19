@@ -90,10 +90,15 @@ export const mcpReloadConfigScenario = {
     await runtime.waitForScreenText(/MCP_RELOAD_CONFIG_WRITTEN=http:\/\/127\.0\.0\.1:/i, terminal, 10_000);
 
     terminal.submit('/mcp reload');
-    await runtime.waitForScreenText(/MCP: Reloaded\. 1 server\(s\) connected, 1 tool\(s\)\./i, terminal, 15_000);
+    // The transient "MCP: Reloaded" toast can be repainted out of the visible
+    // screen buffer before the poll catches it, and a real server teardown +
+    // HTTP reconnect is slow on loaded CI runners. Match the durable parts of
+    // the message (tolerating redraws that split or reflow it) with generous
+    // headroom, then assert the stable end state via `/mcp status`.
+    await runtime.waitForScreenText(/MCP: Reloaded\b/i, terminal, 30_000);
     terminal.submit('/mcp status');
-    await runtime.waitForScreenText(/reload_after \[http\] \(connected\)/i, terminal, 15_000);
-    await runtime.waitForScreenText(/reload_after_reload_probe/i, terminal, 15_000);
+    await runtime.waitForScreenText(/reload_after \[http\] \(connected\)/i, terminal, 30_000);
+    await runtime.waitForScreenText(/reload_after_reload_probe/i, terminal, 30_000);
     runtime.printScreen('mcp reload after status', terminal);
     terminal.keyCtrlC();
   },
