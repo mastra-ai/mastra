@@ -46,7 +46,7 @@ const borderlessTableStyles = [
   'gap-y-px',
   // A neutral tint gives both column headers and sticky row headers the same
   // treatment while still adapting to the card or page surface behind them.
-  '[&_.data-list-top]:mx-0 [&_.data-list-top]:bg-neutral6/15 [&_.data-list-top]:after:hidden',
+  '[&_.data-list-top]:mx-0 [&_.data-list-top]:bg-neutral6/10 [&_.data-list-top]:after:hidden',
   '[&_.data-list-top]:rounded-t-xl [&_.data-list-top]:rounded-b-md',
   // header column separators: a short, faint vertical line centered in the gap
   // to the left of every header cell but the first. A `before` pseudo (not a
@@ -59,8 +59,9 @@ const borderlessTableStyles = [
   '[&_.data-list-row]:mx-0 [&_.data-list-row]:my-0 [&_.data-list-row]:rounded-md',
   '[&_.data-list-row]:hover:bg-surface-overlay-strong!',
   '[&_.data-list-row]:focus-visible:bg-surface-overlay-strong!',
-  '[&_.data-list-top>.data-list-sticky-start]:bg-inherit',
-  '[&_.data-list-row_.data-list-sticky-start]:bg-neutral6/15',
+  '[&_.data-list-top>.data-list-sticky-start]:bg-inherit!',
+  '[&_.data-list-row_.data-list-sticky-start]:rounded-l-md',
+  '[&_.data-list-row_.data-list-sticky-start]:bg-neutral6/10!',
   '[&_.data-list-row:hover_.data-list-sticky-start]:bg-surface-overlay-strong!',
   '[&_.data-list-row:focus-visible_.data-list-sticky-start]:bg-surface-overlay-strong!',
   '[&_.data-list-row:focus-within_.data-list-sticky-start]:bg-surface-overlay-strong!',

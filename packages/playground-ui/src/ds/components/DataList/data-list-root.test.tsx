@@ -219,13 +219,16 @@ describe('DataListRoot', () => {
       );
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
+      const top = container.querySelector<HTMLElement>('.data-list-top');
       const topCell = container.querySelector<HTMLElement>('.data-list-top .data-list-sticky-start');
       const rowHeaderCell = container.querySelector<HTMLElement>('.data-list-row-header');
 
-      expect(grid?.className).toContain('[&_.data-list-top]:bg-neutral6/15');
-      expect(grid?.className).toContain('[&_.data-list-top>.data-list-sticky-start]:bg-inherit');
-      expect(grid?.className).toContain('[&_.data-list-row_.data-list-sticky-start]:bg-neutral6/15');
+      expect(grid?.className).toContain('[&_.data-list-top]:bg-neutral6/10');
+      expect(grid?.className).toContain('[&_.data-list-top>.data-list-sticky-start]:bg-inherit!');
+      expect(grid?.className).toContain('[&_.data-list-row_.data-list-sticky-start]:rounded-l-md');
+      expect(grid?.className).toContain('[&_.data-list-row_.data-list-sticky-start]:bg-neutral6/10!');
       expect(grid?.className).toContain('[&_.data-list-row:hover_.data-list-sticky-start]:bg-surface-overlay-strong!');
+      expect(top?.className).toContain('z-20');
       expect(topCell?.className).toContain('sticky');
       expect(topCell?.className).toContain('left-0');
       expect(topCell?.className).toContain('z-20');
