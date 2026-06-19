@@ -9,6 +9,7 @@ import type {
   AgentThreadSubscription,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
+  SendAgentSignalAccepted,
   ToolsInput,
   ToolsetsInput,
 } from '../agent/types';
@@ -1780,7 +1781,13 @@ export class Harness<TState = {}> {
           threadId,
           ifIdle: { streamOptions: streamOptions as any },
         });
-        this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count(), runId: result.runId });
+        // Let a rejected `accepted` propagate: `next` is already dequeued, so a
+        // setup/misconfig failure must reach the outer catch to requeue it
+        // rather than being swallowed into a false success (the follow-up would
+        // otherwise be lost).
+        const accepted = await result.accepted;
+        const runId = 'runId' in accepted ? accepted.runId : undefined;
+        this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count(), runId });
       } else {
         this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
         await this.sendMessage({
@@ -1924,7 +1931,16 @@ export class Harness<TState = {}> {
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
         },
-  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
+  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId?: string }> } {
+    const settleRunId = async <T>(result: {
+      accepted: Promise<SendAgentSignalAccepted<T>>;
+    }): Promise<string | undefined> => {
+      // Best-effort run id for telemetry. A wake whose stream setup fails rejects
+      // `accepted`; that error surfaces to the harness through the thread subscription
+      // as an error event, so we must not let it reject the harness send here.
+      const settled = await result.accepted.catch(() => undefined);
+      return settled && 'runId' in settled ? settled.runId : undefined;
+    };
     const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
@@ -1948,7 +1964,7 @@ export class Harness<TState = {}> {
           ifActive,
           ifIdle,
         });
-        return { accepted: result.accepted, runId: result.runId };
+        return { accepted: true as const, runId: await settleRunId(result) };
       }
 
       const streamOptions = await this.buildAgentMessageStreamOptions({
@@ -1963,7 +1979,7 @@ export class Harness<TState = {}> {
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
-      return { accepted: result.accepted, runId: result.runId };
+      return { accepted: true as const, runId: await settleRunId(result) };
     });
 
     return { id: signal.id, type: signal.type, accepted };

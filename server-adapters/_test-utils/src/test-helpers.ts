@@ -240,27 +240,27 @@ export function mockAgentMethods(agent: Agent) {
 
   vi.spyOn(agent, 'sendSignal').mockImplementation((signal: any, target: any) => {
     const createdSignal = createSignal(signal);
+    const runId = target?.runId ?? 'test-run';
     return {
-      accepted: true,
-      runId: target?.runId ?? 'test-run',
+      accepted: Promise.resolve({ action: 'deliver', runId }),
       signal: createdSignal,
     } as any;
   });
 
   vi.spyOn(agent, 'sendMessage').mockImplementation((message: any, target: any) => {
     const createdSignal = createMessageSignal(message);
+    const runId = target?.runId ?? 'test-run';
     return {
-      accepted: true,
-      runId: target?.runId ?? 'test-run',
+      accepted: Promise.resolve({ action: 'deliver', runId }),
       signal: createdSignal,
     } as any;
   });
 
   vi.spyOn(agent, 'queueMessage').mockImplementation((message: any, target: any) => {
     const createdSignal = createMessageSignal(message);
+    const runId = target?.runId ?? 'test-run';
     return {
-      accepted: true,
-      runId: target?.runId ?? 'test-run',
+      accepted: Promise.resolve({ action: 'deliver', runId }),
       signal: createdSignal,
     } as any;
   });
