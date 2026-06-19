@@ -175,6 +175,17 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     }
   }
 
+  async function readSuspendedToolCall(iterator: AsyncIterator<any>) {
+    while (true) {
+      const next = await iterator.next();
+      if (next.done) return undefined;
+      const part = next.value;
+      if (part.type === 'tool-call-suspended') {
+        return { toolCallId: part.payload.toolCallId as string, toolName: part.payload.toolName as string };
+      }
+    }
+  }
+
   function createMockSpan(type: string, parentSpan?: any) {
     spanIdCounter += 1;
     const span: Record<string, any> = {
@@ -311,6 +322,75 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     } finally {
       subscription.unsubscribe();
     }
+  }, 30000);
+
+  it('sendStreamResume acknowledges a generic suspended run and delivers resumed output through the subscription', async () => {
+    const agent = createRegisteredAgent(createSuspendingUserTool());
+    const threadId = 'generic-resume-thread';
+    const resourceId = 'generic-resume-resource';
+    const subscription = await agent.subscribeToThread({ threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const suspendedTool = withTimeout(readSuspendedToolCall(iterator), 'Timed out waiting for generic suspension');
+      const result = agent.sendSignal(
+        { type: 'user-message', contents: 'Find Dero Israel' },
+        {
+          resourceId,
+          threadId,
+          ifIdle: { streamOptions: { memory: { thread: threadId, resource: resourceId } } },
+        },
+      );
+
+      const suspension = await suspendedTool;
+      expect(suspension).toMatchObject({ toolName: 'findUserTool' });
+
+      const resumedSubscriptionRun = withTimeout(
+        readRunText(iterator),
+        'Timed out waiting for subscribed generic resume continuation',
+      );
+      const acknowledgement = await agent.sendStreamResume({
+        resourceId,
+        threadId,
+        runId: result.runId,
+        toolCallId: suspension!.toolCallId,
+        resumeData: { name: 'Dero Israel' },
+        streamOptions: { memory: { thread: threadId, resource: resourceId } },
+      });
+
+      expect(acknowledgement).toEqual({ accepted: true, runId: result.runId, toolCallId: suspension!.toolCallId });
+      expect(acknowledgement).not.toHaveProperty('fullStream');
+      await expect(
+        agent.sendStreamResume({
+          resourceId,
+          threadId,
+          runId: result.runId,
+          toolCallId: suspension!.toolCallId,
+          resumeData: { name: 'Dero Israel' },
+          streamOptions: { memory: { thread: threadId, resource: resourceId } },
+        }),
+      ).rejects.toThrow(`could not find a suspended run "${result.runId}"`);
+      await expect(resumedSubscriptionRun).resolves.toBe('User found');
+    } finally {
+      subscription.unsubscribe();
+    }
+  }, 30000);
+
+  it('sendStreamResume rejects missing and non-suspended resume targets', async () => {
+    const agent = createRegisteredAgent(createSuspendingUserTool());
+
+    await expect(
+      agent.sendStreamResume({ threadId: 'thread', resourceId: 'resource', resumeData: {} } as any),
+    ).rejects.toThrow('sendStreamResume() requires threadId, resourceId, and runId');
+
+    await expect(
+      agent.sendStreamResume({
+        threadId: 'thread',
+        resourceId: 'resource',
+        runId: 'not-suspended',
+        resumeData: {},
+      }),
+    ).rejects.toThrow('could not find a suspended run "not-suspended"');
   }, 30000);
 
   it('caller-provided tracingOptions take precedence over persisted trace', async () => {

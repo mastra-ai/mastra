@@ -243,6 +243,27 @@ export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<
 export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
 
 /**
+ * @experimental Agent stream resume APIs are experimental and may change in a future release.
+ */
+export type SendAgentStreamResumeOptions<OUTPUT = unknown> = {
+  threadId: string;
+  resourceId: string;
+  runId: string;
+  toolCallId?: string;
+  resumeData: unknown;
+  streamOptions?: AgentExecutionOptions<OUTPUT>;
+};
+
+/**
+ * @experimental Agent stream resume APIs are experimental and may change in a future release.
+ */
+export interface SendAgentStreamResumeResult {
+  accepted: true;
+  runId: string;
+  toolCallId?: string;
+}
+
+/**
  * @experimental Agent state signal APIs are experimental and may change in a future release.
  */
 export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;

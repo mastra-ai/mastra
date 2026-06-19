@@ -646,6 +646,26 @@ export class AgentThreadStreamRuntime {
     return activeRunId;
   }
 
+  getResumableThreadRun(
+    options: AgentSubscribeToThreadOptions & { runId: string; toolCallId?: string },
+    pubsub?: PubSub,
+  ): { runId: string; toolCallId?: string } | undefined {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const record = state.threadRunsById.get(options.runId);
+    if (!record || state.threadKeysByRunId.get(options.runId) !== key || !this.#isSuspendedRun(state, options.runId)) {
+      return undefined;
+    }
+
+    const suspension = record.suspension ?? state.suspensionMetadataByRunId.get(options.runId);
+    if (options.toolCallId && suspension?.toolCallId && suspension.toolCallId !== options.toolCallId) {
+      return undefined;
+    }
+
+    record.lifecycle = 'resuming';
+    return { runId: options.runId, toolCallId: options.toolCallId ?? suspension?.toolCallId };
+  }
+
   abortThread(options: AgentSubscribeToThreadOptions, pubsub?: PubSub): boolean {
     const activeRunId = this.getActiveThreadRunId(options, pubsub);
     if (!activeRunId) return false;
@@ -832,6 +852,7 @@ export class AgentThreadStreamRuntime {
       createSubscriberStream,
     };
 
+    this.#clearSuspendedRun(state, output.runId);
     state.threadRunsById.set(output.runId, record);
     state.threadRunsByStreamId.set(streamId, record);
     state.threadKeysByRunId.set(output.runId, key);
