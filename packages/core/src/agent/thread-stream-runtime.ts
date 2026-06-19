@@ -494,7 +494,9 @@ export class AgentThreadStreamRuntime {
       });
     };
 
-    return { output, createSubscriberStream: createStream, startBroadcast: start };
+    const shouldStartBroadcastOnRegister = !!Object.getOwnPropertyDescriptor(output, 'fullStream')?.value;
+
+    return { output, createSubscriberStream: createStream, startBroadcast: start, shouldStartBroadcastOnRegister };
   }
 
   #getThreadTarget(options?: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext }) {
@@ -724,6 +726,7 @@ export class AgentThreadStreamRuntime {
       output: outputForSubscribers,
       createSubscriberStream,
       startBroadcast,
+      shouldStartBroadcastOnRegister,
     } = this.#withBroadcastStream(output, pubsub, key);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
@@ -739,7 +742,9 @@ export class AgentThreadStreamRuntime {
     state.threadKeysByRunId.set(output.runId, key);
     state.activeThreadRunIds.set(key, output.runId);
     const registered = this.#publishAndWait(pubsub, key, { type: 'run-registered', runId: output.runId });
-    void registered.then(startBroadcast, startBroadcast);
+    if (shouldStartBroadcastOnRegister) {
+      void registered.then(startBroadcast, startBroadcast);
+    }
     this.#watchThreadRunCompletion(state, pubsub, key, record);
     return registered;
   }
