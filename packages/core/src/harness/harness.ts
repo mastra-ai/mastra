@@ -811,18 +811,12 @@ export class Harness<TState = {}> {
 
     const memoryStorage = await this.getMemoryStorage();
 
-    if (limit) {
-      const result = await memoryStorage.listMessages({
-        threadId,
-        perPage: limit,
-        page: 0,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
-      return result.messages.map(msg => this.convertToHarnessMessage(msg)).reverse();
-    }
-
     const result = await memoryStorage.listMessages({ threadId, perPage: false });
-    return result.messages.map(msg => this.convertToHarnessMessage(msg));
+    const messages = result.messages.map(msg => this.convertToHarnessMessage(msg));
+
+    if (!limit) return messages;
+
+    return messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).slice(-limit);
   }
 
   private async queryFirstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {

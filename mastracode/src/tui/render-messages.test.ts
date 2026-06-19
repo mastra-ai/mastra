@@ -763,12 +763,13 @@ describe('renderExistingMessages task tools', () => {
 
     await renderExistingMessages(state);
 
-    // A fully-completed list leaves no inline receipt in the transcript.
-    expect(visibleChildren(state)).toHaveLength(0);
+    const rendered = visibleChildren(state).map(component => component.render(100).join('\n'));
+    expect(rendered).toHaveLength(2);
+    expect(rendered.join('\n')).toContain('Write tests');
     expect(state.allToolComponents.map(component => (component as any).toolName)).toEqual([]);
   });
 
-  it('renders no inline receipt when replaying repeated completed task writes', async () => {
+  it('renders completed task receipts when replaying repeated completed task writes', async () => {
     const completedTasks = [{ id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' }];
     const messages: HarnessMessage[] = [
       {
@@ -821,8 +822,9 @@ describe('renderExistingMessages task tools', () => {
 
     await renderExistingMessages(state);
 
-    // A fully-completed list leaves no inline receipt in the transcript.
-    expect(visibleChildren(state)).toHaveLength(0);
+    const rendered = visibleChildren(state).map(component => component.render(100).join('\n'));
+    expect(rendered).toHaveLength(2);
+    expect(rendered.join('\n')).toContain('Write tests');
     expect(state.allToolComponents.map(component => (component as any).toolName)).toEqual([]);
   });
 
