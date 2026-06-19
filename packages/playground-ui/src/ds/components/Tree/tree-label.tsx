@@ -7,7 +7,7 @@ export interface TreeLabelProps {
 }
 
 export const TreeLabel = React.forwardRef<HTMLSpanElement, TreeLabelProps>(({ className, children }, ref) => (
-  <span ref={ref} className={cn('truncate text-neutral5', className)}>
+  <span ref={ref} className={cn('min-w-0 truncate text-left text-neutral5', className)}>
     {children}
   </span>
 ));

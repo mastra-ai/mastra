@@ -3,7 +3,7 @@ import { TreeFolderProvider, useTreeContext, useTreeDepth } from './tree-context
 import { Collapsible } from '@/ds/components/Collapsible';
 import { cn } from '@/lib/utils';
 
-export interface TreeFolderProps {
+export interface TreeFolderProps extends Omit<React.HTMLAttributes<HTMLLIElement>, 'id' | 'onChange'> {
   id?: string;
   defaultOpen?: boolean;
   open?: boolean;
@@ -13,7 +13,7 @@ export interface TreeFolderProps {
 }
 
 export const TreeFolder = React.forwardRef<HTMLLIElement, TreeFolderProps>(
-  ({ id, defaultOpen, open, onOpenChange, className, children }, ref) => {
+  ({ id, defaultOpen, open, onOpenChange, className, children, ...props }, ref) => {
     const treeCtx = useTreeContext();
     const depth = useTreeDepth();
     const [internalOpen, setInternalOpen] = React.useState(defaultOpen ?? false);
@@ -50,6 +50,7 @@ export const TreeFolder = React.forwardRef<HTMLLIElement, TreeFolderProps>(
     return (
       <li
         ref={ref}
+        {...props}
         role="treeitem"
         aria-expanded={isOpen}
         aria-level={depth + 1}

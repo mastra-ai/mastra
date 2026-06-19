@@ -3,13 +3,13 @@ import { useTreeContext, useTreeDepth } from './tree-context';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-export interface TreeFileProps {
+export interface TreeFileProps extends Omit<React.HTMLAttributes<HTMLLIElement>, 'id'> {
   id?: string;
   className?: string;
   children: React.ReactNode;
 }
 
-export const TreeFile = React.forwardRef<HTMLLIElement, TreeFileProps>(({ id, className, children }, ref) => {
+export const TreeFile = React.forwardRef<HTMLLIElement, TreeFileProps>(({ id, className, children, ...props }, ref) => {
   const treeCtx = useTreeContext();
   const depth = useTreeDepth();
   const isSelected = id != null && treeCtx?.selectedId === id;
@@ -35,6 +35,7 @@ export const TreeFile = React.forwardRef<HTMLLIElement, TreeFileProps>(({ id, cl
   return (
     <li
       ref={ref}
+      {...props}
       role="treeitem"
       aria-level={depth + 1}
       aria-selected={isSelected || undefined}
