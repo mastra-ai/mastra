@@ -159,7 +159,7 @@ export interface MastraTUIOptions {
   githubSignals?: GithubSignals;
 
   /** Slack signals processor used for /slack command actions. */
-  slackSignals?: SlackSignals;
+  slackSignals?: InstanceType<typeof SlackSignals>;
 
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;

@@ -18,7 +18,7 @@ import { ReactiveSignalComponent } from '../components/reactive-signal.js';
 import { StateSignalComponent } from '../components/state-signal.js';
 import { SystemReminderComponent } from '../components/system-reminder.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
-import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
+import { createToolExecutionComponent } from '../components/tool-execution-factory.js';
 import { UserMessageComponent } from '../components/user-message.js';
 import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
@@ -478,7 +478,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
       if (!state.seenToolCallIds.has(content.id)) {
         state.seenToolCallIds.add(content.id);
 
-        const component = new ToolExecutionComponentEnhanced(
+        const component = createToolExecutionComponent(
           content.name,
           content.args,
           { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
@@ -486,9 +486,9 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
         );
         component.setExpanded(state.toolOutputExpanded);
         if (state.quietMode) {
-          component.setCompactToolModeColor(getCurrentModeColor(ctx));
-          component.setQuietModeDisplay('quiet');
-          component.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
+          component.setCompactToolModeColor?.(getCurrentModeColor(ctx));
+          component.setQuietModeDisplay?.('quiet');
+          component.setQuietPreviewLineLimit?.(state.quietModeMaxToolPreviewLines);
         }
         ctx.addChildBeforeFollowUps(component);
         state.pendingTools.set(content.id, component);

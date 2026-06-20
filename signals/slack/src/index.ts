@@ -105,6 +105,7 @@ export type SlackSignalsMessage = {
   threadTs?: string;
   user?: string;
   username?: string;
+  isCurrentUser?: boolean;
   botId?: string;
   text?: string;
   permalink?: string;
@@ -235,9 +236,15 @@ export type SlackReadConversationInput = {
   abortSignal?: AbortSignal;
 };
 
+export type SlackReadViewer = {
+  userId?: string;
+  username?: string;
+};
+
 export type SlackReadConversationResult = {
   slackMessageRef: SlackMessageRef;
   channel: SlackSignalsConversation;
+  viewer?: SlackReadViewer;
   messages: SlackSignalsMessage[];
 };
 
@@ -252,6 +259,7 @@ export type SlackReadThreadInput = {
 export type SlackReadThreadResult = {
   slackMessageRef: SlackMessageRef;
   channel: SlackSignalsConversation;
+  viewer?: SlackReadViewer;
   messages: SlackSignalsMessage[];
 };
 
@@ -688,10 +696,11 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
           limit: 50,
           maxPages: channel.latestTs ? 5 : 1,
         });
+        const messages = await this.#hydrateMessageUserNames(result.messages);
 
         // On first poll (no latestTs), establish baseline without notifying
         const newMessages = channel.latestTs
-          ? result.messages.filter(msg => isNewerSlackTimestamp(msg.ts, channel.latestTs!))
+          ? messages.filter(msg => isNewerSlackTimestamp(msg.ts, channel.latestTs!))
           : [];
 
         for (const message of newMessages) {
@@ -828,6 +837,13 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
         : Promise.resolve({ messages: [] }),
     ]);
 
+    const viewer = await this.#resolveViewer(input.abortSignal);
+    const messages = await this.#hydrateMessageUserNames(
+      mergeSlackMessages(beforeResult.messages, afterResult.messages),
+      input.abortSignal,
+      viewer,
+    );
+
     return {
       slackMessageRef: {
         channelId: channel.id,
@@ -836,7 +852,8 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
         messageTs: input.aroundTs,
       },
       channel,
-      messages: mergeSlackMessages(beforeResult.messages, afterResult.messages),
+      ...(viewer ? { viewer } : {}),
+      messages,
     };
   }
 
@@ -851,6 +868,9 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
       abortSignal: input.abortSignal,
     });
 
+    const viewer = await this.#resolveViewer(input.abortSignal);
+    const messages = await this.#hydrateMessageUserNames(result.messages, input.abortSignal, viewer);
+
     return {
       slackMessageRef: {
         channelId: channel.id,
@@ -860,7 +880,8 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
         threadTs: input.threadTs,
       },
       channel,
-      messages: result.messages,
+      ...(viewer ? { viewer } : {}),
+      messages,
     };
   }
 
@@ -926,6 +947,46 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     this.#userCache = map;
     this.#userCacheTime = Date.now();
     return map;
+  }
+
+  async #resolveViewer(abortSignal?: AbortSignal): Promise<SlackReadViewer | undefined> {
+    try {
+      const workspace = await this.#syncClient.getWorkspace({ abortSignal });
+      if (!workspace.userId) return undefined;
+      const userMap = await this.#resolveUserNames(abortSignal);
+      return {
+        userId: workspace.userId,
+        ...(userMap.has(workspace.userId) ? { username: userMap.get(workspace.userId) } : {}),
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  async #hydrateMessageUserNames(
+    messages: SlackSignalsMessage[],
+    abortSignal?: AbortSignal,
+    viewer?: SlackReadViewer,
+  ): Promise<SlackSignalsMessage[]> {
+    const needsHydration = messages.some(message => message.user && !message.username);
+    const needsViewerMark = Boolean(viewer?.userId);
+    if (!needsHydration && !needsViewerMark) return messages;
+
+    try {
+      const userMap = needsHydration ? await this.#resolveUserNames(abortSignal) : undefined;
+      return messages.map(message => {
+        if (!message.user && !message.username) return message;
+        const username = message.username ?? (message.user ? userMap?.get(message.user) : undefined);
+        const isCurrentUser = Boolean(viewer?.userId && message.user === viewer.userId);
+        return {
+          ...message,
+          ...(username ? { username } : {}),
+          ...(isCurrentUser ? { isCurrentUser } : {}),
+        };
+      });
+    } catch {
+      return messages;
+    }
   }
 
   #getThreadContext(args: { requestContext?: ProcessInputStepArgs['requestContext'] }): {

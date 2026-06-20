@@ -496,12 +496,12 @@ describe('SlackSignalsProvider', () => {
         .fn()
         .mockResolvedValueOnce({
           messages: [
-            createMessage({ ts: '100.000', channelId: 'C123', channelName: 'general', text: 'before' }),
-            createMessage({ ts: '101.000', channelId: 'C123', channelName: 'general', text: 'target' }),
+            createMessage({ ts: '100.000', channelId: 'C123', channelName: 'general', user: 'U123', text: 'before' }),
+            createMessage({ ts: '101.000', channelId: 'C123', channelName: 'general', user: 'U456', text: 'target' }),
           ],
         })
         .mockResolvedValueOnce({
-          messages: [createMessage({ ts: '102.000', channelId: 'C123', channelName: 'general', text: 'after' })],
+          messages: [createMessage({ ts: '102.000', channelId: 'C123', channelName: 'general', user: 'U123', text: 'after' })],
         });
       const processor = new SlackSignalsProvider({
         token: 'xoxp-test',
@@ -509,6 +509,10 @@ describe('SlackSignalsProvider', () => {
         syncClient: createSyncClient({
           getConversation: vi.fn(async () => ({ id: 'C123', name: 'general', type: 'public_channel' as const })),
           listMessages,
+          listUsers: vi.fn(async () => [
+            { id: 'U123', name: 'tyler', displayName: 'Tyler', realName: 'Tyler Barnes' },
+            { id: 'U456', name: 'abhi', displayName: 'Abhi', realName: 'Abhi Aiyer' },
+          ]),
         }),
       });
 
@@ -523,10 +527,11 @@ describe('SlackSignalsProvider', () => {
         tools.slack_read_conversation!.execute({ channel: 'C123', aroundTs: '101.000', before: 2, after: 1 }),
       ).resolves.toMatchObject({
         slackMessageRef: { channelId: 'C123', channelName: 'general', channelType: 'public_channel', messageTs: '101.000' },
+        viewer: { userId: 'U123', username: 'Tyler' },
         messages: [
-          expect.objectContaining({ ts: '100.000', text: 'before' }),
-          expect.objectContaining({ ts: '101.000', text: 'target' }),
-          expect.objectContaining({ ts: '102.000', text: 'after' }),
+          expect.objectContaining({ ts: '100.000', user: 'U123', username: 'Tyler', isCurrentUser: true, text: 'before' }),
+          expect.objectContaining({ ts: '101.000', user: 'U456', username: 'Abhi', text: 'target' }),
+          expect.objectContaining({ ts: '102.000', user: 'U123', username: 'Tyler', isCurrentUser: true, text: 'after' }),
         ],
       });
       expect(listMessages).toHaveBeenNthCalledWith(
@@ -592,8 +597,8 @@ describe('SlackSignalsProvider', () => {
       const thread = createThread({ id: 'thread-replies', resourceId: 'resource-replies' });
       const listThreadMessages = vi.fn(async () => ({
         messages: [
-          createMessage({ ts: '200.000', threadTs: '200.000', channelId: 'C123', channelName: 'general', text: 'root' }),
-          createMessage({ ts: '201.000', threadTs: '200.000', channelId: 'C123', channelName: 'general', text: 'reply' }),
+          createMessage({ ts: '200.000', threadTs: '200.000', channelId: 'C123', channelName: 'general', user: 'U123', text: 'root' }),
+          createMessage({ ts: '201.000', threadTs: '200.000', channelId: 'C123', channelName: 'general', user: 'U456', text: 'reply' }),
         ],
       }));
       const processor = new SlackSignalsProvider({
@@ -602,6 +607,10 @@ describe('SlackSignalsProvider', () => {
         syncClient: createSyncClient({
           getConversation: vi.fn(async () => ({ id: 'C123', name: 'general', type: 'public_channel' as const })),
           listThreadMessages,
+          listUsers: vi.fn(async () => [
+            { id: 'U123', name: 'tyler', displayName: 'Tyler', realName: 'Tyler Barnes' },
+            { id: 'U456', name: 'abhi', displayName: 'Abhi', realName: 'Abhi Aiyer' },
+          ]),
         }),
       });
 
@@ -614,9 +623,10 @@ describe('SlackSignalsProvider', () => {
 
       await expect(tools.slack_read_thread!.execute({ channel: 'C123', threadTs: '200.000' })).resolves.toMatchObject({
         slackMessageRef: { channelId: 'C123', channelName: 'general', channelType: 'public_channel', messageTs: '200.000', threadTs: '200.000' },
+        viewer: { userId: 'U123', username: 'Tyler' },
         messages: [
-          expect.objectContaining({ ts: '200.000', text: 'root' }),
-          expect.objectContaining({ ts: '201.000', text: 'reply' }),
+          expect.objectContaining({ ts: '200.000', user: 'U123', username: 'Tyler', isCurrentUser: true, text: 'root' }),
+          expect.objectContaining({ ts: '201.000', user: 'U456', username: 'Abhi', text: 'reply' }),
         ],
       });
       expect(listThreadMessages).toHaveBeenCalledWith(

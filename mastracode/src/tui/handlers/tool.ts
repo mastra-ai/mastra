@@ -17,8 +17,9 @@ import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
 import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.js';
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
-import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
+import { createToolExecutionComponent } from '../components/tool-execution-factory.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
+import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
 import { showModalOverlay } from '../overlay.js';
 import { getMarkdownTheme } from '../theme.js';
 
@@ -33,12 +34,12 @@ export function isTaskMutationTool(toolName: string): boolean {
   return toolName === 'task_write' || toolName === 'task_update' || toolName === 'task_complete';
 }
 
-function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
+function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: IToolExecutionComponent): void {
   if (!ctx.state.quietMode) return;
 
-  component.setCompactToolModeColor(getCurrentModeColor(ctx));
-  component.setQuietModeDisplay('quiet');
-  component.setQuietPreviewLineLimit(ctx.state.quietModeMaxToolPreviewLines);
+  component.setCompactToolModeColor?.(getCurrentModeColor(ctx));
+  component.setQuietModeDisplay?.('quiet');
+  component.setQuietPreviewLineLimit?.(ctx.state.quietModeMaxToolPreviewLines);
 }
 
 function reconcileToolBoundaries(ctx: EventHandlerContext): void {
@@ -205,7 +206,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
 
     if (isTaskMutationTool(toolName)) {
       state.taskToolInsertIndex = state.chatContainer.children.length;
-      const component = new ToolExecutionComponentEnhanced(
+      const component = createToolExecutionComponent(
         toolName,
         args,
         { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
@@ -220,7 +221,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       return;
     }
 
-    const component = new ToolExecutionComponentEnhanced(
+    const component = createToolExecutionComponent(
       toolName,
       args,
       { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
@@ -319,7 +320,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
   } else if (isTaskMutationTool(toolName)) {
     // Record position so task_updated can place inline completed/cleared display here
     state.taskToolInsertIndex = state.chatContainer.children.length;
-    const component = new ToolExecutionComponentEnhanced(
+    const component = createToolExecutionComponent(
       toolName,
       {},
       { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
@@ -336,7 +337,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     ctx.addChildBeforeFollowUps(state.streamingComponent);
     state.ui.requestRender();
   } else if (toolName !== 'subagent') {
-    const component = new ToolExecutionComponentEnhanced(
+    const component = createToolExecutionComponent(
       toolName,
       {},
       { showImages: false, collapsedByDefault: !state.toolOutputExpanded },

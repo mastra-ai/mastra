@@ -29,7 +29,7 @@ import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
-import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
+import { createToolExecutionComponent } from './components/tool-execution-factory.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
@@ -769,7 +769,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           // Render the tool call
-          const toolComponent = new ToolExecutionComponentEnhanced(
+          const toolComponent = createToolExecutionComponent(
             content.name,
             content.args,
             {
@@ -856,9 +856,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           if (!replacedWithInline) {
             if (state.quietMode) {
-              toolComponent.setCompactToolModeColor(getCurrentModeColor(state));
-              toolComponent.setQuietModeDisplay('quiet');
-              toolComponent.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
+              toolComponent.setCompactToolModeColor?.(getCurrentModeColor(state));
+              toolComponent.setQuietModeDisplay?.('quiet');
+              toolComponent.setQuietPreviewLineLimit?.(state.quietModeMaxToolPreviewLines);
             }
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);

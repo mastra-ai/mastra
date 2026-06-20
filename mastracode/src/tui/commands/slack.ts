@@ -1,9 +1,17 @@
 import { getSlackSignalsMetadata } from '@mastra/slack-signals';
-import type { SlackSignalsConversation } from '@mastra/slack-signals';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { askModalQuestion } from '../modal-question.js';
 import { SlackChannelPickerComponent } from '../components/slack-channel-picker.js';
 import type { SlashCommandContext } from './types.js';
+
+type SlackSignalsConversation = {
+  id: string;
+  name?: string;
+  type: string;
+  isArchived?: boolean;
+  isMember?: boolean;
+  user?: string;
+};
 
 function formatLocalTimestamp(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -158,7 +166,7 @@ async function pickSlackConversations(ctx: SlashCommandContext): Promise<SlackSi
     picker.focused = true;
 
     slackSignalsProcessor.listAvailableChannels()
-      .then(conversations => {
+      .then((conversations: SlackSignalsConversation[]) => {
         if (done) return;
         if (!conversations || conversations.length === 0) {
           ctx.showInfo('No channels or DMs found. Check your token scopes.');
@@ -167,7 +175,7 @@ async function pickSlackConversations(ctx: SlashCommandContext): Promise<SlackSi
         }
         picker.setConversations(conversations);
       })
-      .catch(err => {
+      .catch((err: unknown) => {
         if (done) return;
         ctx.showError(`Failed to list Slack channels: ${err instanceof Error ? err.message : String(err)}`);
         finish(undefined);
@@ -227,7 +235,7 @@ async function subscribeSlackThread(ctx: SlashCommandContext, channelArgs: strin
 
     if (channels && channels.length > 0) {
       if (result.addedChannels?.length) {
-        ctx.showInfo(`Added ${result.addedChannels.length} channel(s): ${result.addedChannels.map(c => `#${c}`).join(', ')}`);
+        ctx.showInfo(`Added ${result.addedChannels.length} channel(s): ${result.addedChannels.map((c: string) => `#${c}`).join(', ')}`);
       } else {
         ctx.showInfo('No new channels added (already subscribed).');
       }
@@ -271,7 +279,7 @@ async function unsubscribeSlackThread(ctx: SlashCommandContext, channelArgs: str
 
     if (channels && channels.length > 0) {
       if (result.removedChannels?.length) {
-        ctx.showInfo(`Removed ${result.removedChannels.length} channel(s): ${result.removedChannels.map(c => `#${c}`).join(', ')}`);
+        ctx.showInfo(`Removed ${result.removedChannels.length} channel(s): ${result.removedChannels.map((c: string) => `#${c}`).join(', ')}`);
       } else {
         ctx.showInfo('No matching channels found to remove.');
       }
@@ -311,7 +319,7 @@ async function listSlackChannels(ctx: SlashCommandContext): Promise<void> {
       return;
     }
 
-    const lines = conversations.slice(0, 50).map(ch => {
+    const lines = conversations.slice(0, 50).map((ch: SlackSignalsConversation) => {
       return `  ${getConversationLabel(ch)} (${getConversationTypeLabel(ch.type)}) — ${ch.id}`;
     });
 

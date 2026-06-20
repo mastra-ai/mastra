@@ -9,9 +9,17 @@
 
 import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
-import type { SlackSignalsConversation } from '@mastra/slack-signals';
 import chalk from 'chalk';
 import { theme } from '../theme.js';
+
+type SlackSignalsConversation = {
+  id: string;
+  name?: string;
+  type: string;
+  isArchived?: boolean;
+  isMember?: boolean;
+  user?: string;
+};
 
 // =============================================================================
 // Types

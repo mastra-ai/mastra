@@ -163,8 +163,8 @@ export const slackSignalsCommandScenario = {
     runtime.printScreen('slack config after channel subscribe', terminal);
 
     terminal.submit('Use the Slack read tools to summarize the AIMock Slack discussion.');
-    await runtime.waitForScreenText(/slack_read_conversation/i, terminal, 20_000);
-    await runtime.waitForScreenText(/slack_read_thread/i, terminal, 20_000);
+    await runtime.waitForScreenText(/slack #general · 3 messages/i, terminal, 20_000);
+    await runtime.waitForScreenText(/slack thread · #general/i, terminal, 20_000);
     await runtime.waitForScreenText(/AIMock lets us test tools deterministically/i, terminal, 20_000);
     await runtime.waitForScreenText(/Slack signal E2E deterministic/i, terminal, 20_000);
     runtime.printScreen('slack read tools', terminal);
