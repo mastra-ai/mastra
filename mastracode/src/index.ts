@@ -455,14 +455,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     process.env.MASTRACODE_SLACK_USER_TOKEN ??
     '';
   const slackApiBaseUrl = process.env.MASTRACODE_SLACK_API_BASE_URL;
-  const slackPollIntervalMs = globalSettings.signals?.experimentalSlackSignals
-    ? globalSettings.signals.slackPollIntervalMs
-    : undefined;
   const slackSignals: SlackSignals | undefined =
     globalSettings.signals?.experimentalSlackSignals && slackToken
       ? new SlackSignals({
           token: slackToken,
-          ...(slackPollIntervalMs ? { pollIntervalMs: slackPollIntervalMs } : {}),
           ...(slackApiBaseUrl
             ? { syncClient: new SlackWebApiSyncClient({ token: slackToken, baseUrl: slackApiBaseUrl }) }
             : {}),

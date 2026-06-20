@@ -35,10 +35,9 @@ function createContext(overrides?: {
   const slackSignals = overrides?.slackSignals === null
     ? undefined
     : {
-        pollInterval: 60_000,
+        rtmConnected: false,
         subscribeThreadToSlack,
         unsubscribeThreadFromSlack,
-        isPollingThread: vi.fn(() => false),
         ...overrides?.slackSignals,
       };
 
@@ -82,7 +81,7 @@ function createContext(overrides?: {
 describe('handleSlackCommand', () => {
   beforeEach(() => {
     loadSettingsMock.mockReset();
-    loadSettingsMock.mockReturnValue({ signals: { experimentalSlackSignals: true, slackPollIntervalMs: 60_000 } });
+    loadSettingsMock.mockReturnValue({ signals: { experimentalSlackSignals: true } });
     saveSettingsMock.mockReset();
     askModalQuestionMock.mockReset();
     askModalQuestionMock.mockReset();
@@ -214,6 +213,7 @@ describe('handleSlackCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('My Team'));
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Channels tracked: 2'));
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('public_channel, im'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('RTM: disconnected'));
   });
 
   it('defaults to config when no action is provided', async () => {
@@ -230,7 +230,7 @@ describe('handleSlackCommand', () => {
     await handleSlackCommand(ctx, ['debug']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('not subscribed'));
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('polling=inactive'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('RTM=disconnected'));
   });
 
   it('shows debug info with subscription details', async () => {
@@ -257,8 +257,7 @@ describe('handleSlackCommand', () => {
     await handleSlackCommand(ctx, ['debug']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Test Workspace'));
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('general'));
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('latestTs=1700000000.000000'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('RTM: disconnected'));
   });
 
   it('shows usage hint for unknown subcommands', async () => {
@@ -266,7 +265,7 @@ describe('handleSlackCommand', () => {
 
     await handleSlackCommand(ctx, ['bogus']);
 
-    expect(ctx.showError).toHaveBeenCalledWith('Usage: /slack subscribe, /slack unsubscribe, /slack config, /slack token, /slack poll, /slack debug');
+    expect(ctx.showError).toHaveBeenCalledWith('Usage: /slack subscribe, /slack unsubscribe, /slack config, /slack token, /slack debug');
   });
 
   it('shows error when experimental Slack signals are disabled', async () => {
@@ -409,55 +408,11 @@ describe('handleSlackCommand', () => {
     expect(removeApiKey).not.toHaveBeenCalled();
   });
 
-  it('changes poll interval via /slack poll with preset choice', async () => {
-    const { ctx } = createContext();
-    askModalQuestionMock.mockResolvedValueOnce('30s');
-
-    await handleSlackCommand(ctx, ['poll']);
-
-    expect(saveSettingsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ signals: expect.objectContaining({ slackPollIntervalMs: 30_000 }) }),
-    );
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('30s'));
-  });
-
-  it('changes poll interval via /slack poll with custom seconds', async () => {
-    const { ctx } = createContext();
-    askModalQuestionMock.mockResolvedValueOnce('Custom').mockResolvedValueOnce('90');
-
-    await handleSlackCommand(ctx, ['poll']);
-
-    expect(saveSettingsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ signals: expect.objectContaining({ slackPollIntervalMs: 90_000 }) }),
-    );
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('1.5m'));
-  });
-
-  it('rejects custom poll interval outside valid range', async () => {
-    const { ctx } = createContext();
-    askModalQuestionMock.mockResolvedValueOnce('Custom').mockResolvedValueOnce('5');
-
-    await handleSlackCommand(ctx, ['poll']);
-
-    expect(saveSettingsMock).not.toHaveBeenCalled();
-    expect(ctx.showError).toHaveBeenCalledWith(expect.stringContaining('between 10 and 3600'));
-  });
-
-  it('does nothing when poll interval modal is cancelled', async () => {
-    const { ctx } = createContext();
-    askModalQuestionMock.mockResolvedValueOnce(null);
-
-    await handleSlackCommand(ctx, ['poll']);
-
-    expect(saveSettingsMock).not.toHaveBeenCalled();
-  });
-
-  it('shows poll interval in config output when not subscribed', async () => {
+  it('shows RTM state in config output when not subscribed', async () => {
     const { ctx } = createContext({ threadMetadata: undefined });
-    loadSettingsMock.mockReturnValue({ signals: { experimentalSlackSignals: true, slackPollIntervalMs: 120_000 } });
 
     await handleSlackCommand(ctx, ['config']);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Poll interval: 2m'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('RTM: disconnected'));
   });
 });

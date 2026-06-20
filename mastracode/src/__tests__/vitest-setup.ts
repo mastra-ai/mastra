@@ -58,23 +58,13 @@ vi.mock('@mastra/slack-signals', () => ({
     id = 'slack-signals';
     name = 'Slack Signals';
     isConnected = false;
+    rtmConnected = false;
     addAgent() {}
     connect() {
       this.isConnected = true;
     }
-    startPolling() {}
-    stopAllPolling() {}
+    disconnect() {}
     onSubscriptionsChanged() {}
-    onPollingChanged() {}
-    isPollingThread() {
-      return false;
-    }
-    isPollingThreadRunning() {
-      return false;
-    }
-    startPollingForThread() {
-      return Promise.resolve(true);
-    }
     getInputProcessors() {
       return [{ id: 'slack-signals', processInput: vi.fn() }];
     }

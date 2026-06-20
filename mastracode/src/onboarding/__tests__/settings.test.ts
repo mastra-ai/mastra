@@ -67,7 +67,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       stagehand: { env: 'LOCAL' },
     },
     shellPassthrough: { mode: 'default' },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: false, slackPollIntervalMs: 60_000 },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
   };

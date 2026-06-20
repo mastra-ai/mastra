@@ -114,6 +114,7 @@ function createState() {
     githubPrGradientAnimator: undefined,
     githubPrPollingActive: false,
     slackPollingActive: false,
+
     modelAuthStatus: { hasAuth: true, apiKeyEnvVar: undefined },
     projectInfo: {
       rootPath: '/Users/tylerbarnes/code/mastra-ai/mastra--feat-mc-queueing-ux',

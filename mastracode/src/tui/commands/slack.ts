@@ -1,14 +1,7 @@
 import { getSlackSignalsMetadata } from '@mastra/slack-signals';
-import { loadSettings, saveSettings } from '../../onboarding/settings.js';
+import { loadSettings } from '../../onboarding/settings.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';
-
-function formatPollInterval(ms: number): string {
-  const seconds = Math.round(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = seconds / 60;
-  return `${minutes}m`;
-}
 
 function formatLocalTimestamp(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -51,8 +44,6 @@ async function getCurrentSlackThread(ctx: SlashCommandContext): Promise<{
 }
 
 function getSlackSubscriptionFromThreadMetadata(metadata: Record<string, unknown> | undefined) {
-  // getSlackSignalsMetadata expects the full thread metadata and extracts
-  // mastra.slackSignals internally — don't pre-extract the key.
   return getSlackSignalsMetadata(metadata).subscription;
 }
 
@@ -78,24 +69,24 @@ async function describeSlackSubscription(ctx: SlashCommandContext): Promise<stri
     : 'Token: not configured — use /slack token to set it';
 
   const subscription = getSlackSubscriptionFromThreadMetadata(metadata);
-  const settingsPollMs = loadSettings().signals.slackPollIntervalMs;
+  const slackSignalsProcessor = ctx.state.options?.slackSignals;
+  const rtmConnected = slackSignalsProcessor?.rtmConnected ?? false;
+  const rtmState = rtmConnected ? 'connected' : 'disconnected';
+
   if (!subscription) {
     return `Slack Signals for ${threadId}: not subscribed.
   ${tokenLine}
-  Poll interval: ${formatPollInterval(settingsPollMs)} (change with /slack poll)`;
+  RTM: ${rtmState}`;
   }
 
-  const slackSignalsProcessor = ctx.state.options?.slackSignals;
-  const pollIntervalMs = slackSignalsProcessor?.pollInterval ?? settingsPollMs;
   const channelCount = Object.keys(subscription.channels ?? {}).length;
 
   const header = `Slack Signals for ${threadId}:
   Workspace: ${subscription.workspaceName ?? subscription.workspaceId}
   Conversation types: ${subscription.conversationTypes?.join(', ') ?? 'default'}
   Channels tracked: ${channelCount}
+  RTM: ${rtmState}
   Subscribed at: ${formatLocalTimestamp(subscription.subscribedAt) ?? 'unknown'}
-  Last sync: ${subscription.lastSyncAt ? formatLocalTimestamp(subscription.lastSyncAt) : 'never'}${subscription.lastSyncStatus ? ` (${subscription.lastSyncStatus})` : ''}${subscription.lastSyncError ? `\n  Last error: ${subscription.lastSyncError}` : ''}
-  Poll interval: ${formatPollInterval(pollIntervalMs)} (change with /slack poll)
   ${tokenLine}`;
 
   return header;
@@ -121,7 +112,6 @@ async function subscribeSlackThread(ctx: SlashCommandContext): Promise<void> {
     } else {
       ctx.showInfo(`Subscribed this thread to Slack workspace ${result.workspaceName ?? result.workspaceId}.`);
     }
-    // Update statusline badge immediately
     if (result.workspaceId) {
       ctx.state.activeSlackSubscription = {
         workspaceId: result.workspaceId,
@@ -156,7 +146,6 @@ async function unsubscribeSlackThread(ctx: SlashCommandContext): Promise<void> {
     } else {
       ctx.showInfo('This thread is not subscribed to Slack.');
     }
-    // Clear statusline badge immediately
     ctx.state.activeSlackSubscription = undefined;
     ctx.updateStatusLine();
   } catch (error) {
@@ -208,7 +197,6 @@ async function manageSlackToken(ctx: SlashCommandContext): Promise<void> {
     return;
   }
 
-  // No existing token — the typed response is the new token
   if (!hasToken && choice.startsWith('xoxp-')) {
     ctx.authStorage?.setStoredApiKey('slack-signals', choice, 'SLACK_USER_TOKEN');
     ctx.showInfo('Slack token saved. Restart MastraCode for Slack signals to use it.');
@@ -218,89 +206,27 @@ async function manageSlackToken(ctx: SlashCommandContext): Promise<void> {
   ctx.showError('A valid Slack user token (starting with xoxp-) is required.');
 }
 
-async function manageSlackPollInterval(ctx: SlashCommandContext): Promise<void> {
-  const settings = loadSettings();
-  const currentMs = settings.signals.slackPollIntervalMs;
-  const currentLabel = formatPollInterval(currentMs);
-
-  const choice = await askModalQuestion(ctx.state.ui, {
-    question: `Current poll interval: ${currentLabel}\n\nChoose a new interval:`,
-    options: [
-      { label: '30s', description: 'Aggressive — check every 30 seconds' },
-      { label: '1m', description: 'Default — check every minute' },
-      { label: '2m', description: 'Relaxed — check every 2 minutes' },
-      { label: '5m', description: 'Low priority — check every 5 minutes' },
-      { label: 'Custom', description: 'Enter a custom interval in seconds' },
-    ],
-  });
-
-  if (!choice) return;
-
-  let newMs: number;
-  if (choice === '30s') newMs = 30_000;
-  else if (choice === '1m') newMs = 60_000;
-  else if (choice === '2m') newMs = 120_000;
-  else if (choice === '5m') newMs = 300_000;
-  else if (choice === 'Custom') {
-    const input = await askModalQuestion(ctx.state.ui, {
-      question: 'Enter poll interval in seconds (10–3600):',
-      allowCustomResponse: true,
-      allowEmptyInput: false,
-    });
-    if (!input) return;
-    const seconds = Number(input);
-    if (!Number.isFinite(seconds) || seconds < 10 || seconds > 3600) {
-      ctx.showError('Interval must be between 10 and 3600 seconds.');
-      return;
-    }
-    newMs = Math.floor(seconds * 1000);
-  } else {
-    return;
-  }
-
-  settings.signals.slackPollIntervalMs = newMs;
-  saveSettings(settings);
-  ctx.showInfo(`Poll interval changed to ${formatPollInterval(newMs)}. Restart MastraCode for it to take effect.`);
-}
-
 async function describeSlackDebug(ctx: SlashCommandContext): Promise<string> {
-  const { threadId, resourceId, metadata } = await getCurrentSlackThread(ctx);
+  const { threadId, metadata } = await getCurrentSlackThread(ctx);
   if (!threadId) return 'Slack Signals debug: no current thread.';
 
   const slackSignalsProcessor = ctx.state.options?.slackSignals;
-  const pollingActive = resourceId
-    ? (slackSignalsProcessor?.isPollingThread?.({ threadId, resourceId }) ?? false)
-    : false;
-  const pollIntervalMs = slackSignalsProcessor?.pollInterval;
+  const rtmConnected = slackSignalsProcessor?.rtmConnected ?? false;
   const { token, source } = getTokenSource(ctx);
 
   const slackMetadata = getSlackSignalsMetadata(metadata);
   const subscription = slackMetadata.subscription;
   if (!subscription) {
-    return `Slack Signals debug for ${threadId}: not subscribed, polling=${pollingActive ? 'active' : 'inactive'}${pollIntervalMs ? `, interval=${formatPollInterval(pollIntervalMs)}` : ''}, token=${token ? source : 'none'}`;
+    return `Slack Signals debug for ${threadId}: not subscribed, RTM=${rtmConnected ? 'connected' : 'disconnected'}, token=${token ? source : 'none'}`;
   }
-
-  const channelEntries = Object.entries(subscription.channels ?? {});
-  const channelDebugLines = channelEntries.length > 0
-    ? channelEntries.map(([channelId, ch]) => {
-        const name = ch.name ?? channelId;
-        const type = ch.type ?? 'unknown';
-        const latestTs = ch.latestTs ?? 'none';
-        const syncStatus = ch.lastSyncStatus ?? 'unknown';
-        return `- ${name} (${type}) latestTs=${latestTs} sync=${syncStatus}`;
-      }).join('\n')
-    : '  No channels tracked yet.';
 
   return `Slack Signals debug for ${threadId}:
   Workspace: ${subscription.workspaceName ?? subscription.workspaceId}
   Conversation types: ${subscription.conversationTypes.join(', ') || 'default'}
-  Channels tracked: ${channelEntries.length}
-  Polling: ${pollingActive ? 'active' : 'inactive'}${pollIntervalMs ? `, interval=${formatPollInterval(pollIntervalMs)}` : ''}
+  RTM: ${rtmConnected ? 'connected' : 'disconnected'}
   Token: ${token ? `${maskToken(token)} (${source})` : 'none'}
   Subscribed at: ${formatLocalTimestamp(subscription.subscribedAt) ?? 'unknown'}
-  Last sync: ${subscription.lastSyncAt ? formatLocalTimestamp(subscription.lastSyncAt) : 'never'}${subscription.lastSyncStatus ? ` (${subscription.lastSyncStatus})` : ''}${subscription.lastSyncError ? `\n  Last error: ${subscription.lastSyncError}` : ''}
-  Channels:
-${channelDebugLines}`;
+  Last sync: ${subscription.lastSyncAt ? formatLocalTimestamp(subscription.lastSyncAt) : 'never'}${subscription.lastSyncStatus ? ` (${subscription.lastSyncStatus})` : ''}${subscription.lastSyncError ? `\n  Last error: ${subscription.lastSyncError}` : ''}`;
 }
 
 export async function handleSlackCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
@@ -323,10 +249,6 @@ export async function handleSlackCommand(ctx: SlashCommandContext, args: string[
     await manageSlackToken(ctx);
     return;
   }
-  if (action === 'poll' || action === 'interval') {
-    await manageSlackPollInterval(ctx);
-    return;
-  }
   if (action === 'debug') {
     ctx.showInfo(await describeSlackDebug(ctx));
     return;
@@ -336,5 +258,5 @@ export async function handleSlackCommand(ctx: SlashCommandContext, args: string[
     return;
   }
 
-  ctx.showError('Usage: /slack subscribe, /slack unsubscribe, /slack config, /slack token, /slack poll, /slack debug');
+  ctx.showError('Usage: /slack subscribe, /slack unsubscribe, /slack config, /slack token, /slack debug');
 }

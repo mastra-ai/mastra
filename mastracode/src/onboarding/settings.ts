@@ -235,8 +235,6 @@ export interface SignalSettings {
   experimentalGithubSignals: boolean;
   /** Experimental: enable Slack message signals backed by the Slack Web API. */
   experimentalSlackSignals: boolean;
-  /** Slack signals poll interval in milliseconds (min 10_000, default 60_000). */
-  slackPollIntervalMs: number;
 }
 
 export interface ObservabilityResourceConfig {
@@ -308,7 +306,7 @@ const DEFAULTS: GlobalSettings = {
     stagehand: { env: 'LOCAL' },
   },
   shellPassthrough: { mode: 'default' },
-  signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: false, slackPollIntervalMs: 60_000 },
+  signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: false },
   observability: { resources: {}, localTracing: false },
 };
 
@@ -329,8 +327,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
   return (
     left.unixSocketPubSub === right.unixSocketPubSub &&
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
-    left.experimentalSlackSignals === right.experimentalSlackSignals &&
-    left.slackPollIntervalMs === right.slackPollIntervalMs
+    left.experimentalSlackSignals === right.experimentalSlackSignals
   );
 }
 
@@ -359,7 +356,6 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
 
 function parseSignalSettings(rawSignals: unknown): SignalSettings {
   const raw = rawSignals && typeof rawSignals === 'object' ? (rawSignals as Record<string, unknown>) : {};
-  const rawPollInterval = typeof raw.slackPollIntervalMs === 'number' ? raw.slackPollIntervalMs : DEFAULTS.signals.slackPollIntervalMs;
   return {
     unixSocketPubSub:
       typeof raw.unixSocketPubSub === 'boolean' ? raw.unixSocketPubSub : DEFAULTS.signals.unixSocketPubSub,
@@ -371,7 +367,6 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalSlackSignals === 'boolean'
         ? raw.experimentalSlackSignals
         : DEFAULTS.signals.experimentalSlackSignals,
-    slackPollIntervalMs: Math.min(3_600_000, Math.max(10_000, Math.floor(rawPollInterval))),
   };
 }
 
