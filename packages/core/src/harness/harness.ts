@@ -3693,10 +3693,14 @@ export class Harness<TState = {}> {
                 },
               };
 
-              // Exclude the in-flight assistant message (the one containing the
-              // current subagent tool call) so the fork doesn't see a
-              // half-finished `subagent` call in its cloned history. Without this
-              // the forked model mirrors the parent's incomplete tool invocation.
+              let syntheticForkResult: MastraDBMessage | undefined;
+
+              // Replace the in-flight assistant message (the one containing the
+              // current subagent tool call) with a completed synthetic result in
+              // the fork clone. Keeping the half-finished call makes the forked
+              // model mirror it; dropping it entirely makes the fork think it
+              // still needs to call `subagent`. The synthetic result tells the
+              // model that this cloned context is already the forked subagent.
               if (excludeToolCallId) {
                 const { messages: allMessages } = await memory.recall({ threadId: sourceThreadId, perPage: false });
                 const excludedIds = new Set<string>();
@@ -3716,9 +3720,42 @@ export class Harness<TState = {}> {
                 cloneInput.options = {
                   messageFilter: { messageIds: includedIds },
                 };
+
+                syntheticForkResult = {
+                  id: randomUUID(),
+                  role: 'assistant',
+                  createdAt: new Date(),
+                  content: {
+                    format: 2,
+                    parts: [
+                      {
+                        type: 'tool-invocation',
+                        toolInvocation: {
+                          state: 'result',
+                          toolCallId: excludeToolCallId,
+                          toolName: 'subagent',
+                          args: {},
+                          result:
+                            'The subagent tool call is complete. The current context window is now the forked subagent. Complete the delegated task directly using the available tools; do not call the subagent tool again.',
+                        },
+                      },
+                    ],
+                  },
+                };
               }
 
               const result = await memory.cloneThread(cloneInput);
+              if (syntheticForkResult) {
+                await memory.saveMessages({
+                  messages: [
+                    {
+                      ...syntheticForkResult,
+                      threadId: result.thread.id,
+                      resourceId: result.thread.resourceId,
+                    },
+                  ],
+                });
+              }
               return { id: result.thread.id, resourceId: result.thread.resourceId };
             }
           : undefined,

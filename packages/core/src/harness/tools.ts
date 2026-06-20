@@ -92,9 +92,8 @@ export interface CreateSubagentToolOptions {
     title?: string;
     /**
      * Tool-call ID of the current `subagent` invocation. The harness uses this
-     * to exclude the in-flight assistant message (the one containing this tool
-     * call) from the cloned thread so the fork doesn't see a half-finished
-     * subagent call in its history.
+     * to replace the in-flight assistant message (the one containing this tool
+     * call) with a synthetic completed result in the cloned fork history.
      */
     excludeToolCallId?: string;
   }) => Promise<{ id: string; resourceId: string }>;
@@ -242,10 +241,10 @@ Use this tool when:
         resolvedModelId = opts.getParentModelId?.() || 'parent-agent';
         task = `${FORKED_SUBAGENT_NESTING_NOTICE}\n\n${FORKED_SUBAGENT_TASK_NOTICE}\n\nUser task:\n${task}`;
         streamMemory = { thread: forkedThread.id, resource: forkedThread.resourceId };
-        // Allow a recovery step if the forked model accidentally calls the
-        // inherited-but-disabled `subagent` tool. Without this, the single-step
-        // default can return only the stub tool result instead of the answer.
-        streamMaxSteps = 1000;
+        // Keep the legacy subagent step budget. The fork history includes a
+        // synthetic completed subagent result, so the model should complete the
+        // delegated task directly instead of recursively calling `subagent`.
+        streamMaxSteps = 50;
         streamStopWhen = undefined;
         streamPrepareStep = undefined;
 

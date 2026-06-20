@@ -670,15 +670,13 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(taskArg).toContain('YOU are now a forked subagent');
     expect(taskArg).toContain('Do not call the `subagent` tool');
     expect(taskArg).toContain('User task:\nDig deeper');
-    expect(taskArg.indexOf('You are already running as the forked subagent')).toBeLessThan(
-      taskArg.indexOf('User task:\nDig deeper'),
-    );
+    expect(taskArg.indexOf('YOU are now a forked subagent')).toBeLessThan(taskArg.indexOf('User task:\nDig deeper'));
     // Memory option points at the cloned thread so history is inherited
     // without polluting the parent thread.
     expect(streamOpts.memory).toEqual({ thread: 'forked-thread-1', resource: 'parent-resource-1' });
-    // Forked runs need multiple steps so an accidental nested-subagent call can
-    // consume the runtime stub and then produce a direct answer on the next step.
-    expect(streamOpts.maxSteps).toBe(1000);
+    // Forked runs keep the legacy subagent step budget and should complete
+    // directly from the synthetic completed subagent result in cloned history.
+    expect(streamOpts.maxSteps).toBe(50);
 
     expect(harnessCtx.emitEvent).toHaveBeenCalledWith(
       expect.objectContaining({

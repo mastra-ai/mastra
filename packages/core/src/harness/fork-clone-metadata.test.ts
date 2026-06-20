@@ -102,11 +102,11 @@ describe('Harness fork clone metadata wiring', () => {
     });
   });
 
-  it('excludes the in-flight subagent tool-call message from the fork clone', async () => {
+  it('replaces the in-flight subagent tool-call message with a synthetic completed result in the fork clone', async () => {
     // When the fork clone callback receives excludeToolCallId, the harness
-    // should list the parent thread messages, find the one containing that
-    // tool call, and pass only the remaining message IDs via messageFilter so
-    // the fork doesn't see a half-finished subagent invocation in its history.
+    // should list the parent thread messages, exclude the half-finished
+    // assistant message from cloneThread, then append a synthetic completed
+    // subagent result so the fork knows it is already inside the forked context.
     const cloneThread = vi.fn().mockResolvedValue({
       thread: {
         id: 'forked-thread-id',
@@ -155,7 +155,8 @@ describe('Harness fork clone metadata wiring', () => {
       hasMore: false,
     });
 
-    const memoryFactory = vi.fn().mockResolvedValue({ cloneThread, recall });
+    const saveMessages = vi.fn().mockResolvedValue({ messages: [] });
+    const memoryFactory = vi.fn().mockResolvedValue({ cloneThread, recall, saveMessages });
 
     const subagents: HarnessSubagent[] = [
       {
@@ -205,11 +206,30 @@ describe('Harness fork clone metadata wiring', () => {
 
     expect(cloneThread).toHaveBeenCalledTimes(1);
     const cloneArg = cloneThread.mock.calls[0]![0];
-    // The assistant message containing the subagent tool call is excluded.
+    // The assistant message containing the half-finished subagent tool call is excluded.
     expect(cloneArg.options.messageFilter.messageIds).not.toContain('msg-asst-1');
     // Prior user messages are still included.
     expect(cloneArg.options.messageFilter.messageIds).toContain('msg-user-1');
     expect(cloneArg.options.messageFilter.messageIds).toContain('msg-user-2');
+
+    expect(saveMessages).toHaveBeenCalledTimes(1);
+    const savedMessage = saveMessages.mock.calls[0]![0].messages[0];
+    expect(savedMessage.threadId).toBe('forked-thread-id');
+    expect(savedMessage.resourceId).toBe('parent-resource');
+    expect(savedMessage.role).toBe('assistant');
+    expect(savedMessage.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-sub-1',
+          toolName: 'subagent',
+          args: {},
+          result:
+            'The subagent tool call is complete. The current context window is now the forked subagent. Complete the delegated task directly using the available tools; do not call the subagent tool again.',
+        },
+      },
+    ]);
   });
 
   it('does not create the subagent tool from gateways without an app-provided resolver', async () => {
