@@ -100,14 +100,31 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
   insertTaskHistoryComponent(state, container, insertIndex);
 }
 
+export function renderCompletedTasksInline(
+  state: TUIState,
+  completedTasks: TaskItemSnapshot[],
+  insertIndex = -1,
+): void {
+  const container = new TaskHistoryComponent();
+  const count = completedTasks.length;
+  container.addChild(
+    new Text(`${theme.fg('accent', 'Tasks')} ${theme.fg('dim', `[${count}/${count} completed]`)}`, BOX_INDENT, 0),
+  );
+  for (const task of completedTasks) {
+    const icon = chalk.hex(mastra.green)('✓');
+    const text = chalk.hex(theme.getTheme().success)(task.content);
+    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
+  }
+  insertTaskHistoryComponent(state, container, insertIndex);
+}
+
 function renderTaskTransitionFromHistory(
   state: TUIState,
   previousTasks: TaskItemSnapshot[],
   nextTasks: TaskItemSnapshot[],
 ): { tasks: TaskItemSnapshot[]; replacedWithInline: boolean } {
   if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
-    // A fully-completed list hides its pinned view and leaves no inline receipt
-    // (matches the live path); the transcript already narrates completion.
+    renderCompletedTasksInline(state, nextTasks);
     return { tasks: nextTasks, replacedWithInline: true };
   }
 
@@ -246,6 +263,37 @@ export function removePendingUserMessage(state: TUIState, messageId: string): vo
   state.chatContainer.removeChild(pending.component as never);
   state.pendingSignalMessageComponentsById.delete(messageId);
   state.ui.requestRender();
+}
+
+export function confirmPendingSlashCommandMessage(
+  state: TUIState,
+  messageId: string,
+  commandName: string,
+  commandContent: string,
+): SlashCommandComponent | undefined {
+  const pending = state.pendingSignalMessageComponentsById.get(messageId);
+  if (!pending) return undefined;
+
+  const existingSlashComp = state.allSlashCommandComponents.find(
+    component =>
+      component.matches(commandName, commandContent) && state.chatContainer.children.includes(component as never),
+  );
+  const slashComp = existingSlashComp ?? new SlashCommandComponent(commandName, commandContent);
+  if (!existingSlashComp) {
+    state.allSlashCommandComponents.push(slashComp);
+  }
+
+  const idx = state.chatContainer.children.indexOf(pending.component as never);
+  if (idx >= 0) {
+    (state.chatContainer.children as unknown[]).splice(idx, 1, slashComp);
+    reconcileChatBoundarySpacers(state.chatContainer);
+  } else if (!existingSlashComp) {
+    addChildBeforeFollowUps(state, slashComp);
+  }
+
+  state.pendingSignalMessageComponentsById.delete(messageId);
+  state.ui.requestRender();
+  return slashComp;
 }
 
 export function clearPendingUserMessages(state: TUIState): void {
@@ -449,9 +497,9 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     const commandContent = slashCommandMatch[2]!.trim();
     const pending = state.pendingSignalMessageComponentsById.get(message.id);
     if (pending) {
-      state.chatContainer.removeChild(pending.component as never);
-      state.pendingSignalMessageComponentsById.delete(message.id);
-      reconcileChatBoundarySpacers(state.chatContainer);
+      const slashComp = confirmPendingSlashCommandMessage(state, message.id, commandName, commandContent);
+      if (slashComp) state.messageComponentsById.set(message.id, slashComp);
+      return;
     }
     const existingSlashComp = state.allSlashCommandComponents.find(
       component =>

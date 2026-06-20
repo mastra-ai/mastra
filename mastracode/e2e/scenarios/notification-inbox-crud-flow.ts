@@ -11,7 +11,6 @@ export const notificationInboxCrudFlowScenario = {
   name: 'notification-inbox-crud-flow',
   description: 'Exercise notification_inbox list, markSeen, dismiss, archive, and search through the real TUI.',
   testName: 'manages seeded notification inbox records through CRUD and search actions',
-  skipReason: 'current main collapses notification CRUD tool output before all status assertions remain visible',
   useOpenAIModel: true,
   aimockFixture: 'notification-inbox-crud-flow.json',
   async inProcessApp({ startMastraCodeApp }): Promise<McE2eInProcessApp> {
@@ -118,9 +117,9 @@ export const notificationInboxCrudFlowScenario = {
     runtime.printScreen('after seed turn', terminal);
 
     terminal.submit('Exercise notification inbox CRUD and search.');
-    await runtime.waitForScreenText(/"status": "seen"/i, terminal, 15_000);
-    await runtime.waitForScreenText(/"status": "dismissed"/i, terminal, 15_000);
-    await runtime.waitForScreenText(/"status": "archived"/i, terminal, 15_000);
+    await runtime.waitForOutputText(/"status": "seen"/i, terminal, 15_000);
+    await runtime.waitForOutputText(/"status": "dismissed"/i, terminal, 15_000);
+    await runtime.waitForOutputText(/"status": "archived"/i, terminal, 15_000);
     await runtime.waitForScreenText(/Notification inbox CRUD\/search e2e complete/i, terminal, 15_000);
     runtime.printScreen('after notification inbox crud flow', terminal);
     terminal.keyCtrlC();

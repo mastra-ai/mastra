@@ -62,6 +62,7 @@ export type ScenarioName =
   | 'integration-commands'
   | 'lifecycle-hooks-configured'
   | 'login-dialog-masked-input'
+  | 'long-thread-startup-history'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
@@ -130,6 +131,7 @@ export type McE2eTerminal = {
   flushInput?: () => Promise<void>;
   keyCtrlC: () => void;
   serialize: () => { view: string };
+  serializeHistory?: () => { output: string };
   submit: (text: string) => void;
   write: (text: string) => void;
 };
@@ -138,6 +140,7 @@ export type McE2eScenarioRuntime = {
   printScreen: (label: string, terminal: McE2eTerminal) => void;
   sleep: (ms: number) => Promise<void>;
   startLiveOutput: (terminal: McE2eTerminal) => void;
+  waitForOutputText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenTextAbsent: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
 };

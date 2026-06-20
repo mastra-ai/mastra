@@ -41,7 +41,6 @@ export const fileAttachmentBlockedRetryScenario = {
   name: 'file-attachment-blocked-retry',
   description: 'Preserves a pasted image when a user prompt hook blocks the first submit and succeeds on retry.',
   testName: 'preserves pasted image attachments after a blocked submit retry',
-  skipReason: 'current main no longer restores editor attachments after a UserPromptSubmit hook block',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
   aimockFixture: 'file-attachment-blocked-retry.json',
@@ -62,7 +61,7 @@ export const fileAttachmentBlockedRetryScenario = {
             {
               type: 'command',
               command: 'node .mastracode/block-first-attachment.cjs',
-              timeout: 3000,
+              timeout: 10_000,
               description: 'block first attachment submit',
             },
           ],
@@ -73,7 +72,13 @@ export const fileAttachmentBlockedRetryScenario = {
     );
   },
   async inProcessApp({ startMastraCodeApp }) {
-    const restoreFetch = installOpenAIFetchCapture({ capturePath: RAW_REQUEST_CAPTURE_PATH });
+    const restoreFetch = installOpenAIFetchCapture({
+      capturePath: RAW_REQUEST_CAPTURE_PATH,
+      requireBodyIncludes: [
+        { value: 'image/png', label: 'restored image MIME type' },
+        { value: TINY_PNG_BASE64, label: 'restored image payload' },
+      ],
+    });
     const app = await startMastraCodeApp();
     return {
       stop: async () => {
