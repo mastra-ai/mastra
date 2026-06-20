@@ -235,6 +235,8 @@ export interface SignalSettings {
   experimentalGithubSignals: boolean;
   /** Experimental: enable Slack message signals backed by the Slack Web API. */
   experimentalSlackSignals: boolean;
+  /** Slack signal polling interval in milliseconds. */
+  slackPollIntervalMs: number;
 }
 
 export interface ObservabilityResourceConfig {
@@ -306,7 +308,12 @@ const DEFAULTS: GlobalSettings = {
     stagehand: { env: 'LOCAL' },
   },
   shellPassthrough: { mode: 'default' },
-  signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: false },
+  signals: {
+    unixSocketPubSub: false,
+    experimentalGithubSignals: false,
+    experimentalSlackSignals: false,
+    slackPollIntervalMs: 60_000,
+  },
   observability: { resources: {}, localTracing: false },
 };
 
@@ -327,7 +334,8 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
   return (
     left.unixSocketPubSub === right.unixSocketPubSub &&
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
-    left.experimentalSlackSignals === right.experimentalSlackSignals
+    left.experimentalSlackSignals === right.experimentalSlackSignals &&
+    left.slackPollIntervalMs === right.slackPollIntervalMs
   );
 }
 
@@ -367,6 +375,10 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalSlackSignals === 'boolean'
         ? raw.experimentalSlackSignals
         : DEFAULTS.signals.experimentalSlackSignals,
+    slackPollIntervalMs:
+      typeof raw.slackPollIntervalMs === 'number' && Number.isFinite(raw.slackPollIntervalMs)
+        ? Math.max(10_000, Math.floor(raw.slackPollIntervalMs))
+        : DEFAULTS.signals.slackPollIntervalMs,
   };
 }
 

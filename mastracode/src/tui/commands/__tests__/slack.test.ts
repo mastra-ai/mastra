@@ -205,8 +205,8 @@ describe('handleSlackCommand', () => {
               updatedAt: '2024-01-01T00:00:00.000Z',
               lastSubscribeSignalId: 'sig-1',
               channels: {
-                C001: { latestTs: '1700000000.000000' },
-                D001: { latestTs: '1700000001.000000' },
+                C001: { id: 'C001', type: 'public_channel', subscribedAt: '2024-01-01T00:00:00.000Z', latestTs: '1700000000.000000' },
+                D001: { id: 'D001', type: 'im', subscribedAt: '2024-01-01T00:00:00.000Z', latestTs: '1700000001.000000' },
               },
               lastSyncAt: '2024-01-02T00:00:00.000Z',
               lastSyncStatus: 'success',
@@ -253,7 +253,7 @@ describe('handleSlackCommand', () => {
               updatedAt: '2024-01-01T00:00:00.000Z',
               lastSubscribeSignalId: 'sig-1',
               channels: {
-                C001: { id: 'C001', name: 'general', type: 'public_channel', latestTs: '1700000000.000000', lastSyncStatus: 'success' },
+                C001: { id: 'C001', name: 'general', type: 'public_channel', subscribedAt: '2024-01-01T00:00:00.000Z', latestTs: '1700000000.000000', lastSyncStatus: 'success' },
               },
             },
           },
@@ -267,12 +267,25 @@ describe('handleSlackCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Poll interval: 60s'));
   });
 
+  it('updates Slack poll interval from /slack poll', async () => {
+    const { ctx } = createContext();
+    loadSettingsMock.mockReturnValue({ signals: { experimentalSlackSignals: true, slackPollIntervalMs: 60_000 } });
+    askModalQuestionMock.mockResolvedValue('30s');
+
+    await handleSlackCommand(ctx, ['poll']);
+
+    expect(saveSettingsMock).toHaveBeenCalledWith({
+      signals: { experimentalSlackSignals: true, slackPollIntervalMs: 30_000 },
+    });
+    expect(ctx.showInfo).toHaveBeenCalledWith('Slack poll interval set to 30s. Restart MastraCode for the new interval to take effect.');
+  });
+
   it('shows usage hint for unknown subcommands', async () => {
     const { ctx } = createContext();
 
     await handleSlackCommand(ctx, ['bogus']);
 
-    expect(ctx.showError).toHaveBeenCalledWith('Usage: /slack subscribe [#channel...], /slack unsubscribe [#channel...], /slack channels, /slack config, /slack token, /slack debug');
+    expect(ctx.showError).toHaveBeenCalledWith('Usage: /slack subscribe [#channel...], /slack unsubscribe [#channel...], /slack channels, /slack config, /slack token, /slack poll, /slack debug');
   });
 
   it('shows error when experimental Slack signals are disabled', async () => {

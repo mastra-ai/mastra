@@ -305,14 +305,15 @@ function parseChannelState(rawChannel: unknown): SlackSignalsChannelState | unde
   if (!isPlainObject(rawChannel)) return undefined;
   const id = readString(rawChannel.id);
   const type = rawChannel.type;
-  if (!id || !isSlackConversationType(type)) return undefined;
+  const subscribedAt = readString(rawChannel.subscribedAt);
+  if (!id || !isSlackConversationType(type) || !subscribedAt) return undefined;
   return {
     id,
     type,
     ...(readString(rawChannel.name) ? { name: readString(rawChannel.name)! } : {}),
     ...(readString(rawChannel.latestTs) ? { latestTs: readString(rawChannel.latestTs)! } : {}),
     ...(readString(rawChannel.latestMessageHash) ? { latestMessageHash: readString(rawChannel.latestMessageHash)! } : {}),
-    ...(readString(rawChannel.subscribedAt) ? { subscribedAt: readString(rawChannel.subscribedAt)! } : {}),
+    subscribedAt,
     ...(readString(rawChannel.lastSyncAt) ? { lastSyncAt: readString(rawChannel.lastSyncAt)! } : {}),
     ...(rawChannel.lastSyncStatus === 'success' || rawChannel.lastSyncStatus === 'error' || rawChannel.lastSyncStatus === 'skipped'
       ? { lastSyncStatus: rawChannel.lastSyncStatus }

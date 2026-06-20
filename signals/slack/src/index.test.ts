@@ -11,6 +11,7 @@ import {
   SLACK_SIGNALS_METADATA_KEY,
   SlackSignalsProvider,
   getSlackConversationTypes,
+  getSlackSignalsMetadata,
 } from './index.js';
 import type {
   SlackSignalsConversation,
@@ -168,6 +169,21 @@ function createMockAgent() {
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe('SlackSignalsProvider', () => {
+  describe('metadata parsing', () => {
+    it('ignores legacy auto-discovered channels without a subscribedAt marker', () => {
+      const thread = createSubscribedThread({
+        channels: {
+          CLEGACY: { id: 'CLEGACY', name: 'legacy', type: 'public_channel', latestTs: '100.000' },
+          CSELECTED: createChannelState({ id: 'CSELECTED', name: 'selected' }),
+        },
+      });
+
+      const metadata = getSlackSignalsMetadata(thread.metadata);
+
+      expect(Object.keys(metadata.subscription?.channels ?? {})).toEqual(['CSELECTED']);
+    });
+  });
+
   describe('configuration', () => {
     it('exposes provider id and name', () => {
       const provider = new SlackSignalsProvider({ token: 'xoxp-test', syncClient: createSyncClient() });

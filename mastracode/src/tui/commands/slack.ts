@@ -1,5 +1,5 @@
 import { getSlackSignalsMetadata } from '@mastra/slack-signals';
-import { loadSettings } from '../../onboarding/settings.js';
+import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -60,7 +60,7 @@ function getTokenSource(ctx: SlashCommandContext): { token: string | undefined; 
 }
 
 async function describeSlackSubscription(ctx: SlashCommandContext): Promise<string> {
-  const { threadId, metadata } = await getCurrentSlackThread(ctx);
+  const { threadId, resourceId, metadata } = await getCurrentSlackThread(ctx);
   if (!threadId) return 'Slack Signals: no current thread.';
 
   const { token, source } = getTokenSource(ctx);
@@ -70,7 +70,7 @@ async function describeSlackSubscription(ctx: SlashCommandContext): Promise<stri
 
   const subscription = getSlackSubscriptionFromThreadMetadata(metadata);
   const slackSignalsProcessor = ctx.state.options?.slackSignals;
-  const isPolling = slackSignalsProcessor?.isPollingThread?.({ threadId, resourceId: ctx.harness as any }) ?? false;
+  const isPolling = resourceId ? (slackSignalsProcessor?.isPollingThread?.({ threadId, resourceId }) ?? false) : false;
   const pollInterval = slackSignalsProcessor?.pollInterval ? `${Math.round(slackSignalsProcessor.pollInterval / 1000)}s` : '60s';
 
   if (!subscription) {
@@ -277,6 +277,61 @@ async function manageSlackToken(ctx: SlashCommandContext): Promise<void> {
   ctx.showError('A valid Slack user token (starting with xoxp-) is required.');
 }
 
+function formatPollInterval(ms: number): string {
+  if (ms % 60_000 === 0) return `${ms / 60_000}m`;
+  if (ms % 1000 === 0) return `${ms / 1000}s`;
+  return `${ms}ms`;
+}
+
+async function manageSlackPollInterval(ctx: SlashCommandContext): Promise<void> {
+  const settings = loadSettings();
+  const current = settings.signals.slackPollIntervalMs ?? 60_000;
+  const choice = await askModalQuestion(ctx.state.ui, {
+    question: `Slack poll interval is currently ${formatPollInterval(current)}. Choose a new interval:`,
+    options: [
+      { label: '30s', description: 'Poll selected channels every 30 seconds' },
+      { label: '1m', description: 'Poll selected channels every minute' },
+      { label: '2m', description: 'Poll selected channels every 2 minutes' },
+      { label: '5m', description: 'Poll selected channels every 5 minutes' },
+      { label: 'Custom', description: 'Enter seconds manually' },
+    ],
+    allowCustomResponse: true,
+    allowEmptyInput: false,
+    overlay: { widthPercent: 0.65, maxHeight: '65%' },
+  });
+
+  if (!choice) return;
+
+  const preset: Record<string, number> = {
+    '30s': 30_000,
+    '1m': 60_000,
+    '2m': 120_000,
+    '5m': 300_000,
+  };
+  let next = preset[choice];
+  if (!next) {
+    const raw = choice === 'Custom'
+      ? await askModalQuestion(ctx.state.ui, {
+          question: 'Enter Slack poll interval in seconds (minimum 10):',
+          allowCustomResponse: true,
+          allowEmptyInput: false,
+          overlay: { widthPercent: 0.55, maxHeight: '45%' },
+        })
+      : choice;
+    if (!raw) return;
+    const seconds = Number(raw.replace(/s$/i, '').trim());
+    if (!Number.isFinite(seconds) || seconds < 10) {
+      ctx.showError('Slack poll interval must be at least 10 seconds.');
+      return;
+    }
+    next = Math.floor(seconds * 1000);
+  }
+
+  settings.signals.slackPollIntervalMs = next;
+  saveSettings(settings);
+  ctx.showInfo(`Slack poll interval set to ${formatPollInterval(next)}. Restart MastraCode for the new interval to take effect.`);
+}
+
 async function describeSlackDebug(ctx: SlashCommandContext): Promise<string> {
   const { threadId, metadata } = await getCurrentSlackThread(ctx);
   if (!threadId) return 'Slack Signals debug: no current thread.';
@@ -338,6 +393,10 @@ export async function handleSlackCommand(ctx: SlashCommandContext, args: string[
     await manageSlackToken(ctx);
     return;
   }
+  if (action === 'poll') {
+    await manageSlackPollInterval(ctx);
+    return;
+  }
   if (action === 'debug') {
     ctx.showInfo(await describeSlackDebug(ctx));
     return;
@@ -347,5 +406,5 @@ export async function handleSlackCommand(ctx: SlashCommandContext, args: string[
     return;
   }
 
-  ctx.showError('Usage: /slack subscribe [#channel...], /slack unsubscribe [#channel...], /slack channels, /slack config, /slack token, /slack debug');
+  ctx.showError('Usage: /slack subscribe [#channel...], /slack unsubscribe [#channel...], /slack channels, /slack config, /slack token, /slack poll, /slack debug');
 }

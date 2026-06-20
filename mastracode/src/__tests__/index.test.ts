@@ -100,7 +100,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: false, slackPollIntervalMs: 60_000 },
   };
 }
 
@@ -754,7 +754,7 @@ describe('createMastraCode', () => {
   it('configures SlackSignals as a signal provider when experimentalSlackSignals is enabled and a token is set', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
-      signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: true },
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: true, slackPollIntervalMs: 60_000 },
     });
     process.env.SLACK_USER_TOKEN = 'xoxp-test-token';
     const { createMastraCode } = await import('../index.js');
@@ -769,7 +769,7 @@ describe('createMastraCode', () => {
   it('does not configure SlackSignals when no user token is set', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
-      signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: true },
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: false, experimentalSlackSignals: true, slackPollIntervalMs: 60_000 },
     });
     const { createMastraCode } = await import('../index.js');
 

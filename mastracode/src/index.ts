@@ -459,6 +459,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     globalSettings.signals?.experimentalSlackSignals && slackToken
       ? new SlackSignals({
           token: slackToken,
+          pollIntervalMs: globalSettings.signals.slackPollIntervalMs,
           ...(slackApiBaseUrl
             ? { syncClient: new SlackWebApiSyncClient({ token: slackToken, baseUrl: slackApiBaseUrl }) }
             : {}),

@@ -405,6 +405,7 @@ export function setupAutocomplete(state: TUIState): void {
           { value: 'channels', label: 'channels', description: 'List available Slack channels' },
           { value: 'config', label: 'config', description: 'Show Slack signal subscription info' },
           { value: 'token', label: 'token', description: 'Update or clear your Slack user token' },
+          { value: 'poll', label: 'poll', description: 'Change the Slack poll interval' },
           { value: 'debug', label: 'debug', description: 'Show detailed Slack signals diagnostics' },
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     });
