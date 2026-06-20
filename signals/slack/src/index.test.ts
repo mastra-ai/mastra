@@ -77,6 +77,7 @@ function createSyncClient(overrides: Partial<SlackSignalsSyncClient> = {}): Slac
       name: 'test-channel',
       type: 'public_channel' as const,
     })),
+    listUsers: vi.fn(async () => []),
     ...overrides,
   };
 }
@@ -660,8 +661,8 @@ describe('SlackSignalsProvider', () => {
       expect(result.notificationsSent).toBe(0);
 
       const saved = getSavedSlackMetadata(threadStore);
-      expect(saved.subscription.channels.C100.lastSyncStatus).toBe('error');
-      expect(saved.subscription.channels.C100.lastSyncError).toContain('channel_not_found');
+      // channel_not_found removes the stale channel entirely
+      expect(saved.subscription.channels.C100).toBeUndefined();
     });
 
     it('filters messages by excludeChannelIds', async () => {

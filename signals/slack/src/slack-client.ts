@@ -7,6 +7,7 @@ import type {
   SlackSignalsConversation,
   SlackSignalsMessage,
   SlackSignalsSyncClient,
+  SlackSignalsUser,
   SlackSignalsWorkspace,
 } from './index.js';
 
@@ -65,6 +66,26 @@ type SlackRawMessage = Record<string, unknown> & {
   permalink?: string;
 };
 
+type SlackRawUser = Record<string, unknown> & {
+  id?: string;
+  name?: string;
+  profile?: {
+    display_name?: string;
+    real_name?: string;
+  };
+};
+
+function mapUser(raw: SlackRawUser): SlackSignalsUser | undefined {
+  const id = readString(raw.id);
+  if (!id) return undefined;
+  return {
+    id,
+    name: readString(raw.name) ?? id,
+    displayName: readString(raw.profile?.display_name) ?? readString(raw.name) ?? id,
+    realName: readString(raw.profile?.real_name) ?? readString(raw.name) ?? id,
+  };
+}
+
 const DEFAULT_SLACK_BASE_URL = 'https://slack.com/api/';
 const DEFAULT_PAGE_LIMIT = 200;
 const DEFAULT_MAX_RETRIES = 2;
@@ -105,6 +126,7 @@ function mapConversation(conversation: SlackRawConversation): SlackSignalsConver
     id,
     type: getConversationType(conversation),
     ...(readString(conversation.name) ? { name: readString(conversation.name)! } : {}),
+    ...(readString(conversation.user) ? { user: readString(conversation.user)! } : {}),
     ...(typeof conversation.is_archived === 'boolean' ? { isArchived: conversation.is_archived } : {}),
     ...(typeof conversation.is_member === 'boolean' ? { isMember: conversation.is_member } : {}),
   };
@@ -248,6 +270,22 @@ export class SlackWebApiSyncClient implements SlackSignalsSyncClient {
       throw new SlackSignalsApiError({ method: 'conversations.info', code: 'invalid_channel', response });
     }
     return conversation;
+  }
+
+  async listUsers(input: { abortSignal?: AbortSignal } = {}): Promise<SlackSignalsUser[]> {
+    const users: SlackSignalsUser[] = [];
+    let cursor: string | undefined;
+    do {
+      const response = await this.#request('users.list', { cursor, limit: 200 }, input.abortSignal);
+      const rawMembers = Array.isArray(response.members) ? response.members : [];
+      for (const raw of rawMembers) {
+        if (!isPlainObject(raw)) continue;
+        const user = mapUser(raw as SlackRawUser);
+        if (user) users.push(user);
+      }
+      cursor = readString(response.response_metadata?.next_cursor);
+    } while (cursor);
+    return users;
   }
 
   async #request(method: string, params: Record<string, unknown>, abortSignal?: AbortSignal): Promise<SlackApiResponse> {

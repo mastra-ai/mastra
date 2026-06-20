@@ -93,6 +93,8 @@ export type SlackSignalsConversation = {
   type: SlackConversationType;
   isArchived?: boolean;
   isMember?: boolean;
+  /** User ID that this IM conversation is with (only for type='im') */
+  user?: string;
 };
 
 export type SlackSignalsMessage = {
@@ -142,6 +144,14 @@ export type SlackSignalsSyncClient = {
   listConversations(input: SlackListConversationsInput): Promise<SlackListConversationsResult>;
   listMessages(input: SlackListMessagesInput): Promise<SlackListMessagesResult>;
   getConversation(input: SlackGetConversationInput): Promise<SlackSignalsConversation>;
+  listUsers(input?: { abortSignal?: AbortSignal }): Promise<SlackSignalsUser[]>;
+};
+
+export type SlackSignalsUser = {
+  id: string;
+  name: string;
+  displayName: string;
+  realName: string;
 };
 
 export type SlackSignalsChannelState = {
@@ -605,12 +615,20 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
         }
         channelsSynced++;
       } catch (error) {
-        updatedChannels[channelId] = {
-          ...channel,
-          lastSyncAt: now,
-          lastSyncStatus: 'error',
-          lastSyncError: error instanceof Error ? error.message : String(error),
-        };
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const isChannelNotFound = errorMsg.includes('channel_not_found') || errorMsg.includes('not_in_channel');
+        if (isChannelNotFound) {
+          // Remove stale channel — channel was deleted or token lost access
+          delete updatedChannels[channelId];
+        } else {
+          // Transient error — keep channel and mark as error
+          updatedChannels[channelId] = {
+            ...channel,
+            lastSyncAt: now,
+            lastSyncStatus: 'error',
+            lastSyncError: errorMsg,
+          };
+        }
         channelsFailed++;
       }
     }
@@ -679,6 +697,18 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
       types: this.conversationTypes,
       abortSignal: input.abortSignal,
     });
+
+    // Resolve DM user IDs to display names — batch via users.list (1 API call)
+    const dmConversations = result.conversations.filter(c => c.type === 'im' && c.user && !c.name);
+    if (dmConversations.length > 0) {
+      const userMap = await this.#resolveUserNames(input.abortSignal);
+      for (const conversation of result.conversations) {
+        if (conversation.type === 'im' && conversation.user && userMap.has(conversation.user)) {
+          conversation.name = userMap.get(conversation.user);
+        }
+      }
+    }
+
     return result.conversations;
   }
 
@@ -727,6 +757,23 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     const storage = this.mastra?.getStorage?.();
     const memoryStore = storage?.getStore ? await storage.getStore('memory') : undefined;
     return memoryStore as SlackSignalsThreadStore | undefined;
+  }
+
+  /** Resolve user IDs to display names via users.list, with in-memory cache (5 min) */
+  #userCache: Map<string, string> | undefined;
+  #userCacheTime = 0;
+  async #resolveUserNames(abortSignal?: AbortSignal): Promise<Map<string, string>> {
+    if (this.#userCache && Date.now() - this.#userCacheTime < 300_000) {
+      return this.#userCache;
+    }
+    const users = await this.#syncClient.listUsers({ abortSignal });
+    const map = new Map<string, string>();
+    for (const user of users) {
+      map.set(user.id, user.displayName || user.realName || user.name);
+    }
+    this.#userCache = map;
+    this.#userCacheTime = Date.now();
+    return map;
   }
 
   #getThreadContext(args: { requestContext?: ProcessInputStepArgs['requestContext'] }): {

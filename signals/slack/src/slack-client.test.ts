@@ -73,7 +73,7 @@ describe('SlackWebApiSyncClient', () => {
     ).resolves.toEqual({
       conversations: [
         { id: 'C1', name: 'general', type: 'public_channel', isMember: true },
-        { id: 'D1', type: 'im' },
+        { id: 'D1', type: 'im', user: 'U1' },
         { id: 'G1', name: 'private', type: 'private_channel' },
       ],
     });

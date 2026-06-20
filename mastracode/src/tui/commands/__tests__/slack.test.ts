@@ -25,7 +25,8 @@ function createContext(overrides?: {
     workspaceId: 'T123456',
     workspaceName: 'Test Workspace',
     alreadySubscribed: false,
-    subscription: { conversationTypes: ['public_channel', 'im'], channels: {} },
+    addedChannels: ['general'],
+    subscription: { conversationTypes: ['public_channel', 'im'], channels: { C001: { id: 'C001', name: 'general', type: 'public_channel' } } },
   }));
   const unsubscribeThreadFromSlack = vi.fn(async () => ({
     workspaceId: 'T123456',
@@ -94,21 +95,21 @@ describe('handleSlackCommand', () => {
     askModalQuestionMock.mockReset();
   });
 
-  it('subscribes the current thread to Slack', async () => {
+  it('subscribes to a Slack channel by name', async () => {
     const { ctx, subscribeThreadToSlack } = createContext();
 
-    await handleSlackCommand(ctx, ['subscribe']);
+    await handleSlackCommand(ctx, ['subscribe', '#general']);
 
-    expect(subscribeThreadToSlack).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1' });
-    expect(ctx.showInfo).toHaveBeenCalledWith('Subscribed this thread to Slack workspace Test Workspace. Use /slack subscribe #channel to add channels.');
+    expect(subscribeThreadToSlack).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1', channels: ['general'] });
+    expect(ctx.showInfo).toHaveBeenCalledWith('Added 1 channel(s): #general');
   });
 
   it('supports the "sub" alias', async () => {
     const { ctx, subscribeThreadToSlack } = createContext();
 
-    await handleSlackCommand(ctx, ['sub']);
+    await handleSlackCommand(ctx, ['sub', 'random']);
 
-    expect(subscribeThreadToSlack).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1' });
+    expect(subscribeThreadToSlack).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1', channels: ['random'] });
   });
 
   it('shows already-subscribed message when re-subscribing', async () => {
@@ -123,9 +124,9 @@ describe('handleSlackCommand', () => {
       },
     });
 
-    await handleSlackCommand(ctx, ['subscribe']);
+    await handleSlackCommand(ctx, ['subscribe', '#general']);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith('This thread is already subscribed to Slack workspace Test Workspace. Use /slack subscribe #channel to add channels.');
+    expect(ctx.showInfo).toHaveBeenCalledWith('No new channels added (already subscribed).');
   });
 
   it('unsubscribes the current thread from Slack', async () => {
@@ -140,13 +141,13 @@ describe('handleSlackCommand', () => {
   it('updates statusline badge immediately on subscribe', async () => {
     const { ctx } = createContext();
 
-    await handleSlackCommand(ctx, ['subscribe']);
+    await handleSlackCommand(ctx, ['subscribe', '#general']);
 
     expect(ctx.state.activeSlackSubscription).toEqual({
       workspaceId: 'T123456',
       workspaceName: 'Test Workspace',
       conversationTypes: ['public_channel', 'im'],
-      channelCount: 0,
+      channelCount: 1,
     });
     expect(ctx.updateStatusLine).toHaveBeenCalled();
   });
@@ -223,12 +224,16 @@ describe('handleSlackCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Polling: inactive'));
   });
 
-  it('defaults to config when no action is provided', async () => {
+  it('shows action menu when no action is provided', async () => {
     const { ctx } = createContext();
+    askModalQuestionMock.mockResolvedValue(null);
 
     await handleSlackCommand(ctx, []);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('not subscribed'));
+    expect(askModalQuestionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ question: expect.stringContaining('what would you like to do?') }),
+    );
   });
 
   it('shows debug info when not subscribed', async () => {
@@ -339,7 +344,7 @@ describe('handleSlackCommand', () => {
       },
     });
 
-    await handleSlackCommand(ctx, ['subscribe']);
+    await handleSlackCommand(ctx, ['subscribe', '#general']);
 
     expect(ctx.showError).toHaveBeenCalledWith('Failed to subscribe to Slack: auth failed');
   });

@@ -1,6 +1,8 @@
 import { getSlackSignalsMetadata } from '@mastra/slack-signals';
+import type { SlackSignalsConversation } from '@mastra/slack-signals';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { askModalQuestion } from '../modal-question.js';
+import { SlackChannelPickerComponent } from '../components/slack-channel-picker.js';
 import type { SlashCommandContext } from './types.js';
 
 function formatLocalTimestamp(value: unknown): string | undefined {
@@ -108,6 +110,85 @@ function parseChannelArgs(args: string[]): string[] | undefined {
   return args.map(arg => arg.replace(/^#/, '').trim()).filter(Boolean);
 }
 
+function getConversationTypeLabel(type: string | undefined): string {
+  return type === 'im' ? 'DM' : type === 'mpim' ? 'group DM' : type === 'private_channel' ? 'private' : 'public';
+}
+
+function getConversationLabel(conversation: Pick<SlackSignalsConversation, 'id' | 'name' | 'type'>): string {
+  const name = conversation.name ?? conversation.id;
+  return conversation.type === 'im' || conversation.type === 'mpim' ? name : `#${name}`;
+}
+
+async function pickSlackConversation(ctx: SlashCommandContext): Promise<SlackSignalsConversation | undefined> {
+  const slackSignalsProcessor = ctx.state.options?.slackSignals;
+  if (!slackSignalsProcessor?.listAvailableChannels) {
+    ctx.showError('Slack signals are not available. Enable them in /settings and restart MastraCode.');
+    return undefined;
+  }
+
+  const conversations = await slackSignalsProcessor.listAvailableChannels();
+  if (conversations.length === 0) {
+    ctx.showInfo('No channels or DMs found. Check your token scopes.');
+    return undefined;
+  }
+
+  // Gather subscribed channel IDs for this thread
+  const { metadata } = await getCurrentSlackThread(ctx);
+  const subscription = getSlackSubscriptionFromThreadMetadata(metadata);
+  const subscribedIds = new Set(Object.keys(subscription?.channels ?? {}));
+
+  return new Promise(resolve => {
+    const picker = new SlackChannelPickerComponent({
+      tui: ctx.state.ui,
+      conversations,
+      subscribedIds,
+      title: 'Subscribe to Slack Conversation',
+      onSelect: (conversation: SlackSignalsConversation) => {
+        ctx.state.ui.hideOverlay();
+        resolve(conversation);
+      },
+      onCancel: () => {
+        ctx.state.ui.hideOverlay();
+        resolve(undefined);
+      },
+    });
+
+    ctx.state.ui.showOverlay(picker, {
+      width: '70%',
+      maxHeight: '65%',
+      anchor: 'center',
+    });
+    picker.focused = true;
+  });
+}
+
+async function pickSubscribedSlackChannel(ctx: SlashCommandContext): Promise<string[] | undefined> {
+  const { metadata } = await getCurrentSlackThread(ctx);
+  const subscription = getSlackSubscriptionFromThreadMetadata(metadata);
+  const channels = Object.values(subscription?.channels ?? {});
+  if (channels.length === 0) {
+    ctx.showInfo('This thread has no Slack channels or DMs to unsubscribe.');
+    return undefined;
+  }
+
+  const choices = channels.map(channel => ({
+    label: getConversationLabel(channel),
+    description: `${getConversationTypeLabel(channel.type)} — ${channel.id}`,
+  }));
+  const answer = await askModalQuestion(ctx.state.ui, {
+    question: 'Unsubscribe this thread from which Slack channel or DM?',
+    options: choices,
+    allowCustomResponse: true,
+    allowEmptyInput: false,
+    overlay: { widthPercent: 0.75, maxHeight: '75%' },
+  });
+  const trimmed = answer?.replace(/^#/, '').trim();
+  if (!trimmed) return undefined;
+
+  const match = channels.find(channel => channel.id === trimmed || channel.name === trimmed || getConversationLabel(channel).replace(/^#/, '') === trimmed);
+  return [match?.id ?? trimmed];
+}
+
 async function subscribeSlackThread(ctx: SlashCommandContext, channelArgs: string[]): Promise<void> {
   const slackSignalsProcessor = ctx.state.options?.slackSignals;
   if (!slackSignalsProcessor?.subscribeThreadToSlack) {
@@ -121,7 +202,12 @@ async function subscribeSlackThread(ctx: SlashCommandContext, channelArgs: strin
     return;
   }
 
-  const channels = parseChannelArgs(channelArgs);
+  let channels = parseChannelArgs(channelArgs);
+  if (!channels || channels.length === 0) {
+    const conversation = await pickSlackConversation(ctx);
+    if (!conversation) return;
+    channels = [conversation.id];
+  }
 
   try {
     const result = await slackSignalsProcessor.subscribeThreadToSlack({ threadId, resourceId, channels });
@@ -213,9 +299,7 @@ async function listSlackChannels(ctx: SlashCommandContext): Promise<void> {
     }
 
     const lines = conversations.slice(0, 50).map(ch => {
-      const name = ch.name ?? ch.id;
-      const typeLabel = ch.type === 'im' ? 'DM' : ch.type === 'mpim' ? 'group DM' : ch.type === 'private_channel' ? 'private' : 'public';
-      return `  #${name} (${typeLabel}) — ${ch.id}`;
+      return `  ${getConversationLabel(ch)} (${getConversationTypeLabel(ch.type)}) — ${ch.id}`;
     });
 
     ctx.showInfo(`Available channels (${conversations.length} total, showing ${Math.min(50, conversations.length)}):\n${lines.join('\n')}`);
@@ -332,6 +416,54 @@ async function manageSlackPollInterval(ctx: SlashCommandContext): Promise<void> 
   ctx.showInfo(`Slack poll interval set to ${formatPollInterval(next)}. Restart MastraCode for the new interval to take effect.`);
 }
 
+async function showSlackActionMenu(ctx: SlashCommandContext): Promise<void> {
+  const choice = await askModalQuestion(ctx.state.ui, {
+    question: 'Slack Signals — what would you like to do?',
+    options: [
+      { label: 'Subscribe', description: 'Choose a Slack channel or DM to watch in this thread' },
+      { label: 'Unsubscribe', description: 'Remove a watched channel or DM from this thread' },
+      { label: 'List channels', description: 'Show available Slack channels and DMs' },
+      { label: 'Config', description: 'Show current Slack subscription state' },
+      { label: 'Token', description: 'Update or clear your Slack user token' },
+      { label: 'Poll interval', description: 'Change how often selected conversations are checked' },
+      { label: 'Debug', description: 'Show detailed Slack signal diagnostics' },
+    ],
+    overlay: { widthPercent: 0.7, maxHeight: '75%' },
+  });
+
+  if (!choice) return;
+
+  if (choice === 'Subscribe') {
+    const conversation = await pickSlackConversation(ctx);
+    if (conversation) await subscribeSlackThread(ctx, [conversation.id]);
+    return;
+  }
+  if (choice === 'Unsubscribe') {
+    const channels = await pickSubscribedSlackChannel(ctx);
+    if (channels) await unsubscribeSlackThread(ctx, channels);
+    return;
+  }
+  if (choice === 'List channels') {
+    await listSlackChannels(ctx);
+    return;
+  }
+  if (choice === 'Config') {
+    ctx.showInfo(await describeSlackSubscription(ctx));
+    return;
+  }
+  if (choice === 'Token') {
+    await manageSlackToken(ctx);
+    return;
+  }
+  if (choice === 'Poll interval') {
+    await manageSlackPollInterval(ctx);
+    return;
+  }
+  if (choice === 'Debug') {
+    ctx.showInfo(await describeSlackDebug(ctx));
+  }
+}
+
 async function describeSlackDebug(ctx: SlashCommandContext): Promise<string> {
   const { threadId, metadata } = await getCurrentSlackThread(ctx);
   if (!threadId) return 'Slack Signals debug: no current thread.';
@@ -377,6 +509,11 @@ export async function handleSlackCommand(ctx: SlashCommandContext, args: string[
 
   const [action, ...rest] = args;
 
+  if (!action) {
+    await showSlackActionMenu(ctx);
+    return;
+  }
+
   if (action === 'subscribe' || action === 'sub') {
     await subscribeSlackThread(ctx, rest);
     return;
@@ -401,7 +538,7 @@ export async function handleSlackCommand(ctx: SlashCommandContext, args: string[
     ctx.showInfo(await describeSlackDebug(ctx));
     return;
   }
-  if (action === 'config' || action === 'status' || !action) {
+  if (action === 'config' || action === 'status') {
     ctx.showInfo(await describeSlackSubscription(ctx));
     return;
   }
