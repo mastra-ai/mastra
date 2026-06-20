@@ -586,6 +586,20 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
           ...(channel.name ? { name: channel.name } : {}),
         };
 
+        // Resolve DM channel names so notifications show user names not raw IDs
+        if (!conversation.name && conversation.type === 'im') {
+          try {
+            const info = await this.#syncClient.getConversation({ channelId });
+            if (info.user) {
+              const userMap = await this.#resolveUserNames();
+              const resolved = userMap.get(info.user);
+              if (resolved) conversation.name = resolved;
+            }
+          } catch {
+            // Best-effort — notification falls back to channelId if resolution fails
+          }
+        }
+
         const result = await this.#syncClient.listMessages({
           conversation,
           oldest: channel.latestTs,
@@ -931,6 +945,15 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     }
 
     const resolved = await this.#resolveChannelInputs(input.channels, input.abortSignal);
+
+    // Resolve DM user names so we store display names instead of channel IDs
+    let userMap: Map<string, string> | undefined;
+    for (const c of resolved) {
+      if (c.type === 'im' && c.user && !c.name) {
+        userMap ??= await this.#resolveUserNames(input.abortSignal);
+        if (userMap.has(c.user)) c.name = userMap.get(c.user);
+      }
+    }
     const now = new Date().toISOString();
     const updatedChannels = { ...subscription.channels };
     const added: string[] = [];

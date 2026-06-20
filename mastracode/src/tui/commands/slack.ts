@@ -119,16 +119,10 @@ function getConversationLabel(conversation: Pick<SlackSignalsConversation, 'id' 
   return conversation.type === 'im' || conversation.type === 'mpim' ? name : `#${name}`;
 }
 
-async function pickSlackConversation(ctx: SlashCommandContext): Promise<SlackSignalsConversation | undefined> {
+async function pickSlackConversations(ctx: SlashCommandContext): Promise<SlackSignalsConversation[] | undefined> {
   const slackSignalsProcessor = ctx.state.options?.slackSignals;
   if (!slackSignalsProcessor?.listAvailableChannels) {
     ctx.showError('Slack signals are not available. Enable them in /settings and restart MastraCode.');
-    return undefined;
-  }
-
-  const conversations = await slackSignalsProcessor.listAvailableChannels();
-  if (conversations.length === 0) {
-    ctx.showInfo('No channels or DMs found. Check your token scopes.');
     return undefined;
   }
 
@@ -138,19 +132,22 @@ async function pickSlackConversation(ctx: SlashCommandContext): Promise<SlackSig
   const subscribedIds = new Set(Object.keys(subscription?.channels ?? {}));
 
   return new Promise(resolve => {
+    let done = false;
+    const finish = (selected: SlackSignalsConversation[] | undefined) => {
+      if (done) return;
+      done = true;
+      ctx.state.ui.hideOverlay();
+      resolve(selected);
+    };
+
     const picker = new SlackChannelPickerComponent({
       tui: ctx.state.ui,
-      conversations,
+      conversations: [],
       subscribedIds,
       title: 'Subscribe to Slack Conversation',
-      onSelect: (conversation: SlackSignalsConversation) => {
-        ctx.state.ui.hideOverlay();
-        resolve(conversation);
-      },
-      onCancel: () => {
-        ctx.state.ui.hideOverlay();
-        resolve(undefined);
-      },
+      loadingMessage: 'Loading Slack conversations...',
+      onConfirm: finish,
+      onCancel: () => finish(undefined),
     });
 
     ctx.state.ui.showOverlay(picker, {
@@ -159,6 +156,22 @@ async function pickSlackConversation(ctx: SlashCommandContext): Promise<SlackSig
       anchor: 'center',
     });
     picker.focused = true;
+
+    slackSignalsProcessor.listAvailableChannels()
+      .then(conversations => {
+        if (done) return;
+        if (!conversations || conversations.length === 0) {
+          ctx.showInfo('No channels or DMs found. Check your token scopes.');
+          finish(undefined);
+          return;
+        }
+        picker.setConversations(conversations);
+      })
+      .catch(err => {
+        if (done) return;
+        ctx.showError(`Failed to list Slack channels: ${err instanceof Error ? err.message : String(err)}`);
+        finish(undefined);
+      });
   });
 }
 
@@ -204,9 +217,9 @@ async function subscribeSlackThread(ctx: SlashCommandContext, channelArgs: strin
 
   let channels = parseChannelArgs(channelArgs);
   if (!channels || channels.length === 0) {
-    const conversation = await pickSlackConversation(ctx);
-    if (!conversation) return;
-    channels = [conversation.id];
+    const selected = await pickSlackConversations(ctx);
+    if (!selected || selected.length === 0) return;
+    channels = selected.map(c => c.id);
   }
 
   try {
@@ -434,8 +447,8 @@ async function showSlackActionMenu(ctx: SlashCommandContext): Promise<void> {
   if (!choice) return;
 
   if (choice === 'Subscribe') {
-    const conversation = await pickSlackConversation(ctx);
-    if (conversation) await subscribeSlackThread(ctx, [conversation.id]);
+    const selected = await pickSlackConversations(ctx);
+    if (selected && selected.length > 0) await subscribeSlackThread(ctx, selected.map(c => c.id));
     return;
   }
   if (choice === 'Unsubscribe') {
