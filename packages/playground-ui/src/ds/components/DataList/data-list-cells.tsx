@@ -107,7 +107,10 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
   return (
     <DataListCell
       sticky="start"
-      className={cn('data-list-row-header text-left text-ui-sm font-semibold tracking-tight text-neutral2', className)}
+      className={cn(
+        'data-list-row-header -ml-5 -mr-4 w-auto max-w-none rounded-l-md pl-5 pr-4 text-left text-ui-sm font-semibold tracking-tight text-neutral2',
+        className,
+      )}
       {...rest}
     >
       <span className={cn(dataListTruncateContentStyles, 'relative z-10 w-full')}>

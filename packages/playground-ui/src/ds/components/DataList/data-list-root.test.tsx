@@ -244,16 +244,11 @@ describe('DataListRoot', () => {
       expect(grid?.className).toContain('[&_.data-list-top]:bg-[var(--data-list-sticky-header-background)]');
       expect(grid?.className).not.toContain('[&_.data-list-sticky-start]:bg-surface2');
       expect(grid?.className).toContain(
-        '[&_.data-list-row_.data-list-row-header]:before:absolute [&_.data-list-row_.data-list-row-header]:before:inset-y-0',
+        '[&_.data-list-row_.data-list-row-header]:bg-[var(--data-list-sticky-header-background)]',
       );
-      expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:before:-left-5');
-      expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:before:-right-4');
-      expect(grid?.className).toContain(
-        '[&_.data-list-row_.data-list-row-header]:before:bg-[var(--data-list-sticky-header-background)]',
-      );
-      expect(grid?.className).toContain(
-        '[&_.data-list-row:hover_.data-list-row-header]:before:bg-surface-overlay-strong',
-      );
+      expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:after:right-0');
+      expect(grid?.className).toContain('[&_.data-list-row:hover_.data-list-row-header]:bg-surface-overlay-strong');
+      expect(grid?.className).not.toContain('[&_.data-list-row_.data-list-row-header]:before:bg');
       expect(top?.className).toContain('z-20');
       expect(topCell?.className).toContain('sticky');
       expect(topCell?.className).toContain('left-0');
@@ -262,7 +257,14 @@ describe('DataListRoot', () => {
       expect(topCell?.className).toContain('bg-[var(--data-list-sticky-header-background)]');
       expect(topCell?.className).not.toContain('bg-surface2');
       expect(rowHeaderCell?.className).toContain('data-list-sticky-start');
-      expect(rowHeaderCell?.className).toContain('w-full');
+      expect(rowHeaderCell?.className).toContain('-ml-5');
+      expect(rowHeaderCell?.className).toContain('-mr-4');
+      expect(rowHeaderCell?.className).toContain('w-auto');
+      expect(rowHeaderCell?.className).toContain('max-w-none');
+      expect(rowHeaderCell?.className).toContain('pl-5');
+      expect(rowHeaderCell?.className).toContain('pr-4');
+      expect(rowHeaderCell?.className).toContain('rounded-l-md');
+      expect(rowHeaderCell?.className).not.toContain('after:right-0');
       expect(rowHeaderCell?.className).toContain('self-stretch');
       expect(rowHeaderCell?.className).toContain('isolate');
       expect(rowHeaderCell?.className).not.toContain('bg-[var(--data-list-sticky-header-background)]');
