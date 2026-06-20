@@ -98,6 +98,79 @@ describe('SaveQueueManager', () => {
     expect(totalSaves).toBeGreaterThan(0);
   });
 
+  it('propagates save failures to flushMessages callers instead of swallowing them', async () => {
+    mockMemory.saveMessages = vi.fn(async () => {
+      throw new Error('storage down');
+    });
+
+    const manager = new SaveQueueManager({ memory: mockMemory });
+    const list = new MessageList({ threadId: 'thread-fail' });
+    list.add(makeTestMessage('m1', 'thread-fail', 'user', 'Hello'), 'user');
+
+    await expect(manager.flushMessages(list, 'thread-fail')).rejects.toThrow('storage down');
+  });
+
+  it('re-queues messages when a save fails so the next flush retries them', async () => {
+    let shouldFail = true;
+    mockMemory.saveMessages = vi.fn(async ({ messages }) => {
+      if (shouldFail) {
+        shouldFail = false;
+        throw new Error('transient failure');
+      }
+      saved.push(...messages);
+    });
+
+    const manager = new SaveQueueManager({ memory: mockMemory });
+    const list = new MessageList({ threadId: 'thread-retry' });
+    list.add(makeTestMessage('m1', 'thread-retry', 'user', 'Hello'), 'user');
+
+    // First flush fails — messages must NOT be dropped.
+    await expect(manager.flushMessages(list, 'thread-retry')).rejects.toThrow('transient failure');
+    expect(list.getUnsavedMessages().length).toBe(1);
+
+    // A later flush succeeds and persists the previously failed message.
+    await manager.flushMessages(list, 'thread-retry');
+    expect(saved.map(m => m.id)).toContain('m1');
+    expect(list.getUnsavedMessages().length).toBe(0);
+  });
+
+  it('does not stall later saves after a failed save', async () => {
+    let call = 0;
+    mockMemory.saveMessages = vi.fn(async ({ messages }) => {
+      call++;
+      if (call === 1) throw new Error('boom');
+      saved.push(...messages);
+    });
+
+    const manager = new SaveQueueManager({ memory: mockMemory });
+    const list1 = new MessageList({ threadId: 'thread-q' });
+    list1.add(makeTestMessage('m1', 'thread-q', 'user', 'first'), 'user');
+    const failing = manager.flushMessages(list1, 'thread-q');
+
+    const list2 = new MessageList({ threadId: 'thread-q' });
+    list2.add(makeTestMessage('m2', 'thread-q', 'user', 'second'), 'user');
+    const succeeding = manager.flushMessages(list2, 'thread-q');
+
+    await expect(failing).rejects.toThrow('boom');
+    await expect(succeeding).resolves.toBeUndefined();
+    expect(saved.map(m => m.id)).toContain('m2');
+  });
+
+  it('settles superseded debounce promises when the batched save completes', async () => {
+    const manager = new SaveQueueManager({ memory: mockMemory });
+    const list = new MessageList({ threadId: 'thread-debounce' });
+
+    list.add(makeTestMessage('m1', 'thread-debounce', 'user', 'Hello'), 'user');
+    const first = manager.batchMessages(list, 'thread-debounce');
+    list.add(makeTestMessage('m2', 'thread-debounce', 'user', 'World'), 'user');
+    const second = manager.batchMessages(list, 'thread-debounce');
+
+    // The superseded first promise must settle, not hang.
+    await expect(Promise.all([first, second])).resolves.toBeDefined();
+    expect(saveCalls).toBe(1);
+    expect(saved.length).toBe(2);
+  });
+
   it('should flush buffered parts via drainUnsavedMessages before persisting', async () => {
     let savedMessages: any[] = [];
 

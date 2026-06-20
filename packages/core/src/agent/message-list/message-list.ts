@@ -884,6 +884,26 @@ export class MessageList {
     return messages.map(message => this.transformMessageForTranscript(message));
   }
 
+  /**
+   * Returns the unsaved user/response messages (transformed for persistence)
+   * without clearing them from the unsaved tracking. Pair with
+   * {@link clearUnsavedMessages} to only drop messages once a storage write has
+   * succeeded, so a failed save can be retried instead of silently lost.
+   */
+  public getUnsavedMessages(): MastraDBMessage[] {
+    const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
+    return messages.map(message => this.transformMessageForTranscript(message));
+  }
+
+  /**
+   * Marks the given messages (matched by id) as saved by removing them from the
+   * unsaved user/response tracking. Messages added after {@link getUnsavedMessages}
+   * was called remain unsaved and will be picked up by the next save.
+   */
+  public clearUnsavedMessages(messages: MastraDBMessage[]): void {
+    this.stateManager.clearUnsavedMessages(new Set(messages.map(m => m.id)));
+  }
+
   private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
     if (!data || typeof data !== 'object') {
       return data;

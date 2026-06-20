@@ -17,6 +17,10 @@ export class SaveQueueManager {
   }
   private saveQueues = new Map<string, Promise<void>>();
   private saveDebounceTimers = new Map<string, NodeJS.Timeout>();
+  // Callers waiting on a debounced save for a thread. Every caller within a
+  // debounce window must settle when the batched save completes, so superseded
+  // debounce calls cannot be abandoned (and left hanging forever).
+  private pendingDebounceResolvers = new Map<string, Array<{ resolve: () => void; reject: (err: unknown) => void }>>();
 
   /**
    * Debounces save operations for a thread, ensuring that consecutive save requests
@@ -28,24 +32,39 @@ export class SaveQueueManager {
    */
   private debounceSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfigInternal): Promise<void> {
     return new Promise((resolve, reject) => {
+      const resolvers = this.pendingDebounceResolvers.get(threadId) ?? [];
+      resolvers.push({ resolve, reject });
+      this.pendingDebounceResolvers.set(threadId, resolvers);
+
       if (this.saveDebounceTimers.has(threadId)) {
         clearTimeout(this.saveDebounceTimers.get(threadId)!);
       }
       this.saveDebounceTimers.set(
         threadId,
         setTimeout(() => {
-          this.enqueueSave(threadId, messageList, memoryConfig)
-            .then(resolve)
-            .catch(err => {
+          this.saveDebounceTimers.delete(threadId);
+          const pending = this.takePendingDebounceResolvers(threadId);
+          this.enqueueSave(threadId, messageList, memoryConfig).then(
+            () => {
+              for (const p of pending) p.resolve();
+            },
+            err => {
               this.logger?.error?.('Error in debounceSave', { err, threadId });
-              reject(err);
-            })
-            .finally(() => {
-              this.saveDebounceTimers.delete(threadId);
-            });
+              for (const p of pending) p.reject(err);
+            },
+          );
         }, this.debounceMs),
       );
     });
+  }
+
+  /**
+   * Removes and returns the callers waiting on a debounced save for a thread.
+   */
+  private takePendingDebounceResolvers(threadId: string) {
+    const pending = this.pendingDebounceResolvers.get(threadId) ?? [];
+    this.pendingDebounceResolvers.delete(threadId);
+    return pending;
   }
 
   /**
@@ -53,15 +72,25 @@ export class SaveQueueManager {
    * only one save runs at a time per thread. If a save is already in progress for the thread,
    * the new save is queued to run after the previous completes.
    *
+   * The promise returned to the caller rejects if the save fails, so callers (e.g.
+   * `flushMessages`) can surface or retry the error. The queue chain itself always
+   * settles successfully so a single failure does not stall later saves.
+   *
    * @param threadId - The ID of the thread whose messages should be saved.
    * @param messageList - The MessageList instance containing unsaved messages.
    * @param memoryConfig - Optional memory configuration to use for saving.
    */
-  private enqueueSave(threadId: string, messageList: MessageList, memoryConfig?: MemoryConfigInternal) {
+  private enqueueSave(
+    threadId: string,
+    messageList: MessageList,
+    memoryConfig?: MemoryConfigInternal,
+  ): Promise<void> {
     const prev = this.saveQueues.get(threadId) || Promise.resolve();
-    const next = prev
-      .then(() => this.persistUnsavedMessages(messageList, memoryConfig))
+    const result = prev.then(() => this.persistUnsavedMessages(messageList, memoryConfig));
+    const next = result
       .catch(err => {
+        // Swallow on the queue chain only so subsequent saves still run; the
+        // error is propagated to the caller via `result`.
         this.logger?.error?.('Error in enqueueSave', { err, threadId });
       })
       .then(() => {
@@ -70,7 +99,7 @@ export class SaveQueueManager {
         }
       });
     this.saveQueues.set(threadId, next);
-    return next;
+    return result;
   }
 
   /**
@@ -88,17 +117,20 @@ export class SaveQueueManager {
 
   /**
    * Persists any unsaved messages from the MessageList to memory storage.
-   * Drains the list of unsaved messages and writes them using the memory backend.
+   * Reads the unsaved messages and only clears them from the list after a
+   * successful write, so a failed save (e.g. transient storage error) leaves the
+   * messages queued for the next flush instead of silently dropping them.
    * @param messageList - The MessageList instance for the current thread.
    * @param memoryConfig - The memory configuration for saving.
    */
   private async persistUnsavedMessages(messageList: MessageList, memoryConfig?: MemoryConfigInternal) {
-    const newMessages = messageList.drainUnsavedMessages();
+    const newMessages = messageList.getUnsavedMessages();
     if (newMessages.length > 0 && this.memory) {
       await this.memory.saveMessages({
         messages: newMessages,
         memoryConfig,
       });
+      messageList.clearUnsavedMessages(newMessages);
     }
   }
 
@@ -134,6 +166,20 @@ export class SaveQueueManager {
   async flushMessages(messageList: MessageList, threadId?: string, memoryConfig?: MemoryConfigInternal) {
     if (!threadId) return;
     this.clearDebounce(threadId);
-    return this.enqueueSave(threadId, messageList, memoryConfig);
+    // A flush supersedes any pending debounced save for this thread. Adopt its
+    // waiting callers so they settle with this flush instead of hanging.
+    const pending = this.takePendingDebounceResolvers(threadId);
+    const save = this.enqueueSave(threadId, messageList, memoryConfig);
+    if (pending.length > 0) {
+      save.then(
+        () => {
+          for (const p of pending) p.resolve();
+        },
+        err => {
+          for (const p of pending) p.reject(err);
+        },
+      );
+    }
+    return save;
   }
 }

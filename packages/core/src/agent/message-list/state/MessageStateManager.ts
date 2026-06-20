@@ -183,6 +183,20 @@ export class MessageStateManager {
   }
 
   /**
+   * Remove specific unsaved user/response messages (matched by id) from the new
+   * message tracking. Used to mark messages as saved only after a successful
+   * storage write, so a failed save can be retried instead of silently dropped.
+   */
+  clearUnsavedMessages(ids: Set<string>): void {
+    for (const message of this.newUserMessages) {
+      if (ids.has(message.id)) this.newUserMessages.delete(message);
+    }
+    for (const message of this.newResponseMessages) {
+      if (ids.has(message.id)) this.newResponseMessages.delete(message);
+    }
+  }
+
+  /**
    * Clear all messages from all sources (but not persisted tracking)
    */
   clearAll(): void {
