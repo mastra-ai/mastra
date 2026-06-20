@@ -58,7 +58,7 @@ vi.mock('@mastra/slack-signals', () => ({
     id = 'slack-signals';
     name = 'Slack Signals';
     isConnected = false;
-    rtmConnected = false;
+    pollInterval = 60_000;
     addAgent() {}
     connect() {
       this.isConnected = true;
@@ -75,7 +75,17 @@ vi.mock('@mastra/slack-signals', () => ({
       return {};
     }
     start() {}
+    stop() {}
     __registerMastra() {}
+    startPollingForThread() {}
+    stopPollingForThread() {}
+    stopAllPolling() {}
+    isPollingThread() {
+      return false;
+    }
+    subscribeThreadToSlack = vi.fn(async () => ({ subscribed: true, workspaceId: 'T123', workspaceName: 'Test', subscription: { channels: {} } }));
+    unsubscribeThreadFromSlack = vi.fn(async () => ({ removed: true, workspaceId: 'T123', workspaceName: 'Test' }));
+    listAvailableChannels = vi.fn(async () => []);
   },
   SLACK_SIGNALS_PROVIDER_ID: 'slack-signals',
   SLACK_SIGNALS_METADATA_KEY: 'slackSignals',

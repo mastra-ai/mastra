@@ -70,29 +70,45 @@ async function describeSlackSubscription(ctx: SlashCommandContext): Promise<stri
 
   const subscription = getSlackSubscriptionFromThreadMetadata(metadata);
   const slackSignalsProcessor = ctx.state.options?.slackSignals;
-  const rtmConnected = slackSignalsProcessor?.rtmConnected ?? false;
-  const rtmState = rtmConnected ? 'connected' : 'disconnected';
+  const isPolling = slackSignalsProcessor?.isPollingThread?.({ threadId, resourceId: ctx.harness as any }) ?? false;
+  const pollInterval = slackSignalsProcessor?.pollInterval ? `${Math.round(slackSignalsProcessor.pollInterval / 1000)}s` : '60s';
 
   if (!subscription) {
     return `Slack Signals for ${threadId}: not subscribed.
   ${tokenLine}
-  RTM: ${rtmState}`;
+  Polling: ${isPolling ? `active (${pollInterval})` : 'inactive'}
+  Use /slack subscribe #channel to start watching channels.`;
   }
 
-  const channelCount = Object.keys(subscription.channels ?? {}).length;
+  const channels = Object.entries(subscription.channels ?? {});
+  const channelLines = channels.length === 0
+    ? '  Channels: none — use /slack subscribe #channel to add channels'
+    : channels.map(([id, ch]) => {
+        const channel = ch as Record<string, unknown>;
+        const name = channel.name ? `#${channel.name}` : id;
+        const latestTs = channel.latestTs ? `latest: ${channel.latestTs}` : 'baseline pending';
+        const status = channel.lastSyncStatus === 'error' ? ` ⚠ ${channel.lastSyncError}` : '';
+        return `    ${name} — ${latestTs}${status}`;
+      }).join('\n');
 
   const header = `Slack Signals for ${threadId}:
   Workspace: ${subscription.workspaceName ?? subscription.workspaceId}
-  Conversation types: ${subscription.conversationTypes?.join(', ') ?? 'default'}
-  Channels tracked: ${channelCount}
-  RTM: ${rtmState}
+  Channels tracked: ${channels.length}
+  Polling: ${isPolling ? `active (${pollInterval})` : 'inactive'}
   Subscribed at: ${formatLocalTimestamp(subscription.subscribedAt) ?? 'unknown'}
-  ${tokenLine}`;
+  Last sync: ${subscription.lastSyncAt ? formatLocalTimestamp(subscription.lastSyncAt) : 'never'}${subscription.lastSyncStatus ? ` (${subscription.lastSyncStatus})` : ''}
+  ${tokenLine}
+${channelLines}`;
 
   return header;
 }
 
-async function subscribeSlackThread(ctx: SlashCommandContext): Promise<void> {
+function parseChannelArgs(args: string[]): string[] | undefined {
+  if (args.length === 0) return undefined;
+  return args.map(arg => arg.replace(/^#/, '').trim()).filter(Boolean);
+}
+
+async function subscribeSlackThread(ctx: SlashCommandContext, channelArgs: string[]): Promise<void> {
   const slackSignalsProcessor = ctx.state.options?.slackSignals;
   if (!slackSignalsProcessor?.subscribeThreadToSlack) {
     ctx.showError('Slack signals are not available. Enable them in /settings and restart MastraCode.');
@@ -105,13 +121,23 @@ async function subscribeSlackThread(ctx: SlashCommandContext): Promise<void> {
     return;
   }
 
+  const channels = parseChannelArgs(channelArgs);
+
   try {
-    const result = await slackSignalsProcessor.subscribeThreadToSlack({ threadId, resourceId });
-    if (result.alreadySubscribed) {
-      ctx.showInfo(`This thread is already subscribed to Slack workspace ${result.workspaceName ?? result.workspaceId}.`);
+    const result = await slackSignalsProcessor.subscribeThreadToSlack({ threadId, resourceId, channels });
+
+    if (channels && channels.length > 0) {
+      if (result.addedChannels?.length) {
+        ctx.showInfo(`Added ${result.addedChannels.length} channel(s): ${result.addedChannels.map(c => `#${c}`).join(', ')}`);
+      } else {
+        ctx.showInfo('No new channels added (already subscribed).');
+      }
+    } else if (result.alreadySubscribed) {
+      ctx.showInfo(`This thread is already subscribed to Slack workspace ${result.workspaceName ?? result.workspaceId}. Use /slack subscribe #channel to add channels.`);
     } else {
-      ctx.showInfo(`Subscribed this thread to Slack workspace ${result.workspaceName ?? result.workspaceId}.`);
+      ctx.showInfo(`Subscribed this thread to Slack workspace ${result.workspaceName ?? result.workspaceId}. Use /slack subscribe #channel to add channels.`);
     }
+
     if (result.workspaceId) {
       ctx.state.activeSlackSubscription = {
         workspaceId: result.workspaceId,
@@ -126,7 +152,7 @@ async function subscribeSlackThread(ctx: SlashCommandContext): Promise<void> {
   }
 }
 
-async function unsubscribeSlackThread(ctx: SlashCommandContext): Promise<void> {
+async function unsubscribeSlackThread(ctx: SlashCommandContext, channelArgs: string[]): Promise<void> {
   const slackSignalsProcessor = ctx.state.options?.slackSignals;
   if (!slackSignalsProcessor?.unsubscribeThreadFromSlack) {
     ctx.showError('Slack signals are not available. Enable them in /settings and restart MastraCode.');
@@ -139,17 +165,62 @@ async function unsubscribeSlackThread(ctx: SlashCommandContext): Promise<void> {
     return;
   }
 
+  const channels = parseChannelArgs(channelArgs);
+
   try {
-    const result = await slackSignalsProcessor.unsubscribeThreadFromSlack({ threadId, resourceId });
-    if (result.removed) {
+    const result = await slackSignalsProcessor.unsubscribeThreadFromSlack({ threadId, resourceId, channels });
+
+    if (channels && channels.length > 0) {
+      if (result.removedChannels?.length) {
+        ctx.showInfo(`Removed ${result.removedChannels.length} channel(s): ${result.removedChannels.map(c => `#${c}`).join(', ')}`);
+      } else {
+        ctx.showInfo('No matching channels found to remove.');
+      }
+      if (result.subscription) {
+        ctx.state.activeSlackSubscription = {
+          workspaceId: result.workspaceId ?? '',
+          ...(result.workspaceName ? { workspaceName: result.workspaceName } : {}),
+          conversationTypes: result.subscription.conversationTypes ?? [],
+          channelCount: Object.keys(result.subscription.channels ?? {}).length,
+        };
+      } else {
+        ctx.state.activeSlackSubscription = undefined;
+      }
+    } else if (result.removed) {
       ctx.showInfo(`Unsubscribed this thread from Slack workspace ${result.workspaceName ?? result.workspaceId}.`);
+      ctx.state.activeSlackSubscription = undefined;
     } else {
       ctx.showInfo('This thread is not subscribed to Slack.');
     }
-    ctx.state.activeSlackSubscription = undefined;
     ctx.updateStatusLine();
   } catch (error) {
     ctx.showError(`Failed to unsubscribe from Slack: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function listSlackChannels(ctx: SlashCommandContext): Promise<void> {
+  const slackSignalsProcessor = ctx.state.options?.slackSignals;
+  if (!slackSignalsProcessor?.listAvailableChannels) {
+    ctx.showError('Slack signals are not available. Enable them in /settings and restart MastraCode.');
+    return;
+  }
+
+  try {
+    const conversations = await slackSignalsProcessor.listAvailableChannels();
+    if (conversations.length === 0) {
+      ctx.showInfo('No channels found. Check your token scopes.');
+      return;
+    }
+
+    const lines = conversations.slice(0, 50).map(ch => {
+      const name = ch.name ?? ch.id;
+      const typeLabel = ch.type === 'im' ? 'DM' : ch.type === 'mpim' ? 'group DM' : ch.type === 'private_channel' ? 'private' : 'public';
+      return `  #${name} (${typeLabel}) — ${ch.id}`;
+    });
+
+    ctx.showInfo(`Available channels (${conversations.length} total, showing ${Math.min(50, conversations.length)}):\n${lines.join('\n')}`);
+  } catch (error) {
+    ctx.showError(`Failed to list channels: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -211,22 +282,36 @@ async function describeSlackDebug(ctx: SlashCommandContext): Promise<string> {
   if (!threadId) return 'Slack Signals debug: no current thread.';
 
   const slackSignalsProcessor = ctx.state.options?.slackSignals;
-  const rtmConnected = slackSignalsProcessor?.rtmConnected ?? false;
+  const pollInterval = slackSignalsProcessor?.pollInterval ? `${Math.round(slackSignalsProcessor.pollInterval / 1000)}s` : '60s';
   const { token, source } = getTokenSource(ctx);
 
   const slackMetadata = getSlackSignalsMetadata(metadata);
   const subscription = slackMetadata.subscription;
   if (!subscription) {
-    return `Slack Signals debug for ${threadId}: not subscribed, RTM=${rtmConnected ? 'connected' : 'disconnected'}, token=${token ? source : 'none'}`;
+    return `Slack Signals debug for ${threadId}: not subscribed, pollInterval=${pollInterval}, token=${token ? source : 'none'}`;
   }
+
+  const channels = Object.entries(subscription.channels ?? {});
+  const channelLines = channels.length === 0
+    ? '  Channels: none'
+    : channels.map(([id, ch]) => {
+        const channel = ch as Record<string, unknown>;
+        const name = channel.name ? `#${channel.name}` : id;
+        const latestTs = channel.latestTs ? `latestTs=${channel.latestTs}` : 'no baseline';
+        const lastSync = channel.lastSyncAt ? `lastSync=${formatLocalTimestamp(channel.lastSyncAt)}` : 'never synced';
+        const status = channel.lastSyncStatus ? ` (${channel.lastSyncStatus})` : '';
+        const error = channel.lastSyncError ? ` err=${channel.lastSyncError}` : '';
+        return `    ${name} — ${latestTs}, ${lastSync}${status}${error}`;
+      }).join('\n');
 
   return `Slack Signals debug for ${threadId}:
   Workspace: ${subscription.workspaceName ?? subscription.workspaceId}
   Conversation types: ${subscription.conversationTypes.join(', ') || 'default'}
-  RTM: ${rtmConnected ? 'connected' : 'disconnected'}
+  Poll interval: ${pollInterval}
   Token: ${token ? `${maskToken(token)} (${source})` : 'none'}
   Subscribed at: ${formatLocalTimestamp(subscription.subscribedAt) ?? 'unknown'}
-  Last sync: ${subscription.lastSyncAt ? formatLocalTimestamp(subscription.lastSyncAt) : 'never'}${subscription.lastSyncStatus ? ` (${subscription.lastSyncStatus})` : ''}${subscription.lastSyncError ? `\n  Last error: ${subscription.lastSyncError}` : ''}`;
+  Last sync: ${subscription.lastSyncAt ? formatLocalTimestamp(subscription.lastSyncAt) : 'never'}${subscription.lastSyncStatus ? ` (${subscription.lastSyncStatus})` : ''}${subscription.lastSyncError ? `\n  Last error: ${subscription.lastSyncError}` : ''}
+${channelLines}`;
 }
 
 export async function handleSlackCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
@@ -235,14 +320,18 @@ export async function handleSlackCommand(ctx: SlashCommandContext, args: string[
     return;
   }
 
-  const [action] = args;
+  const [action, ...rest] = args;
 
   if (action === 'subscribe' || action === 'sub') {
-    await subscribeSlackThread(ctx);
+    await subscribeSlackThread(ctx, rest);
     return;
   }
   if (action === 'unsubscribe' || action === 'unsub') {
-    await unsubscribeSlackThread(ctx);
+    await unsubscribeSlackThread(ctx, rest);
+    return;
+  }
+  if (action === 'channels' || action === 'list') {
+    await listSlackChannels(ctx);
     return;
   }
   if (action === 'token') {
@@ -258,5 +347,5 @@ export async function handleSlackCommand(ctx: SlashCommandContext, args: string[
     return;
   }
 
-  ctx.showError('Usage: /slack subscribe, /slack unsubscribe, /slack config, /slack token, /slack debug');
+  ctx.showError('Usage: /slack subscribe [#channel...], /slack unsubscribe [#channel...], /slack channels, /slack config, /slack token, /slack debug');
 }

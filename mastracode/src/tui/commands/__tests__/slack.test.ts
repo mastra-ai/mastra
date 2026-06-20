@@ -25,19 +25,26 @@ function createContext(overrides?: {
     workspaceId: 'T123456',
     workspaceName: 'Test Workspace',
     alreadySubscribed: false,
+    subscription: { conversationTypes: ['public_channel', 'im'], channels: {} },
   }));
   const unsubscribeThreadFromSlack = vi.fn(async () => ({
     workspaceId: 'T123456',
     workspaceName: 'Test Workspace',
     removed: true,
   }));
+  const listAvailableChannels = vi.fn(async () => [
+    { id: 'C001', name: 'general', type: 'public_channel' },
+    { id: 'C002', name: 'random', type: 'public_channel' },
+  ]);
 
   const slackSignals = overrides?.slackSignals === null
     ? undefined
     : {
-        rtmConnected: false,
+        isPollingThread: vi.fn(() => false),
+        pollInterval: 60_000,
         subscribeThreadToSlack,
         unsubscribeThreadFromSlack,
+        listAvailableChannels,
         ...overrides?.slackSignals,
       };
 
@@ -75,7 +82,7 @@ function createContext(overrides?: {
     showError: vi.fn(),
     updateStatusLine: vi.fn(),
   } as unknown as SlashCommandContext;
-  return { ctx, subscribeThreadToSlack, unsubscribeThreadFromSlack, getStoredApiKey, setStoredApiKey, removeApiKey };
+  return { ctx, subscribeThreadToSlack, unsubscribeThreadFromSlack, listAvailableChannels, getStoredApiKey, setStoredApiKey, removeApiKey };
 }
 
 describe('handleSlackCommand', () => {
@@ -93,7 +100,7 @@ describe('handleSlackCommand', () => {
     await handleSlackCommand(ctx, ['subscribe']);
 
     expect(subscribeThreadToSlack).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1' });
-    expect(ctx.showInfo).toHaveBeenCalledWith('Subscribed this thread to Slack workspace Test Workspace.');
+    expect(ctx.showInfo).toHaveBeenCalledWith('Subscribed this thread to Slack workspace Test Workspace. Use /slack subscribe #channel to add channels.');
   });
 
   it('supports the "sub" alias', async () => {
@@ -111,13 +118,14 @@ describe('handleSlackCommand', () => {
           workspaceId: 'T123456',
           workspaceName: 'Test Workspace',
           alreadySubscribed: true,
+          subscription: { conversationTypes: [], channels: {} },
         })),
       },
     });
 
     await handleSlackCommand(ctx, ['subscribe']);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith('This thread is already subscribed to Slack workspace Test Workspace.');
+    expect(ctx.showInfo).toHaveBeenCalledWith('This thread is already subscribed to Slack workspace Test Workspace. Use /slack subscribe #channel to add channels.');
   });
 
   it('unsubscribes the current thread from Slack', async () => {
@@ -137,7 +145,7 @@ describe('handleSlackCommand', () => {
     expect(ctx.state.activeSlackSubscription).toEqual({
       workspaceId: 'T123456',
       workspaceName: 'Test Workspace',
-      conversationTypes: [],
+      conversationTypes: ['public_channel', 'im'],
       channelCount: 0,
     });
     expect(ctx.updateStatusLine).toHaveBeenCalled();
@@ -212,8 +220,7 @@ describe('handleSlackCommand', () => {
 
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('My Team'));
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Channels tracked: 2'));
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('public_channel, im'));
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('RTM: disconnected'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Polling: inactive'));
   });
 
   it('defaults to config when no action is provided', async () => {
@@ -230,7 +237,7 @@ describe('handleSlackCommand', () => {
     await handleSlackCommand(ctx, ['debug']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('not subscribed'));
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('RTM=disconnected'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('pollInterval=60s'));
   });
 
   it('shows debug info with subscription details', async () => {
@@ -257,7 +264,7 @@ describe('handleSlackCommand', () => {
     await handleSlackCommand(ctx, ['debug']);
 
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Test Workspace'));
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('RTM: disconnected'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Poll interval: 60s'));
   });
 
   it('shows usage hint for unknown subcommands', async () => {
@@ -265,7 +272,7 @@ describe('handleSlackCommand', () => {
 
     await handleSlackCommand(ctx, ['bogus']);
 
-    expect(ctx.showError).toHaveBeenCalledWith('Usage: /slack subscribe, /slack unsubscribe, /slack config, /slack token, /slack debug');
+    expect(ctx.showError).toHaveBeenCalledWith('Usage: /slack subscribe [#channel...], /slack unsubscribe [#channel...], /slack channels, /slack config, /slack token, /slack debug');
   });
 
   it('shows error when experimental Slack signals are disabled', async () => {
@@ -408,11 +415,71 @@ describe('handleSlackCommand', () => {
     expect(removeApiKey).not.toHaveBeenCalled();
   });
 
-  it('shows RTM state in config output when not subscribed', async () => {
+  it('shows polling state in config output when not subscribed', async () => {
     const { ctx } = createContext({ threadMetadata: undefined });
 
     await handleSlackCommand(ctx, ['config']);
 
-    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('RTM: disconnected'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Polling: inactive'));
+  });
+
+  it('subscribes to specific channels when channel args provided', async () => {
+    const subscribeThreadToSlack = vi.fn(async () => ({
+      workspaceId: 'T123456',
+      workspaceName: 'Test Workspace',
+      addedChannels: ['general', 'random'],
+      subscription: { conversationTypes: ['public_channel'], channels: { C001: {}, C002: {} } },
+    }));
+    const { ctx } = createContext({
+      slackSignals: { subscribeThreadToSlack },
+    });
+
+    await handleSlackCommand(ctx, ['subscribe', 'general', 'random']);
+
+    expect(subscribeThreadToSlack).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1', channels: ['general', 'random'] });
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Added 2 channel(s)'));
+  });
+
+  it('strips # prefix from channel args', async () => {
+    const { ctx, subscribeThreadToSlack } = createContext();
+
+    await handleSlackCommand(ctx, ['subscribe', '#general']);
+
+    expect(subscribeThreadToSlack).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1', channels: ['general'] });
+  });
+
+  it('unsubscribes from specific channels when channel args provided', async () => {
+    const unsubscribeThreadFromSlack = vi.fn(async () => ({
+      workspaceId: 'T123456',
+      workspaceName: 'Test Workspace',
+      removedChannels: ['general'],
+      subscription: { conversationTypes: ['public_channel'], channels: { C002: {} } },
+    }));
+    const { ctx } = createContext({
+      slackSignals: { unsubscribeThreadFromSlack },
+    });
+
+    await handleSlackCommand(ctx, ['unsubscribe', 'general']);
+
+    expect(unsubscribeThreadFromSlack).toHaveBeenCalledWith({ threadId: 'thread-1', resourceId: 'resource-1', channels: ['general'] });
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Removed 1 channel(s)'));
+  });
+
+  it('lists available channels', async () => {
+    const { ctx, listAvailableChannels } = createContext();
+
+    await handleSlackCommand(ctx, ['channels']);
+
+    expect(listAvailableChannels).toHaveBeenCalled();
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('#general'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('#random'));
+  });
+
+  it('supports "list" alias for channels', async () => {
+    const { ctx, listAvailableChannels } = createContext();
+
+    await handleSlackCommand(ctx, ['list']);
+
+    expect(listAvailableChannels).toHaveBeenCalled();
   });
 });

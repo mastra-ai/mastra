@@ -5,22 +5,21 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { StorageThreadType } from '@mastra/core/memory';
 import type { InputProcessorOrWorkflow, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core/processors';
 import { SignalProvider } from '@mastra/core/signals';
+import type { SignalProviderTarget } from '@mastra/core/signals';
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
-import { SlackRtmClient } from './slack-rtm-client.js';
-import type { SlackRtmMessageEvent } from './slack-rtm-client.js';
 import { SlackWebApiSyncClient } from './slack-client.js';
 export { SlackSignalsApiError, SlackWebApiSyncClient } from './slack-client.js';
 export type { SlackWebApiSyncClientOptions } from './slack-client.js';
-export { SlackRtmClient } from './slack-rtm-client.js';
-export type { SlackRtmClientOptions, SlackRtmMessageEvent, SlackRtmLifecycleState } from './slack-rtm-client.js';
 
 export const SLACK_SIGNALS_PROVIDER_ID = 'slack-signals';
 export const SLACK_SIGNALS_METADATA_KEY = 'slackSignals';
 export const SLACK_SUBSCRIBE_TAG = 'slack-subscribe';
 export const SLACK_UNSUBSCRIBE_TAG = 'slack-unsubscribe';
 export const SLACK_SYNC_STATUS_TAG = 'slack-sync-status';
+
+export const DEFAULT_SLACK_SIGNALS_POLL_INTERVAL_MS = 60_000;
 
 export type SlackConversationType = 'public_channel' | 'private_channel' | 'im' | 'mpim';
 
@@ -124,6 +123,7 @@ export type SlackListMessagesInput = {
   oldest?: string;
   inclusive?: boolean;
   limit?: number;
+  maxPages?: number;
   abortSignal?: AbortSignal;
 };
 
@@ -132,10 +132,16 @@ export type SlackListMessagesResult = {
   latestTs?: string;
 };
 
+export type SlackGetConversationInput = {
+  channelId: string;
+  abortSignal?: AbortSignal;
+};
+
 export type SlackSignalsSyncClient = {
   getWorkspace(input?: { abortSignal?: AbortSignal }): Promise<SlackSignalsWorkspace>;
   listConversations(input: SlackListConversationsInput): Promise<SlackListConversationsResult>;
   listMessages(input: SlackListMessagesInput): Promise<SlackListMessagesResult>;
+  getConversation(input: SlackGetConversationInput): Promise<SlackSignalsConversation>;
 };
 
 export type SlackSignalsChannelState = {
@@ -144,6 +150,7 @@ export type SlackSignalsChannelState = {
   type: SlackConversationType;
   latestTs?: string;
   latestMessageHash?: string;
+  subscribedAt?: string;
   lastSyncAt?: string;
   lastSyncStatus?: 'success' | 'error' | 'skipped';
   lastSyncError?: string;
@@ -187,16 +194,15 @@ export type SlackNotificationPayload = {
 export type SlackSignalsThreadStore = {
   getThreadById(input: { threadId: string; resourceId: string }): Promise<StorageThreadType | null | undefined>;
   saveThread(input: { thread: StorageThreadType }): Promise<StorageThreadType>;
-  listThreads?(input?: { perPage?: number | false }): Promise<{ threads: StorageThreadType[] }>;
 };
 
 export type SlackSignalsProviderConfig = {
   token: string;
+  pollIntervalMs?: number;
   include?: SlackSignalsIncludeConfig;
   filters?: SlackSignalsFilterConfig;
   syncClient?: SlackSignalsSyncClient;
   threadStore?: SlackSignalsThreadStore;
-  rtmClient?: SlackRtmClient;
 };
 
 export type SlackSignalsOptions = SlackSignalsProviderConfig;
@@ -212,11 +218,14 @@ export type SlackOperationResult = {
   alreadySubscribed?: boolean;
   alreadyProcessed?: boolean;
   removed?: boolean;
+  addedChannels?: string[];
+  removedChannels?: string[];
 };
 
-export type SlackSignalsThread = {
-  threadId: string;
-  resourceId: string;
+export type SlackPollResult = {
+  notificationsSent: number;
+  channelsSynced: number;
+  channelsFailed: number;
 };
 
 function normalizeIncludeConfig(include: SlackSignalsIncludeConfig = {}): Required<SlackSignalsIncludeConfig> {
@@ -274,6 +283,14 @@ function isSlackConversationType(value: unknown): value is SlackConversationType
   return value === 'public_channel' || value === 'private_channel' || value === 'im' || value === 'mpim';
 }
 
+function compareSlackTimestamps(a: string, b: string): number {
+  return Number(a) - Number(b);
+}
+
+function isNewerSlackTimestamp(a: string, b: string): boolean {
+  return compareSlackTimestamps(a, b) > 0;
+}
+
 function getSignalMetadata(message: MastraDBMessage): Record<string, unknown> | undefined {
   if (message.role !== 'signal') return undefined;
   const signal = message.content.metadata?.signal;
@@ -295,6 +312,7 @@ function parseChannelState(rawChannel: unknown): SlackSignalsChannelState | unde
     ...(readString(rawChannel.name) ? { name: readString(rawChannel.name)! } : {}),
     ...(readString(rawChannel.latestTs) ? { latestTs: readString(rawChannel.latestTs)! } : {}),
     ...(readString(rawChannel.latestMessageHash) ? { latestMessageHash: readString(rawChannel.latestMessageHash)! } : {}),
+    ...(readString(rawChannel.subscribedAt) ? { subscribedAt: readString(rawChannel.subscribedAt)! } : {}),
     ...(readString(rawChannel.lastSyncAt) ? { lastSyncAt: readString(rawChannel.lastSyncAt)! } : {}),
     ...(rawChannel.lastSyncStatus === 'success' || rawChannel.lastSyncStatus === 'error' || rawChannel.lastSyncStatus === 'skipped'
       ? { lastSyncStatus: rawChannel.lastSyncStatus }
@@ -387,7 +405,10 @@ function getMessageSummary(message: SlackSignalsMessage, filters: NormalizedSlac
   return text ? `${author} in ${channel}: ${truncateText(text, filters.maxPreviewLength)}` : `${author} posted in ${channel}.`;
 }
 
-function isMention(subscription: SlackSignalsSubscription, message: SlackSignalsMessage): boolean {
+function isMention(
+  subscription: SlackSignalsSubscription,
+  message: SlackSignalsMessage,
+): boolean {
   const text = message.text ?? '';
   return Boolean(
     (subscription.userId && text.includes(`<@${subscription.userId}>`)) ||
@@ -467,6 +488,12 @@ function createSlackNotificationInput(
   };
 }
 
+function inferChannelType(channelId: string): SlackConversationType {
+  if (channelId.startsWith('D')) return 'im';
+  if (channelId.startsWith('G')) return 'private_channel';
+  return 'public_channel';
+}
+
 export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   readonly id = SLACK_SIGNALS_PROVIDER_ID;
   override readonly name = 'Slack Signals';
@@ -502,9 +529,7 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   readonly #include: Required<SlackSignalsIncludeConfig>;
   readonly #filters: NormalizedSlackSignalsFilterConfig;
   readonly #syncClient: SlackSignalsSyncClient;
-  readonly #rtmClient: SlackRtmClient;
-  #rtmConnected = false;
-  readonly #subscribedThreads = new Map<string, SlackSignalsThread>();
+  override readonly pollInterval: number;
 
   constructor(options: SlackSignalsProviderConfig) {
     super();
@@ -512,15 +537,7 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     this.#include = normalizeIncludeConfig(options.include);
     this.#filters = normalizeSlackFilters(options.filters);
     this.#syncClient = options.syncClient ?? new SlackWebApiSyncClient({ token: options.token });
-    this.#rtmClient = options.rtmClient ?? new SlackRtmClient({ token: options.token });
-  }
-
-  get rtmConnected(): boolean {
-    return this.#rtmConnected;
-  }
-
-  get rtmState(): string {
-    return this.#rtmClient.state;
+    this.pollInterval = options.pollIntervalMs ?? DEFAULT_SLACK_SIGNALS_POLL_INTERVAL_MS;
   }
 
   get include(): Required<SlackSignalsIncludeConfig> {
@@ -535,98 +552,136 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     return this.#options.token;
   }
 
-  override connect(agent: any): void {
-    super.connect(agent);
-    this.#startRtm();
-    void this.#restoreSubscriptions();
-  }
+  // ── Per-thread polling ──────────────────────────────────────────────
 
-  disconnect(): void {
-    this.#rtmClient.disconnect();
-    this.#subscribedThreads.clear();
-    this.#rtmConnected = false;
-  }
-
-  #startRtm(): void {
-    this.#rtmClient.onLifecycle(state => {
-      this.#rtmConnected = state === 'connected';
-    });
-
-    this.#rtmClient.onMessage(event => {
-      this.#handleRtmMessage(event).catch(error => {
-        // Best-effort — don't crash RTM on notification errors
-        console.warn(`[slack-signals] RTM message handler error:`, error);
-      });
-    });
-
-    void this.#rtmClient.connect().catch(error => {
-      console.warn(`[slack-signals] RTM connection failed:`, error);
-    });
-  }
-
-  async #restoreSubscriptions(): Promise<void> {
-    const threadStore = await this.#resolveThreadStore();
-    if (!threadStore?.listThreads) return;
-
-    try {
-      const { threads } = await threadStore.listThreads({ perPage: false });
-      for (const thread of threads) {
-        const subscription = getSlackSignalsMetadata(thread.metadata).subscription;
-        if (!subscription) continue;
-        const key = `${thread.resourceId}:${thread.id}`;
-        if (!this.#subscribedThreads.has(key) && thread.id && thread.resourceId) {
-          this.#subscribedThreads.set(key, { threadId: thread.id, resourceId: thread.resourceId });
-        }
-      }
-    } catch (error) {
-      console.warn('[slack-signals] Failed to restore subscriptions from storage:', error);
+  async pollThread(target: SignalProviderTarget): Promise<SlackPollResult> {
+    const { threadStore, loadedThread } = await this.#loadThread(target);
+    const subscription = getSlackSignalsMetadata(loadedThread.metadata).subscription;
+    if (!subscription || Object.keys(subscription.channels).length === 0) {
+      return { notificationsSent: 0, channelsSynced: 0, channelsFailed: 0 };
     }
-  }
 
-  async #handleRtmMessage(event: SlackRtmMessageEvent): Promise<void> {
-    // Skip message edits/deletes/joins/leaves — only handle new messages
-    if (event.subtype && event.subtype !== 'bot_message') return;
+    let notificationsSent = 0;
+    let channelsSynced = 0;
+    let channelsFailed = 0;
+    const updatedChannels = { ...subscription.channels };
+    const now = new Date().toISOString();
 
-    const channelType = this.#resolveChannelType(event);
-    const message: SlackSignalsMessage = {
-      channelId: event.channel,
-      channelType,
-      ts: event.ts,
-      ...(event.threadTs ? { threadTs: event.threadTs } : {}),
-      ...(event.user ? { user: event.user } : {}),
-      ...(event.botId ? { botId: event.botId } : {}),
-      ...(event.username ? { username: event.username } : {}),
-      ...(event.text ? { text: event.text } : {}),
+    for (const [channelId, channel] of Object.entries(subscription.channels)) {
+      try {
+        const conversation: SlackSignalsConversation = {
+          id: channelId,
+          type: channel.type,
+          ...(channel.name ? { name: channel.name } : {}),
+        };
+
+        const result = await this.#syncClient.listMessages({
+          conversation,
+          oldest: channel.latestTs,
+          limit: 50,
+          maxPages: channel.latestTs ? 5 : 1,
+        });
+
+        // On first poll (no latestTs), establish baseline without notifying
+        const newMessages = channel.latestTs
+          ? result.messages.filter(msg => isNewerSlackTimestamp(msg.ts, channel.latestTs!))
+          : [];
+
+        for (const message of newMessages) {
+          if (!shouldNotifyMessage(message, this.#filters)) continue;
+          await this.notify(createSlackNotificationInput(subscription, message, this.#filters), target);
+          notificationsSent++;
+        }
+
+        if (result.latestTs) {
+          updatedChannels[channelId] = {
+            ...channel,
+            latestTs: result.latestTs,
+            lastSyncAt: now,
+            lastSyncStatus: 'success',
+            lastSyncError: undefined,
+          };
+        }
+        channelsSynced++;
+      } catch (error) {
+        updatedChannels[channelId] = {
+          ...channel,
+          lastSyncAt: now,
+          lastSyncStatus: 'error',
+          lastSyncError: error instanceof Error ? error.message : String(error),
+        };
+        channelsFailed++;
+      }
+    }
+
+    const updatedSubscription: SlackSignalsSubscription = {
+      ...subscription,
+      channels: updatedChannels,
+      lastSyncAt: now,
+      lastSyncStatus: channelsFailed > 0 ? 'error' : 'success',
     };
 
-    if (!shouldNotifyMessage(message, this.#filters)) return;
+    await threadStore.saveThread({
+      thread: {
+        ...loadedThread,
+        updatedAt: new Date(),
+        metadata: setSlackSignalsMetadata(loadedThread.metadata, { subscription: updatedSubscription }),
+      },
+    });
 
-    // Dispatch to all subscribed threads
-    for (const target of this.#subscribedThreads.values()) {
-      const { loadedThread } = await this.#loadThread(target);
-      const subscription = getSlackSignalsMetadata(loadedThread.metadata).subscription;
-      if (!subscription) continue;
+    return { notificationsSent, channelsSynced, channelsFailed };
+  }
 
-      // Check conversation type filter
-      if (subscription.conversationTypes.length > 0 && !subscription.conversationTypes.includes(channelType)) {
-        continue;
-      }
+  // ── Subscription management ──────────────────────────────────────────
 
-      await this.notify(createSlackNotificationInput(subscription, message, this.#filters), target);
+  async subscribeThreadToSlack(input: {
+    threadId?: string;
+    resourceId?: string;
+    channels?: string[];
+    abortSignal?: AbortSignal;
+  }): Promise<SlackOperationResult> {
+    const result = await this.#ensureSubscription({
+      id: `slack-command-subscribe-${randomUUID()}`,
+      ...input,
+    });
+    if (input.channels && input.channels.length > 0 && result.subscription) {
+      return this.#addChannels({
+        threadId: input.threadId,
+        resourceId: input.resourceId,
+        channels: input.channels,
+        abortSignal: input.abortSignal,
+      });
     }
+    return result;
   }
 
-  #resolveChannelType(event: SlackRtmMessageEvent): SlackConversationType {
-    if (event.channelType === 'channel') return 'public_channel';
-    if (event.channelType === 'group') return 'private_channel';
-    if (event.channelType === 'im') return 'im';
-    if (event.channelType === 'mpim') return 'mpim';
-    // Fallback: infer from channel ID prefix
-    if (event.channel.startsWith('C')) return 'public_channel';
-    if (event.channel.startsWith('G')) return 'private_channel';
-    if (event.channel.startsWith('D')) return 'im';
-    return 'public_channel';
+  async unsubscribeThreadFromSlack(input: {
+    threadId?: string;
+    resourceId?: string;
+    channels?: string[];
+  }): Promise<SlackOperationResult> {
+    if (input.channels && input.channels.length > 0) {
+      return this.#removeChannels({
+        threadId: input.threadId,
+        resourceId: input.resourceId,
+        channels: input.channels,
+      });
+    }
+    return this.#removeSubscription({
+      id: `slack-command-unsubscribe-${randomUUID()}`,
+      ...input,
+    });
   }
+
+  async listAvailableChannels(input: { abortSignal?: AbortSignal } = {}): Promise<SlackSignalsConversation[]> {
+    const result = await this.#syncClient.listConversations({
+      types: this.conversationTypes,
+      abortSignal: input.abortSignal,
+    });
+    return result.conversations;
+  }
+
+  // ── Input processor ─────────────────────────────────────────────────
 
   getInputProcessors(): InputProcessorOrWorkflow[] {
     return [this];
@@ -641,7 +696,7 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
 
     const threadContext = this.#getThreadContext(args);
     if (signal.tagName === SLACK_UNSUBSCRIBE_TAG) {
-      const result = await this.#unsubscribe({ ...signal, ...threadContext });
+      const result = await this.#removeSubscription({ ...signal, ...threadContext });
       await this.#sendStatus(args, result, {
         status: result.removed ? 'unsubscribed' : 'not_subscribed',
         action: 'unsubscribe',
@@ -652,25 +707,19 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
       return { tools };
     }
 
-    const result = await this.#subscribe({ ...signal, ...threadContext, abortSignal: args.abortSignal });
+    const result = await this.#ensureSubscription({ ...signal, ...threadContext, abortSignal: args.abortSignal });
     if (result.alreadyProcessed) return { tools };
     await this.#sendStatus(args, result, {
       status: result.alreadySubscribed ? 'already_subscribed' : 'subscribed',
       action: 'subscribe',
       message: result.alreadySubscribed
-        ? `This thread is already subscribed to Slack workspace ${result.workspaceName ?? result.workspaceId}.`
-        : `Subscribed this thread to Slack workspace ${result.workspaceName ?? result.workspaceId}.`,
+        ? `This thread is already subscribed to Slack workspace ${result.workspaceName ?? result.workspaceId}. Use /slack subscribe #channel to add channels.`
+        : `Subscribed this thread to Slack workspace ${result.workspaceName ?? result.workspaceId}. Use /slack subscribe #channel to add channels.`,
     });
     return { tools };
   }
 
-  async subscribeThreadToSlack(input: { threadId?: string; resourceId?: string; abortSignal?: AbortSignal }): Promise<SlackOperationResult> {
-    return this.#subscribe({ id: `slack-command-subscribe-${randomUUID()}`, ...input });
-  }
-
-  async unsubscribeThreadFromSlack(input: { threadId?: string; resourceId?: string }): Promise<SlackOperationResult> {
-    return this.#unsubscribe({ id: `slack-command-unsubscribe-${randomUUID()}`, ...input });
-  }
+  // ── Private helpers ─────────────────────────────────────────────────
 
   async #resolveThreadStore(): Promise<SlackSignalsThreadStore | undefined> {
     if (this.#options.threadStore) return this.#options.threadStore;
@@ -701,14 +750,16 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
       slack_subscribe: createTool({
         id: 'slack_subscribe',
         description:
-          'Subscribe this thread to Slack activity. Watches all reachable DMs, group DMs, public channels, and private channels for the configured token.',
-        inputSchema: z.object({}).optional(),
-        execute: async (_input, context) => {
+          'Subscribe this thread to specific Slack channels. Pass channel names (e.g. "general") or IDs. Creates a workspace subscription if none exists.',
+        inputSchema: z.object({
+          channels: z.array(z.string()).optional().describe('Channel names (e.g. "general") or channel IDs to subscribe to'),
+        }),
+        execute: async (input, context) => {
           const executionThreadContext = getExecutionThreadContext(context);
-          const result = await this.#subscribe({
-            id: `slack-tool-subscribe-${randomUUID()}`,
+          const result = await this.subscribeThreadToSlack({
             threadId: executionThreadContext.threadId,
             resourceId: executionThreadContext.resourceId,
+            channels: input?.channels,
             abortSignal: context?.abortSignal,
           });
           return {
@@ -716,30 +767,39 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
             alreadySubscribed: result.alreadySubscribed ?? false,
             workspaceId: result.workspaceId,
             workspaceName: result.workspaceName,
-            message: result.alreadySubscribed
-              ? `This thread is already subscribed to Slack workspace ${result.workspaceName ?? result.workspaceId}.`
-              : `Subscribed this thread to Slack workspace ${result.workspaceName ?? result.workspaceId}.`,
+            addedChannels: result.addedChannels,
+            message: result.addedChannels?.length
+              ? `Subscribed to ${result.addedChannels.length} channel(s) in workspace ${result.workspaceName ?? result.workspaceId}.`
+              : result.alreadySubscribed
+                ? `This thread is already subscribed to Slack workspace ${result.workspaceName ?? result.workspaceId}.`
+                : `Subscribed this thread to Slack workspace ${result.workspaceName ?? result.workspaceId}. Use /slack subscribe #channel to add channels.`,
           };
         },
       }),
       slack_unsubscribe: createTool({
         id: 'slack_unsubscribe',
-        description: 'Unsubscribe this thread from Slack activity.',
-        inputSchema: z.object({}).optional(),
-        execute: async (_input, context) => {
+        description:
+          'Unsubscribe from specific Slack channels, or remove the entire subscription if no channels specified.',
+        inputSchema: z.object({
+          channels: z.array(z.string()).optional().describe('Channel names or IDs to unsubscribe from. Omit to remove entire subscription.'),
+        }),
+        execute: async (input, context) => {
           const executionThreadContext = getExecutionThreadContext(context);
-          const result = await this.#unsubscribe({
-            id: `slack-tool-unsubscribe-${randomUUID()}`,
+          const result = await this.unsubscribeThreadFromSlack({
             threadId: executionThreadContext.threadId,
             resourceId: executionThreadContext.resourceId,
+            channels: input?.channels,
           });
           return {
             unsubscribed: result.removed ?? false,
             workspaceId: result.workspaceId,
             workspaceName: result.workspaceName,
-            message: result.removed
-              ? `Unsubscribed this thread from Slack workspace ${result.workspaceName ?? result.workspaceId}.`
-              : 'This thread is not subscribed to Slack.',
+            removedChannels: result.removedChannels,
+            message: result.removedChannels?.length
+              ? `Unsubscribed from ${result.removedChannels.length} channel(s).`
+              : result.removed
+                ? `Unsubscribed this thread from Slack workspace ${result.workspaceName ?? result.workspaceId}.`
+                : 'This thread is not subscribed to Slack.',
           };
         },
       }),
@@ -756,7 +816,7 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     return { threadStore, loadedThread };
   }
 
-  async #subscribe(input: {
+  async #ensureSubscription(input: {
     id: string;
     threadId?: string;
     resourceId?: string;
@@ -808,10 +868,6 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
       getWorkspaceExternalResourceId(workspace.teamId),
       { workspaceId: workspace.teamId, workspaceName: workspace.teamName },
     );
-    this.#subscribedThreads.set(`${input.resourceId}:${input.threadId}`, {
-      threadId: input.threadId!,
-      resourceId: input.resourceId!,
-    });
 
     return {
       workspaceId: workspace.teamId,
@@ -822,7 +878,124 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     };
   }
 
-  async #unsubscribe(input: { id: string; threadId?: string; resourceId?: string }): Promise<SlackOperationResult> {
+  async #addChannels(input: {
+    threadId?: string;
+    resourceId?: string;
+    channels: string[];
+    abortSignal?: AbortSignal;
+  }): Promise<SlackOperationResult> {
+    const { threadStore, loadedThread } = await this.#loadThread(input);
+    const subscription = getSlackSignalsMetadata(loadedThread.metadata).subscription;
+    if (!subscription) {
+      throw new Error('No Slack subscription found. Subscribe first with /slack subscribe.');
+    }
+
+    const resolved = await this.#resolveChannelInputs(input.channels, input.abortSignal);
+    const now = new Date().toISOString();
+    const updatedChannels = { ...subscription.channels };
+    const added: string[] = [];
+
+    for (const conversation of resolved) {
+      if (!updatedChannels[conversation.id]) {
+        updatedChannels[conversation.id] = {
+          id: conversation.id,
+          type: conversation.type,
+          ...(conversation.name ? { name: conversation.name } : {}),
+          subscribedAt: now,
+        };
+        added.push(conversation.name ?? conversation.id);
+      }
+    }
+
+    const updatedSubscription: SlackSignalsSubscription = {
+      ...subscription,
+      channels: updatedChannels,
+      updatedAt: now,
+    };
+
+    await threadStore.saveThread({
+      thread: {
+        ...loadedThread,
+        updatedAt: new Date(),
+        metadata: setSlackSignalsMetadata(loadedThread.metadata, { subscription: updatedSubscription }),
+      },
+    });
+
+    return {
+      workspaceId: subscription.workspaceId,
+      workspaceName: subscription.workspaceName,
+      subscription: updatedSubscription,
+      addedChannels: added,
+    };
+  }
+
+  async #removeChannels(input: {
+    threadId?: string;
+    resourceId?: string;
+    channels: string[];
+  }): Promise<SlackOperationResult> {
+    const { threadStore, loadedThread } = await this.#loadThread(input);
+    const subscription = getSlackSignalsMetadata(loadedThread.metadata).subscription;
+    if (!subscription) return { removed: false };
+
+    const normalized = input.channels.map(c => c.replace(/^#/, '').toLowerCase());
+    const updatedChannels = { ...subscription.channels };
+    const removed: string[] = [];
+
+    for (const [channelId, channel] of Object.entries(updatedChannels)) {
+      const nameMatch = channel.name?.toLowerCase();
+      if (normalized.includes(channelId.toLowerCase()) || (nameMatch && normalized.includes(nameMatch))) {
+        delete updatedChannels[channelId];
+        removed.push(channel.name ?? channelId);
+      }
+    }
+
+    const now = new Date().toISOString();
+
+    // If all channels removed, remove entire subscription
+    if (Object.keys(updatedChannels).length === 0) {
+      await threadStore.saveThread({
+        thread: {
+          ...loadedThread,
+          updatedAt: new Date(),
+          metadata: setSlackSignalsMetadata(loadedThread.metadata, {}),
+        },
+      });
+      this.unsubscribe(
+        { threadId: input.threadId!, resourceId: input.resourceId! },
+        getWorkspaceExternalResourceId(subscription.workspaceId),
+      );
+      return {
+        workspaceId: subscription.workspaceId,
+        workspaceName: subscription.workspaceName,
+        removed: true,
+        removedChannels: removed,
+      };
+    }
+
+    const updatedSubscription: SlackSignalsSubscription = {
+      ...subscription,
+      channels: updatedChannels,
+      updatedAt: now,
+    };
+
+    await threadStore.saveThread({
+      thread: {
+        ...loadedThread,
+        updatedAt: new Date(),
+        metadata: setSlackSignalsMetadata(loadedThread.metadata, { subscription: updatedSubscription }),
+      },
+    });
+
+    return {
+      workspaceId: subscription.workspaceId,
+      workspaceName: subscription.workspaceName,
+      subscription: updatedSubscription,
+      removedChannels: removed,
+    };
+  }
+
+  async #removeSubscription(input: { id: string; threadId?: string; resourceId?: string }): Promise<SlackOperationResult> {
     const { threadStore, loadedThread } = await this.#loadThread(input);
     const slackMetadata = getSlackSignalsMetadata(loadedThread.metadata);
     const existing = slackMetadata.subscription;
@@ -838,8 +1011,10 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
         metadata: setSlackSignalsMetadata(loadedThread.metadata, {}),
       },
     });
-    this.unsubscribe({ threadId: input.threadId!, resourceId: input.resourceId! }, getWorkspaceExternalResourceId(existing.workspaceId));
-    this.#subscribedThreads.delete(`${input.resourceId}:${input.threadId}`);
+    this.unsubscribe(
+      { threadId: input.threadId!, resourceId: input.resourceId! },
+      getWorkspaceExternalResourceId(existing.workspaceId),
+    );
 
     return {
       workspaceId: existing.workspaceId,
@@ -847,6 +1022,46 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
       subscription: existing,
       removed: true,
     };
+  }
+
+  async #resolveChannelInputs(
+    channelInputs: string[],
+    abortSignal?: AbortSignal,
+  ): Promise<SlackSignalsConversation[]> {
+    const resolved: SlackSignalsConversation[] = [];
+    const byName: string[] = [];
+
+    for (const input of channelInputs) {
+      const normalized = input.replace(/^#/, '').trim();
+      if (!normalized) continue;
+      // Channel IDs start with C, G, or D — resolve via conversations.info
+      if (/^[CGD][A-Z0-9]+$/.test(normalized)) {
+        try {
+          const conversation = await this.#syncClient.getConversation({ channelId: normalized, abortSignal });
+          resolved.push(conversation);
+        } catch {
+          // If info fails, use inferred type
+          resolved.push({ id: normalized, type: inferChannelType(normalized) });
+        }
+      } else {
+        byName.push(normalized);
+      }
+    }
+
+    if (byName.length > 0) {
+      const result = await this.#syncClient.listConversations({
+        types: this.conversationTypes,
+        abortSignal,
+      });
+      const byNameLower = byName.map(n => n.toLowerCase());
+      for (const conversation of result.conversations) {
+        if (conversation.name && byNameLower.includes(conversation.name.toLowerCase())) {
+          resolved.push(conversation);
+        }
+      }
+    }
+
+    return resolved;
   }
 
   #findLatestSlackSignal(messages: MastraDBMessage[]): { tagName: string; id: string } | undefined {

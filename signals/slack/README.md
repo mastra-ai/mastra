@@ -153,7 +153,6 @@ Required scopes (User Token Scopes in the Slack app config):
 
 | Scope | Used for |
 | --- | --- |
-| `rtm:streaming` | RTM WebSocket connection (`rtm.connect`) — **required** |
 | `channels:read` | Public channel discovery |
 | `channels:history` | Public channel message history |
 | `groups:read` | Private channel discovery |

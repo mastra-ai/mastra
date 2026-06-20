@@ -400,11 +400,11 @@ export function setupAutocomplete(state: TUIState): void {
       description: 'Subscribe/unsubscribe/config Slack signals',
       getArgumentCompletions: (argumentPrefix: string) =>
         [
-          { value: 'subscribe', label: 'subscribe', description: 'Subscribe this thread to Slack messages' },
-          { value: 'unsubscribe', label: 'unsubscribe', description: 'Unsubscribe this thread from Slack' },
+          { value: 'subscribe', label: 'subscribe', description: 'Subscribe to Slack channels (e.g. /slack subscribe #general)' },
+          { value: 'unsubscribe', label: 'unsubscribe', description: 'Unsubscribe from Slack channels' },
+          { value: 'channels', label: 'channels', description: 'List available Slack channels' },
           { value: 'config', label: 'config', description: 'Show Slack signal subscription info' },
           { value: 'token', label: 'token', description: 'Update or clear your Slack user token' },
-          { value: 'poll', label: 'poll', description: 'Change the Slack poll interval' },
           { value: 'debug', label: 'debug', description: 'Show detailed Slack signals diagnostics' },
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     });

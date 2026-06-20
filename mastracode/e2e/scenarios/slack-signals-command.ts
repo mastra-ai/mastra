@@ -155,25 +155,38 @@ export const slackSignalsCommandScenario = {
     await runtime.waitForScreenText(/not subscribed/i, terminal, 10_000);
     runtime.printScreen('slack config before subscribe', terminal);
 
-    // /slack subscribe should call auth.test on the mock server and subscribe.
-    terminal.submit('/slack subscribe');
-    await runtime.waitForScreenText(/Subscribed this thread to Slack workspace E2E Slack Workspace/i, terminal, 30_000);
-    runtime.printScreen('slack subscribe', terminal);
+    // /slack channels should list available channels from the mock Slack API.
+    terminal.submit('/slack channels');
+    await runtime.waitForScreenText(/Available channels/i, terminal, 10_000);
+    await runtime.waitForScreenText(/#general/i, terminal, 10_000);
+    runtime.printScreen('slack channels', terminal);
 
-    // /slack config after subscribing should show workspace + channel info.
+    // /slack subscribe #general should call auth.test + conversations.list and track only that channel.
+    terminal.submit('/slack subscribe #general');
+    await runtime.waitForScreenText(/Added 1 channel\(s\): #general/i, terminal, 30_000);
+    runtime.printScreen('slack subscribe channel', terminal);
+
+    // /slack config after subscribing should show workspace + channel-specific info.
     terminal.submit('/slack config');
     await runtime.waitForScreenText(/E2E Slack Workspace/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Channels tracked:/i, terminal, 10_000);
-    runtime.printScreen('slack config after subscribe', terminal);
+    await runtime.waitForScreenText(/Channels tracked: 1/i, terminal, 10_000);
+    await runtime.waitForScreenText(/#general/i, terminal, 10_000);
+    runtime.printScreen('slack config after channel subscribe', terminal);
 
-    // /slack unsubscribe should remove the subscription.
-    terminal.submit('/slack unsubscribe');
-    await runtime.waitForScreenText(/Unsubscribed this thread from Slack workspace E2E Slack Workspace/i, terminal, 30_000);
-    runtime.printScreen('slack unsubscribe', terminal);
+    // /slack debug should show the per-channel polling state.
+    terminal.submit('/slack debug');
+    await runtime.waitForScreenText(/Poll interval:/i, terminal, 10_000);
+    await runtime.waitForScreenText(/#general/i, terminal, 10_000);
+    runtime.printScreen('slack debug', terminal);
 
-    // /slack config after unsubscribing should say "not subscribed" again.
+    // /slack unsubscribe #general should remove just that channel.
+    terminal.submit('/slack unsubscribe #general');
+    await runtime.waitForScreenText(/Removed 1 channel\(s\): #general/i, terminal, 30_000);
+    runtime.printScreen('slack unsubscribe channel', terminal);
+
+    // Removing the last tracked channel removes the Slack subscription.
     terminal.submit('/slack config');
     await runtime.waitForScreenText(/not subscribed/i, terminal, 10_000);
-    runtime.printScreen('slack config after unsubscribe', terminal);
+    runtime.printScreen('slack config after channel unsubscribe', terminal);
   },
 } satisfies McE2eScenario;

@@ -189,17 +189,22 @@ export class MastraTUI {
       this.state.ui.requestRender();
     });
 
-    // Slack RTM: animate badge while connected
-    const slackRtmActive = (options.slackSignals as { rtmConnected?: boolean } | undefined)?.rtmConnected;
-    if (slackRtmActive) {
-      this.state.slackPollingActive = true;
+    // Slack polling: animate badge while polling
+    (options.slackSignals as { onPollingChanged?: (handler: GithubPollingChangedHandler) => void } | undefined)?.onPollingChanged?.(event => {
+      const currentThreadId = this.state.session?.thread?.getId?.();
+      const currentResourceId = this.state.session?.identity?.getResourceId?.();
+      if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
       if (!this.state.githubPrGradientAnimator) {
         this.state.githubPrGradientAnimator = new GradientAnimator(() => {
           updateStatusLine(this.state);
         });
       }
-      this.state.githubPrGradientAnimator.start();
-    }
+      this.state.slackPollingActive = event.running;
+      if (event.running) this.state.githubPrGradientAnimator.start();
+      else this.state.githubPrGradientAnimator.stop();
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+    });
 
     // Load user preferences
     const savedSettings = loadSettings();

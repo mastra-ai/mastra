@@ -204,8 +204,11 @@ export class SlackWebApiSyncClient implements SlackSignalsSyncClient {
   async listMessages(input: SlackListMessagesInput): Promise<SlackListMessagesResult> {
     const messages: SlackSignalsMessage[] = [];
     let cursor: string | undefined;
+    let page = 0;
+    const maxPages = input.maxPages ?? Infinity;
 
     do {
+      page++;
       const response = await this.#request(
         'conversations.history',
         {
@@ -224,10 +227,27 @@ export class SlackWebApiSyncClient implements SlackSignalsSyncClient {
         if (message) messages.push(message);
       }
       cursor = readString(response.response_metadata?.next_cursor);
-    } while (cursor);
+    } while (cursor && page < maxPages);
 
     messages.sort((a, b) => compareSlackTimestamps(a.ts, b.ts));
     return { messages, latestTs: getLatestTimestamp(messages) };
+  }
+
+  async getConversation(input: { channelId: string; abortSignal?: AbortSignal }): Promise<SlackSignalsConversation> {
+    const response = await this.#request(
+      'conversations.info',
+      { channel: input.channelId },
+      input.abortSignal,
+    );
+    const rawChannel = isPlainObject(response.channel) ? (response.channel as SlackRawConversation) : undefined;
+    if (!rawChannel) {
+      throw new SlackSignalsApiError({ method: 'conversations.info', code: 'not_found', response });
+    }
+    const conversation = mapConversation(rawChannel);
+    if (!conversation) {
+      throw new SlackSignalsApiError({ method: 'conversations.info', code: 'invalid_channel', response });
+    }
+    return conversation;
   }
 
   async #request(method: string, params: Record<string, unknown>, abortSignal?: AbortSignal): Promise<SlackApiResponse> {

@@ -188,7 +188,6 @@ const SLACK_MANIFEST = JSON.stringify(
     oauth_config: {
       scopes: {
         user: [
-          'rtm:streaming',
           'channels:read',
           'channels:history',
           'groups:read',
@@ -262,7 +261,7 @@ async function ensureSlackTokenReady(ctx: SlashCommandContext): Promise<boolean>
     question:
       'After creating the app:\n' +
       '1. In the left sidebar, click OAuth & Permissions\n' +
-      '2. Under User Token Scopes, add: rtm:streaming, channels:read, channels:history, groups:read, groups:history, im:read, im:history, mpim:read, mpim:history, search:read\n' +
+      '2. Under User Token Scopes, add: channels:read, channels:history, groups:read, groups:history, im:read, im:history, mpim:read, mpim:history, search:read\n' +
       '3. Click Install App (install to your workspace)\n' +
       '4. Copy the User OAuth Token (starts with xoxp-)\n\n' +
       'Paste your user token:',
