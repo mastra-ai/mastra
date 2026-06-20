@@ -1,4 +1,11 @@
-import type { McE2eScenario } from './types.js';
+import type { McE2eScenario, McE2eTerminal } from './types.js';
+
+async function typeTextSlowly(terminal: McE2eTerminal, text: string): Promise<void> {
+  for (const char of text) {
+    terminal.write(char);
+    await terminal.flushInput?.();
+  }
+}
 
 export const setupNestedModelSelectorScenario: McE2eScenario = {
   name: 'setup-nested-model-selector',
@@ -35,8 +42,7 @@ export const setupNestedModelSelectorScenario: McE2eScenario = {
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Name this custom pack/i, terminal);
-    terminal.write('Nested Modal E2E');
-    await runtime.waitForScreenText(/Nested Modal E2E/i, terminal);
+    await typeTextSlowly(terminal, 'Nested Modal E2E');
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Select model for plan mode/i, terminal);

@@ -268,6 +268,28 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children.includes(pending as never)).toBe(false);
   });
 
+  it('keeps steered slash commands pending until the echoed slash command message arrives', () => {
+    const state = createState();
+    addPendingUserMessage(state, 'signal-slash', '//deploy', undefined, {
+      slashCommand: { name: 'deploy', content: 'custom output' },
+    });
+    const pending = state.pendingSignalMessageComponentsById.get('signal-slash')?.component;
+
+    expect(state.chatContainer.children).toEqual([pending]);
+    expect(state.allSlashCommandComponents).toHaveLength(0);
+
+    addUserMessage(
+      state,
+      createUserMessage('<slash-command name="deploy">\ncustom output\n</slash-command>', 'persisted-slash'),
+    );
+
+    expect(state.pendingSignalMessageComponentsById.has('signal-slash')).toBe(false);
+    expect(state.allSlashCommandComponents).toHaveLength(1);
+    expect(state.chatContainer.children.includes(pending as never)).toBe(false);
+    expect(state.chatContainer.children.some(child => child instanceof SlashCommandComponent)).toBe(true);
+    expect(state.messageComponentsById.get('persisted-slash')).toBeInstanceOf(SlashCommandComponent);
+  });
+
   it('dedupes echoed <skill> activation messages against the optimistic skill component', () => {
     const state = createState();
     const skillComp = new SlashCommandComponent('skill/github-triage', 'Review the issue.');

@@ -406,7 +406,7 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.showError).not.toHaveBeenCalled();
   });
 
-  it('renders a pending message when a custom slash command signals an active run', async () => {
+  it('keeps a custom slash command pending until it appears in the stream', async () => {
     const sendSignal = vi
       .fn()
       .mockReturnValue({ id: 'signal-custom-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
@@ -438,8 +438,10 @@ describe('dispatchSlashCommand models routing', () => {
     });
     expect(state.session.sendMessage).not.toHaveBeenCalled();
     expect(state.pendingSignalMessageComponentsById.get('signal-custom-1')?.text).toBe('//deploy staging');
+    expect(state.pendingSignalMessageComponentsById.has('signal-custom-1')).toBe(true);
     expect(state.allSlashCommandComponents).toHaveLength(0);
-    expect(state.chatContainer.children.length).toBe(1);
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).not.toBeInstanceOf(SlashCommandComponent);
   });
 
   it('removes the pending message when custom slash command signal delivery fails', async () => {

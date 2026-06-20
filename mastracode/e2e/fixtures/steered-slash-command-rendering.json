@@ -1,0 +1,29 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Start a slow steered slash command rendering run.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 6,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 3
+      },
+      "response": {
+        "content": "Initial steered slash command rendering run is still active. Initial steered slash command rendering run completed."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "STEERED_SLASH_COMMAND_RENDERED_TEMPLATE",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Steered slash command response completed."
+      }
+    }
+  ]
+}

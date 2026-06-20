@@ -158,7 +158,7 @@ export function resolveAuth(request: GatewayAuthRequest, memoryGatewayApiKey?: s
 }
 
 function getGatewayProviderKey(gatewayId: string, providerId: string): string {
-  if (gatewayId === 'models.dev') return providerId;
+  if (gatewayId === 'models.dev' || gatewayId === MASTRACODE_GATEWAY_ID) return providerId;
   return providerId === gatewayId ? gatewayId : `${gatewayId}/${providerId}`;
 }
 

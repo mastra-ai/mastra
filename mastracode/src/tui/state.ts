@@ -43,6 +43,10 @@ export interface PendingSignalMessage {
   text: string;
   images?: Array<{ data: string; mimeType: string }>;
   isInterjection?: boolean;
+  slashCommand?: {
+    name: string;
+    content: string;
+  };
 }
 
 export interface GithubPrSubscriptionBadge {

@@ -31,6 +31,7 @@ import { customProviderModalValidationScenario } from './custom-provider-modal-v
 import { customProviderModelSelectorScenario } from './custom-provider-model-selector.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
+import { doubleSlashAutocompleteFilterScenario } from './double-slash-autocomplete-filter.js';
 import { fileAttachmentBlockedRetryScenario } from './file-attachment-blocked-retry.js';
 import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
@@ -98,6 +99,7 @@ import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
 import { stateSignalReloadScenario } from './state-signal-reload.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
+import { steeredSlashCommandRenderingScenario } from './steered-slash-command-rendering.js';
 import { storageFallbackHistoryReloadScenario } from './storage-fallback-history-reload.js';
 import { storageSettingsScenario } from './storage-settings.js';
 import { storageStartupPgFallbackScenario } from './storage-startup-pg-fallback.js';
@@ -161,6 +163,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'ctrlf-queued-custom-slash': ctrlfQueuedCustomSlashScenario,
   'ctrlf-queued-image-followup': ctrlfQueuedImageFollowupScenario,
   'debug-logging': debugLoggingScenario,
+  'double-slash-autocomplete-filter': doubleSlashAutocompleteFilterScenario,
   'file-attachment-blocked-retry': fileAttachmentBlockedRetryScenario,
   'file-attachment-history-reload': fileAttachmentHistoryReloadScenario,
   'file-autocomplete': fileAutocompleteScenario,
@@ -216,6 +219,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-browser-processor': stateSignalBrowserProcessorScenario,
   'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,
+  'steered-slash-command-rendering': steeredSlashCommandRenderingScenario,
   'setup-completion-persistence': setupCompletionPersistenceScenario,
   'setup-custom-pack-completion': setupCustomPackCompletionScenario,
   'setup-login-refresh': setupLoginRefreshScenario,
