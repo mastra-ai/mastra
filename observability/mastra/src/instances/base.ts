@@ -695,23 +695,19 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * then routes the exported tracing event through the ObservabilityBus.
    */
   protected emitSpanEnded(span: AnySpan): void {
-    const exportedSpan = this.getSpanForExport(span);
-
-    if (exportedSpan) {
+    // Emit metrics independently of export filtering: users who exclude span
+    // types (e.g. MODEL_STEP) to cut per-span costs should still get duration,
+    // token, and cost metrics. Only skip metrics for invalid or internal spans.
+    if (span.isValid && !(span.isInternal && !this.config.includeInternalSpans)) {
       try {
-        // TODO: We intentionally export first so auto-extracted metrics are skipped
-        // when the span is filtered out by processors. Metrics still use the live
-        // span for correlation and parent traversal, but current span processors
-        // mutate spans in place during export, so those mutations can still affect
-        // the live span before metrics run. Future options to explore:
-        // 1. Make span processors pure/non-mutating.
-        // 2. Split trace processors from metric-specific processors/enrichers.
-        // 3. Revisit whether auto-extracted metrics should run before export.
         emitAutoExtractedMetrics(span, this.getMetricsContext(span));
       } catch (err) {
         this.logger.error('[Observability] Auto-extraction error:', err);
       }
+    }
 
+    const exportedSpan = this.getSpanForExport(span);
+    if (exportedSpan) {
       const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
       this.emitTracingEvent(event);
     }
