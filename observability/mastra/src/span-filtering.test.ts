@@ -604,9 +604,7 @@ describe('Span Filtering', () => {
       await tracing.flush();
 
       // Token metrics should only appear once (from rollup, not duplicated).
-      const inputTokenMetrics = collector.metricEvents.filter(
-        e => e.metric.name === 'mastra_model_total_input_tokens',
-      );
+      const inputTokenMetrics = collector.metricEvents.filter(e => e.metric.name === 'mastra_model_total_input_tokens');
       expect(inputTokenMetrics).toHaveLength(1);
       expect(inputTokenMetrics[0]!.metric.value).toBe(50);
 
