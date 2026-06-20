@@ -48,4 +48,31 @@ describe('MainSidebarSections', () => {
     expect(parent.className).not.toContain('bg-sidebar-nav-active');
     expect(child.className).toContain('bg-sidebar-nav-active');
   });
+
+  it('compares nested links against longer matches across the section', () => {
+    render(
+      <MainSidebarSections
+        sections={[
+          {
+            key: 'workspace',
+            links: [
+              {
+                name: 'Agents',
+                url: '/agents',
+                children: [{ name: 'Templates', url: '/agents/templates' }],
+              },
+              { name: 'Template Runs', url: '/agents/templates/runs' },
+            ],
+          },
+        ]}
+        isActive={(link, siblings) => getIsLinkActive(link, '/agents/templates/runs', siblings)}
+      />,
+    );
+
+    const nestedPrefixMatch = screen.getByRole('link', { name: 'Templates' });
+    const longerSectionMatch = screen.getByRole('link', { name: 'Template Runs' });
+
+    expect(nestedPrefixMatch.className).not.toContain('bg-sidebar-nav-active');
+    expect(longerSectionMatch.className).toContain('bg-sidebar-nav-active');
+  });
 });

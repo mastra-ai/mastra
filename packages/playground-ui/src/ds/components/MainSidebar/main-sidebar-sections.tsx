@@ -10,17 +10,18 @@ import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
 export type MainSidebarSectionsProps = {
   sections: NavSection[];
   /**
-   * Called per link to decide the active state. Receives sibling links so
-   * callers can use `getIsLinkActive` (or any sibling-aware logic) without
+   * Called per link to decide the active state. Receives the section's links so
+   * callers can use `getIsLinkActive` (or any section-aware logic) without
    * re-scanning `sections` from the outside. Default: each link's `isActive`.
    */
-  isActive?: (link: NavLink, siblings: NavLink[]) => boolean;
+  isActive?: (link: NavLink, activeCandidates: NavLink[]) => boolean;
   className?: string;
 };
 
 type MainSidebarSectionLinkProps = {
   link: NavLink;
   siblings: NavLink[];
+  activeCandidates: NavLink[];
   level?: number;
   isActive?: MainSidebarSectionsProps['isActive'];
 };
@@ -29,13 +30,19 @@ function getLinkKey(link: NavLink) {
   return `${link.url}:${link.name}`;
 }
 
-function MainSidebarSectionLink({ link, siblings, level = 0, isActive }: MainSidebarSectionLinkProps) {
+function MainSidebarSectionLink({
+  link,
+  siblings,
+  activeCandidates,
+  level = 0,
+  isActive,
+}: MainSidebarSectionLinkProps) {
   const childLinks = link.children ?? [];
 
   return (
     <MainSidebarNavLink
       link={link}
-      isActive={isActive?.(link, siblings) ?? link.isActive}
+      isActive={isActive?.(link, activeCandidates) ?? link.isActive}
       level={level}
       subItems={
         childLinks.length > 0 ? (
@@ -45,6 +52,7 @@ function MainSidebarSectionLink({ link, siblings, level = 0, isActive }: MainSid
                 key={getLinkKey(child)}
                 link={child}
                 siblings={childLinks}
+                activeCandidates={activeCandidates}
                 level={level + 1}
                 isActive={isActive}
               />
@@ -85,6 +93,7 @@ export function MainSidebarSections({ sections, isActive, className }: MainSideb
                   key={getLinkKey(link)}
                   link={link}
                   siblings={section.links}
+                  activeCandidates={section.links}
                   isActive={isActive}
                 />
               ))}
