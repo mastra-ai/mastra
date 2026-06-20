@@ -230,6 +230,8 @@ allowBuilds:
   cpu-features: false
   dd-trace: false
   edgedriver: false
+  electron: true
+  electron-winstaller: false
   esbuild: false
   geckodriver: false
   inngest-cli: false

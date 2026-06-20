@@ -1,0 +1,16 @@
+{
+  "$schema": "https://v2-9-16.turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build", "@internal/playground#build"],
+      "inputs": ["$TURBO_DEFAULT$", "electron.vite.config.ts"],
+      "outputs": ["dist/**", ".mastra/output/**"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "tsconfig.json", "package.json", "vitest.config.ts"],
+      "outputs": []
+    }
+  }
+}

@@ -58,6 +58,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'studio/desktop',
+          label: 'Desktop app',
+        },
+        {
+          type: 'doc',
           id: 'studio/auth',
           label: 'Auth',
         },

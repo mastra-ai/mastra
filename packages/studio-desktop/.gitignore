@@ -1,0 +1,5 @@
+dist/
+release/
+node_modules/
+.mastra/
+pino-detection.js

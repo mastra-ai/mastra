@@ -1,0 +1,47 @@
+---
+title: "Desktop app | Studio"
+description: Run Mastra Studio as an installable desktop app with a bundled local runtime and local model presets.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Studio desktop app
+
+Mastra Studio Desktop is an installable Electron shell for local Studio usage. It starts a bundled Mastra runtime, embeds Studio, and helps connect the default agent to an OpenAI-compatible local model server such as LM Studio.
+
+## When to use the desktop app
+
+Use the desktop app when you want a local Studio experience without opening a terminal for every session.
+
+- Local model workflows: Connect Studio to LM Studio through `http://localhost:1234/v1`.
+- Non-developer iteration: Use Studio and Editor drafts without editing source files.
+- Local demos: Keep the Mastra API, Studio UI, settings, and logs in one app window.
+
+For custom Electron applications that call a Mastra server from their own UI, use the [Electron framework guide](/guides/getting-started/electron).
+
+## Local model preset
+
+The desktop app ships with an LM Studio preset that targets `http://localhost:1234/v1`. Use **Model > Check LM Studio Server** to query `http://localhost:1234/v1/models` and list any model IDs returned by the local server.
+
+Use **Model > Use LM Studio Preset** to switch the managed runtime to LM Studio settings. When LM Studio reports loaded models, the app uses the first returned model ID. Otherwise, it keeps the default local model ID and lets you update the model in the app settings file.
+
+If LM Studio isn't running, start the LM Studio local server and run the check again. The desktop app doesn't start or manage LM Studio in this version.
+
+## Data and runtime
+
+In managed mode, the app starts a bundled Mastra runtime bound to `127.0.0.1`. It stores settings and local Editor files in the app data directory for the current operating system.
+
+The bundled starter runtime includes:
+
+- a `desktopAssistant` agent
+- local filesystem storage for Editor drafts and versioning
+- `@mastra/editor`
+- model configuration from the desktop settings
+
+## Related
+
+- [Studio overview](/docs/studio/overview)
+- [Studio deployment](/docs/studio/deployment)
+- [Editor overview](/docs/editor/overview)
+- [Electron framework guide](/guides/getting-started/electron)

@@ -1,0 +1,99 @@
+{
+  "name": "@internal/studio-desktop",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Installable Mastra Studio desktop shell",
+  "type": "module",
+  "main": "dist/main/index.js",
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/studio-desktop"
+  },
+  "scripts": {
+    "dev": "pnpm prepare:electron && pnpm build:studio && pnpm build:mastra && electron-vite dev",
+    "build": "pnpm build:studio && pnpm build:mastra && electron-vite build",
+    "build:app": "electron-vite build",
+    "build:mastra": "node scripts/build-mastra.mjs",
+    "build:studio": "pnpm --filter @mastra/playground-ui build && pnpm --filter @internal/playground build",
+    "package": "pnpm prepare:electron && pnpm build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
+    "dist": "pnpm prepare:electron && pnpm build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
+    "lint": "eslint .",
+    "prepare:electron": "node -e \"require('electron')\"",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.25",
+    "@internal/lint": "workspace:*",
+    "@internal/playground": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@mastra/editor": "workspace:*",
+    "@vitest/coverage-v8": "catalog:",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "eslint": "^10.4.1",
+    "mastra": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "^7.3.1",
+    "vitest": "catalog:",
+    "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5"
+  },
+  "build": {
+    "appId": "ai.mastra.studio.desktop",
+    "productName": "Mastra Studio",
+    "icon": "build/icon",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": ".mastra/output",
+        "to": "starter-output"
+      },
+      {
+        "from": ".mastra/output/node_modules",
+        "to": "starter-output/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../playground/dist",
+        "to": "studio"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development"
+    }
+  }
+}
