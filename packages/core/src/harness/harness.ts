@@ -3683,7 +3683,7 @@ export class Harness<TState = {}> {
         cloneThreadForFork: hasMemory
           ? async ({ sourceThreadId, resourceId, title, excludeToolCallId }) => {
               const memory = await this.resolveMemory();
-              const cloneInput: Parameters<typeof memory.cloneThread>[0] = {
+              const result = await memory.cloneThread({
                 sourceThreadId,
                 resourceId: resourceId ?? this.#session.identity.getResourceId(),
                 title,
@@ -3691,71 +3691,43 @@ export class Harness<TState = {}> {
                   forkedSubagent: true,
                   parentThreadId: sourceThreadId,
                 },
-              };
+              });
 
-              let syntheticForkResult: MastraDBMessage | undefined;
-
-              // Replace the in-flight assistant message (the one containing the
-              // current subagent tool call) with a completed synthetic result in
-              // the fork clone. Keeping the half-finished call makes the forked
-              // model mirror it; dropping it entirely makes the fork think it
-              // still needs to call `subagent`. The synthetic result tells the
-              // model that this cloned context is already the forked subagent.
+              // Mark the cloned context as already being inside the forked subagent.
+              // We intentionally append this instead of pre-scanning/filtering the
+              // parent thread: long threads can be expensive to recall in full, while
+              // cloneThread already preserves messages, working memory, OM, and clone
+              // metadata in the storage/memory layer.
               if (excludeToolCallId) {
-                const { messages: allMessages } = await memory.recall({ threadId: sourceThreadId, perPage: false });
-                const excludedIds = new Set<string>();
-                for (const msg of allMessages) {
-                  const hasToolCall = msg.content.parts.some(
-                    (part: Record<string, unknown>) =>
-                      (part.type === 'tool-call' && part.toolCallId === excludeToolCallId) ||
-                      (part.type === 'tool-result' && part.toolCallId === excludeToolCallId) ||
-                      (part.type === 'tool-invocation' &&
-                        (part.toolInvocation as Record<string, unknown> | undefined)?.toolCallId === excludeToolCallId),
-                  );
-                  if (hasToolCall) {
-                    excludedIds.add(msg.id);
-                  }
-                }
-                const includedIds = allMessages.filter(msg => !excludedIds.has(msg.id)).map(msg => msg.id);
-                cloneInput.options = {
-                  messageFilter: { messageIds: includedIds },
-                };
-
-                syntheticForkResult = {
-                  id: randomUUID(),
-                  role: 'assistant',
-                  createdAt: new Date(),
-                  content: {
-                    format: 2,
-                    parts: [
-                      {
-                        type: 'tool-invocation',
-                        toolInvocation: {
-                          state: 'result',
-                          toolCallId: excludeToolCallId,
-                          toolName: 'subagent',
-                          args: {},
-                          result:
-                            'The subagent tool call is complete. The current context window is now the forked subagent. Complete the delegated task directly using the available tools; do not call the subagent tool again.',
-                        },
-                      },
-                    ],
-                  },
-                };
-              }
-
-              const result = await memory.cloneThread(cloneInput);
-              if (syntheticForkResult) {
                 await memory.saveMessages({
                   messages: [
                     {
-                      ...syntheticForkResult,
+                      id: randomUUID(),
+                      role: 'assistant',
+                      createdAt: new Date(),
                       threadId: result.thread.id,
                       resourceId: result.thread.resourceId,
+                      content: {
+                        format: 2,
+                        parts: [
+                          {
+                            type: 'tool-invocation',
+                            toolInvocation: {
+                              state: 'result',
+                              toolCallId: excludeToolCallId,
+                              toolName: 'subagent',
+                              args: {},
+                              result:
+                                'The subagent tool call is complete. The current context window is now the forked subagent. Complete the delegated task directly using the available tools; do not call the subagent tool again.',
+                            },
+                          },
+                        ],
+                      },
                     },
                   ],
                 });
               }
+
               return { id: result.thread.id, resourceId: result.thread.resourceId };
             }
           : undefined,

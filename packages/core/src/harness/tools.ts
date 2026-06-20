@@ -91,9 +91,9 @@ export interface CreateSubagentToolOptions {
     resourceId?: string;
     title?: string;
     /**
-     * Tool-call ID of the current `subagent` invocation. The harness uses this
-     * to replace the in-flight assistant message (the one containing this tool
-     * call) with a synthetic completed result in the cloned fork history.
+     * Tool-call ID of the current `subagent` invocation. The harness appends a
+     * synthetic completed result with this ID to the cloned fork history so the
+     * forked model knows it is already running inside the delegated context.
      */
     excludeToolCallId?: string;
   }) => Promise<{ id: string; resourceId: string }>;

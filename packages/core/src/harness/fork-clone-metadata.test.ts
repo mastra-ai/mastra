@@ -102,11 +102,12 @@ describe('Harness fork clone metadata wiring', () => {
     });
   });
 
-  it('replaces the in-flight subagent tool-call message with a synthetic completed result in the fork clone', async () => {
+  it('appends a synthetic completed result to the fork clone without pre-scanning history', async () => {
     // When the fork clone callback receives excludeToolCallId, the harness
-    // should list the parent thread messages, exclude the half-finished
-    // assistant message from cloneThread, then append a synthetic completed
-    // subagent result so the fork knows it is already inside the forked context.
+    // should clone normally (preserving messages, WM, OM, embeddings, and clone
+    // metadata) and append a synthetic completed subagent result. It must not
+    // pre-scan the whole parent thread, because long real threads can make a
+    // full recall expensive enough to freeze startup.
     const cloneThread = vi.fn().mockResolvedValue({
       thread: {
         id: 'forked-thread-id',
@@ -120,41 +121,7 @@ describe('Harness fork clone metadata wiring', () => {
       messageIdMap: {},
     });
 
-    const recall = vi.fn().mockResolvedValue({
-      messages: [
-        {
-          id: 'msg-user-1',
-          role: 'user',
-          createdAt: new Date('2026-01-01T00:00:00Z'),
-          content: { parts: [{ type: 'text', text: 'Do something' }] },
-        },
-        {
-          id: 'msg-asst-1',
-          role: 'assistant',
-          createdAt: new Date('2026-01-01T00:01:00Z'),
-          content: {
-            parts: [
-              { type: 'text', text: 'Let me delegate.' },
-              {
-                type: 'tool-invocation',
-                toolInvocation: { toolCallId: 'tc-sub-1', toolName: 'subagent', state: 'call' },
-              },
-            ],
-          },
-        },
-        {
-          id: 'msg-user-2',
-          role: 'user',
-          createdAt: new Date('2026-01-01T00:02:00Z'),
-          content: { parts: [{ type: 'text', text: 'More context' }] },
-        },
-      ],
-      total: 3,
-      page: 0,
-      perPage: false,
-      hasMore: false,
-    });
-
+    const recall = vi.fn();
     const saveMessages = vi.fn().mockResolvedValue({ messages: [] });
     const memoryFactory = vi.fn().mockResolvedValue({ cloneThread, recall, saveMessages });
 
@@ -204,13 +171,17 @@ describe('Harness fork clone metadata wiring', () => {
 
     await cloneCb({ sourceThreadId: 'parent-thread-xyz', title: 'Fork', excludeToolCallId: 'tc-sub-1' });
 
+    expect(recall).not.toHaveBeenCalled();
     expect(cloneThread).toHaveBeenCalledTimes(1);
-    const cloneArg = cloneThread.mock.calls[0]![0];
-    // The assistant message containing the half-finished subagent tool call is excluded.
-    expect(cloneArg.options.messageFilter.messageIds).not.toContain('msg-asst-1');
-    // Prior user messages are still included.
-    expect(cloneArg.options.messageFilter.messageIds).toContain('msg-user-1');
-    expect(cloneArg.options.messageFilter.messageIds).toContain('msg-user-2');
+    expect(cloneThread).toHaveBeenCalledWith({
+      sourceThreadId: 'parent-thread-xyz',
+      resourceId: 'parent-resource',
+      title: 'Fork',
+      metadata: {
+        forkedSubagent: true,
+        parentThreadId: 'parent-thread-xyz',
+      },
+    });
 
     expect(saveMessages).toHaveBeenCalledTimes(1);
     const savedMessage = saveMessages.mock.calls[0]![0].messages[0];
