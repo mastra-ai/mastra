@@ -76,6 +76,14 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
 
   // ── Mutation API ──────────────────────────────────────────────────────
 
+  updateMetadata(agentType: string, task: string, modelId?: string, forked?: boolean): void {
+    this.agentType = agentType;
+    this.task = task;
+    this.modelId = modelId;
+    this.forked = forked ?? false;
+    this.rebuild();
+  }
+
   addToolStart(name: string, args: unknown): void {
     this.toolCalls.push({ name, args, done: false });
     this.rebuild();
