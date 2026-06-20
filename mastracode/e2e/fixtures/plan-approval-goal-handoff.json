@@ -27,6 +27,21 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
+        "systemMessage": "You are the goal judge",
+        "userMessage": "Goal: # E2E Goal Plan"
+      },
+      "response": {
+        "content": {
+          "decision": "waiting",
+          "reason": "pursuing goal"
+        }
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "systemMessage": "You are Mastra Code",
         "userMessage": "E2E Goal Plan"
       },
       "response": {

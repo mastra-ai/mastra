@@ -3,7 +3,7 @@
     {
       "match": {
         "systemMessage": "You are the goal judge",
-        "userMessage": "Goal: Persist the goal command e2e objective across status commands."
+        "userMessage": "Goal: Run the custom goal slash autocomplete objective."
       },
       "response": {
         "content": {
@@ -15,11 +15,11 @@
     {
       "match": {
         "systemMessage": "You are Mastra Code",
-        "userMessage": "Persist the goal command e2e objective across status commands.",
+        "userMessage": "Run the custom goal slash autocomplete objective.",
         "hasToolResult": false
       },
       "response": {
-        "content": "Persistent goal command e2e acknowledged."
+        "content": "Custom goal autocomplete e2e acknowledged."
       }
     }
   ]

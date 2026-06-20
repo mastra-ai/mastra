@@ -7,7 +7,6 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
   name: 'plan-approval-goal-handoff',
   description: 'Use AIMock submit_plan and select Use as /goal through the real TUI.',
   testName: 'sets an AIMock-driven submitted plan as a persistent goal',
-  skipReason: 'current main goal judge returns invalid structured scorer output after plan goal handoff',
   useOpenAIModel: true,
   aimockFixture: 'plan-approval-goal-handoff.json',
   prepare({ appDataDir }) {

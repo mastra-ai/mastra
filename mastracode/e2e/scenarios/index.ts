@@ -40,6 +40,7 @@ import { githubSignalsIncrementalScenario } from './github-signals-incremental.j
 import { githubSignalsNotificationReloadScenario } from './github-signals-notification-reload.js';
 import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbox.js';
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
+import { goalCustomSlashAutocompleteScenario } from './goal-custom-slash-autocomplete.js';
 import { harnessApiConfigScenario } from './harness-api-config.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { integrationCommandsScenario } from './integration-commands.js';
@@ -170,6 +171,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'github-signals-notification-reload': githubSignalsNotificationReloadScenario,
   'github-signals-polling-inbox': githubSignalsPollingInboxScenario,
   'github-signals-unsubscribe-reload': githubSignalsUnsubscribeReloadScenario,
+  'goal-custom-slash-autocomplete': goalCustomSlashAutocompleteScenario,
   'harness-api-config': harnessApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'visible-commands': visibleCommandsScenario,

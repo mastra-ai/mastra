@@ -2,23 +2,8 @@
   "fixtures": [
     {
       "match": {
-        "endpoint": "chat",
-        "model": "gpt-5.4-mini",
-        "userMessage": "Drive the persistent goal judge e2e until it is done.",
-        "sequenceIndex": 0
-      },
-      "response": {
-        "content": {
-          "decision": "continue",
-          "reason": "Continue by reporting the goal judge follow-up e2e step."
-        }
-      }
-    },
-    {
-      "match": {
-        "endpoint": "chat",
-        "model": "gpt-5.4-mini",
-        "userMessage": "Goal attempt 1/3"
+        "systemMessage": "You are Mastra Code",
+        "userMessage": "Drive the persistent goal judge e2e until it is done."
       },
       "response": {
         "content": "Goal judge follow-up e2e step completed."
@@ -26,10 +11,7 @@
     },
     {
       "match": {
-        "endpoint": "chat",
-        "model": "gpt-5.4-mini",
-        "userMessage": "Drive the persistent goal judge e2e until it is done.",
-        "sequenceIndex": 1
+        "systemMessage": "You are the goal judge"
       },
       "response": {
         "content": {

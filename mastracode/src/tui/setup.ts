@@ -21,10 +21,8 @@ import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
 
-// =============================================================================
-// Keyboard Shortcuts
-// =============================================================================
-
+// ======================================================================// Keyboard Shortcuts
+// ======================================================================
 export function setupKeyboardShortcuts(
   state: TUIState,
   callbacks: {
@@ -231,10 +229,8 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   return true;
 }
 
-// =============================================================================
-// Layout
-// =============================================================================
-
+// ======================================================================// Layout
+// ======================================================================
 export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promise<void>): void {
   // Add header
   const appName = state.options.appName || 'Mastra Code';
@@ -293,10 +289,8 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.ui.setFocus(state.editor);
 }
 
-// =============================================================================
-// Autocomplete
-// =============================================================================
-
+// ======================================================================// Autocomplete
+// ======================================================================
 /** Detect the fd binary (fast file finder) for @ fuzzy file autocomplete */
 function detectFdPath(): string | null {
   const whichCmd = process.platform === 'win32' ? 'where' : 'which';
@@ -432,10 +426,8 @@ export function setupAutocomplete(state: TUIState): void {
   state.editor.setAutocompleteProvider(state.autocompleteProvider);
 }
 
-// =============================================================================
-// Custom Slash Commands Loading
-// =============================================================================
-
+// ======================================================================// Custom Slash Commands Loading
+// ======================================================================
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
     const configDir = (state.session.state.get() as { configDir?: string } | undefined)?.configDir;
@@ -494,10 +486,8 @@ export async function refreshSkillsAutocomplete(state: TUIState): Promise<void> 
   setupAutocomplete(state);
 }
 
-// =============================================================================
-// Key Handlers
-// =============================================================================
-
+// ======================================================================// Key Handlers
+// ======================================================================
 export function setupKeyHandlers(
   state: TUIState,
   callbacks: {
@@ -539,10 +529,8 @@ export function setupKeyHandlers(
   };
 }
 
-// =============================================================================
-// Harness Subscription
-// =============================================================================
-
+// ======================================================================// Harness Subscription
+// ======================================================================
 export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   let eventQueue = Promise.resolve();
   const listener: HarnessEventListener = event => {
@@ -562,20 +550,16 @@ export function subscribeToHarness(state: TUIState, handleEvent: (event: any) =>
   state.unsubscribe = state.session.subscribe(listener);
 }
 
-// =============================================================================
-// Terminal Title
-// =============================================================================
-
+// ======================================================================// Terminal Title
+// ======================================================================
 export function updateTerminalTitle(state: TUIState): void {
   const appName = state.options.appName || 'Mastra Code';
   const cwd = process.cwd().split('/').pop() || '';
   state.ui.terminal.setTitle(`${appName} - ${cwd}`);
 }
 
-// =============================================================================
-// Thread Selection
-// =============================================================================
-
+// ======================================================================// Thread Selection
+// ======================================================================
 export async function promptForThreadSelection(state: TUIState): Promise<void> {
   const allThreads = await state.session.thread.list();
 
@@ -648,10 +632,8 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   state.pendingNewThread = true;
 }
 
-// =============================================================================
-// Existing Tasks
-// =============================================================================
-
+// ======================================================================// Existing Tasks
+// ======================================================================
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
     const tasks = state.session.displayState.get().tasks;
