@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '../processors';
 import { RequestContext } from '../request-context';
 import { askUserTool } from '../tools/builtin/ask-user';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
@@ -20,7 +21,7 @@ import type { HarnessRequestContext, HarnessSubagent } from './types';
 export { askUserTool };
 
 const FORKED_SUBAGENT_NESTING_NOTICE =
-  'Do not call the `subagent` tool. You are currently running inside a forked subagent, and this is the maximum allowed subagent nesting level. Further subagent calls will return an error. Answer the task directly using the conversation history and the other tools available to you.';
+  '!IMPORTANT!: All previous context was from the original thread. YOU are now a forked subagent; you are not the same agent that all previous context related to. That context is there for your understanding. Do not call the `subagent` tool again. Use the previous context and available tools to complete the following task directly.';
 
 const FORKED_SUBAGENT_TASK_NOTICE =
   'Do not call `task_write`, `task_update`, `task_complete`, or `task_check` inside a forked subagent. Forked subagents keep the parent task-tool schemas for prompt-cache stability, but the parent agent owns the visible task list. Track forked subagent work in your final answer instead.';
@@ -89,6 +90,12 @@ export interface CreateSubagentToolOptions {
     sourceThreadId: string;
     resourceId?: string;
     title?: string;
+    /**
+     * Tool-call ID of the current `subagent` invocation. The harness appends a
+     * synthetic completed result with this ID to the cloned fork history so the
+     * forked model knows it is already running inside the delegated context.
+     */
+    excludeToolCallId?: string;
   }) => Promise<{ id: string; resourceId: string }>;
   /**
    * Resolves the toolsets the parent agent runs with for the current request.
@@ -220,6 +227,7 @@ Use this tool when:
             sourceThreadId: parentThreadId,
             resourceId: harnessCtx?.resourceId,
             title: `Fork: ${definition.name} subagent`,
+            excludeToolCallId: toolCallId,
           });
         } catch (err) {
           return {
@@ -231,11 +239,11 @@ Use this tool when:
         subagentToRun = parentAgent;
         // Display value only; forked runs use the parent agent's configured model.
         resolvedModelId = opts.getParentModelId?.() || 'parent-agent';
-        task = `${task}\n\n${FORKED_SUBAGENT_NESTING_NOTICE}\n\n${FORKED_SUBAGENT_TASK_NOTICE}`;
+        task = `${FORKED_SUBAGENT_NESTING_NOTICE}\n\n${FORKED_SUBAGENT_TASK_NOTICE}\n\nUser task:\n${task}`;
         streamMemory = { thread: forkedThread.id, resource: forkedThread.resourceId };
-        // Allow a recovery step if the forked model accidentally calls the
-        // inherited-but-disabled `subagent` tool. Without this, the single-step
-        // default can return only the stub tool result instead of the answer.
+        // Forked subagents may need a larger budget to use the inherited parent
+        // tool environment. Recursion is prevented by the synthetic completed
+        // subagent result in cloned history, not by constraining step count.
         streamMaxSteps = 1000;
         streamStopWhen = undefined;
         streamPrepareStep = undefined;
@@ -311,6 +319,8 @@ Use this tool when:
           model,
           tools: mergedTools,
           workspace,
+          inputProcessors: [new ProviderHistoryCompat()],
+          errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
         });
 
         // Only resolve workspace tool names when an allowlist is configured,
@@ -338,15 +348,9 @@ Use this tool when:
               })
             : undefined;
 
-        // Build a request context for the subagent that inherits sandbox paths
-        // and harness state but strips threadId/resourceId so the subagent
-        // doesn't trigger OM enrichment on the parent's memory thread.
-        if (context?.requestContext) {
-          subagentRequestContext = new RequestContext(context.requestContext.entries());
-          if (harnessCtx) {
-            subagentRequestContext.set('harness', { ...harnessCtx, threadId: null, resourceId: '' });
-          }
-        }
+        // Match the original non-forked subagent contract: the parent request
+        // context is only read above for event forwarding / abort / model lookup.
+        // The fresh subagent Agent runs without inherited request context or memory.
       }
 
       const startTime = Date.now();
