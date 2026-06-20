@@ -12,6 +12,7 @@ export const setupNestedModelSelectorScenario: McE2eScenario = {
     DEEPSEEK_API_KEY: '',
     CEREBRAS_API_KEY: '',
     MASTRA_GATEWAY_API_KEY: '',
+    '302AI_API_KEY': 'sk-nested-model-e2e',
   }),
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);

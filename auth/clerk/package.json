@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-clerk",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Mastra Clerk Auth integration",
   "type": "module",
   "main": "dist/index.js",
