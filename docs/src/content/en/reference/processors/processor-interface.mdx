@@ -1295,7 +1295,7 @@ processToolResult?(args: ProcessToolResultArgs): ProcessorMessageResult;
   {
     name: 'result',
     type: 'unknown',
-    description: 'Raw value returned by `tool.execute()` (already serialized).',
+    description: 'Value returned by the tool. For client-executed tools this is the output of `tool.execute()` after it has passed through `ensureSerializable`. For provider-executed tools (e.g. Anthropic `web_search`) it is the raw result from the provider stream, which is not run through `ensureSerializable`.',
     isOptional: false,
   },
   {

@@ -504,8 +504,7 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
  * result is appended to the message list / fed to the next LLM call.
  * Symmetric with processOutputStep, which fires before tool execution.
  */
-export interface ProcessToolResultArgs<TTripwireMetadata = unknown>
-  extends ProcessorMessageContext<TTripwireMetadata> {
+export interface ProcessToolResultArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
   /** The current step number (0-indexed) */
   stepNumber: number;
   /** Name of the tool that was executed */
@@ -514,7 +513,12 @@ export interface ProcessToolResultArgs<TTripwireMetadata = unknown>
   toolCallId: string;
   /** Arguments the LLM passed to the tool */
   args: unknown;
-  /** Raw value returned by tool.execute() (already passed through ensureSerializable) */
+  /**
+   * Value returned by the tool. For client-executed tools this is the output of
+   * `tool.execute()` after it has passed through `ensureSerializable`. For
+   * provider-executed tools (e.g. Anthropic `web_search`) it is the raw result
+   * from the provider stream, which is not run through `ensureSerializable`.
+   */
   result: unknown;
   /** Whether this result came from a provider-executed tool (e.g. Anthropic web_search) */
   providerExecuted?: boolean;
@@ -747,12 +751,7 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    */
   processToolResult?(
     args: ProcessToolResultArgs<TTripwireMetadata>,
-  ):
-    | Promise<MessageList | MastraDBMessage[] | undefined | void>
-    | MessageList
-    | MastraDBMessage[]
-    | void
-    | undefined;
+  ): Promise<MessageList | MastraDBMessage[] | undefined | void> | MessageList | MastraDBMessage[] | void | undefined;
 
   /**
    * Process an LLM API rejection error before it's surfaced as a final error.
