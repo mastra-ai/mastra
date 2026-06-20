@@ -889,19 +889,38 @@ export class MessageList {
    * without clearing them from the unsaved tracking. Pair with
    * {@link clearUnsavedMessages} to only drop messages once a storage write has
    * succeeded, so a failed save can be retried instead of silently lost.
+   *
+   * The returned messages are deep-cloned so they are an immutable snapshot of the
+   * content at read time: streaming that appends more parts to the same message id
+   * during the in-flight save cannot mutate the payload being written, and
+   * {@link clearUnsavedMessages} can reliably detect whether the live message
+   * changed since this snapshot.
    */
   public getUnsavedMessages(): MastraDBMessage[] {
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
-    return messages.map(message => this.transformMessageForTranscript(message));
+    return messages.map(message => structuredClone(this.transformMessageForTranscript(message)));
   }
 
   /**
-   * Marks the given messages (matched by id) as saved by removing them from the
-   * unsaved user/response tracking. Messages added after {@link getUnsavedMessages}
-   * was called remain unsaved and will be picked up by the next save.
+   * Marks the given messages (the snapshots returned by {@link getUnsavedMessages})
+   * as saved by removing them from the unsaved user/response tracking. A message is
+   * only cleared when the live message still matches the snapshot that was persisted;
+   * if its content changed while the save was in flight (e.g. streaming appended more
+   * parts to the same id), it stays tracked so the newer content is written by the
+   * next save instead of being silently dropped. Messages added after
+   * {@link getUnsavedMessages} was called also remain unsaved.
    */
   public clearUnsavedMessages(messages: MastraDBMessage[]): void {
-    this.stateManager.clearUnsavedMessages(new Set(messages.map(m => m.id)));
+    const savedIds = new Set<string>();
+    for (const saved of messages) {
+      const live = this.messages.find(m => m.id === saved.id);
+      // Drop from tracking only if nothing changed since the snapshot was taken.
+      // A missing live message means it was already removed, so clearing is safe.
+      if (!live || messagesAreEqual(this.transformMessageForTranscript(live), saved)) {
+        savedIds.add(saved.id);
+      }
+    }
+    this.stateManager.clearUnsavedMessages(savedIds);
   }
 
   private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
