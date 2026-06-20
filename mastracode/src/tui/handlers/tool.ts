@@ -84,7 +84,7 @@ function ensureSubmitPlanComponent(
  * Handles objects, strings, and other types.
  * Extracts content from common tool return structures like { content: "...", isError: false }
  */
-function isToolResultError(result: unknown): boolean {
+export function isToolResultError(result: unknown): boolean {
   return typeof result === 'object' && result !== null && (result as Record<string, unknown>).isError === true;
 }
 
@@ -448,14 +448,15 @@ export function handleToolInputEnd(_ctx: EventHandlerContext, _toolCallId: strin
 
 export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
   const { state } = ctx;
-  // If this is a subagent tool, store the result in the SubagentExecutionComponent
+  // If no dedicated subagent_end event is emitted, finalize the subagent
+  // component from the parent tool result so it does not remain stuck as running.
   const subagentComponent = state.pendingSubagents.get(toolCallId);
   if (subagentComponent) {
-    // The final result is available here
-    const resultText = formatToolResult(result);
-    // We'll need to wait for subagent_end to set this
-    // Store it temporarily
-    (subagentComponent as any)._pendingResult = resultText;
+    subagentComponent.finish(isToolResultError(result), 0, formatToolResult(result));
+    state.pendingSubagents.delete(toolCallId);
+    reconcileToolBoundaries(ctx);
+    state.ui.requestRender();
+    return;
   }
 
   // File modification tracking is handled by the Harness display state
