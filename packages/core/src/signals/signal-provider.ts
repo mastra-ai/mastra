@@ -641,7 +641,7 @@ export abstract class SignalProvider<TId extends string = string> {
       resourceId: target.resourceId,
       threadId: target.threadId,
       ifIdle: {
-        behavior: 'persist',
+        behavior: 'wake',
         streamOptions: {
           requestContext: target.requestContext as any,
         },
