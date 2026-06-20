@@ -1,3 +1,4 @@
+import { PubSub as PubSubClient } from '@google-cloud/pubsub';
 import type { Event } from '@mastra/core/events';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { GoogleCloudPubSub } from '.';
@@ -135,6 +136,36 @@ describe.sequential('GoogleCloudPubSub group support', () => {
       expect(msgs2.length).toBe(1);
       expect(msgs1[0]!.type).toBe('raced');
       expect(msgs2[0]!.type).toBe('raced');
+    });
+
+    it('re-attaches to an existing subscription when createSubscription returns ALREADY_EXISTS (issue #18203)', async () => {
+      // Drive the ungrouped recovery branch directly: pre-create the exact subscription
+      // the adapter will use (out-of-band) so its own createSubscription loses with
+      // ALREADY_EXISTS (gRPC code 6). For an ungrouped topic the adapter must re-attach
+      // to the existing subscription instead of returning undefined and throwing. This
+      // also mirrors the restart case where a subscription survives a previous process.
+      const pubsub = createPubSub();
+      const topic = uniqueTopic();
+      const subscriptionName = pubsub.getSubscriptionName(topic);
+
+      const raw = new PubSubClient({ projectId: 'pubsub-test', apiEndpoint: EMULATOR_HOST });
+      await raw.createTopic(topic);
+      await raw.topic(topic).createSubscription(subscriptionName);
+
+      const collected: Event[] = [];
+      await pubsub.subscribe(topic, (event, ack) => {
+        collected.push(event);
+        ack?.();
+      });
+
+      await pubsub.publish(topic, makeEvent({ type: 'recovered' }));
+
+      await waitForMessages(1, collected, 5000);
+
+      expect(collected.length).toBe(1);
+      expect(collected[0]!.type).toBe('recovered');
+
+      await raw.close();
     });
   });
 
