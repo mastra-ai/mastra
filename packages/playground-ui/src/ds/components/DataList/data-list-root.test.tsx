@@ -240,6 +240,8 @@ describe('DataListRoot', () => {
       const top = container.querySelector<HTMLElement>('.data-list-top');
       const topCell = container.querySelector<HTMLElement>('.data-list-top .data-list-sticky-start');
       const rowHeaderCell = container.querySelector<HTMLElement>('.data-list-row-header');
+      const topCellClasses = topCell?.className.split(/\s+/) ?? [];
+      const rowHeaderCellClasses = rowHeaderCell?.className.split(/\s+/) ?? [];
 
       expect(grid?.className).toContain('[&_.data-list-top]:bg-[var(--data-list-sticky-header-background)]');
       expect(grid?.className).not.toContain('[&_.data-list-sticky-start]:bg-surface2');
@@ -249,17 +251,28 @@ describe('DataListRoot', () => {
       expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:after:right-0');
       expect(grid?.className).toContain('[&_.data-list-row:hover_.data-list-row-header]:bg-surface-overlay-strong');
       expect(grid?.className).not.toContain('[&_.data-list-row_.data-list-row-header]:before:bg');
+      expect(grid?.className).toContain('[&_.data-list-top>.data-list-sticky-start]:after:right-0');
       expect(top?.className).toContain('z-20');
       expect(topCell?.className).toContain('sticky');
       expect(topCell?.className).toContain('left-0');
       expect(topCell?.className).toContain('z-20');
       expect(topCell?.className).toContain('isolate');
+      expect(topCell?.className).toContain('-ml-5');
+      expect(topCell?.className).toContain('-mr-4');
+      expect(topCell?.className).toContain('w-auto');
+      expect(topCellClasses).not.toContain('w-full');
+      expect(topCell?.className).toContain('max-w-none');
+      expect(topCell?.className).toContain('pl-5');
+      expect(topCell?.className).toContain('pr-4');
+      expect(topCell?.className).toContain('rounded-tl-xl');
+      expect(topCell?.className).toContain('rounded-bl-md');
       expect(topCell?.className).toContain('bg-[var(--data-list-sticky-header-background)]');
       expect(topCell?.className).not.toContain('bg-surface2');
       expect(rowHeaderCell?.className).toContain('data-list-sticky-start');
       expect(rowHeaderCell?.className).toContain('-ml-5');
       expect(rowHeaderCell?.className).toContain('-mr-4');
       expect(rowHeaderCell?.className).toContain('w-auto');
+      expect(rowHeaderCellClasses).not.toContain('w-full');
       expect(rowHeaderCell?.className).toContain('max-w-none');
       expect(rowHeaderCell?.className).toContain('pl-5');
       expect(rowHeaderCell?.className).toContain('pr-4');

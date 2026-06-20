@@ -94,6 +94,7 @@ const borderlessTableStyles = [
   '[&_.data-list-row:hover_.data-list-row-header]:bg-surface-overlay-strong',
   '[&_.data-list-row:focus-visible_.data-list-row-header]:bg-surface-overlay-strong',
   '[&_.data-list-row:focus-within_.data-list-row-header]:bg-surface-overlay-strong',
+  '[&_.data-list-top>.data-list-sticky-start]:after:right-0',
   '[&_.data-list-top>.data-list-sticky-start+*]:before:hidden',
 ] as const;
 
