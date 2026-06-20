@@ -661,8 +661,8 @@ describe('SlackSignalsProvider', () => {
       expect(result.notificationsSent).toBe(0);
 
       const saved = getSavedSlackMetadata(threadStore);
-      // channel_not_found removes the stale channel entirely
-      expect(saved.subscription.channels.C100).toBeUndefined();
+      expect(saved.subscription.channels.C100.lastSyncStatus).toBe('error');
+      expect(saved.subscription.channels.C100.lastSyncError).toContain('channel_not_found');
     });
 
     it('filters messages by excludeChannelIds', async () => {

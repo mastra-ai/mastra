@@ -768,10 +768,32 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       try {
         const threads = await harness.session.thread.list({ allResources: true });
         const thread = threads.find((item: { id: string }) => item.id === threadId);
+        const requestContext = new RequestContext();
+        const harnessContext: HarnessRequestContext = {
+          harnessId: harness.id,
+          state: harness.session.state.get(),
+          getState: () => harness.session.state.get(),
+          setState: updates => harness.session.state.set(updates),
+          threadId,
+          resourceId: thread?.resourceId ?? harness.session.identity.getResourceId(),
+          session: {
+            modeId: harness.session.mode.get(),
+            modelId: harness.session.model.get(),
+            state: {
+              get: () => harness.session.state.get(),
+              set: updates => harness.session.state.set(updates),
+              update: updater => harness.session.state.update(updater),
+            },
+          },
+          workspace: harness.getWorkspace(),
+          getSubagentModelId: params => harness.session.subagents.model.get(params ?? {}),
+        };
+        requestContext.set('harness', harnessContext);
         await slackSignals.startPollingForThread(
           {
             threadId,
             resourceId: thread?.resourceId ?? harness.session.identity.getResourceId(),
+            requestContext,
           },
           { pollImmediately: true },
         );

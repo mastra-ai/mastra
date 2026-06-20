@@ -615,20 +615,12 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
         }
         channelsSynced++;
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        const isChannelNotFound = errorMsg.includes('channel_not_found') || errorMsg.includes('not_in_channel');
-        if (isChannelNotFound) {
-          // Remove stale channel — channel was deleted or token lost access
-          delete updatedChannels[channelId];
-        } else {
-          // Transient error — keep channel and mark as error
-          updatedChannels[channelId] = {
-            ...channel,
-            lastSyncAt: now,
-            lastSyncStatus: 'error',
-            lastSyncError: errorMsg,
-          };
-        }
+        updatedChannels[channelId] = {
+          ...channel,
+          lastSyncAt: now,
+          lastSyncStatus: 'error',
+          lastSyncError: error instanceof Error ? error.message : String(error),
+        };
         channelsFailed++;
       }
     }
