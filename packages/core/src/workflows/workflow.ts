@@ -3954,6 +3954,33 @@ export class Run<
       actor?: ActorSignal;
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    // FGA authorization check — mirrors Workflow.execute() so that resuming a
+    // suspended run goes through the same `workflows:execute` gate. Without
+    // this, callers that reach _resume directly (or via the public resume /
+    // resumeAsync / resumeStream wrappers) bypass the internal check while the
+    // server route adapter still enforces it on the HTTP path.
+    const fgaProvider = this.#mastra?.getServer()?.fga;
+    if (fgaProvider) {
+      const user = params.requestContext?.get('user' as any);
+      const { getWorkflowFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
+      await requireFGA({
+        fgaProvider,
+        user,
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.workflowId) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: params.requestContext,
+        actor: params.actor,
+        context: {
+          resourceId: this.resourceId,
+        },
+        metadata: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+        },
+      });
+    }
+
     const observabilityContext = resolveObservabilityContext(params);
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
