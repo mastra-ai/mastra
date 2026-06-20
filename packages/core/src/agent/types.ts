@@ -128,6 +128,21 @@ export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 
 /**
+ * Options applied when a signal targets an idle thread.
+ *
+ * Controls whether the thread should be woken, the signal persisted without
+ * waking, or the signal discarded. Also carries optional stream options
+ * (e.g. request context) and attributes for the delivery message.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
+  behavior?: AgentSignalIdleBehavior;
+  streamOptions?: AgentExecutionOptions<OUTPUT>;
+  attributes?: AgentSignalAttributes;
+};
+
+/**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SendAgentSignalOptions<OUTPUT = unknown> =
@@ -143,11 +158,7 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       resourceId: string;
       threadId: string;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
-      ifIdle?: {
-        behavior?: AgentSignalIdleBehavior;
-        streamOptions?: AgentExecutionOptions<OUTPUT>;
-        attributes?: AgentSignalAttributes;
-      };
+      ifIdle?: AgentSignalIfIdleOptions<OUTPUT>;
     };
 
 /**
