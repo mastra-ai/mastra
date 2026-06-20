@@ -669,10 +669,10 @@ describe('renderExistingMessages task tools', () => {
     expect(listActiveMessages).toHaveBeenCalledWith({ limit: 200 });
     expect(updateTasks).toHaveBeenCalledWith(expectedTasks);
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
-    expect(visibleChildren(state)).toHaveLength(39);
+    expect(visibleChildren(state)).toHaveLength(40);
   });
 
-  it('renders no inline receipt when replaying repeated complete patches that finish the list', async () => {
+  it('renders inline receipts when replaying repeated complete patches that finish the list', async () => {
     const messages: HarnessMessage[] = [
       {
         id: 'assistant-1',
@@ -749,8 +749,9 @@ describe('renderExistingMessages task tools', () => {
     await renderExistingMessages(state);
 
     const rendered = visibleChildren(state).map(component => component.render(100).join('\n'));
-    expect(rendered).toHaveLength(2);
+    expect(rendered).toHaveLength(3);
     expect(rendered.join('\n')).toContain('Write tests');
+    expect(rendered.join('\n')).toContain('Tasks');
     expect(state.allToolComponents.map(component => (component as any).toolName)).toEqual([]);
   });
 

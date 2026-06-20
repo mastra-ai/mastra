@@ -66,6 +66,7 @@ function createMockContext(state: TUIState): EventHandlerContext {
     renderExistingMessages: vi.fn(),
     renderClearedTasksInline: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
+    renderTaskDeltaInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
   };
 }

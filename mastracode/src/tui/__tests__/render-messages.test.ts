@@ -610,6 +610,72 @@ describe('renderExistingMessages signals', () => {
 });
 
 describe('renderExistingMessages tasks', () => {
+  it('renders persisted task additions and crossed-off tasks inline', async () => {
+    const initialTasks = [
+      {
+        id: 'history-task-1',
+        content: 'Loaded history task one',
+        status: 'pending',
+        activeForm: 'Loading history task one',
+      },
+    ];
+    const updatedTasks = [
+      { ...initialTasks[0], status: 'completed' },
+      {
+        id: 'history-task-2',
+        content: 'Loaded history task two',
+        status: 'in_progress',
+        activeForm: 'Loading history task two',
+      },
+      {
+        id: 'history-task-3',
+        content: 'Loaded history task three',
+        status: 'pending',
+        activeForm: 'Loading history task three',
+      },
+    ];
+    const message: HarnessMessage = {
+      id: 'assistant-task-delta-history',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: [
+        { type: 'tool_call', id: 'task-write-1', name: 'task_write', args: { tasks: initialTasks } },
+        {
+          type: 'tool_result',
+          id: 'task-write-1',
+          name: 'task_write',
+          result: { tasks: initialTasks },
+          isError: false,
+        },
+        { type: 'tool_call', id: 'task-complete-1', name: 'task_complete', args: { id: 'history-task-1' } },
+        {
+          type: 'tool_result',
+          id: 'task-complete-1',
+          name: 'task_complete',
+          result: { tasks: updatedTasks },
+          isError: false,
+        },
+      ],
+    } as unknown as HarnessMessage;
+    const state = createState();
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    const rendered = state.chatContainer
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('Tasks');
+    expect(rendered).toContain('○ Loaded history task one');
+    expect(rendered).toContain('▶ Loading history task two');
+    expect(rendered).toContain('○ Loaded history task three');
+    expect(rendered).toContain('✓ Loaded history task one');
+  });
+
   it('renders completed persisted task_write history inline', async () => {
     const tasks = [
       {

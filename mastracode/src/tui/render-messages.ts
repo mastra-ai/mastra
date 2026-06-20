@@ -9,13 +9,13 @@ import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnap
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
-import chalk from 'chalk';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
 } from './chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
+import { formatTaskProgressLine } from './components/task-progress.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
 import { JudgeDisplayComponent } from './components/judge-display.js';
 import { NotificationSummaryComponent } from './components/notification-summary.js';
@@ -33,7 +33,7 @@ import { ToolExecutionComponentEnhanced } from './components/tool-execution-enha
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
-import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
+import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
@@ -93,9 +93,7 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
   const label = count === 1 ? 'Task' : 'Tasks';
   container.addChild(new Text(theme.fg('accent', `${label} cleared`), BOX_INDENT, 0));
   for (const task of clearedTasks) {
-    const icon = task.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
-    const text = chalk.hex(theme.getTheme().dim).strikethrough(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
+    container.addChild(new Text(formatTaskProgressLine(task, '  '), BOX_INDENT, 0));
   }
   insertTaskHistoryComponent(state, container, insertIndex);
 }
@@ -111,11 +109,46 @@ export function renderCompletedTasksInline(
     new Text(`${theme.fg('accent', 'Tasks')} ${theme.fg('dim', `[${count}/${count} completed]`)}`, BOX_INDENT, 0),
   );
   for (const task of completedTasks) {
-    const icon = chalk.hex(mastra.green)('✓');
-    const text = chalk.hex(theme.getTheme().success)(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
+    container.addChild(new Text(formatTaskProgressLine(task, '  '), BOX_INDENT, 0));
   }
   insertTaskHistoryComponent(state, container, insertIndex);
+}
+
+function getTaskKey(task: TaskItemSnapshot): string {
+  return task.id || task.content;
+}
+
+export function renderTaskDeltaInline(
+  state: TUIState,
+  previousTasks: TaskItemSnapshot[],
+  nextTasks: TaskItemSnapshot[],
+  insertIndex = -1,
+): boolean {
+  const previousByKey = new Map(previousTasks.map(task => [getTaskKey(task), task]));
+  const addedTasks = nextTasks.filter(task => !previousByKey.has(getTaskKey(task)));
+  const inProgressTasks = nextTasks.filter(task => {
+    const previous = previousByKey.get(getTaskKey(task));
+    return task.status === 'in_progress' && previous?.status !== 'in_progress';
+  });
+  const completedTasks = nextTasks.filter(task => {
+    const previous = previousByKey.get(getTaskKey(task));
+    return task.status === 'completed' && previous?.status !== 'completed';
+  });
+
+  if (addedTasks.length === 0 && inProgressTasks.length === 0 && completedTasks.length === 0) return false;
+
+  const changedTaskKeys = new Set([...addedTasks, ...inProgressTasks, ...completedTasks].map(getTaskKey));
+  const changedTasks = nextTasks.filter(task => changedTaskKeys.has(getTaskKey(task)));
+
+  const container = new TaskHistoryComponent();
+  container.addChild(new Text(theme.fg('accent', 'Tasks'), BOX_INDENT, 0));
+
+  for (const task of changedTasks) {
+    container.addChild(new Text(formatTaskProgressLine(task, '  '), BOX_INDENT, 0));
+  }
+
+  insertTaskHistoryComponent(state, container, insertIndex);
+  return true;
 }
 
 function renderTaskTransitionFromHistory(
@@ -136,6 +169,7 @@ function renderTaskTransitionFromHistory(
     return { tasks: [], replacedWithInline: false };
   }
 
+  renderTaskDeltaInline(state, previousTasks, nextTasks);
   return { tasks: nextTasks, replacedWithInline: true };
 }
 

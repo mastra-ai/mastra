@@ -29,5 +29,10 @@ export interface EventHandlerContext {
   renderExistingMessages: () => Promise<void>;
   renderClearedTasksInline: (clearedTasks: TaskItemSnapshot[], insertIndex?: number) => void;
   renderCompletedTasksInline: (completedTasks: TaskItemSnapshot[], insertIndex?: number) => void;
+  renderTaskDeltaInline: (
+    previousTasks: TaskItemSnapshot[],
+    nextTasks: TaskItemSnapshot[],
+    insertIndex?: number,
+  ) => boolean;
   refreshModelAuthStatus: () => Promise<void>;
 }

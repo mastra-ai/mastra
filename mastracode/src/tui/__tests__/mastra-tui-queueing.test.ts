@@ -104,6 +104,7 @@ function createQueueContext(state: TUIState, overrides: Partial<EventHandlerCont
     renderExistingMessages: vi.fn(),
     renderClearedTasksInline: vi.fn(),
     renderCompletedTasksInline: vi.fn(),
+    renderTaskDeltaInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
     ...overrides,
   };

@@ -15,6 +15,8 @@ export const taskPatchToolsScenario: McE2eScenario = {
 
     await runtime.waitForScreenText(/Tasks\s+\[0\/1 completed\]/i, terminal, 8_000);
     await runtime.waitForScreenText(/Verifying task patch e2e/i, terminal, 8_000);
+    await runtime.waitForOutputText(/Tasks/i, terminal, 8_000);
+    await runtime.waitForOutputText(/▶ Verifying task patch e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/Task Status:\s+\[0\/1 completed\]/i, terminal, 8_000);
     await runtime.waitForScreenText(/All tasks completed:\s+NO/i, terminal, 8_000);
     await runtime.waitForScreenText(/Task patch e2e complete\./i, terminal, 8_000);

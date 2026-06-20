@@ -365,6 +365,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           ectx.renderCompletedTasksInline(tasks, insertIndex);
         } else if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
           ectx.renderClearedTasksInline(previousTasks, insertIndex);
+        } else if (tasks?.length > 0) {
+          ectx.renderTaskDeltaInline(previousTasks, tasks, insertIndex);
         }
 
         state.ui.requestRender();
