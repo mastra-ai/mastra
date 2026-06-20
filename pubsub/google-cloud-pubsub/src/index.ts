@@ -52,18 +52,17 @@ export class GoogleCloudPubSub extends PubSub {
       });
       this.activeSubscriptions[subscriptionKey] = sub;
       return sub;
-    } catch {
-      // Subscription may already exist (e.g. shared group subscription created by another process).
-      // Get the existing subscription instead.
-      if (group) {
-        try {
-          const sub = this.pubsub.subscription(subscriptionName);
-          this.activeSubscriptions[subscriptionKey] = sub;
-          return sub;
-        } catch {
-          // no-op
-        }
+    } catch (e: any) {
+      // Subscription may already exist (ALREADY_EXISTS / gRPC code 6) — e.g. a shared group
+      // subscription created by another process, or a concurrent subscribe to the same topic
+      // that lost the create race. Re-attach to the existing subscription. Rethrow anything
+      // else so real failures (permission, quota, bad config) aren't silently swallowed.
+      if (e.code !== 6) {
+        throw e;
       }
+      const sub = this.pubsub.subscription(subscriptionName);
+      this.activeSubscriptions[subscriptionKey] = sub;
+      return sub;
     }
 
     return undefined;

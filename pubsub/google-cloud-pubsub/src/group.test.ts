@@ -99,6 +99,23 @@ describe.sequential('GoogleCloudPubSub group support', () => {
       expect(msgs1[0]!.type).toBe('hello');
       expect(msgs2[0]!.type).toBe('hello');
     });
+
+    it('re-attaches to an existing ungrouped subscription instead of failing (#18203)', async () => {
+      // When a producer and a consumer subscribe to the same fresh topic at the same time, the
+      // one that loses the create race gets ALREADY_EXISTS from createSubscription. Calling
+      // init() a second time reproduces that condition deterministically (the subscription
+      // created by the first call already exists). It must re-attach and return the existing
+      // subscription, not undefined — returning undefined is what made subscribe() throw
+      // "Failed to subscribe to topic".
+      const pubsub = createPubSub();
+      const topic = uniqueTopic();
+
+      const first = await pubsub.init(topic);
+      expect(first).toBeDefined();
+
+      const second = await pubsub.init(topic);
+      expect(second).toBeDefined();
+    });
   });
 
   describe('group (competing consumers)', () => {
