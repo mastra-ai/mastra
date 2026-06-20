@@ -110,6 +110,15 @@ export type SlackSignalsMessage = {
   permalink?: string;
 };
 
+export type SlackMessageRef = {
+  teamId?: string;
+  channelId: string;
+  channelName?: string;
+  channelType?: SlackConversationType;
+  messageTs: string;
+  threadTs?: string;
+};
+
 export type SlackListConversationsInput = {
   types: SlackConversationType[];
   limit?: number;
@@ -123,7 +132,16 @@ export type SlackListConversationsResult = {
 export type SlackListMessagesInput = {
   conversation: SlackSignalsConversation;
   oldest?: string;
+  latest?: string;
   inclusive?: boolean;
+  limit?: number;
+  maxPages?: number;
+  abortSignal?: AbortSignal;
+};
+
+export type SlackListThreadMessagesInput = {
+  conversation: SlackSignalsConversation;
+  threadTs: string;
   limit?: number;
   maxPages?: number;
   abortSignal?: AbortSignal;
@@ -132,6 +150,10 @@ export type SlackListMessagesInput = {
 export type SlackListMessagesResult = {
   messages: SlackSignalsMessage[];
   latestTs?: string;
+};
+
+export type SlackListThreadMessagesResult = {
+  messages: SlackSignalsMessage[];
 };
 
 export type SlackGetConversationInput = {
@@ -143,6 +165,7 @@ export type SlackSignalsSyncClient = {
   getWorkspace(input?: { abortSignal?: AbortSignal }): Promise<SlackSignalsWorkspace>;
   listConversations(input: SlackListConversationsInput): Promise<SlackListConversationsResult>;
   listMessages(input: SlackListMessagesInput): Promise<SlackListMessagesResult>;
+  listThreadMessages(input: SlackListThreadMessagesInput): Promise<SlackListThreadMessagesResult>;
   getConversation(input: SlackGetConversationInput): Promise<SlackSignalsConversation>;
   listUsers(input?: { abortSignal?: AbortSignal }): Promise<SlackSignalsUser[]>;
 };
@@ -187,6 +210,7 @@ export type SlackSignalsThreadMetadata = {
 };
 
 export type SlackNotificationPayload = {
+  slackMessageRef: SlackMessageRef;
   teamId: string;
   teamName?: string;
   channelId: string;
@@ -199,6 +223,36 @@ export type SlackNotificationPayload = {
   botId?: string;
   text?: string;
   permalink?: string;
+};
+
+
+export type SlackReadConversationInput = {
+  channelId?: string;
+  channelName?: string;
+  aroundTs: string;
+  before?: number;
+  after?: number;
+  abortSignal?: AbortSignal;
+};
+
+export type SlackReadConversationResult = {
+  slackMessageRef: SlackMessageRef;
+  channel: SlackSignalsConversation;
+  messages: SlackSignalsMessage[];
+};
+
+export type SlackReadThreadInput = {
+  channelId?: string;
+  channelName?: string;
+  threadTs: string;
+  limit?: number;
+  abortSignal?: AbortSignal;
+};
+
+export type SlackReadThreadResult = {
+  slackMessageRef: SlackMessageRef;
+  channel: SlackSignalsConversation;
+  messages: SlackSignalsMessage[];
 };
 
 export type SlackSignalsThreadStore = {
@@ -289,6 +343,12 @@ function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function normalizeSlackToolChannel(channel: string): { channelId?: string; channelName?: string } {
+  const normalized = channel.trim().replace(/^#/, '');
+  if (/^[CGD][A-Z0-9]+$/.test(normalized)) return { channelId: normalized };
+  return { channelName: normalized };
+}
+
 function isSlackConversationType(value: unknown): value is SlackConversationType {
   return value === 'public_channel' || value === 'private_channel' || value === 'im' || value === 'mpim';
 }
@@ -299,6 +359,18 @@ function compareSlackTimestamps(a: string, b: string): number {
 
 function isNewerSlackTimestamp(a: string, b: string): boolean {
   return compareSlackTimestamps(a, b) > 0;
+}
+
+function sortSlackMessages(messages: SlackSignalsMessage[]): SlackSignalsMessage[] {
+  return [...messages].sort((a, b) => compareSlackTimestamps(a.ts, b.ts));
+}
+
+function mergeSlackMessages(...messageGroups: SlackSignalsMessage[][]): SlackSignalsMessage[] {
+  const byTs = new Map<string, SlackSignalsMessage>();
+  for (const messages of messageGroups) {
+    for (const message of messages) byTs.set(message.ts, message);
+  }
+  return sortSlackMessages([...byTs.values()]);
 }
 
 function getSignalMetadata(message: MastraDBMessage): Record<string, unknown> | undefined {
@@ -466,7 +538,16 @@ function createSlackNotificationInput(
   filters: NormalizedSlackSignalsFilterConfig,
 ) {
   const dedupeKey = getMessageDedupeKey(subscription, message);
+  const slackMessageRef: SlackMessageRef = {
+    teamId: subscription.workspaceId,
+    channelId: message.channelId,
+    ...(message.channelName ? { channelName: message.channelName } : {}),
+    channelType: message.channelType,
+    messageTs: message.ts,
+    ...(message.threadTs ? { threadTs: message.threadTs } : {}),
+  };
   const payload: SlackNotificationPayload = {
+    slackMessageRef,
     teamId: subscription.workspaceId,
     ...(subscription.workspaceName ? { teamName: subscription.workspaceName } : {}),
     channelId: message.channelId,
@@ -495,6 +576,7 @@ function createSlackNotificationInput(
       channelId: message.channelId,
       channelType: message.channelType,
       messageTs: message.ts,
+      ...(message.threadTs ? { threadTs: message.threadTs } : {}),
     },
   };
 }
@@ -718,6 +800,70 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
     return result.conversations;
   }
 
+  async readConversation(input: SlackReadConversationInput): Promise<SlackReadConversationResult> {
+    const before = Math.max(0, Math.min(input.before ?? 20, 100));
+    const after = Math.max(0, Math.min(input.after ?? 10, 100));
+    const channel = await this.#resolveConversationForRead(input);
+
+    const [beforeResult, afterResult] = await Promise.all([
+      before > 0
+        ? this.#syncClient.listMessages({
+            conversation: channel,
+            latest: input.aroundTs,
+            inclusive: true,
+            limit: before + 1,
+            maxPages: 1,
+            abortSignal: input.abortSignal,
+          })
+        : Promise.resolve({ messages: [] }),
+      after > 0
+        ? this.#syncClient.listMessages({
+            conversation: channel,
+            oldest: input.aroundTs,
+            inclusive: false,
+            limit: after,
+            maxPages: 1,
+            abortSignal: input.abortSignal,
+          })
+        : Promise.resolve({ messages: [] }),
+    ]);
+
+    return {
+      slackMessageRef: {
+        channelId: channel.id,
+        ...(channel.name ? { channelName: channel.name } : {}),
+        channelType: channel.type,
+        messageTs: input.aroundTs,
+      },
+      channel,
+      messages: mergeSlackMessages(beforeResult.messages, afterResult.messages),
+    };
+  }
+
+  async readThread(input: SlackReadThreadInput): Promise<SlackReadThreadResult> {
+    const limit = Math.max(1, Math.min(input.limit ?? 100, 200));
+    const channel = await this.#resolveConversationForRead(input);
+    const result = await this.#syncClient.listThreadMessages({
+      conversation: channel,
+      threadTs: input.threadTs,
+      limit,
+      maxPages: 5,
+      abortSignal: input.abortSignal,
+    });
+
+    return {
+      slackMessageRef: {
+        channelId: channel.id,
+        ...(channel.name ? { channelName: channel.name } : {}),
+        channelType: channel.type,
+        messageTs: input.threadTs,
+        threadTs: input.threadTs,
+      },
+      channel,
+      messages: result.messages,
+    };
+  }
+
   // ── Input processor ─────────────────────────────────────────────────
 
   getInputProcessors(): InputProcessorOrWorkflow[] {
@@ -856,6 +1002,41 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
                 : 'This thread is not subscribed to Slack.',
           };
         },
+      }),
+      slack_read_conversation: createTool({
+        id: 'slack_read_conversation',
+        description:
+          'Read Slack messages around a notification or message timestamp. Pass channel as either a Slack channel ID (C/G/D...) or a channel name (for example, general).',
+        inputSchema: z.object({
+          channel: z.string().describe('Slack channel/conversation ID or channel name, e.g. C123, D123, general, or #general'),
+          aroundTs: z.string().describe('Slack message timestamp to center the transcript around'),
+          before: z.number().int().min(0).max(100).optional().describe('Number of messages before/including aroundTs to fetch'),
+          after: z.number().int().min(0).max(100).optional().describe('Number of messages after aroundTs to fetch'),
+        }),
+        execute: async (input, context) =>
+          this.readConversation({
+            ...normalizeSlackToolChannel(input.channel),
+            aroundTs: input.aroundTs,
+            before: input?.before,
+            after: input?.after,
+            abortSignal: context?.abortSignal,
+          }),
+      }),
+      slack_read_thread: createTool({
+        id: 'slack_read_thread',
+        description: 'Read a Slack thread. Pass channel as either a Slack channel ID (C/G/D...) or a channel name.',
+        inputSchema: z.object({
+          channel: z.string().describe('Slack channel/conversation ID or channel name, e.g. C123, D123, general, or #general'),
+          threadTs: z.string().describe('Slack thread timestamp'),
+          limit: z.number().int().min(1).max(200).optional().describe('Maximum messages to fetch from the thread'),
+        }),
+        execute: async (input, context) =>
+          this.readThread({
+            ...normalizeSlackToolChannel(input.channel),
+            threadTs: input.threadTs,
+            limit: input?.limit,
+            abortSignal: context?.abortSignal,
+          }),
       }),
     };
   }
@@ -1085,6 +1266,32 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
       subscription: existing,
       removed: true,
     };
+  }
+
+  async #resolveConversationForRead(input: {
+    channelId?: string;
+    channelName?: string;
+    abortSignal?: AbortSignal;
+  }): Promise<SlackSignalsConversation> {
+    if (input.channelId) {
+      try {
+        const conversation = await this.#syncClient.getConversation({ channelId: input.channelId, abortSignal: input.abortSignal });
+        if (conversation.type === 'im' && conversation.user && !conversation.name) {
+          const userMap = await this.#resolveUserNames(input.abortSignal);
+          if (userMap.has(conversation.user)) conversation.name = userMap.get(conversation.user);
+        }
+        return conversation;
+      } catch {
+        return { id: input.channelId, type: inferChannelType(input.channelId) };
+      }
+    }
+
+    if (input.channelName) {
+      const [conversation] = await this.#resolveChannelInputs([input.channelName], input.abortSignal);
+      if (conversation) return conversation;
+    }
+
+    throw new Error('Slack read requires a channelId or resolvable channelName.');
   }
 
   async #resolveChannelInputs(

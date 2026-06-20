@@ -138,6 +138,61 @@ describe('SlackWebApiSyncClient', () => {
     expect(getRequestBody(fetchMock, 1).get('cursor')).toBe('history-2');
   });
 
+  it('passes latest to conversations.history for bounded context reads', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        ok: true,
+        messages: [{ ts: '1710000001.000000', user: 'U1', text: 'target' }],
+      }),
+    );
+    const client = new SlackWebApiSyncClient({ token: 'xoxp-test', baseUrl: 'https://slack.test/api/', fetch: fetchMock as any });
+
+    await expect(
+      client.listMessages({
+        conversation: { id: 'C1', name: 'general', type: 'public_channel' },
+        latest: '1710000001.000000',
+        inclusive: true,
+        limit: 3,
+        maxPages: 1,
+      }),
+    ).resolves.toMatchObject({
+      messages: [expect.objectContaining({ ts: '1710000001.000000', text: 'target' })],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://slack.test/api/conversations.history', expect.anything());
+    expect(getRequestBody(fetchMock).get('latest')).toBe('1710000001.000000');
+    expect(getRequestBody(fetchMock).get('inclusive')).toBe('true');
+  });
+
+  it('reads thread replies with conversations.replies', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        ok: true,
+        messages: [
+          { ts: '1710000001.000000', thread_ts: '1710000001.000000', user: 'U1', text: 'root' },
+          { ts: '1710000002.000000', thread_ts: '1710000001.000000', user: 'U2', text: 'reply' },
+        ],
+      }),
+    );
+    const client = new SlackWebApiSyncClient({ token: 'xoxp-test', baseUrl: 'https://slack.test/api/', fetch: fetchMock as any });
+
+    await expect(
+      client.listThreadMessages({
+        conversation: { id: 'C1', name: 'general', type: 'public_channel' },
+        threadTs: '1710000001.000000',
+      }),
+    ).resolves.toEqual({
+      messages: [
+        expect.objectContaining({ ts: '1710000001.000000', text: 'root', threadTs: '1710000001.000000' }),
+        expect.objectContaining({ ts: '1710000002.000000', text: 'reply', threadTs: '1710000001.000000' }),
+      ],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://slack.test/api/conversations.replies', expect.anything());
+    expect(getRequestBody(fetchMock).get('channel')).toBe('C1');
+    expect(getRequestBody(fetchMock).get('ts')).toBe('1710000001.000000');
+  });
+
   it('throws structured Slack API errors', async () => {
     const fetchMock = vi.fn(async () => jsonResponse({ ok: false, error: 'missing_scope' }));
     const client = new SlackWebApiSyncClient({ token: 'xoxp-test', fetch: fetchMock as any });

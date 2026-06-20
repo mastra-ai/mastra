@@ -95,6 +95,8 @@
   },
   "devDependencies": {
     "@copilotkit/aimock": "^1.29.0",
+    "@emulators/core": "0.6.1",
+    "@emulators/slack": "0.6.1",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/node": "22.19.21",

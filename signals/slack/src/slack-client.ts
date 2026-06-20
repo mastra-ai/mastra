@@ -4,6 +4,8 @@ import type {
   SlackListConversationsResult,
   SlackListMessagesInput,
   SlackListMessagesResult,
+  SlackListThreadMessagesInput,
+  SlackListThreadMessagesResult,
   SlackSignalsConversation,
   SlackSignalsMessage,
   SlackSignalsSyncClient,
@@ -237,6 +239,7 @@ export class SlackWebApiSyncClient implements SlackSignalsSyncClient {
           channel: input.conversation.id,
           limit: input.limit ?? DEFAULT_PAGE_LIMIT,
           oldest: input.oldest,
+          latest: input.latest,
           inclusive: input.inclusive,
           cursor,
         },
@@ -253,6 +256,37 @@ export class SlackWebApiSyncClient implements SlackSignalsSyncClient {
 
     messages.sort((a, b) => compareSlackTimestamps(a.ts, b.ts));
     return { messages, latestTs: getLatestTimestamp(messages) };
+  }
+
+  async listThreadMessages(input: SlackListThreadMessagesInput): Promise<SlackListThreadMessagesResult> {
+    const messages: SlackSignalsMessage[] = [];
+    let cursor: string | undefined;
+    let page = 0;
+    const maxPages = input.maxPages ?? Infinity;
+
+    do {
+      page++;
+      const response = await this.#request(
+        'conversations.replies',
+        {
+          channel: input.conversation.id,
+          ts: input.threadTs,
+          limit: input.limit ?? DEFAULT_PAGE_LIMIT,
+          cursor,
+        },
+        input.abortSignal,
+      );
+      const rawMessages = Array.isArray(response.messages) ? response.messages : [];
+      for (const rawMessage of rawMessages) {
+        if (!isPlainObject(rawMessage)) continue;
+        const message = mapMessage(rawMessage, input.conversation);
+        if (message) messages.push(message);
+      }
+      cursor = readString(response.response_metadata?.next_cursor);
+    } while (cursor && page < maxPages);
+
+    messages.sort((a, b) => compareSlackTimestamps(a.ts, b.ts));
+    return { messages };
   }
 
   async getConversation(input: { channelId: string; abortSignal?: AbortSignal }): Promise<SlackSignalsConversation> {

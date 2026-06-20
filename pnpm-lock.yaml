@@ -2099,6 +2099,12 @@ importers:
       '@copilotkit/aimock':
         specifier: ^1.29.0
         version: 1.29.0(vitest@4.1.8)
+      '@emulators/core':
+        specifier: 0.6.1
+        version: 0.6.1
+      '@emulators/slack':
+        specifier: 0.6.1
+        version: 0.6.1
       '@internal/lint':
         specifier: workspace:*
         version: link:../packages/_config

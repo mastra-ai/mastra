@@ -28,6 +28,7 @@ import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
 import { SlackSignals, SlackWebApiSyncClient } from '@mastra/slack-signals';
+import type { SlackSignals as SlackSignalsType } from '@mastra/slack-signals';
 import {
   Observability,
   MastraStorageExporter,
@@ -455,7 +456,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     process.env.MASTRACODE_SLACK_USER_TOKEN ??
     '';
   const slackApiBaseUrl = process.env.MASTRACODE_SLACK_API_BASE_URL;
-  const slackSignals: SlackSignals | undefined =
+  const slackSignals: SlackSignalsType | undefined =
     globalSettings.signals?.experimentalSlackSignals && slackToken
       ? new SlackSignals({
           token: slackToken,

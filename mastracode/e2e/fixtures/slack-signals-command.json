@@ -1,1 +1,56 @@
-{"fixtures":[{"match":{"endpoint":"chat","model":"gpt-5.4-mini","userMessage":"Create a Slack Signals e2e thread.","turnIndex":0},"response":{"content":"Slack Signals thread ready."}}]}
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Create a Slack Signals e2e thread.",
+        "turnIndex": 0
+      },
+      "response": {
+        "content": "Slack Signals thread ready."
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Use the Slack read tools to summarize the AIMock Slack discussion.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_slack_read_conversation_e2e",
+            "name": "slack_read_conversation",
+            "arguments": {
+              "channel": "C000000001",
+              "aroundTs": "1700000000.000100",
+              "before": 10,
+              "after": 10
+            }
+          },
+          {
+            "id": "call_slack_read_thread_e2e",
+            "name": "slack_read_thread",
+            "arguments": {
+              "channel": "C000000001",
+              "threadTs": "1700000000.000100",
+              "limit": 20
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Slack context summary: AIMock lets us test tools deterministically, Abhi said AIMock is legit, and the thread confirms Slack signal E2E deterministic behavior."
+      }
+    }
+  ]
+}

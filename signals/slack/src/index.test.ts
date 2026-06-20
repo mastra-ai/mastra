@@ -72,6 +72,7 @@ function createSyncClient(overrides: Partial<SlackSignalsSyncClient> = {}): Slac
     })),
     listConversations: vi.fn(async () => ({ conversations: [] })),
     listMessages: vi.fn(async () => ({ messages: [] })),
+    listThreadMessages: vi.fn(async () => ({ messages: [] })),
     getConversation: vi.fn(async (input: { channelId: string }) => ({
       id: input.channelId,
       name: 'test-channel',
@@ -406,7 +407,9 @@ describe('SlackSignalsProvider', () => {
         requestContext: createRequestContext(thread),
       });
 
-      expect(Object.keys(result.tools ?? {})).toEqual(expect.arrayContaining(['slack_subscribe', 'slack_unsubscribe']));
+      expect(Object.keys(result.tools ?? {})).toEqual(
+        expect.arrayContaining(['slack_subscribe', 'slack_unsubscribe', 'slack_read_conversation', 'slack_read_thread']),
+      );
     });
 
     it('subscribe and unsubscribe tools mutate the current thread subscription directly', async () => {
@@ -485,6 +488,140 @@ describe('SlackSignalsProvider', () => {
           },
         ),
       ).resolves.toMatchObject({ addedChannels: ['eng'] });
+    });
+
+    it('read conversation tool returns messages around a Slack notification ref', async () => {
+      const thread = createThread({ id: 'thread-read', resourceId: 'resource-read' });
+      const listMessages = vi
+        .fn()
+        .mockResolvedValueOnce({
+          messages: [
+            createMessage({ ts: '100.000', channelId: 'C123', channelName: 'general', text: 'before' }),
+            createMessage({ ts: '101.000', channelId: 'C123', channelName: 'general', text: 'target' }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          messages: [createMessage({ ts: '102.000', channelId: 'C123', channelName: 'general', text: 'after' })],
+        });
+      const processor = new SlackSignalsProvider({
+        token: 'xoxp-test',
+        threadStore: createThreadStore(thread),
+        syncClient: createSyncClient({
+          getConversation: vi.fn(async () => ({ id: 'C123', name: 'general', type: 'public_channel' as const })),
+          listMessages,
+        }),
+      });
+
+      const result = await runSlackSignalsProcessor({
+        processor,
+        messageList: new MessageList({ threadId: thread.id, resourceId: thread.resourceId }),
+        requestContext: createRequestContext(thread),
+      });
+      const tools = result.tools as Record<string, { execute: (input?: unknown, context?: unknown) => Promise<unknown> }>;
+
+      await expect(
+        tools.slack_read_conversation!.execute({ channel: 'C123', aroundTs: '101.000', before: 2, after: 1 }),
+      ).resolves.toMatchObject({
+        slackMessageRef: { channelId: 'C123', channelName: 'general', channelType: 'public_channel', messageTs: '101.000' },
+        messages: [
+          expect.objectContaining({ ts: '100.000', text: 'before' }),
+          expect.objectContaining({ ts: '101.000', text: 'target' }),
+          expect.objectContaining({ ts: '102.000', text: 'after' }),
+        ],
+      });
+      expect(listMessages).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ latest: '101.000', inclusive: true, limit: 3 }),
+      );
+      expect(listMessages).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ oldest: '101.000', inclusive: false, limit: 1 }),
+      );
+    });
+
+    it('read conversation tool accepts channel name without channel ID', async () => {
+      const thread = createThread({ id: 'thread-read-tool-name', resourceId: 'resource-read-tool-name' });
+      const listConversations = vi.fn(async () => ({
+        conversations: [{ id: 'C123', name: 'general', type: 'public_channel' as const }],
+      }));
+      const listMessages = vi.fn().mockResolvedValueOnce({ messages: [createMessage({ ts: '101.000', channelId: 'C123', channelName: 'general', text: 'target' })] });
+      const processor = new SlackSignalsProvider({
+        token: 'xoxp-test',
+        threadStore: createThreadStore(thread),
+        syncClient: createSyncClient({ listConversations, listMessages }),
+      });
+
+      const result = await runSlackSignalsProcessor({
+        processor,
+        messageList: new MessageList({ threadId: thread.id, resourceId: thread.resourceId }),
+        requestContext: createRequestContext(thread),
+      });
+      const tools = result.tools as Record<string, { execute: (input?: unknown, context?: unknown) => Promise<unknown> }>;
+
+      await expect(tools.slack_read_conversation!.execute({ channel: '#general', aroundTs: '101.000', before: 1, after: 0 })).resolves.toMatchObject({
+        slackMessageRef: { channelId: 'C123', channelName: 'general', channelType: 'public_channel', messageTs: '101.000' },
+      });
+      expect(listConversations).toHaveBeenCalledWith(expect.objectContaining({ types: ['public_channel', 'private_channel', 'im', 'mpim'] }));
+    });
+
+    it('read conversation provider method accepts channelName without channelId', async () => {
+      const thread = createThread({ id: 'thread-read-name', resourceId: 'resource-read-name' });
+      const listConversations = vi.fn(async () => ({
+        conversations: [{ id: 'C123', name: 'general', type: 'public_channel' as const }],
+      }));
+      const listMessages = vi.fn().mockResolvedValueOnce({ messages: [createMessage({ ts: '101.000', channelId: 'C123', channelName: 'general', text: 'target' })] });
+      const processor = new SlackSignalsProvider({
+        token: 'xoxp-test',
+        threadStore: createThreadStore(thread),
+        syncClient: createSyncClient({ listConversations, listMessages }),
+      });
+
+      await expect(processor.readConversation({ channelName: 'general', aroundTs: '101.000', before: 1, after: 0 })).resolves.toMatchObject({
+        slackMessageRef: { channelId: 'C123', channelName: 'general', channelType: 'public_channel', messageTs: '101.000' },
+      });
+      expect(listConversations).toHaveBeenCalledWith(expect.objectContaining({ types: ['public_channel', 'private_channel', 'im', 'mpim'] }));
+    });
+
+    it('read conversation requires channelId or channelName', async () => {
+      const processor = new SlackSignalsProvider({ token: 'xoxp-test', syncClient: createSyncClient() });
+
+      await expect(processor.readConversation({ aroundTs: '101.000' })).rejects.toThrow('Slack read requires a channelId or resolvable channelName.');
+    });
+
+    it('read thread tool returns thread replies from Slack', async () => {
+      const thread = createThread({ id: 'thread-replies', resourceId: 'resource-replies' });
+      const listThreadMessages = vi.fn(async () => ({
+        messages: [
+          createMessage({ ts: '200.000', threadTs: '200.000', channelId: 'C123', channelName: 'general', text: 'root' }),
+          createMessage({ ts: '201.000', threadTs: '200.000', channelId: 'C123', channelName: 'general', text: 'reply' }),
+        ],
+      }));
+      const processor = new SlackSignalsProvider({
+        token: 'xoxp-test',
+        threadStore: createThreadStore(thread),
+        syncClient: createSyncClient({
+          getConversation: vi.fn(async () => ({ id: 'C123', name: 'general', type: 'public_channel' as const })),
+          listThreadMessages,
+        }),
+      });
+
+      const result = await runSlackSignalsProcessor({
+        processor,
+        messageList: new MessageList({ threadId: thread.id, resourceId: thread.resourceId }),
+        requestContext: createRequestContext(thread),
+      });
+      const tools = result.tools as Record<string, { execute: (input?: unknown, context?: unknown) => Promise<unknown> }>;
+
+      await expect(tools.slack_read_thread!.execute({ channel: 'C123', threadTs: '200.000' })).resolves.toMatchObject({
+        slackMessageRef: { channelId: 'C123', channelName: 'general', channelType: 'public_channel', messageTs: '200.000', threadTs: '200.000' },
+        messages: [
+          expect.objectContaining({ ts: '200.000', text: 'root' }),
+          expect.objectContaining({ ts: '201.000', text: 'reply' }),
+        ],
+      });
+      expect(listThreadMessages).toHaveBeenCalledWith(
+        expect.objectContaining({ conversation: expect.objectContaining({ id: 'C123' }), threadTs: '200.000', limit: 100 }),
+      );
     });
   });
 
@@ -602,6 +739,18 @@ describe('SlackSignalsProvider', () => {
       expect(call.kind).toBe('slack-message');
       expect(call.summary).toContain('new message 1');
       expect(call.dedupeKey).toBe('T123:C100:101.000');
+      expect(call.payload.slackMessageRef).toEqual({
+        teamId: 'T123',
+        channelId: 'C100',
+        channelType: 'public_channel',
+        messageTs: '101.000',
+      });
+      expect(call.attributes).toEqual({
+        teamId: 'T123',
+        channelId: 'C100',
+        channelType: 'public_channel',
+        messageTs: '101.000',
+      });
     });
 
     it('uses maxPages=1 on baseline and maxPages=5 on subsequent polls', async () => {
