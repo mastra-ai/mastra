@@ -212,7 +212,7 @@ function autoResolve<TState extends Record<string, unknown>>(
     case 'tool_suspended': {
       const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
       if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
-        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: 'Yes' });
+        void harness.session.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: 'Yes' });
         return {
           resolved: true,
           label: `[auto-approved sandbox] ${String(payload.path ?? '')}`,
@@ -220,14 +220,14 @@ function autoResolve<TState extends Record<string, unknown>>(
         };
       }
       if (event.toolName === 'submit_plan') {
-        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: { action: 'approved' } });
+        void harness.session.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: { action: 'approved' } });
         return {
           resolved: true,
           label: `[auto-approved plan] ${String(payload.title ?? '')}`,
           json: { ...event, autoApproved: true },
         };
       }
-      void harness.respondToToolSuspension({
+      void harness.session.respondToToolSuspension({
         toolCallId: event.toolCallId,
         resumeData: 'Proceed with your best judgment. Do not ask further questions.',
       });
@@ -399,7 +399,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
       } else {
         process.stderr.write(`\nTimeout: ${args.timeout}s elapsed. Aborting.\n`);
       }
-      harness.abort();
+      harness.session.abort();
     }, args.timeout * 1000);
   }
 
@@ -573,7 +573,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
     }
   }
 
-  await harness.sendMessage({ content: args.prompt });
+  await harness.session.sendMessage({ content: args.prompt });
 
   const exitCode = await done;
   if (timeoutId) clearTimeout(timeoutId);

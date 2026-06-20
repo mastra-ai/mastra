@@ -139,7 +139,7 @@ describe('Harness mode-model persistence across restarts', () => {
     // Simulate a submit_plan tool that suspended during a plan-mode run.
     session.session.suspensions.register({ toolCallId: 'plan-call-1', runId: 'run-1', toolName: 'submit_plan' });
 
-    await session.respondToToolSuspension({ toolCallId: 'plan-call-1', resumeData: { action: 'approved' } });
+    await session.session.respondToToolSuspension({ toolCallId: 'plan-call-1', resumeData: { action: 'approved' } });
 
     // Approval abandons the parked plan suspension and switches to the default
     // (execution) mode, aborting the plan-mode run.

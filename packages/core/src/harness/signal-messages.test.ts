@@ -55,14 +55,12 @@ function createHarness(
 describe('Harness signal messages', () => {
   it('converts sendMessage files into fenced text and preserved binary file parts', () => {
     const harness = createHarness(new InMemoryStore());
-    const createMessageInput = (
-      harness as unknown as {
+    const createMessageInput = (harness.session as unknown as {
         createMessageInput(input: {
           content: string;
           files?: Array<{ data: string; mediaType: string; filename?: string }>;
         }): unknown;
-      }
-    ).createMessageInput.bind(harness);
+      }).createMessageInput.bind(harness.session);
 
     const input = createMessageInput({
       content: 'Review these attachments.',
@@ -94,14 +92,12 @@ describe('Harness signal messages', () => {
 
   it('uses a longer fence than any backtick run in text attachments', () => {
     const harness = createHarness(new InMemoryStore());
-    const createMessageInput = (
-      harness as unknown as {
+    const createMessageInput = (harness.session as unknown as {
         createMessageInput(input: {
           content: string;
           files?: Array<{ data: string; mediaType: string; filename?: string }>;
         }): unknown;
-      }
-    ).createMessageInput.bind(harness);
+      }).createMessageInput.bind(harness.session);
 
     const input = createMessageInput({
       content: 'Review this markdown.',
@@ -395,7 +391,7 @@ describe('Harness signal messages', () => {
     });
 
     await harness.session.thread.create();
-    await harness.sendMessage({ content: 'hello' });
+    await harness.session.sendMessage({ content: 'hello' });
     await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
 
     const assistantStarts = events.filter(
@@ -439,7 +435,7 @@ describe('Harness signal messages', () => {
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
-    const signal = harness.sendSignal({ content: 'active hello' });
+    const signal = harness.session.sendSignal({ content: 'active hello' });
     await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: 'active-run-id' });
 
     expect(buildToolsets).not.toHaveBeenCalled();
@@ -462,7 +458,7 @@ describe('Harness signal messages', () => {
 
     harness.session.run.ensureAbortController();
 
-    await harness.followUp({ content: 'queued follow-up' });
+    await harness.session.followUp({ content: 'queued follow-up' });
 
     expect(harness.session.followUps.count()).toBe(1);
     expect(harness.session.displayState.get().queuedFollowUps).toBe(1);
@@ -497,8 +493,8 @@ describe('Harness signal messages', () => {
     const thread = await harness.session.thread.create();
     harness.session.run.ensureAbortController();
 
-    await harness.followUp({ content: 'queued follow-up' });
-    await (harness as any).drainFollowUpQueue();
+    await harness.session.followUp({ content: 'queued follow-up' });
+    await harness.session.drainFollowUpQueue();
 
     expect(queueMessage).toHaveBeenCalledWith(
       'queued follow-up',
@@ -529,9 +525,9 @@ describe('Harness signal messages', () => {
     harness.session.subscribe(event => {
       events.push(event);
     });
-    const sendMessage = vi.spyOn(harness, 'sendMessage').mockResolvedValue(undefined);
+    const sendMessage = vi.spyOn(harness.session as any, 'sendMessage').mockResolvedValue(undefined);
 
-    await harness.followUp({ content: 'idle follow-up' });
+    await harness.session.followUp({ content: 'idle follow-up' });
 
     expect(sendMessage).toHaveBeenCalledWith({ content: 'idle follow-up', requestContext: undefined });
     expect(harness.session.followUps.count()).toBe(0);
@@ -562,9 +558,9 @@ describe('Harness signal messages', () => {
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
-    const signal = harness.sendSignal({ content: 'active hello' });
+    const signal = harness.session.sendSignal({ content: 'active hello' });
     await signal.accepted;
-    harness.abort();
+    harness.session.abort();
 
     expect(abort).toHaveBeenCalled();
   });
@@ -601,7 +597,7 @@ describe('Harness signal messages', () => {
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
-    const signal = harness.sendSignal({ content: 'active hello' });
+    const signal = harness.session.sendSignal({ content: 'active hello' });
     await signal.accepted;
     expect(harness.session.getCurrentRunId()).toBe('active-run-id');
 
@@ -687,10 +683,10 @@ describe('Harness signal messages', () => {
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
-    const signal = harness.sendSignal({ content: 'active hello' });
+    const signal = harness.session.sendSignal({ content: 'active hello' });
     await signal.accepted;
     await waitFor(() => events.some(event => event.type === 'agent_start'));
-    harness.abort();
+    harness.session.abort();
     await waitFor(() => events.some(event => event.type === 'agent_end'));
     await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -707,9 +703,9 @@ describe('Harness signal messages', () => {
     });
 
     await harness.session.thread.create();
-    await harness.sendMessage({ content: 'hi' });
+    await harness.session.sendMessage({ content: 'hi' });
 
-    const signal = harness.sendSignal({ content: 'hows it going' });
+    const signal = harness.session.sendSignal({ content: 'hows it going' });
     await signal.accepted;
     await waitFor(() =>
       events.some(
@@ -774,7 +770,7 @@ describe('Harness signal messages', () => {
     });
 
     await harness.session.thread.create();
-    const signal = harness.sendSignal({ content: 'run tool' });
+    const signal = harness.session.sendSignal({ content: 'run tool' });
     await signal.accepted;
     await waitFor(() =>
       events.some(
@@ -804,7 +800,7 @@ describe('Harness signal messages', () => {
     });
 
     await harness.session.thread.create();
-    const signal = harness.sendSignal({ content: 'hello from signal' });
+    const signal = harness.session.sendSignal({ content: 'hello from signal' });
     await signal.accepted;
     await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
 
@@ -830,8 +826,8 @@ describe('Harness signal messages', () => {
     });
 
     await harness.session.thread.create();
-    harness.abort();
-    const signal = harness.sendSignal({ content: 'hello after stale abort' });
+    harness.session.abort();
+    const signal = harness.session.sendSignal({ content: 'hello after stale abort' });
     await signal.accepted;
     await waitFor(() => events.some(event => event.type === 'agent_end'));
 
@@ -889,19 +885,19 @@ describe('Harness signal messages', () => {
     const harness = createHarness(storage, agent);
     await harness.session.thread.create();
 
-    const firstIdle = harness.sendSignal({ content: 'start first idle stream' });
+    const firstIdle = harness.session.sendSignal({ content: 'start first idle stream' });
     await firstIdle.accepted;
     await waitFor(() => harness.session.getCurrentRunId() !== null && releaseInitialCalls.length === 1);
-    const firstInterjection = harness.sendSignal({ content: 'first active interjection' });
+    const firstInterjection = harness.session.sendSignal({ content: 'first active interjection' });
     await firstInterjection.accepted;
     releaseInitialCalls.shift()?.();
     await waitFor(() => harness.session.getCurrentRunId() === null);
     expect(JSON.stringify(prompts[1])).toContain('first active interjection');
 
-    const secondIdle = harness.sendSignal({ content: 'start second idle stream' });
+    const secondIdle = harness.session.sendSignal({ content: 'start second idle stream' });
     await secondIdle.accepted;
     await waitFor(() => harness.session.getCurrentRunId() !== null && releaseInitialCalls.length === 1);
-    const secondInterjection = harness.sendSignal({ content: 'second active interjection' });
+    const secondInterjection = harness.session.sendSignal({ content: 'second active interjection' });
     await secondInterjection.accepted;
     releaseInitialCalls.shift()?.();
     await waitFor(() => harness.session.getCurrentRunId() === null);

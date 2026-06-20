@@ -54,7 +54,7 @@ export function setupKeyboardShortcuts(
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
-      state.harness.abort();
+      state.session.abort();
     } else if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
       // Clean up active inline components on abort. suspensions.hasPending() covers
       // the case where the run is parked in a tool suspend() (e.g. ask_user) —
@@ -65,7 +65,7 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
-      state.harness.abort();
+      state.session.abort();
     } else {
       const current = state.editor.getText();
       if (current.length > 0) {
@@ -219,7 +219,7 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   // continue on the next iteration. Abort the active harness run too: the core
   // scorer owns the judge stream, so the TUI-local controller alone only changes
   // the visual component and lets the judge continue in the background.
-  state.harness.abort();
+  state.session.abort();
   // Persist the paused state immediately so a thread switch or exit before the
   // next save does not reload the old active objective and effectively undo the
   // pause. `saveToThread` is best-effort, so run it fire-and-forget to keep this
@@ -524,7 +524,7 @@ export function setupKeyHandlers(
     state.pendingInlineQuestions.length = 0;
     state.pendingAskUserComponents?.clear();
     state.userInitiatedAbort = true;
-    state.harness.abort();
+    state.session.abort();
   };
   process.on('SIGINT', sigintHandler);
 

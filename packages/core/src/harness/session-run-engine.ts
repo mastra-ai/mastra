@@ -158,7 +158,7 @@ export class SessionRunEngine {
     });
 
     this.#session.run.reset();
-    await this.#machinery.drainFollowUpQueue();
+    await this.#session.drainFollowUpQueue();
 
     return result;
   }
@@ -305,12 +305,12 @@ export class SessionRunEngine {
         const policy = this.#session.resolveToolApproval(toolName);
 
         if (policy === 'allow') {
-          await this.#machinery.approveToolCall({ toolCallId, requestContext });
+          await this.#session.approveToolCall({ toolCallId, requestContext });
           break;
         }
 
         if (policy === 'deny') {
-          await this.#machinery.declineToolCall({ toolCallId, requestContext });
+          await this.#session.declineToolCall({ toolCallId, requestContext });
           break;
         }
 
@@ -321,9 +321,9 @@ export class SessionRunEngine {
         this.#session.approval.clearToolName();
 
         if (approval.decision === 'approve') {
-          await this.#machinery.approveToolCall({ toolCallId, requestContext: approval.requestContext ?? requestContext });
+          await this.#session.approveToolCall({ toolCallId, requestContext: approval.requestContext ?? requestContext });
         } else {
-          await this.#machinery.declineToolCall({ toolCallId, requestContext: approval.requestContext ?? requestContext });
+          await this.#session.declineToolCall({ toolCallId, requestContext: approval.requestContext ?? requestContext });
         }
         break;
       }
@@ -752,7 +752,7 @@ export class SessionRunEngine {
           : 'complete';
     this.#session.emit({ type: 'agent_end', reason });
     this.#session.run.reset();
-    await this.#machinery.drainFollowUpQueue();
+    await this.#session.drainFollowUpQueue();
   }
 
   private async handleSubscribedStreamError(error: unknown): Promise<void> {
@@ -764,7 +764,7 @@ export class SessionRunEngine {
     }
     this.#session.stream.detach();
     this.#session.run.reset();
-    await this.#machinery.drainFollowUpQueue();
+    await this.#session.drainFollowUpQueue();
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {

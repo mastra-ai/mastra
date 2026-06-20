@@ -73,7 +73,7 @@ describe('Harness tracing propagation', () => {
     const mockSpan = { spanContext: () => ({ traceId: 'abc', spanId: 'def' }) };
     const tracingContext: TracingContext = { currentSpan: mockSpan as any };
 
-    await harness.sendMessage({ content: 'hello', tracingContext });
+    await harness.session.sendMessage({ content: 'hello', tracingContext });
 
     expect(streamSpy).toHaveBeenCalledTimes(1);
 
@@ -90,7 +90,7 @@ describe('Harness tracing propagation', () => {
       metadata: { requestId: 'req-789' },
     };
 
-    await harness.sendMessage({ content: 'hello', tracingOptions });
+    await harness.session.sendMessage({ content: 'hello', tracingOptions });
 
     expect(streamSpy).toHaveBeenCalledTimes(1);
 
@@ -101,7 +101,7 @@ describe('Harness tracing propagation', () => {
   });
 
   it('should not include tracingContext/tracingOptions when not provided', async () => {
-    await harness.sendMessage({ content: 'hello' });
+    await harness.session.sendMessage({ content: 'hello' });
 
     expect(streamSpy).toHaveBeenCalledTimes(1);
 
@@ -118,7 +118,7 @@ describe('Harness tracing propagation', () => {
     });
     harness.session.run.requestAbort();
 
-    await harness.sendMessage({ content: 'hello' });
+    await harness.session.sendMessage({ content: 'hello' });
 
     expect(events).toContainEqual({ type: 'agent_end', reason: 'complete' });
   });

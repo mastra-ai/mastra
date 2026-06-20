@@ -17,7 +17,7 @@ export async function sendSlashCommandMessage(
   }
 
   if (isCurrentThreadActive(ctx)) {
-    const signal = ctx.harness.sendSignal({ content });
+    const signal = ctx.harness.session.sendSignal({ content });
     addPendingUserMessage(ctx.state, signal.id, displayText);
     try {
       await signal.accepted;
@@ -37,5 +37,5 @@ export async function sendSlashCommandMessage(
     });
     ctx.state.ui.requestRender();
   }
-  await ctx.harness.sendMessage({ content });
+  await ctx.harness.session.sendMessage({ content });
 }

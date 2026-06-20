@@ -109,11 +109,9 @@ vi.mock('@mastra/core/harness', () => ({
     constructor(config: unknown) {
       harnessConstructorMock(config);
     }
-    subscribe(eventHandler: unknown) {
-      harnessSubscribeMock(eventHandler);
-    }
     get session() {
       return {
+        subscribe: (eventHandler: unknown) => harnessSubscribeMock(eventHandler),
         identity: {
           getResourceId: () => 'project-resource',
         },

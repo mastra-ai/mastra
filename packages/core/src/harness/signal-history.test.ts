@@ -69,7 +69,7 @@ describe('Harness signal history rendering', () => {
     });
 
     try {
-      const signal = harness.sendSignal({
+      const signal = harness.session.sendSignal({
         type: 'system-reminder',
         contents: 'keep going',
         attributes: { type: 'goal' },

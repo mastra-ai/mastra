@@ -2,15 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
-import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
-import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
-import type {
-  AgentInstructions,
-  SendAgentNotificationSignalOptions,
-  SendAgentNotificationSignalResult,
-  ToolsInput,
-  ToolsetsInput,
-} from '../agent/types';
+import { mastraDBMessageToSignal } from '../agent/signals';
+import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { getErrorFromUnknown } from '../error';
 import { Mastra } from '../mastra';
@@ -87,14 +80,6 @@ function validateModes(modes: HarnessMode[]): void {
     }
   }
 }
-
-type HarnessSendNotificationSignalOptions = {
-  ifActive?: SendAgentNotificationSignalOptions['ifActive'];
-  ifIdle?: SendAgentNotificationSignalOptions['ifIdle'];
-  tracingContext?: TracingContext;
-  tracingOptions?: TracingOptions;
-  requestContext?: RequestContext;
-};
 
 /**
  * Build a user-facing message for a non-success stream finish reason.
@@ -273,7 +258,7 @@ export class Harness<TState = {}> {
     session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
     session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null, {
-      abort: () => this.abort(),
+      abort: () => session.abort(),
     });
     session.model.setResolver({
       getCurrentModeId: () => session.mode.get(),
@@ -305,12 +290,8 @@ export class Harness<TState = {}> {
       buildRequestContext: requestContext => this.buildRequestContext(requestContext),
       persistTokenUsage: () => this.persistTokenUsage(),
       generateId: () => this.generateId(),
-      approveToolCall: input => this.handleToolApprove(input),
-      declineToolCall: input => this.handleToolDecline(input),
-      resumeToolCall: input => this.handleToolResume(input),
-      drainFollowUpQueue: async () => {
-        await this.drainFollowUpQueue();
-      },
+      resolveTransitionModeId: () => this.resolveTransitionModeId(),
+      saveSystemReminder: input => this.saveSystemReminder(input),
     });
 
     // Seed the selected model: an explicit initialState.currentModelId wins,
@@ -1074,43 +1055,6 @@ export class Harness<TState = {}> {
   // Message Handling
   // ===========================================================================
 
-  private createMessageInput({
-    content,
-    files,
-  }: {
-    content: string;
-    files?: Array<{ data: string; mediaType: string; filename?: string }>;
-  }): AgentSignalContents {
-    if (!files?.length) return content;
-
-    const fileParts = files.map(f => {
-      const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
-      if (isText) {
-        let textContent = f.data;
-        const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
-        if (base64Match) {
-          try {
-            textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
-          } catch {
-            // Fall through with raw data
-          }
-        }
-        const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
-        const maxBacktickRun = Math.max(0, ...Array.from(textContent.matchAll(/`+/g), match => match[0].length));
-        const fence = '`'.repeat(Math.max(3, maxBacktickRun + 1));
-        return { type: 'text' as const, text: `${label}\n${fence}\n${textContent}\n${fence}` };
-      }
-      return {
-        type: 'file' as const,
-        data: f.data,
-        mediaType: f.mediaType,
-        ...(f.filename ? { filename: f.filename } : {}),
-      };
-    });
-
-    return [{ type: 'text', text: content }, ...fileParts];
-  }
-
   private async buildAgentMessageStreamOptions({
     requestContext: requestContextInput,
     tracingContext,
@@ -1183,208 +1127,33 @@ export class Harness<TState = {}> {
     return shared;
   }
 
-  private async drainFollowUpQueue(options?: {
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-  }): Promise<boolean> {
-    if (this.#session.followUps.isEmpty()) return false;
-
-    const next = this.#session.followUps.dequeue()!;
-    const threadId = this.#session.thread.getId();
-    try {
-      if (this.#session.stream.isOpen() && threadId) {
-        const agent = this.getCurrentAgent();
-        const streamOptions = await this.buildAgentMessageStreamOptions({
-          requestContext: next.requestContext,
-          tracingContext: options?.tracingContext,
-          tracingOptions: options?.tracingOptions,
-        });
-        const result = agent.queueMessage(this.createMessageInput({ content: next.content }), {
-          resourceId: this.#session.identity.getResourceId(),
-          threadId,
-          ifIdle: { streamOptions: streamOptions as any },
-        });
-        this.#session.emit({ type: 'follow_up_queued', count: this.#session.followUps.count(), runId: result.runId });
-      } else {
-        this.#session.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
-        await this.sendMessage({
-          content: next.content,
-          requestContext: next.requestContext,
-          tracingContext: options?.tracingContext,
-          tracingOptions: options?.tracingOptions,
-        });
-      }
-      return true;
-    } catch (error) {
-      this.#session.followUps.requeue(next);
-      this.#session.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
-      throw error;
-    }
-  }
-
   /**
-   * Send a signal to the current agent/thread.
+   * Persist a system-reminder message for a thread (host-owned storage). Throws
+   * when no storage is configured — the Session guards the no-thread case before
+   * calling. Returns the saved message converted to {@link HarnessMessage}.
    */
-  sendSignal(
-    input:
-      | AgentSignalInput
-      | {
-          content: AgentSignalContents;
-          ifActive?: { attributes?: AgentSignalAttributes };
-          ifIdle?: { attributes?: AgentSignalAttributes };
-          tracingContext?: TracingContext;
-          tracingOptions?: TracingOptions;
-          requestContext?: RequestContext;
-        },
-  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
-    const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
-    const ifActive = 'content' in input ? input.ifActive : undefined;
-    const ifIdle = 'content' in input ? input.ifIdle : undefined;
-    const signal = createSignal(
-      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
-    );
-    const accepted = Promise.resolve().then(async () => {
-      if (!this.#session.thread.getId()) {
-        const thread = await this.#session.thread.create();
-        this.#session.thread.set({ threadId: thread.id });
-      }
-      const threadId = this.#session.thread.getId()!;
-
-      const agent = this.getCurrentAgent();
-      await this.#session.thread.ensureSubscription(threadId);
-
-      if (this.#session.run.getRunId() && this.#session.stream.activeRunId()) {
-        const result = agent.sendSignal(signal, {
-          resourceId: this.#session.identity.getResourceId(),
-          threadId,
-          ifActive,
-          ifIdle,
-        });
-        return { accepted: result.accepted, runId: result.runId };
-      }
-
-      const streamOptions = await this.buildAgentMessageStreamOptions({
-        requestContext: requestContextInput,
-        tracingContext,
-        tracingOptions,
-      });
-
-      const result = agent.sendSignal(signal, {
-        resourceId: this.#session.identity.getResourceId(),
-        threadId,
-        ifActive,
-        ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
-      });
-      return { accepted: result.accepted, runId: result.runId };
-    });
-
-    return { id: signal.id, type: signal.type, accepted };
-  }
-
-  /**
-   * Send a notification signal to the current agent/thread.
-   */
-  async sendNotificationSignal(
-    input: SendNotificationSignalInput,
-    options: HarnessSendNotificationSignalOptions = {},
-  ): Promise<SendAgentNotificationSignalResult> {
-    const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
-    if (!this.#session.thread.getId()) {
-      const thread = await this.#session.thread.create();
-      this.#session.thread.set({ threadId: thread.id });
-    }
-    const threadId = this.#session.thread.getId()!;
-
-    const agent = this.getCurrentAgent();
-    await this.#session.thread.ensureSubscription(threadId);
-
-    if (this.#session.run.getRunId() && this.#session.stream.activeRunId()) {
-      return agent.sendNotificationSignal(input, {
-        resourceId: this.#session.identity.getResourceId(),
-        threadId,
-        ifActive,
-        ifIdle,
-      });
-    }
-
-    const streamOptions = await this.buildAgentMessageStreamOptions({
-      requestContext: requestContextInput,
-      tracingContext,
-      tracingOptions,
-    });
-
-    return agent.sendNotificationSignal(input, {
-      resourceId: this.#session.identity.getResourceId(),
-      threadId,
-      ifActive,
-      ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
-    });
-  }
-
-  /**
-   * Send a message to the current agent.
-   * Streams the response and emits events.
-   */
-  async sendMessage({
-    content,
-    files,
-    tracingContext,
-    tracingOptions,
-    requestContext: requestContextInput,
-  }: {
-    content: string;
-    files?: Array<{ data: string; mediaType: string; filename?: string }>;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const messageInput = this.createMessageInput({ content, files });
-
-    const wasActive = this.#session.stream.isActive();
-    let emittedAgentEnd = false;
-    const unsubscribeAgentEnd = wasActive
-      ? undefined
-      : this.#session.subscribe(event => {
-          if (event.type === 'agent_end') emittedAgentEnd = true;
-        });
-    const signal = this.sendSignal({
-      content: messageInput,
-      tracingContext,
-      tracingOptions,
-      requestContext: requestContextInput,
-    });
-    await signal.accepted;
-    if (!wasActive) {
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await this.waitForCurrentThreadStreamIdle();
-      unsubscribeAgentEnd?.();
-      if (!emittedAgentEnd && !this.#session.suspensions.hasPending()) {
-        this.#session.emit({ type: 'agent_end', reason: 'complete' });
-      }
-    }
-    return;
-  }
-
-  async saveSystemReminderMessage({
+  private async saveSystemReminder({
+    threadId,
+    resourceId,
     message,
     reminderType,
-    role = 'user',
+    role,
     metadata,
   }: {
+    threadId: string;
+    resourceId: string;
     message: string;
     reminderType: string;
-    role?: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
   }): Promise<HarnessMessage | null> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId || !this.config.storage) return null;
-
+    if (!this.config.storage) return null;
     const memoryStorage = await this.getMemoryStorage();
     const dbMessage = {
       id: randomUUID(),
       role,
       threadId,
-      resourceId: this.#session.identity.getResourceId(),
+      resourceId,
       createdAt: new Date(),
       content: {
         format: 2 as const,
@@ -1403,6 +1172,22 @@ export class Harness<TState = {}> {
     const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
     const saved = result.messages[0] ?? dbMessage;
     return this.convertToHarnessMessage(saved);
+  }
+
+  /**
+   * Resolve the mode the session transitions to when a plan is approved: the
+   * current mode's `transitionsTo`, else the configured default mode. The mode
+   * catalog is Harness config, so this is host-owned. Returns `undefined` when
+   * no default mode is configured.
+   */
+  private resolveTransitionModeId(): string | undefined {
+    const currentMode = this.#session.mode.resolve();
+    const transitionModeId =
+      currentMode.transitionsTo ??
+      this.config.defaultModeId ??
+      this.config.modes.find(mode => mode.default || mode.metadata?.default === true)?.id ??
+      this.config.modes[0]?.id;
+    return this.listModes().find(mode => mode.id === transitionModeId)?.id;
   }
 
   private convertToHarnessMessage(msg: {
@@ -1741,268 +1526,8 @@ export class Harness<TState = {}> {
   // Control
   // ===========================================================================
 
-  /**
-   * Abort the current operation.
-   */
-  abort(): void {
-    this.#session.abort();
-  }
-
-
-  /**
-   * Steer the agent mid-stream: aborts current run and sends a new message.
-   */
-  async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    this.abort();
-    this.#session.followUps.clear();
-    this.#session.emit({ type: 'follow_up_queued', count: 0 });
-    await this.sendMessage({ content, requestContext });
-  }
-
-  /**
-   * Queue a follow-up message to be processed after the current operation completes.
-   */
-  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    if (this.#session.run.isRunning()) {
-      this.#session.followUps.enqueue({ content, requestContext });
-      this.#session.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
-    } else {
-      await this.sendMessage({ content, requestContext });
-    }
-  }
-
-  /**
-   * True when one or more tools are parked awaiting a resume (e.g. ask_user /
-   * request_access suspensions). A suspended run nulls the AbortController, so
-   * isRunning() returns false even though the run is still pending — callers that
-   * need to know whether the harness is awaiting user input (e.g. to allow abort)
-   * should check this too.
-   */
-  /**
-   * Resolve once the current thread's stream is fully idle.
-   *
-   * After `abort()` is called the run's status can still be `'running'` for a
-   * few microtasks while the underlying model stream finalizes. Callers that
-   * need to send a fresh signal after an abort (e.g. plan approval → mode
-   * switch → trigger reminder) should await this before calling `sendSignal`
-   * to avoid the new signal being queued onto the dying run, which would then
-   * be drained with the previous run's already-aborted abortSignal.
-   */
-  private async waitForCurrentThreadStreamIdle(): Promise<void> {
-    while (this.#session.stream.isActive() || this.#session.run.getRunId() !== null) {
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
-  }
-
   private getSubagentDisplayName(agentType: string): string | undefined {
     return this.config.subagents?.find(subagent => subagent.id === agentType)?.name;
-  }
-
-  /**
-   * Respond to a pending tool suspension from the UI.
-   * Provides resume data so the suspended tool can continue execution.
-   *
-   * `toolCallId` selects which suspended tool to resume — required when more than
-   * one tool is suspended concurrently (e.g. parallel `ask_user` calls, see issue
-   * #13642). When omitted it resolves to the sole pending suspension.
-   */
-  async respondToToolSuspension({
-    resumeData,
-    toolCallId,
-    requestContext,
-  }: {
-    resumeData: any;
-    toolCallId?: string;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const resolvedToolCallId = this.#session.suspensions.resolveToolCallId(toolCallId);
-    if (!resolvedToolCallId) return;
-
-    const suspension = this.#session.suspensions.get({ toolCallId: resolvedToolCallId });
-
-    try {
-      // `submit_plan` resumes carry a plan-approval decision. Approval additionally
-      // switches the Harness from its planning mode to its default execution mode, so
-      // it is handled separately from a plain tool resume. Non-Harness consumers skip
-      // this entirely and resume the tool directly via agent.resumeStream.
-      if (suspension?.toolName === 'submit_plan') {
-        await this.handlePlanApprovalResume({
-          toolCallId: resolvedToolCallId,
-          response: resumeData as { action: 'approved' | 'rejected'; feedback?: string },
-          requestContext,
-        });
-        return;
-      }
-
-      await this.handleToolResume({
-        resumeData,
-        toolCallId: resolvedToolCallId,
-        requestContext,
-      });
-    } catch (error) {
-      const err = getErrorFromUnknown(error);
-      this.#session.emit({ type: 'error', error: err });
-      this.#session.emit({ type: 'agent_end', reason: 'error' });
-    }
-  }
-
-  // ===========================================================================
-  // Plan Approval
-  // ===========================================================================
-
-  /**
-   * Respond to a suspended `submit_plan` tool call.
-   *
-   * `submit_plan` is an agent-agnostic tool that pauses via the native tool-suspension
-   * primitive. The Harness layers its planning UX on top of that generic pause here:
-   *
-   * - On **rejection**, the plan-mode run is resumed with the feedback so the agent can
-   *   revise and submit again. This is an ordinary tool resume.
-   * - On **approval**, the parked plan-mode suspension is abandoned and the Harness
-   *   switches to its default (execution) mode. The mode switch aborts the plan-mode run, so
-   *   there is no point resuming it first; the next signal/message drives the fresh
-   *   default-mode run. The model still sees the "approved" tool result on the rebuilt
-   *   message history when the default-mode run starts.
-   *
-   * Non-Harness consumers (a plain Agent in Studio or a customer app) instead resume the
-   * tool directly via `agent.resumeStream({ action, feedback })` — no modes involved.
-   */
-  private async handlePlanApprovalResume({
-    toolCallId,
-    response,
-    requestContext,
-  }: {
-    toolCallId: string;
-    response: { action: 'approved' | 'rejected'; feedback?: string };
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    if (response.action === 'rejected') {
-      await this.handleToolResume({ resumeData: response, toolCallId, requestContext });
-      return;
-    }
-
-    // Approved: drop the parked suspension (its run is about to be aborted by the mode
-    // switch) and move to the default execution mode.
-    this.#session.suspensions.delete({ toolCallId });
-
-    const currentMode = this.#session.mode.resolve();
-    const transitionModeId =
-      currentMode.transitionsTo ??
-      this.config.defaultModeId ??
-      this.config.modes.find(mode => mode.default || mode.metadata?.default === true)?.id ??
-      this.config.modes[0]?.id;
-
-    const transitionMode = this.listModes().find(mode => mode.id === transitionModeId);
-    if (transitionMode && transitionMode.id !== this.#session.mode.get()) {
-      await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-      await this.#session.mode.switch({ modeId: transitionMode.id });
-      // The mode switch aborts the in-flight run but does not wait for it to
-      // finalize. If the caller (e.g. mastracode's plan-approval handler)
-      // immediately fires a system-reminder signal, that signal can land in
-      // the dying run's pending queue and later get drained with the run's
-      // already-aborted abortSignal — manifesting as a hang where the agent
-      // never resumes after "The user has approved the plan, begin
-      // executing.". Waiting for the stream to be fully idle here ensures
-      // the next sendSignal() always starts a fresh run.
-      await this.waitForCurrentThreadStreamIdle();
-    }
-  }
-
-  private async handleToolApprove({
-    toolCallId,
-    requestContext: requestContextInput,
-  }: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const runId = this.#session.run.getRunId();
-    if (!runId) {
-      throw new Error('No active run to approve tool call for');
-    }
-
-    const agent = this.getCurrentAgent();
-
-    const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.#session.thread.getId();
-    await agent.approveToolCall({
-      runId,
-      toolCallId,
-      requireToolApproval: !isYolo,
-      memory: threadId ? { thread: threadId, resource: this.#session.identity.getResourceId() } : undefined,
-      abortSignal: this.#session.run.ensureAbortController().signal,
-      requestContext,
-      toolsets: await this.buildToolsets(requestContext),
-    });
-  }
-
-  private async handleToolDecline({
-    toolCallId,
-    requestContext: requestContextInput,
-  }: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const runId = this.#session.run.getRunId();
-    if (!runId) {
-      throw new Error('No active run to decline tool call for');
-    }
-
-    const agent = this.getCurrentAgent();
-
-    const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.#session.thread.getId();
-    await agent.declineToolCall({
-      runId,
-      toolCallId,
-      requireToolApproval: !isYolo,
-      memory: threadId ? { thread: threadId, resource: this.#session.identity.getResourceId() } : undefined,
-      abortSignal: this.#session.run.ensureAbortController().signal,
-      requestContext,
-      toolsets: await this.buildToolsets(requestContext),
-    });
-  }
-
-  private async handleToolResume({
-    resumeData,
-    toolCallId,
-    requestContext: requestContextInput,
-  }: {
-    resumeData: any;
-    toolCallId: string;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const suspension = this.#session.suspensions.get({ toolCallId });
-    if (!suspension) {
-      throw new Error('No active suspension to resume');
-    }
-
-    const agent = this.getCurrentAgent();
-
-    // Remove before resuming so a re-suspend during the resumed run can re-register
-    // the same toolCallId without being clobbered by this cleanup. Drop the matching
-    // display-state entry too so the UI stops rendering only the resolved prompt
-    // while any other parked suspensions stay visible.
-    this.#session.suspensions.delete({ toolCallId });
-    this.#session.displayState.deletePendingSuspension(toolCallId);
-
-    const requestContext = await this.buildRequestContext(requestContextInput);
-    const threadId = this.#session.thread.getId();
-
-    const output = await agent.resumeStream(resumeData, {
-      // Re-supply the shared run budget (maxSteps, etc). Without it the resumed
-      // run merges over the agent's small default maxSteps and stops mid-task.
-      ...this.buildSharedRunOptions(),
-      runId: suspension.runId,
-      toolCallId,
-      memory: threadId ? { thread: threadId, resource: this.#session.identity.getResourceId() } : undefined,
-      abortSignal: this.#session.run.ensureAbortController().signal,
-      requestContext,
-      toolsets: await this.buildToolsets(requestContext),
-    });
-
-    await this.#session.processStream(output, requestContext);
   }
 
   // ===========================================================================

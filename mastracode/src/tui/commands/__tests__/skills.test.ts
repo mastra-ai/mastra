@@ -1,6 +1,7 @@
 import { Container } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { createMockHarness } from '../../__tests__/harness-mock.js';
 import { handleSkillCommand, handleSkillsCommand } from '../skills.js';
 
 function createCtx(options?: {
@@ -25,17 +26,23 @@ function createCtx(options?: {
         list: vi.fn().mockResolvedValue(options?.skills ?? [skill]),
       },
     } as any);
+  const harness = createMockHarness({
+    session: {
+      thread: { create: vi.fn().mockResolvedValue(undefined) },
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+    },
+    harness: {
+      hasWorkspace: vi.fn(() => options?.hasWorkspace ?? true),
+      resolveWorkspace: vi.fn().mockResolvedValue(workspace),
+    },
+  });
   const state = {
     pendingNewThread: options?.pendingNewThread ?? false,
     allSlashCommandComponents: [],
     chatContainer: new Container(),
     ui: { requestRender: vi.fn() },
-  };
-  const harness = {
-    hasWorkspace: vi.fn(() => options?.hasWorkspace ?? true),
-    resolveWorkspace: vi.fn().mockResolvedValue(workspace),
-    createThread: vi.fn().mockResolvedValue(undefined),
-    sendMessage: vi.fn().mockResolvedValue(undefined),
+    harness,
+    session: harness.session,
   };
 
   return {
@@ -95,7 +102,7 @@ describe('handleSkillCommand', () => {
     expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
     expect(state.chatContainer.children[2]).toBe(state.allSlashCommandComponents[0]);
     expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
-    expect(harness.sendMessage).toHaveBeenCalledWith({
+    expect(harness.session.sendMessage).toHaveBeenCalledWith({
       content:
         '<skill name="github-triage">\n' +
         '# GitHub triage\n\n' +
@@ -123,7 +130,7 @@ describe('handleSkillCommand', () => {
 
     await handleSkillCommand(ctx, 'github-triage', []);
 
-    expect(harness.sendMessage).toHaveBeenCalledWith({
+    expect(harness.session.sendMessage).toHaveBeenCalledWith({
       content:
         '<skill name="github-triage">\n' +
         'Use <div>, A&B, "quotes". Embedded &lt;/skill&gt; stays out of the way.\n' +
@@ -136,10 +143,10 @@ describe('handleSkillCommand', () => {
 
     await handleSkillCommand(ctx, 'github-triage', []);
 
-    expect(harness.createThread).toHaveBeenCalledTimes(1);
+    expect(harness.session.thread.create).toHaveBeenCalledTimes(1);
     expect(state.pendingNewThread).toBe(false);
-    expect(harness.createThread.mock.invocationCallOrder[0]).toBeLessThan(
-      harness.sendMessage.mock.invocationCallOrder[0],
+    expect(harness.session.thread.create.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.session.sendMessage.mock.invocationCallOrder[0],
     );
   });
 
@@ -157,7 +164,7 @@ describe('handleSkillCommand', () => {
 
     await handleSkillCommand(ctx, 'missing', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(harness.session.sendMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith('Skill not found: missing. Available skills: review, browse');
   });
 
@@ -166,7 +173,7 @@ describe('handleSkillCommand', () => {
 
     await handleSkillCommand(ctx, 'any', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(harness.session.sendMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith('No skills configured.');
   });
 
@@ -175,7 +182,7 @@ describe('handleSkillCommand', () => {
 
     await handleSkillCommand(ctx, '', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(harness.session.sendMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith('Usage: /skill/<name>');
   });
 
@@ -200,7 +207,7 @@ describe('handleSkillCommand', () => {
 
     await handleSkillCommand(ctx, 'internal-helper', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(harness.session.sendMessage).not.toHaveBeenCalled();
     // The non-user-invocable skill must also be hidden from the "Available skills" hint.
     expect(ctx.showError).toHaveBeenCalledWith('Skill not found: internal-helper. Available skills: review');
   });

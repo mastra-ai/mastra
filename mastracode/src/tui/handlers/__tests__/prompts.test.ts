@@ -1,35 +1,38 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
+import { createMockState } from '../../__tests__/harness-mock.js';
 import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
 import type { EventHandlerContext } from '../types.js';
 
 function createCtx() {
   const answerQuestion = vi.fn().mockResolvedValue('Verified');
-  const state = {
-    goalManager: {
-      getGoal: vi.fn(() => ({ status: 'active', judgeModelId: 'openai/gpt-5.5' })),
-      answerQuestion,
-    },
-    options: { inlineQuestions: true },
-    harness: {
+  const state = createMockState({
+    session: {
       respondToToolSuspension: vi.fn(),
-      session: { displayState: { get: vi.fn(() => ({ isRunning: false })) } },
+      displayState: { get: vi.fn(() => ({ isRunning: false })) },
     },
-    pendingInlineQuestions: [],
-    gradientAnimator: {
-      start: vi.fn(),
-      stop: vi.fn(),
+    extra: {
+      goalManager: {
+        getGoal: vi.fn(() => ({ status: 'active', judgeModelId: 'openai/gpt-5.5' })),
+        answerQuestion,
+      },
+      options: { inlineQuestions: true },
+      pendingInlineQuestions: [],
+      gradientAnimator: {
+        start: vi.fn(),
+        stop: vi.fn(),
+      },
+      ui: {
+        requestRender: vi.fn(),
+      },
+      chatContainer: {
+        addChild: vi.fn(),
+        invalidate: vi.fn(),
+      },
+      hideThinkingBlock: false,
     },
-    ui: {
-      requestRender: vi.fn(),
-    },
-    chatContainer: {
-      addChild: vi.fn(),
-      invalidate: vi.fn(),
-    },
-    hideThinkingBlock: false,
-  } as unknown as TUIState;
+  }) as unknown as TUIState;
 
   const ctx = {
     state,
@@ -50,7 +53,7 @@ describe('handleAskQuestion goal mode', () => {
 
     expect(answerQuestion).not.toHaveBeenCalled();
     expect(state.activeInlineQuestion).toBeDefined();
-    expect(state.harness.respondToToolSuspension).not.toHaveBeenCalled();
+    expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
     expect(ctx.addChildBeforeFollowUps).not.toHaveBeenCalled();
     expect(state.activeGoalJudge).toBeUndefined();
 
@@ -74,7 +77,7 @@ describe('handleAskQuestion goal mode', () => {
 
     await promise;
 
-    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledWith({
       toolCallId: 'q1',
       resumeData: ['React', 'Svelte'],
     });
@@ -88,14 +91,14 @@ function createPlanApprovalCtx() {
     accepted: Promise.resolve({ accepted: true, runId: 'run-1' }),
   });
   const state = {
-    session: {
-      state: { set: vi.fn().mockResolvedValue(undefined) },
-      identity: { getResourceId: vi.fn(() => 'resource-1') },
-    },
-    harness: {
-      respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
-      sendSignal,
-    },
+    ...createMockState({
+      session: {
+        state: { set: vi.fn().mockResolvedValue(undefined) },
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
+        sendSignal,
+      },
+    }),
     goalManager: {
       getGoal: vi.fn(() => ({ id: 'goal-123', status: 'active', judgeModelId: 'openai/gpt-5.5' })),
     },
@@ -135,7 +138,7 @@ describe('handlePlanApproval goal mode', () => {
     await (component as any).onGoal();
     await promise;
 
-    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledWith({
       toolCallId: 'plan-1',
       resumeData: { action: 'approved' },
     });
@@ -149,7 +152,7 @@ describe('handlePlanApproval goal mode', () => {
     expect(ctx.fireMessage).not.toHaveBeenCalled();
     // The goal handler does not send the "begin executing" reminder — the
     // goal judge keeps the agent driving toward the goal.
-    expect(state.harness.sendSignal).not.toHaveBeenCalled();
+    expect(state.session.sendSignal).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBe('goal-123');
   });
 
@@ -193,7 +196,7 @@ describe('handlePlanApproval regular approval', () => {
     await (component as any).onApprove();
     await promise;
 
-    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledWith({
       toolCallId: 'plan-1',
       resumeData: { action: 'approved' },
     });

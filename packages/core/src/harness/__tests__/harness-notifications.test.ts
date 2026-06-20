@@ -32,7 +32,7 @@ describe('Harness notification signals', () => {
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
 
-    const result = await harness.sendNotificationSignal({
+    const result = await harness.session.sendNotificationSignal({
       source: 'mastracode',
       kind: 'manual',
       priority: 'high',

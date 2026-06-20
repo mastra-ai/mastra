@@ -99,7 +99,7 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.init();
     await harness.session.thread.create();
 
-    await harness.sendMessage({ content: 'Hello' });
+    await harness.session.sendMessage({ content: 'Hello' });
 
     expect(streamSpy).toHaveBeenCalled();
     const [, streamOptions] = streamSpy.mock.calls[0] as [any, any];
@@ -173,7 +173,7 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.session.thread.create();
 
     // Send a message — the tool should execute and call suspend()
-    await harness.sendMessage({ content: 'Deploy to production' });
+    await harness.session.sendMessage({ content: 'Deploy to production' });
 
     // agent_end should fire with reason 'suspended', not 'complete'
     const agentEndEvent = events.find((e: any) => e.type === 'agent_end');
@@ -231,7 +231,7 @@ describe('Harness: tool suspension and resumption', () => {
 
     await harness.init();
     await harness.session.thread.create();
-    await harness.sendMessage({ content: 'Do it' });
+    await harness.session.sendMessage({ content: 'Do it' });
 
     const ds = harness.session.displayState.get();
     expect(ds.pendingSuspensions.size).toBe(1);
@@ -301,7 +301,7 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.session.thread.create();
 
     // First message triggers suspension
-    await harness.sendMessage({ content: 'Deploy to production' });
+    await harness.session.sendMessage({ content: 'Deploy to production' });
 
     const suspendEnd = events.find((e: any) => e.type === 'agent_end');
     expect(suspendEnd?.reason).toBe('suspended');
@@ -310,7 +310,7 @@ describe('Harness: tool suspension and resumption', () => {
     events.length = 0;
 
     // Resume with data
-    await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await harness.session.respondToToolSuspension({ resumeData: { confirmed: true } });
 
     // Should emit agent_start + agent_end(complete) for the resumed run
     const resumeStart = events.find((e: any) => e.type === 'agent_start');
@@ -376,8 +376,8 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.init();
     await harness.session.thread.create();
 
-    await harness.sendMessage({ content: 'Deploy to production' });
-    await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await harness.session.sendMessage({ content: 'Deploy to production' });
+    await harness.session.respondToToolSuspension({ resumeData: { confirmed: true } });
 
     expect(resumeStreamSpy).toHaveBeenCalled();
     const [, resumeOptions] = resumeStreamSpy.mock.calls[0] as [any, any];
@@ -443,8 +443,8 @@ describe('Harness: tool suspension and resumption', () => {
     await harness.init();
     await harness.session.thread.create();
 
-    await harness.sendMessage({ content: 'Deploy to production' });
-    await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await harness.session.sendMessage({ content: 'Deploy to production' });
+    await harness.session.respondToToolSuspension({ resumeData: { confirmed: true } });
 
     expect(resumeStreamSpy).toHaveBeenCalled();
     const [, resumeOptions] = resumeStreamSpy.mock.calls[0] as [any, any];

@@ -383,7 +383,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     case 'tool_suspended': {
       // Interactive built-in tools pause via the native tool-suspension primitive.
       // Route the suspension to the matching prompt UI using the suspend payload;
-      // the UI resumes the tool by calling harness.respondToToolSuspension({ toolCallId }).
+      // the UI resumes the tool by calling harness.session.respondToToolSuspension({ toolCallId }).
       const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
       if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
         await handleSandboxAccessRequest(

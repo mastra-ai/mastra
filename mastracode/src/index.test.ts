@@ -17,13 +17,13 @@ vi.mock('@mastra/core/agent', () => ({
 
 vi.mock('@mastra/core/harness', () => ({
   Harness: class {
+    session = { subscribe() {} };
+
     constructor(config: { heartbeatHandlers?: Array<{ immediate?: boolean; handler: () => unknown }> }) {
       for (const heartbeat of config.heartbeatHandlers ?? []) {
         if (heartbeat.immediate !== false) void heartbeat.handler();
       }
     }
-
-    subscribe() {}
   },
   taskWriteTool: {},
   taskCheckTool: {},

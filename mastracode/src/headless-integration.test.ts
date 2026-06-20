@@ -195,7 +195,7 @@ describe('headless mode — event-driven auto-resolution', () => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Say hello' });
+    await harness.session.sendMessage({ content: 'Say hello' });
 
     const types = events.map(e => e.type);
     expect(types).toContain('agent_start');
@@ -236,7 +236,7 @@ describe('headless mode — event-driven auto-resolution', () => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Read test.txt' });
+    await harness.session.sendMessage({ content: 'Read test.txt' });
 
     const types = events.map(e => e.type);
     expect(types).toContain('tool_start');
@@ -257,7 +257,7 @@ describe('headless mode — event-driven auto-resolution', () => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Do something' });
+    await harness.session.sendMessage({ content: 'Do something' });
 
     const messageUpdates = events.filter(e => e.type === 'message_update');
     expect(messageUpdates.length).toBeGreaterThan(0);
@@ -300,7 +300,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     // Fire-and-forget (same pattern as headless mode)
-    const sendPromise = harness.sendMessage({ content: 'Do something slow' });
+    const sendPromise = harness.session.sendMessage({ content: 'Do something slow' });
 
     // Wait for agent_start, then abort
     await new Promise<void>(resolve => {
@@ -314,7 +314,7 @@ describe('headless mode — event-driven auto-resolution', () => {
       check();
     });
 
-    harness.abort();
+    harness.session.abort();
 
     // sendMessage should resolve (possibly with error)
     await sendPromise.catch(() => {});
@@ -369,7 +369,7 @@ describe('headless mode — event-driven auto-resolution', () => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Check the nested instructions' });
+    await harness.session.sendMessage({ content: 'Check the nested instructions' });
 
     expect(mockExecute).toHaveBeenCalledTimes(1);
 
@@ -577,20 +577,20 @@ describe('headless mode — --output-format contracts', () => {
       message: 'Browser state changed',
     };
     const harness = {
-      sendMessage: vi.fn(async () => {
-        listener?.({ type: 'agent_start', runId: 'run-state' } as HarnessEvent);
-        listener?.({
-          type: 'message_end',
-          message: {
-            id: 'assistant-state-message',
-            role: 'assistant',
-            content: [stateSignalPart, { type: 'text', text: 'Observed browser state.' }],
-            createdAt: new Date(0),
-          },
-        } as HarnessEvent);
-        listener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
-      }),
       session: {
+        sendMessage: vi.fn(async () => {
+          listener?.({ type: 'agent_start', runId: 'run-state' } as HarnessEvent);
+          listener?.({
+            type: 'message_end',
+            message: {
+              id: 'assistant-state-message',
+              role: 'assistant',
+              content: [stateSignalPart, { type: 'text', text: 'Observed browser state.' }],
+              createdAt: new Date(0),
+            },
+          } as HarnessEvent);
+          listener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
+        }),
         subscribe: vi.fn((next: (event: HarnessEvent) => void) => {
           listener = next;
           return () => {};
