@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PubSub } from '@mastra/core/events';
-import type { Event, EventCallback, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
+import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
 import { createClient } from 'redis';
 import type { RedisClientOptions, RedisClientType } from 'redis';
 
@@ -57,7 +57,7 @@ export interface RedisStreamsPubSubConfig {
   logger?: { debug?: (...args: unknown[]) => void; warn?: (...args: unknown[]) => void };
 }
 
-export class RedisStreamsPubSub extends PubSub {
+export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // Redis Streams is a pull transport: consumers issue XREADGROUP to read
   // events. Mastra reads this to know an OrchestrationWorker is required.
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
@@ -303,6 +303,120 @@ export class RedisStreamsPubSub extends PubSub {
     if (this.#pendingPublishes.size > 0) {
       await Promise.allSettled([...this.#pendingPublishes]);
     }
+  }
+
+  /**
+   * Lease key used in Redis. Distinct prefix from streams so leases and
+   * streams can't collide on key namespace.
+   */
+  #leaseKey(key: string): string {
+    return `${this.#keyPrefix}:lease:${key}`;
+  }
+
+  /**
+   * Atomic claim via SET NX PX. Idempotent for the same owner: if the
+   * current value is already this owner, we refresh the TTL instead of
+   * failing. Cross-process callers race here; Redis serializes them.
+   */
+  async acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+    if (this.#closed) return { acquired: false };
+    await this.#ensureWriterConnected();
+    const redisKey = this.#leaseKey(key);
+    const result = await this.#writeClient.set(redisKey, owner, { NX: true, PX: ttlMs });
+    if (result === 'OK') return { acquired: true, owner };
+    // Someone holds the key. Re-claim only if we still own it, refreshing the
+    // TTL atomically: a bare GET+PEXPIRE would let us extend a *new* owner's
+    // lease if the key expired and was re-acquired between the two calls.
+    const script = `
+      local current = redis.call("GET", KEYS[1])
+      if current == ARGV[1] then
+        redis.call("PEXPIRE", KEYS[1], ARGV[2])
+        return 1
+      end
+      return 0
+    `;
+    const refreshed = await this.#writeClient.eval(script, {
+      keys: [redisKey],
+      arguments: [owner, String(ttlMs)],
+    });
+    if (refreshed === 1) return { acquired: true, owner };
+    return { acquired: false, owner: (await this.#writeClient.get(redisKey)) ?? undefined };
+  }
+
+  async getLeaseOwner(key: string): Promise<string | undefined> {
+    if (this.#closed) return undefined;
+    await this.#ensureWriterConnected();
+    const current = await this.#writeClient.get(this.#leaseKey(key));
+    return current ?? undefined;
+  }
+
+  /**
+   * Release only if we still own it. Implemented as GET+DEL with a Lua
+   * script so the check-and-delete is atomic against concurrent renewals
+   * from other processes.
+   */
+  async releaseLease(key: string, owner: string): Promise<void> {
+    if (this.#closed) return;
+    await this.#ensureWriterConnected();
+    const script = `
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("DEL", KEYS[1])
+      else
+        return 0
+      end
+    `;
+    await this.#writeClient.eval(script, {
+      keys: [this.#leaseKey(key)],
+      arguments: [owner],
+    });
+  }
+
+  /**
+   * Extend the TTL only if we still own the lease. Returns false if the
+   * lease was lost (expired or another owner took it).
+   */
+  async renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
+    if (this.#closed) return false;
+    await this.#ensureWriterConnected();
+    const script = `
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+      else
+        return 0
+      end
+    `;
+    const result = await this.#writeClient.eval(script, {
+      keys: [this.#leaseKey(key)],
+      arguments: [owner, String(ttlMs)],
+    });
+    return result === 1;
+  }
+
+  /**
+   * Atomically hand the lease from `fromOwner` to `toOwner`, refreshing the
+   * TTL to the full `ttlMs`, without the key ever going empty.
+   *
+   * Implemented as a single Lua script (GET == fromOwner -> SET toOwner PX)
+   * so a racing process cannot win the key between a release and a re-acquire.
+   * Returns false if `fromOwner` no longer holds the lease (expired or taken),
+   * in which case the caller should fall back to a fresh `acquireLease`.
+   */
+  async transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean> {
+    if (this.#closed) return false;
+    await this.#ensureWriterConnected();
+    const script = `
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        redis.call("SET", KEYS[1], ARGV[2], "PX", ARGV[3])
+        return 1
+      else
+        return 0
+      end
+    `;
+    const result = await this.#writeClient.eval(script, {
+      keys: [this.#leaseKey(key)],
+      arguments: [fromOwner, toOwner, String(ttlMs)],
+    });
+    return result === 1;
   }
 
   /**
