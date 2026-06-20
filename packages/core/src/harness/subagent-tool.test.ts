@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { RequestContext } from '../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 
 // We need to mock Agent before importing tools.ts.
 const { mockStream, MockAgent, mockCreateWorkspaceTools } = vi.hoisted(() => {
@@ -126,7 +126,7 @@ describe('createSubagentTool requestContext forwarding', () => {
     expect(result.content).not.toContain('<subagent-meta');
   });
 
-  it('forwards a copy of requestContext with threadId/resourceId stripped', async () => {
+  it('does not forward requestContext or memory to non-forked subagent streams', async () => {
     mockStream.mockResolvedValue(createMockStreamResponse('result text'));
 
     const tool = createSubagentTool({
@@ -135,7 +135,6 @@ describe('createSubagentTool requestContext forwarding', () => {
       fallbackModelId: 'test-model',
     });
 
-    // Build a requestContext with harness data including threadId/resourceId
     const requestContext = new RequestContext();
     const harnessCtx: Partial<HarnessRequestContext> = {
       emitEvent: vi.fn(),
@@ -143,6 +142,9 @@ describe('createSubagentTool requestContext forwarding', () => {
       resourceId: 'parent-resource-456',
     };
     requestContext.set('harness', harnessCtx);
+    requestContext.set(MASTRA_THREAD_ID_KEY, 'reserved-parent-thread');
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'reserved-parent-resource');
+    requestContext.set('custom-key', 'custom-value');
 
     const result = await (tool as any).execute(
       { agentType: 'explore', task: 'Find all usages of foo' },
@@ -150,48 +152,13 @@ describe('createSubagentTool requestContext forwarding', () => {
     );
 
     expect(mockStream).toHaveBeenCalledTimes(1);
-    const streamCall = mockStream.mock.calls[0]!;
-    const subagentCtx = streamCall[1].requestContext;
-    // Should be a new instance (not the parent's context)
-    expect(subagentCtx).not.toBe(requestContext);
-    // Harness context should have threadId/resourceId cleared
-    const subagentHarness = subagentCtx.get('harness') as Partial<HarnessRequestContext>;
-    expect(subagentHarness.threadId).toBeNull();
-    expect(subagentHarness.resourceId).toBe('');
-    // Other harness fields should be preserved
-    expect(subagentHarness.emitEvent).toBe(harnessCtx.emitEvent);
+    const streamOpts = mockStream.mock.calls[0]![1];
+    expect(streamOpts.requestContext).toBeUndefined();
+    expect(streamOpts.memory).toBeUndefined();
     expect(result.isError).toBe(false);
   });
 
-  it('forwards requestContext copy when harness context is not set', async () => {
-    mockStream.mockResolvedValue(createMockStreamResponse('result text'));
-
-    const tool = createSubagentTool({
-      subagents,
-      resolveModel,
-      fallbackModelId: 'test-model',
-    });
-
-    // RequestContext without harness data — still should be forwarded
-    const requestContext = new RequestContext();
-    requestContext.set('custom-key', 'custom-value');
-
-    const result = await (tool as any).execute(
-      { agentType: 'explore', task: 'Explore something' },
-      { requestContext, agent: { toolCallId: 'tc-2' } },
-    );
-
-    expect(mockStream).toHaveBeenCalledTimes(1);
-    const streamCall = mockStream.mock.calls[0]!;
-    const subagentCtx = streamCall[1].requestContext;
-    // Should be a new instance but with same data
-    expect(subagentCtx).not.toBe(requestContext);
-    // Verify the custom data is accessible through the forwarded context
-    expect(subagentCtx.get('custom-key')).toBe('custom-value');
-    expect(result.isError).toBe(false);
-  });
-
-  it('passes maxSteps, abortSignal, and requireToolApproval alongside requestContext', async () => {
+  it('passes maxSteps, abortSignal, and requireToolApproval without requestContext', async () => {
     const abortController = new AbortController();
     mockStream.mockResolvedValue(createMockStreamResponse('done'));
 
@@ -221,8 +188,7 @@ describe('createSubagentTool requestContext forwarding', () => {
       abortSignal: abortController.signal,
       requireToolApproval: false,
     });
-    // Subagent gets a copy of the request context (not the original)
-    expect(streamOpts.requestContext).toBeInstanceOf(RequestContext);
+    expect(streamOpts.requestContext).toBeUndefined();
   });
 
   it('returns partial subagent output when the parent aborts during streaming', async () => {
@@ -309,7 +275,7 @@ describe('createSubagentTool requestContext forwarding', () => {
     expect(streamOpts.stopWhen).toBe(stopFn);
   });
 
-  it('forwards default RequestContext when parent context has no explicit requestContext', async () => {
+  it('does not create a default requestContext for non-forked subagent streams', async () => {
     mockStream.mockResolvedValue(createMockStreamResponse('result text'));
 
     const tool = createSubagentTool({
@@ -318,7 +284,6 @@ describe('createSubagentTool requestContext forwarding', () => {
       fallbackModelId: 'test-model',
     });
 
-    // Execute without requestContext — core's createTool wrapper creates a default one
     const result = await (tool as any).execute(
       { agentType: 'explore', task: 'Explore something' },
       { agent: { toolCallId: 'tc-4' } },
@@ -326,8 +291,7 @@ describe('createSubagentTool requestContext forwarding', () => {
 
     expect(mockStream).toHaveBeenCalledTimes(1);
     const streamCall = mockStream.mock.calls[0]!;
-    // The core creates a default RequestContext when none is provided
-    expect(streamCall[1].requestContext).toBeInstanceOf(RequestContext);
+    expect(streamCall[1].requestContext).toBeUndefined();
     expect(result.isError).toBe(false);
   });
 });
@@ -429,6 +393,40 @@ describe('createSubagentTool workspace propagation', () => {
     await (tool as any).execute({ agentType: 'explore', task: 'Find stuff' }, { agent: { toolCallId: 'tc-ws-2' } });
 
     expect(MockAgent.lastConstructorOpts.workspace).toBeUndefined();
+  });
+
+  it('configures direct provider-compat processors for non-forked subagent runs', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('result'));
+
+    const parentAgent = {
+      listErrorProcessors: vi.fn(),
+      listConfiguredInputProcessors: vi.fn(),
+    };
+
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+      getParentAgent: () => parentAgent as any,
+    });
+
+    await (tool as any).execute(
+      { agentType: 'explore', task: 'Find stuff' },
+      { agent: { toolCallId: 'tc-processors' } },
+    );
+
+    expect(MockAgent.lastConstructorOpts.memory).toBeUndefined();
+    expect(MockAgent.lastConstructorOpts.inputProcessors.map((processor: { id: string }) => processor.id)).toEqual([
+      'provider-history-compat',
+    ]);
+    expect(MockAgent.lastConstructorOpts.errorProcessors.map((processor: { id: string }) => processor.id)).toEqual([
+      'stream-error-retry-processor',
+      'prefill-error-handler',
+      'provider-history-compat',
+    ]);
+    expect(MockAgent.lastConstructorOpts.outputProcessors).toBeUndefined();
+    expect(parentAgent.listConfiguredInputProcessors).not.toHaveBeenCalled();
+    expect(parentAgent.listErrorProcessors).not.toHaveBeenCalled();
   });
 });
 
@@ -660,6 +658,7 @@ describe('createSubagentTool forked subagent behavior', () => {
       sourceThreadId: 'parent-thread-1',
       resourceId: 'parent-resource-1',
       title: expect.stringContaining('Fork:'),
+      excludeToolCallId: 'tc-fork-1',
     });
 
     // Parent agent's stream is used — no fresh Agent is constructed for the fork.
@@ -667,8 +666,13 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(mockStream).not.toHaveBeenCalled();
 
     const [taskArg, streamOpts] = parentStream.mock.calls[0]!;
-    expect(taskArg).toContain('Dig deeper');
+    expect(taskArg).toContain('!IMPORTANT!: All previous context was from the original thread');
+    expect(taskArg).toContain('YOU are now a forked subagent');
     expect(taskArg).toContain('Do not call the `subagent` tool');
+    expect(taskArg).toContain('User task:\nDig deeper');
+    expect(taskArg.indexOf('You are already running as the forked subagent')).toBeLessThan(
+      taskArg.indexOf('User task:\nDig deeper'),
+    );
     // Memory option points at the cloned thread so history is inherited
     // without polluting the parent thread.
     expect(streamOpts.memory).toEqual({ thread: 'forked-thread-1', resource: 'parent-resource-1' });
@@ -1033,7 +1037,7 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(patchedSubagent.execute).not.toBe(originalSubagentExecute);
     const stubResult = await patchedSubagent.execute({}, {});
     expect(stubResult.isError).toBe(true);
-    expect(stubResult.content).toMatch(/maximum allowed subagent nesting level/i);
+    expect(stubResult.content).toMatch(/YOU are now a forked subagent/i);
     expect(originalSubagentExecute).not.toHaveBeenCalled();
 
     const patchedTaskWrite = streamOpts.toolsets.harnessBuiltIn.task_write;
@@ -1103,8 +1107,8 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(streamOpts.toolsets).toBeUndefined();
   });
 
-  it('non-forked path is unchanged: strips threadId/resourceId and constructs a fresh Agent', async () => {
-    // Sanity check that wiring fork helpers does NOT affect the default path.
+  it('non-forked path is unchanged: omits request context and constructs a fresh Agent', async () => {
+    // Sanity check that wiring fork helpers does NOT route the default path through the parent agent.
     const { parentAgent, parentStream } = makeParentAgent();
     const cloneThreadForFork = vi.fn();
 
@@ -1136,10 +1140,7 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(mockStream).toHaveBeenCalledTimes(1);
 
     const streamOpts = mockStream.mock.calls[0]![1];
-    const harness = streamOpts.requestContext.get('harness') as Partial<HarnessRequestContext>;
-    expect(harness.threadId).toBeNull();
-    expect(harness.resourceId).toBe('');
-    // memory option is NOT set for non-forked runs
+    expect(streamOpts.requestContext).toBeUndefined();
     expect(streamOpts.memory).toBeUndefined();
   });
 });

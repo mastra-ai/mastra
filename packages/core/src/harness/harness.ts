@@ -3681,9 +3681,9 @@ export class Harness<TState = {}> {
         // that thread pickers / startup flows can hide transient fork threads —
         // see `listThreads` (filtered by default).
         cloneThreadForFork: hasMemory
-          ? async ({ sourceThreadId, resourceId, title }) => {
+          ? async ({ sourceThreadId, resourceId, title, excludeToolCallId }) => {
               const memory = await this.resolveMemory();
-              const result = await memory.cloneThread({
+              const cloneInput: Parameters<typeof memory.cloneThread>[0] = {
                 sourceThreadId,
                 resourceId: resourceId ?? this.#session.identity.getResourceId(),
                 title,
@@ -3691,7 +3691,34 @@ export class Harness<TState = {}> {
                   forkedSubagent: true,
                   parentThreadId: sourceThreadId,
                 },
-              });
+              };
+
+              // Exclude the in-flight assistant message (the one containing the
+              // current subagent tool call) so the fork doesn't see a
+              // half-finished `subagent` call in its cloned history. Without this
+              // the forked model mirrors the parent's incomplete tool invocation.
+              if (excludeToolCallId) {
+                const { messages: allMessages } = await memory.recall({ threadId: sourceThreadId, perPage: false });
+                const excludedIds = new Set<string>();
+                for (const msg of allMessages) {
+                  const hasToolCall = msg.content.parts.some(
+                    (part: Record<string, unknown>) =>
+                      (part.type === 'tool-call' && part.toolCallId === excludeToolCallId) ||
+                      (part.type === 'tool-result' && part.toolCallId === excludeToolCallId) ||
+                      (part.type === 'tool-invocation' &&
+                        (part.toolInvocation as Record<string, unknown> | undefined)?.toolCallId === excludeToolCallId),
+                  );
+                  if (hasToolCall) {
+                    excludedIds.add(msg.id);
+                  }
+                }
+                const includedIds = allMessages.filter(msg => !excludedIds.has(msg.id)).map(msg => msg.id);
+                cloneInput.options = {
+                  messageFilter: { messageIds: includedIds },
+                };
+              }
+
+              const result = await memory.cloneThread(cloneInput);
               return { id: result.thread.id, resourceId: result.thread.resourceId };
             }
           : undefined,

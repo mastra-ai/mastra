@@ -102,6 +102,116 @@ describe('Harness fork clone metadata wiring', () => {
     });
   });
 
+  it('excludes the in-flight subagent tool-call message from the fork clone', async () => {
+    // When the fork clone callback receives excludeToolCallId, the harness
+    // should list the parent thread messages, find the one containing that
+    // tool call, and pass only the remaining message IDs via messageFilter so
+    // the fork doesn't see a half-finished subagent invocation in its history.
+    const cloneThread = vi.fn().mockResolvedValue({
+      thread: {
+        id: 'forked-thread-id',
+        resourceId: 'parent-resource',
+        title: 'Fork: Explore subagent',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      },
+      clonedMessages: [],
+      messageIdMap: {},
+    });
+
+    const recall = vi.fn().mockResolvedValue({
+      messages: [
+        {
+          id: 'msg-user-1',
+          role: 'user',
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+          content: { parts: [{ type: 'text', text: 'Do something' }] },
+        },
+        {
+          id: 'msg-asst-1',
+          role: 'assistant',
+          createdAt: new Date('2026-01-01T00:01:00Z'),
+          content: {
+            parts: [
+              { type: 'text', text: 'Let me delegate.' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: { toolCallId: 'tc-sub-1', toolName: 'subagent', state: 'call' },
+              },
+            ],
+          },
+        },
+        {
+          id: 'msg-user-2',
+          role: 'user',
+          createdAt: new Date('2026-01-01T00:02:00Z'),
+          content: { parts: [{ type: 'text', text: 'More context' }] },
+        },
+      ],
+      total: 3,
+      page: 0,
+      perPage: false,
+      hasMore: false,
+    });
+
+    const memoryFactory = vi.fn().mockResolvedValue({ cloneThread, recall });
+
+    const subagents: HarnessSubagent[] = [
+      {
+        id: 'explore',
+        name: 'Explore',
+        description: 'Explore',
+        instructions: 'Be exploratory.',
+        forked: true,
+      },
+    ];
+
+    const harness = new Harness({
+      id: 'test',
+      resourceId: 'parent-resource',
+      memory: memoryFactory as unknown as never,
+      subagents,
+      resolveModel: () => ({}) as never,
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          defaultModelId: 'openai/gpt-4o',
+          agent: new Agent({
+            name: 'parent',
+            instructions: 'parent',
+            model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+          }),
+        },
+      ],
+    });
+
+    await harness.init();
+
+    await (harness as unknown as { buildToolsets(ctx: RequestContext): Promise<unknown> }).buildToolsets(
+      new RequestContext(),
+    );
+
+    expect(capturedOpts).toHaveLength(1);
+    const cloneCb = capturedOpts[0]!.cloneThreadForFork as (a: {
+      sourceThreadId: string;
+      title?: string;
+      excludeToolCallId?: string;
+    }) => Promise<unknown>;
+
+    await cloneCb({ sourceThreadId: 'parent-thread-xyz', title: 'Fork', excludeToolCallId: 'tc-sub-1' });
+
+    expect(cloneThread).toHaveBeenCalledTimes(1);
+    const cloneArg = cloneThread.mock.calls[0]![0];
+    // The assistant message containing the subagent tool call is excluded.
+    expect(cloneArg.options.messageFilter.messageIds).not.toContain('msg-asst-1');
+    // Prior user messages are still included.
+    expect(cloneArg.options.messageFilter.messageIds).toContain('msg-user-1');
+    expect(cloneArg.options.messageFilter.messageIds).toContain('msg-user-2');
+  });
+
   it('does not create the subagent tool from gateways without an app-provided resolver', async () => {
     const subagents: HarnessSubagent[] = [
       {

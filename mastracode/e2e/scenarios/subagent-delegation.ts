@@ -34,6 +34,14 @@ export const subagentDelegationScenario: McE2eScenario = {
       10_000,
     );
 
+    const history = terminal.serializeHistory?.().output ?? terminal.serialize().view;
+    const renderedSubagentLines = history.match(/subagent\s+explore\s+openai\/gpt-5\.4-mini/g) ?? [];
+    if (renderedSubagentLines.length !== 1) {
+      throw new Error(
+        `Expected exactly one rendered Explore subagent component, found ${renderedSubagentLines.length}.\n\n${history}`,
+      );
+    }
+
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
