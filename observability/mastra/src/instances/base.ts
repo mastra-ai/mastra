@@ -696,8 +696,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   protected emitSpanEnded(span: AnySpan): void {
     // Emit metrics independently of export filtering: users who exclude span
-    // types (e.g. MODEL_STEP) to cut per-span costs should still get duration,
-    // token, and cost metrics. Only skip metrics for invalid or internal spans.
+    // types (e.g. AGENT_RUN, TOOL_CALL) to cut per-span costs should still get
+    // duration, token, and cost metrics. Only skip metrics for invalid or internal spans.
     if (span.isValid && !(span.isInternal && !this.config.includeInternalSpans)) {
       try {
         emitAutoExtractedMetrics(span, this.getMetricsContext(span));
