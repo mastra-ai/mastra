@@ -3,7 +3,6 @@ import type { AgentSignalIfIdleOptions } from '../agent/types';
 import type { Mastra } from '../mastra';
 import type { SendNotificationSignalInput } from '../notifications/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
-import type { AgentSignalIfIdleOptions } from '../agent/types';
 
 /**
  * Identifies a specific agent thread that a signal provider targets.
