@@ -101,6 +101,107 @@ describe('Harness fork clone metadata wiring', () => {
     });
   });
 
+  it('appends a synthetic completed result to the fork clone without pre-scanning history', async () => {
+    // When the fork clone callback receives excludeToolCallId, the harness
+    // should clone normally (preserving messages, WM, OM, embeddings, and clone
+    // metadata) and append a synthetic completed subagent result. It must not
+    // pre-scan the whole parent thread, because long real threads can make a
+    // full recall expensive enough to freeze startup.
+    const cloneThread = vi.fn().mockResolvedValue({
+      thread: {
+        id: 'forked-thread-id',
+        resourceId: 'parent-resource',
+        title: 'Fork: Explore subagent',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {},
+      },
+      clonedMessages: [],
+      messageIdMap: {},
+    });
+
+    const recall = vi.fn();
+    const saveMessages = vi.fn().mockResolvedValue({ messages: [] });
+    const memoryFactory = vi.fn().mockResolvedValue({ cloneThread, recall, saveMessages });
+
+    const subagents: HarnessSubagent[] = [
+      {
+        id: 'explore',
+        name: 'Explore',
+        description: 'Explore',
+        instructions: 'Be exploratory.',
+        forked: true,
+      },
+    ];
+
+    const harness = new Harness({
+      id: 'test',
+      resourceId: 'parent-resource',
+      memory: memoryFactory as unknown as never,
+      subagents,
+      resolveModel: () => ({}) as never,
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          defaultModelId: 'openai/gpt-4o',
+          agent: new Agent({
+            name: 'parent',
+            instructions: 'parent',
+            model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+          }),
+        },
+      ],
+    });
+
+    await harness.init();
+
+    await (harness as unknown as { buildToolsets(ctx: RequestContext): Promise<unknown> }).buildToolsets(
+      new RequestContext(),
+    );
+
+    expect(capturedOpts).toHaveLength(1);
+    const cloneCb = capturedOpts[0]!.cloneThreadForFork as (a: {
+      sourceThreadId: string;
+      title?: string;
+      excludeToolCallId?: string;
+    }) => Promise<unknown>;
+
+    await cloneCb({ sourceThreadId: 'parent-thread-xyz', title: 'Fork', excludeToolCallId: 'tc-sub-1' });
+
+    expect(recall).not.toHaveBeenCalled();
+    expect(cloneThread).toHaveBeenCalledTimes(1);
+    expect(cloneThread).toHaveBeenCalledWith({
+      sourceThreadId: 'parent-thread-xyz',
+      resourceId: 'parent-resource',
+      title: 'Fork',
+      metadata: {
+        forkedSubagent: true,
+        parentThreadId: 'parent-thread-xyz',
+      },
+    });
+
+    expect(saveMessages).toHaveBeenCalledTimes(1);
+    const savedMessage = saveMessages.mock.calls[0]![0].messages[0];
+    expect(savedMessage.threadId).toBe('forked-thread-id');
+    expect(savedMessage.resourceId).toBe('parent-resource');
+    expect(savedMessage.role).toBe('assistant');
+    expect(savedMessage.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-sub-1',
+          toolName: 'subagent',
+          args: {},
+          result:
+            'The subagent tool call is complete. The current context window is now the forked subagent. Complete the delegated task directly using the available tools; do not call the subagent tool again.',
+        },
+      },
+    ]);
+  });
+
   it('does not create the subagent tool from gateways without an app-provided resolver', async () => {
     const subagents: HarnessSubagent[] = [
       {

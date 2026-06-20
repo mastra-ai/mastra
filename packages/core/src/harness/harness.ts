@@ -723,18 +723,12 @@ export class Harness<TState = {}> {
 
     const memoryStorage = await this.getMemoryStorage();
 
-    if (limit) {
-      const result = await memoryStorage.listMessages({
-        threadId,
-        perPage: limit,
-        page: 0,
-        orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
-      return result.messages.map(msg => this.convertToHarnessMessage(msg)).reverse();
-    }
-
     const result = await memoryStorage.listMessages({ threadId, perPage: false });
-    return result.messages.map(msg => this.convertToHarnessMessage(msg));
+    const messages = result.messages.map(msg => this.convertToHarnessMessage(msg));
+
+    if (!limit) return messages;
+
+    return messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).slice(-limit);
   }
 
   private async queryFirstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
@@ -1680,7 +1674,7 @@ export class Harness<TState = {}> {
         // that thread pickers / startup flows can hide transient fork threads —
         // see `listThreads` (filtered by default).
         cloneThreadForFork: hasMemory
-          ? async ({ sourceThreadId, resourceId, title }) => {
+          ? async ({ sourceThreadId, resourceId, title, excludeToolCallId }) => {
               const memory = await this.resolveMemory(session);
               const result = await memory.cloneThread({
                 sourceThreadId,
@@ -1691,6 +1685,42 @@ export class Harness<TState = {}> {
                   parentThreadId: sourceThreadId,
                 },
               });
+
+              // Mark the cloned context as already being inside the forked subagent.
+              // We intentionally append this instead of pre-scanning/filtering the
+              // parent thread: long threads can be expensive to recall in full, while
+              // cloneThread already preserves messages, working memory, OM, and clone
+              // metadata in the storage/memory layer.
+              if (excludeToolCallId) {
+                await memory.saveMessages({
+                  messages: [
+                    {
+                      id: randomUUID(),
+                      role: 'assistant',
+                      createdAt: new Date(),
+                      threadId: result.thread.id,
+                      resourceId: result.thread.resourceId,
+                      content: {
+                        format: 2,
+                        parts: [
+                          {
+                            type: 'tool-invocation',
+                            toolInvocation: {
+                              state: 'result',
+                              toolCallId: excludeToolCallId,
+                              toolName: 'subagent',
+                              args: {},
+                              result:
+                                'The subagent tool call is complete. The current context window is now the forked subagent. Complete the delegated task directly using the available tools; do not call the subagent tool again.',
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                });
+              }
+
               return { id: result.thread.id, resourceId: result.thread.resourceId };
             }
           : undefined,
