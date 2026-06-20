@@ -2,6 +2,7 @@ import type { Agent } from '../agent/agent';
 import type { Mastra } from '../mastra';
 import type { SendNotificationSignalInput } from '../notifications/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
+import type { AgentSignalIfIdleOptions } from '../agent/types';
 
 /**
  * Identifies a specific agent thread that a signal provider targets.
@@ -12,6 +13,8 @@ export type SignalProviderTarget = {
   threadId: string;
   resourceId: string;
   agentId?: string;
+  /** Options for signal delivery when the target thread is idle — forwarded to sendNotificationSignal */
+  ifIdle?: AgentSignalIfIdleOptions<unknown>;
 };
 
 /**
@@ -458,6 +461,7 @@ export abstract class SignalProvider<TId extends string = string> {
     await agent.sendNotificationSignal(notification, {
       resourceId: target.resourceId,
       threadId: target.threadId,
+      ...(target.ifIdle ? { ifIdle: target.ifIdle } : {}),
     });
   }
 
