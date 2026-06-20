@@ -99,6 +99,43 @@ describe.sequential('GoogleCloudPubSub group support', () => {
       expect(msgs1[0]!.type).toBe('hello');
       expect(msgs2[0]!.type).toBe('hello');
     });
+
+    it('two subscribers racing on a fresh topic both attach and receive (issue #18203)', async () => {
+      // A producer (agent.stream) and a consumer (agent.observe) can subscribe to the
+      // same fresh topic within the subscription-creation window, so both reach init()
+      // and race createSubscription for the same name. The loser must attach to the
+      // existing subscription instead of failing, and both callbacks must receive events.
+      const pubsub = createPubSub();
+      const topic = uniqueTopic();
+
+      const collected1: Event[] = [];
+      const collected2: Event[] = [];
+
+      // Subscribe concurrently (no await between) so the two init() calls overlap.
+      await Promise.all([
+        pubsub.subscribe(topic, (event, ack) => {
+          collected1.push(event);
+          ack?.();
+        }),
+        pubsub.subscribe(topic, (event, ack) => {
+          collected2.push(event);
+          ack?.();
+        }),
+      ]);
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      await pubsub.publish(topic, makeEvent({ type: 'raced' }));
+
+      const [msgs1, msgs2] = await Promise.all([
+        waitForMessages(1, collected1, 5000),
+        waitForMessages(1, collected2, 5000),
+      ]);
+
+      expect(msgs1.length).toBe(1);
+      expect(msgs2.length).toBe(1);
+      expect(msgs1[0]!.type).toBe('raced');
+      expect(msgs2[0]!.type).toBe('raced');
+    });
   });
 
   describe('group (competing consumers)', () => {
