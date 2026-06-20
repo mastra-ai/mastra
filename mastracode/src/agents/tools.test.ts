@@ -15,7 +15,7 @@ function createRequestContext(state: Record<string, unknown>, modeId: string = '
       if (key !== 'harness') return undefined;
       return {
         modeId,
-        getState: () => state,
+        session: { state: { get: () => state } },
       };
     },
   } as any;
