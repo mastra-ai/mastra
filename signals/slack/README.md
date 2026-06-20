@@ -151,12 +151,18 @@ A **user token (`xoxp-`)** is recommended — it acts as your Slack identity, gi
 
 Required scopes (User Token Scopes in the Slack app config):
 
-| Conversation type | Read scope | History scope |
-| --- | --- | --- |
-| Public channels | `channels:read` | `channels:history` |
-| Private channels | `groups:read` | `groups:history` |
-| DMs | `im:read` | `im:history` |
-| Group DMs | `mpim:read` | `mpim:history` |
+| Scope | Used for |
+| --- | --- |
+| `rtm:streaming` | RTM WebSocket connection (`rtm.connect`) — **required** |
+| `channels:read` | Public channel discovery |
+| `channels:history` | Public channel message history |
+| `groups:read` | Private channel discovery |
+| `groups:history` | Private channel message history |
+| `im:read` | DM discovery |
+| `im:history` | DM message history |
+| `mpim:read` | Group DM discovery |
+| `mpim:history` | Group DM message history |
+| `search:read` | Search (future use) |
 
 ## Testing and local development
 
