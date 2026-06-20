@@ -43,11 +43,9 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
               </DataList.TopCell>
             ))}
           </DataList.Top>
-          {displayData.map((row: Record<string, unknown>) => {
-            const rowKey = headers.map(header => `${header}:${truncateValue(row[header])}`).join('|');
-
+          {displayData.map((row: Record<string, unknown>, rowIndex: number) => {
             return (
-              <DataList.RowStatic key={rowKey}>
+              <DataList.RowStatic key={rowIndex}>
                 {headers.map((header: string, index: number) => {
                   const value = truncateValue(row[header]);
 

@@ -246,19 +246,20 @@ describe('DataListRoot', () => {
       expect(grid?.className).toContain('[&_.data-list-top]:bg-[var(--data-list-sticky-header-background)]');
       expect(grid?.className).not.toContain('[&_.data-list-sticky-start]:bg-surface2');
       expect(grid?.className).toContain(
-        '[&_.data-list-row_.data-list-row-header]:bg-[var(--data-list-sticky-header-background)]',
+        '[&_.data-list-row>.data-list-sticky-start]:bg-[var(--data-list-sticky-header-background)]',
       );
-      expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:after:right-0');
+      expect(grid?.className).toContain('[&_.data-list-row>.data-list-sticky-start]:after:right-0');
       expect(grid?.className).toContain(
-        '[&_.data-list-row:hover_.data-list-row-header]:bg-[var(--data-list-sticky-header-hover-background)]',
-      );
-      expect(grid?.className).toContain(
-        '[&_.data-list-row:focus-visible_.data-list-row-header]:bg-[var(--data-list-sticky-header-hover-background)]',
+        '[&_.data-list-row:hover>.data-list-sticky-start]:bg-[var(--data-list-sticky-header-hover-background)]',
       );
       expect(grid?.className).toContain(
-        '[&_.data-list-row:focus-within_.data-list-row-header]:bg-[var(--data-list-sticky-header-hover-background)]',
+        '[&_.data-list-row:focus-visible>.data-list-sticky-start]:bg-[var(--data-list-sticky-header-hover-background)]',
       );
-      expect(grid?.className).not.toContain('[&_.data-list-row:hover_.data-list-row-header]:bg-surface-overlay');
+      expect(grid?.className).toContain(
+        '[&_.data-list-row:focus-within>.data-list-sticky-start]:bg-[var(--data-list-sticky-header-hover-background)]',
+      );
+      expect(grid?.className).not.toContain('[&_.data-list-row:hover>.data-list-sticky-start]:bg-surface-overlay');
+      expect(grid?.className).not.toContain('[&_.data-list-row_.data-list-row-header]:bg');
       expect(grid?.className).not.toContain('[&_.data-list-row_.data-list-row-header]:before:bg');
       expect(grid?.className).toContain('[&_.data-list-top>.data-list-sticky-start]:after:right-0');
       expect(top?.className).toContain('z-20');
