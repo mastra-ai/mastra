@@ -128,6 +128,21 @@ export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 
 /**
+ * Options applied when a signal targets an idle thread.
+ *
+ * Controls whether the thread should be woken, the signal persisted without
+ * waking, or the signal discarded. Also carries optional stream options
+ * (e.g. request context) and attributes for the delivery message.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalIfIdleOptions<OUTPUT = unknown> = {
+  behavior?: AgentSignalIdleBehavior;
+  streamOptions?: AgentExecutionOptions<OUTPUT>;
+  attributes?: AgentSignalAttributes;
+};
+
+/**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type SendAgentSignalOptions<OUTPUT = unknown> =
@@ -143,19 +158,65 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       resourceId: string;
       threadId: string;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
-      ifIdle?: {
-        behavior?: AgentSignalIdleBehavior;
-        streamOptions?: AgentExecutionOptions<OUTPUT>;
-        attributes?: AgentSignalAttributes;
-      };
+      ifIdle?: AgentSignalIfIdleOptions<OUTPUT>;
     };
+
+/**
+ * What `sendSignal` decided to do with a signal once active/idle policy was
+ * applied. This is the value the {@link SendAgentSignalResult.accepted} promise
+ * resolves to.
+ *
+ * `action` mirrors the winning `behavior` from `ifActive`/`ifIdle` — the value
+ * is whichever behavior the runtime actually applied, not the request.
+ *
+ * `runId` is present only on the members where a run exists (`wake`, `deliver`)
+ * and is the authoritative, correlatable id (matching the stream, trace spans,
+ * and persisted messages). `persist`/`discard` carry no `runId` because nothing
+ * ran; for those, correlate the stored signal via {@link SendAgentSignalResult.signal}'s `id`.
+ *
+ * - `wake`    — this process started a new run for an idle thread and owns it.
+ *               `output` is the run's `MastraModelOutput` for in-process
+ *               consumption. Only the runtime that actually runs the agent
+ *               resolves to `wake`.
+ * - `deliver` — the signal was handed off rather than started here. This covers
+ *               a follow-up signal joining an already-active run and the loser
+ *               of a cross-process wake race (whose signal is forwarded to the
+ *               winning run). No new run was started locally and no stream is
+ *               owned; `runId` is the run the signal joined.
+ * - `persist` — the signal was written to memory by a `persist` behavior. To
+ *               await the storage write, use the top-level `persisted` promise.
+ * - `discard` — policy dropped the signal; nothing ran and nothing was stored.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SendAgentSignalAccepted<OUTPUT = unknown> =
+  | { action: 'wake'; runId: string; output: MastraModelOutput<OUTPUT> }
+  | { action: 'deliver'; runId: string }
+  | { action: 'persist' }
+  | { action: 'discard' };
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export interface SendAgentSignalResult {
-  accepted: true;
-  runId: string;
+export interface SendAgentSignalResult<OUTPUT = unknown> {
+  /**
+   * Resolves once the runtime has decided what to do with the signal
+   * (`wake`/`deliver`/`persist`/`discard`). This settles at decision-time — it
+   * never waits for a woken run to finish or for a `persist` write to land.
+   *
+   * Rejects only when the signal cannot be routed/started at all — for example
+   * a misconfigured agent that throws during stream setup (no model, an
+   * unsupported model, an FGA denial). A run that fails *after* starting does
+   * not reject here; that error surfaces on the `wake` member's `output`.
+   *
+   * `wake` means this process ran the agent and `output` is its
+   * `MastraModelOutput`. A signal queued onto an existing run, or one whose
+   * cross-process wake race was lost (and forwarded to the winning run),
+   * resolves to `deliver`. `runId` is present on `wake`/`deliver` only; for
+   * `persist`/`discard`, correlate via {@link signal}'s `id`. To await a
+   * `persist` write, use {@link persisted}.
+   */
+  accepted: Promise<SendAgentSignalAccepted<OUTPUT>>;
   signal: CreatedAgentSignal;
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
@@ -169,7 +230,7 @@ export type SendAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<O
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export type SendAgentMessageResult = SendAgentSignalResult;
+export type SendAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
 
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
@@ -179,7 +240,7 @@ export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<
 /**
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
-export type QueueAgentMessageResult = SendAgentSignalResult;
+export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
 
 /**
  * @experimental Agent state signal APIs are experimental and may change in a future release.
@@ -189,9 +250,9 @@ export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptio
 /**
  * @experimental Agent state signal APIs are experimental and may change in a future release.
  */
-export type SendAgentStateSignalResult =
-  | (SendAgentSignalResult & { skipped?: false })
-  | { accepted: true; skipped: true; reason: 'unchanged'; runId?: string; signal?: undefined };
+export type SendAgentStateSignalResult<OUTPUT = unknown> =
+  | (SendAgentSignalResult<OUTPUT> & { skipped?: false })
+  | { skipped: true; reason: 'unchanged'; signal?: undefined };
 
 /**
  * @experimental Agent notification signal APIs are experimental and may change in a future release.
@@ -216,13 +277,27 @@ export type AgentNotificationConfig = {
 /**
  * @experimental Agent notification signal APIs are experimental and may change in a future release.
  */
-export type SendAgentNotificationSignalResult = {
-  accepted: boolean;
+export type SendAgentNotificationSignalResult<OUTPUT = unknown> = {
   record: NotificationRecord;
+  /**
+   * The delivery-policy verdict for this notification (deliver, summarize,
+   * persist, or discard). Use this to determine what the notification policy
+   * decided to do with the record.
+   */
   decision: NotificationDeliveryDecision;
   runId?: string;
   signal?: CreatedAgentSignal;
   persisted?: Promise<void>;
+  /**
+   * The underlying signal's routing outcome. Present only when the notification
+   * actually emitted a signal (deliver/summarize paths); absent when the policy
+   * dropped or deferred the notification without sending a signal. Resolves with
+   * the routing decision and rejects if the underlying agent is misconfigured.
+   * See {@link SendAgentSignalResult.accepted}.
+   *
+   * @experimental
+   */
+  accepted?: Promise<SendAgentSignalAccepted<OUTPUT>>;
 };
 
 export interface AgentThreadRun<OUTPUT = unknown> {
