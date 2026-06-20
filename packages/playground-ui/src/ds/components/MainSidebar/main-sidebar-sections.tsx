@@ -20,7 +20,6 @@ export type MainSidebarSectionsProps = {
 
 type MainSidebarSectionLinkProps = {
   link: NavLink;
-  siblings: NavLink[];
   activeCandidates: NavLink[];
   level?: number;
   isActive?: MainSidebarSectionsProps['isActive'];
@@ -30,13 +29,7 @@ function getLinkKey(link: NavLink) {
   return `${link.url}:${link.name}`;
 }
 
-function MainSidebarSectionLink({
-  link,
-  siblings,
-  activeCandidates,
-  level = 0,
-  isActive,
-}: MainSidebarSectionLinkProps) {
+function MainSidebarSectionLink({ link, activeCandidates, level = 0, isActive }: MainSidebarSectionLinkProps) {
   const childLinks = link.children ?? [];
 
   return (
@@ -51,7 +44,6 @@ function MainSidebarSectionLink({
               <MainSidebarSectionLink
                 key={getLinkKey(child)}
                 link={child}
-                siblings={childLinks}
                 activeCandidates={activeCandidates}
                 level={level + 1}
                 isActive={isActive}
@@ -92,7 +84,6 @@ export function MainSidebarSections({ sections, isActive, className }: MainSideb
                 <MainSidebarSectionLink
                   key={getLinkKey(link)}
                   link={link}
-                  siblings={section.links}
                   activeCandidates={section.links}
                   isActive={isActive}
                 />
