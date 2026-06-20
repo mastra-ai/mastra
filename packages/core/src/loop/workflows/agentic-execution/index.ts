@@ -110,11 +110,10 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
         const toolCalls = typedInputData.output.toolCalls || [];
-        const calledToolNames = [...new Set(toolCalls.map(toolCall => toolCall.toolName))];
         toolCallForeachOptions.concurrency = resolveToolCallConcurrency({
           requireToolApproval: rest.requireToolApproval,
           tools: ((_internal?.stepTools as Tools | undefined) ?? rest.tools) as Tools | undefined,
-          activeTools: calledToolNames,
+          activeTools: _internal?.stepActiveTools as string[] | undefined,
           configuredConcurrency: configuredToolCallConcurrency,
         });
         return toolCalls;
