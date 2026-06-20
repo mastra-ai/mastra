@@ -281,32 +281,7 @@ export async function handlePlanApproval(
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        const modeBeforeApprove = state.session?.mode?.get?.() ?? 'build';
         await approvePlan(ctx, toolCallId, title, plan);
-        const modeAfterApprove = state.session?.mode?.get?.() ?? 'build';
-
-        // Same-mode approval: the harness resumed submit_plan directly and the
-        // model continues the loop — no handoff signal needed.
-        if (modeAfterApprove === modeBeforeApprove) {
-          resolve();
-          return;
-        }
-
-        // Cross-mode approval: fire a structured system-reminder signal to wake
-        // the freshly switched-to default-mode agent. `approvePlan` (via
-        // `respondToToolSuspension` → `handlePlanApprovalResume`) switches mode,
-        // resumes the tool to persist the "approved" result, aborts the loop,
-        // and waits for idle — so this signal always starts a fresh build-mode
-        // run that sees the persisted tool result.
-        try {
-          await state.harness.sendSignal({
-            type: 'system-reminder',
-            contents: 'The user has approved the plan, begin executing.',
-          }).accepted;
-        } catch (err) {
-          ctx.showError(`Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`);
-        }
-
         resolve();
       },
       onGoal: async () => {
@@ -314,10 +289,9 @@ export async function handlePlanApproval(
         state.ui.setFocus(state.editor);
         await approvePlan(ctx, toolCallId, title, plan);
 
-        // `approvePlan` (via `handlePlanApprovalResume`) either resumes the tool
-        // directly (same-mode) or switches mode + resumes + aborts + waits idle
-        // (cross-mode). `startGoal` then sends the canonical goal reminder to
-        // start a fresh build-mode run with the plan as the objective.
+        // `approvePlan` (via `handlePlanApprovalResume`) resumes the tool,
+        // switching mode first when needed. `startGoal` then sends the canonical
+        // goal reminder with the plan as the objective.
         const objective = formatPlanGoalObjective(title, plan);
         await ctx.startGoal(objective, 'Goal cancelled.');
 

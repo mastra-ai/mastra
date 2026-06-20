@@ -211,7 +211,7 @@ describe('handlePlanApproval regular approval', () => {
     expect(state.planStartedGoalId).toBeUndefined();
   });
 
-  it('sends a begin-executing system-reminder when plan approval changes modes', async () => {
+  it('approves the plan without a handoff signal when approval changes modes', async () => {
     const { state, ctx, sendSignal } = createPlanApprovalCtx({ modeId: 'plan', modeAfterApproval: 'build' });
 
     const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
@@ -226,11 +226,7 @@ describe('handlePlanApproval regular approval', () => {
     });
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
-    expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect(sendSignal).toHaveBeenCalledWith({
-      type: 'system-reminder',
-      contents: 'The user has approved the plan, begin executing.',
-    });
+    expect(sendSignal).not.toHaveBeenCalled();
     expect(ctx.startGoal).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBeUndefined();
   });

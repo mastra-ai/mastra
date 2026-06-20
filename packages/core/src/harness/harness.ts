@@ -3270,10 +3270,8 @@ export class Harness<TState = {}> {
    *   `{ action: 'approved' }`. The tool result ("Plan approved. Proceed with
    *   implementation…") is persisted and the model continues the loop naturally.
    * - On **approval** with a mode transition (e.g. plan → build), the mode is switched
-   *   *without aborting* the suspended run, the tool is resumed so the "approved" result
-   *   is persisted, then the agent loop is ended (abort) so the model doesn't continue
-   *   mid-stream in the new mode. The caller's handoff signal then starts a fresh
-   *   default-mode run that sees the persisted tool result in message history.
+   *   *without aborting* the suspended run, then the tool is resumed so the "approved"
+   *   result is persisted and the model continues the loop naturally in the target mode.
    *
    * Non-Harness consumers (a plain Agent in Studio or a customer app) instead resume the
    * tool directly via `agent.resumeStream({ action, feedback })` — no modes involved.
@@ -3308,17 +3306,11 @@ export class Harness<TState = {}> {
       return;
     }
 
-    // Cross-mode: switch mode without aborting, resume the tool so the
-    // "approved" result is persisted, then abort to end the agent loop. The
-    // caller's handoff signal starts a fresh run that sees the persisted result.
+    // Cross-mode: switch modes without aborting, then resume the tool so the
+    // "approved" result is persisted and the model continues in the target mode.
     await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
     await this.#session.mode.switch({ modeId: transitionMode.id });
     await this.handleToolResume({ resumeData: response, toolCallId, requestContext });
-    this.abort();
-
-    // Wait for the aborted run to finalize before returning, so the caller's
-    // handoff signal always starts a fresh run.
-    await this.waitForCurrentThreadStreamIdle();
   }
 
   private async handleToolApprove({
