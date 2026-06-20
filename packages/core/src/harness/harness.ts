@@ -507,7 +507,6 @@ export class Harness<TState = {}> {
     this.#session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     this.#session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
     this.#session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null, {
-      abort: () => this.abort(),
       emit: event => this.emit(event),
     });
     this.#session.model.setResolver({
@@ -3184,13 +3183,19 @@ export class Harness<TState = {}> {
     }
   }
 
-  private createSubscribedResumeBoundaryWaiter(): { promise: Promise<void>; cancel: () => void } {
+  private createSubscribedResumeBoundaryWaiter(toolCallId?: string): { promise: Promise<void>; cancel: () => void } {
     let unsubscribe: (() => void) | undefined;
     const promise = new Promise<void>(resolve => {
       unsubscribe = this.subscribe(event => {
-        if (event.type !== 'tool_suspended' && event.type !== 'agent_end' && event.type !== 'error') return;
-        unsubscribe?.();
-        resolve();
+        if (
+          event.type === 'tool_suspended' ||
+          event.type === 'agent_end' ||
+          event.type === 'error' ||
+          (event.type === 'tool_end' && toolCallId && event.toolCallId === toolCallId)
+        ) {
+          unsubscribe?.();
+          resolve();
+        }
       });
     });
 
@@ -3261,11 +3266,14 @@ export class Harness<TState = {}> {
    *
    * - On **rejection**, the plan-mode run is resumed with the feedback so the agent can
    *   revise and submit again. This is an ordinary tool resume.
-   * - On **approval**, the parked plan-mode suspension is abandoned and the Harness
-   *   switches to its default (execution) mode. The mode switch aborts the plan-mode run, so
-   *   there is no point resuming it first; the next signal/message drives the fresh
-   *   default-mode run. The model still sees the "approved" tool result on the rebuilt
-   *   message history when the default-mode run starts.
+   * - On **approval** in the same mode, the suspended `submit_plan` tool is resumed with
+   *   `{ action: 'approved' }`. The tool result ("Plan approved. Proceed with
+   *   implementation…") is persisted and the model continues the loop naturally.
+   * - On **approval** with a mode transition (e.g. plan → build), the mode is switched
+   *   *without aborting* the suspended run, the tool is resumed so the "approved" result
+   *   is persisted, then the agent loop is ended (abort) so the model doesn't continue
+   *   mid-stream in the new mode. The caller's handoff signal then starts a fresh
+   *   default-mode run that sees the persisted tool result in message history.
    *
    * Non-Harness consumers (a plain Agent in Studio or a customer app) instead resume the
    * tool directly via `agent.resumeStream({ action, feedback })` — no modes involved.
@@ -3284,10 +3292,6 @@ export class Harness<TState = {}> {
       return;
     }
 
-    // Approved: drop the parked suspension (its run is about to be aborted by the mode
-    // switch) and move to the default execution mode.
-    this.#session.suspensions.delete({ toolCallId });
-
     const currentMode = this.#session.mode.resolve();
     const transitionModeId =
       currentMode.transitionsTo ??
@@ -3296,19 +3300,25 @@ export class Harness<TState = {}> {
       this.config.modes[0]?.id;
 
     const transitionMode = this.listModes().find(mode => mode.id === transitionModeId);
-    if (transitionMode && transitionMode.id !== this.#session.mode.get()) {
-      await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-      await this.#session.mode.switch({ modeId: transitionMode.id });
-      // The mode switch aborts the in-flight run but does not wait for it to
-      // finalize. If the caller (e.g. mastracode's plan-approval handler)
-      // immediately fires a system-reminder signal, that signal can land in
-      // the dying run's pending queue and later get drained with the run's
-      // already-aborted abortSignal — manifesting as a hang where the agent
-      // never resumes after "The user has approved the plan, begin
-      // executing.". Waiting for the stream to be fully idle here ensures
-      // the next sendSignal() always starts a fresh run.
-      await this.waitForCurrentThreadStreamIdle();
+
+    // Same mode: resume the tool directly. The "approved" tool result persists
+    // and the model continues the loop naturally — no abort, no handoff signal.
+    if (!transitionMode || transitionMode.id === this.#session.mode.get()) {
+      await this.handleToolResume({ resumeData: response, toolCallId, requestContext });
+      return;
     }
+
+    // Cross-mode: switch mode without aborting, resume the tool so the
+    // "approved" result is persisted, then abort to end the agent loop. The
+    // caller's handoff signal starts a fresh run that sees the persisted result.
+    await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
+    await this.#session.mode.switch({ modeId: transitionMode.id });
+    await this.handleToolResume({ resumeData: response, toolCallId, requestContext });
+    this.abort();
+
+    // Wait for the aborted run to finalize before returning, so the caller's
+    // handoff signal always starts a fresh run.
+    await this.waitForCurrentThreadStreamIdle();
   }
 
   private async handleToolApprove({
@@ -3408,7 +3418,7 @@ export class Harness<TState = {}> {
     }
 
     await this.ensureAgentThreadSubscription(agent, threadId);
-    const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter();
+    const resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter(toolCallId);
 
     try {
       // Thread subscriptions are the sole consumer for harness agent output. Resumed

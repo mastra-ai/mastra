@@ -81,19 +81,25 @@ describe('handleAskQuestion goal mode', () => {
   });
 });
 
-function createPlanApprovalCtx() {
+function createPlanApprovalCtx({ modeId, modeAfterApproval }: { modeId?: string; modeAfterApproval?: string } = {}) {
+  let currentModeId = modeId ?? 'build';
+  modeAfterApproval ??= currentModeId;
   const sendSignal = vi.fn().mockReturnValue({
     id: 'sig-1',
     type: 'system-reminder',
     accepted: Promise.resolve({ accepted: true, runId: 'run-1' }),
   });
+  const respondToToolSuspension = vi.fn().mockImplementation(async () => {
+    currentModeId = modeAfterApproval;
+  });
   const state = {
     session: {
       state: { set: vi.fn().mockResolvedValue(undefined) },
       identity: { getResourceId: vi.fn(() => 'resource-1') },
+      mode: { get: vi.fn(() => currentModeId) },
     },
     harness: {
-      respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
+      respondToToolSuspension,
       sendSignal,
     },
     goalManager: {
@@ -184,7 +190,7 @@ describe('handlePlanApproval regular approval', () => {
     expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
   });
 
-  it('approves the plan and sends a single begin-executing system-reminder through harness.sendSignal', async () => {
+  it('approves the plan without a handoff signal when approval stays in the same mode', async () => {
     const { state, ctx, sendSignal } = createPlanApprovalCtx();
 
     const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
@@ -198,9 +204,26 @@ describe('handlePlanApproval regular approval', () => {
       resumeData: { action: 'approved' },
     });
     expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
-    // The trigger goes through the structured signal pathway. We do not
-    // also call `addUserMessage` or `fireMessage` — either would render
-    // the reminder a second time.
+    expect(ctx.addUserMessage).not.toHaveBeenCalled();
+    expect(ctx.fireMessage).not.toHaveBeenCalled();
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(ctx.startGoal).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBeUndefined();
+  });
+
+  it('sends a begin-executing system-reminder when plan approval changes modes', async () => {
+    const { state, ctx, sendSignal } = createPlanApprovalCtx({ modeId: 'plan', modeAfterApproval: 'build' });
+
+    const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
+    const component = state.chatContainer.children[0];
+
+    await (component as any).onApprove();
+    await promise;
+
+    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+      toolCallId: 'plan-1',
+      resumeData: { action: 'approved' },
+    });
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledTimes(1);
@@ -208,7 +231,6 @@ describe('handlePlanApproval regular approval', () => {
       type: 'system-reminder',
       contents: 'The user has approved the plan, begin executing.',
     });
-    // Regular approval should not enter goal mode or set the return flag.
     expect(ctx.startGoal).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBeUndefined();
   });

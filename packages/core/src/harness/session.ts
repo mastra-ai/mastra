@@ -810,11 +810,6 @@ export class SessionMode {
    */
   #resolveMode: ((modeId: string) => HarnessMode | null) | undefined;
   /**
-   * Aborts any in-progress generation before a switch. Injected by the Harness
-   * via {@link setResolver}, since aborting a run is Harness-owned orchestration.
-   */
-  #abort: (() => void) | undefined;
-  /**
    * Emits Harness events (mode_changed / model_changed) during a switch.
    * Injected by the Harness via {@link setResolver}.
    */
@@ -827,16 +822,15 @@ export class SessionMode {
 
   /**
    * Attach the resolver that maps a mode id to its definition, plus the
-   * Harness-owned orchestration callbacks ({@link switch} uses to abort the
-   * in-flight run and emit events). The Harness owns the mode catalog
-   * (`config.modes`) and injects these once.
+   * Harness-owned event emitter ({@link switch} uses to emit mode/model change
+   * events). The Harness owns the mode catalog (`config.modes`) and injects
+   * these once.
    */
   setResolver(
     resolve: (modeId: string) => HarnessMode | null,
-    options?: { abort?: () => void; emit?: (event: HarnessEvent) => void },
+    options?: { emit?: (event: HarnessEvent) => void },
   ): void {
     this.#resolveMode = resolve;
-    this.#abort = options?.abort;
     this.#emit = options?.emit;
   }
 
@@ -865,19 +859,17 @@ export class SessionMode {
   /**
    * Switch to a different mode.
    *
-   * Aborts any in-progress generation, emits `mode_changed`, then runs the
-   * version-guarded sequence: remember the outgoing mode's model, persist the
-   * new mode, then resolve and apply the incoming mode's model — emitting
-   * `model_changed` once applied. A newer switch starting mid-flight supersedes
-   * this one, which then bails before emitting `model_changed`.
+   * Emits `mode_changed`, then runs the version-guarded sequence: remember the
+   * outgoing mode's model, persist the new mode, then resolve and apply the
+   * incoming mode's model — emitting `model_changed` once applied. A newer
+   * switch starting mid-flight supersedes this one, which then bails before
+   * emitting `model_changed`.
    */
   async switch({ modeId }: { modeId: string }): Promise<void> {
     const mode = this.#resolveMode?.(modeId) ?? null;
     if (!mode) {
       throw new Error(`Mode not found: ${modeId}`);
     }
-
-    this.#abort?.();
 
     const previousModeId = this.#id;
     const previousModelId = this.#model.get();

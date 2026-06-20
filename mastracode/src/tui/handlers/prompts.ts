@@ -281,18 +281,23 @@ export async function handlePlanApproval(
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
+        const modeBeforeApprove = state.session?.mode?.get?.() ?? 'build';
         await approvePlan(ctx, toolCallId, title, plan);
+        const modeAfterApprove = state.session?.mode?.get?.() ?? 'build';
 
-        // Fire a structured system-reminder signal to wake the freshly
-        // switched-to default-mode agent. The signal echoes back as a
-        // `system_reminder` content part and renders through the same
-        // path as any other reminder — no legacy XML regex, no companion
-        // `addUserMessage` call, so the reminder shows up exactly once.
-        //
-        // `approvePlan` (via `respondToToolSuspension` → `switchMode`) waits
-        // for the aborted plan-mode run to fully idle before returning, so
-        // this signal always starts a fresh build-mode run instead of
-        // queuing onto the dying one.
+        // Same-mode approval: the harness resumed submit_plan directly and the
+        // model continues the loop — no handoff signal needed.
+        if (modeAfterApprove === modeBeforeApprove) {
+          resolve();
+          return;
+        }
+
+        // Cross-mode approval: fire a structured system-reminder signal to wake
+        // the freshly switched-to default-mode agent. `approvePlan` (via
+        // `respondToToolSuspension` → `handlePlanApprovalResume`) switches mode,
+        // resumes the tool to persist the "approved" result, aborts the loop,
+        // and waits for idle — so this signal always starts a fresh build-mode
+        // run that sees the persisted tool result.
         try {
           await state.harness.sendSignal({
             type: 'system-reminder',
@@ -309,8 +314,10 @@ export async function handlePlanApproval(
         state.ui.setFocus(state.editor);
         await approvePlan(ctx, toolCallId, title, plan);
 
-        // `approvePlan` waits for plan mode to idle before `startGoal` sends
-        // the canonical goal reminder, so this starts a fresh build-mode run.
+        // `approvePlan` (via `handlePlanApprovalResume`) either resumes the tool
+        // directly (same-mode) or switches mode + resumes + aborts + waits idle
+        // (cross-mode). `startGoal` then sends the canonical goal reminder to
+        // start a fresh build-mode run with the plan as the objective.
         const objective = formatPlanGoalObjective(title, plan);
         await ctx.startGoal(objective, 'Goal cancelled.');
 
