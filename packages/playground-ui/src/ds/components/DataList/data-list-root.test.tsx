@@ -249,7 +249,16 @@ describe('DataListRoot', () => {
         '[&_.data-list-row_.data-list-row-header]:bg-[var(--data-list-sticky-header-background)]',
       );
       expect(grid?.className).toContain('[&_.data-list-row_.data-list-row-header]:after:right-0');
-      expect(grid?.className).toContain('[&_.data-list-row:hover_.data-list-row-header]:bg-surface-overlay-strong');
+      expect(grid?.className).toContain(
+        '[&_.data-list-row:hover_.data-list-row-header]:bg-[var(--data-list-sticky-header-hover-background)]',
+      );
+      expect(grid?.className).toContain(
+        '[&_.data-list-row:focus-visible_.data-list-row-header]:bg-[var(--data-list-sticky-header-hover-background)]',
+      );
+      expect(grid?.className).toContain(
+        '[&_.data-list-row:focus-within_.data-list-row-header]:bg-[var(--data-list-sticky-header-hover-background)]',
+      );
+      expect(grid?.className).not.toContain('[&_.data-list-row:hover_.data-list-row-header]:bg-surface-overlay');
       expect(grid?.className).not.toContain('[&_.data-list-row_.data-list-row-header]:before:bg');
       expect(grid?.className).toContain('[&_.data-list-top>.data-list-sticky-start]:after:right-0');
       expect(top?.className).toContain('z-20');
@@ -307,6 +316,9 @@ describe('DataListRoot', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       expect(grid?.style.getPropertyValue('--data-list-sticky-header-background')).toBe('var(--surface2)');
+      expect(grid?.style.getPropertyValue('--data-list-sticky-header-hover-background')).toBe(
+        'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)',
+      );
     });
   });
 

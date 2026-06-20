@@ -45,8 +45,15 @@ const stickyHeaderBackgroundValues = {
   transparent: 'transparent',
 } satisfies Record<DataListStickyHeaderBackground, string>;
 
+const stickyHeaderHoverBackgroundValues = {
+  tinted: 'color-mix(in oklch, var(--surface1), var(--neutral6) 14%)',
+  surface: 'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)',
+  transparent: 'transparent',
+} satisfies Record<DataListStickyHeaderBackground, string>;
+
 type DataListRootStyle = CSSProperties & {
   '--data-list-sticky-header-background'?: string;
+  '--data-list-sticky-header-hover-background'?: string;
 };
 
 function getDataListMask(mask: ScrollAreaMask | undefined): ScrollAreaMask {
@@ -91,9 +98,9 @@ const borderlessTableStyles = [
   '[&_.data-list-row]:focus-visible:bg-surface-overlay-strong!',
   '[&_.data-list-row_.data-list-row-header]:bg-[var(--data-list-sticky-header-background)]',
   '[&_.data-list-row_.data-list-row-header]:after:right-0',
-  '[&_.data-list-row:hover_.data-list-row-header]:bg-surface-overlay-strong',
-  '[&_.data-list-row:focus-visible_.data-list-row-header]:bg-surface-overlay-strong',
-  '[&_.data-list-row:focus-within_.data-list-row-header]:bg-surface-overlay-strong',
+  '[&_.data-list-row:hover_.data-list-row-header]:bg-[var(--data-list-sticky-header-hover-background)]',
+  '[&_.data-list-row:focus-visible_.data-list-row-header]:bg-[var(--data-list-sticky-header-hover-background)]',
+  '[&_.data-list-row:focus-within_.data-list-row-header]:bg-[var(--data-list-sticky-header-hover-background)]',
   '[&_.data-list-top>.data-list-sticky-start]:after:right-0',
   '[&_.data-list-top>.data-list-sticky-start+*]:before:hidden',
 ] as const;
@@ -129,6 +136,7 @@ export function DataListRoot({
 }: DataListRootProps) {
   const gridStyle: DataListRootStyle = {
     '--data-list-sticky-header-background': stickyHeaderBackgroundValues[stickyHeaderBackground],
+    '--data-list-sticky-header-hover-background': stickyHeaderHoverBackgroundValues[stickyHeaderBackground],
     gridTemplateColumns: columns,
   };
 
