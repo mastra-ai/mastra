@@ -793,7 +793,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           {
             threadId,
             resourceId: thread?.resourceId ?? harness.session.identity.getResourceId(),
-            requestContext,
+            ifIdle: {
+              behavior: 'wake',
+              streamOptions: { requestContext },
+            },
           },
           { pollImmediately: true },
         );

@@ -12,8 +12,11 @@ export type SignalProviderTarget = {
   threadId: string;
   resourceId: string;
   agentId?: string;
-  /** Harness request context — threaded through to agent.sendNotificationSignal for model resolution on idle wake */
-  requestContext?: unknown;
+  /** Options for signal delivery when the target thread is idle — forwarded to sendNotificationSignal */
+  ifIdle?: {
+    behavior?: 'wake' | 'persist' | 'discard';
+    streamOptions?: { requestContext?: unknown };
+  };
 };
 
 /**
@@ -640,12 +643,7 @@ export abstract class SignalProvider<TId extends string = string> {
     await agent.sendNotificationSignal(notification, {
       resourceId: target.resourceId,
       threadId: target.threadId,
-      ifIdle: {
-        behavior: 'wake',
-        streamOptions: {
-          requestContext: target.requestContext as any,
-        },
-      },
+      ifIdle: target.ifIdle as any,
     });
   }
 
