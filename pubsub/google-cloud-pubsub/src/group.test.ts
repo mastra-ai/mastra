@@ -149,23 +149,25 @@ describe.sequential('GoogleCloudPubSub group support', () => {
       const subscriptionName = pubsub.getSubscriptionName(topic);
 
       const raw = new PubSubClient({ projectId: 'pubsub-test', apiEndpoint: EMULATOR_HOST });
-      await raw.createTopic(topic);
-      await raw.topic(topic).createSubscription(subscriptionName);
+      try {
+        await raw.createTopic(topic);
+        await raw.topic(topic).createSubscription(subscriptionName);
 
-      const collected: Event[] = [];
-      await pubsub.subscribe(topic, (event, ack) => {
-        collected.push(event);
-        ack?.();
-      });
+        const collected: Event[] = [];
+        await pubsub.subscribe(topic, (event, ack) => {
+          collected.push(event);
+          ack?.();
+        });
 
-      await pubsub.publish(topic, makeEvent({ type: 'recovered' }));
+        await pubsub.publish(topic, makeEvent({ type: 'recovered' }));
 
-      await waitForMessages(1, collected, 5000);
+        await waitForMessages(1, collected, 5000);
 
-      expect(collected.length).toBe(1);
-      expect(collected[0]!.type).toBe('recovered');
-
-      await raw.close();
+        expect(collected.length).toBe(1);
+        expect(collected[0]!.type).toBe('recovered');
+      } finally {
+        await raw.close();
+      }
     });
   });
 
