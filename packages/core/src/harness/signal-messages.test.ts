@@ -754,14 +754,11 @@ describe('Harness signal messages', () => {
       abort: vi.fn(),
       activeRunId: () => 'run-1',
     });
-    const directResumeStream = (async function* () {
-      yield { type: 'text-start', payload: { id: 'direct-text' } };
-      yield { type: 'text-delta', payload: { id: 'direct-text', text: 'direct resume should not render' } };
-      yield { type: 'finish', payload: { stepResult: { reason: 'stop' } } };
-    })();
-    const approveToolCall = vi
-      .spyOn(agent, 'approveToolCall')
-      .mockResolvedValue({ fullStream: directResumeStream } as any);
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({
+      accepted: true,
+      runId: 'run-1',
+      toolCallId: 'tool-1',
+    });
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
       signal: createSignal({ type: 'user-message', contents: 'run tool' }),
@@ -779,14 +776,7 @@ describe('Harness signal messages', () => {
       ),
     );
 
-    expect(approveToolCall).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-1', toolCallId: 'tool-1' }));
-    expect(
-      events.some(
-        event =>
-          event.type === 'message_end' &&
-          event.message.content.some(part => part.type === 'text' && part.text === 'direct resume should not render'),
-      ),
-    ).toBe(false);
+    expect(sendToolApproval).toHaveBeenCalledWith(expect.objectContaining({ approved: true, toolCallId: 'tool-1' }));
   });
 
   it('starts idle text signals through ifIdle stream options', async () => {

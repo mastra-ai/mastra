@@ -27,6 +27,38 @@ function emit(harness: Harness, event: HarnessEvent) {
   (harness as any).emit(event);
 }
 
+async function processTestStream(
+  harness: Harness,
+  fullStream: AsyncIterable<any> | ReadableStream<any>,
+  requestContext = new RequestContext(),
+) {
+  const state = (harness as any).createStreamState();
+  let result: any;
+
+  const processChunk = async (chunk: any) => {
+    result = (await (harness as any).processStreamChunk(state, chunk, requestContext)) ?? result;
+  };
+
+  if ('getReader' in fullStream && typeof fullStream.getReader === 'function') {
+    const reader = fullStream.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await processChunk(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  } else {
+    for await (const chunk of fullStream as AsyncIterable<any>) {
+      await processChunk(chunk);
+    }
+  }
+
+  return result ?? (harness as any).finishStreamState(state);
+}
+
 describe('defaultDisplayState', () => {
   it('returns a fresh display state with correct defaults', () => {
     const ds = defaultDisplayState();
@@ -330,53 +362,51 @@ describe('tool lifecycle', () => {
     const events: HarnessEvent[] = [];
     harness.subscribe(event => events.push(event));
 
-    const result = await (harness as any).processStream(
-      {
-        fullStream: new ReadableStream({
-          start(controller) {
-            controller.enqueue({
-              type: 'tool-call',
-              runId: 'run-1',
-              from: ChunkFrom.AGENT,
-              payload: {
-                toolCallId: 'call-1',
-                toolName: 'lookupCustomer',
-                args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
-              },
-              metadata: {
-                mastra: {
-                  toolPayloadTransform: {
-                    display: {
-                      'input-available': { transformed: { customerId: 'cus_123' } },
-                    },
+    const result = await processTestStream(
+      harness,
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue({
+            type: 'tool-call',
+            runId: 'run-1',
+            from: ChunkFrom.AGENT,
+            payload: {
+              toolCallId: 'call-1',
+              toolName: 'lookupCustomer',
+              args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+            },
+            metadata: {
+              mastra: {
+                toolPayloadTransform: {
+                  display: {
+                    'input-available': { transformed: { customerId: 'cus_123' } },
                   },
                 },
               },
-            });
-            controller.enqueue({
-              type: 'tool-result',
-              runId: 'run-1',
-              from: ChunkFrom.AGENT,
-              payload: {
-                toolCallId: 'call-1',
-                toolName: 'lookupCustomer',
-                result: { displayName: 'Acme', apiKey: 'secret-output' },
-              },
-              metadata: {
-                mastra: {
-                  toolPayloadTransform: {
-                    display: {
-                      'output-available': { transformed: { displayName: 'Acme' } },
-                    },
+            },
+          });
+          controller.enqueue({
+            type: 'tool-result',
+            runId: 'run-1',
+            from: ChunkFrom.AGENT,
+            payload: {
+              toolCallId: 'call-1',
+              toolName: 'lookupCustomer',
+              result: { displayName: 'Acme', apiKey: 'secret-output' },
+            },
+            metadata: {
+              mastra: {
+                toolPayloadTransform: {
+                  display: {
+                    'output-available': { transformed: { displayName: 'Acme' } },
                   },
                 },
               },
-            });
-            controller.close();
-          },
-        }),
-      },
-      new RequestContext(),
+            },
+          });
+          controller.close();
+        },
+      }),
     );
 
     expect(result.message.content).toEqual([
@@ -401,72 +431,70 @@ describe('tool lifecycle', () => {
     const events: HarnessEvent[] = [];
     harness.subscribe(event => events.push(event));
 
-    const result = await (harness as any).processStream(
-      {
-        fullStream: new ReadableStream({
-          start(controller) {
-            controller.enqueue({
-              type: 'tool-call-delta',
-              runId: 'run-1',
-              from: ChunkFrom.AGENT,
-              payload: {
-                toolCallId: 'call-1',
-                toolName: 'lookupCustomer',
-                argsTextDelta: '{"internalPath":"/workspace/private',
-              },
-              metadata: {
-                mastra: {
-                  toolPayloadTransform: {
-                    display: {
-                      'input-delta': { transformed: null },
-                    },
+    const result = await processTestStream(
+      harness,
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue({
+            type: 'tool-call-delta',
+            runId: 'run-1',
+            from: ChunkFrom.AGENT,
+            payload: {
+              toolCallId: 'call-1',
+              toolName: 'lookupCustomer',
+              argsTextDelta: '{"internalPath":"/workspace/private',
+            },
+            metadata: {
+              mastra: {
+                toolPayloadTransform: {
+                  display: {
+                    'input-delta': { transformed: null },
                   },
                 },
               },
-            });
-            controller.enqueue({
-              type: 'tool-call',
-              runId: 'run-1',
-              from: ChunkFrom.AGENT,
-              payload: {
-                toolCallId: 'call-1',
-                toolName: 'lookupCustomer',
-                args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
-              },
-              metadata: {
-                mastra: {
-                  toolPayloadTransform: {
-                    display: {
-                      'input-available': { transformed: null },
-                    },
+            },
+          });
+          controller.enqueue({
+            type: 'tool-call',
+            runId: 'run-1',
+            from: ChunkFrom.AGENT,
+            payload: {
+              toolCallId: 'call-1',
+              toolName: 'lookupCustomer',
+              args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+            },
+            metadata: {
+              mastra: {
+                toolPayloadTransform: {
+                  display: {
+                    'input-available': { transformed: null },
                   },
                 },
               },
-            });
-            controller.enqueue({
-              type: 'tool-result',
-              runId: 'run-1',
-              from: ChunkFrom.AGENT,
-              payload: {
-                toolCallId: 'call-1',
-                toolName: 'lookupCustomer',
-                result: { displayName: 'Acme', apiKey: 'secret-output' },
-              },
-              metadata: {
-                mastra: {
-                  toolPayloadTransform: {
-                    display: {
-                      'output-available': { transformed: null },
-                    },
+            },
+          });
+          controller.enqueue({
+            type: 'tool-result',
+            runId: 'run-1',
+            from: ChunkFrom.AGENT,
+            payload: {
+              toolCallId: 'call-1',
+              toolName: 'lookupCustomer',
+              result: { displayName: 'Acme', apiKey: 'secret-output' },
+            },
+            metadata: {
+              mastra: {
+                toolPayloadTransform: {
+                  display: {
+                    'output-available': { transformed: null },
                   },
                 },
               },
-            });
-            controller.close();
-          },
-        }),
-      },
-      new RequestContext(),
+            },
+          });
+          controller.close();
+        },
+      }),
     );
 
     expect(result.message.content).toEqual([

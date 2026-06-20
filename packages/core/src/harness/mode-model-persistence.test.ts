@@ -141,10 +141,11 @@ describe('Harness mode-model persistence across restarts', () => {
 
     await session.respondToToolSuspension({ toolCallId: 'plan-call-1', resumeData: { action: 'approved' } });
 
-    // Approval abandons the parked plan suspension and switches to the default
-    // (execution) mode, aborting the plan-mode run.
+    // Approval switches to the default execution mode and resumes the parked
+    // submit_plan suspension so the approved tool result can be persisted before
+    // any active subscribed stream is ended by the full cross-mode handoff path.
     expect(session.session.suspensions.has({ toolCallId: 'plan-call-1' })).toBe(false);
-    expect(controller.signal.aborted).toBe(true);
+    expect(controller.signal.aborted).toBe(false);
     expect(session.session.mode.get()).toBe('build');
   });
 });
