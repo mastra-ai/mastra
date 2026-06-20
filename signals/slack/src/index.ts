@@ -21,7 +21,6 @@ export const SLACK_SIGNALS_METADATA_KEY = 'slackSignals';
 export const SLACK_SUBSCRIBE_TAG = 'slack-subscribe';
 export const SLACK_UNSUBSCRIBE_TAG = 'slack-unsubscribe';
 export const SLACK_SYNC_STATUS_TAG = 'slack-sync-status';
-export const DEFAULT_SLACK_SIGNALS_POLL_INTERVAL_MS = 60_000;
 
 export type SlackConversationType = 'public_channel' | 'private_channel' | 'im' | 'mpim';
 
@@ -193,12 +192,10 @@ export type SlackSignalsThreadStore = {
 
 export type SlackSignalsProviderConfig = {
   token: string;
-  pollIntervalMs?: number;
   include?: SlackSignalsIncludeConfig;
   filters?: SlackSignalsFilterConfig;
   syncClient?: SlackSignalsSyncClient;
   threadStore?: SlackSignalsThreadStore;
-  maxMessagesPerChannel?: number;
   rtmClient?: SlackRtmClient;
 };
 
@@ -217,15 +214,9 @@ export type SlackOperationResult = {
   removed?: boolean;
 };
 
-export type SlackPollingThread = {
+export type SlackSignalsThread = {
   threadId: string;
   resourceId: string;
-};
-
-export type SlackPollResult = {
-  notificationsSent: number;
-  channelsSynced: number;
-  channelsFailed: number;
 };
 
 function normalizeIncludeConfig(include: SlackSignalsIncludeConfig = {}): Required<SlackSignalsIncludeConfig> {
@@ -513,7 +504,7 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
   readonly #syncClient: SlackSignalsSyncClient;
   readonly #rtmClient: SlackRtmClient;
   #rtmConnected = false;
-  readonly #subscribedThreads = new Map<string, SlackPollingThread>();
+  readonly #subscribedThreads = new Map<string, SlackSignalsThread>();
 
   constructor(options: SlackSignalsProviderConfig) {
     super();

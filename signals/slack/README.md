@@ -7,10 +7,9 @@ Slack Signals lets a Mastra agent watch Slack activity and surface new messages 
 - Adds a `SlackSignalsProvider` for Mastra agents.
 - Lets a thread subscribe or unsubscribe from Slack activity.
 - Watches all reachable public channels, private channels, DMs, and group DMs by default.
-- Polls Slack with the official Web API.
-- Stores per-channel `latestTs` high-water timestamps in thread metadata.
-- Emits durable Mastra notifications for new watched messages.
-- Filters notification emission without stopping conversation discovery or high-water advancement.
+- Uses the Slack RTM API (WebSocket) for real-time message delivery — no polling.
+- Emits durable Mastra notifications for new messages.
+- Filters by channel, keyword, and bot/user identity.
 
 This package is signals-only. It does not send Slack replies, import Slack archives, scrape Slack Desktop data, or use browser session tokens.
 
@@ -53,13 +52,28 @@ A subscribed thread receives Slack messages as notification records with:
 - `coalesceKey`: `${teamId}:${channelId}`
 - payload fields for team, channel, message timestamp, user, bot, text, thread timestamp, and permalink when Slack returns it.
 
+## How it works
+
+The provider opens a single persistent WebSocket connection to Slack's RTM API on `connect()`. Messages arrive in real-time — no polling, no baseline pass, no per-channel HTTP requests. Each incoming RTM `message` event is mapped to a notification and dispatched to all subscribed threads.
+
+### RTM connection lifecycle
+
+1. `connect()` calls `rtm.connect` to get a WebSocket URL, opens the connection, and registers a message handler.
+2. The WebSocket receives `message` events for all channels the token can access.
+3. Messages with subtypes like `message_changed` or `message_deleted` are skipped. `bot_message` events are allowed.
+4. Each message is checked against filters, then dispatched to subscribed threads via `notify()`.
+5. Auto-reconnect with exponential backoff handles socket disconnects.
+6. Ping/pong keepalive detects dead connections and triggers reconnect.
+
+### Subscription management
+
+Subscriptions are stored in Mastra thread metadata under `mastra.slackSignals.subscription`. On `connect()`, the provider scans thread storage for threads with Slack metadata and restores them to the in-memory subscribed set, so messages flow immediately after restart.
+
 ## Configuration
 
 ```ts
 const slackSignals = new SlackSignalsProvider({
   token: process.env.SLACK_USER_TOKEN!,
-  pollIntervalMs: 60_000,
-  maxMessagesPerChannel: 100,
   include: {
     publicChannels: true,
     privateChannels: true,
@@ -86,7 +100,7 @@ const slackSignals = new SlackSignalsProvider({
 
 ### `include`
 
-`include` controls which Slack conversation types are requested from `conversations.list`:
+`include` controls which Slack conversation types the subscription tracks:
 
 | Option | Slack type | Default |
 | --- | --- | --- |
@@ -95,11 +109,9 @@ const slackSignals = new SlackSignalsProvider({
 | `dms` | `im` | `true` |
 | `groupDms` | `mpim` | `true` |
 
-The token still limits what Slack returns. Bot tokens only see conversations the bot can access.
-
 ### `filters`
 
-Filters only control notification emission. The provider still syncs discovered conversations and advances channel `latestTs` for filtered messages so the next poll does not repeatedly inspect the same old messages.
+Filters control which messages produce notifications. Messages that don't match are silently dropped.
 
 Supported filters:
 
@@ -132,78 +144,39 @@ Mentions are detected from Slack mention syntax such as `<@U123>` or `<@B123>` w
 
 The provider uses these Slack Web API methods:
 
-- `auth.test`
-- `conversations.list`
-- `conversations.history`
+- `auth.test` (subscribe flow — verifies token and gets workspace info)
+- `rtm.connect` (opens WebSocket)
 
 A **user token (`xoxp-`)** is recommended — it acts as your Slack identity, giving access to all channels and DMs you're a member of. Bot tokens (`xoxb-`) only see channels they've been explicitly invited to, so they can't watch "all DMs and channels" without admin intervention. Only use a user token in workspaces where you've approved that access.
 
 Required scopes (User Token Scopes in the Slack app config):
 
-| Conversation type | Discovery scope | History scope |
+| Conversation type | Read scope | History scope |
 | --- | --- | --- |
 | Public channels | `channels:read` | `channels:history` |
 | Private channels | `groups:read` | `groups:history` |
 | DMs | `im:read` | `im:history` |
 | Group DMs | `mpim:read` | `mpim:history` |
-| Search | `search:read` | — |
-
-## Sync behavior
-
-The provider keeps durable sync state in Mastra thread metadata under `mastra.slackSignals.subscription`.
-
-For each channel, the provider stores:
-
-- `latestTs`: latest Slack timestamp safely processed for that channel.
-- `lastSyncAt`
-- `lastSyncStatus`
-- `lastSyncError` when a sync fails.
-
-Polling flow:
-
-1. Load the thread subscription.
-2. Discover reachable conversations with `conversations.list`.
-3. For each conversation, call `conversations.history` with `oldest: latestTs` and `inclusive: false`.
-4. Emit notifications for messages that pass filters.
-5. Advance `latestTs` after successful processing.
-6. Persist sync status back to thread metadata.
-
-Slack `response_metadata.next_cursor` values are only used inside the current API request loop. They are never stored as durable sync state.
-
-On first discovery of a channel with no `latestTs`, the provider records the latest observed timestamp as a baseline and does not emit historical notifications. This avoids flooding the notification inbox on first subscribe.
 
 ## Testing and local development
 
-Use mock sync clients for deterministic unit tests:
+Use mock RTM clients and sync clients for deterministic unit tests:
 
 ```ts
 const syncClient = {
   getWorkspace: async () => ({ teamId: 'T123', teamName: 'Example' }),
-  listConversations: async () => ({
-    conversations: [{ id: 'C123', name: 'alerts', type: 'public_channel' as const }],
-  }),
-  listMessages: async () => ({
-    latestTs: '1710000002.000000',
-    messages: [
-      {
-        channelId: 'C123',
-        channelName: 'alerts',
-        channelType: 'public_channel' as const,
-        ts: '1710000002.000000',
-        user: 'U123',
-        text: 'New alert',
-      },
-    ],
-  }),
+  listConversations: async () => ({ conversations: [] }),
+  listMessages: async () => ({ messages: [] }),
 };
 
 const slackSignals = new SlackSignalsProvider({
   token: 'xoxp-test',
   syncClient,
+  rtmClient: mockRtmClient,
 });
 ```
 
-The HTTP client also accepts a custom `baseUrl`, `fetch`, `maxRetries`, and `sleep` through `SlackWebApiSyncClient` for emulator or test environments.
+The HTTP sync client also accepts a custom `baseUrl`, `fetch`, `maxRetries`, and `sleep` through `SlackWebApiSyncClient` for emulator or test environments.
 
 ```ts
 import { SlackSignalsProvider, SlackWebApiSyncClient } from '@mastra/slack-signals';
@@ -221,19 +194,9 @@ const slackSignals = new SlackSignalsProvider({
 
 ## Limitations
 
-- Polling-based only; no Slack Events API consumer in this package yet.
-- No `conversations.replies` polling for thread replies beyond messages returned by `conversations.history`.
+- RTM is a legacy Slack API. Still fully functional, but Slack recommends Socket Mode for new integrations. Migration path is documented for the future.
+- No historical backfill — messages are only received from the moment the RTM connection opens. Messages sent while the provider is disconnected are not retrieved.
+- No `conversations.replies` — thread replies beyond the initial message are not individually tracked.
 - No Slack archive import.
 - No Slack Desktop database access.
-- No `xoxc`/`xoxd` browser-session token scraping.
-- No local Slack mirror database.
-- No Slack write behavior.
-
-## Verification
-
-From the repository root:
-
-```bash
-pnpm --filter ./signals/slack test -- --bail 1 --reporter=dot
-pnpm --filter ./signals/slack build
-```
+- RTM message rate limit: 1 message per second sustained, 16KB per message.
