@@ -674,9 +674,9 @@ describe('createSubagentTool forked subagent behavior', () => {
     // Memory option points at the cloned thread so history is inherited
     // without polluting the parent thread.
     expect(streamOpts.memory).toEqual({ thread: 'forked-thread-1', resource: 'parent-resource-1' });
-    // Forked runs keep the legacy subagent step budget and should complete
-    // directly from the synthetic completed subagent result in cloned history.
-    expect(streamOpts.maxSteps).toBe(50);
+    // Forked runs get a larger step budget for inherited parent tools; the
+    // synthetic completed subagent result prevents recursive delegation.
+    expect(streamOpts.maxSteps).toBe(1000);
 
     expect(harnessCtx.emitEvent).toHaveBeenCalledWith(
       expect.objectContaining({

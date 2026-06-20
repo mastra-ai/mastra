@@ -241,10 +241,10 @@ Use this tool when:
         resolvedModelId = opts.getParentModelId?.() || 'parent-agent';
         task = `${FORKED_SUBAGENT_NESTING_NOTICE}\n\n${FORKED_SUBAGENT_TASK_NOTICE}\n\nUser task:\n${task}`;
         streamMemory = { thread: forkedThread.id, resource: forkedThread.resourceId };
-        // Keep the legacy subagent step budget. The fork history includes a
-        // synthetic completed subagent result, so the model should complete the
-        // delegated task directly instead of recursively calling `subagent`.
-        streamMaxSteps = 50;
+        // Forked subagents may need a larger budget to use the inherited parent
+        // tool environment. Recursion is prevented by the synthetic completed
+        // subagent result in cloned history, not by constraining step count.
+        streamMaxSteps = 1000;
         streamStopWhen = undefined;
         streamPrepareStep = undefined;
 
