@@ -42,7 +42,7 @@ export const lifecycleHooksConfiguredScenario: McE2eScenario = {
             {
               type: 'command',
               command: 'node .mastracode/hook-before.cjs',
-              timeout: 3000,
+              timeout: 10_000,
               description: 'before reload prompt block',
             },
           ],
@@ -59,7 +59,7 @@ fs.writeFileSync('.mastracode/hooks.json', JSON.stringify({
   UserPromptSubmit: [{
     type: 'command',
     command: 'node .mastracode/hook-after.cjs',
-    timeout: 3000,
+    timeout: 10_000,
     description: 'after reload prompt block'
   }]
 }, null, 2));

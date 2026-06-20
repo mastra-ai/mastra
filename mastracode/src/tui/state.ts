@@ -42,6 +42,10 @@ export interface PendingSignalMessage {
   component: Component;
   text: string;
   isInterjection?: boolean;
+  slashCommand?: {
+    name: string;
+    content: string;
+  };
 }
 
 export interface GithubPrSubscriptionBadge {
