@@ -35,7 +35,12 @@ function createMockModel() {
  * counting how many times it was invoked so we can assert the agentic loop ran
  * the expected number of steps.
  */
-function createRepeatedToolThenTextModel(toolName: string, toolArgs: object, toolIterations: number, finalText: string) {
+function createRepeatedToolThenTextModel(
+  toolName: string,
+  toolArgs: object,
+  toolIterations: number,
+  finalText: string,
+) {
   let callCount = 0;
   const model = new MockLanguageModelV2({
     doStream: async () => {
@@ -53,7 +58,11 @@ function createRepeatedToolThenTextModel(toolName: string, toolArgs: object, too
                 input: JSON.stringify(toolArgs),
                 providerExecuted: false,
               },
-              { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
             ])
           : convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
