@@ -1,0 +1,41 @@
+{
+  "name": "examples-mastra-code-react",
+  "type": "module",
+  "private": true,
+  "version": "0.0.1",
+  "description": "MastraCode served over HTTP as a React web app, driven by a Harness registered on a Mastra instance.",
+  "dependencies": {
+    "@ai-sdk/openai": "^1.3.24",
+    "@mastra/client-js": "link:../../client-sdks/client-js",
+    "@mastra/core": "link:../../packages/core",
+    "@mastra/libsql": "link:../../stores/libsql",
+    "ai": "^4.3.19",
+    "mastra": "link:../../packages/cli",
+    "zod": "^4.3.6"
+  },
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail --names server,web \"pnpm dev:server\" \"pnpm dev:web\"",
+    "dev:server": "mastra dev",
+    "dev:web": "vite",
+    "build:web": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p scenarios/tsconfig.json",
+    "clean": "rm -rf .mastra database.sqlite web/dist"
+  },
+  "devDependencies": {
+    "@copilotkit/aimock": "^1.29.0",
+    "@mastra/server": "link:../../packages/server",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.11",
+    "vitest": "^4.1.8"
+  },
+  "keywords": [],
+  "license": "Apache-2.0"
+}

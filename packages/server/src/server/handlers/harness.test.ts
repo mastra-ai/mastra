@@ -11,6 +11,10 @@ import {
   SEND_HARNESS_MESSAGE_ROUTE,
   ABORT_HARNESS_SESSION_ROUTE,
   STREAM_HARNESS_SESSION_ROUTE,
+  GET_HARNESS_SESSION_STATE_ROUTE,
+  LIST_HARNESS_MODES_ROUTE,
+  LIST_HARNESS_THREADS_ROUTE,
+  SWITCH_HARNESS_MODE_ROUTE,
 } from './harness';
 
 function makeAgent(id = 'test-agent') {
@@ -21,7 +25,10 @@ function makeMastra() {
   const harness = new Harness({
     id: 'code',
     storage: new InMemoryStore(),
-    modes: [{ id: 'build', name: 'Build', default: true, agent: makeAgent() }],
+    modes: [
+      { id: 'build', name: 'Build', default: true, agent: makeAgent() },
+      { id: 'plan', name: 'Plan', agent: makeAgent() },
+    ],
   });
   const mastra = new Mastra({ harnesses: { code: harness }, storage: new InMemoryStore() });
   return { mastra, harness };
@@ -133,6 +140,57 @@ describe('harness routes', () => {
 
       expect(received).toContain('data:');
       expect(received).toContain('agent_start');
+    });
+  });
+
+  describe('LIST_HARNESS_MODES_ROUTE', () => {
+    it('lists the harness modes', async () => {
+      const res = await LIST_HARNESS_MODES_ROUTE.handler({ mastra, harnessId: 'code' } as any);
+      expect(res).toEqual({ modes: [{ id: 'build', name: 'Build' }, { id: 'plan', name: 'Plan' }] });
+    });
+  });
+
+  describe('GET_HARNESS_SESSION_STATE_ROUTE', () => {
+    it('returns the current mode, model, and thread', async () => {
+      const res = (await GET_HARNESS_SESSION_STATE_ROUTE.handler({
+        mastra,
+        harnessId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { modeId: string; threadId?: string };
+      expect(res.modeId).toBe('build');
+      expect(typeof res.threadId).toBe('string');
+    });
+  });
+
+  describe('SWITCH_HARNESS_MODE_ROUTE', () => {
+    it('switches the active mode', async () => {
+      const ack = await SWITCH_HARNESS_MODE_ROUTE.handler({
+        mastra,
+        harnessId: 'code',
+        resourceId: 'user-1',
+        modeId: 'plan',
+      } as any);
+      expect(ack).toEqual({ ok: true });
+
+      const state = (await GET_HARNESS_SESSION_STATE_ROUTE.handler({
+        mastra,
+        harnessId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { modeId: string };
+      expect(state.modeId).toBe('plan');
+    });
+  });
+
+  describe('LIST_HARNESS_THREADS_ROUTE', () => {
+    it('lists the session threads (at least the auto-created one)', async () => {
+      await CREATE_HARNESS_SESSION_ROUTE.handler({ mastra, harnessId: 'code', resourceId: 'user-1' } as any);
+      const res = (await LIST_HARNESS_THREADS_ROUTE.handler({
+        mastra,
+        harnessId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { threads: { id: string }[] };
+      expect(Array.isArray(res.threads)).toBe(true);
+      expect(res.threads.length).toBeGreaterThanOrEqual(1);
     });
   });
 });

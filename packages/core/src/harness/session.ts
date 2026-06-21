@@ -2964,9 +2964,20 @@ export class Session<TState = unknown> {
   async approveToolCall({
     toolCallId,
     requestContext: requestContextInput,
+    viaSubscription = false,
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
+    /**
+     * Set by the run engine when it drives this approval from inside its own
+     * live thread-stream loop (the all-local TUI path). In that case the
+     * subscription continues the approved run and emits its events, so the
+     * direct resume stream returned here must NOT be processed (double-render).
+     * Standalone callers (the client/server approval request) leave this false:
+     * no loop is consuming the run, so the resumed stream is folded into the
+     * session bus, otherwise the open SSE stream would see nothing after approval.
+     */
+    viaSubscription?: boolean;
   }): Promise<void> {
     const runId = this.run.getRunId();
     if (!runId) {
@@ -2977,7 +2988,7 @@ export class Session<TState = unknown> {
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const threadId = this.thread.getId();
-    await agent.approveToolCall({
+    const output = await agent.approveToolCall({
       runId,
       toolCallId,
       requireToolApproval: !isYolo,
@@ -2986,6 +2997,10 @@ export class Session<TState = unknown> {
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
     });
+
+    if (!viaSubscription) {
+      await this.processStream(output, requestContext);
+    }
   }
 
   /**
@@ -2995,9 +3010,12 @@ export class Session<TState = unknown> {
   async declineToolCall({
     toolCallId,
     requestContext: requestContextInput,
+    viaSubscription = false,
   }: {
     toolCallId?: string;
     requestContext?: RequestContext;
+    /** See {@link approveToolCall}'s `viaSubscription` — set by the run engine. */
+    viaSubscription?: boolean;
   }): Promise<void> {
     const runId = this.run.getRunId();
     if (!runId) {
@@ -3008,7 +3026,7 @@ export class Session<TState = unknown> {
     const requestContext = await this.machinery.buildRequestContext(requestContextInput);
     const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
     const threadId = this.thread.getId();
-    await agent.declineToolCall({
+    const output = await agent.declineToolCall({
       runId,
       toolCallId,
       requireToolApproval: !isYolo,
@@ -3017,6 +3035,10 @@ export class Session<TState = unknown> {
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
     });
+
+    if (!viaSubscription) {
+      await this.processStream(output, requestContext);
+    }
   }
 
   /**

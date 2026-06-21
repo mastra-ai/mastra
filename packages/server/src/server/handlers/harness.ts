@@ -38,10 +38,25 @@ const sessionPathParams = z.object({ harnessId: z.string(), resourceId: z.string
 
 const createSessionBodySchema = z.object({ resourceId: z.string() });
 const sendMessageBodySchema = z.object({ message: z.string() });
+const steerBodySchema = z.object({ message: z.string() });
 const toolApprovalBodySchema = z.object({
   toolCallId: z.string(),
   approved: z.boolean(),
 });
+const toolSuspensionBodySchema = z.object({
+  toolCallId: z.string(),
+  // Free-form resume payload. For ask_user this is a string (or string[] for
+  // multi-select); for submit_plan it's `{ action, feedback? }`; for
+  // request_access it's "Yes"/"No".
+  resumeData: z.any(),
+});
+const switchModeBodySchema = z.object({ modeId: z.string() });
+const switchModelBodySchema = z.object({
+  modelId: z.string(),
+  scope: z.enum(['global', 'thread']).optional(),
+  modeId: z.string().optional(),
+});
+const switchThreadBodySchema = z.object({ threadId: z.string() });
 
 const listHarnessesResponseSchema = z.object({
   harnesses: z.array(z.object({ id: z.string() })),
@@ -52,6 +67,25 @@ const createSessionResponseSchema = z.object({
   threadId: z.string().optional(),
 });
 const ackResponseSchema = z.object({ ok: z.boolean() });
+const sessionStateResponseSchema = z.object({
+  harnessId: z.string(),
+  resourceId: z.string(),
+  threadId: z.string().optional(),
+  modeId: z.string(),
+  modelId: z.string(),
+});
+const listModesResponseSchema = z.object({
+  modes: z.array(z.object({ id: z.string(), name: z.string().optional() })),
+});
+const listThreadsResponseSchema = z.object({
+  threads: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string().optional(),
+      updatedAt: z.string().optional(),
+    }),
+  ),
+});
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -244,18 +278,219 @@ export const HARNESS_TOOL_APPROVAL_ROUTE = createRoute({
   tags: ['Harness'],
   requiresAuth: true,
   requiresPermission: 'harness:execute',
-  handler: async ({ mastra, harnessId, resourceId, toolCallId, approved }) => {
+  handler: async ({ mastra, harnessId, resourceId, approved }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
       const session = await getSession(harness, resourceId);
-      if (approved) {
-        await session.approveToolCall({ toolCallId });
-      } else {
-        await session.declineToolCall({ toolCallId });
-      }
+      // Resolve the parked approval gate so the session's own run loop drives the
+      // continuation and emits its events to subscribers (the open SSE stream).
+      // Calling approveToolCall/declineToolCall directly would bypass the gate,
+      // leaving the run loop hung and duplicating the resumed stream.
+      session.respondToToolApproval({ decision: approved ? 'approve' : 'decline' });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error responding to harness tool approval');
+    }
+  },
+});
+
+export const HARNESS_TOOL_SUSPENSION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/tool-suspension',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: toolSuspensionBodySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Respond to a suspended harness tool',
+  description:
+    'Resumes a suspended interactive tool (ask_user, request_access, submit_plan) with the provided resume data.',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, toolCallId, resumeData }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      await session.respondToToolSuspension({ toolCallId, resumeData });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error responding to harness tool suspension');
+    }
+  },
+});
+
+export const STEER_HARNESS_SESSION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/steer',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: steerBodySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Steer the in-flight run',
+  description: 'Injects a message into the running turn (interjection) without starting a new run.',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, message }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      void session.steer({ content: message });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error steering harness session');
+    }
+  },
+});
+
+export const SWITCH_HARNESS_MODE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/mode',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: switchModeBodySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Switch the session mode',
+  description: 'Switches the active mode (e.g. build, plan) for the session.',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, modeId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      await session.mode.switch({ modeId });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error switching harness mode');
+    }
+  },
+});
+
+export const SWITCH_HARNESS_MODEL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/model',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: switchModelBodySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Switch the session model',
+  description: 'Switches the model for the session, scoped to the thread by default.',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, modelId, scope, modeId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      await session.model.switch({ modelId, scope, modeId });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error switching harness model');
+    }
+  },
+});
+
+export const SWITCH_HARNESS_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/thread',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: switchThreadBodySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Switch the session thread',
+  description: 'Switches the session to an existing thread (rebinding its stream and state).',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, threadId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      await session.thread.switch({ threadId });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error switching harness thread');
+    }
+  },
+});
+
+export const GET_HARNESS_SESSION_STATE_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:harnessId/sessions/:resourceId',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  responseSchema: sessionStateResponseSchema,
+  summary: 'Get session state',
+  description: 'Returns the current mode, model, and thread for the session (for initial UI hydration).',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:read',
+  handler: async ({ mastra, harnessId, resourceId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      return {
+        harnessId,
+        resourceId,
+        threadId: session.thread.getId() ?? undefined,
+        modeId: session.mode.get(),
+        modelId: session.model.get(),
+      };
+    } catch (error) {
+      return handleError(error, 'error reading harness session state');
+    }
+  },
+});
+
+export const LIST_HARNESS_MODES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:harnessId/modes',
+  responseType: 'json' as const,
+  pathParamSchema: harnessIdPathParams,
+  responseSchema: listModesResponseSchema,
+  summary: 'List harness modes',
+  description: 'Lists the modes configured on the harness (e.g. build, plan).',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:read',
+  handler: async ({ mastra, harnessId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      return {
+        modes: harness.listModes().map(mode => ({ id: mode.id, name: mode.name })),
+      };
+    } catch (error) {
+      return handleError(error, 'error listing harness modes');
+    }
+  },
+});
+
+export const LIST_HARNESS_THREADS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:harnessId/sessions/:resourceId/threads',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  responseSchema: listThreadsResponseSchema,
+  summary: 'List session threads',
+  description: 'Lists the threads for the session\u2019s resource.',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:read',
+  handler: async ({ mastra, harnessId, resourceId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const threads = await session.thread.list();
+      return {
+        threads: threads.map(t => ({
+          id: t.id,
+          title: t.title,
+          updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : undefined,
+        })),
+      };
+    } catch (error) {
+      return handleError(error, 'error listing harness threads');
     }
   },
 });

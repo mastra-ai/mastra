@@ -305,12 +305,12 @@ export class SessionRunEngine {
         const policy = this.#session.resolveToolApproval(toolName);
 
         if (policy === 'allow') {
-          await this.#session.approveToolCall({ toolCallId, requestContext });
+          await this.#session.approveToolCall({ toolCallId, requestContext, viaSubscription: true });
           break;
         }
 
         if (policy === 'deny') {
-          await this.#session.declineToolCall({ toolCallId, requestContext });
+          await this.#session.declineToolCall({ toolCallId, requestContext, viaSubscription: true });
           break;
         }
 
@@ -321,9 +321,17 @@ export class SessionRunEngine {
         this.#session.approval.clearToolName();
 
         if (approval.decision === 'approve') {
-          await this.#session.approveToolCall({ toolCallId, requestContext: approval.requestContext ?? requestContext });
+          await this.#session.approveToolCall({
+            toolCallId,
+            requestContext: approval.requestContext ?? requestContext,
+            viaSubscription: true,
+          });
         } else {
-          await this.#session.declineToolCall({ toolCallId, requestContext: approval.requestContext ?? requestContext });
+          await this.#session.declineToolCall({
+            toolCallId,
+            requestContext: approval.requestContext ?? requestContext,
+            viaSubscription: true,
+          });
         }
         break;
       }
