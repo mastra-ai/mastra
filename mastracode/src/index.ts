@@ -418,8 +418,18 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           process.env.GITCRAWL_BIN ??
           process.env.MASTRACODE_GITCRAWL_COMMAND ??
           process.env.GITCRAWL_COMMAND,
-        getNotificationStreamOptions: ({ resourceId, threadId }) => {
-          const session = activeSession!;
+        getNotificationStreamOptions: async ({ resourceId, threadId }) => {
+          // Run the woken notification as the session that owns the target
+          // resource so it uses that session's model/mode/state. Fall back to
+          // the current session only when no session owns the resource yet.
+          const session = (await harness.getSessionByResource(resourceId)) ?? activeSession!;
+          // A long-running system must be able to drive work unattended, so a
+          // target session without an explicit model selection falls back to a
+          // real model rather than failing the run: the current session's live
+          // selection (what the user actually picked), then the mode's default.
+          const modeId = session.mode.get();
+          const defaultModeModelId = harness.listModes().find(mode => mode.id === modeId)?.defaultModelId;
+          const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
           const requestContext = new RequestContext();
           const harnessContext: HarnessRequestContext = {
             harnessId: harness.id,
@@ -429,8 +439,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
             threadId,
             resourceId,
             session: {
-              modeId: session.mode.get(),
-              modelId: session.model.get(),
+              modeId,
+              modelId,
               state: {
                 get: () => session.state.get(),
                 set: updates => session.state.set(updates),
