@@ -63,12 +63,15 @@ async function buildScenarioAgent({
   memory,
   workspace,
   agents,
+  workflows,
   agentBackgroundTasks,
   goal,
   backgroundTasks,
+  model,
+  errorProcessors,
 }: Pick<
   RunLoopScenarioOptions,
-  'llm' | 'tools' | 'instructions' | 'memory' | 'workspace' | 'agents' | 'agentBackgroundTasks' | 'goal' | 'backgroundTasks'
+  'llm' | 'tools' | 'instructions' | 'memory' | 'workspace' | 'agents' | 'workflows' | 'agentBackgroundTasks' | 'goal' | 'backgroundTasks' | 'model' | 'errorProcessors'
 >): Promise<{ agent: Agent; mastra: any }> {
   const openai = createOpenAI({
     apiKey: 'aimock-test-key',
@@ -79,17 +82,22 @@ async function buildScenarioAgent({
   // Mastra agent registry.
   const agentId = `aimock-loop-scenario-agent-${++scenarioAgentCounter}`;
 
+  // Use dynamic model function if provided, otherwise use default AIMock-backed model
+  const modelConfig = model ?? openai(SCENARIO_MODEL_ID);
+
   const agent = new Agent({
     id: agentId,
     name: 'AIMock Loop Scenario Agent',
     instructions: instructions ?? 'You are a test agent driven by scripted AIMock responses.',
-    model: openai(SCENARIO_MODEL_ID),
+    model: modelConfig,
     ...(tools ? { tools } : {}),
     ...(memory ? { memory } : {}),
     ...(workspace ? { workspace } : {}),
     ...(agents ? { agents } : {}),
+    ...(workflows ? { workflows } : {}),
     ...(agentBackgroundTasks ? { backgroundTasks: agentBackgroundTasks } : {}),
     ...(goal ? { goal } : {}),
+    ...(errorProcessors ? { errorProcessors } : {}),
   });
 
   // Registering the agent on a Mastra instance with storage is required for the
@@ -139,6 +147,7 @@ export async function runLoopScenario({
   resourceId,
   workspace,
   agents,
+  workflows,
   requestContext,
   collectChunks,
   manualStreamConsumption,
@@ -148,11 +157,19 @@ export async function runLoopScenario({
   goal,
   objective,
   onIterationComplete,
+  clientTools,
+  toolChoice,
+  model,
   delegation,
   abortSignal,
   providerOptions,
   modelSettings,
   toolsets,
+  errorProcessors,
+  onStepFinish,
+  onFinish,
+  savePerStep,
+  actor,
 }: RunLoopScenarioOptions): Promise<LoopScenarioResult> {
   fixtures(llm);
 
@@ -163,9 +180,12 @@ export async function runLoopScenario({
     memory,
     workspace,
     agents,
+    workflows,
     agentBackgroundTasks,
     goal,
     backgroundTasks,
+    model,
+    errorProcessors,
   });
 
   // Set objective before streaming if provided (for goal scenarios)
@@ -187,10 +207,16 @@ export async function runLoopScenario({
     ...(requestContext ? { requestContext } : {}),
     ...(delegation ? { delegation } : {}),
     ...(onIterationComplete ? { onIterationComplete } : {}),
+    ...(onStepFinish ? { onStepFinish } : {}),
+    ...(onFinish ? { onFinish } : {}),
+    ...(savePerStep !== undefined ? { savePerStep } : {}),
+    ...(actor ? { actor } : {}),
     ...(abortSignal ? { abortSignal } : {}),
     ...(providerOptions ? { providerOptions } : {}),
     ...(modelSettings ? { modelSettings } : {}),
     ...(toolsets ? { toolsets } : {}),
+    ...(clientTools ? { clientTools } : {}),
+    ...(toolChoice ? { toolChoice } : {}),
     ...memoryOption,
   };
 

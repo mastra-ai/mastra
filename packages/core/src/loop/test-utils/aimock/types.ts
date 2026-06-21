@@ -83,6 +83,12 @@ export interface RunLoopScenarioOptions {
    */
   agents?: AgentConfig['agents'];
   /**
+   * Workflows registered on the agent (`workflows: { researchWorkflow }`). Mastra
+   * converts each to a tool named `workflow-<key>`, enabling workflow-as-tools
+   * scenarios. Workflows are executed when the model calls them.
+   */
+  workflows?: Record<string, any>;
+  /**
    * Additional tool sets available for this generation, merged with agent-level
    * tools. Forwarded to `agent.stream({ toolsets })`. Toolsets allow dynamic
    * tool availability per-request.
@@ -110,6 +116,55 @@ export interface RunLoopScenarioOptions {
    * request body.
    */
   modelSettings?: any;
+  /**
+   * Client-side tools to merge with agent-level tools. Forwarded to `agent.stream({ clientTools })`.
+   * Useful for testing tool merging scenarios where tools are defined at the call site rather than
+   * at agent construction time.
+   */
+  clientTools?: import('../../../agent/types').ToolsInput;
+  /**
+   * Controls how the model uses tools. Forwarded to `agent.stream({ toolChoice })`.
+   * - 'auto': Model decides whether to call tools (default)
+   * - 'required': Model must call at least one tool
+   * - 'none': Model cannot call tools
+   * - { type: 'tool', toolName: 'specific-tool' }: Model must call specific tool
+   */
+  toolChoice?: 'auto' | 'required' | 'none' | { type: 'tool'; toolName: string };
+  /**
+   * Dynamic model function that resolves based on requestContext. When provided,
+   * the harness uses this function instead of the default AIMock-backed model.
+   * The function receives `{ requestContext }` and returns a model instance.
+   */
+  model?: (ctx: { requestContext: any }) => any;
+  /**
+   * Error processors registered on the Agent constructor (`errorProcessors: [...]`).
+   * These intercept non-retryable API errors (400/422) and can retry after applying
+   * modifications. Combine with AIMock error fixtures to test error recovery paths.
+   */
+  errorProcessors?: any[];
+  /**
+   * Callback fired after each execution step (including intermediate tool-call steps).
+   * Forwarded to `agent.stream({ onStepFinish })`. Useful for asserting step-level
+   * observability and tracking tool execution progress.
+   */
+  onStepFinish?: any;
+  /**
+   * Callback fired when execution completes. Forwarded to `agent.stream({ onFinish })`.
+   * Useful for asserting final result properties and cleanup logic.
+   */
+  onFinish?: any;
+  /**
+   * Save messages incrementally after each stream step completes. Forwarded to
+   * `agent.stream({ savePerStep })`. Requires `memory` and `threadId` to be set.
+   * Useful for testing intermediate message persistence.
+   */
+  savePerStep?: boolean;
+  /**
+   * Trusted server-side signal for this agent FGA check. Forwarded to
+   * `agent.stream({ actor })`. Useful for testing fine-grained authorization
+   * scenarios where the actor identity affects tool access.
+   */
+  actor?: any;
   /**
    * isTaskComplete (supervisor-style completion) config forwarded to
    * `agent.stream({ isTaskComplete })`. Supply custom `scorers` to gate the loop

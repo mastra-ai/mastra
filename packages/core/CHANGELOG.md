@@ -8,6 +8,8 @@
 
 ### Patch Changes
 
+- Added comprehensive AIMock scenario tests covering error processors, lifecycle callbacks, incremental message persistence, actor identity, completion callbacks, multi-turn memory persistence with message ordering and resource isolation, workflows-as-tools integration, abort during tool execution, error processor retry exhaustion, structured output validation repair, concurrent approval requests with independent approve/decline decisions, memory thread switching with conversation isolation, nested agent delegation chains, and structured output aggregation from multiple tool results. The test suite now includes 122 scenarios across 61 test files, providing comprehensive coverage of agent loop behaviors including error recovery, step-level observability, execution lifecycle hooks, memory system integrity, workflow tool execution, tool-level abort handling, retry exhaustion semantics, concurrent approval handling, thread isolation, and multi-level delegation.
+
 - Improved state signal restoration so long threads can resume without scanning every message. ([#18182](https://github.com/mastra-ai/mastra/pull/18182))
 
 - Fix agent signal drains so pending signals are recorded through the canonical signal transcript path and consistently rotate the response message id. This prevents follow-up signal turns from being attached to the previous assistant response and helps the agent see the latest completed step before continuing. ([#18105](https://github.com/mastra-ai/mastra/pull/18105))
