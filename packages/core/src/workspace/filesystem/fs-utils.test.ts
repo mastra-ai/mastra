@@ -330,7 +330,11 @@ describe('fsStat', () => {
     const stat = await fsStat(dir, 'subdir');
 
     expect(stat.type).toBe('directory');
-    expect(stat.size).toBe(0);
+    // Directory size is the filesystem block size, which varies by platform
+    // (e.g. 0 on some filesystems, 64 on macOS, 4096 on Linux), so only assert
+    // it is a non-negative number rather than a specific value.
+    expect(typeof stat.size).toBe('number');
+    expect(stat.size).toBeGreaterThanOrEqual(0);
     expect(stat.mimeType).toBeUndefined();
   });
 
