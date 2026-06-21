@@ -38,41 +38,37 @@ function getObservationTimestamp(record: OMHistoryRecord): string {
 }
 
 function toContextData(records: OMHistoryRecord[], markers: ExtractedOmMarker[], domain: TDomain) {
-  const fromRecords = records.map((r) => ({
+  const fromRecords = records.map(r => ({
     ts: String(getObservationTimestamp(r)),
     pendingMessageTokens: r.pendingMessageTokens,
   }));
   const fromMarkers = markers
-    .filter((m) => m.pendingTokens != null)
-    .map((m) => ({
+    .filter(m => m.pendingTokens != null)
+    .map(m => ({
       ts: m.timestamp,
       pendingMessageTokens: m.pendingTokens!,
     }));
   return [...fromRecords, ...fromMarkers]
     .sort((a, b) => a.ts.localeCompare(b.ts))
-    .map((d) => ({ t: toT(d.ts, domain), pendingMessageTokens: d.pendingMessageTokens }));
+    .map(d => ({ t: toT(d.ts, domain), pendingMessageTokens: d.pendingMessageTokens }));
 }
 
-function toActiveObservationData(
-  records: OMHistoryRecord[],
-  markers: ExtractedOmMarker[],
-  domain: TDomain,
-) {
+function toActiveObservationData(records: OMHistoryRecord[], markers: ExtractedOmMarker[], domain: TDomain) {
   const points = [
-    ...records.map((record) => ({
+    ...records.map(record => ({
       ts: String(getObservationTimestamp(record)),
       observationTokenCount: record.observationTokenCount,
     })),
     ...markers
-      .filter((marker) => marker.type === 'status' && marker.observationTokens != null)
-      .map((marker) => ({
+      .filter(marker => marker.type === 'status' && marker.observationTokens != null)
+      .map(marker => ({
         ts: marker.timestamp,
         observationTokenCount: marker.observationTokens!,
       })),
   ].sort((a, b) => a.ts.localeCompare(b.ts));
 
   let runningTotal = 0;
-  return points.map((point) => {
+  return points.map(point => {
     runningTotal = Math.max(runningTotal, point.observationTokenCount);
     return { t: toT(point.ts, domain), observationTokenCount: runningTotal };
   });
@@ -81,11 +77,9 @@ function toActiveObservationData(
 function toBufferedObservationData(markers: ExtractedOmMarker[], domain: TDomain) {
   const points = markers
     .filter(
-      (marker) =>
-        marker.observationTokens != null &&
-        (marker.type === 'buffering-end' || marker.type === 'activation'),
+      marker => marker.observationTokens != null && (marker.type === 'buffering-end' || marker.type === 'activation'),
     )
-    .map((marker) => ({
+    .map(marker => ({
       ts: marker.timestamp,
       bufferedObservationTokenCount:
         marker.type === 'activation' ? -marker.observationTokens! : marker.observationTokens!,
@@ -93,7 +87,7 @@ function toBufferedObservationData(markers: ExtractedOmMarker[], domain: TDomain
     .sort((a, b) => a.ts.localeCompare(b.ts));
 
   let runningTotal = 0;
-  return points.map((point) => {
+  return points.map(point => {
     runningTotal = Math.max(0, runningTotal + point.bufferedObservationTokenCount);
     return { t: toT(point.ts, domain), bufferedObservationTokenCount: runningTotal };
   });
@@ -101,16 +95,14 @@ function toBufferedObservationData(markers: ExtractedOmMarker[], domain: TDomain
 
 function toEventData(records: OMHistoryRecord[], domain: TDomain) {
   return [...records]
-    .sort((a, b) =>
-      String(getObservationTimestamp(a)).localeCompare(String(getObservationTimestamp(b))),
-    )
-    .map((r) => ({ t: toT(String(getObservationTimestamp(r)), domain), event: 1 }));
+    .sort((a, b) => String(getObservationTimestamp(a)).localeCompare(String(getObservationTimestamp(b))))
+    .map(r => ({ t: toT(String(getObservationTimestamp(r)), domain), event: 1 }));
 }
 
 function toMessageData(messages: MemoryMessage[], domain: TDomain) {
   return [...messages]
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    .map((m) => ({
+    .map(m => ({
       t: toT(new Date(m.createdAt).toISOString(), domain),
       event: 1,
       role: m.role,
@@ -125,7 +117,7 @@ function TimeAxis({ domain }: { domain: TDomain }) {
         Time
       </p>
       <div className="flex justify-between px-1 py-1.5 font-mono text-[9px] text-icon3">
-        {ticks.map((t) => (
+        {ticks.map(t => (
           <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
         ))}
       </div>
@@ -147,9 +139,7 @@ function FlameTooltip({
   if (!active || !payload?.length) return null;
   const t = payload[0]?.payload?.t;
   const time = domain != null && t != null ? formatTimeDisplay(tToTimestamp(t, domain)) : null;
-  const visibleEntries = payload.filter(
-    (entry) => entry.name !== 't' && entry.name !== 'time' && entry.value != null,
-  );
+  const visibleEntries = payload.filter(entry => entry.name !== 't' && entry.name !== 'time' && entry.value != null);
 
   if (showValue) {
     return (
@@ -160,13 +150,11 @@ function FlameTooltip({
             <span className="text-[var(--mastra-el-6)]">{time}</span>
           </div>
         )}
-        {visibleEntries.map((entry) => (
+        {visibleEntries.map(entry => (
           <div key={entry.name} className="flex items-center justify-between gap-3">
             <span className="text-icon3">{entry.name}</span>
             <span className="text-[var(--mastra-el-6)]">
-              {typeof entry.value === 'number'
-                ? Math.round(entry.value).toLocaleString()
-                : String(entry.value)}
+              {typeof entry.value === 'number' ? Math.round(entry.value).toLocaleString() : String(entry.value)}
             </span>
           </div>
         ))}
@@ -192,17 +180,8 @@ interface AreaRowProps {
   threshold?: number;
 }
 
-function AreaRow({
-  label,
-  data,
-  dataKey,
-  color,
-  gradientId,
-  domain,
-  zoomDomain,
-  threshold,
-}: AreaRowProps) {
-  const maxValue = Math.max(0, ...data.map((d) => Number(d[dataKey]) || 0));
+function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, threshold }: AreaRowProps) {
+  const maxValue = Math.max(0, ...data.map(d => Number(d[dataKey]) || 0));
   const yMax = threshold != null ? Math.max(maxValue, threshold) : undefined;
 
   return (
@@ -311,22 +290,17 @@ function CombinedRow({
   threshold,
   height = 44,
 }: CombinedRowProps) {
-  const areaValueByTime = new Map(areaData.map((point) => [point.t, Number(point[areaDataKey] ?? 0)]));
-  const eventsByTime = eventData.reduce<Map<number, Array<(typeof eventData)[number]>>>(
-    (acc, event) => {
-      const bucket = acc.get(event.t);
-      if (bucket) {
-        bucket.push(event);
-      } else {
-        acc.set(event.t, [event]);
-      }
-      return acc;
-    },
-    new Map(),
-  );
-  const allTimes = Array.from(new Set([...areaValueByTime.keys(), ...eventsByTime.keys()])).sort(
-    (a, b) => a - b,
-  );
+  const areaValueByTime = new Map(areaData.map(point => [point.t, Number(point[areaDataKey] ?? 0)]));
+  const eventsByTime = eventData.reduce<Map<number, Array<(typeof eventData)[number]>>>((acc, event) => {
+    const bucket = acc.get(event.t);
+    if (bucket) {
+      bucket.push(event);
+    } else {
+      acc.set(event.t, [event]);
+    }
+    return acc;
+  }, new Map());
+  const allTimes = Array.from(new Set([...areaValueByTime.keys(), ...eventsByTime.keys()])).sort((a, b) => a - b);
 
   let lastAreaValue = 0;
   const combinedData: Array<Record<string, unknown> & { t: number }> = [];
@@ -377,19 +351,11 @@ function CombinedRow({
               dot={(props: Record<string, unknown>) => {
                 const dotPayload = props.payload as { event?: number } | undefined;
                 if (!dotPayload?.event) return <></>;
-                return (
-                  <circle cx={props.cx as number} cy={props.cy as number} r={4} fill={color} />
-                );
+                return <circle cx={props.cx as number} cy={props.cy as number} r={4} fill={color} />;
               }}
             />
             {threshold != null && (
-              <ReferenceLine
-                yAxisId="area"
-                y={threshold}
-                stroke={color}
-                strokeDasharray="4 3"
-                strokeOpacity={0.4}
-              />
+              <ReferenceLine yAxisId="area" y={threshold} stroke={color} strokeDasharray="4 3" strokeOpacity={0.4} />
             )}
           </ComposedChart>
         </ResponsiveContainer>
@@ -464,7 +430,7 @@ function ZoomTrack({
       <div
         ref={trackRef}
         className="relative h-6 cursor-pointer select-none"
-        onMouseDown={(e) => {
+        onMouseDown={e => {
           const ts = toTimestamp(e.clientX);
           if (ts == null) return;
           e.preventDefault();
@@ -491,7 +457,7 @@ function ZoomTrack({
         <div
           className="absolute inset-y-0 w-1 cursor-col-resize bg-[var(--mastra-el-6)]/50 hover:bg-[var(--mastra-el-6)]"
           style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
-          onMouseDown={(e) => {
+          onMouseDown={e => {
             e.preventDefault();
             e.stopPropagation();
             dragging.current = 'left';
@@ -500,7 +466,7 @@ function ZoomTrack({
         <div
           className="absolute inset-y-0 w-1 cursor-col-resize bg-[var(--mastra-el-6)]/50 hover:bg-[var(--mastra-el-6)]"
           style={{ left: `${rightPercent}%`, transform: 'translateX(-50%)' }}
-          onMouseDown={(e) => {
+          onMouseDown={e => {
             e.preventDefault();
             e.stopPropagation();
             dragging.current = 'right';
@@ -542,18 +508,12 @@ export function FlameGraph({
   const zoomDomain: [number, number] = [zoomTLeft, zoomTRight];
 
   const messageData = useMemo(() => toMessageData(messages, domain), [messages, domain]);
-  const contextData = useMemo(
-    () => toContextData(omRecords, markers, domain),
-    [omRecords, markers, domain],
-  );
+  const contextData = useMemo(() => toContextData(omRecords, markers, domain), [omRecords, markers, domain]);
   const activeObservationData = useMemo(
     () => toActiveObservationData(omRecords, markers, domain),
     [omRecords, markers, domain],
   );
-  const bufferedObservationData = useMemo(
-    () => toBufferedObservationData(markers, domain),
-    [markers, domain],
-  );
+  const bufferedObservationData = useMemo(() => toBufferedObservationData(markers, domain), [markers, domain]);
   const eventData = useMemo(() => toEventData(omRecords, domain), [omRecords, domain]);
 
   const hasData =

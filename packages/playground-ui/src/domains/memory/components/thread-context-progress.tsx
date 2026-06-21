@@ -61,9 +61,7 @@ export function ThreadContextProgress({
         {showMessages ? (
           <ProgressBar label="Messages" value={messageTokens} max={messageThreshold} tone="message" />
         ) : null}
-        {showMemory ? (
-          <ProgressBar label="Memory" value={memoryTokens} max={memoryThreshold} tone="memory" />
-        ) : null}
+        {showMemory ? <ProgressBar label="Memory" value={memoryTokens} max={memoryThreshold} tone="memory" /> : null}
       </div>
     </div>
   );

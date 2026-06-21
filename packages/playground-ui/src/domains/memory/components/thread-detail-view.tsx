@@ -47,7 +47,7 @@ export function ThreadDetailView({
   const markers = useMemo(() => extractOmMarkers(messages), [messages]);
   const tDomain = useMemo(() => {
     if (messages.length === 0) return { tMin: 0, tMax: 1 };
-    return timestampsToTDomain(messages.map((m) => new Date(m.createdAt).toISOString()));
+    return timestampsToTDomain(messages.map(m => new Date(m.createdAt).toISOString()));
   }, [messages]);
   const currentWindowState = useMemo(
     () => getLatestThreadContextWindowState({ markers, omRecords }),
@@ -132,12 +132,7 @@ export function ThreadDetailView({
                 memoryTokens={currentWindowState.memoryTokens}
                 memoryThreshold={currentWindowState.memoryThreshold}
               />
-              <FlameGraph
-                omRecords={omRecords}
-                markers={markers}
-                messages={messages}
-                tDomain={tDomain}
-              />
+              <FlameGraph omRecords={omRecords} markers={markers} messages={messages} tDomain={tDomain} />
             </div>
           </div>
         )}

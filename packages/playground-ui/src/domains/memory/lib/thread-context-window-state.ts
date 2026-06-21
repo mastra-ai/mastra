@@ -15,9 +15,7 @@ function getObservationTimestamp(record: OMHistoryRecord): string {
 }
 
 function sortObservationRecords(records: OMHistoryRecord[]) {
-  return [...records].sort(
-    (a, b) => parseUTC(getObservationTimestamp(a)) - parseUTC(getObservationTimestamp(b)),
-  );
+  return [...records].sort((a, b) => parseUTC(getObservationTimestamp(a)) - parseUTC(getObservationTimestamp(b)));
 }
 
 export function getLatestThreadContextWindowState({
@@ -32,10 +30,7 @@ export function getLatestThreadContextWindowState({
   reflectionThreshold?: number;
 }): ThreadContextWindowState {
   const latestStatusMarker = [...markers]
-    .filter(
-      (marker) =>
-        marker.type === 'status' && (marker.pendingTokens != null || marker.observationTokens != null),
-    )
+    .filter(marker => marker.type === 'status' && (marker.pendingTokens != null || marker.observationTokens != null))
     .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
     .at(-1);
 
