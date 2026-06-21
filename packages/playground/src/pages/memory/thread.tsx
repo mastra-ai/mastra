@@ -26,7 +26,7 @@ export default function MemoryThreadPage() {
 
   const { data: thread, isLoading: isThreadLoading, error } = useMemoryThread(threadId);
   const { data: messagesData, isLoading: isMessagesLoading } = useMemoryThreadMessages(threadId);
-  const { data: omData, isLoading: isOMLoading } = useObservationalMemory(firstAgentId, threadId);
+  const { data: omData, isLoading: isOMLoading } = useObservationalMemory(firstAgentId, threadId, thread?.resourceId);
 
   if (error) {
     return (
