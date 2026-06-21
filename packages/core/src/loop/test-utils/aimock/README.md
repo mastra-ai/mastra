@@ -181,6 +181,7 @@ Tools support lifecycle hooks and streaming output:
 | `prepare-step.scenario.test.ts` | per-step `prepareStep` activeTools override lands in each request |
 | `workspace.scenario.test.ts` | workspace threaded into tool execution; tool reads a file mid-loop |
 | `skills-integration.scenario.test.ts` | SkillsProcessor discovers real SKILL.md files on disk via Workspace + LocalFilesystem; injects `<available_skills>` XML into system prompt; auto-injects `skill`/`skill_search`/`skill_read` tools; model calls `skill` tool to load instructions mid-loop; missing skills return graceful "not found" error |
+| `skills-same-name-disambiguation.scenario.test.ts` | same-named skills in different directories both listed in system prompt; local precedence over external when activated by name; path-based activation bypasses tie-breaking entirely |
 | `agents-as-tools.scenario.test.ts` | supervisor delegates to a subagent (`agent-<key>`); result plumbed back |
 | `dynamic-instructions.scenario.test.ts` | instructions resolved from request context land in the system prompt |
 | `provider-error.scenario.test.ts` | provider 500 surfaces an `error` chunk + `finishReason: 'error'` |
@@ -496,11 +497,12 @@ UI check.
 multi-step composition regressions that unit tests miss.
 
 **Final Deliverables:**
-- **79 scenario files** containing **169 passing tests**
+- **80 scenario files** containing **172 passing tests**
 - Coverage of **19 feature categories** documented in `docs/src/content/en/docs/agents/` and `docs/src/content/en/docs/workspace/`
 - **AIMock harness** (`aimock-scenario.ts`, `types.ts`) supporting complex multi-turn loops,
   approval flows, background tasks, goals, delegation, processors, memory integration,
-  shared-agent storage for suspend/resume scenarios, and real workspace + skills integration
+  shared-agent storage for suspend/resume scenarios, real workspace + skills integration,
+  and same-named skill tie-breaking edge cases
 - **Comprehensive README** with scenario catalog, scripting guide, and regression-injection proof
 - **CHANGELOG entry** documenting the initiative
 
@@ -523,7 +525,7 @@ multi-step composition regressions that unit tests miss.
 16. Observability (tracing context, actor identity)
 17. Suspend/resume flows (autoResumeSuspendedTools, resumeStream, generate approval)
 18. Workflows-as-tools (workflow tool invocation)
-19. Skills integration (workspace discovery, system prompt injection, skill tool round-trip)
+19. Skills integration (workspace discovery, system prompt injection, skill tool round-trip, same-name tie-breaking, path disambiguation)
 
 **Proven Regression Detection:**
 Multiple scenarios have been validated via controlled code injection to catch real regressions
@@ -539,7 +541,7 @@ or already have robust unit tests at the appropriate layer. Justifications docum
 "Features Intentionally Not Covered" section above.
 
 **Test Suite Health:**
-- All 169 scenarios pass
+- All 172 scenarios pass
 - Typecheck clean (`tsc --noEmit`)
 - Zero changes to core loop source code (harness + scenarios only)
 - Comprehensive documentation for future scenario authors
