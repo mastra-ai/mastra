@@ -191,6 +191,8 @@ Tools support lifecycle hooks and streaming output:
 | Scenario | Behavior Covered |
 |---|---|
 | `signal-send-message.scenario.test.ts` | `subscribeToThread()` + `sendMessage()` flow: signal accepted with `action: 'wake'`, subscription receives the agent's response text; `sendStateSignal()` with `ifIdle: { behavior: 'persist' }` persists state without waking the agent; signal metadata includes correct `type`, `tagName`, `contents`, and `state` fields |
+| `signal-edge-cases.scenario.test.ts` | multiple subscribers on one thread both receive the same run; unsubscribed subscriber stops receiving messages; `sendStateSignal()` with unchanged `cacheKey` + `contents` is skipped (cache dedup) |
+| `signal-no-subscriber.scenario.test.ts` | `sendMessage()` to an idle, non-subscribed thread still wakes and completes a run (`action: 'wake'`, no subscriber required); `sendStateSignal()` with `ifIdle: { behavior: 'persist' }` persists (`action: 'persist'`, no `runId`) without waking a run |
 | `agents-as-tools.scenario.test.ts` | supervisor delegates to a subagent (`agent-<key>`); result plumbed back |
 | `dynamic-instructions.scenario.test.ts` | instructions resolved from request context land in the system prompt |
 | `provider-error.scenario.test.ts` | provider 500 surfaces an `error` chunk + `finishReason: 'error'` |
@@ -428,7 +430,7 @@ Revert any injection to restore the full suite to green.
 
 ## Coverage summary (final)
 
-**75 scenario files / 159 tests** covering the core agentic loop behaviors across all agent features and integrations. Scenarios test both the loop's emitted output and the per-turn HTTP requests sent to the model, catching cross-turn composition bugs that unit tests miss.
+**83 scenario files / 179 tests** covering the core agentic loop behaviors across all agent features and integrations. Scenarios test both the loop's emitted output and the per-turn HTTP requests sent to the model, catching cross-turn composition bugs that unit tests miss.
 
 **Categories covered:**
 
@@ -503,7 +505,7 @@ UI check.
 multi-step composition regressions that unit tests miss.
 
 **Final Deliverables:**
-- **81 scenario files** containing **174 passing tests**
+- **83 scenario files** containing **179 passing tests**
 - Coverage of **20 feature categories** documented in `docs/src/content/en/docs/agents/` and `docs/src/content/en/docs/workspace/`
 - **AIMock harness** (`aimock-scenario.ts`, `types.ts`) supporting complex multi-turn loops,
   approval flows, background tasks, goals, delegation, processors, memory integration,
