@@ -145,10 +145,10 @@ export * from './lib/template';
 export { usePlaygroundStore } from './store/playground-store';
 
 // Domains
-export * from './domains/memory';
 export * from './domains/metrics';
 export * from './domains/traces';
 export * from './domains/logs';
+export * from './domains/memory';
 
 // DS Types
 export type { LinkComponent, LinkComponentProps } from './ds/types/link-component';

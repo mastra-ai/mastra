@@ -1,13 +1,18 @@
 import { ArrowLeftIcon, BrainIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ElementType, ReactNode } from 'react';
 import { Badge } from '../../../ds/components/Badge';
 import { Button } from '../../../ds/components/Button';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { cn } from '../../../lib/utils';
 import type { MemoryMessage, OMHistoryRecord } from '../types';
+import { extractOmMarkers } from '../lib/extract-markers';
+import { timestampsToTDomain } from '../lib/timeline';
+import { getLatestThreadContextWindowState } from '../lib/thread-context-window-state';
+import { FlameGraph } from './flame-graph';
 import { MemoryMessageList } from './memory-message-list';
 import { ObservationDetailView } from './observation-detail-view';
+import { ThreadContextProgress } from './thread-context-progress';
 
 export interface ThreadDetailViewProps {
   thread: { id: string; title?: string; resourceId?: string } | undefined;
@@ -37,6 +42,16 @@ export function ThreadDetailView({
   const [selectedOMRecordId, setSelectedOMRecordId] = useState<string | null>(null);
   const [showOM, setShowOM] = useState(true);
   const hasOM = omRecords.length > 0 || isOMLoading;
+
+  const markers = useMemo(() => extractOmMarkers(messages), [messages]);
+  const tDomain = useMemo(() => {
+    if (messages.length === 0) return { tMin: 0, tMax: 1 };
+    return timestampsToTDomain(messages.map((m) => new Date(m.createdAt).toISOString()));
+  }, [messages]);
+  const currentWindowState = useMemo(
+    () => getLatestThreadContextWindowState({ markers, omRecords }),
+    [markers, omRecords],
+  );
 
   const BackWrapper = backHref && LinkComponent ? LinkComponent : 'button';
   const backProps = backHref && LinkComponent ? { href: backHref } : { type: 'button' as const, onClick: onBack };
@@ -98,15 +113,31 @@ export function ThreadDetailView({
           </div>
         </div>
 
-        {/* Right: Observation memory */}
+        {/* Right: Observation memory + flame graph */}
         {hasOM && showOM && (
-          <div className="min-w-0 flex flex-col overflow-hidden">
-            <ObservationDetailView
-              records={omRecords}
-              selectedRecordId={selectedOMRecordId}
-              onSelectRecord={setSelectedOMRecordId}
-              isLoading={isOMLoading}
-            />
+          <div className="min-w-0 grid grid-rows-[1fr_auto] overflow-hidden">
+            <div className="min-h-0 flex flex-col overflow-hidden">
+              <ObservationDetailView
+                records={omRecords}
+                selectedRecordId={selectedOMRecordId}
+                onSelectRecord={setSelectedOMRecordId}
+                isLoading={isOMLoading}
+              />
+            </div>
+            <div className="border-t border-[var(--mastra-border-1)]">
+              <ThreadContextProgress
+                messageTokens={currentWindowState.messageTokens}
+                messageThreshold={currentWindowState.messageThreshold}
+                memoryTokens={currentWindowState.memoryTokens}
+                memoryThreshold={currentWindowState.memoryThreshold}
+              />
+              <FlameGraph
+                omRecords={omRecords}
+                markers={markers}
+                messages={messages}
+                tDomain={tDomain}
+              />
+            </div>
           </div>
         )}
       </div>
