@@ -5,7 +5,12 @@ import type {
   GetMemoryStatusResponse,
 } from '@mastra/client-js';
 
-export type { ListMemoryThreadsResponse, ListMemoryThreadMessagesResponse, GetObservationalMemoryResponse, GetMemoryStatusResponse };
+export type {
+  ListMemoryThreadsResponse,
+  ListMemoryThreadMessagesResponse,
+  GetObservationalMemoryResponse,
+  GetMemoryStatusResponse,
+};
 
 export type MemoryThread = ListMemoryThreadsResponse['threads'][number];
 

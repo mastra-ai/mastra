@@ -370,7 +370,11 @@ export const routes: RouteObject[] = [
 
       { path: '/logs', element: <Logs />, handle: navHandle('/logs') },
       { path: '/memory', element: <Memory />, handle: navHandle('/memory') },
-      { path: '/memory/:threadId', element: <MemoryThread />, handle: navHandleWithChildren('/memory', [{ id: 'memory-thread', label: 'Thread' }]) },
+      {
+        path: '/memory/:threadId',
+        element: <MemoryThread />,
+        handle: navHandleWithChildren('/memory', [{ id: 'memory-thread', label: 'Thread' }]),
+      },
       { path: '/evaluation', element: <Evaluation />, handle: navHandle('/evaluation') },
       { path: '/scorers', element: <Scorers />, handle: navHandle('/scorers') },
       {

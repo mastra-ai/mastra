@@ -44,7 +44,10 @@ export function ThreadDetailView({
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="flex shrink-0 items-center gap-2 border-b border-[var(--mastra-border-1)] px-4 py-2.5">
         {(onBack || backHref) && (
-          <BackWrapper {...backProps} className="flex items-center gap-1.5 text-xs text-[var(--mastra-el-3)] hover:text-[var(--mastra-el-6)] transition-colors">
+          <BackWrapper
+            {...backProps}
+            className="flex items-center gap-1.5 text-xs text-[var(--mastra-el-3)] hover:text-[var(--mastra-el-6)] transition-colors"
+          >
             <ArrowLeftIcon className="size-3" />
             <span>Threads</span>
           </BackWrapper>

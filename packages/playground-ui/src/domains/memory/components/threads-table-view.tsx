@@ -74,7 +74,11 @@ export function ThreadsTableView({
 
   if (isError) {
     return (
-      <EmptyState iconSlot={<InboxIcon className="size-4" />} titleSlot="Failed to load threads" descriptionSlot="An error occurred while loading memory threads." />
+      <EmptyState
+        iconSlot={<InboxIcon className="size-4" />}
+        titleSlot="Failed to load threads"
+        descriptionSlot="An error occurred while loading memory threads."
+      />
     );
   }
 

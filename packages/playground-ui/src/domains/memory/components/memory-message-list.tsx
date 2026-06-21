@@ -25,7 +25,12 @@ interface MastraV2Content {
 }
 
 function isMastraV2(content: unknown): content is MastraV2Content {
-  return typeof content === 'object' && content !== null && 'parts' in content && Array.isArray((content as { parts?: unknown }).parts);
+  return (
+    typeof content === 'object' &&
+    content !== null &&
+    'parts' in content &&
+    Array.isArray((content as { parts?: unknown }).parts)
+  );
 }
 
 function parseContent(content: unknown): unknown {
@@ -102,7 +107,9 @@ function MessageBubble({ message }: { message: MemoryMessage }) {
             <>
               <span className="text-xs font-mono text-icon3">{format(new Date(message.createdAt), 'HH:mm:ss')}</span>
               <span className="text-icon3">·</span>
-              <Badge variant="info" size="xs">User</Badge>
+              <Badge variant="info" size="xs">
+                User
+              </Badge>
             </>
           ) : (
             <>
@@ -117,10 +124,14 @@ function MessageBubble({ message }: { message: MemoryMessage }) {
         <div
           className={cn(
             'rounded-lg px-3 py-2 text-sm leading-relaxed',
-            isUser ? 'bg-[var(--mastra-bg-3)] text-[var(--mastra-el-6)]' : 'bg-[var(--mastra-bg-2)] text-[var(--mastra-el-5)]',
+            isUser
+              ? 'bg-[var(--mastra-bg-3)] text-[var(--mastra-el-6)]'
+              : 'bg-[var(--mastra-bg-2)] text-[var(--mastra-el-5)]',
           )}
         >
-          <pre className={cn('whitespace-pre-wrap break-words font-sans', !expanded && 'max-h-[200px] overflow-hidden')}>
+          <pre
+            className={cn('whitespace-pre-wrap break-words font-sans', !expanded && 'max-h-[200px] overflow-hidden')}
+          >
             {text}
           </pre>
           {needsCollapse && (

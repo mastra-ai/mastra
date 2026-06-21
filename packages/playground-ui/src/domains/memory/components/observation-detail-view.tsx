@@ -31,19 +31,39 @@ function getPriorityFromEmoji(emoji?: string): ParsedItem['priority'] {
 
 function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
   if (nested) {
-    return { card: 'bg-transparent border-transparent', text: 'text-[var(--mastra-el-5)]', time: 'text-[var(--mastra-el-3)]' };
+    return {
+      card: 'bg-transparent border-transparent',
+      text: 'text-[var(--mastra-el-5)]',
+      time: 'text-[var(--mastra-el-3)]',
+    };
   }
   switch (priority) {
     case 'high':
-      return { card: 'border-purple-400/30 bg-purple-500/10', text: 'text-[var(--mastra-el-6)]', time: 'text-purple-200/80' };
+      return {
+        card: 'border-purple-400/30 bg-purple-500/10',
+        text: 'text-[var(--mastra-el-6)]',
+        time: 'text-purple-200/80',
+      };
     case 'medium':
       return { card: 'border-blue-400/30 bg-blue-500/10', text: 'text-[var(--mastra-el-6)]', time: 'text-blue-200/80' };
     case 'low':
-      return { card: 'border-emerald-400/30 bg-emerald-500/10', text: 'text-[var(--mastra-el-6)]', time: 'text-emerald-200/80' };
+      return {
+        card: 'border-emerald-400/30 bg-emerald-500/10',
+        text: 'text-[var(--mastra-el-6)]',
+        time: 'text-emerald-200/80',
+      };
     case 'complete':
-      return { card: 'border-green-400/30 bg-green-500/10', text: 'text-[var(--mastra-el-6)]', time: 'text-green-200/80' };
+      return {
+        card: 'border-green-400/30 bg-green-500/10',
+        text: 'text-[var(--mastra-el-6)]',
+        time: 'text-green-200/80',
+      };
     default:
-      return { card: 'border-[var(--mastra-border-1)] bg-[var(--mastra-bg-2)]', text: 'text-[var(--mastra-el-6)]', time: 'text-[var(--mastra-el-3)]' };
+      return {
+        card: 'border-[var(--mastra-border-1)] bg-[var(--mastra-bg-2)]',
+        text: 'text-[var(--mastra-el-6)]',
+        time: 'text-[var(--mastra-el-3)]',
+      };
   }
 }
 
@@ -160,7 +180,12 @@ export interface ObservationDetailViewProps {
   isLoading?: boolean;
 }
 
-export function ObservationDetailView({ records, selectedRecordId, onSelectRecord, isLoading }: ObservationDetailViewProps) {
+export function ObservationDetailView({
+  records,
+  selectedRecordId,
+  onSelectRecord,
+  isLoading,
+}: ObservationDetailViewProps) {
   const [showDiff, setShowDiff] = useState(false);
 
   const sorted = useMemo(
@@ -185,7 +210,11 @@ export function ObservationDetailView({ records, selectedRecordId, onSelectRecor
   if (!selected) {
     return (
       <div className="flex h-full items-center justify-center">
-        <EmptyState iconSlot={<BrainIcon className="size-4" />} titleSlot="No observations" descriptionSlot="No observational memory snapshots available for this thread." />
+        <EmptyState
+          iconSlot={<BrainIcon className="size-4" />}
+          titleSlot="No observations"
+          descriptionSlot="No observational memory snapshots available for this thread."
+        />
       </div>
     );
   }
@@ -202,7 +231,9 @@ export function ObservationDetailView({ records, selectedRecordId, onSelectRecor
               <span className="font-mono text-[10px] text-[var(--mastra-el-3)] tabular-nums">
                 {showDiff && previousRecord ? (
                   <>
-                    {previousRecord.observationTokenCount} → <span className="font-semibold text-[var(--mastra-el-6)]">{selected.observationTokenCount}</span> tokens
+                    {previousRecord.observationTokenCount} →{' '}
+                    <span className="font-semibold text-[var(--mastra-el-6)]">{selected.observationTokenCount}</span>{' '}
+                    tokens
                   </>
                 ) : (
                   <>{selected.observationTokenCount} tokens</>
@@ -248,7 +279,9 @@ export function ObservationDetailView({ records, selectedRecordId, onSelectRecor
                   type="button"
                   className={cn(
                     'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors',
-                    isSelected ? 'bg-[var(--mastra-bg-3)] text-[var(--mastra-el-6)]' : 'text-[var(--mastra-el-3)] hover:bg-[var(--mastra-bg-2)]',
+                    isSelected
+                      ? 'bg-[var(--mastra-bg-3)] text-[var(--mastra-el-6)]'
+                      : 'text-[var(--mastra-el-3)] hover:bg-[var(--mastra-bg-2)]',
                   )}
                   onClick={() => onSelectRecord(record.id)}
                 >
@@ -256,8 +289,16 @@ export function ObservationDetailView({ records, selectedRecordId, onSelectRecor
                     #{record.generationCount}
                   </Badge>
                   <span className="font-mono tabular-nums">{record.observationTokenCount} tokens</span>
-                  {record.isObserving && <Badge variant="warning" size="xs">Observing</Badge>}
-                  {record.isReflecting && <Badge variant="info" size="xs">Reflecting</Badge>}
+                  {record.isObserving && (
+                    <Badge variant="warning" size="xs">
+                      Observing
+                    </Badge>
+                  )}
+                  {record.isReflecting && (
+                    <Badge variant="info" size="xs">
+                      Reflecting
+                    </Badge>
+                  )}
                 </button>
               );
             })}
