@@ -13,6 +13,7 @@ From root prefer specific scripts like pnpm build:core or pnpm --filter ./packag
 Do not pnpm run setup pnpm build pnpm build:packages or repo wide test runs when package local is enough
 Building whole monorepo is slow and should be last resort
 Before pushing commits or opening PRs run the narrowest relevant local checks; if CodeRabbit CLI is installed and configured, run a local CodeRabbit review too
+Always run lint and format before opening a PR; CI runs prettier --check and will fail on unformatted files. Fix formatting with pnpm prettier:format (or pnpm prettier:changed for only changed files) and verify with pnpm prettier:format:check; run pnpm lint for eslint on changed packages
 some integration tests need pnpm i --ignore-workspace
 
 features and new packages need related docs updates
