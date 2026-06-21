@@ -1,9 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { Button, cn } from '@mastra/playground-ui';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { MessageFactory } from '@mastra/react';
 import type { MessageRenderers } from '@mastra/react';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import type { DataMessagePart } from '../tools/tool-card';
 import { DatasetSaveAction } from './dataset-save-action';
@@ -137,20 +138,11 @@ const isPendingMessage = (message: MastraDBMessage): boolean => {
 };
 
 const CopyButton = ({ text }: { text: string }) => {
-  const [copied, setCopied] = useState(false);
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
+
   return (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      tooltip="Copy"
-      aria-label="Copy"
-      onClick={() => {
-        void navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-    >
-      {copied ? <CheckIcon /> : <CopyIcon />}
+    <Button variant="ghost" size="icon-xs" tooltip="Copy" aria-label="Copy" onClick={() => copyToClipboard(text)}>
+      {isCopied ? <CheckIcon /> : <CopyIcon />}
     </Button>
   );
 };
