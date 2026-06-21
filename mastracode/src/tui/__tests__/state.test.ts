@@ -41,17 +41,20 @@ vi.mock('../../utils/project.js', async importOriginal => {
 
 import { createTUIState } from '../state.js';
 
-function createHarness() {
+function createSession() {
   return {
-    session: {
-      mode: { resolve: vi.fn(() => ({ id: 'build', metadata: { color: '#7c3aed' } })) },
-    },
+    mode: { resolve: vi.fn(() => ({ id: 'build', metadata: { color: '#7c3aed' } })) },
   };
+}
+
+function createHarness(session: ReturnType<typeof createSession>) {
+  return { session };
 }
 
 describe('createTUIState', () => {
   it('initializes the shared TUI runtime defaults used by chat handlers', () => {
-    const harness = createHarness();
+    const session = createSession();
+    const harness = createHarness(session);
     const hookManager = {};
     const analytics = {};
     const authStorage = {};
@@ -60,6 +63,7 @@ describe('createTUIState', () => {
 
     const state = createTUIState({
       harness: harness as never,
+      session: session as never,
       hookManager: hookManager as never,
       analytics: analytics as never,
       authStorage: authStorage as never,

@@ -76,12 +76,11 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
     // Invoke the private buildToolsets to trigger createSubagentTool with the
     // wired-in cloneThreadForFork callback.
-    await (harness as unknown as { buildToolsets(ctx: RequestContext): Promise<unknown> }).buildToolsets(
-      new RequestContext(),
-    );
+    await (harness as any).buildToolsets(session, new RequestContext());
 
     expect(capturedOpts).toHaveLength(1);
     const captured = capturedOpts[0]!;
@@ -139,10 +138,12 @@ describe('Harness fork clone metadata wiring', () => {
         },
       ],
     });
+    await harness.init();
+    const session = await harness.createSession();
 
     const toolsets = (await (
-      harness as unknown as { buildToolsets(ctx: RequestContext): Promise<Record<string, unknown>> }
-    ).buildToolsets(new RequestContext())) as { harnessBuiltIn?: Record<string, unknown> };
+      harness as any
+    ).buildToolsets(session, new RequestContext())) as { harnessBuiltIn?: Record<string, unknown> };
 
     expect(capturedOpts).toHaveLength(0);
     expect(toolsets.harnessBuiltIn?.subagent).toBeUndefined();
@@ -182,10 +183,9 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
-    await (harness as unknown as { buildToolsets(ctx: RequestContext): Promise<unknown> }).buildToolsets(
-      new RequestContext(),
-    );
+    await (harness as any).buildToolsets(session, new RequestContext());
 
     expect(capturedOpts).toHaveLength(1);
     const captured = capturedOpts[0]!;
@@ -233,13 +233,14 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
     // All modes should return the same agent instance — no forking
-    const buildAgent = harness.getCurrentAgent();
-    await harness.session.mode.switch({ modeId: 'plan' });
-    const planAgent = harness.getCurrentAgent();
-    await harness.session.mode.switch({ modeId: 'build' });
-    const buildAgentAgain = harness.getCurrentAgent();
+    const buildAgent = harness.getCurrentAgent(session);
+    await session.mode.switch({ modeId: 'plan' });
+    const planAgent = harness.getCurrentAgent(session);
+    await session.mode.switch({ modeId: 'build' });
+    const buildAgentAgain = harness.getCurrentAgent(session);
 
     expect(buildAgent).toBe(baseAgent);
     expect(planAgent).toBe(baseAgent);
@@ -280,13 +281,14 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
     // Switch modes multiple times
-    harness.getCurrentAgent();
-    await harness.session.mode.switch({ modeId: 'plan' });
-    harness.getCurrentAgent();
-    await harness.session.mode.switch({ modeId: 'build' });
-    harness.getCurrentAgent();
+    harness.getCurrentAgent(session);
+    await session.mode.switch({ modeId: 'plan' });
+    harness.getCurrentAgent(session);
+    await session.mode.switch({ modeId: 'build' });
+    harness.getCurrentAgent(session);
 
     // The agent's own instructions should remain unchanged
     const agentInstructions = await baseAgent.getInstructions();
@@ -326,18 +328,19 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
-    const resolve = (harness as unknown as { resolveCurrentModeInstructions(): string | undefined })
+    const resolve = (harness as any)
       .resolveCurrentModeInstructions;
 
     // Default mode is 'build'
-    expect(resolve.call(harness)).toBe('Harness global.\nBuild mode.');
+    expect(resolve.call(harness, session)).toBe('Harness global.\nBuild mode.');
 
-    await harness.session.mode.switch({ modeId: 'plan' });
-    expect(resolve.call(harness)).toBe('Harness global.\nPlan mode.');
+    await session.mode.switch({ modeId: 'plan' });
+    expect(resolve.call(harness, session)).toBe('Harness global.\nPlan mode.');
 
-    await harness.session.mode.switch({ modeId: 'build' });
-    expect(resolve.call(harness)).toBe('Harness global.\nBuild mode.');
+    await session.mode.switch({ modeId: 'build' });
+    expect(resolve.call(harness, session)).toBe('Harness global.\nBuild mode.');
   });
 
   it('mode tools are included in toolsets when using shared config.agent', async () => {
@@ -372,21 +375,22 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
     const buildToolsets = (
-      harness as unknown as { buildToolsets(ctx: RequestContext): Promise<Record<string, unknown>> }
+      harness as any
     ).buildToolsets;
 
     // In 'build' mode, mode tools should appear in toolsets
-    const buildResult = (await buildToolsets.call(harness, new RequestContext())) as {
+    const buildResult = (await buildToolsets.call(harness, session, new RequestContext())) as {
       modeTools?: Record<string, unknown>;
     };
     expect(buildResult.modeTools).toBeDefined();
     expect(buildResult.modeTools!.buildTool).toBe(modeTool);
 
     // Switch to 'plan' mode (no mode tools) — modeTools should be absent
-    await harness.session.mode.switch({ modeId: 'plan' });
-    const planResult = (await buildToolsets.call(harness, new RequestContext())) as {
+    await session.mode.switch({ modeId: 'plan' });
+    const planResult = (await buildToolsets.call(harness, session, new RequestContext())) as {
       modeTools?: Record<string, unknown>;
     };
     expect(planResult.modeTools).toBeUndefined();
@@ -433,16 +437,17 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
     // Signal provider should always point at baseAgent, regardless of mode
     expect(signalProvider.getConnectedAgent()).toBe(baseAgent);
     expect(signalProvider.getConnectedAgent()!.hasOwnMemory()).toBe(true);
 
-    await harness.session.mode.switch({ modeId: 'plan' });
+    await session.mode.switch({ modeId: 'plan' });
     expect(signalProvider.getConnectedAgent()).toBe(baseAgent);
     expect(signalProvider.getConnectedAgent()!.hasOwnMemory()).toBe(true);
 
-    await harness.session.mode.switch({ modeId: 'build' });
+    await session.mode.switch({ modeId: 'build' });
     expect(signalProvider.getConnectedAgent()).toBe(baseAgent);
     expect(signalProvider.getConnectedAgent()!.hasOwnMemory()).toBe(true);
   });
@@ -484,13 +489,14 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
     // Deprecated mode.agent path — each mode gets its own agent
-    const currentBuild = harness.getCurrentAgent();
+    const currentBuild = harness.getCurrentAgent(session);
     expect(currentBuild).toBe(buildAgent);
 
-    await harness.session.mode.switch({ modeId: 'plan' });
-    const currentPlan = harness.getCurrentAgent();
+    await session.mode.switch({ modeId: 'plan' });
+    const currentPlan = harness.getCurrentAgent(session);
     expect(currentPlan).toBe(planAgent);
     expect(currentPlan).not.toBe(currentBuild);
   });
@@ -543,6 +549,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
     // After init, signal provider's connected agent (the base agent) should have memory
     const connectedAgent = signalProvider.getConnectedAgent()!;

@@ -47,7 +47,6 @@ import type {
   HarnessMessageContent,
   HarnessMode,
   HarnessRequestContext,
-  HarnessSession,
   HarnessThread,
   ModelAuthStatus,
   ToolCategory,
@@ -182,12 +181,19 @@ export class Harness<TState = {}> {
       }) => Promise<Workspace | undefined> | Workspace | undefined)
     | undefined = undefined;
   private workspaceInitialized = false;
+  private initPromise: Promise<void> | undefined = undefined;
+  private workspaceError: Error | undefined = undefined;
   private browser: MastraBrowser | undefined = undefined;
   private browserFn:
     | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
     | undefined = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
-  readonly #session: Session<TState>;
+  /**
+   * The mode every new session starts in. Resolved once at construction from
+   * `config.defaultModeId` (or the configured default/first mode) and reused by
+   * every {@link createSession} call. The Harness itself holds no session.
+   */
+  readonly #defaultMode: HarnessMode;
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
@@ -212,16 +218,7 @@ export class Harness<TState = {}> {
       );
     }
 
-    this.#session = this.#wireSession(
-      new Session({
-        resourceId: config.resourceId ?? config.id,
-        state: {
-          initialState: config.initialState,
-          stateSchema: config.stateSchema,
-        },
-      }),
-      defaultMode,
-    );
+    this.#defaultMode = defaultMode;
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
     if (config.workspace instanceof Workspace) {
@@ -249,7 +246,8 @@ export class Harness<TState = {}> {
    * dependencies (config catalog, resolvers, tracker, thread store). Extracted
    * from the constructor so additional sessions can be wired the same way.
    */
-  #wireSession(session: Session<TState>, defaultMode: HarnessMode): Session<TState> {
+  #wireSession(session: Session<TState>): Session<TState> {
+    const defaultMode = this.#defaultMode;
     session.mode.set({ modeId: defaultMode.id });
     session.setStore({
       get: key => session.thread.getSetting({ key }),
@@ -280,17 +278,18 @@ export class Harness<TState = {}> {
       setState: updates => void session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
     });
-    session.thread.connect(this.createThreadDataStore(), session as Session);
+    session.thread.connect(this.createThreadDataStore(session), session as Session);
     session.setMachinery({
-      getAgent: () => this.getCurrentAgent(),
-      subscribeToThread: ({ resourceId, threadId }) => this.getCurrentAgent().subscribeToThread({ resourceId, threadId }),
-      buildStreamOptions: input => this.buildAgentMessageStreamOptions(input),
-      buildSharedRunOptions: () => this.buildSharedRunOptions(),
-      buildToolsets: requestContext => this.buildToolsets(requestContext),
-      buildRequestContext: requestContext => this.buildRequestContext(requestContext),
-      persistTokenUsage: () => this.persistTokenUsage(),
+      getAgent: () => this.getCurrentAgent(session),
+      subscribeToThread: ({ resourceId, threadId }) =>
+        this.getCurrentAgent(session).subscribeToThread({ resourceId, threadId }),
+      buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
+      buildSharedRunOptions: () => this.buildSharedRunOptions(session),
+      buildToolsets: requestContext => this.buildToolsets(session, requestContext),
+      buildRequestContext: requestContext => this.buildRequestContext(session, requestContext),
+      persistTokenUsage: () => this.persistTokenUsage(session),
       generateId: () => this.generateId(),
-      resolveTransitionModeId: () => this.resolveTransitionModeId(),
+      resolveTransitionModeId: () => this.resolveTransitionModeId(session),
       saveSystemReminder: input => this.saveSystemReminder(input),
     });
 
@@ -308,6 +307,63 @@ export class Harness<TState = {}> {
     return session;
   }
 
+  /**
+   * Create a new, fully-wired {@link Session} and bring it online: it starts in
+   * the default mode with the seeded model, is connected to the Harness's shared
+   * machinery (agent, storage/lock, config catalog), and has a current thread
+   * (the most recent thread for `resourceId`, or a freshly created one).
+   *
+   * The Harness owns no session of its own — every consumer creates its own
+   * session and drives all work through it (`session.sendMessage`,
+   * `session.mode.switch`, `session.thread.*`, `session.subscribe`, ...). In a
+   * server / multiplayer setting, each request / thread / user gets its own
+   * session, isolated from every other: independent event bus, mode, model,
+   * state, and current thread.
+   *
+   * Call {@link init} once before creating sessions so shared storage and
+   * workspace are ready.
+   */
+  async createSession({ resourceId }: { resourceId?: string } = {}): Promise<Session<TState>> {
+    const session = this.#wireSession(
+      new Session({
+        resourceId: resourceId ?? this.config.resourceId ?? this.config.id,
+        state: {
+          initialState: this.config.initialState,
+          stateSchema: this.config.stateSchema,
+        },
+      }),
+    );
+
+    // Replay current workspace status onto the new session so a session created
+    // after init() still observes the shared workspace being ready (or failed).
+    if (this.workspace && this.workspaceInitialized) {
+      session.emit({ type: 'workspace_status_changed', status: 'ready' });
+      session.emit({
+        type: 'workspace_ready',
+        workspaceId: this.workspace.id,
+        workspaceName: this.workspace.name,
+      });
+    } else if (this.workspaceError) {
+      session.emit({ type: 'workspace_status_changed', status: 'error', error: this.workspaceError });
+      session.emit({ type: 'workspace_error', error: this.workspaceError });
+    }
+
+    // Bring the session online with a current thread: resume the most recent
+    // thread for this resource, or create a fresh one when none exist.
+    const threads = await session.thread.list();
+    if (threads.length === 0) {
+      await session.thread.create();
+    } else {
+      const mostRecent = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+      await this.config.threadLock?.acquire(mostRecent.id);
+      session.thread.set({ threadId: mostRecent.id });
+      await session.thread.loadMetadata();
+      await session.thread.ensureCurrentSubscription();
+    }
+
+    return session;
+  }
+
   // ===========================================================================
   // Accessors
   // ===========================================================================
@@ -319,15 +375,6 @@ export class Harness<TState = {}> {
    */
   getMastra(): Mastra | undefined {
     return this.#internalMastra;
-  }
-
-  /**
-   * The current harness session. Owns per-session runtime state such as
-   * session-scoped permission grants. Prefer `harness.session.*` over the
-   * (removed) re-exposed grant helpers on the Harness.
-   */
-  get session(): Session<TState> {
-    return this.#session;
   }
 
   /**
@@ -360,9 +407,16 @@ export class Harness<TState = {}> {
 
   /**
    * Initialize the harness — loads storage and workspace.
-   * Must be called before using the harness.
+   * Must be called before using the harness. Idempotent: repeated calls
+   * return the same in-flight/completed initialization instead of rebuilding
+   * the internal Mastra instance (which would orphan registered agents).
    */
   async init(): Promise<void> {
+    this.initPromise ??= this.runInit();
+    return this.initPromise;
+  }
+
+  private async runInit(): Promise<void> {
     // Create an internal Mastra instance so agents have access to storage
     // (required for tool approval snapshot persistence/resume).
     // We init storage through Mastra's proxied storage so augmentWithInit
@@ -390,23 +444,16 @@ export class Harness<TState = {}> {
           this.workspace = new Workspace(this.config.workspace as WorkspaceConfig);
         }
 
-        this.#session.emit({ type: 'workspace_status_changed', status: 'initializing' });
         await this.workspace.init();
         this.workspaceInitialized = true;
-
-        this.#session.emit({ type: 'workspace_status_changed', status: 'ready' });
-        this.#session.emit({
-          type: 'workspace_ready',
-          workspaceId: this.workspace.id,
-          workspaceName: this.workspace.name,
-        });
+        this.workspaceError = undefined;
       } catch (error) {
         const err = getErrorFromUnknown(error);
         this.workspace = undefined;
         this.workspaceInitialized = false;
-
-        this.#session.emit({ type: 'workspace_status_changed', status: 'error', error: err });
-        this.#session.emit({ type: 'workspace_error', error: err });
+        // Remember the failure so sessions created later can surface it; the
+        // Harness holds no session of its own to emit onto during init().
+        this.workspaceError = err;
       }
     }
 
@@ -430,26 +477,6 @@ export class Harness<TState = {}> {
     this.startHeartbeats();
   }
 
-  /**
-   * Select the most recent thread, or create one if none exist.
-   */
-  async selectOrCreateThread(): Promise<HarnessThread> {
-    const threads = await this.#session.thread.list();
-
-    if (threads.length === 0) {
-      return await this.#session.thread.create();
-    }
-
-    const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-    const mostRecent = sortedThreads[0]!;
-    await this.config.threadLock?.acquire(mostRecent.id);
-    this.#session.thread.set({ threadId: mostRecent.id });
-    await this.#session.thread.loadMetadata();
-    await this.#session.thread.ensureCurrentSubscription();
-
-    return mostRecent;
-  }
-
   private async getMemoryStorage(): Promise<MemoryStorage> {
     if (!this.config.storage) {
       throw new Error('Storage is not configured on this Harness');
@@ -466,7 +493,7 @@ export class Harness<TState = {}> {
    * through. The Session owns the thread-domain logic; this adapter just maps
    * raw storage rows to Harness types — it does not call back into Session.
    */
-  private createThreadDataStore(): ThreadDataStore {
+  private createThreadDataStore(session: Session<TState>): ThreadDataStore {
     return {
       listThreads: ({ resourceId, includeForkedSubagents }) =>
         this.queryThreads({ resourceId, includeForkedSubagents }),
@@ -480,7 +507,7 @@ export class Harness<TState = {}> {
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
       cloneThread: ({ sourceThreadId, resourceId, title }) =>
-        this.cloneThreadRow({ sourceThreadId, resourceId, title }),
+        this.cloneThreadRow(session, { sourceThreadId, resourceId, title }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -511,19 +538,22 @@ export class Harness<TState = {}> {
   }
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
-  private async cloneThreadRow({
-    sourceThreadId,
-    resourceId,
-    title,
-  }: {
-    sourceThreadId: string;
-    resourceId: string;
-    title?: string;
-  }): Promise<HarnessThread> {
+  private async cloneThreadRow(
+    session: Session<TState>,
+    {
+      sourceThreadId,
+      resourceId,
+      title,
+    }: {
+      sourceThreadId: string;
+      resourceId: string;
+      title?: string;
+    },
+  ): Promise<HarnessThread> {
     if (!this.config.memory) {
       throw new Error('Memory is not configured on this Harness');
     }
-    const memory = await this.resolveMemory();
+    const memory = await this.resolveMemory(session);
     const result = await memory.cloneThread({ sourceThreadId, resourceId, title });
     return {
       id: result.thread.id,
@@ -766,8 +796,8 @@ export class Harness<TState = {}> {
    * `buildAgentMessageStreamOptions` so the agent's own instructions are
    * never mutated.
    */
-  private resolveCurrentModeInstructions(): string | undefined {
-    const mode = this.#session.mode.resolve();
+  private resolveCurrentModeInstructions(session: Session<TState>): string | undefined {
+    const mode = session.mode.resolve();
     const combined = [this.#instructions ?? '', mode?.instructions ?? ''].filter(Boolean).join('\n');
     return combined || undefined;
   }
@@ -797,8 +827,8 @@ export class Harness<TState = {}> {
    * (`setObjective`/`getObjective`/`clearObjective`/`updateObjectiveOptions`),
    * which read/write the durable `threadState` `'goal'` slot.
    */
-  getCurrentAgent(): Agent {
-    const mode = this.#session.mode.resolve();
+  getCurrentAgent(session: Session<TState>): Agent {
+    const mode = session.mode.resolve();
 
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
   }
@@ -807,8 +837,8 @@ export class Harness<TState = {}> {
    * Check if the current model's provider has authentication configured.
    * Uses app-provided catalog/auth hooks; Harness does not resolve gateway auth itself.
    */
-  async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
-    const modelId = this.#session.model.get();
+  async getCurrentModelAuthStatus(session: Session<TState>): Promise<ModelAuthStatus> {
+    const modelId = session.model.get();
     if (!modelId) return { hasAuth: true };
 
     try {
@@ -885,25 +915,20 @@ export class Harness<TState = {}> {
   // Thread Management
   // ===========================================================================
 
-  async getResolvedMemory(): Promise<MastraMemory | null> {
-    if (!this.config.memory) return null;
-    return this.resolveMemory();
-  }
-
   /**
    * Point the session at a different memory resourceId. The resourceId itself
    * lives on the session (`session.identity`); the Harness orchestrates the
    * surrounding teardown — dropping the current thread subscription and clearing
    * the active thread — since those are Harness-owned.
    */
-  setResourceId({ resourceId }: { resourceId: string }): void {
-    this.#session.thread.cleanupSubscription();
-    this.#session.identity.setResourceId({ resourceId });
-    this.#session.thread.clear();
+  setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): void {
+    session.thread.cleanupSubscription();
+    session.identity.setResourceId({ resourceId });
+    session.thread.clear();
   }
 
-  async getKnownResourceIds(): Promise<string[]> {
-    const threads = await this.#session.thread.list({ allResources: true });
+  async getKnownResourceIds(session: Session<TState>): Promise<string[]> {
+    const threads = await session.thread.list({ allResources: true });
     const ids = new Set(threads.map(t => t.resourceId));
     return [...ids].sort();
   }
@@ -917,13 +942,13 @@ export class Harness<TState = {}> {
    * Reads the OM record and recent messages to reconstruct status,
    * then emits an `om_status` event for the UI.
    */
-  async loadOMProgress(): Promise<void> {
-    const threadId = this.#session.thread.getId();
+  async loadOMProgress(session: Session<TState>): Promise<void> {
+    const threadId = session.thread.getId();
     if (!threadId) return;
 
     try {
       const memoryStorage = await this.getMemoryStorage();
-      const record = await memoryStorage.getObservationalMemory(threadId, this.#session.identity.getResourceId());
+      const record = await memoryStorage.getObservationalMemory(threadId, session.identity.getResourceId());
 
       if (!record) return;
 
@@ -1010,7 +1035,7 @@ export class Harness<TState = {}> {
         if (foundStatus) break;
       }
 
-      this.#session.emit({
+      session.emit({
         type: 'om_status',
         windows: {
           active: {
@@ -1029,14 +1054,14 @@ export class Harness<TState = {}> {
     }
   }
 
-  async getObservationalMemoryRecord(): Promise<ObservationalMemoryRecord | null> {
-    if (!this.#session.thread.getId()) return null;
+  async getObservationalMemoryRecord(session: Session<TState>): Promise<ObservationalMemoryRecord | null> {
+    if (!session.thread.getId()) return null;
 
     try {
       const memoryStorage = await this.getMemoryStorage();
       return await memoryStorage.getObservationalMemory(
-        this.#session.thread.getId(),
-        this.#session.identity.getResourceId(),
+        session.thread.getId(),
+        session.identity.getResourceId(),
       );
     } catch {
       return null;
@@ -1056,20 +1081,22 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   private async buildAgentMessageStreamOptions({
+    session,
     requestContext: requestContextInput,
     tracingContext,
     tracingOptions,
   }: {
+    session: Session<TState>;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<Record<string, unknown>> {
-    if (!this.#session.thread.getId()) {
+    if (!session.thread.getId()) {
       throw new Error('Cannot build stream options without a current thread');
     }
 
-    this.#session.run.clearAbortRequested();
-    const requestContext = await this.buildRequestContext(requestContextInput);
+    session.run.clearAbortRequested();
+    const requestContext = await this.buildRequestContext(session, requestContextInput);
     // Resolve mode-aware instructions at call time so the agent's own
     // instructions are never mutated by the harness.
     // When mode/harness instructions exist, combine them with the agent's
@@ -1078,9 +1105,9 @@ export class Harness<TState = {}> {
     // full override.
     let callTimeInstructions: string | undefined;
     if (this.config.agent) {
-      const modeInstructions = this.resolveCurrentModeInstructions();
+      const modeInstructions = this.resolveCurrentModeInstructions(session);
       if (modeInstructions) {
-        const agent = this.getCurrentAgent();
+        const agent = this.getCurrentAgent(session);
         const agentInstructions = await agent.getInstructions({ requestContext });
         const agentStr = this.instructionsToString(agentInstructions);
         callTimeInstructions = [agentStr, modeInstructions].filter(Boolean).join('\n') || undefined;
@@ -1090,15 +1117,15 @@ export class Harness<TState = {}> {
     }
 
     const streamOptions: Record<string, unknown> = {
-      ...this.buildSharedRunOptions(),
-      memory: { thread: this.#session.thread.getId(), resource: this.#session.identity.getResourceId() },
-      abortSignal: this.#session.run.ensureAbortController().signal,
+      ...this.buildSharedRunOptions(session),
+      memory: { thread: session.thread.getId(), resource: session.identity.getResourceId() },
+      abortSignal: session.run.ensureAbortController().signal,
       requestContext,
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
-    streamOptions.toolsets = await this.buildToolsets(requestContext);
+    streamOptions.toolsets = await this.buildToolsets(session, requestContext);
 
     return streamOptions;
   }
@@ -1109,8 +1136,8 @@ export class Harness<TState = {}> {
    * missing `maxSteps` on resume silently caps the resumed run at the agent's
    * small default and ends it mid-task (see {@link HARNESS_MAX_STEPS}).
    */
-  private buildSharedRunOptions(): Record<string, unknown> {
-    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
+  private buildSharedRunOptions(session: Session<TState>): Record<string, unknown> {
+    const isYolo = (session.state.get() as Record<string, unknown>).yolo === true;
     const shared: Record<string, unknown> = {
       maxSteps: HARNESS_MAX_STEPS,
       savePerStep: false,
@@ -1119,7 +1146,7 @@ export class Harness<TState = {}> {
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
     // block is transparently retried on the fallback model instead of failing.
-    const fableFallback = buildFableFallbackProviderOptions(this.#session.model.get());
+    const fableFallback = buildFableFallbackProviderOptions(session.model.get());
     if (fableFallback) {
       shared.providerOptions = { anthropic: { ...fableFallback.anthropic } };
     }
@@ -1180,8 +1207,8 @@ export class Harness<TState = {}> {
    * catalog is Harness config, so this is host-owned. Returns `undefined` when
    * no default mode is configured.
    */
-  private resolveTransitionModeId(): string | undefined {
-    const currentMode = this.#session.mode.resolve();
+  private resolveTransitionModeId(session: Session<TState>): string | undefined {
+    const currentMode = session.mode.resolve();
     const transitionModeId =
       currentMode.transitionsTo ??
       this.config.defaultModeId ??
@@ -1547,7 +1574,7 @@ export class Harness<TState = {}> {
    * and optionally subagent) plus any user-configured tools.
    * Used by sendMessage, handleToolApprove, and handleToolDecline.
    */
-  private async buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput> {
+  private async buildToolsets(session: Session<TState>, requestContext: RequestContext): Promise<ToolsetsInput> {
     const builtInTools: ToolsInput = {
       ask_user: askUserTool,
       submit_plan: submitPlanTool,
@@ -1569,19 +1596,19 @@ export class Harness<TState = {}> {
 
     // Auto-create subagent tool if subagent definitions are configured
     if (this.config.subagents?.length && this.config.resolveModel) {
-      const currentMode = this.#session.mode.resolve();
+      const currentMode = session.mode.resolve();
       const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
         resolveModel: this.config.resolveModel,
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
-        getParentModelId: () => this.#session.model.get(),
+        getParentModelId: () => session.model.get(),
         // Resolved lazily so forked subagents see the current mode's agent
         // even if the mode switches between tool-call scheduling and execution.
         getParentAgent: () => {
           try {
-            return this.getCurrentAgent();
+            return this.getCurrentAgent(session);
           } catch {
             return undefined;
           }
@@ -1595,10 +1622,10 @@ export class Harness<TState = {}> {
         // see `listThreads` (filtered by default).
         cloneThreadForFork: hasMemory
           ? async ({ sourceThreadId, resourceId, title }) => {
-              const memory = await this.resolveMemory();
+              const memory = await this.resolveMemory(session);
               const result = await memory.cloneThread({
                 sourceThreadId,
-                resourceId: resourceId ?? this.#session.identity.getResourceId(),
+                resourceId: resourceId ?? session.identity.getResourceId(),
                 title,
                 metadata: {
                   forkedSubagent: true,
@@ -1615,7 +1642,7 @@ export class Harness<TState = {}> {
         // prompt-cache prefix, and stripping it would invalidate the cache.
         // Recursive forking is blocked at runtime instead: see the patched
         // `subagent` execute that the forked tool path installs in `tools.ts`.
-        getParentToolsets: forkRequestContext => this.buildToolsets(forkRequestContext ?? requestContext),
+        getParentToolsets: forkRequestContext => this.buildToolsets(session, forkRequestContext ?? requestContext),
       });
     }
 
@@ -1626,7 +1653,7 @@ export class Harness<TState = {}> {
       }
     }
 
-    const permissionRules = this.#session.permissions.getRules();
+    const permissionRules = session.permissions.getRules();
     for (const [toolId, policy] of Object.entries(permissionRules.tools)) {
       if (policy === 'deny') {
         delete builtInTools[toolId];
@@ -1649,7 +1676,7 @@ export class Harness<TState = {}> {
     // supported yet.  validateModes() already prevents setting both on the
     // same mode.
     if (this.config.agent) {
-      const currentMode = this.#session.mode.resolve();
+      const currentMode = session.mode.resolve();
       const modeTools = currentMode.tools ?? currentMode.additionalTools;
       if (modeTools) {
         result.modeTools = modeTools;
@@ -1663,29 +1690,32 @@ export class Harness<TState = {}> {
    * Build request context for agent execution.
    * Tools can access harness state via requestContext.get('harness').
    */
-  private async buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
+  private async buildRequestContext(
+    session: Session<TState>,
+    requestContext?: RequestContext,
+  ): Promise<RequestContext> {
     requestContext ??= new RequestContext();
     const harnessContext: HarnessRequestContext<TState> = {
       harnessId: this.id,
-      state: this.#session.state.get(),
-      getState: () => this.#session.state.get(),
-      setState: updates => this.#session.state.set(updates),
-      updateState: updater => this.#session.state.update(updater),
-      threadId: this.#session.thread.getId(),
-      resourceId: this.#session.identity.getResourceId(),
+      state: session.state.get(),
+      getState: () => session.state.get(),
+      setState: updates => session.state.set(updates),
+      updateState: updater => session.state.update(updater),
+      threadId: session.thread.getId(),
+      resourceId: session.identity.getResourceId(),
       session: {
-        modeId: this.#session.mode.get(),
-        modelId: this.#session.model.get(),
+        modeId: session.mode.get(),
+        modelId: session.model.get(),
         state: {
-          get: () => this.#session.state.get(),
-          set: updates => this.#session.state.set(updates),
-          update: updater => this.#session.state.update(updater),
+          get: () => session.state.get(),
+          set: updates => session.state.set(updates),
+          update: updater => session.state.update(updater),
         },
       },
-      abortSignal: this.#session.run.getAbortSignal(),
+      abortSignal: session.run.getAbortSignal(),
       workspace: this.workspace,
-      emitEvent: event => this.#session.emit(event),
-      getSubagentModelId: params => this.#session.subagents.model.get(params ?? {}),
+      emitEvent: event => session.emit(event),
+      getSubagentModelId: params => session.subagents.model.get(params ?? {}),
     };
 
     requestContext.set('harness', harnessContext);
@@ -1709,7 +1739,7 @@ export class Harness<TState = {}> {
   /**
    * Resolve memory from config — handles both static instances and dynamic factory functions.
    */
-  private async resolveMemory(): Promise<MastraMemory> {
+  private async resolveMemory(session: Session<TState>): Promise<MastraMemory> {
     const mem = this.config.memory;
     if (!mem) {
       throw new Error('Memory is not configured on this Harness');
@@ -1717,7 +1747,7 @@ export class Harness<TState = {}> {
     if (typeof mem !== 'function') {
       return mem;
     }
-    const requestContext = await this.buildRequestContext();
+    const requestContext = await this.buildRequestContext(session);
     const resolved = await Promise.resolve(mem({ requestContext }));
     if (!resolved) {
       throw new Error('Dynamic memory factory returned empty value');
@@ -1729,8 +1759,8 @@ export class Harness<TState = {}> {
   // Token Usage
   // ===========================================================================
 
-  private async persistTokenUsage(): Promise<void> {
-    const threadId = this.#session.thread.getId();
+  private async persistTokenUsage(session: Session<TState>): Promise<void> {
+    const threadId = session.thread.getId();
     if (!threadId || !this.config.storage) return;
 
     try {
@@ -1740,7 +1770,7 @@ export class Harness<TState = {}> {
         await memoryStorage.saveThread({
           thread: {
             ...thread,
-            metadata: { ...thread.metadata, tokenUsage: this.#session.getTokenUsage() },
+            metadata: { ...thread.metadata, tokenUsage: session.getTokenUsage() },
             updatedAt: new Date(),
           },
         });
@@ -1764,14 +1794,16 @@ export class Harness<TState = {}> {
    * Useful for code paths outside the request flow (e.g. slash commands).
    */
   async resolveWorkspace({
+    session,
     requestContext,
   }: {
+    session: Session<TState>;
     requestContext?: RequestContext;
-  } = {}): Promise<Workspace | undefined> {
+  }): Promise<Workspace | undefined> {
     if (this.workspace) return this.workspace;
     if (this.workspaceFn) {
       // buildRequestContext resolves the workspace and caches it on this.workspace
-      await this.buildRequestContext(requestContext);
+      await this.buildRequestContext(session, requestContext);
       return this.workspace;
     }
     return undefined;
@@ -1789,10 +1821,10 @@ export class Harness<TState = {}> {
   async destroyWorkspace(): Promise<void> {
     if (this.workspaceFn) return;
     if (this.workspace && this.workspaceInitialized) {
+      // The workspace is a Harness-shared resource torn down at Harness
+      // shutdown; there is no single session to emit lifecycle events onto.
       try {
-        this.#session.emit({ type: 'workspace_status_changed', status: 'destroying' });
         await this.workspace.destroy();
-        this.#session.emit({ type: 'workspace_status_changed', status: 'destroyed' });
       } catch (error) {
         console.warn('Workspace destroy failed:', error);
       } finally {
@@ -1882,21 +1914,11 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   async destroy(): Promise<void> {
-    this.#session.thread.cleanupSubscription();
+    // The Harness owns no session; per-session teardown (thread-subscription
+    // cleanup) is the caller's responsibility via `session.thread.*`. Here we
+    // only tear down Harness-shared resources.
     await this.stopHeartbeats();
     await this.destroyWorkspace();
-  }
-
-  // ===========================================================================
-  // Session
-  // ===========================================================================
-
-  async getSession(): Promise<HarnessSession> {
-    return {
-      currentThreadId: this.#session.thread.getId(),
-      currentModeId: this.#session.mode.get(),
-      threads: await this.#session.thread.list(),
-    };
   }
 
   // ===========================================================================

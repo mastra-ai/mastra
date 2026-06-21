@@ -31,7 +31,6 @@ export type {
   HarnessRequestState,
   HarnessRequestStateUpdater,
   HarnessRequestStateUpdateResult,
-  HarnessSession,
   HarnessStateSchema,
   HarnessSubagent,
   HarnessSubagentHistoryEntry,

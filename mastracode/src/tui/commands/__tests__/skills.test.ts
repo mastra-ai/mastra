@@ -70,6 +70,7 @@ describe('handleSkillCommand', () => {
       },
     };
     const ctx = {
+      state: { session: {} },
       harness: {
         hasWorkspace: vi.fn(() => true),
         resolveWorkspace: vi.fn().mockResolvedValue(workspace),

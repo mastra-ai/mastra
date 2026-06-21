@@ -118,31 +118,32 @@ describe('tool approval with LibSQLStore via Harness', () => {
     (harness as any).getAgentForMode = () => registeredAgent;
 
     await harness.init();
+    const session = await harness.createSession();
 
     // Collect events
     const events: any[] = [];
-    harness.session.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
     // Create a thread
-    await harness.session.thread.create();
+    await session.thread.create();
 
     // Send message — should hit tool-call-approval and auto-approve (policy = 'ask')
     // We need to respond to the approval prompt
     const approvalPromise = new Promise<void>(resolve => {
-      harness.session.subscribe(event => {
+      session.subscribe(event => {
         if (event.type === 'tool_approval_required') {
           // Must be async — the approval gate is armed after emit returns
           queueMicrotask(() => {
-            harness.session.respondToToolApproval({ decision: 'approve' });
+            session.respondToToolApproval({ decision: 'approve' });
             resolve();
           });
         }
       });
     });
 
-    await Promise.all([harness.session.sendMessage({ content: 'Read test.txt' }), approvalPromise]);
+    await Promise.all([session.sendMessage({ content: 'Read test.txt' }), approvalPromise]);
 
     // The tool should have been called
     expect(mockExecute).toHaveBeenCalledTimes(1);
