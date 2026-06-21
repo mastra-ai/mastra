@@ -1,22 +1,23 @@
-import { useMemo, useEffect, useRef, useCallback, useState } from 'react';
+import { RotateCcw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ResponsiveContainer,
-  AreaChart,
   Area,
+  AreaChart,
+  ComposedChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
   XAxis,
   YAxis,
-  Tooltip,
-  ScatterChart,
-  Scatter,
-  ReferenceLine,
-  ComposedChart,
 } from 'recharts';
-import { RotateCcw } from 'lucide-react';
+
 import { Button } from '../../../ds/components/Button';
-import type { MemoryMessage, OMHistoryRecord } from '../types';
 import type { ExtractedOmMarker } from '../lib/extract-markers';
 import type { TDomain } from '../lib/timeline';
-import { toT, tToTimestamp, formatTimeDisplay } from '../lib/timeline';
+import { formatTimeDisplay, toT, tToTimestamp } from '../lib/timeline';
+import type { MemoryMessage, OMHistoryRecord } from '../types';
 
 interface FlameGraphProps {
   omRecords: OMHistoryRecord[];

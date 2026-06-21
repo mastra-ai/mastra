@@ -1,14 +1,15 @@
 import { ArrowLeftIcon, BrainIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ElementType, ReactNode } from 'react';
+
 import { Badge } from '../../../ds/components/Badge';
 import { Button } from '../../../ds/components/Button';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { cn } from '../../../lib/utils';
-import type { MemoryMessage, OMHistoryRecord } from '../types';
 import { extractOmMarkers } from '../lib/extract-markers';
-import { timestampsToTDomain } from '../lib/timeline';
 import { getLatestThreadContextWindowState } from '../lib/thread-context-window-state';
+import { timestampsToTDomain } from '../lib/timeline';
+import type { MemoryMessage, OMHistoryRecord } from '../types';
 import { FlameGraph } from './flame-graph';
 import { MemoryMessageList } from './memory-message-list';
 import { ObservationDetailView } from './observation-detail-view';
