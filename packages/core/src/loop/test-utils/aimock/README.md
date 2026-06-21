@@ -180,6 +180,7 @@ Tools support lifecycle hooks and streaming output:
 | `input-processor.scenario.test.ts` | input processor redacts the user message before the request |
 | `prepare-step.scenario.test.ts` | per-step `prepareStep` activeTools override lands in each request |
 | `workspace.scenario.test.ts` | workspace threaded into tool execution; tool reads a file mid-loop |
+| `skills-integration.scenario.test.ts` | SkillsProcessor discovers real SKILL.md files on disk via Workspace + LocalFilesystem; injects `<available_skills>` XML into system prompt; auto-injects `skill`/`skill_search`/`skill_read` tools; model calls `skill` tool to load instructions mid-loop; missing skills return graceful "not found" error |
 | `agents-as-tools.scenario.test.ts` | supervisor delegates to a subagent (`agent-<key>`); result plumbed back |
 | `dynamic-instructions.scenario.test.ts` | instructions resolved from request context land in the system prompt |
 | `provider-error.scenario.test.ts` | provider 500 surfaces an `error` chunk + `finishReason: 'error'` |
@@ -445,7 +446,7 @@ already have robust, comprehensive unit tests at the appropriate layer:
 
 | Feature | Justification |
 | --- | --- |
-| **Skills integration** | Requires `SkillsProcessor` infrastructure, skill discovery, versioning. Already has comprehensive unit tests: `skills-with-custom-processors.test.ts` (595 lines), `skills-activation-persistence.test.ts` (320 lines), `skills.test.ts`, `skill-search.test.ts`. |
+| **Skills integration (on-demand discovery)** | On-demand skill discovery via SkillSearchProcessor is already well-tested in `skills-with-custom-processors.test.ts` (595 lines), `skills-activation-persistence.test.ts` (320 lines), `skills.test.ts`, `skill-search.test.ts`. Eager discovery is now covered by `skills-integration.scenario.test.ts`. |
 | **Provider retry with maxRetries** | Retry logic tested at processor level: `stream-error-retry-processor.test.ts` (171 lines). AIMock HTTP scenarios don't model p-retry behavior well. |
 | **Multi-model fallback** | Already has comprehensive unit tests: `credential-error-fallback.test.ts` (433 lines, 8+ tests), `per-model-fallback-settings.test.ts`. |
 | **TokenLimiterProcessor** | Already has comprehensive unit tests: `token-limiter.test.ts` (1229 lines, 96+ tests). |
@@ -495,10 +496,11 @@ UI check.
 multi-step composition regressions that unit tests miss.
 
 **Final Deliverables:**
-- **75 scenario files** containing **159 passing tests**
-- Coverage of **16 feature categories** documented in `docs/src/content/en/docs/agents/`
+- **79 scenario files** containing **169 passing tests**
+- Coverage of **19 feature categories** documented in `docs/src/content/en/docs/agents/` and `docs/src/content/en/docs/workspace/`
 - **AIMock harness** (`aimock-scenario.ts`, `types.ts`) supporting complex multi-turn loops,
-  approval flows, background tasks, goals, delegation, processors, and memory integration
+  approval flows, background tasks, goals, delegation, processors, memory integration,
+  shared-agent storage for suspend/resume scenarios, and real workspace + skills integration
 - **Comprehensive README** with scenario catalog, scripting guide, and regression-injection proof
 - **CHANGELOG entry** documenting the initiative
 
@@ -506,35 +508,49 @@ multi-step composition regressions that unit tests miss.
 1. Tool-result plumbing and cross-turn message ordering
 2. Stop conditions (`stepCountIs`, `maxSteps`, custom predicates)
 3. Tool execution errors and edge cases
-4. Approval gates (stream-level, tool-level, conditional)
-5. Structured output validation and streaming
+4. Approval gates (stream-level, tool-level, conditional, concurrent)
+5. Structured output validation, streaming, and error strategies
 6. Input/output processors (per-step, error processors, guardrails)
-7. Memory recall, working memory, multi-turn persistence
+7. Memory recall, working memory, multi-turn persistence, thread switching
 8. Goals and isTaskComplete (scorers, budget exhaustion, feedback injection)
 9. Background tasks (tool-level, agent-level, `streamUntilIdle`)
-10. Supervisor delegation (onDelegationStart, messageFilter)
-11. Dynamic configuration (instructions, model, requestContext, providerOptions)
-12. Lifecycle callbacks (onStepFinish, onFinish, onIterationComplete)
-13. Agents-as-tools (subagent invocation)
+10. Supervisor delegation (onDelegationStart, messageFilter, onDelegationComplete bail)
+11. Dynamic configuration (instructions, model, requestContext, providerOptions, toolChoice)
+12. Lifecycle callbacks (onStepFinish, onFinish, onIterationComplete, onError)
+13. Agents-as-tools (subagent invocation, nested tool calls)
 14. Workspace integration (file I/O)
 15. Streaming fidelity (text-delta reassembly, abort signal)
 16. Observability (tracing context, actor identity)
+17. Suspend/resume flows (autoResumeSuspendedTools, resumeStream, generate approval)
+18. Workflows-as-tools (workflow tool invocation)
+19. Skills integration (workspace discovery, system prompt injection, skill tool round-trip)
 
 **Proven Regression Detection:**
 Multiple scenarios have been validated via controlled code injection to catch real regressions
 in tool-result plumbing, completion feedback, error-chunk emission, goal scoring, approval
-resolution, delegation rejection, tool-call IDs, workspace context, and working memory.
+resolution, delegation rejection, tool-call IDs, workspace context, working memory injection,
+workflow tool naming, error processor retry counting, concurrent approval chunks, memory thread
+isolation, and structured output error strategy fallback.
 
 **Features Intentionally Not Covered:**
-13 documented features (workflows-as-tools, skills, channels, voice, SDK agents, etc.) are
-either infeasible in AIMock's HTTP-scenario model or already have robust unit tests at the
-appropriate layer. Justifications documented in the README.
+9 documented features (channels, voice, SDK agents, A2A/ACP, semantic recall, etc.)
+are either infeasible in AIMock's HTTP-scenario model (external integrations, infrastructure-heavy)
+or already have robust unit tests at the appropriate layer. Justifications documented in the
+"Features Intentionally Not Covered" section above.
 
 **Test Suite Health:**
-- All 159 scenarios pass
+- All 169 scenarios pass
 - Typecheck clean (`tsc --noEmit`)
 - Zero changes to core loop source code (harness + scenarios only)
 - Comprehensive documentation for future scenario authors
+
+**Comprehensive Audit (Round 17):**
+Final audit of all 18 agent feature docs confirmed:
+- Every core loop feature has AIMock scenario coverage
+- All remaining documented features are external integrations (channels, A2A/ACP, SDK agents),
+  infrastructure-heavy (semantic recall, code mode), or already have robust unit tests
+- AIMock harness now supports shared-agent storage, unlocking previously infeasible
+  suspend/resume scenarios (autoResumeSuspendedTools, resumeStream, generate approval)
 
 **Impact:**
 The core agentic loop now has battle-tested coverage of every major agent feature documented
