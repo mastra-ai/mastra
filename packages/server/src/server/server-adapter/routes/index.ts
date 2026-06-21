@@ -15,6 +15,7 @@ import { BACKGROUND_TASK_ROUTES } from './background-tasks';
 import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
+import { HARNESS_ROUTES } from './harness';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
@@ -192,6 +193,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...AGENT_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
   ...CHANNELS_ROUTES,
+  ...HARNESS_ROUTES,
 ];
 
 /**
