@@ -218,15 +218,15 @@ type OmStatus = { label: string; className: string };
 function getOmStatusForPart(part: ContentPart): OmStatus | null {
   switch (part.type) {
     case 'data-om-buffering-start':
-      return { label: 'Buffering', className: 'bg-amber-500/15 text-amber-500 border-amber-500/30' };
+      return { label: 'Buffering', className: 'bg-amber-500/15 text-amber-600 border-amber-500/30' };
     case 'data-om-buffering-end':
-      return { label: 'Buffered Observations', className: 'bg-blue-500/15 text-blue-500 border-blue-500/30' };
+      return { label: 'Buffered Observations', className: 'bg-blue-500/15 text-blue-600 border-blue-500/30' };
     case 'data-om-activation':
-      return { label: 'Activated Observations', className: 'bg-violet-500/15 text-violet-500 border-violet-500/30' };
+      return { label: 'Activated Observations', className: 'bg-violet-500/15 text-violet-600 border-violet-500/30' };
     case 'data-om-observation-start':
-      return { label: 'Observing', className: 'bg-amber-500/15 text-amber-500 border-amber-500/30' };
+      return { label: 'Observing', className: 'bg-amber-500/15 text-amber-600 border-amber-500/30' };
     case 'data-om-observation-end':
-      return { label: 'Observed', className: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' };
+      return { label: 'Observed', className: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30' };
     default:
       return null;
   }
@@ -239,32 +239,100 @@ function formatCompactTokens(value: number): string {
   return formatted.endsWith('.0') ? formatted.slice(0, -2) : formatted;
 }
 
-function OmMarker({ part }: { part: ContentPart }) {
-  const status = getOmStatusForPart(part);
-  if (!status) return null;
+type OmMarkerKind =
+  | 'buffering-start'
+  | 'buffering-end'
+  | 'activation'
+  | 'observation-start'
+  | 'observation-end';
 
-  const tokens = part.data?.tokensToObserve ?? part.data?.tokensToBuffer ?? part.data?.tokensActivated;
-  const obsTokens = part.data?.observationTokens ?? part.data?.bufferedTokens;
+type OmMetrics = {
+  pendingTokens?: number;
+  observationTokens?: number;
+};
 
-  let summary: string | null = null;
-  if (tokens != null && obsTokens != null) {
-    summary = `${formatCompactTokens(tokens)}k → ${formatCompactTokens(obsTokens)}k`;
-  } else if (tokens != null) {
-    summary = `${formatCompactTokens(tokens)}k`;
+type OmMarkerData = {
+  id: string;
+  statuses: OmStatus[];
+  metrics: OmMetrics;
+  kind: OmMarkerKind;
+  cycleId?: string;
+};
+
+function getOmMarkerKind(part: ContentPart): OmMarkerKind {
+  switch (part.type) {
+    case 'data-om-buffering-start': return 'buffering-start';
+    case 'data-om-buffering-end': return 'buffering-end';
+    case 'data-om-activation': return 'activation';
+    case 'data-om-observation-start': return 'observation-start';
+    case 'data-om-observation-end': return 'observation-end';
+    default: return 'activation';
   }
+}
+
+function buildOmMarkerData(message: MemoryMessage, part: ContentPart, index: number): OmMarkerData {
+  const pendingTokens = part.data?.tokensToObserve ?? part.data?.tokensToBuffer ?? part.data?.tokensActivated;
+  const observationTokens = part.data?.observationTokens ?? part.data?.bufferedTokens;
+  return {
+    id: `${message.id}-om-${index}`,
+    statuses: getOmStatusForPart(part) ? [getOmStatusForPart(part)!] : [],
+    metrics: { pendingTokens, observationTokens },
+    kind: getOmMarkerKind(part),
+    cycleId: part.data?.cycleId,
+  };
+}
+
+function formatCompressionRatio(input?: number, output?: number): string | null {
+  if (!input || !output || output <= 0) return null;
+  return `-${Math.max(1, Math.round(input / output))}x`;
+}
+
+function getOmMarkerSummary(marker: OmMarkerData): string | null {
+  const pending = marker.metrics.pendingTokens != null ? `${formatCompactTokens(marker.metrics.pendingTokens)}k` : null;
+  const observed = marker.metrics.observationTokens != null ? `${formatCompactTokens(marker.metrics.observationTokens)}k` : null;
+
+  switch (marker.kind) {
+    case 'buffering-end': {
+      const ratio = formatCompressionRatio(marker.metrics.pendingTokens, marker.metrics.observationTokens);
+      if (pending && observed && ratio) return `${pending} messages → ${observed} memory (${ratio})`;
+      if (pending && observed) return `${pending} messages → ${observed} memory`;
+      return pending ?? observed;
+    }
+    case 'activation':
+      if (pending && observed) return `-${pending} messages +${observed} memory`;
+      if (pending) return `-${pending} messages`;
+      if (observed) return `+${observed} memory`;
+      return null;
+    case 'observation-end': {
+      const ratio = formatCompressionRatio(marker.metrics.pendingTokens, marker.metrics.observationTokens);
+      if (pending && observed && ratio) return `${pending} observed → ${observed} memory (${ratio})`;
+      if (pending && observed) return `${pending} observed → ${observed} memory`;
+      return pending ?? observed;
+    }
+    default:
+      if (pending && observed) return `${pending} · ${observed}`;
+      return pending ?? observed;
+  }
+}
+
+function OmMarker({ marker }: { marker: OmMarkerData }) {
+  const primaryStatus = marker.statuses[marker.statuses.length - 1];
+  const summary = getOmMarkerSummary(marker);
 
   return (
     <div className="flex justify-center py-0.5">
       <div className="w-full max-w-3xl px-3 py-1.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono uppercase tracking-wide text-icon3">
-          <span
-            className={cn(
-              'h-5 rounded-full border px-2 inline-flex items-center text-[10px] shadow-none',
-              status.className,
-            )}
-          >
-            {status.label}
-          </span>
+          {primaryStatus ? (
+            <span
+              className={cn(
+                'h-5 rounded-full border px-2 inline-flex items-center text-[10px] shadow-none',
+                primaryStatus.className,
+              )}
+            >
+              {primaryStatus.label}
+            </span>
+          ) : null}
           {summary ? <span className="text-icon3 normal-case tracking-normal">{summary}</span> : null}
         </div>
       </div>
@@ -297,7 +365,7 @@ function shouldCollapseMessage(message: MemoryMessage): boolean {
 
 type TimelineEntry =
   | { type: 'message'; id: string; message: MemoryMessage }
-  | { type: 'marker'; id: string; part: ContentPart };
+  | { type: 'marker'; id: string; marker: OmMarkerData };
 
 function splitMessageIntoEntries(message: MemoryMessage): TimelineEntry[] {
   const content = parseContent(message.content);
@@ -331,7 +399,11 @@ function splitMessageIntoEntries(message: MemoryMessage): TimelineEntry[] {
     if (isOmPart(part)) {
       flushChunk();
       if (part.type !== 'data-om-status') {
-        entries.push({ type: 'marker', id: `${message.id}-om-${markerIndex}`, part });
+        entries.push({
+          type: 'marker',
+          id: `${message.id}-om-${markerIndex}`,
+          marker: buildOmMarkerData(message, part, markerIndex),
+        });
         markerIndex += 1;
       }
       continue;
@@ -344,6 +416,117 @@ function splitMessageIntoEntries(message: MemoryMessage): TimelineEntry[] {
   flushChunk();
 
   return entries.length > 0 ? entries : [{ type: 'message', id: message.id, message }];
+}
+
+function isToolResultOnlyMessage(message: MemoryMessage): boolean {
+  const content = parseContent(message.content);
+  if (!isMastraV2(content)) return false;
+  const toolParts = content.parts.filter(p => p.type === 'tool-invocation');
+  return toolParts.length > 0 && toolParts.every(p => p.toolInvocation?.state === 'result');
+}
+
+function isAssistantToolCallOnlyMessage(message: MemoryMessage): boolean {
+  if (message.role !== 'assistant') return false;
+  const content = parseContent(message.content);
+  if (!isMastraV2(content) || content.parts.length === 0) return false;
+  const visibleParts = content.parts.filter(p => p.type !== 'step-start' && !isOmPart(p));
+  return (
+    visibleParts.length > 0 &&
+    visibleParts.every(p => p.type === 'tool-invocation' && p.toolInvocation?.state !== 'result')
+  );
+}
+
+function mergeToolCallAndResultMessages(messages: MemoryMessage[]): MemoryMessage[] {
+  const merged: MemoryMessage[] = [];
+  for (let i = 0; i < messages.length; i += 1) {
+    const current = messages[i];
+    const next = messages[i + 1];
+    if (!current || !next || !isAssistantToolCallOnlyMessage(current) || !isToolResultOnlyMessage(next)) {
+      merged.push(current);
+      continue;
+    }
+    const currentContent = parseContent(current.content);
+    const nextContent = parseContent(next.content);
+    if (!isMastraV2(currentContent) || !isMastraV2(nextContent)) {
+      merged.push(current);
+      continue;
+    }
+    const currentVisible = currentContent.parts.filter(p => !isOmPart(p));
+    const currentOm = currentContent.parts.filter(p => isOmPart(p));
+    const nextVisible = nextContent.parts.filter(p => !isOmPart(p));
+    merged.push({
+      ...current,
+      content: { ...currentContent, parts: [...currentVisible, ...nextVisible, ...currentOm] } as unknown as MemoryMessage['content'],
+    });
+    i += 1;
+  }
+  return merged;
+}
+
+function mergeConsecutiveOmMarkers(entries: TimelineEntry[]): TimelineEntry[] {
+  const merged: TimelineEntry[] = [];
+  for (const entry of entries) {
+    const previous = merged[merged.length - 1];
+
+    if (entry.type === 'marker') {
+      let matchingStartIndex = -1;
+      if (entry.marker.cycleId) {
+        for (let i = merged.length - 1; i >= 0; i -= 1) {
+          const candidate = merged[i];
+          if (candidate?.type !== 'marker') continue;
+          const isBufferingMatch =
+            candidate.marker.kind === 'buffering-start' &&
+            entry.marker.kind === 'buffering-end' &&
+            candidate.marker.cycleId === entry.marker.cycleId;
+          const isObservationMatch =
+            candidate.marker.kind === 'observation-start' &&
+            entry.marker.kind === 'observation-end' &&
+            candidate.marker.cycleId === entry.marker.cycleId;
+          if (isBufferingMatch || isObservationMatch) {
+            matchingStartIndex = i;
+            break;
+          }
+        }
+      }
+      if (matchingStartIndex >= 0) {
+        const matchingStart = merged[matchingStartIndex];
+        if (matchingStart?.type === 'marker') {
+          matchingStart.marker = {
+            ...matchingStart.marker,
+            kind: entry.marker.kind,
+            statuses: entry.marker.statuses,
+            metrics: {
+              pendingTokens: entry.marker.metrics.pendingTokens ?? matchingStart.marker.metrics.pendingTokens,
+              observationTokens: entry.marker.metrics.observationTokens ?? matchingStart.marker.metrics.observationTokens,
+            },
+          };
+          continue;
+        }
+      }
+    }
+
+    if (entry.type === 'marker' && previous?.type === 'marker') {
+      const shouldMergeBuffering =
+        previous.marker.kind === 'buffering-start' && entry.marker.kind === 'buffering-end';
+      const shouldMergeObservation =
+        previous.marker.kind === 'observation-start' && entry.marker.kind === 'observation-end';
+      if (shouldMergeBuffering || shouldMergeObservation) {
+        previous.marker = {
+          ...previous.marker,
+          kind: entry.marker.kind,
+          statuses: entry.marker.statuses,
+          metrics: {
+            pendingTokens: entry.marker.metrics.pendingTokens ?? previous.marker.metrics.pendingTokens,
+            observationTokens: entry.marker.metrics.observationTokens ?? previous.marker.metrics.observationTokens,
+          },
+        };
+        continue;
+      }
+    }
+
+    merged.push(entry);
+  }
+  return merged;
 }
 
 function MessageContent({ content: raw }: { content: unknown }) {
@@ -436,7 +619,10 @@ export interface MemoryMessageListProps {
 
 export function MemoryMessageList({ messages, isLoading }: MemoryMessageListProps) {
   const entries = useMemo<TimelineEntry[]>(
-    () => messages.flatMap(message => splitMessageIntoEntries(message)),
+    () =>
+      mergeConsecutiveOmMarkers(
+        mergeToolCallAndResultMessages(messages).flatMap(message => splitMessageIntoEntries(message)),
+      ),
     [messages],
   );
 
@@ -482,7 +668,7 @@ export function MemoryMessageList({ messages, isLoading }: MemoryMessageListProp
         entry.type === 'message' ? (
           <MessageBubble key={entry.id} message={entry.message} />
         ) : (
-          <OmMarker key={entry.id} part={entry.part} />
+          <OmMarker key={entry.id} marker={entry.marker} />
         ),
       )}
     </div>

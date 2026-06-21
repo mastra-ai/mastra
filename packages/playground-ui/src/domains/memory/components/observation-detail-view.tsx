@@ -1,6 +1,5 @@
 import { BrainIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Badge } from '../../../ds/components/Badge';
 import { Checkbox } from '../../../ds/components/Checkbox';
 import { CodeDiff } from '../../../ds/components/CodeDiff';
 import { EmptyState } from '../../../ds/components/EmptyState';
@@ -212,30 +211,15 @@ function ObservationHistoryPanel({
               key={record.id}
               type="button"
               className={cn(
-                'w-full cursor-pointer border-l-2 border-l-transparent px-3 py-2 text-left truncate text-xs text-icon3 transition-all hover:bg-[var(--mastra-bg-3)]',
-                isSelected && 'bg-[var(--mastra-bg-3)] border-l-emerald-400',
+                'w-full cursor-pointer border-l-2 border-l-transparent px-3 py-2 text-left truncate text-xs text-icon3 transition-all hover:bg-[var(--mastra-bg-3)]/50',
+                isSelected && 'bg-[var(--mastra-bg-3)]/50 border-l-[var(--mastra-el-accent)]',
               )}
               onClick={() => onSelectRecord(record.id)}
             >
-              <div className="flex items-center gap-2">
-                <Badge variant="default" size="xs">
-                  #{record.generationCount}
-                </Badge>
-                <span className="font-mono tabular-nums">{record.observationTokenCount} tokens</span>
-              </div>
-              {(record.isObserving || record.isReflecting) && (
-                <div className="mt-1">
-                  {record.isObserving && (
-                    <Badge variant="warning" size="xs">
-                      Observing
-                    </Badge>
-                  )}
-                  {record.isReflecting && (
-                    <Badge variant="info" size="xs">
-                      Reflecting
-                    </Badge>
-                  )}
-                </div>
+              {record.activeObservations || (
+                <span className="italic text-icon3">
+                  {record.isObserving || record.isReflecting ? 'Processing\u2026' : 'Initialized'}
+                </span>
               )}
             </button>
           );
