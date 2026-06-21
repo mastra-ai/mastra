@@ -46,4 +46,4 @@ jobs:
         run: pnpm run build:mastracode
 
       - name: Run Mastra Code E2E
-        run: MC_E2E_VITEST_SCENARIOS=all pnpm --filter ./mastracode run e2e:test -- --reporter=dot
+        run: pnpm --filter ./mastracode run e2e:test -- --reporter=dot

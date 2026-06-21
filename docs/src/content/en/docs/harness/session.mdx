@@ -1,33 +1,28 @@
 ---
 title: "Session | Harness"
-description: "Understand the Session — the per-conversation state object on a Harness — and how it divides responsibility with the shared host."
+description: "Understand the Session — the live state object on a Harness — and the identity, thread, mode, grants, run, and display state it tracks."
 packages:
   - "@mastra/core"
 ---
 
 # Session
 
-A `Session` holds the per-conversation state of a Harness: who the conversation is for, which thread is active, the selected mode and model, permission grants, queued follow-ups, token usage, application state, and the display snapshot. You reach it through `harness.session`.
+A [`Session`](/reference/harness/session) holds the live state of a Harness: who the session is for, which thread is active, the selected mode and model, permission grants, queued follow-ups, token usage, application state, and the display snapshot. You reach it through `harness.session`.
 
-## Harness vs. Session
+## What the Session tracks
 
-The Harness is the shared host. It owns the machinery that doesn't change from one conversation to the next: configuration, storage, the agent registry, the thread lock, the event bus, and permission _policy_. The Session is the per-conversation state that sits on top of that machinery.
+The Session is the live state of a single user's interaction with the Harness. It answers "what is true right now": who the session belongs to, which thread is currently bound, which mode and model are selected, what the user has approved, what's queued or running, the application state, and the snapshot to render. A session has one active thread at a time but can list, switch between, and clone many threads over its lifetime. Anything that describes the current state lives here; the Harness owns the shared infrastructure every session runs on.
 
-A useful way to remember the split: the **Harness** is the application, and the **Session** is the current conversation running inside it. Operations that mutate shared infrastructure or coordinate the event bus stay on the Harness; everything that describes "this conversation right now" lives on the Session.
+Because each session has its own identity and state, one Harness can serve many users at once — each backed by its own Session — without one session's mode, grants, or active thread leaking into another.
 
-| Lives on the Harness (shared host) | Lives on the Session (per-conversation) |
-| - | - |
-| Configuration, storage, and memory | Resource ID and active thread binding ([`session.identity`](#identity), [`session.thread`](#thread)) |
-| Thread lifecycle: `createThread`, `switchThread`, `cloneThread`, `renameThread`, `deleteThread` | Thread and message reads ([`session.thread.list()`](#thread)) |
-| The event bus (`subscribe`, event emission) | Selected mode and model ([`session.mode`](#mode-and-model), [`session.model`](#mode-and-model)) |
-| Permission _policy_ (`setPermissionForCategory`, `getToolCategory`) | Permission _grants_ ([`session.grantCategory`](#permission-grants)) |
-| Mode and model _definitions_ (`config.modes`) | Run state, abort, follow-ups, suspensions ([`session.run`](#run-state), [`session.followUps`](#follow-ups)) |
-| The `stateSchema` definition | Application state and its updates ([`session.state`](#state)) |
-| The shared agent loop and subagent spawning | Token usage and the display snapshot ([`session.displayState`](#display-state)) |
+The rest of this page walks through the Session's state. Each part is a focused sub-object on `harness.session`:
 
-This is why thread _creation_ is `harness.createThread()` (it acquires the shared lock and emits an event) while thread _reads_ are `harness.session.thread.list()` (they describe the current conversation's view).
+- **Who and where**: [Identity](#identity) sets the resource the session belongs to, and [Thread](#thread) tracks the currently bound thread.
+- **How the agent behaves**: [Mode and model](#mode-and-model) controls which agent profile and model are active, and [Permission grants](#permission-grants) records what the user has approved to run without prompting.
+- **What's happening right now**: [Run state](#run-state) reflects the in-flight generation, and [Follow-ups](#follow-ups) holds messages queued to send when it finishes.
+- **What you store and render**: [State](#state) holds your application's structured data, and [Display state](#display-state) is the single snapshot your UI renders from.
 
-In single-player apps there is one Harness and one Session, so the split is mostly organizational. In a multi-user host, the same Harness can serve many conversations — each backed by its own Session — without one conversation's mode, grants, or active thread leaking into another.
+The Harness performs actions that change this state — switching threads, modes, or models — because those operations coordinate shared infrastructure and emit events. The Session is where you read the result. The sections below note this split where it matters.
 
 ## Identity
 
@@ -38,7 +33,7 @@ const resourceId = harness.session.identity.getResourceId()
 const threadId = harness.session.thread.getId()
 ```
 
-To change the resource a conversation operates under, use `harness.setResourceId()` — it lives on the Harness because it also clears the active thread and releases the shared lock.
+The resource ID is set on the Harness constructor and defaults to the harness `id`. See [Resource IDs](/docs/harness/threads-and-state#resource-ids) for how it scopes threads.
 
 ## Thread
 
@@ -60,8 +55,8 @@ See [Threads and state](/docs/harness/threads-and-state) for the full lifecycle.
 The Harness defines the available modes in `config.modes`. The Session tracks which mode and model are _currently_ selected:
 
 ```typescript
-// Switch mode (Harness orchestration — aborts the run, emits events)
-await harness.switchMode({ modeId: 'build' })
+// Switch mode (aborts the run, emits events)
+await harness.session.mode.switch({ modeId: 'build' })
 
 // Read the current selection (Session state)
 const modeId = harness.session.mode.get()
@@ -101,11 +96,13 @@ harness.abort()
 
 ## Follow-ups
 
-While a run is in progress, queued follow-up messages live on `session.followUps`. They are sent when the current run finishes:
+A user may want to add to the conversation while the agent is still working. Instead of dropping or interrupting those messages, the Session queues them on `session.followUps` and sends them when the current run finishes:
 
 ```typescript
 const queued = harness.session.followUps.count()
 ```
+
+Queue a follow-up with `harness.followUp({ content })`. To redirect the agent mid-run instead of waiting, use `harness.steer({ content })`. Both build on [signals](/docs/agents/signals).
 
 ## State
 
@@ -120,18 +117,24 @@ See [Threads and state](/docs/harness/threads-and-state) for defining a schema.
 
 ## Display state
 
-`session.displayState` is the coalesced `HarnessDisplayState` snapshot — the single object a UI renders from. It folds run status, streaming messages, active tools, tasks, token usage, and pending approvals into one place:
+A conversation emits many fine-grained events: tokens streaming in, tools starting and finishing, approvals pending, tasks updating, token usage climbing. Subscribing to each event type and reassembling the current picture yourself is tedious and error-prone. `session.displayState` does that work for you.
+
+It's a reducer-maintained snapshot. The Session keeps one `HarnessDisplayState` object and folds every harness event into it as it happens, so the snapshot always reflects the latest state. It captures everything a UI needs to render: whether the agent is running and what it's streaming, which tools and subagents are active, anything waiting on the user such as approvals, the current task list, and running totals like token usage and queued follow-ups.
+
+Because it's a single object, you can drive an entire UI from one place: read the current snapshot with `get()`, and re-render whenever the Harness emits `display_state_changed` (fired after every other event):
 
 ```typescript
 const snapshot = harness.session.displayState.get()
 
-// React to changes
+// Re-render from the snapshot on every change
 harness.subscribe(event => {
   if (event.type === 'display_state_changed') {
     render(harness.session.displayState.get())
   }
 })
 ```
+
+This is the recommended pattern for most UIs. Subscribe to individual typed events only when you need to react to a specific transition rather than re-render the whole view.
 
 :::note
 

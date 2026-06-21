@@ -5,12 +5,20 @@ Mastra Code scenarios live in `e2e/scenarios/` and run through the zero-subproce
 ## Run all scenarios
 
 ```bash
-MC_E2E_VITEST_SCENARIOS=all pnpm --filter ./mastracode run e2e:test -- --reporter=dot
+pnpm --filter ./mastracode run e2e:test -- --reporter=dot
 ```
 
 The runner constructs Mastra Code in-process, injects a `pi-tui` terminal backed by `@xterm/headless`, and runs four static Vitest shard files in one CI job. It does not launch the `mastracode` CLI, `tsx` scenario entrypoints, worker threads, or Mastra Code subprocesses.
 
 Failed runs keep their per-scenario temp directories under `mastracode/.tmp-mc-e2e-vitest/` until cleanup runs; inspect that directory when debugging a failed scenario.
+
+## Smoke test
+
+Run the default smoke scenarios (`startup`, `automated-chat`, and `modal-and-shell`):
+
+```bash
+pnpm --filter ./mastracode run e2e:smoke
+```
 
 ## Focused scenario runs
 
@@ -26,4 +34,4 @@ List available scenarios:
 pnpm --filter ./mastracode run e2e:list
 ```
 
-Use focused runs for scenario development, then run `e2e:test` with `MC_E2E_VITEST_SCENARIOS=all` before shipping runner changes.
+Use focused runs for scenario development, then run `e2e:test` before shipping runner changes.

@@ -7,11 +7,7 @@ packages:
 
 # Tool approvals and permissions
 
-The Harness provides a permission system that controls which tools require user approval before execution. You can configure policies at the category level or per-tool, and grant session-wide exceptions for trusted tools.
-
-## When to use tool approvals
-
-Use tool approvals when agents have access to destructive or sensitive tools (file writes, command execution, API calls) and you want a human-in-the-loop checkpoint before those tools run.
+The Harness provides a permission system that controls which tools require user approval before execution. You can configure policies at the category level or per-tool, and grant session-wide exceptions for trusted tools. This gives agents with access to destructive or sensitive tools — file writes, command execution, API calls — a human-in-the-loop checkpoint before those tools run.
 
 ## Permission policies
 
@@ -27,10 +23,10 @@ Set policies per-category or per-tool. Per-tool policies take precedence over ca
 
 ```typescript
 // Category-level: all execute tools require approval
-harness.setPermissionForCategory({ category: 'execute', policy: 'ask' })
+await harness.session.permissions.setForCategory({ category: 'execute', policy: 'ask' })
 
 // Tool-level: this specific tool is always blocked
-harness.setPermissionForTool({ toolName: 'dangerous_tool', policy: 'deny' })
+await harness.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' })
 ```
 
 ### Tool categories

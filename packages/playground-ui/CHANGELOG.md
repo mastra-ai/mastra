@@ -1,5 +1,107 @@
 # @mastra/playground-ui
 
+## 35.0.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+- Added reusable UI support for redesigned Studio panels and code surfaces. ([#17970](https://github.com/mastra-ai/mastra/pull/17970))
+
+  **Resizable panels.** Collapsing a side panel no longer reserves a wide empty rail with a permanent arrow button: the panel collapses to zero width while its content fades and slides out as one block. A ghost panel icon stays visible at the top of the edge so the panel remains discoverable, and hovering the edge or the resize handle peeks the content back in by a translucent sliver — a hint that clicking the edge opens it.
+
+  **Smooth open and close.** Expanding animates the panel width so the neighboring layout reflows smoothly instead of jumping, and a panel restored in its collapsed state first paints collapsed instead of loading open and snapping shut. Content holds a minimum width while the panel moves so text never rewraps mid-flight, and stays mounted while collapsed, preserving scroll position and inputs.
+
+  **Mobile gets drawers.** Below the mobile breakpoint, resizable side panels become near-full-width edge drawers (new `PanelDrawer` component) opened from the same ghost icon, with content kept mounted so panel state survives open/close. A new `useIsMobile` hook is exported for viewport-dependent rendering.
+
+  **CodeBlock actions.** `CodeBlock` has a new `actions` prop for controls that belong with the code surface, such as a mode toggle next to language tabs. The slot renders at the inline end of the header row in all three header modes (tabs, select, file name), and gets its own header row when no other header is present.
+
+  **Popover alignment.** `PopoverContent` now exposes collision avoidance controls so consumers can keep start-aligned popovers while still avoiding viewport overflow.
+
+  The resize wrapper also preserves the original resize callback arguments from `react-resizable-panels`, `useIsMobile` handles environments where media query APIs are unavailable, and the `SearchWithDropdown` ButtonsGroup story now keeps the segmented control heights aligned.
+
+  **Example**
+
+  ```tsx
+  import { PanelDrawer, useIsMobile, CodeBlock } from '@mastra/playground-ui';
+
+  function Panel({ code }: { code: string }) {
+    const isMobile = useIsMobile();
+
+    if (isMobile) {
+      return (
+        <PanelDrawer direction="left" label="Open panel">
+          <CodeBlock code={code} actions={<button type="button">Toggle view</button>} />
+        </PanelDrawer>
+      );
+    }
+
+    return <CodeBlock code={code} actions={<button type="button">Toggle view</button>} />;
+  }
+  ```
+
+### Patch Changes
+
+- Improved the mobile sidebar menu to use native drawer interactions. ([#18154](https://github.com/mastra-ai/mastra/pull/18154))
+
+- Improved mobile breakpoint detection to avoid unnecessary listener updates. ([#17970](https://github.com/mastra-ai/mastra/pull/17970))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3)]:
+  - @mastra/core@1.45.0
+  - @mastra/client-js@1.26.0
+  - @mastra/react@1.1.0
+
+## 35.0.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+- Added reusable UI support for redesigned Studio panels and code surfaces. ([#17970](https://github.com/mastra-ai/mastra/pull/17970))
+
+  **Resizable panels.** Collapsing a side panel no longer reserves a wide empty rail with a permanent arrow button: the panel collapses to zero width while its content fades and slides out as one block. A ghost panel icon stays visible at the top of the edge so the panel remains discoverable, and hovering the edge or the resize handle peeks the content back in by a translucent sliver — a hint that clicking the edge opens it.
+
+  **Smooth open and close.** Expanding animates the panel width so the neighboring layout reflows smoothly instead of jumping, and a panel restored in its collapsed state first paints collapsed instead of loading open and snapping shut. Content holds a minimum width while the panel moves so text never rewraps mid-flight, and stays mounted while collapsed, preserving scroll position and inputs.
+
+  **Mobile gets drawers.** Below the mobile breakpoint, resizable side panels become near-full-width edge drawers (new `PanelDrawer` component) opened from the same ghost icon, with content kept mounted so panel state survives open/close. A new `useIsMobile` hook is exported for viewport-dependent rendering.
+
+  **CodeBlock actions.** `CodeBlock` has a new `actions` prop for controls that belong with the code surface, such as a mode toggle next to language tabs. The slot renders at the inline end of the header row in all three header modes (tabs, select, file name), and gets its own header row when no other header is present.
+
+  **Popover alignment.** `PopoverContent` now exposes collision avoidance controls so consumers can keep start-aligned popovers while still avoiding viewport overflow.
+
+  The resize wrapper also preserves the original resize callback arguments from `react-resizable-panels`, `useIsMobile` handles environments where media query APIs are unavailable, and the `SearchWithDropdown` ButtonsGroup story now keeps the segmented control heights aligned.
+
+  **Example**
+
+  ```tsx
+  import { PanelDrawer, useIsMobile, CodeBlock } from '@mastra/playground-ui';
+
+  function Panel({ code }: { code: string }) {
+    const isMobile = useIsMobile();
+
+    if (isMobile) {
+      return (
+        <PanelDrawer direction="left" label="Open panel">
+          <CodeBlock code={code} actions={<button type="button">Toggle view</button>} />
+        </PanelDrawer>
+      );
+    }
+
+    return <CodeBlock code={code} actions={<button type="button">Toggle view</button>} />;
+  }
+  ```
+
+### Patch Changes
+
+- Improved the mobile sidebar menu to use native drawer interactions. ([#18154](https://github.com/mastra-ai/mastra/pull/18154))
+
+- Improved mobile breakpoint detection to avoid unnecessary listener updates. ([#17970](https://github.com/mastra-ai/mastra/pull/17970))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3)]:
+  - @mastra/core@1.45.0-alpha.0
+  - @mastra/client-js@1.26.0-alpha.0
+  - @mastra/react@1.1.0-alpha.0
+
 ## 34.1.0
 
 ### Minor Changes
