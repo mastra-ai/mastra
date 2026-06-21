@@ -67,6 +67,13 @@ export interface RunLoopScenarioOptions {
   fixtures: (llm: LLMock) => void;
   /** The user prompt that kicks off the loop. */
   prompt: string;
+  /**
+   * Default options for the agent (e.g. `autoResumeSuspendedTools`).
+   * Applied to the Agent constructor via `defaultOptions` config.
+   */
+  defaultOptions?: {
+    autoResumeSuspendedTools?: boolean;
+  };
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
   tools?: ToolsInput;
   /**
@@ -105,6 +112,12 @@ export interface RunLoopScenarioOptions {
    */
   stopWhen?: any;
   /**
+   * Maximum number of steps (model invocations) before the loop terminates.
+   * Forwarded to `agent.stream({ maxSteps })`. Prevents runaway execution.
+   * `stopWhen` can terminate earlier if its predicate is satisfied.
+   */
+  maxSteps?: number;
+  /**
    * Provider-specific options forwarded to `agent.stream({ providerOptions })`.
    * These land in the model request and can include provider-specific metadata
    * like OpenAI's `prediction` or `store` flags.
@@ -142,6 +155,12 @@ export interface RunLoopScenarioOptions {
    * modifications. Combine with AIMock error fixtures to test error recovery paths.
    */
   errorProcessors?: any[];
+  /**
+   * Error callback fired on tool execution errors or API errors.
+   * Forwarded to `agent.stream({ onError })`. Useful for asserting error handling
+   * and observing error propagation. Fires after errorProcessors (if any).
+   */
+  onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
   /**
    * Callback fired after each execution step (including intermediate tool-call steps).
    * Forwarded to `agent.stream({ onStepFinish })`. Useful for asserting step-level
@@ -262,6 +281,12 @@ export interface RunLoopScenarioOptions {
   /** Resource id for memory-backed runs. Forwarded to `agent.stream({ memory: { resource } })`. */
   resourceId?: string;
   /**
+   * Memory options forwarded to `agent.stream({ memory: { options } })`.
+   * Controls recall behavior like `lastMessages` (number of messages to recall)
+   * or `semanticRecall` (enable/disable semantic recall).
+   */
+  memoryOptions?: { lastMessages?: number | false; semanticRecall?: boolean };
+  /**
    * Workspace attached to the agent. Passed into tool execution context so tools
    * can read `workspace.filesystem` / `workspace.sandbox` mid-loop.
    */
@@ -280,6 +305,14 @@ export interface RunLoopScenarioOptions {
    * need to be published while the stream is still open.
    */
   manualStreamConsumption?: boolean;
+  /**
+   * Pre-built agent and Mastra instances for scenarios that need to share
+   * storage/memory across multiple `runLoopScenario` calls. When provided,
+   * the harness skips building a new agent and uses these instead. Required
+   * for suspend/resume flows (autoResumeSuspendedTools, resumeStream) where
+   * the same agent+storage must persist across calls.
+   */
+  sharedAgent?: { agent: any; mastra: any };
 }
 
 /**

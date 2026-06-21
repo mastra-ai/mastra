@@ -52,6 +52,25 @@ export function useLoopScenarioAimock(): () => LLMock {
 let scenarioAgentCounter = 0;
 
 /**
+ * Create a shared agent/mastra pair that persists across multiple
+ * `runLoopScenario` calls. Use for suspend/resume scenarios where the same
+ * agent+storage must survive across calls.
+ *
+ * Pass the result to `runLoopScenario` via the `sharedAgent` option:
+ * ```ts
+ * const shared = await createSharedAgent(getMock(), { tools: { myTool } });
+ * await runLoopScenario({ llm: getMock(), ..., sharedAgent: shared });
+ * await runLoopScenario({ llm: getMock(), ..., sharedAgent: shared });
+ * ```
+ */
+export async function createSharedAgent(
+  llm: LLMock,
+  opts: Pick<RunLoopScenarioOptions, 'tools' | 'instructions' | 'memory' | 'workspace' | 'agents' | 'workflows' | 'agentBackgroundTasks' | 'goal' | 'backgroundTasks' | 'model' | 'errorProcessors' | 'defaultOptions'> = {},
+): Promise<{ agent: Agent; mastra: any }> {
+  return buildScenarioAgent({ llm, ...opts });
+}
+
+/**
  * Build an {@link Agent} backed by a real OpenAI v5 provider pointed at the
  * in-test AIMock server, registered on a {@link Mastra} instance with storage
  * so suspend/resume (tool approval) works.
@@ -69,9 +88,10 @@ async function buildScenarioAgent({
   backgroundTasks,
   model,
   errorProcessors,
+  defaultOptions,
 }: Pick<
   RunLoopScenarioOptions,
-  'llm' | 'tools' | 'instructions' | 'memory' | 'workspace' | 'agents' | 'workflows' | 'agentBackgroundTasks' | 'goal' | 'backgroundTasks' | 'model' | 'errorProcessors'
+  'llm' | 'tools' | 'instructions' | 'memory' | 'workspace' | 'agents' | 'workflows' | 'agentBackgroundTasks' | 'goal' | 'backgroundTasks' | 'model' | 'errorProcessors' | 'defaultOptions'
 >): Promise<{ agent: Agent; mastra: any }> {
   const openai = createOpenAI({
     apiKey: 'aimock-test-key',
@@ -98,6 +118,7 @@ async function buildScenarioAgent({
     ...(agentBackgroundTasks ? { backgroundTasks: agentBackgroundTasks } : {}),
     ...(goal ? { goal } : {}),
     ...(errorProcessors ? { errorProcessors } : {}),
+    ...(defaultOptions ? { defaultOptions } : {}),
   });
 
   // Registering the agent on a Mastra instance with storage is required for the
@@ -136,6 +157,7 @@ export async function runLoopScenario({
   tools,
   instructions,
   stopWhen,
+  maxSteps,
   isTaskComplete,
   structuredOutput,
   activeTools,
@@ -145,6 +167,7 @@ export async function runLoopScenario({
   memory,
   threadId,
   resourceId,
+  memoryOptions,
   workspace,
   agents,
   workflows,
@@ -166,27 +189,42 @@ export async function runLoopScenario({
   modelSettings,
   toolsets,
   errorProcessors,
+  onError,
   onStepFinish,
   onFinish,
   savePerStep,
   actor,
+  defaultOptions,
+  sharedAgent,
 }: RunLoopScenarioOptions): Promise<LoopScenarioResult> {
   fixtures(llm);
 
-  const { agent, mastra } = await buildScenarioAgent({
-    llm,
-    tools,
-    instructions,
-    memory,
-    workspace,
-    agents,
-    workflows,
-    agentBackgroundTasks,
-    goal,
-    backgroundTasks,
-    model,
-    errorProcessors,
-  });
+  // Use shared agent/mastra if provided (for suspend/resume flows across calls),
+  // otherwise build a fresh one.
+  let agent: any;
+  let mastra: any;
+  if (sharedAgent) {
+    agent = sharedAgent.agent;
+    mastra = sharedAgent.mastra;
+  } else {
+    const built = await buildScenarioAgent({
+      llm,
+      tools,
+      instructions,
+      memory,
+      workspace,
+      agents,
+      workflows,
+      agentBackgroundTasks,
+      goal,
+      backgroundTasks,
+      model,
+      errorProcessors,
+      defaultOptions,
+    });
+    agent = built.agent;
+    mastra = built.mastra;
+  }
 
   // Set objective before streaming if provided (for goal scenarios)
   if (objective && threadId && resourceId) {
@@ -194,10 +232,19 @@ export async function runLoopScenario({
   }
 
   const memoryOption =
-    memory && threadId ? { memory: { thread: threadId, ...(resourceId ? { resource: resourceId } : {}) } } : {};
+    memory && threadId
+      ? {
+          memory: {
+            thread: threadId,
+            ...(resourceId ? { resource: resourceId } : {}),
+            ...(memoryOptions ? { options: memoryOptions } : {}),
+          },
+        }
+      : {};
 
   const streamOptions = {
     ...(stopWhen ? { stopWhen } : {}),
+    ...(maxSteps ? { maxSteps } : {}),
     ...(isTaskComplete ? { isTaskComplete } : {}),
     ...(structuredOutput ? { structuredOutput } : {}),
     ...(activeTools ? { activeTools } : {}),
@@ -209,6 +256,7 @@ export async function runLoopScenario({
     ...(onIterationComplete ? { onIterationComplete } : {}),
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
+    ...(onError ? { onError } : {}),
     ...(savePerStep !== undefined ? { savePerStep } : {}),
     ...(actor ? { actor } : {}),
     ...(abortSignal ? { abortSignal } : {}),

@@ -93,8 +93,8 @@ describe('AIMock loop scenario: abort during tool execution', () => {
       },
     });
 
-    // Trigger abort shortly after tool starts
-    setTimeout(() => abortController.abort(), 30);
+    // Trigger abort shortly after tool starts (give time for model request + tool dispatch)
+    setTimeout(() => abortController.abort(), 500);
 
     const { output } = await runLoopScenario({
       llm: getMock(),

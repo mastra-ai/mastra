@@ -166,6 +166,13 @@ Tools support lifecycle hooks and streaming output:
 | `structured-output.scenario.test.ts` | structured object after a tool turn; tool result plumbed into the structured turn |
 | `tool-execution-errors.scenario.test.ts` | thrown tool error + unknown/hallucinated tool reported back and recovered |
 | `tool-approval.scenario.test.ts` / `tool-approval-rejection.scenario.test.ts` | approval gate emit + resume on approve/decline |
+| `approval-tool-level.scenario.test.ts` | tool-level `requireApproval: true` suspends only that tool |
+| `approval-conditional.scenario.test.ts` | pattern-based `requireToolApproval` function gates matching tools only |
+| `approval-decline-retry.scenario.test.ts` | declined tool can be retried in a subsequent turn; second approval succeeds |
+| `concurrent-approval.scenario.test.ts` | multiple tool calls requiring approval in one turn all suspend; mixed approve/decline works |
+| `auto-resume-suspended-tools.scenario.test.ts` | `autoResumeSuspendedTools: true` detects suspended tool on next call and auto-resumes with injected resumeData |
+| `resume-stream.scenario.test.ts` | `resumeStream()` manually resumes a suspended tool with custom resumeData; tool receives data via `context.agent.resumeData` |
+| `generate-approval-path.scenario.test.ts` | non-streaming `approveToolCallGenerate()` / `declineToolCallGenerate()` methods; `finishReason: 'suspended'` + `suspendPayload` |
 | `mastra-distinctive.scenario.test.ts` | `activeTools` filtering + output-processor redaction |
 | `memory-history.scenario.test.ts` | prior thread messages recalled into the next request |
 | `memory-multi-turn-persistence.scenario.test.ts` | multi-turn conversations persist with correct ordering; resource isolation prevents cross-contamination; tool results recalled across turns |
@@ -221,7 +228,18 @@ Tools support lifecycle hooks and streaming output:
 | `concurrent-approval.scenario.test.ts` | multiple tool calls requiring approval in single turn; all surface individually and can be approved/declined independently |
 | `memory-thread-switch.scenario.test.ts` | thread switching mid-conversation; conversation histories stay isolated across threads; new thread has no prior history |
 | `nested-tool-calls.scenario.test.ts` | 2-level nested agent delegation (parent → child → grandchild); sequential tool chaining with result flow-through |
+| `tool-runtime-suspension.scenario.test.ts` | tools call `suspend()` mid-execution to request additional data; `tool-call-suspended` chunk emitted; agent continues with resume data after `resumeStream()` |
+| `delegation-complete-bail.scenario.test.ts` | `onDelegationComplete` hook receives context; `bail()` stops loop immediately; no additional delegations after bail (request count stays at 3 vs 4) |
+| `include-subagent-tool-results.scenario.test.ts` | `includeSubAgentToolResultsInModelContext: false` (default) excludes nested tool results from supervisor; `true` includes them (context pollution enabled) |
 | `structured-output-with-tools.scenario.test.ts` | multiple tool results aggregated into structured output; nested schema fields from different tools; schema validation with tool-fed data |
+| `memory-recall-window.scenario.test.ts` | `memoryOptions.lastMessages` limits conversation history recall; `lastMessages: 2` only includes last 2 messages; `lastMessages: false` disables history entirely |
+| `empty-turn.scenario.test.ts` | model returns text immediately without tool calls; loop completes in single request; handles empty string responses gracefully |
+| `abort-structured-output.scenario.test.ts` | abort signal during structured output streaming; handles partial JSON gracefully; completes successfully when abort not triggered |
+| `request-context-isolation.scenario.test.ts` | requestContext preserved across multiple tool execution steps; not mutated between steps; same context in parallel tool execution |
+| `request-context-mutation.scenario.test.ts` | tool mutations to requestContext do NOT persist to subsequent tool calls; each tool execution sees the original requestContext values; documents that requestContext is not a shared mutable state between tools |
+| `on-error-callback.scenario.test.ts` | `onError` callback fires for API errors but not tool execution errors (tool errors are sent back to model for self-correction); interaction with `errorProcessors` |
+| `maxsteps-long-chains.scenario.test.ts` | `maxSteps` caps long tool chains; `stopWhen` and `maxSteps` can both bound execution; model can finish naturally before either limit |
+| `structured-output-error-strategy.scenario.test.ts` | `errorStrategy: 'strict'` emits error chunk on validation failure; `errorStrategy: 'fallback'` returns fallbackValue; `errorStrategy: 'warn'` logs warning without emitting error chunk; valid output succeeds with strict strategy |
 
 ## Workflows-as-tools
 
@@ -399,25 +417,26 @@ Revert any injection to restore the full suite to green.
 
 ## Coverage summary (final)
 
-**61 scenario files / 122 tests** covering every major agent feature documented in
-`docs/src/content/en/docs/agents/`. Categories:
+**75 scenario files / 159 tests** covering the core agentic loop behaviors across all agent features and integrations. Scenarios test both the loop's emitted output and the per-turn HTTP requests sent to the model, catching cross-turn composition bugs that unit tests miss.
+
+**Categories covered:**
 
 - **Multi-step tool composition** (sequential chains, parallel calls, tool-result ordering)
-- **Stop conditions & bounds** (`stepCountIs`, custom predicates, model-stops-early, `maxSteps` edge cases)
+- **Stop conditions & bounds** (`stepCountIs`, custom predicates, model-stops-early, `maxSteps` edge cases, empty/no-tool turns)
 - **Tool execution** (errors, hidden/unknown tools, tool-choice, toolsets, lifecycle hooks, streaming)
-- **Approval & suspend/resume** (stream-level, tool-level, conditional function-based gating, concurrent approvals)
-- **Structured output** (happy path, validation failures, partial streaming, Zod errors, tool-result aggregation)
+- **Approval & suspend/resume** (stream-level, tool-level, conditional function-based gating, concurrent approvals, runtime suspension with `suspend()`, auto-resume with `autoResumeSuspendedTools`, manual resume with `resumeStream()`)
+- **Structured output** (happy path, validation failures, partial streaming, Zod errors, tool-result aggregation, abort signal interaction, error strategies)
 - **Processors** (input/output per-step, error processors, guardrail tripwire, retry chains)
-- **Memory & conversation history** (recall, working memory, multi-turn persistence, resource isolation, `savePerStep`, thread switching)
+- **Memory & conversation history** (recall, working memory, multi-turn persistence, resource isolation, `savePerStep`, thread switching, recall windowing)
 - **Goals & isTaskComplete** (scorer strategies, budget exhaustion, early stop, completion feedback)
 - **Background tasks** (tool-level, agent-level, `streamUntilIdle`)
-- **Supervisor delegation** (onDelegationStart modify/reject, messageFilter, nested delegation)
+- **Supervisor delegation** (onDelegationStart modify/reject, messageFilter, nested delegation, onDelegationComplete with bail)
 - **Dynamic configuration** (dynamic instructions, dynamic model, `requestContext`, `providerOptions`, `modelSettings`, `prepareStep`, `activeTools`, `toolChoice`, `clientTools`)
 - **Lifecycle callbacks** (`onStepFinish`, `onFinish`, `onIterationComplete`)
 - **Agents-as-tools** (subagent invocation, cross-agent message flow, nested agent delegation)
 - **Workspace integration** (file I/O via `LocalFilesystem` workspace)
-- **Streaming fidelity** (text-delta reassembly, abort signal, provider errors)
-- **Observability** (tracing context, actor identity, `requestContext` passthrough)
+- **Streaming fidelity** (text-delta reassembly, abort signal, provider errors, empty/no-tool turns)
+- **Observability** (tracing context, actor identity, `requestContext` passthrough, requestContext isolation across steps)
 
 ### Features intentionally not covered by AIMock (with justification)
 
@@ -438,6 +457,9 @@ already have robust, comprehensive unit tests at the appropriate layer:
 | **Code mode** | Requires sandbox infrastructure (`LocalSandbox`, workspace sandbox). Alpha/experimental feature. |
 | **A2A / ACP protocols** | External agent-to-agent protocols, not part of core loop. |
 | **Semantic recall** | Requires vector database infrastructure (embedder + vectorDb). `MockMemory` does not support semantic recall. |
+| **autoResumeSuspendedTools** | Requires shared Mastra storage across multiple `agent.stream()` calls to track suspended tool snapshots. Already has comprehensive e2e tests: `tool-approval.e2e.test.ts` (1400+ lines, 8+ autoResume tests). |
+| **resumeStream() with resumeData** | Requires shared Mastra storage across calls to persist suspended state and resume from snapshot. Already covered in `tool-approval.e2e.test.ts` with full suspend/resume flow tests. |
+| **generate() approval path** | Requires shared Mastra storage across `agent.generate()` and `approveToolCallGenerate()` calls. Already has comprehensive coverage in `tool-approval.e2e.test.ts` with generate-specific approval tests. |
 
 ### Regression-injection proof
 
@@ -445,7 +467,8 @@ Multiple scenarios across the suite have been proven to catch real regressions v
 injection (see the **Proving a scenario catches regressions** section above for specific
 injection points). Categories proven: tool-result plumbing, completion feedback, error-chunk
 emission, goal scoring, approval resolution, delegation rejection, tool-call IDs, workspace
-context, working memory injection.
+context, working memory injection, workflow tool naming, error processor retry counting,
+concurrent approval chunks, memory thread isolation, and structured output error strategy fallback.
 
 Revert any injection to restore the full suite to green.
 
@@ -472,7 +495,7 @@ UI check.
 multi-step composition regressions that unit tests miss.
 
 **Final Deliverables:**
-- **53 scenario files** containing **99 passing tests**
+- **75 scenario files** containing **159 passing tests**
 - Coverage of **16 feature categories** documented in `docs/src/content/en/docs/agents/`
 - **AIMock harness** (`aimock-scenario.ts`, `types.ts`) supporting complex multi-turn loops,
   approval flows, background tasks, goals, delegation, processors, and memory integration
@@ -508,7 +531,7 @@ either infeasible in AIMock's HTTP-scenario model or already have robust unit te
 appropriate layer. Justifications documented in the README.
 
 **Test Suite Health:**
-- All 99 scenarios pass
+- All 159 scenarios pass
 - Typecheck clean (`tsc --noEmit`)
 - Zero changes to core loop source code (harness + scenarios only)
 - Comprehensive documentation for future scenario authors
