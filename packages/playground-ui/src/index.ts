@@ -145,6 +145,7 @@ export * from './lib/template';
 export { usePlaygroundStore } from './store/playground-store';
 
 // Domains
+export * from './domains/memory';
 export * from './domains/metrics';
 export * from './domains/traces';
 export * from './domains/logs';
