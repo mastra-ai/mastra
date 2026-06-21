@@ -207,6 +207,13 @@ export class Harness<TState = {}> {
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
+  /**
+   * Set when this Harness is registered on a parent Mastra (via
+   * {@link __registerMastra}). When present it is used in place of the
+   * lazily-created internal Mastra, so a server-hosted Harness shares the
+   * server's storage/agents/gateways instead of spinning up its own.
+   */
+  #externalMastra: Mastra | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
   constructor(config: HarnessConfig<TState>) {
@@ -414,12 +421,28 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   /**
-   * Access the internal Mastra instance.
-   * Available after `init()` when storage is configured.
+   * Access the Mastra instance backing this Harness.
+   *
+   * Returns the parent Mastra when this Harness is registered on one (see
+   * {@link __registerMastra}); otherwise the internal Mastra created during
+   * `init()` when storage is configured.
+   *
    * Useful for scorer registration, observability access, and eval tooling.
    */
   getMastra(): Mastra | undefined {
-    return this.#internalMastra;
+    return this.#externalMastra ?? this.#internalMastra;
+  }
+
+  /**
+   * Register this Harness on a parent Mastra. Called by Mastra during
+   * construction when a harness is passed in its config. Once registered, the
+   * Harness uses the parent Mastra (its storage, agents, gateways, and
+   * observability) instead of building its own internal one during `init()`.
+   *
+   * @internal
+   */
+  __registerMastra(mastra: Mastra): void {
+    this.#externalMastra = mastra;
   }
 
   /**
@@ -466,7 +489,10 @@ export class Harness<TState = {}> {
     // (required for tool approval snapshot persistence/resume).
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
-    if (this.config.storage) {
+    //
+    // Skip this when registered on a parent Mastra: that Mastra already owns
+    // storage/agents/gateways, and getMastra() resolves to it.
+    if (this.config.storage && !this.#externalMastra) {
       const enabledGateways = this.config.gateways?.filter(gateway => gateway.shouldEnable?.() ?? true);
       const gateways = enabledGateways?.length
         ? Object.fromEntries(enabledGateways.map(gateway => [gateway.id, gateway]))
@@ -787,8 +813,9 @@ export class Harness<TState = {}> {
       agent.__setPubSub(this.config.pubsub);
     }
 
-    if (this.#internalMastra && !alreadyHasMastra) {
-      this.#internalMastra.addAgent(agent);
+    const mastra = this.getMastra();
+    if (mastra && !alreadyHasMastra) {
+      mastra.addAgent(agent);
     }
 
     return agent;
@@ -1790,7 +1817,7 @@ export class Harness<TState = {}> {
       // from the one the agent resolves and registers — leaving harness-side
       // tools (e.g. request_access) mutating a different filesystem than the
       // agent's workspace tools (e.g. view) read from.
-      const resolved = await Promise.resolve(this.workspaceFn({ requestContext, mastra: this.#internalMastra }));
+      const resolved = await Promise.resolve(this.workspaceFn({ requestContext, mastra: this.getMastra() }));
       harnessContext.workspace = resolved;
       // Cache for getWorkspace() so callers outside request flow (e.g. /skills) can access it
       this.workspace = resolved;
