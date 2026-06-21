@@ -62,8 +62,30 @@ export interface SuspensionPrompt {
   suspendPayload: unknown;
 }
 
+/** A notification delivered to the session. */
+export interface NotificationEntry {
+  kind: 'notification';
+  id: string;
+  notificationId?: string;
+  message: string;
+  source?: string;
+  notifKind?: string;
+  priority?: string;
+}
+
+/** A notification summary batching multiple pending notifications. */
+export interface NotificationSummaryEntry {
+  kind: 'notification_summary';
+  id: string;
+  message: string;
+  pending: number;
+  bySource: Record<string, number>;
+  byPriority: Record<string, number>;
+  notificationIds: string[];
+}
+
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
-export type TimelineEntry = UserEntry | AssistantEntry | NoticeEntry | PromptEntry;
+export type TimelineEntry = UserEntry | AssistantEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry;
 
 export interface TranscriptState {
   entries: TimelineEntry[];
@@ -166,6 +188,39 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
 
     case 'task_updated':
       return { ...state, tasks: event.tasks };
+
+    case 'notification':
+      return {
+        ...state,
+        entries: [
+          ...state.entries,
+          {
+            kind: 'notification' as const,
+            id: `notif-${event.notificationId ?? Date.now()}-${noticeSeq++}`,
+            notificationId: event.notificationId,
+            message: event.message,
+            source: event.source,
+            notifKind: event.kind,
+            priority: event.priority,
+          },
+        ],
+      };
+    case 'notification_summary':
+      return {
+        ...state,
+        entries: [
+          ...state.entries,
+          {
+            kind: 'notification_summary' as const,
+            id: `notif-summary-${Date.now()}-${noticeSeq++}`,
+            message: event.message,
+            pending: event.pending,
+            bySource: event.bySource,
+            byPriority: event.byPriority,
+            notificationIds: event.notificationIds,
+          },
+        ],
+      };
 
     case 'info':
       return pushNotice(state, 'info', event.message);

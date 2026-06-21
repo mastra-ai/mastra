@@ -71,6 +71,26 @@ export type KnownHarnessEvent =
   | { type: 'subagent_end'; toolCallId: string }
   // Task tools.
   | { type: 'task_updated'; tasks: HarnessTaskSnapshot[] }
+  // Notifications.
+  | {
+      type: 'notification';
+      notificationId?: string;
+      message: string;
+      source?: string;
+      kind?: string;
+      priority?: string;
+      status?: string;
+      attributes?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    }
+  | {
+      type: 'notification_summary';
+      message: string;
+      pending: number;
+      bySource: Record<string, number>;
+      byPriority: Record<string, number>;
+      notificationIds: string[];
+    }
   // Notices.
   | { type: 'info'; message: string }
   | { type: 'error'; error: { message?: string } | string; errorType?: string }
@@ -119,6 +139,29 @@ export interface HarnessTaskSnapshot {
   content: string;
   status: 'pending' | 'in_progress' | 'completed';
   activeForm: string;
+}
+
+/** Input for sending a notification signal to a session. */
+export interface SendNotificationInput {
+  source: string;
+  kind: string;
+  summary: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  payload?: unknown;
+  sourceId?: string;
+  dedupeKey?: string;
+  coalesceKey?: string;
+  attributes?: Record<string, string | number | boolean | null | undefined>;
+  metadata?: Record<string, unknown>;
+}
+
+/** Result of sending a notification signal. */
+export interface SendNotificationResult {
+  accepted: boolean;
+  notificationId?: string;
+  /** Delivery decision: deliver, queue, defer, summarize, persist, or discard. */
+  decision?: string;
+  runId?: string;
 }
 
 /** Resume payload for the built-in `submit_plan` suspension. */
@@ -281,6 +324,18 @@ export class HarnessSession extends BaseResource {
   /** Switch the session to an existing thread (rebinds stream + state). */
   async switchThread(threadId: string): Promise<void> {
     await this.request(`${this.base()}/thread`, { method: 'POST', body: { threadId } });
+  }
+
+  /**
+   * Send a notification signal to this session. The agent's delivery policy
+   * determines whether the notification wakes an idle thread, is summarised,
+   * or is persisted for later.
+   */
+  async sendNotification(input: SendNotificationInput): Promise<SendNotificationResult> {
+    return this.request(`${this.base()}/notifications`, {
+      method: 'POST',
+      body: input,
+    });
   }
 }
 

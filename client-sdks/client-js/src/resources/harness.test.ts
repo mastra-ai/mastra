@@ -189,4 +189,27 @@ describe('Harness Resource', () => {
 
     expect(received).toEqual([event]);
   });
+
+  it('sends a notification signal', async () => {
+    mockJson({ accepted: true, notificationId: 'n-1', decision: 'deliver', runId: 'run-1' });
+    const result = await client.getHarness('code').session('user-1').sendNotification({
+      source: 'github',
+      kind: 'pr_review',
+      summary: 'PR #42 was approved',
+      priority: 'high',
+      payload: { pr: 42 },
+    });
+
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/notifications');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string);
+    expect(body.source).toBe('github');
+    expect(body.kind).toBe('pr_review');
+    expect(body.summary).toBe('PR #42 was approved');
+    expect(body.priority).toBe('high');
+    expect(result.accepted).toBe(true);
+    expect(result.notificationId).toBe('n-1');
+    expect(result.decision).toBe('deliver');
+  });
 });

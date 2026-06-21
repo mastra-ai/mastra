@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import { Mastra } from '@mastra/core/mastra';
-import { InMemoryStore } from '@mastra/core/storage';
+import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
+import { InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
 import { z } from 'zod';
@@ -147,7 +148,12 @@ export async function startHarnessServer(
     defaultModeId: 'build',
   });
 
-  const mastra = new Mastra({ harnesses: { [HARNESS_ID]: harness }, storage: new InMemoryStore() });
+  const notifications = new InMemoryNotificationsStorage();
+  const compositeStorage = new MastraCompositeStore({
+    id: 'scenario-storage',
+    domains: { notifications },
+  });
+  const mastra = new Mastra({ harnesses: { [HARNESS_ID]: harness }, storage: compositeStorage });
 
   const app = new Hono();
 

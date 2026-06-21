@@ -1,8 +1,8 @@
 import { MastraClient } from '@mastra/client-js';
-import type { PlanResume } from '@mastra/client-js';
+import type { PlanResume, SendNotificationInput } from '@mastra/client-js';
 
 import { initialTranscript, transcriptReducer } from '../web/transcript';
-import type { ApprovalPrompt, SuspensionPrompt, TimelineEntry, TranscriptState } from '../web/transcript';
+import type { ApprovalPrompt, NotificationEntry, SuspensionPrompt, TimelineEntry, TranscriptState } from '../web/transcript';
 
 /**
  * Scenario driver — the web equivalent of MastraCode's `McE2eTerminal`.
@@ -36,6 +36,12 @@ export interface ScenarioDriver {
   /** Wait for a suspended interactive tool (ask_user/plan/access). */
   waitForSuspension: (timeoutMs?: number) => Promise<SuspensionPrompt>;
   respond: (resumeData: string | string[] | PlanResume) => Promise<void>;
+  /** Send a notification signal to the session. */
+  sendNotification: (input: SendNotificationInput) => Promise<void>;
+  /** Wait for a notification entry to appear in the transcript. */
+  waitForNotification: (timeoutMs?: number) => Promise<NotificationEntry>;
+  /** Access the underlying SDK session (for multi-session scenarios). */
+  getClient: () => MastraClient;
   dispose: () => Promise<void>;
 }
 
@@ -109,6 +115,12 @@ export async function createDriver(opts: {
       apply(transcriptReducer(state, { type: 'resolvePrompt', id: prompt.id }));
       await session.respondToToolSuspension(prompt.toolCallId, resumeData);
     },
+    sendNotification: async input => {
+      await session.sendNotification(input);
+    },
+    waitForNotification: timeoutMs =>
+      waitFor(() => state.entries.find(e => e.kind === 'notification') as NotificationEntry | undefined, 'notification', timeoutMs),
+    getClient: () => client,
     dispose: async () => {
       sub.unsubscribe();
     },
@@ -128,6 +140,10 @@ function entryText(entry: TimelineEntry): string {
       return `approve ${(entry as ApprovalPrompt).toolName}`;
     case 'suspension':
       return `suspend ${(entry as SuspensionPrompt).toolName}`;
+    case 'notification':
+      return `notification ${(entry as NotificationEntry).message}`;
+    case 'notification_summary':
+      return `notification_summary ${(entry as { message: string }).message}`;
     default:
       return '';
   }

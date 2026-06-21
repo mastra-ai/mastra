@@ -30,6 +30,8 @@ export type {
   HarnessModeInfo,
   HarnessThreadInfo,
   HarnessTaskSnapshot,
+  SendNotificationInput,
+  SendNotificationResult,
   PlanResume,
 } from './resources/harness';
 export { RequestContext } from '@mastra/core/request-context';

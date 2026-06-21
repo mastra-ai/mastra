@@ -58,6 +58,19 @@ const switchModelBodySchema = z.object({
 });
 const switchThreadBodySchema = z.object({ threadId: z.string() });
 
+const sendNotificationBodySchema = z.object({
+  source: z.string(),
+  kind: z.string(),
+  summary: z.string(),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+  payload: z.any().optional(),
+  sourceId: z.string().optional(),
+  dedupeKey: z.string().optional(),
+  coalesceKey: z.string().optional(),
+  attributes: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
 const listHarnessesResponseSchema = z.object({
   harnesses: z.array(z.object({ id: z.string() })),
 });
@@ -491,6 +504,53 @@ export const LIST_HARNESS_THREADS_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'error listing harness threads');
+    }
+  },
+});
+
+export const SEND_HARNESS_NOTIFICATION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/notifications',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: sendNotificationBodySchema,
+  responseSchema: z.object({
+    accepted: z.boolean(),
+    notificationId: z.string().optional(),
+    decision: z.string().optional(),
+    runId: z.string().optional(),
+  }),
+  summary: 'Send a notification signal to a session',
+  description: 'Delivers a notification to the session\u2019s current agent/thread. The agent\u2019s delivery policy determines whether the notification wakes an idle thread, is summarised, or is persisted for later.',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, source, kind, summary, priority, payload, sourceId, dedupeKey, coalesceKey, attributes, metadata }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const result = await session.sendNotificationSignal(
+        {
+          source,
+          kind,
+          summary,
+          priority,
+          payload,
+          sourceId,
+          dedupeKey,
+          coalesceKey,
+          attributes: attributes as Record<string, string | number | boolean | null | undefined> | undefined,
+          metadata,
+        },
+      );
+      return {
+        accepted: result.accepted,
+        notificationId: result.record?.id,
+        decision: result.decision?.action,
+        runId: result.runId,
+      };
+    } catch (error) {
+      return handleError(error, 'error sending harness notification');
     }
   },
 });

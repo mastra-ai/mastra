@@ -5,6 +5,8 @@ import type {
   ApprovalPrompt,
   AssistantEntry,
   NoticeEntry,
+  NotificationEntry,
+  NotificationSummaryEntry,
   SuspensionPrompt,
   TimelineEntry,
   ToolCall,
@@ -164,6 +166,36 @@ function AskUserCard({
 }
 
 // ---------------------------------------------------------------------------
+// Notification cards
+// ---------------------------------------------------------------------------
+
+function NotificationCard({ entry }: { entry: NotificationEntry }) {
+  return (
+    <div style={{ ...S.tool, borderColor: '#6366f1' }}>
+      <div style={S.toolHead}>
+        <span style={S.toolIcon}>🔔</span>
+        <span style={S.toolName}>{entry.source ?? 'notification'}</span>
+        {entry.priority && <span style={S.dim}>[{entry.priority}]</span>}
+      </div>
+      <div style={S.text}>{entry.message}</div>
+    </div>
+  );
+}
+
+function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
+  return (
+    <div style={{ ...S.tool, borderColor: '#6366f1' }}>
+      <div style={S.toolHead}>
+        <span style={S.toolIcon}>📬</span>
+        <span style={S.toolName}>Notification summary</span>
+        <span style={S.dim}>{entry.pending} pending</span>
+      </div>
+      <div style={S.text}>{entry.message}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Transcript
 // ---------------------------------------------------------------------------
 
@@ -188,6 +220,10 @@ export function Transcript({
             return <Notice key={entry.id} entry={entry} />;
           case 'approval':
             return <ApprovalCard key={entry.id} prompt={entry} onApprove={onApprove} />;
+          case 'notification':
+            return <NotificationCard key={entry.id} entry={entry} />;
+          case 'notification_summary':
+            return <NotificationSummaryCard key={entry.id} entry={entry} />;
           case 'suspension':
             return <SuspensionCard key={entry.id} prompt={entry} onRespond={onRespond} />;
           default:
