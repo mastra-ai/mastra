@@ -112,7 +112,8 @@ function ToolMessage({ parts }: { parts: ToolInvocationPart[] }) {
   const resultPart = parts.find(p => p.toolInvocation?.state === 'result');
   const inv = callPart.toolInvocation!;
   const args = formatToolValue(inv.args);
-  const result = resultPart?.toolInvocation?.result !== undefined ? formatToolValue(resultPart.toolInvocation.result) : null;
+  const result =
+    resultPart?.toolInvocation?.result !== undefined ? formatToolValue(resultPart.toolInvocation.result) : null;
 
   return (
     <Collapsible className="mt-2 w-full">
@@ -256,7 +257,12 @@ function OmMarker({ part }: { part: ContentPart }) {
     <div className="flex justify-center py-0.5">
       <div className="w-full max-w-3xl px-3 py-1.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono uppercase tracking-wide text-icon3">
-          <span className={cn('h-5 rounded-full border px-2 inline-flex items-center text-[10px] shadow-none', status.className)}>
+          <span
+            className={cn(
+              'h-5 rounded-full border px-2 inline-flex items-center text-[10px] shadow-none',
+              status.className,
+            )}
+          >
             {status.label}
           </span>
           {summary ? <span className="text-icon3 normal-case tracking-normal">{summary}</span> : null}
@@ -311,7 +317,11 @@ function splitMessageIntoEntries(message: MemoryMessage): TimelineEntry[] {
     entries.push({
       type: 'message',
       id: `${message.id}-chunk-${chunkIndex}`,
-      message: { ...message, id: `${message.id}-chunk-${chunkIndex}`, content: { ...content, parts: visible } as unknown as MemoryMessage['content'] },
+      message: {
+        ...message,
+        id: `${message.id}-chunk-${chunkIndex}`,
+        content: { ...content, parts: visible } as unknown as MemoryMessage['content'],
+      },
     });
     chunkIndex += 1;
     chunk = [];

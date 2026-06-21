@@ -124,8 +124,7 @@ function parseObservations(raw: string): ParsedSection[] {
       sections.push(current);
     }
     const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
-    const isNested =
-      indent >= 2 && (trimmed.startsWith('* ->') || trimmed.startsWith('->') || trimmed.startsWith('-'));
+    const isNested = indent >= 2 && (trimmed.startsWith('* ->') || trimmed.startsWith('->') || trimmed.startsWith('-'));
     const item = parseItem(line);
     if (!item) continue;
     if (isNested && lastRoot) {
@@ -148,9 +147,7 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
             <div className="flex items-start gap-3">
               <div className="w-12 shrink-0 pt-2 text-right">
                 {item.time && (
-                  <span className={`font-mono text-[10px] ${styles.time}`}>
-                    {formatObservationTime(item.time)}
-                  </span>
+                  <span className={`font-mono text-[10px] ${styles.time}`}>{formatObservationTime(item.time)}</span>
                 )}
               </div>
               <div className={cn('min-w-0 flex-1 rounded-md border px-3 py-2', styles.card)}>
@@ -315,9 +312,7 @@ export function ObservationDetailView({
                   {showDiff && previousRecord ? (
                     <>
                       {previousRecord.observationTokenCount} →{' '}
-                      <span className="font-semibold text-[var(--mastra-el-6)]">
-                        {selected.observationTokenCount}
-                      </span>{' '}
+                      <span className="font-semibold text-[var(--mastra-el-6)]">{selected.observationTokenCount}</span>{' '}
                       tokens
                     </>
                   ) : (
@@ -354,11 +349,7 @@ export function ObservationDetailView({
       </div>
 
       {/* History sidebar */}
-      <ObservationHistoryPanel
-        records={sorted}
-        selectedRecordId={selected.id}
-        onSelectRecord={onSelectRecord}
-      />
+      <ObservationHistoryPanel records={sorted} selectedRecordId={selected.id} onSelectRecord={onSelectRecord} />
     </div>
   );
 }

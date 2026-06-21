@@ -39,8 +39,7 @@ export function ThreadDetailView({
   const hasOM = omRecords.length > 0 || isOMLoading;
 
   const BackWrapper = backHref && LinkComponent ? LinkComponent : 'button';
-  const backProps =
-    backHref && LinkComponent ? { href: backHref } : { type: 'button' as const, onClick: onBack };
+  const backProps = backHref && LinkComponent ? { href: backHref } : { type: 'button' as const, onClick: onBack };
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
