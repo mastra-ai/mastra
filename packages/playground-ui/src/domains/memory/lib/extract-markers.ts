@@ -127,8 +127,8 @@ function mapMarker(part: OmMarkerPart, messageCreatedAt: string): ExtractedOmMar
         type: 'observation-start',
         timestamp: part.data.startedAt,
         pendingTokens: part.data.tokensToObserve,
-        observationThreshold: part.data.config.messageTokens,
-        reflectionThreshold: part.data.config.observationTokens,
+        observationThreshold: part.data.config?.messageTokens,
+        reflectionThreshold: part.data.config?.observationTokens,
       };
     case 'data-om-observation-end':
       return {
@@ -141,8 +141,8 @@ function mapMarker(part: OmMarkerPart, messageCreatedAt: string): ExtractedOmMar
         type: 'buffering-start',
         timestamp: part.data.startedAt,
         pendingTokens: part.data.tokensToBuffer,
-        observationThreshold: part.data.config.messageTokens,
-        reflectionThreshold: part.data.config.observationTokens,
+        observationThreshold: part.data.config?.messageTokens,
+        reflectionThreshold: part.data.config?.observationTokens,
       };
     case 'data-om-buffering-end':
       return {
@@ -156,8 +156,8 @@ function mapMarker(part: OmMarkerPart, messageCreatedAt: string): ExtractedOmMar
         timestamp: part.data.activatedAt,
         pendingTokens: part.data.tokensActivated,
         observationTokens: part.data.observationTokens,
-        observationThreshold: part.data.config.messageTokens,
-        reflectionThreshold: part.data.config.observationTokens,
+        observationThreshold: part.data.config?.messageTokens,
+        reflectionThreshold: part.data.config?.observationTokens,
         generationCount: part.data.generationCount,
       };
   }

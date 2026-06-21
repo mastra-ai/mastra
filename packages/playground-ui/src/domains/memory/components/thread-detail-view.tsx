@@ -127,10 +127,10 @@ export function ThreadDetailView({
             </div>
             <div className="border-t border-[var(--mastra-border-1)]">
               <ThreadContextProgress
-                messageTokens={currentWindowState.messageTokens}
-                messageThreshold={currentWindowState.messageThreshold}
-                memoryTokens={currentWindowState.memoryTokens}
-                memoryThreshold={currentWindowState.memoryThreshold}
+                messageTokens={currentWindowState?.messageTokens}
+                messageThreshold={currentWindowState?.messageThreshold}
+                memoryTokens={currentWindowState?.memoryTokens}
+                memoryThreshold={currentWindowState?.memoryThreshold}
               />
               <FlameGraph omRecords={omRecords} markers={markers} messages={messages} tDomain={tDomain} />
             </div>
