@@ -4,11 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 export const observationalMemoryQueryKey = (agentId: string, threadId: string) =>
   ['memory', 'observational-memory', agentId, threadId] as const;
 
-export function useObservationalMemory(
-  agentId: string | undefined,
-  threadId: string | undefined,
-  resourceId?: string,
-) {
+export function useObservationalMemory(agentId: string | undefined, threadId: string | undefined, resourceId?: string) {
   const client = useMastraClient();
 
   return useQuery({

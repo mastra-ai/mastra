@@ -239,12 +239,7 @@ function formatCompactTokens(value: number): string {
   return formatted.endsWith('.0') ? formatted.slice(0, -2) : formatted;
 }
 
-type OmMarkerKind =
-  | 'buffering-start'
-  | 'buffering-end'
-  | 'activation'
-  | 'observation-start'
-  | 'observation-end';
+type OmMarkerKind = 'buffering-start' | 'buffering-end' | 'activation' | 'observation-start' | 'observation-end';
 
 type OmMetrics = {
   pendingTokens?: number;
@@ -261,12 +256,18 @@ type OmMarkerData = {
 
 function getOmMarkerKind(part: ContentPart): OmMarkerKind {
   switch (part.type) {
-    case 'data-om-buffering-start': return 'buffering-start';
-    case 'data-om-buffering-end': return 'buffering-end';
-    case 'data-om-activation': return 'activation';
-    case 'data-om-observation-start': return 'observation-start';
-    case 'data-om-observation-end': return 'observation-end';
-    default: return 'activation';
+    case 'data-om-buffering-start':
+      return 'buffering-start';
+    case 'data-om-buffering-end':
+      return 'buffering-end';
+    case 'data-om-activation':
+      return 'activation';
+    case 'data-om-observation-start':
+      return 'observation-start';
+    case 'data-om-observation-end':
+      return 'observation-end';
+    default:
+      return 'activation';
   }
 }
 
@@ -289,7 +290,8 @@ function formatCompressionRatio(input?: number, output?: number): string | null 
 
 function getOmMarkerSummary(marker: OmMarkerData): string | null {
   const pending = marker.metrics.pendingTokens != null ? `${formatCompactTokens(marker.metrics.pendingTokens)}k` : null;
-  const observed = marker.metrics.observationTokens != null ? `${formatCompactTokens(marker.metrics.observationTokens)}k` : null;
+  const observed =
+    marker.metrics.observationTokens != null ? `${formatCompactTokens(marker.metrics.observationTokens)}k` : null;
 
   switch (marker.kind) {
     case 'buffering-end': {
@@ -456,7 +458,10 @@ function mergeToolCallAndResultMessages(messages: MemoryMessage[]): MemoryMessag
     const nextVisible = nextContent.parts.filter(p => !isOmPart(p));
     merged.push({
       ...current,
-      content: { ...currentContent, parts: [...currentVisible, ...nextVisible, ...currentOm] } as unknown as MemoryMessage['content'],
+      content: {
+        ...currentContent,
+        parts: [...currentVisible, ...nextVisible, ...currentOm],
+      } as unknown as MemoryMessage['content'],
     });
     i += 1;
   }
@@ -497,7 +502,8 @@ function mergeConsecutiveOmMarkers(entries: TimelineEntry[]): TimelineEntry[] {
             statuses: entry.marker.statuses,
             metrics: {
               pendingTokens: entry.marker.metrics.pendingTokens ?? matchingStart.marker.metrics.pendingTokens,
-              observationTokens: entry.marker.metrics.observationTokens ?? matchingStart.marker.metrics.observationTokens,
+              observationTokens:
+                entry.marker.metrics.observationTokens ?? matchingStart.marker.metrics.observationTokens,
             },
           };
           continue;
@@ -506,8 +512,7 @@ function mergeConsecutiveOmMarkers(entries: TimelineEntry[]): TimelineEntry[] {
     }
 
     if (entry.type === 'marker' && previous?.type === 'marker') {
-      const shouldMergeBuffering =
-        previous.marker.kind === 'buffering-start' && entry.marker.kind === 'buffering-end';
+      const shouldMergeBuffering = previous.marker.kind === 'buffering-start' && entry.marker.kind === 'buffering-end';
       const shouldMergeObservation =
         previous.marker.kind === 'observation-start' && entry.marker.kind === 'observation-end';
       if (shouldMergeBuffering || shouldMergeObservation) {
