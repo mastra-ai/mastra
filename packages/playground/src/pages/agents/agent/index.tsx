@@ -1,6 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
+import type { ComponentProps } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
@@ -22,11 +23,33 @@ import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import { ArtifactPreviewProvider, useArtifactPreview } from '@/lib/ai-ui/artifacts/artifact-preview-context';
+import { ArtifactPreviewPanel } from '@/lib/ai-ui/artifacts/artifact-preview-panel';
 
 // With View Transitions support the chat/settings switch is choreographed in
 // agent-view-transition.css; the in-DOM enter animation would replay inside the
 // captured snapshot and double the motion, so it only serves as a fallback.
 const supportsViewTransitions = typeof document !== 'undefined' && 'startViewTransition' in document;
+
+type AgentLayoutWithArtifactsProps = Omit<
+  ComponentProps<typeof AgentLayout>,
+  'onRightDrawerOpenChange' | 'rightDrawerLabel' | 'rightSlot'
+>;
+
+function AgentLayoutWithArtifacts(props: AgentLayoutWithArtifactsProps) {
+  const { closeArtifact, selectedArtifact } = useArtifactPreview();
+
+  return (
+    <AgentLayout
+      {...props}
+      onRightDrawerOpenChange={open => {
+        if (!open) closeArtifact();
+      }}
+      rightDrawerLabel="Open artifacts"
+      rightSlot={selectedArtifact ? <ArtifactPreviewPanel /> : undefined}
+    />
+  );
+}
 
 function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   const { agentId, threadId } = useParams();
@@ -125,52 +148,56 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
               <ThreadInputProvider>
                 <ObservationalMemoryProvider>
                   <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                    <AgentLayout
-                      agentId={agentId!}
-                      leftDrawerLabel="Open threads and memory"
-                      leftSlot={
-                        <AgentSidebar
-                          agentId={agentId!}
-                          threadId={actualThreadId!}
-                          threads={sidebarThreads}
-                          isLoading={isMemoryLoading || isThreadsLoading}
-                          memoryType={memory?.memoryType}
-                          hasMemory={isMemoryLoading || hasMemory}
-                        />
-                      }
-                      browserOverlay={<BrowserViewPanel />}
-                    >
-                      <div className="grid grid-rows-[auto_1fr] h-full min-h-0">
-                        <AgentViewHeader agentId={agentId!} view={view} />
-                        <div
-                          key={view}
-                          className={
-                            supportsViewTransitions
-                              ? 'min-h-0 overflow-hidden'
-                              : 'agent-view-enter min-h-0 overflow-hidden'
-                          }
-                        >
-                          {isSettingsView ? (
-                            <AgentSettingsView agentId={agentId!} />
-                          ) : (
-                            <AgentChat
-                              key={actualThreadId!}
-                              agentId={agentId!}
-                              agentName={agent?.name}
-                              modelVersion={agent?.modelVersion}
-                              supportsMemory={agent?.supportsMemory}
-                              threadId={actualThreadId!}
-                              memory={hasMemory}
-                              refreshThreadList={handleRefreshThreadList}
-                              modelList={agent?.modelList}
-                              messageId={messageId}
-                              isNewThread={isNewThread}
-                              runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
-                            />
-                          )}
+                    <ArtifactPreviewProvider>
+                      <AgentLayoutWithArtifacts
+                        agentId={agentId!}
+                        leftDrawerLabel="Open threads and memory"
+                        leftSlot={
+                          <AgentSidebar
+                            agentId={agentId!}
+                            threadId={actualThreadId!}
+                            threads={sidebarThreads}
+                            isLoading={isMemoryLoading || isThreadsLoading}
+                            memoryType={memory?.memoryType}
+                            hasMemory={isMemoryLoading || hasMemory}
+                          />
+                        }
+                        browserOverlay={<BrowserViewPanel />}
+                      >
+                        <div className="grid grid-rows-[auto_1fr] h-full min-h-0">
+                          <AgentViewHeader agentId={agentId!} view={view} />
+                          <div
+                            key={view}
+                            className={
+                              supportsViewTransitions
+                                ? 'min-h-0 overflow-hidden'
+                                : 'agent-view-enter min-h-0 overflow-hidden'
+                            }
+                          >
+                            {isSettingsView ? (
+                              <AgentSettingsView agentId={agentId!} />
+                            ) : (
+                              <AgentChat
+                                key={actualThreadId!}
+                                agentId={agentId!}
+                                agentName={agent?.name}
+                                modelVersion={agent?.modelVersion}
+                                supportsMemory={agent?.supportsMemory}
+                                threadId={actualThreadId!}
+                                memory={hasMemory}
+                                refreshThreadList={handleRefreshThreadList}
+                                modelList={agent?.modelList}
+                                messageId={messageId}
+                                isNewThread={isNewThread}
+                                runOptionsSlot={
+                                  <ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />
+                                }
+                              />
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </AgentLayout>
+                      </AgentLayoutWithArtifacts>
+                    </ArtifactPreviewProvider>
                   </ActivatedSkillsProvider>
                 </ObservationalMemoryProvider>
               </ThreadInputProvider>

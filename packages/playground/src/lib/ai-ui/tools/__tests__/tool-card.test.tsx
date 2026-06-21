@@ -11,6 +11,7 @@ import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import { ArtifactPreviewProvider } from '@/lib/ai-ui/artifacts/artifact-preview-context';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
@@ -43,7 +44,7 @@ const Providers = ({ children }: { children: ReactNode }) => {
             toolCallApprovals={{}}
             networkToolCallApprovals={{}}
           >
-            {children}
+            <ArtifactPreviewProvider>{children}</ArtifactPreviewProvider>
           </ToolCallProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -149,6 +150,95 @@ describe('ToolCard dispatch', () => {
   it('renders a generic tool badge as a fallback', () => {
     renderToolCard(baseProps({ toolName: 'searchDocs' }));
     expect(screen.getByText('searchDocs')).toBeTruthy();
+  });
+
+  it('renders an open artifact chip for completed workspace write_file calls with workspace metadata', () => {
+    renderToolCard(
+      baseProps({
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+        input: { path: 'reports/output.pdf' },
+        output: { path: 'reports/output.pdf', success: true, mimeType: 'application/pdf' },
+        toolCallId: 'call-write',
+        dataParts: [
+          {
+            type: 'data-workspace-metadata',
+            data: {
+              toolCallId: 'call-write',
+              id: 'workspace-1',
+              name: 'Workspace One',
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByTestId('workspace-artifact-chip').textContent).toContain('Open file');
+    expect(screen.getByTestId('workspace-artifact-chip').textContent).toContain('output.pdf');
+  });
+
+  it('renders an open artifact chip for completed workspace read_file calls with workspace metadata', () => {
+    renderToolCard(
+      baseProps({
+        toolName: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
+        input: JSON.stringify({ path: 'notes/brief.md' }),
+        output: { path: 'notes/brief.md', content: '# Brief', mimeType: 'text/markdown' },
+        toolCallId: 'call-read',
+        dataParts: [
+          {
+            type: 'data',
+            name: 'workspace-metadata',
+            data: {
+              toolCallId: 'call-read',
+              id: 'workspace-1',
+              name: 'Workspace One',
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getByTestId('workspace-artifact-chip').textContent).toContain('brief.md');
+  });
+
+  it('does not render an artifact chip when workspace metadata or path is missing', () => {
+    const { rerender } = render(
+      <Providers>
+        <ToolCard
+          {...baseProps({
+            toolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+            input: { path: 'reports/output.pdf' },
+            output: { path: 'reports/output.pdf', success: true },
+            toolCallId: 'call-missing-metadata',
+          })}
+        />
+      </Providers>,
+    );
+
+    expect(screen.queryByTestId('workspace-artifact-chip')).toBeNull();
+
+    rerender(
+      <Providers>
+        <ToolCard
+          {...baseProps({
+            toolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+            input: {},
+            output: { path: 'reports/output.pdf', success: true },
+            toolCallId: 'call-missing-path',
+            dataParts: [
+              {
+                type: 'data-workspace-metadata',
+                data: {
+                  toolCallId: 'call-missing-path',
+                  id: 'workspace-1',
+                },
+              },
+            ],
+          })}
+        />
+      </Providers>,
+    );
+
+    expect(screen.queryByTestId('workspace-artifact-chip')).toBeNull();
   });
 
   it('treats background-task string results as a generic tool badge', () => {

@@ -1,10 +1,13 @@
 import { Txt } from '@mastra/playground-ui';
+import type { ComponentProps } from 'react';
 
 import { AgentLayout } from '../agent-layout';
 import { SidebarPanel } from '../sidebar-panel';
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
+import { ArtifactPreviewProvider, useArtifactPreview } from '@/lib/ai-ui/artifacts/artifact-preview-context';
+import { ArtifactPreviewPanel } from '@/lib/ai-ui/artifacts/artifact-preview-panel';
 
 interface AgentPlaygroundViewProps {
   agentId: string;
@@ -30,6 +33,26 @@ interface AgentPlaygroundViewProps {
   onDownloadJson?: () => Promise<void>;
   onOpenPr?: () => Promise<void>;
   isViewingPreviousVersion?: boolean;
+}
+
+type AgentLayoutWithArtifactsProps = Omit<
+  ComponentProps<typeof AgentLayout>,
+  'onRightDrawerOpenChange' | 'rightDrawerLabel' | 'rightSlot'
+>;
+
+function AgentLayoutWithArtifacts(props: AgentLayoutWithArtifactsProps) {
+  const { closeArtifact, selectedArtifact } = useArtifactPreview();
+
+  return (
+    <AgentLayout
+      {...props}
+      onRightDrawerOpenChange={open => {
+        if (!open) closeArtifact();
+      }}
+      rightDrawerLabel="Open artifacts"
+      rightSlot={selectedArtifact ? <ArtifactPreviewPanel /> : undefined}
+    />
+  );
 }
 
 function LeftPanel({
@@ -143,40 +166,42 @@ export function AgentPlaygroundView({
   isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
   return (
-    <AgentLayout
-      agentId={agentId}
-      leftDrawerLabel="Open configuration"
-      leftSlot={
-        <LeftPanel
-          agentId={agentId}
-          activeVersionId={activeVersionId}
-          selectedVersionId={selectedVersionId}
-          latestVersionId={latestVersionId}
-          onVersionSelect={onVersionSelect}
-          isDirty={isDirty}
-          isSavingDraft={isSavingDraft}
-          isPublishing={isPublishing}
-          hasDraft={hasDraft}
-          readOnly={readOnly}
-          isCodeSourceAgent={isCodeSourceAgent}
-          showCodeModeActions={showCodeModeActions}
-          canOpenPr={canOpenPr}
-          openPrTitle={openPrTitle}
-          onSaveDraft={onSaveDraft}
-          onPublish={onPublish}
-          onDownloadJson={onDownloadJson}
-          onOpenPr={onOpenPr}
-          isViewingPreviousVersion={isViewingPreviousVersion}
-        />
-      }
-    >
-      <AgentPlaygroundTestChat
+    <ArtifactPreviewProvider>
+      <AgentLayoutWithArtifacts
         agentId={agentId}
-        agentName={agentName}
-        modelVersion={modelVersion}
-        agentVersionId={agentVersionId}
-        hasMemory={hasMemory}
-      />
-    </AgentLayout>
+        leftDrawerLabel="Open configuration"
+        leftSlot={
+          <LeftPanel
+            agentId={agentId}
+            activeVersionId={activeVersionId}
+            selectedVersionId={selectedVersionId}
+            latestVersionId={latestVersionId}
+            onVersionSelect={onVersionSelect}
+            isDirty={isDirty}
+            isSavingDraft={isSavingDraft}
+            isPublishing={isPublishing}
+            hasDraft={hasDraft}
+            readOnly={readOnly}
+            isCodeSourceAgent={isCodeSourceAgent}
+            showCodeModeActions={showCodeModeActions}
+            canOpenPr={canOpenPr}
+            openPrTitle={openPrTitle}
+            onSaveDraft={onSaveDraft}
+            onPublish={onPublish}
+            onDownloadJson={onDownloadJson}
+            onOpenPr={onOpenPr}
+            isViewingPreviousVersion={isViewingPreviousVersion}
+          />
+        }
+      >
+        <AgentPlaygroundTestChat
+          agentId={agentId}
+          agentName={agentName}
+          modelVersion={modelVersion}
+          agentVersionId={agentVersionId}
+          hasMemory={hasMemory}
+        />
+      </AgentLayoutWithArtifacts>
+    </ArtifactPreviewProvider>
   );
 }

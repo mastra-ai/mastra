@@ -1,7 +1,6 @@
 import {
   AlertDialog,
   Button,
-  CopyButton,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
@@ -30,9 +29,8 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import type { FileEntry } from '../types';
+import { WorkspaceFilePreview } from './workspace-file-preview';
 
 // =============================================================================
 // Type Definitions
@@ -204,6 +202,7 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
   return (
     <div className="flex items-center gap-1 text-sm overflow-x-auto">
       <button
+        type="button"
         onClick={() => onNavigate('.')}
         className="p-1 rounded hover:bg-surface4 text-neutral5 hover:text-neutral6 transition-colors"
         aria-label="Workspace root"
@@ -216,6 +215,7 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
           <div key={partPath} className="flex items-center">
             <ChevronRight className="h-4 w-4 text-neutral3" />
             <button
+              type="button"
               onClick={() => onNavigate(partPath)}
               className="px-2 py-1 rounded hover:bg-surface4 text-neutral5 hover:text-neutral6 transition-colors truncate max-w-[150px]"
               title={part}
@@ -333,6 +333,7 @@ export function FileBrowser({
               {!isRoot && (
                 <li>
                   <button
+                    type="button"
                     onClick={() => {
                       const parentPath = currentPath.split('/').slice(0, -1).join('/') || '.';
                       onNavigate(parentPath);
@@ -352,6 +353,7 @@ export function FileBrowser({
                   <li key={entry.name} className="group">
                     <div className="flex items-center hover:bg-surface4 transition-colors">
                       <button
+                        type="button"
                         onClick={() => handleEntryClick(entry)}
                         className="flex-1 flex items-center gap-3 px-4 py-2 text-left"
                       >
@@ -361,7 +363,7 @@ export function FileBrowser({
                         {entry.mount && isError && (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span tabIndex={0} className="flex items-center">
+                              <span className="flex items-center">
                                 <AlertCircle className="h-4 w-4 text-red-400" />
                               </span>
                             </TooltipTrigger>
@@ -377,7 +379,6 @@ export function FileBrowser({
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span
-                                  tabIndex={0}
                                   className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-neutral3 bg-surface4'}`}
                                 >
                                   {mountLabel}
@@ -398,6 +399,7 @@ export function FileBrowser({
                       </button>
                       {onDelete && !entry.mount && (
                         <button
+                          type="button"
                           onClick={() => handleDelete(entry)}
                           aria-label={`Delete ${entry.name}`}
                           className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-neutral3 transition-all"
@@ -451,127 +453,12 @@ export function FileBrowser({
 // File Viewer Component
 // =============================================================================
 
-/**
- * Map file extensions to Prism language names for syntax highlighting.
- */
-function getLanguageFromExtension(ext?: string): string | null {
-  if (!ext) return null;
-  const map: Record<string, string> = {
-    js: 'javascript',
-    jsx: 'jsx',
-    ts: 'typescript',
-    tsx: 'tsx',
-    json: 'json',
-    md: 'markdown',
-    mdx: 'mdx',
-    py: 'python',
-    rb: 'ruby',
-    go: 'go',
-    rs: 'rust',
-    java: 'java',
-    c: 'c',
-    cpp: 'cpp',
-    h: 'c',
-    hpp: 'cpp',
-    css: 'css',
-    scss: 'scss',
-    less: 'less',
-    html: 'html',
-    xml: 'xml',
-    yaml: 'yaml',
-    yml: 'yaml',
-    toml: 'toml',
-    sh: 'bash',
-    bash: 'bash',
-    zsh: 'bash',
-    sql: 'sql',
-    graphql: 'graphql',
-    gql: 'graphql',
-    dockerfile: 'dockerfile',
-    makefile: 'makefile',
-    vue: 'vue',
-    svelte: 'svelte',
-  };
-  return map[ext.toLowerCase()] || null;
-}
-
-/**
- * Highlighted code display component using Prism.
- */
-function HighlightedCode({ content, language }: { content: string; language: string }) {
-  return (
-    <SyntaxHighlighter
-      language={language}
-      style={coldarkDark}
-      customStyle={{
-        margin: 0,
-        padding: '1rem',
-        backgroundColor: 'transparent',
-        fontSize: '0.875rem',
-      }}
-      codeTagProps={{
-        style: {
-          fontFamily: 'var(--font-mono)',
-        },
-      }}
-    >
-      {content}
-    </SyntaxHighlighter>
-  );
-}
-
 export interface FileViewerProps {
+  workspaceId: string;
   path: string;
-  content: string;
-  isLoading: boolean;
-  mimeType?: string;
   onClose?: () => void;
 }
 
-export function FileViewer({ path, content, isLoading, mimeType, onClose }: FileViewerProps) {
-  const fileName = path.split('/').pop() || path;
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  const isImage = mimeType?.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext || '');
-  const language = getLanguageFromExtension(ext);
-
-  return (
-    <div className="rounded-lg border border-border1 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-surface3 border-b border-border1">
-        <div className="flex items-center gap-2">
-          {getFileIcon({ name: fileName, type: 'file' })}
-          <span className="text-sm font-medium text-neutral6">{fileName}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <CopyButton content={content} copyMessage="Copied file content" />
-          {onClose && (
-            <Button variant="ghost" size="md" onClick={onClose}>
-              Close
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="max-h-[500px] overflow-auto h-full" style={{ backgroundColor: 'black' }}>
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
-          </div>
-        ) : isImage ? (
-          <div className="p-4 flex items-center justify-center">
-            <img
-              src={`data:${mimeType || 'image/png'};base64,${btoa(content)}`}
-              alt={fileName}
-              className="max-w-full max-h-[400px] object-contain"
-            />
-          </div>
-        ) : language ? (
-          <HighlightedCode content={content} language={language} />
-        ) : (
-          <pre className="p-4 text-sm text-neutral5 whitespace-pre-wrap font-mono overflow-x-auto">{content}</pre>
-        )}
-      </div>
-    </div>
-  );
+export function FileViewer({ workspaceId, path, onClose }: FileViewerProps) {
+  return <WorkspaceFilePreview workspaceId={workspaceId} path={path} onClose={onClose} />;
 }

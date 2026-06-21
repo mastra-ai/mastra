@@ -62,12 +62,15 @@ function createMockFilesystem(
     status: 'ready' as const,
     readOnly: options.readOnly ?? false,
 
-    readFile: vi.fn(async (path: string) => {
+    readFile: vi.fn(async (path: string, options?: { encoding?: BufferEncoding }) => {
       const content = files.get(path);
       if (content === undefined) {
         const error = new Error(`File not found: ${path}`);
         (error as any).code = 'ENOENT';
         throw error;
+      }
+      if (options?.encoding === 'base64') {
+        return Buffer.from(content).toString('base64');
       }
       return content;
     }),
@@ -157,7 +160,7 @@ function createMockFilesystem(
           size: files.get(path)!.length,
           createdAt: new Date(),
           modifiedAt: new Date(),
-          mimeType: 'text/plain',
+          mimeType: path.endsWith('.pdf') ? 'application/pdf' : 'text/plain',
         };
       }
       if (directories.has(path) || path === '/') {
@@ -477,6 +480,31 @@ describe('Workspace Handlers', () => {
 
       expect(result.content).toBe('Hello World');
       expect(result.path).toBe('/test.txt');
+      expect(result.type).toBe('file');
+      expect(result.size).toBe('Hello World'.length);
+      expect(result.mimeType).toBe('text/plain');
+    });
+
+    it('should preserve base64 content for binary file reads', async () => {
+      const pdfContent = '%PDF-1.4';
+      const files = new Map([['/report.pdf', pdfContent]]);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      const result = await WORKSPACE_FS_READ_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'test-workspace',
+        path: '/report.pdf',
+        encoding: 'base64',
+      });
+
+      expect(result).toMatchObject({
+        path: '/report.pdf',
+        content: Buffer.from(pdfContent).toString('base64'),
+        type: 'file',
+        size: pdfContent.length,
+        mimeType: 'application/pdf',
+      });
     });
 
     it('should throw 404 when file not found', async () => {

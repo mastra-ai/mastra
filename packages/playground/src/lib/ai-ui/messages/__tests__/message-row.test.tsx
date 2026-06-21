@@ -71,6 +71,26 @@ describe('MessageRow', () => {
     expect(screen.getByText('world')).toBeTruthy();
   });
 
+  it('renders assistant file parts safely', () => {
+    renderRow(
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'file',
+              mimeType: 'application/pdf',
+              data: 'data:application/pdf;base64,JVBERi0xLjQ=',
+            } as never,
+          ],
+        },
+      }),
+    );
+
+    expect(screen.getByLabelText('View PDF')).toBeTruthy();
+  });
+
   it('renders user text', () => {
     renderRow(
       baseMessage({

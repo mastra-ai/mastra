@@ -31,7 +31,6 @@ import {
   useSearchWorkspace,
   useDeleteWorkspaceFile,
   useCreateWorkspaceDirectory,
-  useWorkspaceFile,
 } from '@/domains/workspace/hooks/use-workspace';
 import { useWorkspaceSkills, useSearchWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skills';
 import type { WorkspaceItem } from '@/domains/workspace/types';
@@ -133,12 +132,6 @@ export default function Workspace() {
   });
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
-
-  // Selected file content - pass workspaceId
-  const { data: fileContent, isLoading: isLoadingFileContent } = useWorkspaceFile(selectedFile ?? '', {
-    enabled: !!selectedFile,
-    workspaceId: effectiveWorkspaceId,
-  });
 
   // Skills - pass workspaceId to get skills from the selected workspace
   const {
@@ -378,6 +371,7 @@ export default function Workspace() {
         {workspaces.length > 1 && (
           <div className="relative">
             <button
+              type="button"
               onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
               className="flex items-center gap-2 px-3 py-2 text-sm border border-border1 rounded-lg bg-surface2 hover:bg-surface3 transition-colors w-full max-w-md"
             >
@@ -401,6 +395,7 @@ export default function Workspace() {
               <div className="absolute z-50 mt-1 w-full max-w-md bg-surface2 border border-border1 rounded-lg shadow-lg overflow-hidden">
                 {workspaces.map(workspace => (
                   <button
+                    type="button"
                     key={workspace.id}
                     onClick={() => {
                       setSelectedWorkspaceId(workspace.id);
@@ -528,12 +523,10 @@ export default function Workspace() {
                             deleteFile.mutate({ path, recursive: true, force: true, workspaceId: effectiveWorkspaceId })
                     }
                   />
-                  {selectedFile && (
+                  {selectedFile && effectiveWorkspaceId && (
                     <FileViewer
+                      workspaceId={effectiveWorkspaceId}
                       path={selectedFile}
-                      content={fileContent?.content ?? ''}
-                      isLoading={isLoadingFileContent}
-                      mimeType={fileContent?.mimeType}
                       onClose={() => setSelectedFile(null)}
                     />
                   )}

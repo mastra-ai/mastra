@@ -1,5 +1,17 @@
 // File browser components
 export { FileBrowser, FileViewer, type FileBrowserProps, type FileViewerProps } from './file-browser';
+export {
+  WorkspaceFilePreview,
+  WorkspaceFilePreviewContent,
+  type WorkspaceFilePreviewContentProps,
+  type WorkspaceFilePreviewProps,
+  type WorkspaceFilePreviewVariant,
+} from './workspace-file-preview';
+export {
+  formatWorkspaceFileSize,
+  getWorkspaceFilePreviewKind,
+  type WorkspaceFilePreviewKind,
+} from './workspace-file-preview-utils';
 
 export { NoWorkspacesInfo } from './no-workspaces-info';
 export { WorkspaceNotConfigured } from './workspace-not-configured';

@@ -48,7 +48,7 @@ export const useWorkspaceInfo = (workspaceId?: string) => {
 // List All Workspaces Hook
 // =============================================================================
 
-export const useWorkspaces = () => {
+export const useWorkspaces = (options?: { enabled?: boolean }) => {
   const client = useMastraClient();
 
   return useQuery({
@@ -59,6 +59,7 @@ export const useWorkspaces = () => {
       }
       return (client as any).listWorkspaces();
     },
+    enabled: options?.enabled !== false && isWorkspaceV1Supported(client),
     retry: shouldRetryWorkspaceQuery,
   });
 };
@@ -97,7 +98,7 @@ export const useWorkspaceFile = (
   const client = useMastraClient();
 
   return useQuery({
-    queryKey: ['workspace', 'file', path, options?.workspaceId],
+    queryKey: ['workspace', 'file', path, options?.workspaceId, options?.encoding ?? 'utf-8'],
     queryFn: async (): Promise<FileReadResponse> => {
       if (!isWorkspaceV1Supported(client)) {
         throw new Error('Workspace v1 not supported by core or client');

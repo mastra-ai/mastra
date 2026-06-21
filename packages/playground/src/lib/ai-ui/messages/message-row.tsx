@@ -226,6 +226,7 @@ export const MessageRow = ({ message, hasModelList, isSpeaking, onReadAloud, onS
     () => ({
       ...sharedRenderers,
       Text: part => <AssistantTextPartRenderer part={part} metadata={metadata} />,
+      File: part => <UserFilePartRenderer part={part} />,
     }),
     [sharedRenderers, metadata],
   );

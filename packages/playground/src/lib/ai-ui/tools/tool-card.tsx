@@ -7,6 +7,7 @@ import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
+import { WorkspaceArtifactChip } from './badges/workspace-artifact-chip';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 import {
   isBrowserTool,
@@ -277,6 +278,8 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   }
 
   const mcpAppInfo = mcpAppToolsMap?.[toolName];
+  const isWorkspaceArtifactTool =
+    toolName === WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE || toolName === WORKSPACE_TOOLS.FILESYSTEM.READ_FILE;
 
   return (
     <>
@@ -292,6 +295,9 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
         isNetwork={isNetwork}
         toolCalled={toolCalled}
       />
+      {isWorkspaceArtifactTool && isComplete ? (
+        <WorkspaceArtifactChip args={args} result={result} toolCallId={toolCallId} dataParts={dataParts} />
+      ) : null}
       {mcpAppInfo && result !== undefined && (
         <McpAppToolResult
           appInfo={mcpAppInfo}

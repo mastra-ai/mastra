@@ -498,15 +498,20 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
         throw new HTTPException(404, { message: `Path "${decodedPath}" not found` });
       }
 
+      const stat = await workspace.filesystem.stat(decodedPath);
+      const effectiveEncoding = (encoding as BufferEncoding | undefined) || 'utf-8';
+
       // Read file content
       const content = await workspace.filesystem.readFile(decodedPath, {
-        encoding: (encoding as BufferEncoding) || 'utf-8',
+        encoding: effectiveEncoding,
       });
 
       return {
         path: decodedPath,
-        content: typeof content === 'string' ? content : content.toString('utf-8'),
-        type: 'file' as const,
+        content: typeof content === 'string' ? content : content.toString(effectiveEncoding),
+        type: stat.type,
+        size: stat.size,
+        mimeType: stat.mimeType,
       };
     } catch (error) {
       return handleWorkspaceError(error, 'Error reading file');

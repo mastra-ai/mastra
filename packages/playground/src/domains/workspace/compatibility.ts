@@ -89,6 +89,13 @@ export const isNotFoundError = (error: unknown): boolean => {
   return false;
 };
 
+export const isWorkspaceFilesystemUnavailableError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object' || !('message' in error)) return false;
+
+  const message = (error as { message: string }).message;
+  return message.includes('No workspace filesystem configured');
+};
+
 /**
  * React Query retry function that doesn't retry on client errors (4xx) or 501 errors.
  * Use this to prevent infinite retries when resources don't exist, access is denied, or workspaces aren't supported.
@@ -96,6 +103,11 @@ export const isNotFoundError = (error: unknown): boolean => {
 export const shouldRetryWorkspaceQuery = (failureCount: number, error: unknown): boolean => {
   // Don't retry 4xx client errors (400, 401, 403, 404, etc.) - these won't resolve with retries
   if (isClientError(error)) {
+    return false;
+  }
+  // client-js can surface fetch failures as plain Error messages, so keep the
+  // text-based 404 guard in the retry path too.
+  if (isNotFoundError(error)) {
     return false;
   }
   // Don't retry 501 "Not Implemented" errors - they won't resolve with retries
