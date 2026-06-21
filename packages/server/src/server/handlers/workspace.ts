@@ -499,6 +499,10 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
       }
 
       const stat = await workspace.filesystem.stat(decodedPath);
+      if (stat.type !== 'file') {
+        throw new HTTPException(400, { message: `Path "${decodedPath}" is not a file` });
+      }
+
       const effectiveEncoding = (encoding as BufferEncoding | undefined) || 'utf-8';
 
       // Read file content

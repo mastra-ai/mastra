@@ -1,17 +1,21 @@
 import { Button, Spinner } from '@mastra/playground-ui';
 import { useEffect, useMemo, useState } from 'react';
-import { WorkspaceDataListPreview } from './workspace-data-list-preview';
+import { MAX_PREVIEW_ROWS, WorkspaceDataListPreview } from './workspace-data-list-preview';
 import { base64ToUint8Array } from './workspace-preview-binary-utils';
 import { WorkspacePreviewFallback } from './workspace-preview-fallback';
 import { cn } from '@/lib/utils';
 
+const MAX_PREVIEW_SHEETS = 10;
+
 interface SpreadsheetSheet {
+  isRowTruncated: boolean;
   name: string;
   rows: string[][];
 }
 
 interface SpreadsheetPreviewState {
   error: Error | null;
+  isSheetTruncated: boolean;
   isLoading: boolean;
   sheets: SpreadsheetSheet[];
 }
@@ -34,6 +38,13 @@ function normalizeSheetRows(rows: unknown[][]) {
   return rows.map(row => row.map(normalizeCellValue));
 }
 
+function isWorksheetRowTruncated(worksheet: unknown) {
+  if (!worksheet || typeof worksheet !== 'object') return false;
+
+  const sheet = worksheet as { ['!fullref']?: string; ['!ref']?: string };
+  return Boolean(sheet['!fullref'] && sheet['!ref'] && sheet['!fullref'] !== sheet['!ref']);
+}
+
 export function WorkspaceSpreadsheetPreview({
   content,
   isDownloading,
@@ -43,6 +54,7 @@ export function WorkspaceSpreadsheetPreview({
   const [activeSheetName, setActiveSheetName] = useState<string | null>(null);
   const [state, setState] = useState<SpreadsheetPreviewState>({
     error: null,
+    isSheetTruncated: false,
     isLoading: true,
     sheets: [],
   });
@@ -52,17 +64,19 @@ export function WorkspaceSpreadsheetPreview({
 
     const loadSpreadsheet = async () => {
       try {
-        setState({ error: null, isLoading: true, sheets: [] });
+        setState({ error: null, isSheetTruncated: false, isLoading: true, sheets: [] });
 
         const xlsx = await import('xlsx');
-        const workbook = xlsx.read(base64ToUint8Array(content), { type: 'array' });
-        const sheets = workbook.SheetNames.map(name => {
+        const workbook = xlsx.read(base64ToUint8Array(content), { sheetRows: MAX_PREVIEW_ROWS + 1, type: 'array' });
+        const sheetNames = workbook.SheetNames.slice(0, MAX_PREVIEW_SHEETS);
+        const sheets = sheetNames.map(name => {
           const worksheet = workbook.Sheets[name];
           const rows = worksheet
             ? xlsx.utils.sheet_to_json<unknown[]>(worksheet, { blankrows: false, defval: '', header: 1, raw: false })
             : [];
 
           return {
+            isRowTruncated: isWorksheetRowTruncated(worksheet),
             name,
             rows: normalizeSheetRows(rows),
           };
@@ -70,12 +84,18 @@ export function WorkspaceSpreadsheetPreview({
 
         if (!isCancelled) {
           setActiveSheetName(sheets[0]?.name ?? null);
-          setState({ error: null, isLoading: false, sheets });
+          setState({
+            error: null,
+            isSheetTruncated: workbook.SheetNames.length > sheetNames.length,
+            isLoading: false,
+            sheets,
+          });
         }
       } catch (error) {
         if (!isCancelled) {
           setState({
             error: error instanceof Error ? error : new Error('Failed to parse spreadsheet'),
+            isSheetTruncated: false,
             isLoading: false,
             sheets: [],
           });
@@ -143,7 +163,12 @@ export function WorkspaceSpreadsheetPreview({
       ) : null}
 
       <div className="min-h-0 flex-1">
-        <WorkspaceDataListPreview caption={activeSheet.name} headerMode="letters" rows={activeSheet.rows} />
+        <WorkspaceDataListPreview
+          caption={`${activeSheet.name}${state.isSheetTruncated ? ` · showing first ${MAX_PREVIEW_SHEETS} sheets` : ''}`}
+          headerMode="letters"
+          isRowTruncated={activeSheet.isRowTruncated}
+          rows={activeSheet.rows}
+        />
       </div>
     </div>
   );

@@ -4,6 +4,8 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.mjs?worker&url';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
+const MAX_PDF_PREVIEW_PAGES = 25;
+
 interface WorkspacePdfPreviewProps {
   content: string;
   fileName: string;
@@ -129,10 +131,7 @@ function WorkspacePdfPage({ containerWidth, pdfDocument, pageNumber }: Workspace
 export function WorkspacePdfPreview({ content, fileName }: WorkspacePdfPreviewProps) {
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const [containerWidth, setContainerWidth] = useState(0);
-  const [{ error, isLoading, pdfDocument, retryKey }, dispatch] = useReducer(
-    pdfPreviewReducer,
-    initialPdfPreviewState,
-  );
+  const [{ error, isLoading, pdfDocument, retryKey }, dispatch] = useReducer(pdfPreviewReducer, initialPdfPreviewState);
 
   const setPdfContainerRef = useCallback((element: HTMLDivElement | null) => {
     resizeObserverRef.current?.disconnect();
@@ -221,7 +220,12 @@ export function WorkspacePdfPreview({ content, fileName }: WorkspacePdfPreviewPr
         </div>
       ) : (
         <div className="mx-auto flex w-full max-w-full flex-col items-center gap-4">
-          {Array.from({ length: pdfDocument.numPages }, (_, index) => (
+          {pdfDocument.numPages > MAX_PDF_PREVIEW_PAGES ? (
+            <p className="w-full text-center text-xs text-neutral3">
+              Showing first {MAX_PDF_PREVIEW_PAGES} of {pdfDocument.numPages} pages.
+            </p>
+          ) : null}
+          {Array.from({ length: Math.min(pdfDocument.numPages, MAX_PDF_PREVIEW_PAGES) }, (_, index) => (
             <WorkspacePdfPage
               key={index + 1}
               containerWidth={containerWidth}

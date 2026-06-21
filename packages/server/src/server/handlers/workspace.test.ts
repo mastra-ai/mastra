@@ -530,6 +530,30 @@ describe('Workspace Handlers', () => {
       }
     });
 
+    it('should throw 400 when path is a directory', async () => {
+      const files = new Map([['/reports/output.txt', 'Hello World']]);
+      const workspace = createWorkspace('test-workspace', { files });
+      const mastra = createMastra(workspace);
+
+      await expect(
+        WORKSPACE_FS_READ_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          path: '/reports',
+        }),
+      ).rejects.toThrow(HTTPException);
+
+      try {
+        await WORKSPACE_FS_READ_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'test-workspace',
+          path: '/reports',
+        });
+      } catch (e) {
+        expect((e as HTTPException).status).toBe(400);
+      }
+    });
+
     it('should throw 404 when workspace not found', async () => {
       const mastra = createMastra();
 

@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { base64ToArrayBuffer } from './workspace-preview-binary-utils';
 import { WorkspacePreviewFallback } from './workspace-preview-fallback';
 
+const MAX_PREVIEW_SLIDES = 25;
+
 interface PresentationSlide {
   number: number;
   text: string[];
@@ -10,6 +12,7 @@ interface PresentationSlide {
 
 interface PresentationPreviewState {
   error: Error | null;
+  isTruncated: boolean;
   isLoading: boolean;
   slides: PresentationSlide[];
 }
@@ -66,6 +69,7 @@ export function WorkspacePresentationPreview({
 }: WorkspacePresentationPreviewProps) {
   const [state, setState] = useState<PresentationPreviewState>({
     error: null,
+    isTruncated: false,
     isLoading: true,
     slides: [],
   });
@@ -75,27 +79,34 @@ export function WorkspacePresentationPreview({
 
     const loadPresentation = async () => {
       try {
-        setState({ error: null, isLoading: true, slides: [] });
+        setState({ error: null, isTruncated: false, isLoading: true, slides: [] });
 
         const { default: JSZip } = await import('jszip');
         const zip = await JSZip.loadAsync(base64ToArrayBuffer(content));
         const slideFiles = zip
           .file(/^ppt\/slides\/slide\d+\.xml$/)
           .sort((left, right) => getSlideNumber(left.name) - getSlideNumber(right.name));
+        const previewSlideFiles = slideFiles.slice(0, MAX_PREVIEW_SLIDES);
         const slides = await Promise.all(
-          slideFiles.map(async file => ({
+          previewSlideFiles.map(async file => ({
             number: getSlideNumber(file.name),
             text: extractSlideText(await file.async('text')),
           })),
         );
 
         if (!isCancelled) {
-          setState({ error: null, isLoading: false, slides });
+          setState({
+            error: null,
+            isTruncated: slideFiles.length > previewSlideFiles.length,
+            isLoading: false,
+            slides,
+          });
         }
       } catch (error) {
         if (!isCancelled) {
           setState({
             error: error instanceof Error ? error : new Error('Failed to parse presentation'),
+            isTruncated: false,
             isLoading: false,
             slides: [],
           });
@@ -141,6 +152,7 @@ export function WorkspacePresentationPreview({
   return (
     <div className="h-full min-h-[280px] overflow-auto p-4">
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        {state.isTruncated ? <p className="text-xs text-neutral3">Showing first {MAX_PREVIEW_SLIDES} slides.</p> : null}
         {state.slides.map(slide => {
           const textKeyOccurrences = new Map<string, number>();
 

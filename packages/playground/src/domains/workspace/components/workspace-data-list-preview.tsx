@@ -3,14 +3,15 @@ import Papa from 'papaparse';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
-const MAX_PREVIEW_COLUMNS = 50;
-const MAX_PREVIEW_ROWS = 200;
+export const MAX_PREVIEW_COLUMNS = 50;
+export const MAX_PREVIEW_ROWS = 200;
 
 export type WorkspaceDataListHeaderMode = 'first-row' | 'letters';
 
 export interface WorkspaceDataListPreviewProps {
   caption?: string;
   headerMode?: WorkspaceDataListHeaderMode;
+  isRowTruncated?: boolean;
   rows: string[][];
 }
 
@@ -45,13 +46,7 @@ function columnName(index: number) {
 }
 
 function getColumnCount(rows: string[][]) {
-  return Math.min(
-    Math.max(
-      1,
-      ...rows.map(row => row.length),
-    ),
-    MAX_PREVIEW_COLUMNS,
-  );
+  return Math.min(Math.max(1, ...rows.map(row => row.length)), MAX_PREVIEW_COLUMNS);
 }
 
 function getCell(row: string[] | undefined, index: number) {
@@ -67,16 +62,23 @@ function getColumnTemplate(columnCount: number) {
 function parseDelimitedContent(content: string, type: 'csv' | 'tsv') {
   const result = Papa.parse<string[]>(content, {
     delimiter: type === 'tsv' ? '\t' : undefined,
+    preview: MAX_PREVIEW_ROWS + 2,
     skipEmptyLines: false,
   });
 
   return {
     rows: normalizeRows(result.data),
     errors: result.errors,
+    isTruncated: result.meta.truncated,
   };
 }
 
-export function WorkspaceDataListPreview({ caption, rows, headerMode = 'first-row' }: WorkspaceDataListPreviewProps) {
+export function WorkspaceDataListPreview({
+  caption,
+  isRowTruncated = false,
+  rows,
+  headerMode = 'first-row',
+}: WorkspaceDataListPreviewProps) {
   const nonEmptyRows = rows.filter(row => row.some(cell => cell.length > 0));
   const columnCount = getColumnCount(nonEmptyRows);
   const headers =
@@ -86,7 +88,7 @@ export function WorkspaceDataListPreview({ caption, rows, headerMode = 'first-ro
   const bodyRows = headerMode === 'first-row' ? nonEmptyRows.slice(1) : nonEmptyRows;
   const visibleRows = bodyRows.slice(0, MAX_PREVIEW_ROWS);
   const isColumnClipped = nonEmptyRows.some(row => row.length > MAX_PREVIEW_COLUMNS);
-  const isRowClipped = bodyRows.length > visibleRows.length;
+  const isRowClipped = isRowTruncated || bodyRows.length > visibleRows.length;
   const columnTemplate = getColumnTemplate(columnCount);
 
   if (nonEmptyRows.length === 0) {
@@ -107,7 +109,8 @@ export function WorkspaceDataListPreview({ caption, rows, headerMode = 'first-ro
           {caption}
           {isRowClipped || isColumnClipped ? (
             <span className="ml-2 text-neutral3">
-              Showing {visibleRows.length.toLocaleString()} of {bodyRows.length.toLocaleString()} rows
+              Showing {visibleRows.length.toLocaleString()}
+              {isRowTruncated ? ' rows' : ` of ${bodyRows.length.toLocaleString()} rows`}
               {isColumnClipped ? ` and first ${MAX_PREVIEW_COLUMNS} columns` : ''}
             </span>
           ) : null}
@@ -156,18 +159,15 @@ export function WorkspaceDataListPreview({ caption, rows, headerMode = 'first-ro
   );
 }
 
-export function WorkspaceDelimitedDataListPreview({
-  content,
-  fileName,
-  type,
-}: WorkspaceDelimitedDataListPreviewProps) {
-  const { rows, errors } = useMemo(() => parseDelimitedContent(content, type), [content, type]);
+export function WorkspaceDelimitedDataListPreview({ content, fileName, type }: WorkspaceDelimitedDataListPreviewProps) {
+  const { rows, errors, isTruncated } = useMemo(() => parseDelimitedContent(content, type), [content, type]);
   const warningCount = errors.length;
 
   return (
     <WorkspaceDataListPreview
       caption={`${fileName}${warningCount > 0 ? ` · parsed with ${warningCount} warning${warningCount === 1 ? '' : 's'}` : ''}`}
       headerMode="first-row"
+      isRowTruncated={isTruncated}
       rows={rows}
     />
   );

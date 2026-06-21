@@ -138,6 +138,24 @@ describe('WorkspaceFilePreviewContent', () => {
     await waitFor(() => expect(pdfMocks.renderPage).toHaveBeenCalled());
   });
 
+  it('caps PDF rendering to the first preview pages', async () => {
+    pdfMocks.getDocument.mockReturnValue({
+      destroy: pdfMocks.destroyLoadingTask,
+      promise: Promise.resolve({
+        cleanup: pdfMocks.cleanupDocument,
+        getPage: pdfMocks.getPage,
+        numPages: 30,
+      }),
+    });
+
+    render(<WorkspaceFilePreviewContent path="reports/output.pdf" content="JVBERi0xLjQ=" mimeType="application/pdf" />);
+
+    expect(await screen.findByText('Showing first 25 of 30 pages.')).toBeTruthy();
+    expect(await screen.findByTestId('workspace-pdf-page-25')).toBeTruthy();
+    expect(screen.queryByTestId('workspace-pdf-page-26')).toBeNull();
+    await waitFor(() => expect(pdfMocks.getPage).toHaveBeenCalledTimes(25));
+  });
+
   it('recovers a stale artifact workspace when a single filesystem workspace can read the file', async () => {
     server.use(
       http.get(`${BASE_URL}/api/workspaces`, () =>
@@ -192,6 +210,38 @@ describe('WorkspaceFilePreviewContent', () => {
     await waitFor(() => expect(pdfMocks.getDocument).toHaveBeenCalled());
   });
 
+  it('does not read files that exceed the inline preview size limit', async () => {
+    const onRead = vi.fn();
+
+    server.use(
+      http.get(`${BASE_URL}/api/workspaces/ws-1/fs/stat`, () =>
+        HttpResponse.json({
+          path: 'exports/big.csv',
+          type: 'file',
+          size: 3 * 1024 * 1024,
+          mimeType: 'text/csv',
+        }),
+      ),
+      http.get(`${BASE_URL}/api/workspaces/ws-1/fs/read`, () => {
+        onRead();
+        return HttpResponse.json({
+          path: 'exports/big.csv',
+          content: 'name,value\nAda,1',
+          type: 'file',
+          size: 3 * 1024 * 1024,
+          mimeType: 'text/csv',
+        });
+      }),
+    );
+
+    renderWithMastraClient(<WorkspaceFilePreview workspaceId="ws-1" path="exports/big.csv" />);
+
+    expect(await screen.findByText('Preview skipped')).toBeTruthy();
+    expect(screen.getByText(/2 MB inline preview limit/)).toBeTruthy();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onRead).not.toHaveBeenCalled();
+  });
+
   it('renders image files with a base64 data URL', () => {
     render(<WorkspaceFilePreviewContent path="images/chart.png" content="iVBORw0KGgo=" mimeType="image/png" />);
 
@@ -244,9 +294,7 @@ describe('WorkspaceFilePreviewContent', () => {
 - 2 tbsp olive oil
 
 </RecipeCard>`;
-    const { container } = render(
-      <WorkspaceFilePreviewContent path="docs/page.mdx" content={mdxContent} />,
-    );
+    const { container } = render(<WorkspaceFilePreviewContent path="docs/page.mdx" content={mdxContent} />);
 
     expect(screen.getByRole('heading', { name: 'Quick Lemon Garlic Pasta' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Ingredients' })).toBeTruthy();
@@ -299,6 +347,20 @@ describe('WorkspaceFilePreviewContent', () => {
     expect(screen.queryByText('const answer = 42;')).toBeNull();
   });
 
+  it('limits delimited data previews before rendering rows', () => {
+    const content = ['name,count', ...Array.from({ length: 250 }, (_, index) => `row-${index + 1},${index + 1}`)].join(
+      '\n',
+    );
+    const { container } = render(
+      <WorkspaceFilePreviewContent path="exports/report.csv" content={content} mimeType="text/csv" />,
+    );
+
+    expect(container.querySelectorAll('.data-list-row')).toHaveLength(200);
+    expect(screen.getByText('Showing 200 rows')).toBeTruthy();
+    expect(screen.getByText('row-200')).toBeTruthy();
+    expect(screen.queryByText('row-201')).toBeNull();
+  });
+
   it('renders TSV files with DataList', () => {
     const { container } = render(
       <WorkspaceFilePreviewContent path="exports/report.tsv" content={'name\tcount\nAda\t2'} />,
@@ -335,6 +397,10 @@ describe('WorkspaceFilePreviewContent', () => {
     );
 
     expect(await screen.findByRole('button', { name: 'Budget' })).toBeTruthy();
+    expect(officeMocks.readSpreadsheet).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      expect.objectContaining({ sheetRows: 201, type: 'array' }),
+    );
     expect(screen.getByRole('button', { name: 'Notes' })).toBeTruthy();
     expect(screen.getByText('Quarter')).toBeTruthy();
     expect(screen.getByText('Q1')).toBeTruthy();

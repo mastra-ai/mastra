@@ -24,10 +24,13 @@ import {
   getWorkspaceFileName,
   getWorkspaceFileParentPath,
   getWorkspaceFilePreviewKind,
+  getWorkspaceFilePreviewSizeLimit,
   isWorkspaceFilePreviewBinary,
+  isWorkspaceFilePreviewTooLarge,
 } from './workspace-file-preview-utils';
 import { WorkspacePdfPreview } from './workspace-pdf-preview';
 import { WorkspacePresentationPreview } from './workspace-presentation-preview';
+import { WorkspacePreviewFallback } from './workspace-preview-fallback';
 import { WorkspaceSpreadsheetPreview } from './workspace-spreadsheet-preview';
 import { WorkspaceTextPreview } from './workspace-text-preview';
 import { cn } from '@/lib/utils';
@@ -127,6 +130,9 @@ export function WorkspaceFilePreviewContent({
   const metadata = [mimeType, sizeLabel].filter(Boolean).join(' · ');
   const headerSubtitle = [workspaceName, path].filter(Boolean).join(' · ');
   const isArtifactVariant = variant === 'artifact';
+  const previewSizeLimit = getWorkspaceFilePreviewSizeLimit(previewKind);
+  const isPreviewTooLarge = isWorkspaceFilePreviewTooLarge(previewKind, size);
+  const previewSizeLimitLabel = formatWorkspaceFileSize(previewSizeLimit ?? undefined);
 
   return (
     <div
@@ -194,6 +200,14 @@ export function WorkspaceFilePreviewContent({
               <p className="text-xs text-neutral4">{error.message}</p>
             </div>
           </div>
+        ) : isPreviewTooLarge ? (
+          <WorkspacePreviewFallback
+            isDownloading={isDownloading}
+            message={`This file is ${sizeLabel || 'larger than expected'} and exceeds the ${previewSizeLimitLabel} inline preview limit.`}
+            onDownload={onDownload}
+            title="Preview skipped"
+            workspaceHref={workspaceHref}
+          />
         ) : previewKind === 'pdf' && content ? (
           <WorkspacePdfPreview content={content} fileName={fileName} />
         ) : previewKind === 'image' && content ? (
@@ -288,8 +302,9 @@ export function WorkspaceFilePreview({
     if (!shouldRecoverWorkspace) return null;
 
     const filesystemWorkspaces =
-      workspacesData?.workspaces.filter(workspace => workspace.capabilities.hasFilesystem && workspace.id !== workspaceId) ??
-      [];
+      workspacesData?.workspaces.filter(
+        workspace => workspace.capabilities.hasFilesystem && workspace.id !== workspaceId,
+      ) ?? [];
 
     return filesystemWorkspaces.length === 1 ? filesystemWorkspaces[0] : null;
   }, [shouldRecoverWorkspace, workspacesData?.workspaces, workspaceId]);
@@ -310,7 +325,10 @@ export function WorkspaceFilePreview({
     (!!fallbackWorkspace && isLoadingFallbackStat);
   const previewKind = useMemo(() => getWorkspaceFilePreviewKind(path, fileStat?.mimeType), [fileStat?.mimeType, path]);
   const encoding = isWorkspaceFilePreviewBinary(previewKind) ? 'base64' : 'utf-8';
-  const shouldReadFile = previewKind !== 'unsupported' && fileStat?.type === 'file';
+  const shouldReadFile =
+    previewKind !== 'unsupported' &&
+    fileStat?.type === 'file' &&
+    !isWorkspaceFilePreviewTooLarge(previewKind, fileStat.size);
   const {
     data: fileContent,
     error: fileError,

@@ -8,10 +8,23 @@ export type WorkspaceFilePreviewKind =
   | 'presentation'
   | 'unsupported';
 
+const MiB = 1024 * 1024;
+
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'avif']);
 const SPREADSHEET_EXTENSIONS = new Set(['xls', 'xlsx']);
 const LEGACY_OFFICE_EXTENSIONS = new Set(['doc', 'ppt']);
 const PLAIN_TEXT_EXTENSIONS = new Set(['csv', 'tsv', 'txt', 'log']);
+
+const PREVIEW_SIZE_LIMITS: Record<WorkspaceFilePreviewKind, number | null> = {
+  pdf: 25 * MiB,
+  image: 25 * MiB,
+  text: 2 * MiB,
+  csv: 2 * MiB,
+  spreadsheet: 10 * MiB,
+  document: 10 * MiB,
+  presentation: 10 * MiB,
+  unsupported: null,
+};
 
 const TEXT_MIME_TYPES = new Set([
   'application/json',
@@ -33,9 +46,7 @@ const SPREADSHEET_MIME_TYPES = new Set([
 
 const DOCUMENT_MIME_TYPES = new Set(['application/vnd.openxmlformats-officedocument.wordprocessingml.document']);
 
-const PRESENTATION_MIME_TYPES = new Set([
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-]);
+const PRESENTATION_MIME_TYPES = new Set(['application/vnd.openxmlformats-officedocument.presentationml.presentation']);
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   bash: 'bash',
@@ -125,4 +136,14 @@ export function getWorkspaceFilePreviewKind(path: string, mimeType?: string): Wo
 
 export function isWorkspaceFilePreviewBinary(kind: WorkspaceFilePreviewKind) {
   return kind === 'pdf' || kind === 'image' || kind === 'spreadsheet' || kind === 'document' || kind === 'presentation';
+}
+
+export function getWorkspaceFilePreviewSizeLimit(kind: WorkspaceFilePreviewKind) {
+  return PREVIEW_SIZE_LIMITS[kind];
+}
+
+export function isWorkspaceFilePreviewTooLarge(kind: WorkspaceFilePreviewKind, size?: number) {
+  const limit = getWorkspaceFilePreviewSizeLimit(kind);
+
+  return typeof limit === 'number' && typeof size === 'number' && size > limit;
 }
