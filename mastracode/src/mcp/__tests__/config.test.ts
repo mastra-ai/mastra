@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { classifyServerEntry, expandEnvVars, validateConfig } from '../config.js';
 
@@ -87,6 +87,7 @@ describe('validateConfig', () => {
   });
 
   it('expands ${VAR} references in http header values from the environment', () => {
+    const previous = process.env.MC_TEST_MCP_KEY;
     process.env.MC_TEST_MCP_KEY = 'secret-123';
     try {
       const result = validateConfig({
@@ -99,7 +100,8 @@ describe('validateConfig', () => {
         headers: { 'x-api-key': 'secret-123' },
       });
     } finally {
-      delete process.env.MC_TEST_MCP_KEY;
+      if (previous === undefined) delete process.env.MC_TEST_MCP_KEY;
+      else process.env.MC_TEST_MCP_KEY = previous;
     }
   });
 
