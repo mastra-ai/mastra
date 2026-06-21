@@ -456,7 +456,7 @@ already have robust, comprehensive unit tests at the appropriate layer:
 | **Voice (adding-voice)** | Audio I/O layer (`speak/listen/getSpeakers`), not part of HTTP-based agentic loop. |
 | **SDK agents (Claude/Cursor/OpenAI)** | External SDK runtimes (`@mastra/claude`, `@mastra/cursor`, `@mastra/openai`), not part of core loop. |
 | **Code mode** | Requires sandbox infrastructure (`LocalSandbox`, workspace sandbox). Alpha/experimental feature. |
-| **A2A / ACP protocols** | External agent-to-agent protocols, not part of core loop. |
+| **A2A / ACP protocols** | Attempted concrete scenario (Round 18): A2AAgent requires mocking `global.fetch` for agent card discovery + JSON-RPC message/send, but AIMock intercepts the same `fetch` for LLM provider calls, causing fixture conflicts. The A2A protocol's task/message model and streaming semantics differ fundamentally from OpenAI chat completions. Already has comprehensive unit tests: `a2a-agent.test.ts` (824 lines, 8+ tests covering agent card fetch, task lifecycle, streaming, error handling). |
 | **Semantic recall** | Requires vector database infrastructure (embedder + vectorDb). `MockMemory` does not support semantic recall. |
 | **autoResumeSuspendedTools** | Requires shared Mastra storage across multiple `agent.stream()` calls to track suspended tool snapshots. Already has comprehensive e2e tests: `tool-approval.e2e.test.ts` (1400+ lines, 8+ autoResume tests). |
 | **resumeStream() with resumeData** | Requires shared Mastra storage across calls to persist suspended state and resume from snapshot. Already covered in `tool-approval.e2e.test.ts` with full suspend/resume flow tests. |
