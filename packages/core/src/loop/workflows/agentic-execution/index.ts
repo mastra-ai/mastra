@@ -110,10 +110,16 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
       async ({ inputData }) => {
         const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
         const toolCalls = typedInputData.output.toolCalls || [];
+        // Recompute concurrency from the step's effective active tool set (set by
+        // llm-execution-step), NOT from the tools the model actually called. A
+        // registered approval/suspending tool that the model did not call this
+        // step must still force sequential execution, so narrowing to called
+        // tool names here would incorrectly allow concurrent execution.
+        const stepActiveTools = _internal?.stepActiveTools as string[] | undefined;
         toolCallForeachOptions.concurrency = resolveToolCallConcurrency({
           requireToolApproval: rest.requireToolApproval,
           tools: ((_internal?.stepTools as Tools | undefined) ?? rest.tools) as Tools | undefined,
-          activeTools: _internal?.stepActiveTools as string[] | undefined,
+          activeTools: stepActiveTools,
           configuredConcurrency: configuredToolCallConcurrency,
         });
         return toolCalls;
