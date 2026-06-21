@@ -127,6 +127,29 @@ function getConversationLabel(conversation: Pick<SlackSignalsConversation, 'id' 
   return conversation.type === 'im' || conversation.type === 'mpim' ? name : `#${name}`;
 }
 
+function getConversationTypeCounts(conversations: SlackSignalsConversation[]): string {
+  const counts = conversations.reduce(
+    (acc, conversation) => {
+      if (conversation.type === 'public_channel') acc.channels += 1;
+      else if (conversation.type === 'private_channel') acc.privateChannels += 1;
+      else if (conversation.type === 'im') acc.dms += 1;
+      else if (conversation.type === 'mpim') acc.groupDms += 1;
+      else acc.unknown += 1;
+      return acc;
+    },
+    { channels: 0, privateChannels: 0, dms: 0, groupDms: 0, unknown: 0 },
+  );
+
+  const parts = [
+    `channels ${counts.channels}`,
+    `private ${counts.privateChannels}`,
+    `DMs ${counts.dms}`,
+    `group DMs ${counts.groupDms}`,
+  ];
+  if (counts.unknown > 0) parts.push(`unknown ${counts.unknown}`);
+  return parts.join(', ');
+}
+
 async function pickSlackConversations(ctx: SlashCommandContext): Promise<SlackSignalsConversation[] | undefined> {
   const slackSignalsProcessor = ctx.state.options?.slackSignals;
   if (!slackSignalsProcessor?.listAvailableChannels) {
@@ -323,7 +346,7 @@ async function listSlackChannels(ctx: SlashCommandContext): Promise<void> {
       return `  ${getConversationLabel(ch)} (${getConversationTypeLabel(ch.type)}) — ${ch.id}`;
     });
 
-    ctx.showInfo(`Available channels (${conversations.length} total, showing ${Math.min(50, conversations.length)}):\n${lines.join('\n')}`);
+    ctx.showInfo(`Available conversations (${conversations.length} total, showing ${Math.min(50, conversations.length)})\nTypes: ${getConversationTypeCounts(conversations)}\n${lines.join('\n')}`);
   } catch (error) {
     ctx.showError(`Failed to list channels: ${error instanceof Error ? error.message : String(error)}`);
   }

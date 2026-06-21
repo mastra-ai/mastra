@@ -59,6 +59,50 @@ describe('SlackToolExecutionComponent', () => {
     expect(output).toContain('⋯');
   });
 
+  it('renders Slack subscription list results as subscription cards', () => {
+    const component = createToolExecutionComponent('slack_list_subscriptions', {}, { collapsedByDefault: true }, ui);
+
+    component.updateResult({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            subscribed: true,
+            workspaceName: 'Mastra',
+            channelCount: 2,
+            lastSyncAt: '2026-06-20T23:33:34.951Z',
+            lastSyncStatus: 'success',
+            channels: [
+              {
+                id: 'C123',
+                name: 'eng',
+                type: 'public_channel',
+                latestTs: '1781996227.789599',
+                lastSyncAt: '2026-06-20T22:58:07.097Z',
+                lastSyncStatus: 'success',
+              },
+              {
+                id: 'D123',
+                name: 'Sam Bhagwat',
+                type: 'im',
+                lastSyncAt: '2026-06-20T05:36:51.397Z',
+                lastSyncStatus: 'success',
+              },
+            ],
+          }),
+        },
+      ],
+      isError: false,
+    });
+
+    const output = stripAnsi(component.render(120).join('\n'));
+    expect(output).toContain('Mastra 2 subscriptions');
+    expect(output).toContain('#eng');
+    expect(output).toContain('Sam Bhagwat');
+    expect(output).toContain('last sync');
+    expect(output).toContain('slack Mastra · 2 subscriptions ✓');
+  });
+
   it('keeps Slack cards readable in quiet mode', () => {
     const component = createToolExecutionComponent(
       'slack_read_conversation',

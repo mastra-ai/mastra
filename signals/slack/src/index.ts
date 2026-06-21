@@ -126,6 +126,10 @@ export type SlackListConversationsInput = {
   abortSignal?: AbortSignal;
 };
 
+export type SlackListUserConversationsInput = SlackListConversationsInput & {
+  userId?: string;
+};
+
 export type SlackListConversationsResult = {
   conversations: SlackSignalsConversation[];
 };
@@ -165,6 +169,7 @@ export type SlackGetConversationInput = {
 export type SlackSignalsSyncClient = {
   getWorkspace(input?: { abortSignal?: AbortSignal }): Promise<SlackSignalsWorkspace>;
   listConversations(input: SlackListConversationsInput): Promise<SlackListConversationsResult>;
+  listUserConversations?(input: SlackListUserConversationsInput): Promise<SlackListConversationsResult>;
   listMessages(input: SlackListMessagesInput): Promise<SlackListMessagesResult>;
   listThreadMessages(input: SlackListThreadMessagesInput): Promise<SlackListThreadMessagesResult>;
   getConversation(input: SlackGetConversationInput): Promise<SlackSignalsConversation>;
@@ -261,6 +266,21 @@ export type SlackReadThreadResult = {
   channel: SlackSignalsConversation;
   viewer?: SlackReadViewer;
   messages: SlackSignalsMessage[];
+};
+
+export type SlackListSubscriptionsResult = {
+  subscribed: boolean;
+  workspaceId?: string;
+  workspaceName?: string;
+  workspaceUrl?: string;
+  userId?: string;
+  conversationTypes: SlackConversationType[];
+  channels: SlackSignalsChannelState[];
+  channelCount: number;
+  lastSyncAt?: string;
+  lastSyncStatus?: 'success' | 'error' | 'skipped';
+  lastSyncError?: string;
+  message: string;
 };
 
 export type SlackSignalsThreadStore = {
@@ -795,18 +815,72 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
       abortSignal: input.abortSignal,
     });
 
+    const conversationsById = new Map(result.conversations.map(conversation => [conversation.id, conversation]));
+    if (this.#syncClient.listUserConversations) {
+      try {
+        const workspace = await this.#syncClient.getWorkspace({ abortSignal: input.abortSignal });
+        const userResult = await this.#syncClient.listUserConversations({
+          userId: workspace.userId,
+          types: this.conversationTypes,
+          abortSignal: input.abortSignal,
+        });
+        for (const conversation of userResult.conversations) conversationsById.set(conversation.id, conversation);
+      } catch {
+        // Fall back to conversations.list results when users.conversations is unavailable.
+      }
+    }
+
+    const conversations = [...conversationsById.values()];
+
     // Resolve DM user IDs to display names — batch via users.list (1 API call)
-    const dmConversations = result.conversations.filter(c => c.type === 'im' && c.user && !c.name);
+    const dmConversations = conversations.filter(c => c.type === 'im' && c.user && !c.name);
     if (dmConversations.length > 0) {
       const userMap = await this.#resolveUserNames(input.abortSignal);
-      for (const conversation of result.conversations) {
+      for (const conversation of conversations) {
         if (conversation.type === 'im' && conversation.user && userMap.has(conversation.user)) {
           conversation.name = userMap.get(conversation.user);
         }
       }
     }
 
-    return result.conversations;
+    return conversations;
+  }
+
+  async listThreadSubscriptions(input: { threadId?: string; resourceId?: string }): Promise<SlackListSubscriptionsResult> {
+    const { loadedThread } = await this.#loadThread(input);
+    const subscription = getSlackSignalsMetadata(loadedThread.metadata).subscription;
+    if (!subscription) {
+      return {
+        subscribed: false,
+        conversationTypes: [],
+        channels: [],
+        channelCount: 0,
+        message: 'This thread is not subscribed to Slack.',
+      };
+    }
+
+    const channels = Object.values(subscription.channels).sort((a, b) => {
+      const aLabel = a.name ?? a.id;
+      const bLabel = b.name ?? b.id;
+      return aLabel.localeCompare(bLabel);
+    });
+
+    return {
+      subscribed: true,
+      workspaceId: subscription.workspaceId,
+      ...(subscription.workspaceName ? { workspaceName: subscription.workspaceName } : {}),
+      ...(subscription.workspaceUrl ? { workspaceUrl: subscription.workspaceUrl } : {}),
+      ...(subscription.userId ? { userId: subscription.userId } : {}),
+      conversationTypes: subscription.conversationTypes,
+      channels,
+      channelCount: channels.length,
+      ...(subscription.lastSyncAt ? { lastSyncAt: subscription.lastSyncAt } : {}),
+      ...(subscription.lastSyncStatus ? { lastSyncStatus: subscription.lastSyncStatus } : {}),
+      ...(subscription.lastSyncError ? { lastSyncError: subscription.lastSyncError } : {}),
+      message: channels.length
+        ? `This thread is subscribed to ${channels.length} Slack channel(s).`
+        : `This thread is subscribed to Slack workspace ${subscription.workspaceName ?? subscription.workspaceId} but has no channels selected.`,
+    };
   }
 
   async readConversation(input: SlackReadConversationInput): Promise<SlackReadConversationResult> {
@@ -1062,6 +1136,18 @@ export class SlackSignalsProvider extends SignalProvider<'slack-signals'> {
                 ? `Unsubscribed this thread from Slack workspace ${result.workspaceName ?? result.workspaceId}.`
                 : 'This thread is not subscribed to Slack.',
           };
+        },
+      }),
+      slack_list_subscriptions: createTool({
+        id: 'slack_list_subscriptions',
+        description: 'List Slack workspace and channel or DM subscriptions for the current thread.',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          const executionThreadContext = getExecutionThreadContext(context);
+          return this.listThreadSubscriptions({
+            threadId: executionThreadContext.threadId,
+            resourceId: executionThreadContext.resourceId,
+          });
         },
       }),
       slack_read_conversation: createTool({

@@ -26,6 +26,16 @@ type SlackMessage = {
   text?: string;
 };
 
+type SlackSubscriptionChannel = {
+  id?: string;
+  name?: string;
+  type?: string;
+  latestTs?: string;
+  lastSyncAt?: string;
+  lastSyncStatus?: 'success' | 'error' | 'skipped';
+  lastSyncError?: string;
+};
+
 type SlackReadResult = {
   channel?: SlackConversation;
   messages?: SlackMessage[];
@@ -36,9 +46,17 @@ type SlackReadResult = {
     messageTs?: string;
     threadTs?: string;
   };
+  subscribed?: boolean;
+  workspaceName?: string;
+  workspaceId?: string;
+  channels?: SlackSubscriptionChannel[];
+  channelCount?: number;
+  lastSyncAt?: string;
+  lastSyncStatus?: 'success' | 'error' | 'skipped';
+  message?: string;
 };
 
-const SLACK_TOOL_NAMES = new Set(['slack_read_conversation', 'slack_read_thread']);
+const SLACK_TOOL_NAMES = new Set(['slack_read_conversation', 'slack_read_thread', 'slack_list_subscriptions']);
 const SLACK_TITLE = '#c084fc';
 const SLACK_AUTHOR = '#c084fc';
 const SLACK_CURRENT_USER = '#fbbf24';
@@ -150,13 +168,44 @@ export class SlackToolExecutionComponent extends Container implements IToolExecu
     const messages = parsed?.messages ?? [];
     this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
-    if (messages.length === 0) {
+    if (this.toolName === 'slack_list_subscriptions') {
+      for (const line of this.formatSubscriptions(parsed)) this.contentBox.addChild(new Text(`${border('│')} ${line}`, 0, 0));
+    } else if (messages.length === 0) {
       this.contentBox.addChild(new Text(`${border('│')} ${theme.fg('muted', 'No Slack messages returned')}`, 0, 0));
     } else {
       for (const line of this.formatMessages(messages)) this.contentBox.addChild(new Text(`${border('│')} ${line}`, 0, 0));
     }
 
     this.contentBox.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
+  }
+
+  private formatSubscriptions(parsed: SlackReadResult | undefined): string[] {
+    const maxLineWidth = Math.max(20, getTermWidth() - BOX_INDENT * 2 - 4);
+    if (!parsed?.subscribed) return [theme.fg('muted', parsed?.message ?? 'This thread is not subscribed to Slack.')];
+
+    const lines: string[] = [];
+    const workspace = parsed.workspaceName ?? parsed.workspaceId ?? 'Slack workspace';
+    const total = parsed.channelCount ?? parsed.channels?.length ?? 0;
+    lines.push(`${chalk.hex(SLACK_AUTHOR).bold(workspace)} ${theme.fg('muted', `${total} subscription${total === 1 ? '' : 's'}`)}`);
+    if (parsed.lastSyncAt) lines.push(`  ${theme.fg('muted', `last sync ${formatDateTime(parsed.lastSyncAt)}${parsed.lastSyncStatus ? ` · ${parsed.lastSyncStatus}` : ''}`)}`);
+
+    const channels = parsed.channels ?? [];
+    if (channels.length === 0) {
+      lines.push(theme.fg('muted', 'No channels or DMs selected.'));
+      return lines;
+    }
+
+    for (const channel of channels) {
+      const label = formatChannelLabel(channel.name ?? channel.id ?? 'unknown', channel.type);
+      const status = channel.lastSyncStatus ? ` · ${channel.lastSyncStatus}` : '';
+      const lastSync = channel.lastSyncAt ? `last sync ${formatDateTime(channel.lastSyncAt)}` : 'not synced yet';
+      const latest = channel.latestTs ? ` · latest ${formatSlackTimestamp(channel.latestTs) || channel.latestTs}` : '';
+      const detail = `${lastSync}${status}${latest}`;
+      lines.push(truncateAnsi(`${chalk.hex(SLACK_AUTHOR).bold(label)} ${theme.fg('muted', detail)}`, maxLineWidth));
+      if (channel.lastSyncError) lines.push(`  ${theme.fg('error', truncateAnsi(channel.lastSyncError, maxLineWidth - 2))}`);
+    }
+
+    return lines;
   }
 
   private formatMessages(messages: SlackMessage[]): string[] {
@@ -179,6 +228,13 @@ export class SlackToolExecutionComponent extends Container implements IToolExecu
 
   private getSummary(): string {
     const parsed = this.parseResult();
+    if (this.toolName === 'slack_list_subscriptions') {
+      const workspace = parsed?.workspaceName ?? parsed?.workspaceId ?? '';
+      const count = parsed?.channelCount;
+      const countText = count === undefined ? '' : `${count} subscription${count === 1 ? '' : 's'}`;
+      return [workspace, countText].filter(Boolean).join(' · ');
+    }
+
     const channel = parsed?.channel;
     const ref = parsed?.slackMessageRef;
     const channelName = channel?.name ?? ref?.channelName ?? channel?.id ?? ref?.channelId ?? this.getArg('channel');
@@ -243,6 +299,17 @@ function formatSlackTimestamp(ts?: string): string {
   const seconds = Number(ts.split('.')[0]);
   if (!Number.isFinite(seconds)) return ts;
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(seconds * 1000));
+}
+
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
 }
 
 function normalizeSlackText(text: string): string {

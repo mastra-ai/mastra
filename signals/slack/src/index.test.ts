@@ -218,6 +218,28 @@ describe('SlackSignalsProvider', () => {
       const provider = new SlackSignalsProvider({ token: 'xoxp-test', pollIntervalMs: 30_000, syncClient: createSyncClient() });
       expect(provider.pollInterval).toBe(30_000);
     });
+
+    it('supplements available conversations with users.conversations results', async () => {
+      const listConversations = vi.fn(async () => ({
+        conversations: [{ id: 'C123', name: 'general', type: 'public_channel' as const }],
+      }));
+      const listUserConversations = vi.fn(async () => ({
+        conversations: [
+          { id: 'C123', name: 'general', type: 'public_channel' as const },
+          { id: 'GMP1', name: 'project-group', type: 'mpim' as const },
+        ],
+      }));
+      const provider = new SlackSignalsProvider({
+        token: 'xoxp-test',
+        syncClient: createSyncClient({ listConversations, listUserConversations }),
+      });
+
+      await expect(provider.listAvailableChannels()).resolves.toEqual([
+        { id: 'C123', name: 'general', type: 'public_channel' },
+        { id: 'GMP1', name: 'project-group', type: 'mpim' },
+      ]);
+      expect(listUserConversations).toHaveBeenCalledWith(expect.objectContaining({ userId: 'U123', types: ['public_channel', 'private_channel', 'im', 'mpim'] }));
+    });
   });
 
   describe('subscribe', () => {
@@ -408,7 +430,13 @@ describe('SlackSignalsProvider', () => {
       });
 
       expect(Object.keys(result.tools ?? {})).toEqual(
-        expect.arrayContaining(['slack_subscribe', 'slack_unsubscribe', 'slack_read_conversation', 'slack_read_thread']),
+        expect.arrayContaining([
+          'slack_subscribe',
+          'slack_unsubscribe',
+          'slack_list_subscriptions',
+          'slack_read_conversation',
+          'slack_read_thread',
+        ]),
       );
     });
 
@@ -488,6 +516,82 @@ describe('SlackSignalsProvider', () => {
           },
         ),
       ).resolves.toMatchObject({ addedChannels: ['eng'] });
+    });
+
+    it('list subscriptions tool returns selected Slack channels for the current thread', async () => {
+      const thread = createSubscribedThread({
+        id: 'thread-list-subscriptions',
+        resourceId: 'resource-list-subscriptions',
+        channels: {
+          C999: createChannelState({ id: 'C999', name: 'eng', type: 'public_channel', latestTs: '100.000' }),
+          D123: createChannelState({ id: 'D123', name: 'Abhi Aiyer', type: 'im', latestTs: '101.000' }),
+        },
+      });
+      const processor = new SlackSignalsProvider({ token: 'xoxp-test', threadStore: createThreadStore(thread), syncClient: createSyncClient() });
+
+      const result = await runSlackSignalsProcessor({
+        processor,
+        messageList: new MessageList({ threadId: thread.id, resourceId: thread.resourceId }),
+        requestContext: createRequestContext(thread),
+      });
+      const tools = result.tools as Record<string, { execute: (input?: unknown, context?: unknown) => Promise<unknown> }>;
+
+      await expect(
+        tools.slack_list_subscriptions!.execute(
+          {},
+          {
+            agent: {
+              agentId: 'code-agent',
+              threadId: thread.id,
+              resourceId: thread.resourceId,
+              toolCallId: 'tool-call-list',
+              messages: [],
+            },
+          },
+        ),
+      ).resolves.toMatchObject({
+        subscribed: true,
+        workspaceId: 'T123',
+        workspaceName: 'Mastra',
+        channelCount: 2,
+        channels: [
+          expect.objectContaining({ id: 'D123', name: 'Abhi Aiyer', type: 'im' }),
+          expect.objectContaining({ id: 'C999', name: 'eng', type: 'public_channel' }),
+        ],
+      });
+    });
+
+    it('list subscriptions tool reports when the thread is not subscribed', async () => {
+      const thread = createThread({ id: 'thread-list-unsubscribed', resourceId: 'resource-list-unsubscribed' });
+      const processor = new SlackSignalsProvider({ token: 'xoxp-test', threadStore: createThreadStore(thread), syncClient: createSyncClient() });
+
+      const result = await runSlackSignalsProcessor({
+        processor,
+        messageList: new MessageList({ threadId: thread.id, resourceId: thread.resourceId }),
+        requestContext: createRequestContext(thread),
+      });
+      const tools = result.tools as Record<string, { execute: (input?: unknown, context?: unknown) => Promise<unknown> }>;
+
+      await expect(
+        tools.slack_list_subscriptions!.execute(
+          {},
+          {
+            agent: {
+              agentId: 'code-agent',
+              threadId: thread.id,
+              resourceId: thread.resourceId,
+              toolCallId: 'tool-call-list-empty',
+              messages: [],
+            },
+          },
+        ),
+      ).resolves.toEqual({
+        subscribed: false,
+        conversationTypes: [],
+        channels: [],
+        channelCount: 0,
+        message: 'This thread is not subscribed to Slack.',
+      });
     });
 
     it('read conversation tool returns messages around a Slack notification ref', async () => {

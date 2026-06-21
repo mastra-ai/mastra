@@ -36,6 +36,8 @@ function createContext(overrides?: {
   const listAvailableChannels = vi.fn(async () => [
     { id: 'C001', name: 'general', type: 'public_channel' },
     { id: 'C002', name: 'random', type: 'public_channel' },
+    { id: 'D001', name: 'Sam', type: 'im' },
+    { id: 'G001', name: 'project dm', type: 'mpim' },
   ]);
 
   const slackSignals = overrides?.slackSignals === null
@@ -489,6 +491,7 @@ describe('handleSlackCommand', () => {
     await handleSlackCommand(ctx, ['channels']);
 
     expect(listAvailableChannels).toHaveBeenCalled();
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Types: channels 2, private 0, DMs 1, group DMs 1'));
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('#general'));
     expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('#random'));
   });

@@ -84,6 +84,26 @@ describe('SlackWebApiSyncClient', () => {
     expect(getRequestBody(fetchMock, 1).get('cursor')).toBe('cursor-2');
   });
 
+  it('lists user conversations with users.conversations', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        ok: true,
+        channels: [{ id: 'GMP1', name: 'project-group', is_mpim: true }],
+        response_metadata: { next_cursor: '' },
+      }),
+    );
+    const client = new SlackWebApiSyncClient({ token: 'xoxp-test', baseUrl: 'https://slack.test/api/', fetch: fetchMock as any });
+
+    await expect(client.listUserConversations({ userId: 'U123', types: ['mpim'], limit: 100 })).resolves.toEqual({
+      conversations: [{ id: 'GMP1', name: 'project-group', type: 'mpim' }],
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://slack.test/api/users.conversations', expect.anything());
+    expect(getRequestBody(fetchMock).get('user')).toBe('U123');
+    expect(getRequestBody(fetchMock).get('types')).toBe('mpim');
+    expect(getRequestBody(fetchMock).get('exclude_archived')).toBe('true');
+  });
+
   it('uses oldest as durable high-water input while cursors remain per-request', async () => {
     const fetchMock = vi
       .fn()

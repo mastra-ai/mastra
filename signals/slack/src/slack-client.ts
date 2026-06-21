@@ -3,6 +3,7 @@ import type {
   SlackListConversationsInput,
   SlackListConversationsResult,
   SlackListMessagesInput,
+  SlackListUserConversationsInput,
   SlackListMessagesResult,
   SlackListThreadMessagesInput,
   SlackListThreadMessagesResult,
@@ -199,13 +200,26 @@ export class SlackWebApiSyncClient implements SlackSignalsSyncClient {
   }
 
   async listConversations(input: SlackListConversationsInput): Promise<SlackListConversationsResult> {
+    return this.#listConversationPageSource('conversations.list', input);
+  }
+
+  async listUserConversations(input: SlackListUserConversationsInput): Promise<SlackListConversationsResult> {
+    return this.#listConversationPageSource('users.conversations', input, { user: input.userId });
+  }
+
+  async #listConversationPageSource(
+    method: 'conversations.list' | 'users.conversations',
+    input: SlackListConversationsInput,
+    extraParams: Record<string, unknown> = {},
+  ): Promise<SlackListConversationsResult> {
     const conversations: SlackSignalsConversation[] = [];
     let cursor: string | undefined;
 
     do {
       const response = await this.#request(
-        'conversations.list',
+        method,
         {
+          ...extraParams,
           types: input.types.join(','),
           exclude_archived: true,
           limit: input.limit ?? DEFAULT_PAGE_LIMIT,
