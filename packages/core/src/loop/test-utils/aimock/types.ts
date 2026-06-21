@@ -1,5 +1,6 @@
 import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
+import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { RequestContext } from '../../../request-context';
 import type { MastraModelOutput } from '../../../stream/base/output';
@@ -291,6 +292,12 @@ export interface RunLoopScenarioOptions {
    * can read `workspace.filesystem` / `workspace.sandbox` mid-loop.
    */
   workspace?: AnyWorkspace;
+  /**
+   * PubSub instance for signal/event scenarios. Passed to the Mastra constructor
+   * to enable `subscribeToThread()`, `sendMessage()`, and other signal APIs.
+   * Use for testing the signal integration (subscribe → sendMessage → receive response).
+   */
+  pubsub?: PubSub;
   /**
    * When set, {@link runLoopScenario} iterates `output.fullStream` itself
    * (instead of the default `consumeStream` drain) and returns every emitted

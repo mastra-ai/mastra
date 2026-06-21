@@ -120,6 +120,9 @@ for any model ids in fixtures/comments.
   `finishReason` resolves to a termination reason. Pre-aborted signals prevent the loop from starting.
 - `providerOptions: { openai: { ... } }` — provider-specific options forwarded through `agent.stream()`.
 - `modelSettings: { temperature, maxTokens, ... }` — model settings forwarded to the request body.
+- `pubsub: new InMemoryPubSub()` — attach a PubSub instance to the Mastra backing the agent, enabling
+  the signal API (`subscribeToThread()`, `sendMessage()`, `sendStateSignal()`). Combine with the
+  `agent` returned by `runLoopScenario` to drive thread subscriptions and assert signal metadata.
 
 ### Error-state scenarios
 
@@ -182,6 +185,12 @@ Tools support lifecycle hooks and streaming output:
 | `workspace.scenario.test.ts` | workspace threaded into tool execution; tool reads a file mid-loop |
 | `skills-integration.scenario.test.ts` | SkillsProcessor discovers real SKILL.md files on disk via Workspace + LocalFilesystem; injects `<available_skills>` XML into system prompt; auto-injects `skill`/`skill_search`/`skill_read` tools; model calls `skill` tool to load instructions mid-loop; missing skills return graceful "not found" error |
 | `skills-same-name-disambiguation.scenario.test.ts` | same-named skills in different directories both listed in system prompt; local precedence over external when activated by name; path-based activation bypasses tie-breaking entirely |
+
+### Signals (thread messaging)
+
+| Scenario | Behavior Covered |
+|---|---|
+| `signal-send-message.scenario.test.ts` | `subscribeToThread()` + `sendMessage()` flow: signal accepted with `action: 'wake'`, subscription receives the agent's response text; `sendStateSignal()` with `ifIdle: { behavior: 'persist' }` persists state without waking the agent; signal metadata includes correct `type`, `tagName`, `contents`, and `state` fields |
 | `agents-as-tools.scenario.test.ts` | supervisor delegates to a subagent (`agent-<key>`); result plumbed back |
 | `dynamic-instructions.scenario.test.ts` | instructions resolved from request context land in the system prompt |
 | `provider-error.scenario.test.ts` | provider 500 surfaces an `error` chunk + `finishReason: 'error'` |
@@ -453,15 +462,12 @@ already have robust, comprehensive unit tests at the appropriate layer:
 | **TokenLimiterProcessor** | Already has comprehensive unit tests: `token-limiter.test.ts` (1229 lines, 96+ tests). |
 | **Channels (Slack/Discord/Telegram)** | External platform adapters (`@chat-adapter/*`), not part of core loop. Requires webhook infrastructure. |
 | **Agent networks** | Deprecated in favor of supervisor agents (already covered by delegation scenarios). |
-| **Signals / signal-providers** | Attempted assessment (Round 18): signals use `agentThreadStreamRuntime` + `getPubSub()` requiring pubsub infrastructure and thread subscription state machine. `sendMessage()`, `queueMessage()`, `sendSignal()` all route through pubsub which conflicts with AIMock's HTTP-based design. Signal providers (webhooks, polling) are external event sources. Already has unit tests at the signal API level. |
 | **Voice (adding-voice)** | Audio I/O layer (`speak/listen/getSpeakers`), not part of HTTP-based agentic loop. |
 | **SDK agents (Claude/Cursor/OpenAI)** | External SDK runtimes (`@mastra/claude`, `@mastra/cursor`, `@mastra/openai`), not part of core loop. |
 | **Code mode** | Requires sandbox infrastructure (`LocalSandbox`, workspace sandbox). Alpha/experimental feature. |
 | **A2A / ACP protocols** | Attempted concrete scenario (Round 18): A2AAgent requires mocking `global.fetch` for agent card discovery + JSON-RPC message/send, but AIMock intercepts the same `fetch` for LLM provider calls, causing fixture conflicts. The A2A protocol's task/message model and streaming semantics differ fundamentally from OpenAI chat completions. Already has comprehensive unit tests: `a2a-agent.test.ts` (824 lines, 8+ tests covering agent card fetch, task lifecycle, streaming, error handling). |
 | **Semantic recall** | Requires vector database infrastructure (embedder + vectorDb). `MockMemory` does not support semantic recall. |
-| **autoResumeSuspendedTools** | Requires shared Mastra storage across multiple `agent.stream()` calls to track suspended tool snapshots. Already has comprehensive e2e tests: `tool-approval.e2e.test.ts` (1400+ lines, 8+ autoResume tests). |
-| **resumeStream() with resumeData** | Requires shared Mastra storage across calls to persist suspended state and resume from snapshot. Already covered in `tool-approval.e2e.test.ts` with full suspend/resume flow tests. |
-| **generate() approval path** | Requires shared Mastra storage across `agent.generate()` and `approveToolCallGenerate()` calls. Already has comprehensive coverage in `tool-approval.e2e.test.ts` with generate-specific approval tests. |
+| **Signal providers (webhooks/polling)** | External event sources (`SignalProvider.poll()` / `handleWebhook()`) require HTTP webhook infrastructure. The signal *API* itself (subscribeToThread/sendMessage/sendStateSignal) is now covered by `signal-send-message.scenario.test.ts`. |
 
 ### Regression-injection proof
 
@@ -497,12 +503,12 @@ UI check.
 multi-step composition regressions that unit tests miss.
 
 **Final Deliverables:**
-- **80 scenario files** containing **172 passing tests**
-- Coverage of **19 feature categories** documented in `docs/src/content/en/docs/agents/` and `docs/src/content/en/docs/workspace/`
+- **81 scenario files** containing **174 passing tests**
+- Coverage of **20 feature categories** documented in `docs/src/content/en/docs/agents/` and `docs/src/content/en/docs/workspace/`
 - **AIMock harness** (`aimock-scenario.ts`, `types.ts`) supporting complex multi-turn loops,
   approval flows, background tasks, goals, delegation, processors, memory integration,
   shared-agent storage for suspend/resume scenarios, real workspace + skills integration,
-  and same-named skill tie-breaking edge cases
+  same-named skill tie-breaking edge cases, and signal integration (subscribe/send/sendStateSignal)
 - **Comprehensive README** with scenario catalog, scripting guide, and regression-injection proof
 - **CHANGELOG entry** documenting the initiative
 
@@ -526,6 +532,7 @@ multi-step composition regressions that unit tests miss.
 17. Suspend/resume flows (autoResumeSuspendedTools, resumeStream, generate approval)
 18. Workflows-as-tools (workflow tool invocation)
 19. Skills integration (workspace discovery, system prompt injection, skill tool round-trip, same-name tie-breaking, path disambiguation)
+20. Signals / thread messaging (subscribeToThread, sendMessage, sendStateSignal)
 
 **Proven Regression Detection:**
 Multiple scenarios have been validated via controlled code injection to catch real regressions
@@ -535,13 +542,13 @@ workflow tool naming, error processor retry counting, concurrent approval chunks
 isolation, and structured output error strategy fallback.
 
 **Features Intentionally Not Covered:**
-9 documented features (channels, voice, SDK agents, A2A/ACP, semantic recall, etc.)
+12 documented features (channels, voice, SDK agents, A2A/ACP, semantic recall, etc.)
 are either infeasible in AIMock's HTTP-scenario model (external integrations, infrastructure-heavy)
 or already have robust unit tests at the appropriate layer. Justifications documented in the
 "Features Intentionally Not Covered" section above.
 
 **Test Suite Health:**
-- All 172 scenarios pass
+- All 174 scenarios pass
 - Typecheck clean (`tsc --noEmit`)
 - Zero changes to core loop source code (harness + scenarios only)
 - Comprehensive documentation for future scenario authors
