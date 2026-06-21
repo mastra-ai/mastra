@@ -452,7 +452,7 @@ already have robust, comprehensive unit tests at the appropriate layer:
 | **TokenLimiterProcessor** | Already has comprehensive unit tests: `token-limiter.test.ts` (1229 lines, 96+ tests). |
 | **Channels (Slack/Discord/Telegram)** | External platform adapters (`@chat-adapter/*`), not part of core loop. Requires webhook infrastructure. |
 | **Agent networks** | Deprecated in favor of supervisor agents (already covered by delegation scenarios). |
-| **Signals / signal-providers** | External event sources (webhooks, polling), not part of core loop request/response cycle. |
+| **Signals / signal-providers** | Attempted assessment (Round 18): signals use `agentThreadStreamRuntime` + `getPubSub()` requiring pubsub infrastructure and thread subscription state machine. `sendMessage()`, `queueMessage()`, `sendSignal()` all route through pubsub which conflicts with AIMock's HTTP-based design. Signal providers (webhooks, polling) are external event sources. Already has unit tests at the signal API level. |
 | **Voice (adding-voice)** | Audio I/O layer (`speak/listen/getSpeakers`), not part of HTTP-based agentic loop. |
 | **SDK agents (Claude/Cursor/OpenAI)** | External SDK runtimes (`@mastra/claude`, `@mastra/cursor`, `@mastra/openai`), not part of core loop. |
 | **Code mode** | Requires sandbox infrastructure (`LocalSandbox`, workspace sandbox). Alpha/experimental feature. |
