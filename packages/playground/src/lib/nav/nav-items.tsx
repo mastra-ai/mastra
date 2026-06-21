@@ -51,6 +51,13 @@ export const mainNav: NavSection[] = [
         isOnMastraPlatform: true,
       },
       {
+        name: 'Memory',
+        url: '/memory',
+        Icon: MemoryIcon,
+        docs: { href: 'https://mastra.ai/en/docs/memory/overview', label: 'Memory documentation' },
+        isOnMastraPlatform: true,
+      },
+      {
         name: 'Prompts',
         url: '/prompts',
         Icon: PromptIcon,
@@ -163,13 +170,6 @@ export const mainNav: NavSection[] = [
         url: '/logs',
         Icon: LogsIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/logging', label: 'Logs documentation' },
-        isOnMastraPlatform: true,
-      },
-      {
-        name: 'Memory',
-        url: '/memory',
-        Icon: MemoryIcon,
-        docs: { href: 'https://mastra.ai/en/docs/memory/overview', label: 'Memory documentation' },
         isOnMastraPlatform: true,
       },
     ],
