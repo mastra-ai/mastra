@@ -1,3 +1,6 @@
 {
-  "attachment": ["moonshotai/kimi-k2.6"]
+  "attachment": [
+    "moonshotai/kimi-k2.6",
+    "moonshotai/kimi-k2.7-code"
+  ]
 }

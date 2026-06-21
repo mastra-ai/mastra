@@ -1,3 +1,7 @@
 {
-  "attachment": ["google/gemma-4-31B-it", "mistralai/Mistral-Medium-3.5-128B", "moonshotai/Kimi-K2.6"]
+  "attachment": [
+    "google/gemma-4-31B-it",
+    "mistralai/Mistral-Medium-3.5-128B",
+    "moonshotai/Kimi-K2.6"
+  ]
 }

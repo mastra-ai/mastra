@@ -1,3 +1,6 @@
 {
-  "attachment": ["google/gemma-4-31b-it", "moonshotai/kimi-k2.6"]
+  "attachment": [
+    "google/gemma-4-31b-it",
+    "moonshotai/kimi-k2.6"
+  ]
 }

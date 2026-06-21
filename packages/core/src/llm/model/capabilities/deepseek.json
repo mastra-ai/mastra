@@ -1,3 +1,6 @@
 {
-  "attachment": ["deepseek-chat", "deepseek-reasoner"]
+  "attachment": [
+    "deepseek-chat",
+    "deepseek-reasoner"
+  ]
 }

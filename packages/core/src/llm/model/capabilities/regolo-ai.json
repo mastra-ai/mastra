@@ -1,3 +1,7 @@
 {
-  "attachment": ["mistral-small-4-119b", "qwen3.5-122b", "qwen3.5-9b"]
+  "attachment": [
+    "mistral-small-4-119b",
+    "qwen3.5-122b",
+    "qwen3.5-9b"
+  ]
 }

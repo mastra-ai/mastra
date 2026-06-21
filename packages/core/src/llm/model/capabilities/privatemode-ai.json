@@ -1,3 +1,6 @@
 {
-  "attachment": ["gemma-3-27b", "whisper-large-v3"]
+  "attachment": [
+    "gemma-3-27b",
+    "whisper-large-v3"
+  ]
 }

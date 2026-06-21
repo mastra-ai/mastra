@@ -1,3 +1,7 @@
 {
-  "attachment": ["Qwen/Qwen3-VL-235B-A22B-Instruct-FP8", "Qwen/Qwen3-VL-Embedding-8B", "google/gemma-3-27b-it"]
+  "attachment": [
+    "Qwen/Qwen3-VL-235B-A22B-Instruct-FP8",
+    "Qwen/Qwen3-VL-Embedding-8B",
+    "google/gemma-3-27b-it"
+  ]
 }

@@ -1,3 +1,7 @@
 {
-  "attachment": ["kimi-k2.6", "qwen3.5-flash"]
+  "attachment": [
+    "kimi-k2.6",
+    "qwen3.5-flash",
+    "qwen3.6-flash"
+  ]
 }
