@@ -66,26 +66,10 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
 
           <br />
 
-          <DataDetailsPanel.CodeSection
-            title="Input"
-            icon={<FileInputIcon />}
-            codeStr={JSON.stringify(span.input ?? null, null, 2)}
-          />
-          <DataDetailsPanel.CodeSection
-            title="Output"
-            icon={<FileOutputIcon />}
-            codeStr={JSON.stringify(span.output ?? null, null, 2)}
-          />
-          <DataDetailsPanel.CodeSection
-            title="Metadata"
-            icon={<BracesIcon />}
-            codeStr={JSON.stringify(span.metadata ?? null, null, 2)}
-          />
-          <DataDetailsPanel.CodeSection
-            title="Attributes"
-            icon={<BracesIcon />}
-            codeStr={JSON.stringify(span.attributes ?? null, null, 2)}
-          />
+          <DataDetailsPanel.CodeSection title="Input" icon={<FileInputIcon />} data={span.input ?? null} />
+          <DataDetailsPanel.CodeSection title="Output" icon={<FileOutputIcon />} data={span.output ?? null} />
+          <DataDetailsPanel.CodeSection title="Metadata" icon={<BracesIcon />} data={span.metadata ?? null} />
+          <DataDetailsPanel.CodeSection title="Attributes" icon={<BracesIcon />} data={span.attributes ?? null} />
         </DataDetailsPanel.Content>
       )}
     </DataDetailsPanel>

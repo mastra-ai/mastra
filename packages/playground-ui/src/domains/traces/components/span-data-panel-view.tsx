@@ -296,25 +296,25 @@ function SpanDataPanelContent({
           title="Input"
           dialogTitle={buildDialogTitle('Input', <FileInputIcon />, { spanId, traceId })}
           icon={<FileInputIcon />}
-          codeStr={JSON.stringify(span.input ?? null, null, 2)}
+          data={span.input ?? null}
         />
         <DataPanel.CodeSection
           title="Output"
           dialogTitle={buildDialogTitle('Output', <FileOutputIcon />, { spanId, traceId })}
           icon={<FileOutputIcon />}
-          codeStr={JSON.stringify(span.output ?? null, null, 2)}
+          data={span.output ?? null}
         />
         <DataPanel.CodeSection
           title="Metadata"
           dialogTitle={buildDialogTitle('Metadata', <BracesIcon />, { spanId, traceId })}
           icon={<BracesIcon />}
-          codeStr={JSON.stringify(span.metadata ?? null, null, 2)}
+          data={span.metadata ?? null}
         />
         <DataPanel.CodeSection
           title="Attributes"
           dialogTitle={buildDialogTitle('Attributes', <BracesIcon />, { spanId, traceId })}
           icon={<BracesIcon />}
-          codeStr={JSON.stringify(span.attributes ?? null, null, 2)}
+          data={span.attributes ?? null}
         />
       </div>
     </>

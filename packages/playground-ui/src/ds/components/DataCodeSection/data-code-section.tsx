@@ -14,6 +14,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { resolveDataCodeSectionPayload } from '@/ds/components/DataCodeSection/data-code-section-utils';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import {
   Dialog,
@@ -24,6 +25,7 @@ import {
   DialogDescription,
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { useTheme } from '@/ds/components/ThemeProvider';
 import { cn } from '@/lib/utils';
 
@@ -140,12 +142,14 @@ export interface DataCodeSectionProps {
   title: React.ReactNode;
   dialogTitle?: React.ReactNode;
   icon?: React.ReactNode;
+  data?: unknown;
   codeStr?: string;
   simplified?: boolean;
   className?: string;
 }
 
 export function DataCodeSection({
+  data,
   codeStr = '',
   title,
   dialogTitle,
@@ -163,14 +167,8 @@ export function DataCodeSection({
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const expandedEditorRef = useRef<ReactCodeMirrorRef>(null);
 
-  const hasMultilineText = useMemo(() => {
-    try {
-      const parsed = JSON.parse(codeStr);
-      return containsInnerNewline(parsed || '');
-    } catch {
-      return false;
-    }
-  }, [codeStr]);
+  const payload = useMemo(() => resolveDataCodeSectionPayload({ data, codeStr }), [data, codeStr]);
+  const canUseCodeEditor = payload?.mode === 'json' && !simplified;
 
   const dispatchSearch = useCallback((query: string) => {
     const view = editorRef.current?.view;
@@ -236,18 +234,70 @@ export function DataCodeSection({
     dispatchExpandedSearch('');
   }, [dispatchExpandedSearch]);
 
-  const finalCodeStr = showAsMultilineText ? codeStr?.replace(/\\n/g, '\n') : codeStr;
-  const expandedFinalCodeStr = expandedMultiline ? codeStr?.replace(/\\n/g, '\n') : codeStr;
-  const usePlainTextView = simplified || showAsMultilineText;
+  if (!payload) return null;
 
-  if (!codeStr || codeStr === 'null') return null;
+  const hasMultilineText = payload.hasMultilineText;
+  const copyValue = payload.copyValue;
+  const finalCodeStr = showAsMultilineText ? payload.value.replace(/\\n/g, '\n') : payload.value;
+  const expandedFinalCodeStr = expandedMultiline ? payload.value.replace(/\\n/g, '\n') : payload.value;
+  const useInlinePlainTextView = simplified || showAsMultilineText || payload.mode === 'text';
+  const useExpandedPlainTextView = simplified || expandedMultiline || payload.mode === 'text';
+  const useMarkdownView = payload.mode === 'markdown' && !simplified;
+
+  let inlineContent: React.ReactNode;
+  if (useMarkdownView) {
+    inlineContent = <MarkdownRenderer>{payload.value}</MarkdownRenderer>;
+  } else if (useInlinePlainTextView) {
+    inlineContent = (
+      <div className="text-neutral4 font-mono break-all">
+        <pre className="text-wrap">{finalCodeStr}</pre>
+      </div>
+    );
+  } else {
+    inlineContent = (
+      <ReactCodeMirror
+        ref={editorRef}
+        extensions={[json(), EditorView.lineWrapping, searchHighlightExtension()]}
+        theme={theme}
+        value={payload.value}
+        editable={false}
+      />
+    );
+  }
+
+  let expandedContent: React.ReactNode;
+  if (useMarkdownView) {
+    expandedContent = (
+      <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all overflow-y-auto">
+        <MarkdownRenderer>{payload.value}</MarkdownRenderer>
+      </div>
+    );
+  } else if (useExpandedPlainTextView) {
+    expandedContent = (
+      <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all overflow-y-auto">
+        <div className="text-neutral4 font-mono break-all">
+          <pre className="text-wrap">{expandedFinalCodeStr}</pre>
+        </div>
+      </div>
+    );
+  } else {
+    expandedContent = (
+      <ReactCodeMirror
+        ref={expandedEditorRef}
+        extensions={[json(), EditorView.lineWrapping, searchHighlightExtension()]}
+        theme={theme}
+        value={payload.value}
+        editable={false}
+      />
+    );
+  }
 
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       <div className="flex items-center justify-between">
         <DataPanelSectionHeading icon={icon}>{title}</DataPanelSectionHeading>
         <div className="flex items-center gap-2">
-          {!usePlainTextView && (
+          {canUseCodeEditor && !showAsMultilineText && (
             <SearchFieldBlock
               name="code-section-search"
               label="Search code"
@@ -262,8 +312,8 @@ export function DataCodeSection({
             />
           )}
           <ButtonsGroup>
-            <CopyButton content={codeStr || 'No content'} size="sm" />
-            {hasMultilineText && (
+            <CopyButton content={copyValue} size="sm" />
+            {canUseCodeEditor && hasMultilineText && (
               <Button
                 size="sm"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
@@ -281,19 +331,7 @@ export function DataCodeSection({
       </div>
 
       <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all max-h-[30vh] overflow-y-auto">
-        {usePlainTextView ? (
-          <div className="text-neutral4 font-mono break-all">
-            <pre className="text-wrap">{finalCodeStr}</pre>
-          </div>
-        ) : (
-          <ReactCodeMirror
-            ref={editorRef}
-            extensions={[json(), EditorView.lineWrapping, searchHighlightExtension()]}
-            theme={theme}
-            value={codeStr}
-            editable={false}
-          />
-        )}
+        {inlineContent}
       </div>
 
       <Dialog open={expandedOpen} onOpenChange={setExpandedOpen}>
@@ -309,7 +347,7 @@ export function DataCodeSection({
             </DialogTitle>
             <DialogDescription>Expanded code view</DialogDescription>
             <div className="flex items-center gap-2 shrink-0">
-              {!expandedMultiline && (
+              {canUseCodeEditor && !expandedMultiline && (
                 <SearchFieldBlock
                   name="expanded-code-search"
                   label="Search code"
@@ -322,8 +360,8 @@ export function DataCodeSection({
                 />
               )}
               <ButtonsGroup>
-                <CopyButton content={codeStr || 'No content'} size="sm" />
-                {hasMultilineText && (
+                <CopyButton content={copyValue} size="sm" />
+                {canUseCodeEditor && hasMultilineText && (
                   <Button
                     size="sm"
                     aria-label={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
@@ -341,37 +379,9 @@ export function DataCodeSection({
               </ButtonsGroup>
             </div>
           </DialogHeader>
-          <div className="overflow-auto px-6 pb-6">
-            {expandedMultiline ? (
-              <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all overflow-y-auto">
-                <div className="text-neutral4 font-mono break-all">
-                  <pre className="text-wrap">{expandedFinalCodeStr}</pre>
-                </div>
-              </div>
-            ) : (
-              <ReactCodeMirror
-                ref={expandedEditorRef}
-                extensions={[json(), EditorView.lineWrapping, searchHighlightExtension()]}
-                theme={theme}
-                value={codeStr}
-                editable={false}
-              />
-            )}
-          </div>
+          <div className="overflow-auto px-6 pb-6">{expandedContent}</div>
         </DialogContent>
       </Dialog>
     </div>
   );
-}
-
-function containsInnerNewline(obj: unknown): boolean {
-  if (typeof obj === 'string') {
-    const idx = obj.indexOf('\n');
-    return idx !== -1 && idx !== obj.length - 1;
-  } else if (Array.isArray(obj)) {
-    return obj.some(item => containsInnerNewline(item));
-  } else if (obj && typeof obj === 'object') {
-    return Object.values(obj).some(value => containsInnerNewline(value));
-  }
-  return false;
 }

@@ -152,7 +152,7 @@ export function LogDetailsView({
           </KV>
 
           {log.data && Object.keys(log.data).length > 0 && (
-            <DataDetailsPanel.CodeSection title="Data" codeStr={JSON.stringify(log.data, null, 2)} className="mt-6" />
+            <DataDetailsPanel.CodeSection title="Data" data={log.data} className="mt-6" />
           )}
         </DataDetailsPanel.Content>
       )}

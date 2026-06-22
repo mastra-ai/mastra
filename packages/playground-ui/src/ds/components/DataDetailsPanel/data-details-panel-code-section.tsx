@@ -10,6 +10,8 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { resolveDataCodeSectionPayload } from '@/ds/components/DataCodeSection/data-code-section-utils';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { useTheme } from '@/ds/components/ThemeProvider';
 import { cn } from '@/lib/utils';
 
@@ -82,12 +84,14 @@ const useCodemirrorTheme = (): Extension => {
 export interface DataDetailsPanelCodeSectionProps {
   title: React.ReactNode;
   icon?: React.ReactNode;
+  data?: unknown;
   codeStr?: string;
   simplified?: boolean;
   className?: string;
 }
 
 export function DataDetailsPanelCodeSection({
+  data,
   codeStr = '',
   title,
   icon,
@@ -96,19 +100,34 @@ export function DataDetailsPanelCodeSection({
 }: DataDetailsPanelCodeSectionProps) {
   const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
-  const hasMultilineText = useMemo(() => {
-    try {
-      const parsed = JSON.parse(codeStr);
-      return containsInnerNewline(parsed || '');
-    } catch {
-      return false;
-    }
-  }, [codeStr]);
+  const payload = useMemo(() => resolveDataCodeSectionPayload({ data, codeStr }), [data, codeStr]);
+  const canUseCodeEditor = payload?.mode === 'json' && !simplified;
 
-  const finalCodeStr = showAsMultilineText ? codeStr?.replace(/\\n/g, '\n') : codeStr;
-  const usePlainTextView = simplified || showAsMultilineText;
+  if (!payload) return null;
 
-  if (!codeStr || codeStr === 'null') return null;
+  const finalCodeStr = showAsMultilineText ? payload.value.replace(/\\n/g, '\n') : payload.value;
+  const usePlainTextView = simplified || showAsMultilineText || payload.mode === 'text';
+  const useMarkdownView = payload.mode === 'markdown' && !simplified;
+
+  let content: React.ReactNode;
+  if (useMarkdownView) {
+    content = <MarkdownRenderer>{payload.value}</MarkdownRenderer>;
+  } else if (usePlainTextView) {
+    content = (
+      <div className="text-neutral4 font-mono break-all">
+        <pre className="text-wrap">{finalCodeStr}</pre>
+      </div>
+    );
+  } else {
+    content = (
+      <ReactCodeMirror
+        extensions={[json(), EditorView.lineWrapping]}
+        theme={theme}
+        value={payload.value}
+        editable={false}
+      />
+    );
+  }
 
   return (
     <div className={cn('flex flex-col gap-2', className)}>
@@ -123,8 +142,8 @@ export function DataDetailsPanelCodeSection({
           {title}
         </div>
         <ButtonsGroup>
-          <CopyButton content={codeStr || 'No content'} size="sm" />
-          {hasMultilineText && (
+          <CopyButton content={payload.copyValue} size="sm" />
+          {canUseCodeEditor && payload.hasMultilineText && (
             <Button
               size="sm"
               aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
@@ -136,31 +155,8 @@ export function DataDetailsPanelCodeSection({
         </ButtonsGroup>
       </div>
       <div className="dark:bg-black/20 bg-surface3 p-3 overflow-hidden rounded-lg border dark:border-white/10 border-border1 text-neutral4 text-ui-sm break-all max-h-[30vh] overflow-y-auto">
-        {usePlainTextView ? (
-          <div className="text-neutral4 font-mono break-all">
-            <pre className="text-wrap">{finalCodeStr}</pre>
-          </div>
-        ) : (
-          <ReactCodeMirror
-            extensions={[json(), EditorView.lineWrapping]}
-            theme={theme}
-            value={codeStr}
-            editable={false}
-          />
-        )}
+        {content}
       </div>
     </div>
   );
-}
-
-function containsInnerNewline(obj: unknown): boolean {
-  if (typeof obj === 'string') {
-    const idx = obj.indexOf('\n');
-    return idx !== -1 && idx !== obj.length - 1;
-  } else if (Array.isArray(obj)) {
-    return obj.some(item => containsInnerNewline(item));
-  } else if (obj && typeof obj === 'object') {
-    return Object.values(obj).some(value => containsInnerNewline(value));
-  }
-  return false;
 }

@@ -37,6 +37,8 @@ describe('MarkdownRenderer', () => {
     expect(token.style.getPropertyValue('--shiki-light')).toBe('#24292f');
     expect(token.style.getPropertyValue('--shiki-dark')).toBe('#c9d1d9');
     expect(token.closest('pre')).not.toBeNull();
+    expect(token.closest('pre')?.classList.contains('whitespace-pre-wrap')).toBe(true);
+    expect(token.closest('pre')?.classList.contains('break-words')).toBe(true);
   });
 
   it('renders inline code as a plain non-copyable <code> element', () => {
