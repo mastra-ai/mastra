@@ -16,7 +16,6 @@ function createAgentMock() {
     getMastraInstance: vi.fn(() => undefined),
     subscribeToThread: vi.fn(async () => createSubscription()),
     sendNotificationSignal: vi.fn(async (_input, target) => ({
-      accepted: true,
       record: { id: 'notification-1', threadId: target.threadId, source: 'mastracode' },
       decision: { action: 'deliver' },
     })),
@@ -43,7 +42,7 @@ describe('Harness notification signals', () => {
 
     const threadId = session.thread.getId();
     expect(threadId).toBeTruthy();
-    expect(result).toMatchObject({ accepted: true, record: { id: 'notification-1', threadId } });
+    expect(result).toMatchObject({ decision: { action: 'deliver' }, record: { id: 'notification-1', threadId } });
     expect(agent.subscribeToThread).toHaveBeenCalledTimes(1);
     expect(agent.subscribeToThread).toHaveBeenCalledWith({ resourceId: 'resource-1', threadId });
     expect(agent.sendNotificationSignal).toHaveBeenCalledTimes(1);

@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
@@ -248,6 +249,62 @@ describe('getProvidersHandler', () => {
 
     // Cleanup
     delete process.env.CUSTOM_LLM_API_KEY;
+  });
+
+  it('should hide registry and default-gateway providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set, keeping only custom gateways', async () => {
+    process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = 'true';
+
+    const mockGateway = {
+      id: 'test-gateway',
+      name: 'Test Gateway',
+      getId: () => 'test-gateway',
+      fetchProviders: vi.fn().mockResolvedValue({
+        'custom-llm': {
+          name: 'Custom LLM',
+          models: ['custom-model-1', 'custom-model-2'],
+          apiKeyEnvVar: 'CUSTOM_LLM_API_KEY',
+          gateway: 'test-gateway',
+        },
+      }),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+
+    const mastra = new Mastra({
+      gateways: {
+        'test-gateway': mockGateway,
+      },
+    });
+
+    const requestContext = new RequestContext();
+    const abortSignal = new AbortController().signal;
+
+    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+    // External registry providers should be hidden
+    expect(result.providers.find(p => p.id === 'openai')).toBeUndefined();
+    expect(result.providers.find(p => p.id === 'anthropic')).toBeUndefined();
+
+    // Built-in default gateways (models.dev, netlify, mastra) should be hidden
+    expect(result.providers.some(p => p.id === 'mastra' || p.id.startsWith('netlify/'))).toBe(false);
+
+    // The user-registered custom gateway provider should remain
+    const customProvider = result.providers.find(p => p.id === 'test-gateway/custom-llm');
+    expect(customProvider).toBeDefined();
+    expect(customProvider?.name).toBe('Custom LLM');
+  });
+
+  it('should return no providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set and no custom gateway is registered', async () => {
+    process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = '1';
+
+    const mastra = new Mastra({});
+    const requestContext = new RequestContext();
+    const abortSignal = new AbortController().signal;
+
+    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+    expect(result.providers).toEqual([]);
   });
 
   it('should correctly show custom gateway providers as connected', async () => {
@@ -1511,7 +1568,9 @@ describe('Agent Routes Authorization', () => {
       (mockAgent as any).sendSignal = vi.fn((signal, target) => {
         capturedSignal = signal;
         capturedTarget = target;
-        return { accepted: true, runId: 'signal-run-id' };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'signal-run-id' }),
+        };
       });
 
       const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
@@ -1551,7 +1610,10 @@ describe('Agent Routes Authorization', () => {
       (mockAgent as any).sendMessage = vi.fn((message, target) => {
         capturedMessage = message;
         capturedTarget = target;
-        return { accepted: true, runId: 'message-run-id', signal: { id: 'signal-id' } };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'message-run-id' }),
+          signal: { id: 'signal-id' },
+        };
       });
 
       const result = await SEND_AGENT_MESSAGE_ROUTE.handler({
@@ -1586,7 +1648,9 @@ describe('Agent Routes Authorization', () => {
 
       (mockAgent as any).queueMessage = vi.fn((_message, target) => {
         capturedTarget = target;
-        return { accepted: true, runId: 'queued-message-run-id' };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'queued-message-run-id' }),
+        };
       });
 
       const result = await QUEUE_AGENT_MESSAGE_ROUTE.handler({
@@ -1638,7 +1702,9 @@ describe('Agent Routes Authorization', () => {
 
       (mockAgent as any).sendSignal = vi.fn((_signal, target) => {
         capturedTarget = target;
-        return { accepted: true, runId: 'signal-run-with-context' };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'signal-run-with-context' }),
+        };
       });
 
       const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
@@ -1664,6 +1730,61 @@ describe('Agent Routes Authorization', () => {
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+    });
+
+    it('maps a rejected accepted promise (USER MastraError) to a 400', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-reject-user',
+        resourceId: 'user-a',
+        title: 'Signal Thread Reject User',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      (mockAgent as any).sendSignal = vi.fn(() => ({
+        accepted: Promise.reject(
+          new MastraError({
+            category: ErrorCategory.USER,
+            domain: ErrorDomain.MASTRA_SERVER,
+            id: 'NO_MODEL_SELECTED',
+            text: 'No model selected',
+          }),
+        ),
+      }));
+
+      await expect(
+        SEND_AGENT_SIGNAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'signal-thread-reject-user',
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'No model selected' }));
+    });
+
+    it('maps a rejected accepted promise (non-USER error) to a 500', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-reject-system',
+        resourceId: 'user-a',
+        title: 'Signal Thread Reject System',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      (mockAgent as any).sendSignal = vi.fn(() => ({
+        accepted: Promise.reject(new Error('lease backend exploded')),
+      }));
+
+      await expect(
+        SEND_AGENT_SIGNAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'signal-thread-reject-system',
+        } as any),
+      ).rejects.toMatchObject({ status: 500 });
     });
 
     it('should reject sending a message to a thread owned by a different resource', async () => {

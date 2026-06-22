@@ -433,8 +433,7 @@ describe('Harness signal messages', () => {
 
     const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
     const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
-      accepted: true,
-      runId: 'active-run-id',
+      accepted: Promise.resolve({ action: 'deliver', runId: 'active-run-id' }),
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
@@ -488,8 +487,7 @@ describe('Harness signal messages', () => {
       activeRunId: () => 'run-1',
     });
     const queueMessage = vi.spyOn(agent, 'queueMessage').mockReturnValue({
-      accepted: true,
-      runId: 'queued-run-id',
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
       signal: createSignal({ type: 'user', contents: 'queued follow-up' }),
     });
     const sendSignal = vi.spyOn(agent, 'sendSignal');
@@ -556,8 +554,7 @@ describe('Harness signal messages', () => {
     });
     await session.thread.create();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
-      accepted: true,
-      runId: 'active-run-id',
+      accepted: Promise.resolve({ action: 'deliver', runId: 'active-run-id' }),
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
@@ -595,8 +592,7 @@ describe('Harness signal messages', () => {
       });
     await session.thread.create();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
-      accepted: true,
-      runId: 'active-run-id',
+      accepted: Promise.resolve({ action: 'deliver', runId: 'active-run-id' }),
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
@@ -681,8 +677,7 @@ describe('Harness signal messages', () => {
     });
     await session.thread.create();
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
-      accepted: true,
-      runId: 'run-1',
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
       signal: createSignal({ type: 'user-message', contents: 'active hello' }),
     });
 
@@ -769,8 +764,7 @@ describe('Harness signal messages', () => {
       .spyOn(agent, 'approveToolCall')
       .mockResolvedValue({ fullStream: directResumeStream } as any);
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
-      accepted: true,
-      runId: 'run-1',
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
       signal: createSignal({ type: 'user-message', contents: 'run tool' }),
     });
 
