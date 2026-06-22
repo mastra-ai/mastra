@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.46.0-alpha.1
+
+### Patch Changes
+
+- Fix `DurableAgent.prepare()` ignoring `options.runId`. `prepare()` did not forward `runId` to `prepareForDurableExecution()` (unlike `stream()`), so it always registered a freshly minted run id. This made `prepare()` unusable for rehydrating a persisted, suspended run in a fresh process (e.g. after a server restart or registry eviction): a follow-up `resume(runId)` couldn't find the registry entry `prepare()` had built and threw `No registry entry found for run … Cannot resume.`. `prepare()` now forwards the caller-provided `runId`, so re-registering a known run id and resuming a durable snapshot across a restart works. ([#18113](https://github.com/mastra-ai/mastra/pull/18113))
+
 ## 1.46.0-alpha.0
 
 ### Minor Changes
