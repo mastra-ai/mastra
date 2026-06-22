@@ -2487,10 +2487,9 @@ export interface UpdateDatasetInput {
   targetType?: TargetType | null;
   targetIds?: string[] | null;
   scorerIds?: string[] | null;
-  organizationId?: string | null;
-  resourceId?: string | null;
-  candidateKey?: string | null;
-  candidateId?: string | null;
+  // Tenancy and candidate identity (organizationId, resourceId, candidateKey, candidateId)
+  // are immutable after creation — mutating them silently re-keys items across tenants,
+  // so they are intentionally excluded from this input. Set them in CreateDatasetInput.
 }
 
 export interface AddDatasetItemInput {

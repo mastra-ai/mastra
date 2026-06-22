@@ -561,6 +561,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         });
       }
       const newVersion = result.version as number;
+      // Tenancy re-inherited from parent dataset (Option B)
+      const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
+      const parentResourceId = (result.resourceId as string | null | undefined) ?? null;
 
       // Close old row (set validTo = newVersion)
       await itemsCollection.updateOne(
@@ -573,8 +576,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         id: args.id,
         datasetId: args.datasetId,
         datasetVersion: newVersion,
-        organizationId: existing.organizationId ?? null,
-        resourceId: existing.resourceId ?? null,
+        organizationId: parentOrganizationId,
+        resourceId: parentResourceId,
         validTo: null,
         isDeleted: false,
         input: mergedInput,
@@ -598,6 +601,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       return {
         ...existing,
         datasetVersion: newVersion,
+        organizationId: parentOrganizationId,
+        resourceId: parentResourceId,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
@@ -654,6 +659,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         });
       }
       const newVersion = result.version as number;
+      // Tenancy re-inherited from parent dataset (Option B)
+      const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
+      const parentResourceId = (result.resourceId as string | null | undefined) ?? null;
 
       // Close old row
       await itemsCollection.updateOne({ id, validTo: null, isDeleted: false }, { $set: { validTo: newVersion } });
@@ -663,8 +671,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         id,
         datasetId,
         datasetVersion: newVersion,
-        organizationId: existing.organizationId ?? null,
-        resourceId: existing.resourceId ?? null,
+        organizationId: parentOrganizationId,
+        resourceId: parentResourceId,
         validTo: null,
         isDeleted: true,
         input: existing.input,
@@ -851,6 +859,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         });
       }
       const newVersion = result.version as number;
+      // Tenancy re-inherited from parent dataset (Option B)
+      const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
+      const parentResourceId = (result.resourceId as string | null | undefined) ?? null;
 
       // Close old rows in batch
       const currentIds = currentItems.map(i => i.id);
@@ -864,8 +875,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         id: item.id,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
-        organizationId: item.organizationId ?? null,
-        resourceId: item.resourceId ?? null,
+        organizationId: parentOrganizationId,
+        resourceId: parentResourceId,
         validTo: null,
         isDeleted: true,
         input: item.input,

@@ -762,18 +762,23 @@ describe('DatasetsInMemory', () => {
       expect(dataset.candidateId).toBeNull();
     });
 
-    it('updateDataset can change tenancy + candidate identity fields', async () => {
-      const created = await storage.createDataset({ name: 'd', organizationId: 'org-1' });
+    it('updateDataset preserves tenancy + candidate identity (immutable after create)', async () => {
+      const created = await storage.createDataset({
+        name: 'd',
+        organizationId: 'org-1',
+        resourceId: 'proj-1',
+        candidateKey: 'k-1',
+        candidateId: 'i-1',
+      });
       const updated = await storage.updateDataset({
         id: created.id,
-        resourceId: 'proj-2',
-        candidateKey: 'k',
-        candidateId: 'i',
+        description: 'updated description',
       });
       expect(updated.organizationId).toBe('org-1');
-      expect(updated.resourceId).toBe('proj-2');
-      expect(updated.candidateKey).toBe('k');
-      expect(updated.candidateId).toBe('i');
+      expect(updated.resourceId).toBe('proj-1');
+      expect(updated.candidateKey).toBe('k-1');
+      expect(updated.candidateId).toBe('i-1');
+      expect(updated.description).toBe('updated description');
     });
 
     it('addItem inherits tenancy from parent dataset', async () => {

@@ -121,10 +121,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       targetType: args.targetType !== undefined ? args.targetType : existing.targetType,
       targetIds: args.targetIds !== undefined ? args.targetIds : existing.targetIds,
       scorerIds: args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds,
-      organizationId: args.organizationId !== undefined ? args.organizationId : existing.organizationId,
-      resourceId: args.resourceId !== undefined ? args.resourceId : existing.resourceId,
-      candidateKey: args.candidateKey !== undefined ? args.candidateKey : existing.candidateKey,
-      candidateId: args.candidateId !== undefined ? args.candidateId : existing.candidateId,
+      // Tenancy and candidate identity are immutable after creation.
       updatedAt: new Date(),
     } as DatasetRecord;
     this.db.datasets.set(args.id, updated);

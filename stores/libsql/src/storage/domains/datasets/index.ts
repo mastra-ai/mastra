@@ -491,6 +491,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
     try {
+      // Fetch parent dataset for tenancy values returned to caller (Option B)
+      const dataset = await this.getDatasetById({ id: args.datasetId });
       const id = crypto.randomUUID();
       const versionId = crypto.randomUUID();
       const now = new Date();
@@ -535,6 +537,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
         id,
         datasetId: args.datasetId,
         datasetVersion: newVersion,
+        organizationId: dataset?.organizationId ?? null,
+        resourceId: dataset?.resourceId ?? null,
         input: args.input,
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
@@ -577,6 +581,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
           details: { itemId: args.id, expectedDatasetId: args.datasetId, actualDatasetId: existing.datasetId },
         });
       }
+      // Fetch parent dataset for fresh tenancy returned to caller (Option B)
+      const dataset = await this.getDatasetById({ id: args.datasetId });
 
       const versionId = crypto.randomUUID();
       const now = new Date();
@@ -633,6 +639,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
       return {
         ...existing,
         datasetVersion: newVersion,
+        organizationId: dataset?.organizationId ?? null,
+        resourceId: dataset?.resourceId ?? null,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,

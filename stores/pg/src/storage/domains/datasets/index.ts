@@ -390,22 +390,8 @@ export class DatasetsPG extends DatasetsStorage {
         setClauses.push(`"scorerIds" = $${paramIndex++}`);
         values.push(args.scorerIds === null ? null : JSON.stringify(args.scorerIds));
       }
-      if (args.organizationId !== undefined) {
-        setClauses.push(`"organizationId" = $${paramIndex++}`);
-        values.push(args.organizationId);
-      }
-      if (args.resourceId !== undefined) {
-        setClauses.push(`"resourceId" = $${paramIndex++}`);
-        values.push(args.resourceId);
-      }
-      if (args.candidateKey !== undefined) {
-        setClauses.push(`"candidateKey" = $${paramIndex++}`);
-        values.push(args.candidateKey);
-      }
-      if (args.candidateId !== undefined) {
-        setClauses.push(`"candidateId" = $${paramIndex++}`);
-        values.push(args.candidateId);
-      }
+      // Tenancy (organizationId, resourceId) and candidate identity (candidateKey,
+      // candidateId) are immutable after creation — they're not part of UpdateDatasetInput.
 
       values.push(args.id);
       await this.#db.client.none(
@@ -428,10 +414,10 @@ export class DatasetsPG extends DatasetsStorage {
         targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? null,
         targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? null,
         scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? null,
-        organizationId: args.organizationId !== undefined ? args.organizationId : (existing.organizationId ?? null),
-        resourceId: args.resourceId !== undefined ? args.resourceId : (existing.resourceId ?? null),
-        candidateKey: args.candidateKey !== undefined ? args.candidateKey : (existing.candidateKey ?? null),
-        candidateId: args.candidateId !== undefined ? args.candidateId : (existing.candidateId ?? null),
+        organizationId: existing.organizationId ?? null,
+        resourceId: existing.resourceId ?? null,
+        candidateKey: existing.candidateKey ?? null,
+        candidateId: existing.candidateId ?? null,
         updatedAt: new Date(now),
       };
     } catch (error) {
@@ -793,12 +779,14 @@ export class DatasetsPG extends DatasetsStorage {
       const nowIso = new Date().toISOString();
 
       await this.#db.client.tx(async t => {
-        // 1. Bump dataset version
+        // 1. Bump dataset version and re-inherit tenancy from parent
         const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
+          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "resourceId"`,
           [datasetId],
         );
         const newVersion = row.version as number;
+        const parentOrganizationId = (row.organizationId as string | null) ?? null;
+        const parentResourceId = (row.resourceId as string | null) ?? null;
 
         // 2. Close old row
         await t.none(
@@ -807,15 +795,15 @@ export class DatasetsPG extends DatasetsStorage {
         );
 
         // 3. Insert tombstone (isDeleted=true, validTo=NULL — tombstone is the "current" terminal version);
-        //    tenancy preserved from prior current row
+        //    tenancy re-inherited from parent dataset
         await t.none(
           `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","resourceId","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
           [
             id,
             datasetId,
             newVersion,
-            existing.organizationId ?? null,
-            existing.resourceId ?? null,
+            parentOrganizationId,
+            parentResourceId,
             JSON.stringify(existing.input),
             jsonbArg(existing.groundTruth),
             jsonbArg(existing.expectedTrajectory),
@@ -979,6 +967,10 @@ export class DatasetsPG extends DatasetsStorage {
       const nowIso = new Date().toISOString();
       const versionId = crypto.randomUUID();
 
+      // Tenancy re-inherited from parent dataset (Option B)
+      const parentOrganizationId = dataset.organizationId ?? null;
+      const parentResourceId = dataset.resourceId ?? null;
+
       await this.#db.client.tx(async t => {
         // 1. Single version bump
         const row = await t.one(
@@ -999,8 +991,8 @@ export class DatasetsPG extends DatasetsStorage {
               item.id,
               input.datasetId,
               newVersion,
-              item.organizationId ?? null,
-              item.resourceId ?? null,
+              parentOrganizationId,
+              parentResourceId,
               JSON.stringify(item.input),
               jsonbArg(item.groundTruth),
               jsonbArg(item.expectedTrajectory),
