@@ -194,6 +194,15 @@ export class Harness<TState = {}> {
    * every {@link createSession} call. The Harness itself holds no session.
    */
   readonly #defaultMode: HarnessMode;
+  /**
+   * Live sessions created by {@link createSession}, keyed by resourceId. A
+   * resourceId maps to exactly one session per Harness (get-or-create). Stores
+   * the in-flight creation promise so concurrent calls share one session. Lets
+   * Harness-external callers (e.g. notification delivery) resolve "the session
+   * that owns this resource" so a woken run uses that session's model/mode/state
+   * instead of an arbitrary one.
+   */
+  readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
@@ -324,9 +333,35 @@ export class Harness<TState = {}> {
    * workspace are ready.
    */
   async createSession({ resourceId }: { resourceId?: string } = {}): Promise<Session<TState>> {
+    const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
+
+    // Get-or-create: a resourceId maps to exactly one durable session per
+    // Harness. Asking for the same resource twice returns the same session, so
+    // a user/thread always resumes their own session and notification delivery
+    // reuses it rather than spawning a split-brain duplicate. Cache the in-flight
+    // promise so concurrent calls for the same resource resolve to one session.
+    const existing = this.#sessionsByResource.get(effectiveResourceId);
+    if (existing) {
+      return existing;
+    }
+
+    const creation = this.#createSessionForResource(effectiveResourceId);
+    this.#sessionsByResource.set(effectiveResourceId, creation);
+    try {
+      return await creation;
+    } catch (error) {
+      // Don't cache a failed creation — let the next call retry.
+      if (this.#sessionsByResource.get(effectiveResourceId) === creation) {
+        this.#sessionsByResource.delete(effectiveResourceId);
+      }
+      throw error;
+    }
+  }
+
+  async #createSessionForResource(effectiveResourceId: string): Promise<Session<TState>> {
     const session = this.#wireSession(
       new Session({
-        resourceId: resourceId ?? this.config.resourceId ?? this.config.id,
+        resourceId: effectiveResourceId,
         state: {
           initialState: this.config.initialState,
           stateSchema: this.config.stateSchema,
@@ -362,6 +397,16 @@ export class Harness<TState = {}> {
     }
 
     return session;
+  }
+
+  /**
+   * Resolve a live session by resourceId, if one was created for it via
+   * {@link createSession}. Returns `undefined` when no session owns the
+   * resource. Used by notification delivery to run woken signals as the session
+   * that owns the target thread, rather than an arbitrary session.
+   */
+  async getSessionByResource(resourceId: string): Promise<Session<TState> | undefined> {
+    return this.#sessionsByResource.get(resourceId);
   }
 
   // ===========================================================================
@@ -922,9 +967,27 @@ export class Harness<TState = {}> {
    * the active thread — since those are Harness-owned.
    */
   setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): void {
+    const previousResourceId = session.identity.getResourceId();
     session.thread.cleanupSubscription();
     session.identity.setResourceId({ resourceId });
     session.thread.clear();
+
+    // Re-key the resource registry so this session is the one resolved for its
+    // new resourceId (and is no longer resolved for the old one). This session
+    // becomes the authoritative owner of the target resource, replacing any
+    // prior session registered there.
+    void this.#dropSessionFromRegistry(previousResourceId, session);
+    this.#sessionsByResource.set(resourceId, Promise.resolve(session));
+  }
+
+  /** Remove `resourceId` from the registry only if it still resolves to `session`. */
+  async #dropSessionFromRegistry(resourceId: string, session: Session<TState>): Promise<void> {
+    const pending = this.#sessionsByResource.get(resourceId);
+    if (!pending) return;
+    const resolved = await pending.catch(() => undefined);
+    if (resolved === session && this.#sessionsByResource.get(resourceId) === pending) {
+      this.#sessionsByResource.delete(resourceId);
+    }
   }
 
   async getKnownResourceIds(session: Session<TState>): Promise<string[]> {

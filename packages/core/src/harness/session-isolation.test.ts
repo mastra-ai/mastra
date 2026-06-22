@@ -111,3 +111,38 @@ describe('Harness.createSession — cross-session isolation', () => {
     expect(bEvents.some(e => e.type === 'mode_changed')).toBe(false);
   });
 });
+
+describe('Harness session registry', () => {
+  it('resolves a created session by its resourceId', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    const b = await harness.createSession({ resourceId: 'user-b' });
+
+    expect(await harness.getSessionByResource('user-a')).toBe(a);
+    expect(await harness.getSessionByResource('user-b')).toBe(b);
+    expect(await harness.getSessionByResource('user-unknown')).toBeUndefined();
+  });
+
+  it('returns the same session for the same resourceId (get-or-create)', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const first = await harness.createSession({ resourceId: 'user-a' });
+    const second = await harness.createSession({ resourceId: 'user-a' });
+
+    expect(second).toBe(first);
+  });
+
+  it('follows a session when its resourceId changes', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    harness.setResourceId(a, { resourceId: 'user-a-renamed' });
+
+    expect(await harness.getSessionByResource('user-a-renamed')).toBe(a);
+    expect(await harness.getSessionByResource('user-a')).toBeUndefined();
+  });
+});
