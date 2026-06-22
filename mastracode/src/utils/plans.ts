@@ -2,6 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getAppDataDir } from './project.js';
 
+/** Root directory for all plan files. */
+export function getPlansDir(): string {
+  return process.env.MASTRA_PLANS_DIR ?? path.join(getAppDataDir(), 'plans');
+}
+
 function slugify(str: string): string {
   const slug = str
     .toLowerCase()
@@ -17,7 +22,7 @@ export async function savePlanToDisk(opts: {
   plansDir?: string;
 }): Promise<void> {
   const { title, plan, resourceId } = opts;
-  const plansDir = opts.plansDir ?? process.env.MASTRA_PLANS_DIR ?? path.join(getAppDataDir(), 'plans');
+  const plansDir = opts.plansDir ?? getPlansDir();
   const dir = path.join(plansDir, resourceId);
 
   await fs.mkdir(dir, { recursive: true });
@@ -45,7 +50,7 @@ export async function savePlanSnapshot(opts: {
   plansDir?: string;
 }): Promise<void> {
   const { title, plan, resourceId } = opts;
-  const plansDir = opts.plansDir ?? process.env.MASTRA_PLANS_DIR ?? path.join(getAppDataDir(), 'plans');
+  const plansDir = opts.plansDir ?? getPlansDir();
   const dir = path.join(plansDir, resourceId);
 
   await fs.mkdir(dir, { recursive: true });

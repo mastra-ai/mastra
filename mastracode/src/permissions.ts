@@ -59,7 +59,7 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   [MC_TOOLS.EXECUTE_COMMAND]: 'execute',
 
   // Interactive / planning tools — always allowed (no category needed)
-  // ask_user, task_write, task_update, task_complete, task_check, submit_plan, plan_file, request_access
+  // ask_user, task_write, task_update, task_complete, task_check, submit_plan, request_access
 };
 
 // Tools that never need approval regardless of policy
@@ -70,7 +70,6 @@ const ALWAYS_ALLOW_TOOLS = new Set([
   'task_complete',
   'task_check',
   'submit_plan',
-  'plan_file',
   'request_access',
 ]);
 

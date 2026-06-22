@@ -59,12 +59,12 @@ For each step:
 
 ## Plan File Management
 
-Plan files are stored outside the project workspace sandbox. Use the \`plan_file\` tool to read or update your plan file:
+When you submit a plan via \`submit_plan\`, the system saves it as a \`.md\` file in the plans directory. The plans directory is accessible via regular workspace tools:
 
-- \`plan_file({ action: "read" })\` — Read the current plan file content
-- \`plan_file({ action: "write", content: "..." })\` — Write or update the plan file
+- Use \`view\` to read your current plan file
+- Use \`string_replace_lsp\` to make targeted edits to plan sections
 
-Do NOT try to access plan files with regular workspace tools (view, write_file, etc.) — they are outside the sandbox.
+The plan file path will be included in your context when revising a previously submitted plan.
 
 ## IMMEDIATE ACTION: Call submit_plan Tool
 
@@ -88,12 +88,12 @@ The user will see the plan rendered inline and can:
 ## Revision Workflow
 
 If the user requests changes, you will be stopped immediately. Wait for their next message — it will contain their revision feedback. When you receive it:
-1. Call \`plan_file({ action: "read" })\` to retrieve the current plan content
-2. Revise the plan based on the user's feedback
-3. Call \`plan_file({ action: "write", content: "..." })\` to save the updated plan
-4. Call \`submit_plan\` again with the updated plan
+1. Use \`view\` to read the current plan file (its path will be in context)
+2. Use \`string_replace_lsp\` to make targeted edits to the plan based on feedback
+3. Use \`view\` to re-read the updated plan file
+4. Call \`submit_plan\` again with the full updated plan content
 
-The user will see a diff of what changed between the previous and revised plan. Do NOT rewrite the entire plan from scratch for small changes — make targeted revisions so the diff is clear and meaningful.
+The user will see a diff of what changed between the previous and revised plan. Use \`string_replace_lsp\` for targeted edits so the diff is clear and meaningful — do NOT rewrite the entire plan from scratch for small changes.
 
 Do NOT start implementing until the plan is approved.
 `;

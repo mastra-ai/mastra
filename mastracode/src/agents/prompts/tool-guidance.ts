@@ -216,13 +216,11 @@ ${patchToolGuidance}
 - Takes two arguments: \`title\` (short descriptive title) and \`plan\` (full plan in markdown).`);
   }
 
-  if (modeId === 'plan' && !denied.has('plan_file')) {
+  if (modeId === 'plan') {
     sections.push(`
-**plan_file** — Read or update the plan file for the current resource
-- Plan files live outside the workspace sandbox — use this tool, not regular file tools.
-- \`action: "read"\` returns the current plan content (or a message if none exists).
-- \`action: "write"\` creates or overwrites the plan file. Requires \`content\` parameter.
-- Use this to read the previous plan before making targeted revisions after a rejection.`);
+**Plan file access** — The plans directory is in your allowed paths
+- Use \`view\` to read plan files and \`string_replace_lsp\` to make targeted edits.
+- When revising a rejected plan, read the current file first, edit specific sections, then re-read and call \`submit_plan\` with the updated content.`);
   }
 
   // --- Subagent tool (all modes) ---
