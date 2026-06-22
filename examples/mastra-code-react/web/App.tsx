@@ -1,40 +1,57 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { GoalPanel, StatusLine, Transcript } from './components';
-import { ProjectPicker } from './ProjectPicker';
-import { loadProjects } from './projects';
+import { loadProjects, DEFAULT_RESOURCE_ID, projectResourceId } from './projects';
 import type { Project } from './projects';
-import { ThreadSidebar } from './ThreadSidebar';
+import { Sidebar } from './Sidebar';
 import { useHarnessSession } from './useHarnessSession';
 
-// A fixed conversation id for this demo. In a real app this is the signed-in
-// user id (or a per-conversation id); the server get-or-creates a durable
-// session for it, so reloads resume the same thread.
-const RESOURCE_ID = 'web-demo-user';
-
 export default function App() {
-  const session = useHarnessSession({ harnessId: 'code', resourceId: RESOURCE_ID });
-  const { transcript, status, modes, threads, send, steer, abort } = session;
-  const [draft, setDraft] = useState('');
-  const [showThreads, setShowThreads] = useState(false);
-  const threadRef = useRef<HTMLDivElement>(null);
-
-  // ── Projects ────────────────────────────────────────────────────────────
+  // ── Projects (localStorage) ─────────────────────────────────────────
   const [projects, setProjects] = useState<Project[]>(() => loadProjects());
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const activeProject = projects.find(p => p.id === activeProjectId) ?? null;
 
-  const handleProjectSelect = async (project: Project | null) => {
-    setActiveProjectId(project?.id ?? null);
-    await session.setState({ projectPath: project?.path ?? '' });
-    session.pushNotice(
-      project ? `Project: ${project.name} (${project.path})` : 'Switched to default workspace',
-    );
-  };
+  // resourceId is scoped to the active project so threads belong to it.
+  const resourceId = activeProject ? projectResourceId(activeProject) : DEFAULT_RESOURCE_ID;
 
-  // Auto-scroll the transcript as it grows.
+  const session = useHarnessSession({ harnessId: 'code', resourceId });
+  const { transcript, status, modes, threads, send, steer, abort } = session;
+  const [draft, setDraft] = useState('');
+  const threadRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll the transcript.
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
   }, [transcript.entries.length, transcript.running]);
+
+  // When a project is selected, set projectPath on the server session state.
+  const handleSelectProject = async (project: Project | null) => {
+    setActiveProjectId(project?.id ?? null);
+    // The hook will re-mount with a new resourceId, creating/resuming the
+    // project's session. We also push projectPath so the workspace factory
+    // picks it up on the next message.
+  };
+
+  // After the session connects for a new project, set projectPath.
+  const prevResourceId = useRef(resourceId);
+  useEffect(() => {
+    if (resourceId !== prevResourceId.current) {
+      prevResourceId.current = resourceId;
+      if (status === 'ready') {
+        void session.setState({ projectPath: activeProject?.path ?? '' });
+      }
+    }
+  }, [resourceId, status, activeProject, session]);
+
+  // Also set projectPath on initial connection for the active project.
+  const initialSet = useRef(false);
+  useEffect(() => {
+    if (status === 'ready' && !initialSet.current && activeProject) {
+      initialSet.current = true;
+      void session.setState({ projectPath: activeProject.path });
+    }
+  }, [status, activeProject, session]);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,45 +62,22 @@ export default function App() {
   };
 
   async function handleInput(text: string) {
-    // Slash commands mirror a subset of MastraCode's command surface.
     if (text.startsWith('/')) {
       const [cmd, ...rest] = text.slice(1).split(/\s+/);
       const arg = rest.join(' ');
       switch (cmd) {
-        case 'mode':
-          if (arg) await session.switchMode(arg);
-          return;
-        case 'model':
-          if (arg) await session.switchModel(arg);
-          return;
-        case 'threads':
-          await session.refreshThreads();
-          setShowThreads(true);
-          return;
-        case 'new':
-          await session.createThread(arg || undefined);
-          return;
+        case 'mode': if (arg) await session.switchMode(arg); return;
+        case 'model': if (arg) await session.switchModel(arg); return;
+        case 'new': await session.createThread(arg || undefined); return;
         case 'rename':
           if (arg && transcript.threadId) await session.renameThread(transcript.threadId, arg);
           return;
-        case 'delete':
-          if (arg) await session.deleteThread(arg);
-          return;
-        case 'clone':
-          await session.cloneThread();
-          return;
-        case 'goal':
-          if (arg) await session.setGoal(arg);
-          return;
-        case 'goal-clear':
-          await session.clearGoal();
-          return;
-        case 'goal-pause':
-          await session.pauseGoal();
-          return;
-        case 'goal-resume':
-          await session.resumeGoal();
-          return;
+        case 'delete': if (arg) await session.deleteThread(arg); return;
+        case 'clone': await session.cloneThread(); return;
+        case 'goal': if (arg) await session.setGoal(arg); return;
+        case 'goal-clear': await session.clearGoal(); return;
+        case 'goal-pause': await session.pauseGoal(); return;
+        case 'goal-resume': await session.resumeGoal(); return;
         case 'permissions': {
           const rules = await session.getPermissions();
           const cats = Object.entries(rules.categories ?? {}).map(([k, v]) => `  ${k}: ${v}`).join('\n') || '  (none)';
@@ -92,8 +86,7 @@ export default function App() {
           return;
         }
         case 'yolo': {
-          const categories = ['read', 'edit', 'execute', 'mcp', 'other'] as const;
-          for (const cat of categories) {
+          for (const cat of ['read', 'edit', 'execute', 'mcp', 'other'] as const) {
             await session.setPermissionForCategory(cat, 'allow');
           }
           session.pushNotice('YOLO mode: all tool categories set to auto-allow');
@@ -101,13 +94,8 @@ export default function App() {
         }
         case 'cost': {
           const u = transcript.usage;
-          if (!u?.totalTokens) {
-            session.pushNotice('No token usage recorded yet.');
-          } else {
-            session.pushNotice(
-              `Tokens — prompt: ${u.promptTokens ?? 0}, completion: ${u.completionTokens ?? 0}, total: ${u.totalTokens}`,
-            );
-          }
+          if (!u?.totalTokens) session.pushNotice('No token usage recorded yet.');
+          else session.pushNotice(`Tokens — prompt: ${u.promptTokens ?? 0}, completion: ${u.completionTokens ?? 0}, total: ${u.totalTokens}`);
           return;
         }
         case 'think':
@@ -118,58 +106,41 @@ export default function App() {
           return;
         case 'settings': {
           const lines = [
+            `Project: ${activeProject?.name ?? '(none)'}`,
+            `Path: ${activeProject?.path ?? '(default workspace)'}`,
             `Mode: ${transcript.modeId ?? '—'}`,
             `Model: ${transcript.modelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
             `Running: ${transcript.running}`,
-            `Tasks: ${transcript.tasks.length}`,
-            `Follow-ups queued: ${transcript.followUpCount}`,
-            `OM phase: ${transcript.omPhase}`,
-            `Workspace: ${transcript.workspaceReady ? 'ready' : 'not ready'}`,
           ];
           session.pushNotice(lines.join('\n'));
           return;
         }
         case 'follow-up':
-        case 'followup':
-          if (arg) await session.followUp(arg);
-          return;
-        case 'abort':
-          await session.abort();
-          return;
+        case 'followup': if (arg) await session.followUp(arg); return;
+        case 'abort': await session.abort(); return;
         case 'help':
-          session.pushNotice(
-            [
-              'Available commands:',
-              '  /mode <id>        — Switch mode (e.g. /mode plan)',
-              '  /model <id>       — Switch model',
-              '  /threads           — Show thread list',
-              '  /new [title]       — Create new thread',
-              '  /rename <title>    — Rename current thread',
-              '  /delete <id>       — Delete a thread',
-              '  /clone             — Clone current thread',
-              '  /goal <objective>  — Set a goal',
-              '  /goal-clear        — Clear active goal',
-              '  /goal-pause        — Pause active goal',
-              '  /goal-resume       — Resume paused goal',
-              '  /permissions       — Show permission rules',
-              '  /yolo              — Auto-allow all tools',
-              '  /cost              — Show token usage',
-              '  /settings          — Show session state',
-              '  /om                — Show OM phase',
-              '  /think             — Extended thinking hint',
-              '  /follow-up <msg>   — Queue a follow-up message',
-              '  /abort             — Abort the current run',
-              '  /help              — Show this list',
-            ].join('\n'),
-          );
+          session.pushNotice([
+            'Available commands:',
+            '  /mode <id>        — Switch mode',
+            '  /model <id>       — Switch model',
+            '  /new [title]       — Create new thread',
+            '  /rename <title>    — Rename current thread',
+            '  /delete <id>       — Delete a thread',
+            '  /clone             — Clone current thread',
+            '  /goal <objective>  — Set a goal',
+            '  /permissions       — Show permission rules',
+            '  /yolo              — Auto-allow all tools',
+            '  /cost              — Show token usage',
+            '  /settings          — Show session state',
+            '  /help              — Show this list',
+          ].join('\n'));
           return;
         default:
           session.pushNotice(`Unknown command: /${cmd}. Type /help for available commands.`, 'error');
           return;
       }
     }
-    // While the agent runs, additional input steers the active turn.
     if (transcript.running) await steer(text);
     else await send(text);
   }
@@ -182,28 +153,24 @@ export default function App() {
   };
 
   return (
-    <div className={showThreads ? 'page-with-sidebar' : ''}>
-      {showThreads && (
-        <ThreadSidebar
-          threads={threads}
-          activeThreadId={transcript.threadId}
-          onSwitch={id => { void session.switchThread(id); }}
-          onCreate={title => { void session.createThread(title); }}
-          onRename={(id, title) => { void session.renameThread(id, title); }}
-          onDelete={id => { void session.deleteThread(id); }}
-          onClose={() => setShowThreads(false)}
-        />
-      )}
+    <div className="app-layout">
+      <Sidebar
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onSelectProject={p => void handleSelectProject(p)}
+        onProjectsChange={setProjects}
+        threads={threads}
+        activeThreadId={transcript.threadId}
+        onSwitchThread={id => { void session.switchThread(id); }}
+        onCreateThread={title => { void session.createThread(title); }}
+        onDeleteThread={id => { void session.deleteThread(id); }}
+      />
 
-      <div className={showThreads ? 'page-main' : 'page'}>
+      <div className="app-main">
         <header className="header">
-          <span className="header-title">MastraCode</span>
-          <ProjectPicker
-            projects={projects}
-            activeProjectId={activeProjectId}
-            onSelect={p => void handleProjectSelect(p)}
-            onProjectsChange={setProjects}
-          />
+          <span className="header-title">
+            {activeProject ? activeProject.name : 'MastraCode'}
+          </span>
           <div className="header-actions">
             {modes.map(m => (
               <button
@@ -214,49 +181,49 @@ export default function App() {
                 {m.name ?? m.id}
               </button>
             ))}
-            <button
-              className={`mode-btn ${showThreads ? 'active' : ''}`}
-              onClick={() => { void session.refreshThreads(); setShowThreads(s => !s); }}
-            >
-              threads
-            </button>
             <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
               {theme === 'dark' ? '☀️' : '🌙'}
             </button>
           </div>
         </header>
 
-        <GoalPanel
-          goal={transcript.goal}
-          onSetGoal={session.setGoal}
-          onPauseGoal={session.pauseGoal}
-          onResumeGoal={session.resumeGoal}
-          onClearGoal={session.clearGoal}
-        />
+        {transcript.goal && (
+          <GoalPanel
+            goal={transcript.goal}
+            onSetGoal={o => void session.setGoal(o)}
+            onPauseGoal={() => void session.pauseGoal()}
+            onResumeGoal={() => void session.resumeGoal()}
+            onClearGoal={() => void session.clearGoal()}
+          />
+        )}
 
-        <main ref={threadRef} className="transcript">
+        <div className="transcript" ref={threadRef}>
           {transcript.entries.length === 0 && (
-            <p className="empty">Ask the coding agent to read, write, or run something in the workspace.</p>
+            <div className="transcript-empty">
+              {activeProject
+                ? `Working in ${activeProject.name}. Ask the agent to read, write, or run code.`
+                : 'Select a project from the sidebar, or ask the agent to work in the default workspace.'}
+            </div>
           )}
-          <Transcript entries={transcript.entries} onApprove={session.approveTool} onRespond={session.respondSuspension} />
-        </main>
+          <Transcript
+            entries={transcript.entries}
+            onApprove={(toolCallId, approved, id) => void session.approveTool(toolCallId, approved, id)}
+            onRespond={(toolCallId, data, id) => void session.respondSuspension(toolCallId, data, id)}
+          />
+        </div>
 
-        <form onSubmit={onSubmit} className="composer">
+        <form className="composer" onSubmit={onSubmit}>
           <input
-            className="input"
+            className="input composer-input"
             value={draft}
             onChange={e => setDraft(e.target.value)}
-            placeholder={transcript.running ? 'Steer the run, or /command…' : 'Message the agent, or /mode plan…'}
-            disabled={status !== 'ready'}
+            placeholder="Message the agent, or /mode plan..."
+            disabled={status === 'error'}
           />
           {transcript.running ? (
-            <button type="button" className="btn btn-danger" onClick={() => void abort()}>
-              Stop
-            </button>
+            <button type="button" className="btn btn-danger" onClick={() => void abort()}>Stop</button>
           ) : (
-            <button type="submit" className="btn btn-primary" disabled={status !== 'ready' || !draft.trim()}>
-              Send
-            </button>
+            <button type="submit" className="btn btn-primary" disabled={status !== 'ready' || !draft.trim()}>Send</button>
           )}
         </form>
 
@@ -269,7 +236,7 @@ export default function App() {
           omPhase={transcript.omPhase}
           usage={transcript.usage}
           workspaceReady={transcript.workspaceReady}
-          projectName={projects.find(p => p.id === activeProjectId)?.name}
+          projectName={activeProject?.name}
         />
       </div>
     </div>
