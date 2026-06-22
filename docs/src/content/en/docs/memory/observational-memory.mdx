@@ -408,7 +408,7 @@ Use [thread scope with retrieval](#retrieval-mode-experimental) for cross-sessio
 Resource scope shares observations across all threads for a resource (typically a user). In practice, each thread becomes a perspective on _all_ threads for that resource, which causes two problems:
 
 1. **Context bloat**: Every new thread is preloaded with observations from all prior threads, even when they aren't relevant.
-2. **Task interference**: The agent tries to continue work from other threads that it hasn't finished, rather than focusing on the current thread's task.
+1. **Task interference**: The agent tries to continue work from other threads that it hasn't finished, rather than focusing on the current thread's task.
 
 ```typescript
 // ⚠️ Deprecated — avoid for new projects
