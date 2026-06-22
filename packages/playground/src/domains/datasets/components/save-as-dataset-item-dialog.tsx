@@ -14,6 +14,7 @@ import {
 } from '@mastra/playground-ui';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
+import type { DatasetItemToolMock } from '@mastra/client-js';
 import { DatabaseIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
@@ -27,6 +28,10 @@ type SaveAsDatasetItemDialogProps = {
   initialTrajectory?: string;
   /** Whether the trajectory is still being fetched */
   trajectoryLoading?: boolean;
+  /** JSON string of the tool mocks (array of { toolName, args, output }) */
+  initialToolMocks?: string;
+  /** Whether the tool mocks are still being fetched */
+  toolMocksLoading?: boolean;
   breadcrumb: ReactNode;
   isOpen: boolean;
   onClose: () => void;
@@ -39,6 +44,8 @@ export function SaveAsDatasetItemDialog({
   initialGroundTruth,
   initialTrajectory,
   trajectoryLoading,
+  initialToolMocks,
+  toolMocksLoading,
   breadcrumb,
   isOpen,
   onClose,
@@ -49,6 +56,7 @@ export function SaveAsDatasetItemDialog({
   const [input, setInput] = useState('');
   const [groundTruth, setGroundTruth] = useState('');
   const [expectedTrajectory, setExpectedTrajectory] = useState('');
+  const [toolMocks, setToolMocks] = useState('');
   // source is passed through — not editable in the UI
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
@@ -60,22 +68,26 @@ export function SaveAsDatasetItemDialog({
   const trajectorySeededRef = useRef(false);
   const inputSeededRef = useRef(false);
   const groundTruthSeededRef = useRef(false);
+  const toolMocksSeededRef = useRef(false);
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {
       setInput(initialInput);
       setGroundTruth(initialGroundTruth);
       setExpectedTrajectory(initialTrajectory ?? '');
+      setToolMocks(initialToolMocks ?? '');
       trajectorySeededRef.current = !!initialTrajectory;
       inputSeededRef.current = initialInput !== '{}';
       groundTruthSeededRef.current = !!initialGroundTruth;
+      toolMocksSeededRef.current = !!initialToolMocks;
     }
     prevOpenRef.current = isOpen;
     if (!isOpen) {
       trajectorySeededRef.current = false;
       inputSeededRef.current = false;
       groundTruthSeededRef.current = false;
+      toolMocksSeededRef.current = false;
     }
-  }, [isOpen, initialInput, initialGroundTruth, initialTrajectory]);
+  }, [isOpen, initialInput, initialGroundTruth, initialTrajectory, initialToolMocks]);
 
   // Mark fields as user-edited so async seeding won't overwrite them.
   const handleInputChange = (value: string) => {
@@ -91,6 +103,11 @@ export function SaveAsDatasetItemDialog({
   const handleExpectedTrajectoryChange = (value: string) => {
     trajectorySeededRef.current = true;
     setExpectedTrajectory(value);
+  };
+
+  const handleToolMocksChange = (value: string) => {
+    toolMocksSeededRef.current = true;
+    setToolMocks(value);
   };
 
   // Seed input when it arrives asynchronously after the dialog is already open
@@ -116,6 +133,14 @@ export function SaveAsDatasetItemDialog({
       trajectorySeededRef.current = true;
     }
   }, [isOpen, initialTrajectory]);
+
+  // Seed tool mocks when they arrive asynchronously after the dialog is already open
+  useEffect(() => {
+    if (isOpen && initialToolMocks && !toolMocksSeededRef.current) {
+      setToolMocks(initialToolMocks);
+      toolMocksSeededRef.current = true;
+    }
+  }, [isOpen, initialToolMocks]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,12 +178,28 @@ export function SaveAsDatasetItemDialog({
       }
     }
 
+    let parsedToolMocks: DatasetItemToolMock[] | undefined;
+    if (toolMocks.trim()) {
+      try {
+        const parsed = JSON.parse(toolMocks);
+        if (!Array.isArray(parsed)) {
+          toast.error('Tool Mocks must be a JSON array');
+          return;
+        }
+        parsedToolMocks = parsed as DatasetItemToolMock[];
+      } catch {
+        toast.error('Tool Mocks must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await addItem.mutateAsync({
         datasetId: selectedDatasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         expectedTrajectory: parsedTrajectory,
+        toolMocks: parsedToolMocks,
         ...(source ? { source } : {}),
       });
 
@@ -169,6 +210,7 @@ export function SaveAsDatasetItemDialog({
       setInput('{}');
       setGroundTruth('');
       setExpectedTrajectory('');
+      setToolMocks('');
       onClose();
     } catch (error) {
       toast.error(`Failed to save item: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -252,6 +294,16 @@ export function SaveAsDatasetItemDialog({
             />
           </div>
 
+          <div className="grid gap-2">
+            <Label htmlFor="item-tool-mocks">Tool Mocks (JSON, optional)</Label>
+            <CodeEditor
+              value={toolMocks}
+              onChange={handleToolMocksChange}
+              showCopyButton={false}
+              className="min-h-[80px]"
+            />
+          </div>
+
           <div className="flex justify-end gap-2 pt-4">
             <Button type="button" variant="outline" onClick={handleCancel}>
               Cancel
@@ -259,9 +311,19 @@ export function SaveAsDatasetItemDialog({
             <Button
               type="submit"
               variant="default"
-              disabled={addItem.isPending || trajectoryLoading || !selectedDatasetId || datasets.length === 0}
+              disabled={
+                addItem.isPending ||
+                trajectoryLoading ||
+                toolMocksLoading ||
+                !selectedDatasetId ||
+                datasets.length === 0
+              }
             >
-              {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading trajectory...' : 'Save Item'}
+              {addItem.isPending
+                ? 'Saving...'
+                : trajectoryLoading || toolMocksLoading
+                  ? 'Loading...'
+                  : 'Save Item'}
             </Button>
           </div>
         </form>

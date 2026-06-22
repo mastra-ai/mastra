@@ -5620,6 +5620,18 @@ export class Agent<
     return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));
   }
 
+  /**
+   * Returns the agent's statically-configured tool hooks, if any.
+   *
+   * @internal Used by dataset experiments to compose item-level tool mocks with
+   * the user's configured `beforeToolCall`/`afterToolCall` hooks. Run-level hooks
+   * override these via {@link resolveToolHooks}, so callers that need to preserve
+   * the configured hooks must read and compose them explicitly.
+   */
+  getConfiguredToolHooks(): ToolHooks | undefined {
+    return this.#hooks;
+  }
+
   private resolveToolHooks(runHooks?: ToolHooks): ToolHooks | undefined {
     if (!this.#hooks) return runHooks;
     if (!runHooks) return this.#hooks;

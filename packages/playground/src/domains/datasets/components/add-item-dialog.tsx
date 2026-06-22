@@ -11,6 +11,7 @@ import {
   Label,
   toast,
 } from '@mastra/playground-ui';
+import type { DatasetItemToolMock } from '@mastra/client-js';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
@@ -69,6 +70,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
   const [input, setInput] = useState('{}');
   const [groundTruth, setGroundTruth] = useState('');
   const [expectedTrajectory, setExpectedTrajectory] = useState('');
+  const [toolMocks, setToolMocks] = useState('');
   const [requestContext, setRequestContext] = useState('');
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
   const { addItem } = useDatasetMutations();
@@ -106,6 +108,22 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       }
     }
 
+    // Parse toolMocks if provided — must be a JSON array.
+    let parsedToolMocks: DatasetItemToolMock[] | undefined;
+    if (toolMocks.trim()) {
+      try {
+        const parsed = JSON.parse(toolMocks);
+        if (!Array.isArray(parsed)) {
+          toast.error('Tool Mocks must be a JSON array');
+          return;
+        }
+        parsedToolMocks = parsed as DatasetItemToolMock[];
+      } catch {
+        toast.error('Tool Mocks must be valid JSON');
+        return;
+      }
+    }
+
     // Parse requestContext if provided
     let parsedRequestContext: Record<string, unknown> | undefined;
     if (requestContext.trim()) {
@@ -123,6 +141,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         expectedTrajectory: parsedTrajectory,
+        toolMocks: parsedToolMocks,
         requestContext: parsedRequestContext,
       });
 
@@ -133,6 +152,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       setInput('{}');
       setGroundTruth('');
       setExpectedTrajectory('');
+      setToolMocks('');
       setRequestContext('');
       onOpenChange(false);
 
@@ -168,6 +188,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
     setInput('{}');
     setGroundTruth('');
     setExpectedTrajectory('');
+    setToolMocks('');
     setRequestContext('');
     setValidationErrors(null);
     onOpenChange(false);
@@ -207,6 +228,16 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
               <CodeEditor
                 value={expectedTrajectory}
                 onChange={setExpectedTrajectory}
+                showCopyButton={false}
+                className="min-h-[80px]"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="item-tool-mocks">Tool Mocks (JSON array, optional)</Label>
+              <CodeEditor
+                value={toolMocks}
+                onChange={setToolMocks}
                 showCopyButton={false}
                 className="min-h-[80px]"
               />

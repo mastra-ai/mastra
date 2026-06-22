@@ -66,6 +66,22 @@ export class DatasetsMySQL extends DatasetsStorage {
   static readonly MANAGED_TABLES = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
 
   /**
+   * Item-level tool mocks are not persisted by the MySQL adapter. Reject writes
+   * that carry them so the feature fails loudly here instead of silently dropping
+   * the mocks and then running tools live during experiments.
+   */
+  #rejectToolMocks(toolMocks: unknown): void {
+    if (Array.isArray(toolMocks) && toolMocks.length > 0) {
+      throw new MastraError({
+        id: 'MYSQL_DATASET_TOOL_MOCKS_UNSUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Tool mocks are not supported on the MySQL storage adapter. Use a supported adapter (LibSQL, PostgreSQL, MongoDB, or Spanner) to persist dataset item tool mocks.',
+      });
+    }
+  }
+
+  /**
    * Returns default index definitions for the datasets domain tables.
    * Currently no default indexes are defined for datasets.
    */
@@ -412,6 +428,7 @@ export class DatasetsMySQL extends DatasetsStorage {
   // --- SCD-2 item mutations ---
 
   protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
+    this.#rejectToolMocks(args.toolMocks);
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -485,6 +502,7 @@ export class DatasetsMySQL extends DatasetsStorage {
   }
 
   protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
+    this.#rejectToolMocks(args.toolMocks);
     const existing = await this.getItemById({ id: args.id });
     if (!existing) {
       throw new MastraError({
@@ -886,6 +904,9 @@ export class DatasetsMySQL extends DatasetsStorage {
   // --- Bulk operations (SCD-2 internally) ---
 
   protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
+    for (const item of input.items) {
+      this.#rejectToolMocks(item.toolMocks);
+    }
     const dataset = await this.getDatasetById({ id: input.datasetId });
     if (!dataset) {
       throw new MastraError({

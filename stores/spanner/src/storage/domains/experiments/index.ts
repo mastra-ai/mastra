@@ -74,6 +74,7 @@ function rowToExperimentResult(row: Record<string, any>): ExperimentResult {
     traceId: t.traceId ?? null,
     status: (t.status ?? null) as ExperimentResult['status'],
     tags: (t.tags ?? null) as string[] | null,
+    toolMockReport: (t.toolMockReport ?? null) as ExperimentResult['toolMockReport'],
     createdAt: toDate(t.createdAt),
   };
 }
@@ -398,6 +399,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
+        toolMockReport: input.toolMockReport ?? null,
         createdAt: now,
       };
       await this.db.insert({
@@ -417,6 +419,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           traceId: result.traceId,
           status: result.status,
           tags: result.tags,
+          toolMockReport: result.toolMockReport,
           createdAt: now,
         },
       });
