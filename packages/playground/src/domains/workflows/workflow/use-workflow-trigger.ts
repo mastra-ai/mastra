@@ -6,9 +6,18 @@ import { z } from 'zod';
 
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import type { ResumeStepParams } from './workflow-suspended-steps';
-import { buildStepsFlow, constructNodesAndEdges } from './utils';
+import {
+  buildNextStepInput,
+  buildStepSuccessors,
+  buildStepsFlow,
+  collectGraphStepFlags,
+  constructNodesAndEdges,
+  isBranchArmBypassed,
+  isLastRunnableStep,
+  selectNextStepKey,
+} from './utils';
 import { WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
+import type { ResumeStepParams } from './workflow-suspended-steps';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
 
@@ -53,146 +62,65 @@ export function useWorkflowSchemas(workflow?: GetWorkflowResponse) {
   }, [workflow?.inputSchema, workflow?.stateSchema]);
 }
 
+/**
+ * Derive everything we need to reason about per-step execution from the static
+ * workflow graph (independent of any run state):
+ * - `stepNodesInOrder`: step ids in graph order (excludes boundary/condition nodes).
+ * - `stepsFlow`: each step -> its predecessor step ids.
+ * - `stepSuccessors`: each step -> the steps that depend on it (the inverse of `stepsFlow`).
+ * - `conditionalStepIds` / `nestedWorkflowStepIds`: see `collectGraphStepFlags`.
+ */
+function useWorkflowStepGraphInfo(stepGraph: GetWorkflowResponse['stepGraph'] | undefined) {
+  return useMemo(() => {
+    const { nodes, edges } = constructNodesAndEdges({ stepGraph });
+    const stepNodesInOrder = nodes
+      .filter(node => node.type === WORKFLOW_STEP_NODE_TYPE && node.data?.nodeRole !== 'condition' && node.data?.stepId)
+      .map(node => node.data.stepId as string);
+
+    const stepsFlow = buildStepsFlow(edges);
+    const stepSuccessors = buildStepSuccessors(stepsFlow);
+    const { conditionalStepIds, nestedWorkflowStepIds } = collectGraphStepFlags(stepGraph);
+
+    return { stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds, nestedWorkflowStepIds };
+  }, [stepGraph]);
+}
+
 export function useNextPerStep() {
   const { result, runId, workflowId, workflow, setDebugMode, timeTravelWorkflowStream } =
     useContext(WorkflowRunContext);
   const requestContext = useMergedRequestContext();
 
-  const stepGraph = workflow?.stepGraph;
+  const { stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds, nestedWorkflowStepIds } =
+    useWorkflowStepGraphInfo(workflow?.stepGraph);
 
-  const { stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds, nestedWorkflowStepIds } = useMemo(() => {
-    const { nodes, edges } = constructNodesAndEdges({ stepGraph });
-    const orderedStepIds = nodes
-      .filter(node => node.type === WORKFLOW_STEP_NODE_TYPE && node.data?.nodeRole !== 'condition' && node.data?.stepId)
-      .map(node => node.data.stepId as string);
+  const steps = result?.steps;
 
-    const stepsFlow = buildStepsFlow(edges);
+  // A run only reaches the 'paused' status when it was started in per-step (debug) mode, so a
+  // paused run is always steppable regardless of the in-memory debugMode flag. This lets the
+  // step controls work when landing directly on a paused run's :runId page, where the debugMode
+  // flag starts out false.
+  const isPaused = result?.status === 'paused';
 
-    // Invert the predecessor map so we can tell which steps share a successor (a "join").
-    // Branch arms feed the same downstream join node, which lets us detect arms that were
-    // never taken once a sibling on the same join has already succeeded.
-    const stepSuccessors = Object.entries(stepsFlow).reduce(
-      (acc, [stepId, prevStepIds]) => {
-        for (const prevStepId of prevStepIds) {
-          acc[prevStepId] = [...new Set([...(acc[prevStepId] || []), stepId])];
-        }
-        return acc;
-      },
-      {} as Record<string, string[]>,
-    );
+  const isStepSuccess = useCallback((stepId: string) => steps?.[stepId]?.status === 'success', [steps]);
+  const isStepBypassed = useCallback(
+    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess }),
+    [conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess],
+  );
 
-    // Only steps inside a conditional entry can be "bypassed": when one branch arm is
-    // selected, the other arms never run. Parallel arms also share a downstream join, but
-    // every parallel arm must run, so they must NOT be treated as bypassable.
-    const conditionalStepIds = new Set<string>();
-    // A nested workflow is a single atomic step from the parent's perspective. When it is
-    // the next step to advance, it must run to completion in one go rather than pausing
-    // after its own first inner step, so it is targeted with per-step execution disabled.
-    const nestedWorkflowStepIds = new Set<string>();
-    const collectStepFlags = (entry: any) => {
-      if (!entry) return;
-      if (entry.type === 'step' || entry.type === 'foreach' || entry.type === 'loop') {
-        if (entry.step?.component === 'WORKFLOW' && entry.step?.id) {
-          nestedWorkflowStepIds.add(entry.step.id);
-        }
-      }
-      if (entry.type === 'conditional') {
-        for (const child of entry.steps) {
-          conditionalStepIds.add(child.step.id);
-          collectStepFlags(child);
-        }
-      }
-      if (entry.type === 'parallel') {
-        for (const child of entry.steps) {
-          collectStepFlags(child);
-        }
-      }
-    };
-    for (const entry of stepGraph ?? []) {
-      collectStepFlags(entry);
-    }
+  const nextStepKey = useMemo(
+    () => (isPaused ? selectNextStepKey({ stepNodesInOrder, isStepSuccess, isStepBypassed }) : undefined),
+    [isPaused, stepNodesInOrder, isStepSuccess, isStepBypassed],
+  );
 
-    return {
-      stepNodesInOrder: orderedStepIds,
-      stepsFlow,
-      stepSuccessors,
-      conditionalStepIds,
-      nestedWorkflowStepIds,
-    };
-  }, [stepGraph]);
+  const stepPayload = useMemo(
+    () => buildNextStepInput({ nextStepKey, stepsFlow, steps }),
+    [nextStepKey, stepsFlow, steps],
+  );
 
-  const nextStepKey = useMemo(() => {
-    // A run only reaches the 'paused' status when it was started in per-step (debug) mode, so
-    // a paused run is always steppable regardless of the in-memory debugMode flag. This lets
-    // the step controls work when landing directly on a paused run's :runId page, where the
-    // debugMode flag starts out false.
-    if (result?.status !== 'paused') return undefined;
-
-    const isSuccess = (stepId: string) => result?.steps?.[stepId]?.status === 'success';
-
-    // A conditional branch arm is bypassed when one of its successors (a join such as a
-    // post-branch map) already has another predecessor that succeeded. That means a sibling
-    // arm was the one selected by the condition, so this arm will never run and must be
-    // skipped, otherwise per-step execution stalls on it forever. Parallel arms are excluded
-    // here because every parallel arm is expected to run, even though they share a join.
-    const isBypassed = (stepId: string) => {
-      if (!conditionalStepIds.has(stepId)) return false;
-      const successors = stepSuccessors[stepId] ?? [];
-      return successors.some(successorId =>
-        (stepsFlow[successorId] ?? []).some(sib => sib !== stepId && isSuccess(sib)),
-      );
-    };
-
-    return stepNodesInOrder.find(stepId => !isSuccess(stepId) && !isBypassed(stepId));
-  }, [result?.status, result?.steps, stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds]);
-
-  const stepPayload = useMemo(() => {
-    if (!nextStepKey) return undefined;
-    const previousSteps = stepsFlow?.[nextStepKey] ?? [];
-    if (previousSteps.length === 0) return undefined;
-
-    if (previousSteps.length > 1) {
-      return {
-        hasMultiSteps: true,
-        input: previousSteps.reduce(
-          (acc, stepId) => {
-            if (result?.steps?.[stepId]?.status === 'success') {
-              acc[stepId] = result?.steps?.[stepId].output;
-            }
-            return acc;
-          },
-          {} as Record<string, any>,
-        ),
-      };
-    }
-
-    const prevStepId = previousSteps[0];
-    if (result?.steps?.[prevStepId]?.status === 'success') {
-      return {
-        hasMultiSteps: false,
-        input: result?.steps?.[prevStepId].output,
-      };
-    }
-
-    return undefined;
-  }, [nextStepKey, stepsFlow, result?.steps]);
-
-  // The final advance must finish the run instead of pausing again, otherwise the workflow
-  // ends in a 'paused' state and the user never sees the run's end output. A step is the last
-  // one when no later step in graph order still needs to run (ignoring bypassed branch arms).
-  const isLastStep = useMemo(() => {
-    if (!nextStepKey) return false;
-    const isSuccess = (stepId: string) => result?.steps?.[stepId]?.status === 'success';
-    const isBypassed = (stepId: string) => {
-      if (!conditionalStepIds.has(stepId)) return false;
-      const successors = stepSuccessors[stepId] ?? [];
-      return successors.some(successorId =>
-        (stepsFlow[successorId] ?? []).some(sib => sib !== stepId && isSuccess(sib)),
-      );
-    };
-    const nextIndex = stepNodesInOrder.indexOf(nextStepKey);
-    return stepNodesInOrder.slice(nextIndex + 1).every(stepId => isSuccess(stepId) || isBypassed(stepId));
-  }, [nextStepKey, stepNodesInOrder, result?.steps, conditionalStepIds, stepSuccessors, stepsFlow]);
+  const isLastStep = useMemo(
+    () => isLastRunnableStep({ nextStepKey, stepNodesInOrder, isStepSuccess, isStepBypassed }),
+    [nextStepKey, stepNodesInOrder, isStepSuccess, isStepBypassed],
+  );
 
   const canRunNextStep = Boolean(nextStepKey && stepPayload);
 
@@ -200,14 +128,10 @@ export function useNextPerStep() {
     (isContinueRun: boolean) => {
       if (!nextStepKey || !stepPayload) return;
 
-      // A nested workflow must run atomically: disable per-step for this single advance so
-      // the nested run completes instead of pausing after its first inner step. Debug mode
-      // stays on so subsequent top-level steps continue to advance one at a time.
+      // A nested workflow is atomic from the parent's perspective, and the last step must finish
+      // the run instead of pausing again (otherwise the user never sees the run's end output).
+      // Both cases run to completion in a single advance with per-step disabled.
       const isNestedWorkflowStep = nestedWorkflowStepIds.has(nextStepKey);
-
-      // The last step must finish the run rather than pause again, so the user can see the
-      // workflow's end output. Disabling per-step for this final advance lets core complete
-      // the run and populate the run result.
       const runToFinish = isContinueRun || isNestedWorkflowStep || isLastStep;
 
       const payload = {
@@ -248,7 +172,6 @@ export function useNextPerStep() {
       setDebugMode,
       timeTravelWorkflowStream,
       nestedWorkflowStepIds,
-      result?.steps,
       isLastStep,
     ],
   );

@@ -609,3 +609,175 @@ export const buildStepsFlow = (edges: Edge[]): Record<string, string[]> =>
     },
     {} as Record<string, string[]>,
   );
+
+/**
+ * Invert the predecessor map (step -> its predecessors) into a successor map
+ * (step -> the steps that depend on it). Branch arms feed the same downstream
+ * join node, so this lets us detect arms that were never taken once a sibling
+ * on the same join has already succeeded.
+ */
+export const buildStepSuccessors = (stepsFlow: Record<string, string[]>): Record<string, string[]> =>
+  Object.entries(stepsFlow).reduce(
+    (acc, [stepId, prevStepIds]) => {
+      for (const prevStepId of prevStepIds) {
+        acc[prevStepId] = [...new Set([...(acc[prevStepId] || []), stepId])];
+      }
+      return acc;
+    },
+    {} as Record<string, string[]>,
+  );
+
+/**
+ * Walk the serialized step graph to flag two special kinds of step:
+ * - `conditionalStepIds`: arms of a conditional entry. Only these can be
+ *   "bypassed" — when one branch arm is selected, the others never run.
+ *   Parallel arms also share a downstream join, but every parallel arm must
+ *   run, so they are deliberately NOT collected here.
+ * - `nestedWorkflowStepIds`: steps whose component is a nested workflow. From
+ *   the parent's perspective a nested workflow is a single atomic step.
+ */
+export const collectGraphStepFlags = (
+  stepGraph: SerializedStepFlowEntry[] | undefined,
+): { conditionalStepIds: Set<string>; nestedWorkflowStepIds: Set<string> } => {
+  const conditionalStepIds = new Set<string>();
+  const nestedWorkflowStepIds = new Set<string>();
+
+  const visit = (entry: SerializedStepFlowEntry | undefined) => {
+    if (!entry) return;
+    if (entry.type === 'step' || entry.type === 'foreach' || entry.type === 'loop') {
+      if (entry.step?.component === 'WORKFLOW' && entry.step?.id) {
+        nestedWorkflowStepIds.add(entry.step.id);
+      }
+    }
+    if (entry.type === 'conditional') {
+      for (const child of entry.steps) {
+        conditionalStepIds.add(child.step.id);
+        visit(child);
+      }
+    }
+    if (entry.type === 'parallel') {
+      for (const child of entry.steps) {
+        visit(child);
+      }
+    }
+  };
+
+  for (const entry of stepGraph ?? []) {
+    visit(entry);
+  }
+
+  return { conditionalStepIds, nestedWorkflowStepIds };
+};
+
+type StepStatusLookup = (stepId: string) => boolean;
+
+/**
+ * A conditional branch arm is "bypassed" when one of its successors (a join
+ * such as a post-branch map) already has another predecessor that succeeded.
+ * That means a sibling arm was the one selected by the condition, so this arm
+ * will never run and must be skipped — otherwise per-step execution stalls on
+ * it forever. Parallel arms are excluded via `conditionalStepIds`, because
+ * every parallel arm is expected to run even though they share a join.
+ */
+export const isBranchArmBypassed = ({
+  stepId,
+  conditionalStepIds,
+  stepSuccessors,
+  stepsFlow,
+  isStepSuccess,
+}: {
+  stepId: string;
+  conditionalStepIds: Set<string>;
+  stepSuccessors: Record<string, string[]>;
+  stepsFlow: Record<string, string[]>;
+  isStepSuccess: StepStatusLookup;
+}): boolean => {
+  if (!conditionalStepIds.has(stepId)) return false;
+  const successors = stepSuccessors[stepId] ?? [];
+  return successors.some(successorId =>
+    (stepsFlow[successorId] ?? []).some(sib => sib !== stepId && isStepSuccess(sib)),
+  );
+};
+
+/**
+ * The next step to advance is the first step in graph order that has not yet
+ * succeeded and was not bypassed by a conditional branch decision.
+ */
+export const selectNextStepKey = ({
+  stepNodesInOrder,
+  isStepSuccess,
+  isStepBypassed,
+}: {
+  stepNodesInOrder: string[];
+  isStepSuccess: StepStatusLookup;
+  isStepBypassed: StepStatusLookup;
+}): string | undefined => stepNodesInOrder.find(stepId => !isStepSuccess(stepId) && !isStepBypassed(stepId));
+
+/**
+ * A step is the last runnable one when no later step in graph order still needs
+ * to run (ignoring bypassed branch arms). The final advance must finish the run
+ * instead of pausing again, otherwise the workflow ends in a 'paused' state and
+ * the user never sees the run's end output.
+ */
+export const isLastRunnableStep = ({
+  nextStepKey,
+  stepNodesInOrder,
+  isStepSuccess,
+  isStepBypassed,
+}: {
+  nextStepKey: string | undefined;
+  stepNodesInOrder: string[];
+  isStepSuccess: StepStatusLookup;
+  isStepBypassed: StepStatusLookup;
+}): boolean => {
+  if (!nextStepKey) return false;
+  const nextIndex = stepNodesInOrder.indexOf(nextStepKey);
+  return stepNodesInOrder.slice(nextIndex + 1).every(stepId => isStepSuccess(stepId) || isStepBypassed(stepId));
+};
+
+/**
+ * Build the input payload for the next step from its successful predecessors:
+ * - A join with multiple predecessors yields a keyed map of each predecessor's
+ *   output (`hasMultiSteps`).
+ * - A single predecessor yields its output directly.
+ * Returns undefined when the step has no predecessor or the predecessor has not
+ * succeeded yet.
+ */
+export const buildNextStepInput = ({
+  nextStepKey,
+  stepsFlow,
+  steps,
+}: {
+  nextStepKey: string | undefined;
+  stepsFlow: Record<string, string[]>;
+  steps: Record<string, { status?: string; output?: any }> | undefined;
+}): { hasMultiSteps: boolean; input: any } | undefined => {
+  if (!nextStepKey) return undefined;
+  const previousSteps = stepsFlow?.[nextStepKey] ?? [];
+  if (previousSteps.length === 0) return undefined;
+
+  if (previousSteps.length > 1) {
+    return {
+      hasMultiSteps: true,
+      input: previousSteps.reduce(
+        (acc, stepId) => {
+          if (steps?.[stepId]?.status === 'success') {
+            acc[stepId] = steps?.[stepId]?.output;
+          }
+          return acc;
+        },
+        {} as Record<string, any>,
+      ),
+    };
+  }
+
+  const prevStepId = previousSteps[0];
+  if (steps?.[prevStepId]?.status === 'success') {
+    return {
+      hasMultiSteps: false,
+      input: steps?.[prevStepId]?.output,
+    };
+  }
+
+  return undefined;
+};
