@@ -89,30 +89,10 @@ export function ScoresOverTimeCard({
                       <DataList.RowHeaderCell height="compact" className="text-ui-sm">
                         {row.scorer}
                       </DataList.RowHeaderCell>
-                      <DataList.Cell
-                        height="compact"
-                        className="justify-items-end text-right text-ui-sm tabular-nums text-neutral4 font-semibold"
-                      >
-                        {row.avg.toFixed(2)}
-                      </DataList.Cell>
-                      <DataList.Cell
-                        height="compact"
-                        className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                      >
-                        {row.min.toFixed(2)}
-                      </DataList.Cell>
-                      <DataList.Cell
-                        height="compact"
-                        className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                      >
-                        {row.max.toFixed(2)}
-                      </DataList.Cell>
-                      <DataList.Cell
-                        height="compact"
-                        className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                      >
-                        {row.count.toLocaleString()}
-                      </DataList.Cell>
+                      <DataList.NumberCell highlight>{row.avg.toFixed(2)}</DataList.NumberCell>
+                      <DataList.NumberCell>{row.min.toFixed(2)}</DataList.NumberCell>
+                      <DataList.NumberCell>{row.max.toFixed(2)}</DataList.NumberCell>
+                      <DataList.NumberCell>{row.count.toLocaleString()}</DataList.NumberCell>
                     </DataList.RowStatic>
                   ))}
                 </DataList>

@@ -78,36 +78,13 @@ export function ModelUsageCostCardView({
                     <DataList.RowHeaderCell height="compact" className="text-ui-sm">
                       {row.model}
                     </DataList.RowHeaderCell>
-                    <DataList.Cell
-                      height="compact"
-                      className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                    >
-                      {row.input}
-                    </DataList.Cell>
-                    <DataList.Cell
-                      height="compact"
-                      className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                    >
-                      {row.output}
-                    </DataList.Cell>
-                    <DataList.Cell
-                      height="compact"
-                      className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                    >
-                      {row.cacheRead}
-                    </DataList.Cell>
-                    <DataList.Cell
-                      height="compact"
-                      className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                    >
-                      {row.cacheWrite}
-                    </DataList.Cell>
-                    <DataList.Cell
-                      height="compact"
-                      className="justify-items-end text-right text-ui-sm tabular-nums text-neutral4 font-semibold"
-                    >
+                    <DataList.NumberCell>{row.input}</DataList.NumberCell>
+                    <DataList.NumberCell>{row.output}</DataList.NumberCell>
+                    <DataList.NumberCell>{row.cacheRead}</DataList.NumberCell>
+                    <DataList.NumberCell>{row.cacheWrite}</DataList.NumberCell>
+                    <DataList.NumberCell highlight>
                       {row.cost != null ? formatCost(row.cost, row.costUnit) : '—'}
-                    </DataList.Cell>
+                    </DataList.NumberCell>
                   </>
                 );
 

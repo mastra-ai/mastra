@@ -452,30 +452,13 @@ export const StickyRowHeaders: Story = {
               <DataList.RowHeaderCell height="compact" className="text-ui-sm">
                 {model}
               </DataList.RowHeaderCell>
-              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
-                {(index * 1300 + 6200).toLocaleString()}
-              </DataList.Cell>
-              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
-                {(index * 840 + 2100).toLocaleString()}
-              </DataList.Cell>
-              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
-                {(index * 260 + 900).toLocaleString()}
-              </DataList.Cell>
-              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
-                {(index * 120 + 300).toLocaleString()}
-              </DataList.Cell>
-              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
-                {180 + index * 24}ms
-              </DataList.Cell>
-              <DataList.Cell height="compact" className="justify-items-end text-right tabular-nums text-ui-sm">
-                {(index + 1) * 17}
-              </DataList.Cell>
-              <DataList.Cell
-                height="compact"
-                className="justify-items-end text-right tabular-nums text-ui-sm font-semibold text-neutral4"
-              >
-                ${(index * 0.014 + 0.008).toFixed(3)}
-              </DataList.Cell>
+              <DataList.NumberCell>{(index * 1300 + 6200).toLocaleString()}</DataList.NumberCell>
+              <DataList.NumberCell>{(index * 840 + 2100).toLocaleString()}</DataList.NumberCell>
+              <DataList.NumberCell>{(index * 260 + 900).toLocaleString()}</DataList.NumberCell>
+              <DataList.NumberCell>{(index * 120 + 300).toLocaleString()}</DataList.NumberCell>
+              <DataList.NumberCell>{180 + index * 24}ms</DataList.NumberCell>
+              <DataList.NumberCell>{(index + 1) * 17}</DataList.NumberCell>
+              <DataList.NumberCell highlight>${(index * 0.014 + 0.008).toFixed(3)}</DataList.NumberCell>
             </DataList.RowButton>
           );
         })}

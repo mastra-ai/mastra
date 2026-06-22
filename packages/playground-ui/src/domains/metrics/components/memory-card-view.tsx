@@ -118,30 +118,12 @@ export function MemoryCardView({
                         <DataList.RowHeaderCell height="compact" className="text-ui-sm">
                           {shortId(row.threadId)}
                         </DataList.RowHeaderCell>
-                        <DataList.Cell
-                          height="compact"
-                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                        >
-                          {row.resourceId ? shortId(row.resourceId) : '—'}
-                        </DataList.Cell>
-                        <DataList.Cell
-                          height="compact"
-                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral4 font-semibold"
-                        >
-                          {row.runs.toLocaleString()}
-                        </DataList.Cell>
-                        <DataList.Cell
-                          height="compact"
-                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                        >
-                          {row.tokens > 0 ? formatCompact(row.tokens) : '—'}
-                        </DataList.Cell>
-                        <DataList.Cell
-                          height="compact"
-                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                        >
+                        <DataList.NumberCell>{row.resourceId ? shortId(row.resourceId) : '—'}</DataList.NumberCell>
+                        <DataList.NumberCell highlight>{row.runs.toLocaleString()}</DataList.NumberCell>
+                        <DataList.NumberCell>{row.tokens > 0 ? formatCompact(row.tokens) : '—'}</DataList.NumberCell>
+                        <DataList.NumberCell>
                           {row.cost != null ? formatCost(row.cost, row.costUnit) : '—'}
-                        </DataList.Cell>
+                        </DataList.NumberCell>
                       </>
                     );
 
@@ -174,24 +156,11 @@ export function MemoryCardView({
                         <DataList.RowHeaderCell height="compact" className="text-ui-sm">
                           {shortId(row.resourceId)}
                         </DataList.RowHeaderCell>
-                        <DataList.Cell
-                          height="compact"
-                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral4 font-semibold"
-                        >
-                          {row.threadCount.toLocaleString()}
-                        </DataList.Cell>
-                        <DataList.Cell
-                          height="compact"
-                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                        >
-                          {row.tokens > 0 ? formatCompact(row.tokens) : '—'}
-                        </DataList.Cell>
-                        <DataList.Cell
-                          height="compact"
-                          className="justify-items-end text-right text-ui-sm tabular-nums text-neutral3"
-                        >
+                        <DataList.NumberCell highlight>{row.threadCount.toLocaleString()}</DataList.NumberCell>
+                        <DataList.NumberCell>{row.tokens > 0 ? formatCompact(row.tokens) : '—'}</DataList.NumberCell>
+                        <DataList.NumberCell>
                           {row.cost != null ? formatCost(row.cost, row.costUnit) : '—'}
-                        </DataList.Cell>
+                        </DataList.NumberCell>
                       </>
                     );
 

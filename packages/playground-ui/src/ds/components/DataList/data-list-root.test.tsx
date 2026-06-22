@@ -323,6 +323,35 @@ describe('DataListRoot', () => {
     });
   });
 
+  describe('NumberCell', () => {
+    it('right-aligns tabular figures with compact height and tones the value by highlight', () => {
+      render(
+        <DataList columns="auto auto">
+          <DataList.RowStatic>
+            <DataList.NumberCell>1,200</DataList.NumberCell>
+            <DataList.NumberCell highlight>$0.42</DataList.NumberCell>
+          </DataList.RowStatic>
+        </DataList>,
+      );
+
+      const plain = screen.getByText('1,200');
+      const emphasized = screen.getByText('$0.42');
+
+      for (const cell of [plain, emphasized]) {
+        expect(cell.className).toContain('justify-items-end');
+        expect(cell.className).toContain('text-right');
+        expect(cell.className).toContain('tabular-nums');
+        expect(cell.className).toContain('text-ui-sm');
+        expect(cell.className).toContain('py-1.5');
+      }
+
+      expect(plain.className).toContain('text-neutral3');
+      expect(plain.className).not.toContain('font-semibold');
+      expect(emphasized.className).toContain('text-neutral4');
+      expect(emphasized.className).toContain('font-semibold');
+    });
+  });
+
   describe('selection header layout', () => {
     it('keeps grouped header cells from covering the select-all checkbox', () => {
       const onToggle = vi.fn();

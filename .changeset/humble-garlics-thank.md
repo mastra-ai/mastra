@@ -25,4 +25,11 @@ Metrics tables now render directly through DataList so sticky row headers share 
 
 DataList now exposes `stickyHeaderBackground` to keep the top header and sticky row-header fill in sync, and forwards `mask` to the underlying ScrollArea so sticky-start tables can disable the left edge fade.
 
+Added `DataList.NumberCell` for right-aligned numeric columns. It bakes in the tabular-figure, compact metric-table styling, with a `highlight` prop for the emphasized value:
+
+```tsx
+<DataList.NumberCell>1,200</DataList.NumberCell>
+<DataList.NumberCell highlight>$0.42</DataList.NumberCell>
+```
+
 The metrics-specific `MetricsDataTable` wrapper was removed. Use DataList for DS-owned metrics table layouts.

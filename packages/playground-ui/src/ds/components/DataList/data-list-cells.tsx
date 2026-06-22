@@ -120,6 +120,41 @@ export function DataListRowHeaderCell({ children, className, ...rest }: DataList
   );
 }
 
+export type DataListNumberCellProps = DataListCellProps & {
+  /**
+   * Emphasizes the value with a brighter tone and semibold weight — use for the
+   * primary metric in a row (e.g. a total or headline number).
+   */
+  highlight?: boolean;
+};
+
+/**
+ * Right-aligned numeric cell with tabular figures, for metric and summary
+ * tables. Defaults to `compact` height to match those layouts; pass `highlight`
+ * for the emphasized column.
+ */
+export function DataListNumberCell({
+  children,
+  className,
+  highlight,
+  height = 'compact',
+  ...rest
+}: DataListNumberCellProps) {
+  return (
+    <DataListCell
+      height={height}
+      className={cn(
+        'justify-items-end text-right text-ui-sm tabular-nums',
+        highlight ? 'text-neutral4 font-semibold' : 'text-neutral3',
+        className,
+      )}
+      {...rest}
+    >
+      {children}
+    </DataListCell>
+  );
+}
+
 function getShortId(id: string | undefined): string {
   if (!id) return '';
   return id.length > 8 ? id.slice(0, 8) : id;
