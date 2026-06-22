@@ -1,5 +1,8 @@
 export { createMastraVoiceAgent, MastraVoiceAgent } from './bridge';
-export type { MastraVoiceAgentOptions, MastraVoiceAgentMemory, VoiceToolCall } from './bridge';
+export type { MastraVoiceAgentOptions, MastraVoiceAgentMemory, VoiceToolCall, MastraStreamOptions } from './bridge';
+export { inProcessTransport } from './transport-in-process';
+export type { InProcessTransportOptions } from './transport-in-process';
+export type { VoiceAgentTransport, VoiceTurn, MastraAgentChunk } from './transport';
 export { createLiveKitWorker } from './worker';
 export type { CreateLiveKitWorkerOptions, ResolveMastraAgentArgs, SessionStartArgs } from './worker';
 export { runLiveKitWorker, resolveWorkerEntryPath } from './run';

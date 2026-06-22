@@ -4,10 +4,11 @@ import type { Agent as MastraAgent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createMastraVoiceAgent } from './bridge';
-import type { MastraVoiceAgent, MastraVoiceAgentMemory, VoiceToolCall } from './bridge';
+import type { MastraStreamOptions, MastraVoiceAgent, MastraVoiceAgentMemory, VoiceToolCall } from './bridge';
 import { parseSessionMetadata } from './metadata';
 import type { LiveKitSessionMetadata } from './metadata';
-import { ensureVoiceCallThread, persistSpokenGreeting } from './voice-thread';
+import type { VoiceAgentTransport } from './transport';
+import { inProcessTransport } from './transport-in-process';
 import { isEouMethodRequested, queueWorkerSetup, requestEouMethod } from './worker-setup';
 
 const EOU_METHODS = {
@@ -35,13 +36,26 @@ export interface SessionStartArgs {
 }
 
 export interface CreateLiveKitWorkerOptions {
-  /** The Mastra instance whose agents handle voice sessions. */
-  mastra: Mastra;
+  /**
+   * The Mastra instance whose agents handle voice sessions. Required unless a `transport`
+   * is supplied (the transport then owns how replies are generated).
+   */
+  mastra?: Mastra;
   /**
    * Which Mastra agent answers each session: a fixed agent key/id, or a resolver called
-   * per session with the dispatch metadata. Defaults to `metadata.agentId`.
+   * per session with the dispatch metadata. Defaults to `metadata.agentId`. Used to build
+   * the default in-process transport; ignored when `transport` is set.
    */
   agent?: string | ((args: ResolveMastraAgentArgs) => string | MastraAgent | Promise<string | MastraAgent>);
+  /**
+   * The seam between LiveKit and Mastra. Defaults to an {@link inProcessTransport} built
+   * from `mastra` + `agent`, which runs the agent in the worker process. Pass your own
+   * transport (or a per-session resolver) to run the agent elsewhere — e.g. a remote
+   * agent service reached over HTTP.
+   */
+  transport?: VoiceAgentTransport | ((args: ResolveMastraAgentArgs) => VoiceAgentTransport | Promise<VoiceAgentTransport>);
+  /** Extra options merged into every in-process `agent.stream()` call. Ignored when `transport` is set. */
+  streamOptions?: MastraStreamOptions;
   /** Speech-to-text: a LiveKit plugin instance or an inference model string like 'deepgram/nova-3'. */
   stt?: voice.AgentSessionOptions['stt'];
   /** Text-to-speech: a LiveKit plugin instance or an inference model string like 'cartesia/sonic-3'. */
@@ -119,6 +133,12 @@ async function resolveMastraAgent(
   options: CreateLiveKitWorkerOptions,
   args: ResolveMastraAgentArgs,
 ): Promise<MastraAgent> {
+  if (!options.mastra) {
+    throw new Error(
+      '@mastra/livekit: createLiveKitWorker needs `mastra` (with `agent`) to build the ' +
+        'in-process transport, or an explicit `transport`.',
+    );
+  }
   let ref: string | MastraAgent | undefined =
     typeof options.agent === 'function' ? await options.agent(args) : options.agent;
   ref ??= args.metadata.agentId;
@@ -136,15 +156,27 @@ async function resolveMastraAgent(
   }
 }
 
-function resolveMemory(
+async function resolveTransport(
   options: CreateLiveKitWorkerOptions,
-  mastraAgent: MastraAgent,
+  args: ResolveMastraAgentArgs,
+  requestContext: RequestContext | undefined,
+): Promise<VoiceAgentTransport> {
+  if (options.transport) {
+    return typeof options.transport === 'function' ? options.transport(args) : options.transport;
+  }
+  const mastraAgent = await resolveMastraAgent(options, args);
+  return inProcessTransport(mastraAgent, { requestContext, streamOptions: options.streamOptions });
+}
+
+async function resolveMemory(
+  options: CreateLiveKitWorkerOptions,
+  transport: VoiceAgentTransport,
   args: ResolveMastraAgentArgs,
   roomName: string,
-): MastraVoiceAgentMemory | false {
+): Promise<MastraVoiceAgentMemory | false> {
   if (options.memory === false) return false;
   if (typeof options.memory === 'function') return options.memory({ ...args, roomName });
-  if (!mastraAgent.hasOwnMemory()) return false;
+  if (!(await transport.supportsMemory?.())) return false;
   const thread = args.metadata.threadId ?? roomName;
   return { thread, resource: args.metadata.resourceId ?? thread };
 }
@@ -163,18 +195,6 @@ export function buildTurnHandling(
     preemptiveGeneration: { enabled: false },
     ...options.turnHandling,
   };
-}
-
-async function resolveInstructions(
-  mastraAgent: MastraAgent,
-  requestContext: RequestContext | undefined,
-): Promise<string | undefined> {
-  try {
-    const instructions = await mastraAgent.getInstructions({ requestContext });
-    return typeof instructions === 'string' ? instructions : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -236,10 +256,10 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
     entry: async (ctx: JobContext<WorkerUserData>) => {
       const metadata = parseSessionMetadata(ctx.job.metadata);
       const args: ResolveMastraAgentArgs = { metadata, ctx };
-      const mastraAgent = await resolveMastraAgent(options, args);
       const requestContext = metadata.requestContext
         ? new RequestContext<unknown>(Object.entries(metadata.requestContext))
         : undefined;
+      const transport = await resolveTransport(options, args, requestContext);
 
       await ctx.connect();
       const roomName = ctx.room.name ?? 'mastra-voice';
@@ -258,24 +278,18 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         turnDetection = options.turnDetection;
       }
 
-      const memory = resolveMemory(options, mastraAgent, args, roomName);
-      const memoryInstance = memory ? await mastraAgent.getMemory({ requestContext }) : null;
-      if (memory && memoryInstance) {
+      const memory = await resolveMemory(options, transport, args, roomName);
+      if (memory) {
         try {
-          await ensureVoiceCallThread({
-            memory: memoryInstance,
-            threadId: memory.thread,
-            resourceId: memory.resource ?? memory.thread,
-            roomName,
-          });
+          await transport.ensureThread?.({ memory, roomName });
         } catch (error) {
           console.warn('@mastra/livekit: failed to create the voice call thread', error);
         }
       }
 
       const agent = createMastraVoiceAgent({
-        agent: mastraAgent,
-        instructions: await resolveInstructions(mastraAgent, requestContext),
+        transport,
+        instructions: await transport.getInstructions?.({ requestContext }),
         memory,
         requestContext,
         toolFeedback: options.toolFeedback,
@@ -298,14 +312,9 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
 
       if (options.greeting) {
         session.say(options.greeting);
-        if (options.persistGreeting !== false && memory && memoryInstance) {
+        if (options.persistGreeting !== false && memory) {
           try {
-            await persistSpokenGreeting({
-              memory: memoryInstance,
-              threadId: memory.thread,
-              resourceId: memory.resource ?? memory.thread,
-              greeting: options.greeting,
-            });
+            await transport.persistGreeting?.({ memory, greeting: options.greeting });
           } catch (error) {
             console.warn('@mastra/livekit: failed to persist the greeting', error);
           }

@@ -1,9 +1,10 @@
 import { ReadableStream } from 'node:stream/web';
 import { llm, voice } from '@livekit/agents';
-import type { Agent as MastraAgent, AgentExecutionOptionsBase } from '@mastra/core/agent';
+import type { AgentExecutionOptionsBase } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { chatContextToMessages, extractNewTurnMessages } from './messages';
 import type { VoiceTurnMessage } from './messages';
+import type { VoiceAgentTransport } from './transport';
 
 const DEFAULT_INSTRUCTIONS = 'You are a helpful voice assistant powered by a Mastra agent.';
 
@@ -21,15 +22,19 @@ export interface MastraVoiceAgentMemory {
 }
 
 export interface MastraVoiceAgentOptions {
-  /** The Mastra agent that generates replies. Tools and memory run inside this agent. */
-  agent: MastraAgent;
+  /**
+   * The transport that generates replies — the seam between LiveKit and Mastra. Build the
+   * default in-process transport with {@link inProcessTransport}, which runs the agent's
+   * full loop (model, tools, memory) inside the worker.
+   */
+  transport: VoiceAgentTransport;
   /**
    * Conversation persistence. When set, only messages new since the agent last spoke are
    * sent each turn and Mastra Memory supplies history. When `false`, the full LiveKit
    * in-session context is sent on every turn instead.
    */
   memory?: MastraVoiceAgentMemory | false;
-  /** Request context entries forwarded to `agent.stream()`. */
+  /** Request context entries forwarded to the transport for each turn. */
   requestContext?: RequestContext | Record<string, unknown>;
   /**
    * Called when the Mastra agent starts a tool call mid-reply. Return a short phrase
@@ -37,8 +42,6 @@ export interface MastraVoiceAgentOptions {
    * the transcript. Return nothing to stay silent.
    */
   toolFeedback?: (toolCall: VoiceToolCall) => string | undefined | void;
-  /** Extra options merged into every `agent.stream()` call. */
-  streamOptions?: MastraStreamOptions;
   /** LiveKit agent instructions. Unused for reply generation (the Mastra agent applies its own). */
   instructions?: string;
   id?: voice.AgentOptions<unknown>['id'];
@@ -88,11 +91,10 @@ class MastraPlaceholderLLM extends llm.LLM {
  * cancels the returned stream, which aborts the in-flight Mastra stream.
  */
 export class MastraVoiceAgent extends voice.Agent {
-  readonly mastraAgent: MastraAgent;
+  readonly transport: VoiceAgentTransport;
   readonly memory: MastraVoiceAgentMemory | false;
   readonly requestContext?: RequestContext;
   readonly toolFeedback?: (toolCall: VoiceToolCall) => string | undefined | void;
-  readonly streamOptions?: MastraStreamOptions;
 
   constructor(options: MastraVoiceAgentOptions) {
     super({
@@ -104,11 +106,10 @@ export class MastraVoiceAgent extends voice.Agent {
       tts: options.tts,
       turnHandling: options.turnHandling,
     });
-    this.mastraAgent = options.agent;
+    this.transport = options.transport;
     this.memory = options.memory ?? false;
     this.requestContext = toRequestContext(options.requestContext);
     this.toolFeedback = options.toolFeedback;
-    this.streamOptions = options.streamOptions;
   }
 
   override async llmNode(
@@ -121,22 +122,22 @@ export class MastraVoiceAgent extends voice.Agent {
     if (messages.length === 0) return null;
 
     const abortController = new AbortController();
-    const streamOptions: MastraStreamOptions = {
-      ...this.streamOptions,
-      abortSignal: abortController.signal,
-    };
-    if (this.memory) streamOptions.memory = this.memory;
-    if (this.requestContext) streamOptions.requestContext = this.requestContext;
-
-    const mastraAgent = this.mastraAgent;
+    const transport = this.transport;
+    const memory = this.memory;
+    const requestContext = this.requestContext;
     const toolFeedback = this.toolFeedback;
     let cancelled = false;
 
     return new ReadableStream<string>({
       start: async controller => {
         try {
-          const result = await mastraAgent.stream(messages, streamOptions);
-          for await (const chunk of result.fullStream) {
+          const stream = await transport.stream({
+            messages,
+            memory,
+            requestContext,
+            abortSignal: abortController.signal,
+          });
+          for await (const chunk of stream) {
             if (cancelled) break;
             if (chunk.type === 'text-delta') {
               if (chunk.payload.text) controller.enqueue(chunk.payload.text);

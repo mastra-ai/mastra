@@ -118,6 +118,7 @@ allowBuilds:
   '@datadog/native-iast-taint-tracking': false
   '@datadog/native-metrics': false
   '@datadog/pprof': false
+  '@ffmpeg-installer/darwin-arm64': false
   '@fingerprintjs/fingerprintjs-pro-react': false
   '@firebase/util': false
   '@google/genai': false

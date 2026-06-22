@@ -4,6 +4,7 @@ import type { voice } from '@livekit/agents';
 import type { Agent as MastraAgent } from '@mastra/core/agent';
 import { describe, expect, it, vi } from 'vitest';
 import { MastraVoiceAgent } from './bridge';
+import { inProcessTransport } from './transport-in-process';
 
 interface FakeChunk {
   type: string;
@@ -49,7 +50,7 @@ const modelSettings = {} as voice.ModelSettings;
 describe('MastraVoiceAgent.llmNode', () => {
   it('returns null when there is no new input', async () => {
     const { agent, stream } = fakeMastraAgent([]);
-    const voiceAgent = new MastraVoiceAgent({ agent, memory: { thread: 't1' } });
+    const voiceAgent = new MastraVoiceAgent({ transport: inProcessTransport(agent), memory: { thread: 't1' } });
     const result = await voiceAgent.llmNode(llm.ChatContext.empty(), toolCtx, modelSettings);
     expect(result).toBeNull();
     expect(stream).not.toHaveBeenCalled();
@@ -64,7 +65,7 @@ describe('MastraVoiceAgent.llmNode', () => {
       { type: 'text-delta', payload: { id: '1', text: 'world' } },
       { type: 'finish', payload: {} },
     ]);
-    const voiceAgent = new MastraVoiceAgent({ agent });
+    const voiceAgent = new MastraVoiceAgent({ transport: inProcessTransport(agent) });
     const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
     expect(await readAll(result!)).toEqual(['Hello ', 'world']);
   });
@@ -75,7 +76,7 @@ describe('MastraVoiceAgent.llmNode', () => {
       { type: 'text-delta', payload: { id: '1', text: 'Found it.' } },
     ]);
     const toolFeedback = vi.fn(() => 'Let me check.');
-    const voiceAgent = new MastraVoiceAgent({ agent, toolFeedback });
+    const voiceAgent = new MastraVoiceAgent({ transport: inProcessTransport(agent), toolFeedback });
     const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
     expect(await readAll(result!)).toEqual(['Let me check. ', 'Found it.']);
     expect(toolFeedback).toHaveBeenCalledWith({ toolCallId: 'c1', toolName: 'lookup', args: { q: 'x' } });
@@ -84,7 +85,7 @@ describe('MastraVoiceAgent.llmNode', () => {
   it('passes memory, request context, and an abort signal to agent.stream', async () => {
     const { agent, stream } = fakeMastraAgent([{ type: 'text-delta', payload: { id: '1', text: 'ok' } }]);
     const voiceAgent = new MastraVoiceAgent({
-      agent,
+      transport: inProcessTransport(agent),
       memory: { thread: 'thread-1', resource: 'user-1' },
       requestContext: { tenant: 'acme' },
     });
@@ -105,7 +106,7 @@ describe('MastraVoiceAgent.llmNode', () => {
 
   it('sends the full LiveKit context when memory is disabled', async () => {
     const { agent, stream } = fakeMastraAgent([{ type: 'text-delta', payload: { id: '1', text: 'ok' } }]);
-    const voiceAgent = new MastraVoiceAgent({ agent, memory: false });
+    const voiceAgent = new MastraVoiceAgent({ transport: inProcessTransport(agent), memory: false });
     const ctx = llm.ChatContext.empty();
     ctx.addMessage({ role: 'user', content: 'old question' });
     ctx.addMessage({ role: 'assistant', content: 'old answer' });
@@ -133,7 +134,7 @@ describe('MastraVoiceAgent.llmNode', () => {
       };
     });
     const agent = { stream } as unknown as MastraAgent;
-    const voiceAgent = new MastraVoiceAgent({ agent });
+    const voiceAgent = new MastraVoiceAgent({ transport: inProcessTransport(agent) });
     const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
 
     const reader = result!.getReader();
@@ -147,7 +148,7 @@ describe('MastraVoiceAgent.llmNode', () => {
       { type: 'text-delta', payload: { id: '1', text: 'partial' } },
       { type: 'error', payload: { error: new Error('boom') } },
     ]);
-    const voiceAgent = new MastraVoiceAgent({ agent });
+    const voiceAgent = new MastraVoiceAgent({ transport: inProcessTransport(agent) });
     const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
     await expect(readAll(result!)).rejects.toThrow('boom');
   });
@@ -156,7 +157,7 @@ describe('MastraVoiceAgent.llmNode', () => {
 describe('MastraVoiceAgent llm placeholder', () => {
   it('provides an LLM instance so the session runs the cascaded reply pipeline', () => {
     const { agent } = fakeMastraAgent([]);
-    const voiceAgent = new MastraVoiceAgent({ agent });
+    const voiceAgent = new MastraVoiceAgent({ transport: inProcessTransport(agent) });
     expect(voiceAgent.llm).toBeInstanceOf(llm.LLM);
     // Inference never goes through it — generation runs in llmNode.
     expect(() => (voiceAgent.llm as llm.LLM).chat({ chatCtx: llm.ChatContext.empty() })).toThrow(/llmNode/);
