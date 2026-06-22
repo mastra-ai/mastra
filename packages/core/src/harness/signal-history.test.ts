@@ -21,15 +21,16 @@ describe('Harness signal history rendering', () => {
     });
 
     await harness.init();
-    const thread = await harness.createThread({ title: 'Signal thread' });
+    const session = await harness.createSession();
+    const thread = await session.thread.create({ title: 'Signal thread' });
     const memoryStorage = await storage.getStore('memory');
     if (!memoryStorage) throw new Error('Expected memory storage');
 
-    return { harness, memoryStorage, thread };
+    return { harness, session, memoryStorage, thread };
   }
 
   it('renders persisted user-message signals as user content', async () => {
-    const { harness, memoryStorage, thread } = await createHarnessWithThread();
+    const { harness, session, memoryStorage, thread } = await createHarnessWithThread();
 
     await memoryStorage.saveMessages({
       messages: [
@@ -48,7 +49,7 @@ describe('Harness signal history rendering', () => {
       ],
     });
 
-    const messages = await harness.session.thread.listActiveMessages();
+    const messages = await session.thread.listActiveMessages();
 
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({
@@ -62,14 +63,14 @@ describe('Harness signal history rendering', () => {
   });
 
   it('emits agent_end when a system-reminder signal starts an idle run', async () => {
-    const { harness } = await createHarnessWithThread();
+    const { harness, session } = await createHarnessWithThread();
     const events: Array<{ type: string; reason?: string }> = [];
-    const unsubscribe = harness.session.subscribe(event => {
+    const unsubscribe = session.subscribe(event => {
       events.push(event as { type: string; reason?: string });
     });
 
     try {
-      const signal = harness.sendSignal({
+      const signal = session.sendSignal({
         type: 'system-reminder',
         contents: 'keep going',
         attributes: { type: 'goal' },
@@ -86,7 +87,7 @@ describe('Harness signal history rendering', () => {
   });
 
   it('renders persisted system-reminder signals as system reminder content', async () => {
-    const { harness, memoryStorage, thread } = await createHarnessWithThread();
+    const { harness, session, memoryStorage, thread } = await createHarnessWithThread();
 
     await memoryStorage.saveMessages({
       messages: [
@@ -103,7 +104,7 @@ describe('Harness signal history rendering', () => {
       ],
     });
 
-    const messages = await harness.session.thread.listActiveMessages();
+    const messages = await session.thread.listActiveMessages();
 
     expect(messages).toEqual([
       {

@@ -40,7 +40,7 @@ export async function askCloneName(state: TUIState): Promise<string | null> {
 /**
  * Shared post-clone UI reset: clears chat, tools, tasks, re-renders messages,
  * and shows an info banner. Every clone path should call this after
- * `harness.cloneThread()` succeeds.
+ * `harness.session.thread.clone()` succeeds.
  */
 export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: string): Promise<void> {
   const { state } = ctx;
@@ -51,7 +51,7 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   state.allSystemReminderComponents = [];
   state.messageComponentsById.clear();
   state.allShellComponents = [];
-  state.harness.session.displayState.clearModifiedFiles();
+  state.session.displayState.clearModifiedFiles();
   // Clear per-thread ephemeral state from the global harness state
   await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
   if (state.taskProgress) {
@@ -81,7 +81,7 @@ export async function handleCloneCommand(ctx: SlashCommandContext): Promise<void
   const customTitle = await askCloneName(state);
 
   try {
-    const clonedThread = await state.harness.cloneThread({
+    const clonedThread = await state.session.thread.clone({
       sourceThreadId: currentThreadId,
       ...(customTitle ? { title: customTitle } : {}),
     });
