@@ -47,7 +47,7 @@ describe('ACP Event Mapper', () => {
   describe('message_update - text delta computation', () => {
     it('emits agent_message_chunk with delta text', () => {
       const state = createPromptState('session-1');
-      
+
       // First message_update with "Hello"
       const event1: Extract<HarnessEvent, { type: 'message_update' }> = {
         type: 'message_update',
@@ -100,7 +100,7 @@ describe('ACP Event Mapper', () => {
 
     it('ignores non-assistant messages', () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'message_update' }> = {
         type: 'message_update',
         message: {
@@ -119,7 +119,7 @@ describe('ACP Event Mapper', () => {
   describe('tool_start - tool_call emission', () => {
     it('emits tool_call with correct kind mapping', () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'tool_start' }> = {
         type: 'tool_start',
         toolCallId: 'tool-123',
@@ -177,7 +177,7 @@ describe('ACP Event Mapper', () => {
   describe('tool_end - tool_call_update emission', () => {
     it('emits tool_call_update with completed status', () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'tool_end' }> = {
         type: 'tool_end',
         toolCallId: 'tool-123',
@@ -200,7 +200,7 @@ describe('ACP Event Mapper', () => {
 
     it('emits tool_call_update with failed status on error', () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'tool_end' }> = {
         type: 'tool_end',
         toolCallId: 'tool-123',
@@ -225,7 +225,7 @@ describe('ACP Event Mapper', () => {
   describe('tool_approval_required - permission request', () => {
     it('requests permission and responds with approve on allow_once', async () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'tool_approval_required' }> = {
         type: 'tool_approval_required',
         toolCallId: 'tool-123',
@@ -262,7 +262,7 @@ describe('ACP Event Mapper', () => {
       });
 
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'tool_approval_required' }> = {
         type: 'tool_approval_required',
         toolCallId: 'tool-123',
@@ -287,7 +287,7 @@ describe('ACP Event Mapper', () => {
 
       try {
         const state = createPromptState('session-1');
-        
+
         const event: Extract<HarnessEvent, { type: 'tool_approval_required' }> = {
           type: 'tool_approval_required',
           toolCallId: 'tool-123',
@@ -311,7 +311,7 @@ describe('ACP Event Mapper', () => {
   describe('tool_suspended - auto-resolve and plan approval', () => {
     it('auto-resolves request_access suspension', () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'tool_suspended' }> = {
         type: 'tool_suspended',
         toolCallId: 'tool-123',
@@ -330,7 +330,7 @@ describe('ACP Event Mapper', () => {
 
     it('auto-resolves sandbox_access_request suspension', () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'tool_suspended' }> = {
         type: 'tool_suspended',
         toolCallId: 'tool-123',
@@ -349,7 +349,7 @@ describe('ACP Event Mapper', () => {
 
     it('requests permission for submit_plan and approves', async () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'tool_suspended' }> = {
         type: 'tool_suspended',
         toolCallId: 'tool-123',
@@ -383,7 +383,7 @@ describe('ACP Event Mapper', () => {
 
     it('auto-resolves ask_user with default message', () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'tool_suspended' }> = {
         type: 'tool_suspended',
         toolCallId: 'tool-123',
@@ -404,7 +404,7 @@ describe('ACP Event Mapper', () => {
   describe('usage_update - token accumulation', () => {
     it('accumulates token usage', () => {
       const state = createPromptState('session-1');
-      
+
       const event1: Extract<HarnessEvent, { type: 'usage_update' }> = {
         type: 'usage_update',
         usage: {
@@ -447,7 +447,7 @@ describe('ACP Event Mapper', () => {
   describe('agent_end - stopReason mapping', () => {
     it('resolves with complete reason', () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'agent_end' }> = {
         type: 'agent_end',
         reason: 'complete',
@@ -460,7 +460,7 @@ describe('ACP Event Mapper', () => {
 
     it('resolves with aborted reason', () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'agent_end' }> = {
         type: 'agent_end',
         reason: 'aborted',
@@ -473,7 +473,7 @@ describe('ACP Event Mapper', () => {
 
     it('resolves with error reason', () => {
       const state = createPromptState('session-1');
-      
+
       const event: Extract<HarnessEvent, { type: 'agent_end' }> = {
         type: 'agent_end',
         reason: 'error',
@@ -506,7 +506,7 @@ describe('ACP Event Mapper', () => {
   describe('ignored events', () => {
     it('ignores om_*, subagent_*, workspace_* events', () => {
       const state = createPromptState('session-1');
-      
+
       const ignoredEvents: HarnessEvent[] = [
         { type: 'om_status', status: 'active' } as any,
         { type: 'subagent_start', agentType: 'explore' } as any,

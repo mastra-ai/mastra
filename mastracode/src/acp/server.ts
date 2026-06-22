@@ -18,10 +18,7 @@ export async function runAcpServer(
   const stream = ndJsonStream(output, input);
 
   // Create the agent-side connection
-  const connection = new AgentSideConnection(
-    (conn) => new MastraCodeAcpAgent(conn, harness, modes),
-    stream,
-  );
+  const connection = new AgentSideConnection(conn => new MastraCodeAcpAgent(conn, harness, modes), stream);
 
   // Handle cleanup on disconnect (success or error)
   try {

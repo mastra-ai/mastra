@@ -43,9 +43,7 @@ describe('ACP Agent - Text Extraction', () => {
       },
     ];
 
-    expect(extractTextFromContentBlocks(blocks)).toBe(
-      'Here is the content:\n[resource: file:///path/to/file.ts]',
-    );
+    expect(extractTextFromContentBlocks(blocks)).toBe('Here is the content:\n[resource: file:///path/to/file.ts]');
   });
 
   it('handles mixed content blocks', () => {
