@@ -8060,8 +8060,8 @@ export class Agent<
       ...(resumableRun.toolCallId ? { toolCallId: resumableRun.toolCallId } : {}),
       memory: {
         ...(resumeOptions.memory ?? {}),
-        thread: resumeOptions.memory?.thread ?? threadId,
-        resource: resumeOptions.memory?.resource ?? resourceId,
+        thread: threadId,
+        resource: resourceId,
       },
     });
 

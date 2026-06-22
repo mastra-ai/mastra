@@ -1432,8 +1432,12 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(key);
           state.activeThreadStreamIds.delete(key);
         }
-        const errorRun = createRemoteRun(data.runId, eventStreamId, state.streamSeqByRunId.get(data.runId) ?? 1);
-        const remoteRun = remoteRuns.get(eventStreamId);
+        let errorRun: AgentThreadRunRecord<any> | undefined;
+        let remoteRun = remoteRuns.get(eventStreamId);
+        if (!remoteRun) {
+          errorRun = createRemoteRun(data.runId, eventStreamId, state.streamSeqByRunId.get(data.runId) ?? 1);
+          remoteRun = remoteRuns.get(eventStreamId);
+        }
         if (remoteRun) {
           remoteRun.parts.push({ type: 'error', payload: { error: new Error(data.error) } });
           remoteRun.done = true;
@@ -1441,7 +1445,7 @@ export class AgentThreadStreamRuntime {
           while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
           remoteRuns.delete(eventStreamId);
         }
-        enqueueRun(errorRun);
+        if (errorRun) enqueueRun(errorRun);
         void this.#drainPendingIdleSignals(state, resolvedPubSub, key);
         wake();
         return;
