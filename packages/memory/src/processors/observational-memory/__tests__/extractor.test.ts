@@ -1,3 +1,5 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -97,12 +99,19 @@ describe('Extractor', () => {
       instructions: 'Extract profile.',
       schema: z.object({ tier: z.string() }),
     });
-    const agent = {
-      generate: vi.fn().mockRejectedValue(new Error('structured call failed')),
-    };
+    const agent = new Agent({
+      id: 'structured-extraction-failure-test',
+      name: 'Structured Extraction Failure Test',
+      instructions: 'Extract values.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          throw new Error('structured call failed');
+        },
+      }),
+    });
 
     const result = await extractStructuredValues({
-      agent: agent as any,
+      agent,
       source: 'observer',
       extractors: [priority, profile],
       sourceMessages: [],
@@ -114,6 +123,41 @@ describe('Extractor', () => {
       { slug: 'priority', error: 'structured call failed' },
       { slug: 'profile', error: 'structured call failed' },
     ]);
+  });
+
+  it('uses memory-backed history for structured extraction follow-up calls', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    let prompt = '';
+    const agent = new Agent({
+      id: 'structured-extraction-memory-test',
+      name: 'Structured Extraction Memory Test',
+      instructions: 'Extract values.',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ prompt: modelPrompt }) => {
+          prompt = JSON.stringify(modelPrompt);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            content: [{ type: 'text', text: '{"priority":"high"}' }],
+            warnings: [],
+          };
+        },
+      }),
+    });
+
+    const result = await extractStructuredValues({
+      agent,
+      source: 'observer',
+      extractors: [priority],
+      sourceMessages: [{ role: 'user', content: 'The priority is high.' }],
+      sourceOutput: '<observations>User priority is high.</observations>',
+    });
+
+    expect(result.values).toEqual({ priority: 'high' });
+    expect(prompt).toContain('The priority is high.');
+    expect(prompt).toContain('<observations>User priority is high.</observations>');
+    expect(prompt).toContain('Extract the configured Observational Memory values');
   });
 
   it('applies user hooks, validates returned values, and records hook failures', async () => {

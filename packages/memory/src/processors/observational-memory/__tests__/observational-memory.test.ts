@@ -1,4 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
+import { Extractor } from '../extractor';
 import {
   filterObservedMessages,
   getBufferedChunks,
@@ -4076,9 +4077,9 @@ describe('ObservationalMemory Integration', () => {
       );
       const formattedText = formatted.join('\n\n');
 
-      expect(formattedText).toContain('## Group `group-1`');
-      expect(formattedText).toContain('_range: `msg-1:msg-2`_');
-      expect(formattedText).toContain('recall tool');
+      expect(formattedText).toContain('<observation-group id="group-1" range="msg-1:msg-2">');
+      expect(formattedText).toContain('- 🔴 User prefers direct answers');
+      expect(formattedText).toContain('</observation-group>');
     });
 
     it('should default retrieval mode to false', () => {
@@ -6030,6 +6031,75 @@ describe('Resource Scope Observation Flow', () => {
     expect(priorMetadata?.get('thread-1')?.suggestedResponse).toBe('Ask for the invoice number.');
     expect(priorMetadata?.get('thread-2')?.currentTask).toBe('Track rollout readiness');
     multiThreadSpy.mockRestore();
+  });
+
+  it('isolates structured extraction source output per thread in multi-thread observation', async () => {
+    const structuredPrompts: string[] = [];
+    const observerOutput = `<observations>
+<thread id="thread-1">
+- thread-1-secret priority alpha
+</thread>
+<thread id="thread-2">
+- thread-2-secret priority beta
+</thread>
+</observations>`;
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer', timestamp: new Date() },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: observerOutput },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
+        const promptText = JSON.stringify(prompt);
+        structuredPrompts.push(promptText);
+        const priority = promptText.includes('thread-1') ? 'alpha' : 'beta';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          content: [{ type: 'text', text: JSON.stringify({ priority }) }],
+          warnings: [],
+        };
+      },
+    });
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model,
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: 'auto',
+        extractors: [new Extractor({ name: 'Priority', instructions: 'Extract priority.' })],
+      } as any,
+      observedMessageIds: new Set(),
+      resolveModel: () => ({ model: model as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+    const results = await observer.callMultiThread(
+      undefined,
+      new Map([
+        ['thread-1', [createTestMessage('Thread one says alpha.', 'user', 't1-msg-1')]],
+        ['thread-2', [createTestMessage('Thread two says beta.', 'user', 't2-msg-1')]],
+      ]),
+      ['thread-1', 'thread-2'],
+    );
+
+    expect(results.results.get('thread-1')?.extractedValues).toEqual({ priority: 'alpha' });
+    expect(results.results.get('thread-2')?.extractedValues).toEqual({ priority: 'beta' });
+    expect(structuredPrompts).toHaveLength(2);
+    const threadOnePrompt = structuredPrompts.find(prompt => prompt.includes('thread-1-secret'));
+    const threadTwoPrompt = structuredPrompts.find(prompt => prompt.includes('thread-2-secret'));
+    expect(threadOnePrompt).toBeDefined();
+    expect(threadOnePrompt).not.toContain('thread-2-secret');
+    expect(threadTwoPrompt).toBeDefined();
+    expect(threadTwoPrompt).not.toContain('thread-1-secret');
   });
 
   it('should NOT use thread tags in thread scope mode', async () => {
@@ -9851,7 +9921,7 @@ describe('Full Async Buffering Flow', () => {
     const reflectorCalls: { input: string }[] = [];
 
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         const promptText = JSON.stringify(prompt);
 
         // Detect whether this is a reflection call (reflector prompt mentions "consolidate")
@@ -10904,7 +10974,7 @@ describe('Full Async Buffering Flow', () => {
 
     const observerCalls: { input: string }[] = [];
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -11089,7 +11159,7 @@ describe('Full Async Buffering Flow', () => {
 
     const observerCalls: { input: string }[] = [];
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -11565,7 +11635,7 @@ describe('Full Async Buffering Flow', () => {
 
       let _reflectorCallCount = 0;
       const mockModel = createStreamCapableMockModel({
-        doGenerate: async ({ prompt }) => {
+        doGenerate: async ({ prompt }: { prompt: unknown }) => {
           const promptText = JSON.stringify(prompt);
           const isReflection = promptText.includes('consolidat') || promptText.includes('reflect');
           if (isReflection) {

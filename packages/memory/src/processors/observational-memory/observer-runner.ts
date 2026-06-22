@@ -58,13 +58,16 @@ export interface ObserverExchange {
 }
 
 function filterObserverExtractors(
-  extractors: ResolvedObservationConfig['extractors'],
+  extractors: ResolvedObservationConfig['extractors'] | undefined,
   skipContinuationHints?: boolean,
 ) {
+  const configuredExtractors = extractors ?? [];
   if (!skipContinuationHints) {
-    return extractors;
+    return configuredExtractors;
   }
-  return extractors.filter(extractor => extractor.slug !== 'current-task' && extractor.slug !== 'suggested-response');
+  return configuredExtractors.filter(
+    extractor => extractor.slug !== 'current-task' && extractor.slug !== 'suggested-response',
+  );
 }
 
 export class ObserverRunner {
@@ -103,7 +106,7 @@ export class ObserverRunner {
         isMultiThread,
         this.observationConfig.instruction,
         this.observationConfig.threadTitle,
-        this.observationConfig.extractors,
+        this.observationConfig.extractors ?? [],
       ),
       model,
     });
@@ -366,6 +369,7 @@ export class ObserverRunner {
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model, true);
     const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
+    const activeExtractors = this.observationConfig.extractors ?? [];
 
     const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
 
@@ -378,7 +382,7 @@ export class ObserverRunner {
           priorMetadataByThread,
           undefined,
           this.observationConfig.threadTitle,
-          this.observationConfig.extractors,
+          activeExtractors,
         ),
       },
       buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
@@ -429,13 +433,13 @@ export class ObserverRunner {
     };
 
     let result = await doGenerate();
-    let parsed = parseMultiThreadObserverOutput(result.text, this.observationConfig.extractors);
+    let parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
     let retriedDueToDegenerate = false;
 
     if (parsed.degenerate) {
       omDebug(`[OM:callMultiThreadObserver] degenerate repetition detected, retrying once`);
       result = await doGenerate();
-      parsed = parseMultiThreadObserverOutput(result.text, this.observationConfig.extractors);
+      parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
       retriedDueToDegenerate = true;
       if (parsed.degenerate) {
         omDebug(`[OM:callMultiThreadObserver] degenerate repetition on retry, failing`);
@@ -446,10 +450,11 @@ export class ObserverRunner {
     const structuredExtractionResults = await Promise.all(
       Array.from(parsed.threads, async ([threadId, threadResult]) => {
         const threadMessages = messagesByThread.get(threadId) ?? [];
+        const threadSourceOutput = `<observations>\n<thread id="${threadId}">\n${threadResult.rawOutput ?? threadResult.observations}\n</thread>\n</observations>`;
         const structuredExtraction = await extractStructuredValues({
           agent,
           source: 'observer',
-          extractors: this.observationConfig.extractors,
+          extractors: activeExtractors,
           sourceMessages: [
             {
               role: 'user',
@@ -459,14 +464,14 @@ export class ObserverRunner {
                 priorMetadataByThread,
                 undefined,
                 this.observationConfig.threadTitle,
-                this.observationConfig.extractors,
+                activeExtractors,
               ),
             },
             buildMultiThreadObserverHistoryMessage(new Map([[threadId, threadMessages]]), [threadId], {
               attachmentFilter: multiThreadAttachmentFilter,
             }),
           ],
-          sourceOutput: result.text,
+          sourceOutput: threadSourceOutput,
           observations: threadResult.observations,
           priorExtractedValues: priorMetadataByThread?.get(threadId)?.extracted,
           requestContext,
@@ -493,7 +498,7 @@ export class ObserverRunner {
       true,
       this.observationConfig.instruction,
       this.observationConfig.threadTitle,
-      this.observationConfig.extractors,
+      activeExtractors,
     );
     this.lastExchange = {
       systemPrompt,

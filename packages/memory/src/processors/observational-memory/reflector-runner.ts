@@ -10,7 +10,6 @@ import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/stor
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { omDebug, omError } from './debug';
-import { withOmInternalThreadId } from './internal-request-context';
 import {
   applyExtractorHooks,
   buildThreadMetadataFromExtractedValues,
@@ -20,6 +19,7 @@ import {
   mergeExtractionFailures,
 } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
+import { withOmInternalThreadId } from './internal-request-context';
 import {
   createActivationMarker,
   createBufferingEndMarker,

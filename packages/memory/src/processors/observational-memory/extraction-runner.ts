@@ -1,7 +1,11 @@
+import { randomUUID } from 'node:crypto';
+
+import { Agent as MastraAgent, MessageList } from '@mastra/core/agent';
 import type { Agent } from '@mastra/core/agent';
 import type { CoreMessageV4 } from '@mastra/core/agent/message-list';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { z } from 'zod';
 
 import type { Extractor, ExtractorSource } from './extractor';
@@ -10,6 +14,67 @@ import { buildExtractorPriorLines } from './extractor';
 export interface StructuredExtractionResult {
   values: Record<string, unknown>;
   failures: Array<{ slug: string; error: string }>;
+}
+
+function isAbortError(error: unknown, abortSignal?: AbortSignal): boolean {
+  return (
+    abortSignal?.aborted === true ||
+    (error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
+}
+
+async function generateStructuredExtraction(opts: {
+  agent: Agent<any, any, any, any>;
+  sourceMessages: CoreMessageV4[];
+  sourceOutput: string;
+  prompt: string;
+  schema: z.ZodObject<Record<string, z.ZodTypeAny>>;
+  requestContext?: RequestContext;
+  observabilityContext?: ObservabilityContext;
+  abortSignal?: AbortSignal;
+}): Promise<Record<string, unknown>> {
+  const { Memory } = await import('../../index');
+  const threadId = `structured-extraction-${randomUUID()}`;
+  const resourceId = 'structured-extraction';
+  const messageList = new MessageList({ threadId, resourceId }).add(
+    [...opts.sourceMessages, { role: 'assistant', content: opts.sourceOutput }],
+    'memory',
+  );
+  const memory = new Memory({
+    storage: new InMemoryStore(),
+    options: {
+      lastMessages: opts.sourceMessages.length + 1,
+      generateTitle: false,
+    },
+  });
+
+  await memory.createThread({ threadId, resourceId });
+  await memory.saveMessages({ messages: messageList.get.all.db() });
+
+  const extractionAgent = new MastraAgent({
+    id: 'structured-extraction-agent',
+    name: 'Structured Extraction Agent',
+    instructions: await opts.agent.getInstructions({ requestContext: opts.requestContext }),
+    model: await opts.agent.getModel({ requestContext: opts.requestContext }),
+    memory,
+  });
+  const output = await extractionAgent.generate(opts.prompt, {
+    structuredOutput: { schema: opts.schema },
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+      options: {
+        lastMessages: opts.sourceMessages.length + 1,
+        generateTitle: false,
+      },
+    },
+    ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),
+    ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
+    ...opts.observabilityContext,
+  });
+
+  return output.object ?? {};
 }
 
 export async function extractStructuredValues(opts: {
@@ -56,17 +121,21 @@ ${opts.sourceOutput}${opts.observations ? `\n\n## Parsed Observations\n\n${opts.
 
   let object: Record<string, unknown>;
   try {
-    const output = await opts.agent.generate(
-      [...opts.sourceMessages, { role: 'assistant', content: opts.sourceOutput }, { role: 'user', content: prompt }],
-      {
-        structuredOutput: { schema },
-        ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),
-        ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
-        ...opts.observabilityContext,
-      },
-    );
-    object = output.object ?? {};
+    object = await generateStructuredExtraction({
+      agent: opts.agent,
+      sourceMessages: opts.sourceMessages,
+      sourceOutput: opts.sourceOutput,
+      prompt,
+      schema,
+      requestContext: opts.requestContext,
+      observabilityContext: opts.observabilityContext,
+      abortSignal: opts.abortSignal,
+    });
   } catch (error) {
+    if (isAbortError(error, opts.abortSignal)) {
+      throw error;
+    }
+
     const message = error instanceof Error ? error.message : String(error);
     return {
       values,
