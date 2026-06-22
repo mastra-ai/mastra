@@ -1932,9 +1932,7 @@ export class GeminiLiveVoice extends MastraVoice<
         // Session resumption: empty object requests server-issued tokens on new sessions;
         // { handle } resumes a previous session. Only included when enableResumption is set.
         ...(this.options.sessionConfig?.enableResumption && {
-          session_resumption: this.isResuming && this.sessionHandle
-            ? { handle: this.sessionHandle }
-            : {},
+          session_resumption: this.isResuming && this.sessionHandle ? { handle: this.sessionHandle } : {},
         }),
       },
     };
