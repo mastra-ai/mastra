@@ -187,6 +187,26 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
     return translatedFilter ? (translatedFilter as Where) : undefined;
   }
 
+  /**
+   * Converts a Chroma distance into a similarity score (higher = more similar) based on the
+   * collection's HNSW space. This keeps scores in a comparable range across metrics, matching
+   * the conventions used by @mastra/pg and @mastra/duckdb.
+   *
+   * - cosine (`cosine`): distance in [0, 2] → `1 - distance`
+   * - euclidean (`l2`): squared-L2 distance in [0, ∞) → `1 / (1 + distance)`, kept in (0, 1]
+   * - dotproduct (`ip`): Chroma returns `1 - <a, b>` → `1 - distance` recovers the inner product
+   */
+  private distanceToScore(distance: number, space: string | undefined): number {
+    switch (space) {
+      case 'l2':
+        return 1 / (1 + distance);
+      case 'ip':
+      case 'cosine':
+      default:
+        return 1 - distance;
+    }
+  }
+
   async query<T extends Metadata = Metadata>({
     indexName,
     queryVector,
@@ -222,11 +242,15 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
         include: includeVector ? [...defaultInclude, 'embeddings'] : defaultInclude,
       });
 
+      // Resolve the collection's distance space so scores are normalized per metric,
+      // consistent with @mastra/pg and @mastra/duckdb.
+      const space = collection.configuration.hnsw?.space || collection.configuration.spann?.space || undefined;
+
       return (results.ids[0] || []).map((id: string, index: number) => {
-        // Chroma returns distances (lower = more similar), convert to similarity scores (higher = more similar)
-        // For cosine: similarity = 1 - distance
-        const distance = results.distances?.[0]?.[index] || 0;
-        const score = 1 - distance;
+        // Chroma returns distances (lower = more similar); convert to similarity scores (higher = more similar).
+        // A missing distance means "no information", which must not become a perfect score.
+        const distance = results.distances?.[0]?.[index];
+        const score = distance == null ? 0 : this.distanceToScore(distance, space);
         return {
           id,
           score,

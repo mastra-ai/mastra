@@ -474,6 +474,68 @@ describe('ChromaVector Integration Tests', () => {
     });
   });
 
+  describe('Per-metric score normalization', () => {
+    const cosineIndex = 'metric-cosine-index';
+    const euclideanIndex = 'metric-euclidean-index';
+
+    afterEach(async () => {
+      for (const indexName of [cosineIndex, euclideanIndex]) {
+        try {
+          await vectorDB.deleteIndex({ indexName });
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    });
+
+    it('keeps euclidean scores in (0, 1] instead of going negative', async () => {
+      await vectorDB.createIndex({ indexName: euclideanIndex, dimension: 2, metric: 'euclidean' });
+      await vectorDB.upsert({
+        indexName: euclideanIndex,
+        vectors: [
+          [0, 0],
+          [3, 4],
+        ],
+        ids: ['near', 'far'],
+      });
+
+      const results = await vectorDB.query({ indexName: euclideanIndex, queryVector: [0, 0], topK: 2 });
+
+      const near = results.find(r => r.id === 'near')!;
+      const far = results.find(r => r.id === 'far')!;
+
+      // Exact match → distance 0 → score 1
+      expect(near.score).toBeCloseTo(1, 5);
+      // Squared-L2 distance is 25 → 1 / (1 + 25) ≈ 0.0385, NOT 1 - 25 = -24
+      expect(far.score).toBeGreaterThan(0);
+      expect(far.score).toBeLessThanOrEqual(1);
+      expect(far.score).toBeCloseTo(1 / 26, 5);
+      // Closer vector still ranks higher
+      expect(near.score).toBeGreaterThan(far.score);
+    }, 15000);
+
+    it('keeps cosine scores as 1 - distance', async () => {
+      await vectorDB.createIndex({ indexName: cosineIndex, dimension: 2, metric: 'cosine' });
+      await vectorDB.upsert({
+        indexName: cosineIndex,
+        vectors: [
+          [1, 0],
+          [0, 1],
+        ],
+        ids: ['same', 'orthogonal'],
+      });
+
+      const results = await vectorDB.query({ indexName: cosineIndex, queryVector: [1, 0], topK: 2 });
+
+      const same = results.find(r => r.id === 'same')!;
+      const orthogonal = results.find(r => r.id === 'orthogonal')!;
+
+      expect(same.score).toBeCloseTo(1, 5);
+      // Orthogonal cosine distance is 1 → score 0
+      expect(orthogonal.score).toBeCloseTo(0, 5);
+    }, 15000);
+  });
+
   describe('Performance and Concurrency', () => {
     const perfTestIndex = 'perf-test-index';
 
