@@ -196,7 +196,7 @@ const mastra = new Mastra({
 const agent = new Agent({
   name: 'customer-support',
   instructions: 'Help customers with their questions',
-  model: openai('gpt-4'),
+  model: openai('gpt-4o-mini'),
   mastra,
 });
 

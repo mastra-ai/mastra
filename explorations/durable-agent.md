@@ -67,7 +67,7 @@ The architecture supports three increasingly durable patterns:
 **`createInngestAgent()`** — Factory function to create durable agents powered by Inngest:
 
 ```typescript
-const agent = new Agent({ id: 'my-agent', model: openai('gpt-4'), ... });
+const agent = new Agent({ id: 'my-agent', model: openai('gpt-4o-mini'), ... });
 const durableAgent = createInngestAgent({ agent, inngest });
 const mastra = new Mastra({ agents: { myAgent: durableAgent } });
 ```

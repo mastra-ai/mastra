@@ -35,8 +35,8 @@ import { AgentBuilder } from '@mastra/agent-builder';
 import { openai } from '@ai-sdk/openai';
 
 const builder = new AgentBuilder({
-  model: openai('gpt-4'),
-  summaryModel: openai('gpt-4'),
+  model: openai('gpt-4o-mini'),
+  summaryModel: openai('gpt-4o-mini'),
   projectPath: '/path/to/your/project',
 });
 
