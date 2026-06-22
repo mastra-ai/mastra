@@ -116,7 +116,7 @@ const sidebars = {
           id: 'agents/goals',
           label: 'Goals',
           customProps: {
-            tags: ['new'],
+            tags: ['alpha'],
           },
         },
         {
