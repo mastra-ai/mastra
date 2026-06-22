@@ -305,9 +305,19 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Report an error on the generation span
+   * Report an error on the generation span, also closing any still-open
+   * MODEL_INFERENCE / MODEL_STEP children so a fatal error before step-finish
+   * doesn't leave them dangling. No-op if they were already closed.
    */
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void {
+    if (this.#currentInferenceSpan) {
+      this.#currentInferenceSpan.error({ error: options.error, endSpan: true });
+      this.#currentInferenceSpan = undefined;
+    }
+    if (this.#currentStepSpan) {
+      this.#currentStepSpan.error({ error: options.error, endSpan: true });
+      this.#currentStepSpan = undefined;
+    }
     this.#modelSpan?.error(options);
   }
 

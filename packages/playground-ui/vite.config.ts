@@ -24,6 +24,22 @@ const componentEntries = Object.fromEntries(
     }),
 );
 
+// Public hook subpath entries, exposed as
+// `@mastra/playground-ui/hooks/<hook-file>` via the `./hooks/*` package export.
+const hooksDir = resolve(__dirname, 'src/hooks');
+const hookEntries = Object.fromEntries(
+  readdirSync(hooksDir, { withFileTypes: true })
+    .filter(dirent => dirent.isFile())
+    .map(dirent => dirent.name)
+    .filter(
+      fileName => /\.(ts|tsx)$/.test(fileName) && !fileName.endsWith('.test.tsx') && !fileName.endsWith('.test.ts'),
+    )
+    .map(fileName => {
+      const entryName = fileName.replace(/\.(ts|tsx)$/, '');
+      return [`hooks/${entryName}`, resolve(hooksDir, fileName)] as const;
+    }),
+);
+
 const baseConfig: UserConfig = {
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -61,6 +77,7 @@ const libConfig: UserConfig = {
         tokens: resolve(__dirname, 'src/ds/tokens/index.ts'),
         // Slashed keys make Rollup emit nested output: dist/components/<Name>.<format>.js
         ...componentEntries,
+        ...hookEntries,
       },
       formats: ['es', 'cjs'],
       fileName: (format, entryName) => {

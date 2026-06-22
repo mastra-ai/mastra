@@ -379,7 +379,7 @@ await workspace.destroy()
 
 Call `destroy()` when your application is done with a workspace. `mastra.shutdown()` calls it for registered workspaces during shutdown. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
 
-`LocalFilesystem.destroy()` does not delete files on disk. Resolver-backed filesystem and sandbox providers are owned by your application and must be cleaned up by your application.
+`LocalFilesystem.destroy()` doesn't delete files on disk. Resolver-backed filesystem and sandbox providers are owned by your application and must be cleaned up by your application.
 
 ### Search operations
 
@@ -624,9 +624,9 @@ const sandbox = await workspace.resolveSandbox({ requestContext: ctx })
 
 Clear resolver-backed sandboxes cached by `sandboxCacheKey`. Pass a cache key to clear one entry, or omit it to clear all keyed sandbox entries.
 
-This method does not clear the per-`RequestContext` weak cache. Those entries are garbage-collection managed.
+This method doesn't clear the per-`RequestContext` weak cache. Those entries are garbage-collection managed.
 
-The workspace does not own resolver-returned sandboxes. This method only drops workspace references. Destroy the sandbox in your own lifecycle code.
+The workspace doesn't own resolver-returned sandboxes. This method only drops workspace references. Destroy the sandbox in your own lifecycle code.
 
 ```typescript
 workspace.clearSandboxCache('thread-123')
@@ -716,7 +716,7 @@ Added when a sandbox is configured:
 | `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
 | `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
 
-With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox does not implement a requested capability.
+With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
 
 The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
 

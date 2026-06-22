@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { join } from 'node:path';
 import { config } from 'dotenv';
+import { getAnalytics } from '../../analytics/index.js';
 import { logger } from '../../utils/logger';
 import { shouldSkipDotenvLoading } from '../utils';
 interface StartOptions {
@@ -39,6 +40,9 @@ export async function start(options: StartOptions = {}) {
       env: {
         ...process.env,
         NODE_ENV: 'production',
+        MASTRA_TELEMETRY_COMMAND: 'start',
+        MASTRA_PROJECT_ROOT: process.cwd(),
+        ...(getAnalytics()?.getDistinctId() ? { MASTRA_CLI_DISTINCT_ID: getAnalytics()!.getDistinctId() } : {}),
       },
     });
 

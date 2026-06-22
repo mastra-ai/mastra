@@ -55,6 +55,21 @@ import type { CollectedChunk } from './build-messages-from-chunks';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
+/**
+ * Finish reasons that terminate the agentic loop. The loop must NOT continue on
+ * any of these, otherwise it re-sends the same request and spins until maxSteps
+ * (or forever when maxSteps is unset).
+ *
+ * - `stop`: the model finished normally.
+ * - `error`: the model stream failed.
+ * - `length`: the model hit max_tokens; retrying reproduces the truncation
+ *   (issue #15717).
+ * - `content-filter`: a classifier block / model refusal (e.g. `claude-fable-5`
+ *   surfaced by the AI SDK as `content-filter`). Retrying re-triggers the same
+ *   refusal, so the run would hang indefinitely.
+ */
+const TERMINAL_FINISH_REASONS = ['stop', 'error', 'length', 'content-filter'];
+
 function getRequestInputProcessors({
   inputProcessors,
   llmRequestInputProcessors,
@@ -644,7 +659,7 @@ async function processOutputStream<OUTPUT = undefined>({
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error', 'length'].includes(chunk.payload.stepResult.reason),
+            isContinued: !TERMINAL_FINISH_REASONS.includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
@@ -828,6 +843,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   workspace,
   outputWriter,
   mastra,
+  rotateResponseMessageId: rotateLoopResponseMessageId,
 }: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
   const initialUntaggedSystemMessages = messageList.getSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
@@ -914,7 +930,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // so each becomes its own turn.
             const preRunSignals = _internal?.drainPendingSignals?.(runId, 'pre-run') ?? [];
             if (preRunSignals.length > 0) {
-              currentMessageId = _internal?.generateId?.() ?? generateId();
+              currentMessageId = rotateLoopResponseMessageId();
             }
             for (const preRunSignal of preRunSignals) {
               const signalForTranscript = messageList.addSignal(preRunSignal);
@@ -2009,10 +2025,21 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // excluded 'length' from shouldContinue; this guard prevents hasPendingToolCalls from
       // inadvertently re-enabling it.
       // See: https://github.com/mastra-ai/mastra/issues/15717
-      const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted) && finishReason !== 'length';
+      // `error` failures, `length` truncation, and `content-filter` refusals
+      // must never be overridden by a pending tool call: retrying re-sends the
+      // same request (reproducing the failure/truncation, or re-triggering the
+      // same refusal) and the loop spins until maxSteps — or forever when
+      // maxSteps is unset. Note we deliberately do NOT exclude `stop` here:
+      // some models return finishReason='stop' alongside tool calls, which the
+      // loop must process.
+      const hasPendingToolCalls =
+        toolCalls &&
+        toolCalls.some(tc => !tc.providerExecuted) &&
+        finishReason !== 'error' &&
+        finishReason !== 'length' &&
+        finishReason !== 'content-filter';
       const shouldContinue =
-        shouldRetry ||
-        (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));
+        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
 
       // Reset retry count after a successful non-retry step; only consecutive retries carry forward.
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : 0;

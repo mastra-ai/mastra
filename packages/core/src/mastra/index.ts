@@ -19,6 +19,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
+import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
@@ -41,7 +42,7 @@ import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../obs
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
 import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
@@ -319,6 +320,38 @@ export interface Config<
   server?: ServerConfig;
 
   /**
+   * Studio-specific authentication and authorization configuration.
+   *
+   * When configured, Studio uses separate auth from the server (API) auth,
+   * allowing different providers for internal team members vs external customers.
+   *
+   * - `server.auth` handles API authentication (external customers)
+   * - `studio.auth` handles Studio authentication (internal team)
+   *
+   * **Dual auth is opt-in:** If `studio.auth` is not configured, Studio requests
+   * fall back to `server.auth` for backward compatibility. To enable strict
+   * separation between Studio and API auth, configure both `studio.auth` and
+   * `server.auth`.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   server: {
+   *     auth: new MastraAuthWorkos({ ... }), // External customers
+   *   },
+   *   studio: {
+   *     auth: new MastraAuthOkta({ ... }), // Internal team
+   *     rbac: new StaticRBACProvider({
+   *       roles: DEFAULT_ROLES,
+   *       getUserRoles: (user) => [user.role],
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  studio?: StudioConfig;
+
+  /**
    * MCP servers provide tools and resources that agents can use.
    */
   mcpServers?: TMCPServers;
@@ -566,6 +599,7 @@ export class Mastra<
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
+  #studio?: StudioConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
@@ -631,9 +665,82 @@ export class Mastra<
   #datasets?: DatasetsManager;
   // Global version overrides for primitives (agents, etc.)
   #versions?: VersionOverrides;
+  // Cached pubsub proxy that tags internal-workflow events with `_localOnly`
+  // so the broker skips relaying multi-MB payloads to non-owning instances.
+  #pubsubProxy?: PubSub;
 
-  get pubsub() {
-    return this.#pubsub;
+  get pubsub(): PubSub {
+    if (!this.#pubsubProxy) {
+      const raw = this.#pubsub;
+      const self = this;
+      this.#pubsubProxy = new Proxy(raw, {
+        get(target, prop, _receiver) {
+          if (prop === 'publish') {
+            return function publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>) {
+              // Internal execution-workflows / agentic-loops are run-scoped:
+              // only the owning instance needs their events. Pass `localOnly`
+              // so the broker delivers locally + echoes back to the sender,
+              // but does NOT fan out to other clients (avoids serialising
+              // cumulative stepResults blobs — often 9 MB+ — across the unix
+              // socket). The flag rides on the publish-frame envelope, not on
+              // event.data, so WEP consumers never see it.
+              if (topic === 'workflows' || topic === 'workflows-finish') {
+                const data = event.data as Record<string, unknown> | undefined;
+                const wfId = data?.workflowId as string | undefined;
+                const rId = data?.runId as string | undefined;
+                // Walk parentWorkflow chain to root — nested internal workflows
+                // (e.g. `executionWorkflow` inside `agentic-loop`) carry an
+                // immediate workflowId that isn't itself in the internal registry,
+                // but their root parent (the registered agentic-loop) is. If any
+                // ancestor matches an internal registration, this instance owns
+                // the run and the event should stay local. Also tag publishes
+                // for workflow ids only known to this instance's public registry
+                // (e.g. background scheduler runs like the notification
+                // dispatcher) — they have no cross-instance consumer.
+                const isOwnedHere = (() => {
+                  if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
+                  let parent = data?.parentWorkflow as
+                    | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
+                    | undefined;
+                  let depth = 0;
+                  while (parent && depth < 16) {
+                    const pwfId = parent.workflowId;
+                    const prId = parent.runId;
+                    if (pwfId && prId && self.__hasInternalWorkflow(pwfId, prId)) return true;
+                    parent = parent.parentWorkflow as typeof parent;
+                    depth++;
+                  }
+                  // Scheduler-spawned background workflows: runId carries the
+                  // workflow id prefix `sched_wf_<workflowId>_<timestamp>`. These
+                  // ticks fire on every instance independently — events are
+                  // only meaningful to the publishing process.
+                  if (rId && rId.startsWith('sched_wf_')) return true;
+                  return false;
+                })();
+                if (isOwnedHere) {
+                  return target.publish(topic, event, { localOnly: true });
+                }
+              } else if (topic.startsWith('workflow.events.v2.')) {
+                // Per-run watch stream events. Only the publishing process
+                // consumes these (execution-engine subscribes per-run). No
+                // cross-instance fan-out needed.
+                return target.publish(topic, event, { localOnly: true });
+              }
+              return target.publish(topic, event);
+            };
+          }
+          // Bind methods to `target` so private field access (#subscribers etc.)
+          // works correctly — JS Proxies set `this` to the proxy, which breaks
+          // private fields since they are scoped to the declaring class instance.
+          const val = Reflect.get(target, prop, target);
+          if (typeof val === 'function') {
+            return val.bind(target);
+          }
+          return val;
+        },
+      }) as PubSub;
+    }
+    return this.#pubsubProxy;
   }
 
   get agentThreadStreamRuntime() {
@@ -855,6 +962,28 @@ export class Mastra<
    */
   public setServer(server: ServerConfig): void {
     this.#server = server;
+  }
+
+  /**
+   * Sets the studio configuration for this Mastra instance.
+   *
+   * The studio configuration controls authentication and authorization for Studio UI,
+   * separate from the server configuration. This enables dual auth patterns where
+   * Studio users (e.g., internal team) use different auth than API consumers.
+   *
+   * @param studio - The studio configuration object
+   *
+   * @example
+   * ```typescript
+   * // Set studio auth separately from server auth
+   * mastra.setStudio({
+   *   auth: new MastraAuthStudio(),
+   *   rbac: new MastraRBACStudio({ roleMapping: { admin: ['*'] } }),
+   * });
+   * ```
+   */
+  public setStudio(studio: StudioConfig): void {
+    this.#studio = studio;
   }
 
   /**
@@ -1111,6 +1240,18 @@ export class Mastra<
       this.#editor.registerWithMastra(this);
     }
 
+    // Kick off background license validation against the license server when
+    // an enterprise license key is configured. Fire-and-forget: LicenseClient
+    // caches the result, schedules revalidation, and fails open on network
+    // errors, so this never blocks or throws during construction.
+    if (process.env.MASTRA_LICENSE_KEY || process.env.MASTRA_EE_LICENSE) {
+      LicenseClient.getInstance(this.#logger)
+        .validate()
+        .catch(() => {
+          // Failures are logged and handled inside LicenseClient.
+        });
+    }
+
     this.#backgroundTaskConfig = config?.backgroundTasks;
     // Auto-create the background-task manager only when this Mastra is
     // running workers. When `workers: false`, the consumer of the
@@ -1246,6 +1387,10 @@ export class Mastra<
 
     if (config?.server) {
       this.#server = config.server;
+    }
+
+    if (config?.studio) {
+      this.#studio = config.studio;
     }
 
     // Register channels and merge their routes into server config
@@ -2393,6 +2538,43 @@ export class Mastra<
       return !!this.#internalMastraWorkflows[`${id}:${runId}`] || !!this.#internalMastraWorkflows[id];
     }
     return !!this.#internalMastraWorkflows[id];
+  }
+
+  /**
+   * Returns `true` when this Mastra instance can resolve the workflow
+   * identified by `workflowId` + `runId`.  Mirrors the resolution order in
+   * the WEP's `#dispatch` — internal registry → nested (parentWorkflow
+   * present) → public registry — without side-effects.
+   *
+   * Used by the push-subscription guard in {@link startWorkers} to drop
+   * cross-process events for internal workflows that belong to another
+   * process.
+   */
+  #ownsWorkflow(workflowId: string, runId: string, parentWorkflow: unknown): boolean {
+    // 1. Internal registry (run-scoped execution-workflow, agentic-loop, etc.)
+    if (this.__hasInternalWorkflow(workflowId, runId)) return true;
+    // 2. Nested workflow — walk up the parentWorkflow chain to the root and
+    //    verify that the root workflow is owned by this instance. Without this
+    //    check, cross-process subscribers would process foreign nested events
+    //    (the parentWorkflow field is truthy on both processes) and publish
+    //    spurious workflow.fail events that kill the correct owner's run.
+    if (parentWorkflow) {
+      let root = parentWorkflow as { workflowId?: string; runId?: string; parentWorkflow?: unknown };
+      while (root.parentWorkflow) {
+        root = root.parentWorkflow as typeof root;
+      }
+      const rootId = root.workflowId as string | undefined;
+      const rootRunId = root.runId as string | undefined;
+      if (rootId && rootRunId) {
+        return this.#ownsWorkflow(rootId, rootRunId, undefined);
+      }
+      // Malformed chain — fall through to public registry check below.
+    }
+    // 3. Public workflow registry — direct lookup to avoid telemetry noise
+    //    from getWorkflowById() on the expected "foreign workflow" path.
+    const workflows = this.#workflows as Record<string, AnyWorkflow> | undefined;
+    if (workflows?.[workflowId]) return true;
+    return Object.values(workflows ?? {}).some(w => w.id === workflowId);
   }
 
   __getInternalWorkflow(id: string, runId?: string): AnyWorkflow {
@@ -3698,6 +3880,23 @@ export class Mastra<
   }
 
   /**
+   * Gets the Studio-specific authentication and authorization configuration.
+   *
+   * @returns The studio config, or undefined if not configured
+   *
+   * @example
+   * ```typescript
+   * const studioConfig = mastra.getStudio();
+   * if (studioConfig?.auth) {
+   *   // Studio has separate auth configured
+   * }
+   * ```
+   */
+  public getStudio() {
+    return this.#studio;
+  }
+
+  /**
    * Sets the server adapter for this Mastra instance.
    *
    * The server adapter provides access to the underlying server app (e.g., Hono, Express)
@@ -4131,6 +4330,17 @@ export class Mastra<
       targets = this.#workers;
     }
 
+    // Ensure storage is fully initialized before any worker starts. The
+    // scheduler worker runs an immediate warm-up tick on start(), which can
+    // dispatch an internal scheduled workflow (e.g. the notification
+    // dispatcher) and persist a workflow snapshot. Without awaiting init here,
+    // that write can race the lazy storage.init() that creates
+    // `mastra_workflow_snapshot`, producing "no such table" errors on SQL
+    // stores (see #17905). init() is idempotent and a no-op when disabled.
+    if (this.#storage) {
+      await this.#storage.init();
+    }
+
     for (const worker of targets) {
       await worker.init(deps);
       await worker.start();
@@ -4143,16 +4353,62 @@ export class Mastra<
       const modes = this.#pubsub.supportedModes ?? ['pull'];
       const pushOnly = modes.includes('push') && !modes.includes('pull');
       if (pushOnly && !this.#pushSubscription) {
-        const cb: EventCallback = (event, ack) => {
+        const cb: EventCallback = (event, ack, nack) => {
+          // In cross-process push environments (e.g. UnixSocketPubSub),
+          // every subscriber receives every event — including events for
+          // internal workflows registered on a different process. Skip
+          // events whose workflow exists in neither the internal nor the
+          // public registry so only the owning process handles them.
+          // Without this guard the WEP would publish workflow.fail,
+          // propagating through workflows-finish and erroneously
+          // terminating the correct process's run.
+          const data = event.data as Record<string, unknown> | undefined;
+          const wfId = data?.workflowId as string | undefined;
+          const rId = data?.runId as string | undefined;
+          if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
+            if (ack) {
+              void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+            }
+            return;
+          }
+
           void this.handleWorkflowEvent(event)
             .then(result => {
-              if (result.ok && ack) {
+              if (result.ok) {
+                if (ack) {
+                  return ack().catch(err =>
+                    this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                  );
+                }
+                return;
+              }
+              // Non-ok result: ask the transport to redeliver (nack) when the
+              // handle layer says retry. The WEP tracks per-event delivery
+              // attempts and eventually returns `retry: false` to break the
+              // loop and surface a terminal workflow.fail. For terminal
+              // failures we ack so the event is dropped from the transport.
+              if (result.retry) {
+                if (nack) {
+                  return nack().catch(err =>
+                    this.#logger?.error?.('Error nacking workflow event in push subscription', err),
+                  );
+                }
+                // Transport does not support nack. Do NOT ack — acking a
+                // retryable failure would drop the event and silently lose
+                // the workflow run. Log and let the transport's own delivery
+                // semantics decide (most non-ack transports redeliver until
+                // explicitly acked).
+                this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
+                  type: event.type,
+                  runId: event.runId,
+                });
+                return;
+              }
+              if (ack) {
                 return ack().catch(err =>
-                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                  this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
                 );
               }
-              // Push transports without nack semantics (EventEmitter) treat
-              // a non-ack as a failure signal; we already logged inside handle().
             })
             .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
         };

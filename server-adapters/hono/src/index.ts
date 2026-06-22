@@ -11,6 +11,7 @@ import {
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
+  serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
@@ -193,10 +194,20 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
               const shouldRedact = this.streamOptions?.redact ?? true;
               const outputValue = shouldRedact ? redactStreamChunk(value) : value;
+              // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
+              const serialized = serializeStreamChunk(outputValue);
+              if (!serialized.ok) {
+                this.mastra.getLogger()?.error('Failed to serialize stream chunk, skipping', {
+                  path: route.path,
+                  chunkType: (outputValue as { type?: string })?.type,
+                  error: serialized.error.message,
+                });
+                continue;
+              }
               if (streamFormat === 'sse') {
-                await stream.write(`data: ${JSON.stringify(outputValue)}\n\n`);
+                await stream.write(`data: ${serialized.json}\n\n`);
               } else {
-                await stream.write(JSON.stringify(outputValue) + '\x1E');
+                await stream.write(serialized.json + '\x1E');
               }
             }
           }
@@ -523,12 +534,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // Check route permission requirement (EE feature)
         // Uses convention-based permission derivation: permissions are auto-derived
         // from route path/method unless explicitly set or route is public
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
+        const requestContext = c.get('requestContext');
+        // Check if any auth is configured (studio or server) for RBAC
+        const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+        if (hasAuth) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = c.get('requestContext').get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
             if (permissionError) {
               return c.json(
@@ -640,12 +653,19 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
+        const requestContext = c.get('requestContext');
+        // Check if any auth is configured (studio or server) for RBAC
+        const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+        if (hasAuth) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = c.get('requestContext').get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(
+              serverRoute,
+              userPermissions,
+              hasPermission,
+              requestContext,
+            );
             if (permissionError) {
               return c.json(
                 { error: permissionError.error, message: permissionError.message },

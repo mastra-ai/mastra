@@ -265,11 +265,12 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const extensions = useMemo(() => {
       const exts: Extension[] = [];
 
+      exts.push(EditorView.lineWrapping);
+
       if (language === 'json') {
         exts.push(jsonLanguage);
       } else if (language === 'markdown') {
         exts.push(markdown({ base: markdownLanguage, codeLanguages }));
-        exts.push(EditorView.lineWrapping);
       }
 
       if (highlightVariables && language === 'markdown') {

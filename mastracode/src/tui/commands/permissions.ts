@@ -14,7 +14,7 @@ export async function handlePermissionsCommand(ctx: SlashCommandContext, args: s
       ctx.showInfo(`Invalid policy: ${policy}. Must be one of: ${validPolicies.join(', ')}`);
       return;
     }
-    ctx.harness.setPermissionForCategory({ category, policy });
+    await ctx.state.session.permissions.setForCategory({ category, policy });
     ctx.showInfo(`Set ${category} policy to: ${policy}`);
     return;
   }
@@ -23,9 +23,9 @@ export async function handlePermissionsCommand(ctx: SlashCommandContext, args: s
 
 async function showPermissions(ctx: SlashCommandContext): Promise<void> {
   const { TOOL_CATEGORIES, getToolsForCategory } = await import('../../permissions.js');
-  const rules = ctx.harness.getPermissionRules();
-  const grants = ctx.harness.getSessionGrants();
-  const isYolo = (ctx.harness.getState() as any).yolo === true;
+  const rules = ctx.state.session.permissions.getRules();
+  const grants = ctx.state.session.getGrants();
+  const isYolo = (ctx.state.session.state.get() as any)?.yolo === true;
 
   const lines: string[] = [];
   lines.push('Tool Approval Permissions');

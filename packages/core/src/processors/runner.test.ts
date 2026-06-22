@@ -3229,18 +3229,19 @@ describe('ProcessorRunner', () => {
         contents: 'stored delta',
         createdAt: new Date('2026-01-01T00:00:01.000Z'),
       });
-      const localDelta = createStateSignal({
-        id: 'local-delta',
-        mode: 'delta',
-        cacheKey: 'delta:local',
-        version: 3,
-        contents: 'local delta',
-        createdAt: new Date('2026-01-01T00:00:02.000Z'),
-      });
-      messageList.addSignal(localDelta);
       const storedMessages = new MessageList({ threadId: 'thread-1' });
       storedMessages.addSignal(snapshot);
       storedMessages.addSignal(delta);
+      const localDelta = messageList.addSignal(
+        createStateSignal({
+          id: 'local-delta',
+          mode: 'delta',
+          cacheKey: 'delta:local',
+          version: 3,
+          contents: 'local delta',
+          createdAt: new Date('2026-01-01T00:00:02.000Z'),
+        }),
+      );
 
       const requestContext = new RequestContext();
       const thread = {
@@ -3269,10 +3270,11 @@ describe('ProcessorRunner', () => {
         perPage: false,
         hasMore: false,
       }));
+      const listMessagesById = vi.fn(async () => ({ messages: storedMessages.get.all.db() }));
       const memory = {
         getThreadById: vi.fn(async () => thread),
         saveThread: vi.fn(async ({ thread }) => thread),
-        storage: { getStore: vi.fn(async () => ({ listMessages })) },
+        storage: { getStore: vi.fn(async () => ({ listMessages, listMessagesById })) },
       };
       const computeStateSignal = vi.fn((_args: any) => undefined);
 
@@ -3294,9 +3296,8 @@ describe('ProcessorRunner', () => {
         memory: memory as any,
       });
 
-      expect(listMessages).toHaveBeenCalledWith(
-        expect.objectContaining({ threadId: 'thread-1', resourceId: 'resource-1', perPage: false }),
-      );
+      expect(listMessages).not.toHaveBeenCalled();
+      expect(listMessagesById).toHaveBeenCalledWith({ messageIds: ['stored-snapshot'] });
       const computeArgs = computeStateSignal.mock.calls[0]?.[0];
       expect(computeArgs.activeStateSignals.map(signal => signal.id)).toEqual(
         expect.arrayContaining([snapshot.id, delta.id, localDelta.id]),

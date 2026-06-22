@@ -1,7 +1,7 @@
 import EventEmitter from 'node:events';
 import type { IMastraLogger } from '../../logger';
 import { PubSub } from '../pubsub';
-import type { PubSubDeliveryMode } from '../pubsub';
+import type { LeaseProvider, PubSubDeliveryMode } from '../pubsub';
 import type { Event, EventCallback, SubscribeOptions } from '../types';
 import { AckHandleBuffer } from './ack-handle-buffer';
 
@@ -18,7 +18,7 @@ export interface EventEmitterPubSubOptions {
 // to module scope so we don't allocate two new closures per emitted event.
 const NOOP_ACK = async (): Promise<void> => {};
 
-export class EventEmitterPubSub extends PubSub {
+export class EventEmitterPubSub extends PubSub implements LeaseProvider {
   // EventEmitter dispatches synchronously to listeners, so it can serve both
   // a push consumer (no worker) and a pull-style worker that simply calls
   // `subscribe()` to register a listener. Both modes are advertised so the
@@ -85,7 +85,11 @@ export class EventEmitterPubSub extends PubSub {
     }
   }
 
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+  async publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt'>,
+    _options?: { localOnly?: boolean },
+  ): Promise<void> {
     const id = crypto.randomUUID();
     const createdAt = new Date();
     this.emitter.emit(topic, {
@@ -349,5 +353,61 @@ export class EventEmitterPubSub extends PubSub {
     } else {
       member(eventWithAttempt, ack, nack);
     }
+  }
+
+  // key → { owner, expiresAt }. In-process so a single Map is enough;
+  // there is no other process to race against. The same owner can renew
+  // their own lease; expired entries are reclaimed lazily on the next
+  // acquireLease call.
+  private leases: Map<string, { owner: string; expiresAt: number }> = new Map();
+
+  acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+    const now = Date.now();
+    const existing = this.leases.get(key);
+    if (existing && existing.expiresAt > now && existing.owner !== owner) {
+      return Promise.resolve({ acquired: false, owner: existing.owner });
+    }
+    this.leases.set(key, { owner, expiresAt: now + ttlMs });
+    return Promise.resolve({ acquired: true, owner });
+  }
+
+  getLeaseOwner(key: string): Promise<string | undefined> {
+    const existing = this.leases.get(key);
+    if (!existing) return Promise.resolve(undefined);
+    if (existing.expiresAt <= Date.now()) {
+      this.leases.delete(key);
+      return Promise.resolve(undefined);
+    }
+    return Promise.resolve(existing.owner);
+  }
+
+  releaseLease(key: string, owner: string): Promise<void> {
+    const existing = this.leases.get(key);
+    if (existing && existing.owner === owner) {
+      this.leases.delete(key);
+    }
+    return Promise.resolve();
+  }
+
+  renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
+    const existing = this.leases.get(key);
+    if (!existing || existing.owner !== owner || existing.expiresAt <= Date.now()) {
+      return Promise.resolve(false);
+    }
+    existing.expiresAt = Date.now() + ttlMs;
+    return Promise.resolve(true);
+  }
+
+  // Atomic owner-guarded handoff: only the current owner can transfer, and the
+  // key is never empty during the swap (mirrors the Redis GET==from -> SET to
+  // Lua). Lets a finishing run hand the lease to its drain run without a
+  // release/acquire gap, even on the in-process backend.
+  transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean> {
+    const existing = this.leases.get(key);
+    if (!existing || existing.owner !== fromOwner || existing.expiresAt <= Date.now()) {
+      return Promise.resolve(false);
+    }
+    this.leases.set(key, { owner: toOwner, expiresAt: Date.now() + ttlMs });
+    return Promise.resolve(true);
   }
 }

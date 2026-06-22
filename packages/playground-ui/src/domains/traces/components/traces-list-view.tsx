@@ -115,7 +115,7 @@ export function TracesListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <TracesDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
+    <TracesDataList columns={COLUMNS} variant="striped" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
         <TracesDataList.TopCell>Date</TracesDataList.TopCell>
         <TracesDataList.TopCell>Time</TracesDataList.TopCell>

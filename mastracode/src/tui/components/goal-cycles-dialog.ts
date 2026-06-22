@@ -3,8 +3,8 @@
  * Shows a preconfigured input with the current default value that the user can edit.
  */
 
-import { Box, getKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable } from '@mariozechner/pi-tui';
+import { Box, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable } from '@earendil-works/pi-tui';
 
 import { theme } from '../theme.js';
 
