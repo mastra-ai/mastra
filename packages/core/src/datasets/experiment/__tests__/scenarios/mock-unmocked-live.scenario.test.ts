@@ -13,7 +13,7 @@ describe('Tool mock scenario: unmocked tools run live', () => {
   it('serves the mocked tool and runs the unmocked tool live; item passes', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { summary, item } = await runToolMockScenario({
       tools: {
         getWeather: recordingTool('getWeather', liveLog),
         lookupOrder: recordingTool('lookupOrder', liveLog),
@@ -30,29 +30,30 @@ describe('Tool mock scenario: unmocked tools run live', () => {
       toolMocks: [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { tempF: 52 } }],
     });
 
-    expect(result.error).toBeNull();
+    expect(summary.succeededCount).toBe(1);
+    expect(item.error).toBeNull();
 
     // getWeather served from the mock (did not run live); lookupOrder ran live.
     expect(liveLog).toEqual(['lookupOrder']);
 
-    expect(result.toolMockReport?.served).toHaveLength(1);
-    expect(result.toolMockReport?.served[0]).toMatchObject({ toolName: 'getWeather' });
-    expect(result.toolMockReport?.liveCalls).toEqual([{ toolName: 'lookupOrder', args: { id: 'A-1' } }]);
-    expect(result.toolMockReport?.failure).toBeUndefined();
+    expect(item.toolMockReport?.served).toHaveLength(1);
+    expect(item.toolMockReport?.served[0]).toMatchObject({ toolName: 'getWeather' });
+    expect(item.toolMockReport?.liveCalls).toEqual([{ toolName: 'lookupOrder', args: { id: 'A-1' } }]);
+    expect(item.toolMockReport?.failure).toBeUndefined();
   });
 
   it('attaches no report and runs everything live when the item has no mocks', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { item } = await runToolMockScenario({
       tools: { lookupOrder: recordingTool('lookupOrder', liveLog) },
       turns: [{ toolCalls: [{ id: 'c1', toolName: 'lookupOrder', args: { id: 'A-1' } }] }, { text: 'done' }],
       // no toolMocks
     });
 
-    expect(result.error).toBeNull();
+    expect(item.error).toBeNull();
     expect(liveLog).toEqual(['lookupOrder']);
     // Mock-free runs behave exactly as before: no report attached.
-    expect(result.toolMockReport).toBeUndefined();
+    expect(item.toolMockReport).toBeUndefined();
   });
 });

@@ -17,7 +17,7 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
   it('serves repeated same-args mocks in declared order across calls', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { item } = await runToolMockScenario({
       tools: { appendLine: recordingTool('appendLine', liveLog) },
       turns: [
         { toolCalls: [{ id: 'c1', toolName: 'appendLine', args: { file: 'log.txt' } }] },
@@ -30,19 +30,19 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
       ],
     });
 
-    expect(result.error).toBeNull();
+    expect(item.error).toBeNull();
     expect(liveLog).toEqual([]);
 
     // Both mocks consumed, in declared order (mockIndex 0 then 1), none left over.
-    expect(result.toolMockReport?.served.map(s => s.mockIndex)).toEqual([0, 1]);
-    expect(result.toolMockReport?.unconsumed).toEqual([]);
-    expect(result.toolMockReport?.failure).toBeUndefined();
+    expect(item.toolMockReport?.served.map(s => s.mockIndex)).toEqual([0, 1]);
+    expect(item.toolMockReport?.unconsumed).toEqual([]);
+    expect(item.toolMockReport?.failure).toBeUndefined();
   });
 
   it('reports unconsumed mocks without failing when the tool is called fewer times', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { item } = await runToolMockScenario({
       tools: { appendLine: recordingTool('appendLine', liveLog) },
       turns: [{ toolCalls: [{ id: 'c1', toolName: 'appendLine', args: { file: 'log.txt' } }] }, { text: 'done' }],
       toolMocks: [
@@ -52,16 +52,16 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
     });
 
     // Item passes; the second mock is reported as unconsumed (report-only, not a failure).
-    expect(result.error).toBeNull();
-    expect(result.toolMockReport?.served.map(s => s.mockIndex)).toEqual([0]);
-    expect(result.toolMockReport?.unconsumed.map(u => u.mockIndex)).toEqual([1]);
-    expect(result.toolMockReport?.failure).toBeUndefined();
+    expect(item.error).toBeNull();
+    expect(item.toolMockReport?.served.map(s => s.mockIndex)).toEqual([0]);
+    expect(item.toolMockReport?.unconsumed.map(u => u.mockIndex)).toEqual([1]);
+    expect(item.toolMockReport?.failure).toBeUndefined();
   });
 
   it('keeps per-(tool,args) order when another tool call happens between the repeats', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { item } = await runToolMockScenario({
       tools: {
         appendLine: recordingTool('appendLine', liveLog),
         lookupOrder: recordingTool('lookupOrder', liveLog),
@@ -81,24 +81,24 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
       ],
     });
 
-    expect(result.error).toBeNull();
+    expect(item.error).toBeNull();
 
     // The interleaved tool ran live; the mocked appendLine repeats never ran live.
     expect(liveLog).toEqual(['lookupOrder']);
 
     // Both appendLine mocks consumed in declared order despite the call in between;
     // consumption order is tracked per (toolName, args), not globally across tools.
-    const appendServed = result.toolMockReport?.served.filter(s => s.toolName === 'appendLine');
+    const appendServed = item.toolMockReport?.served.filter(s => s.toolName === 'appendLine');
     expect(appendServed?.map(s => s.mockIndex)).toEqual([0, 1]);
-    expect(result.toolMockReport?.unconsumed).toEqual([]);
-    expect(result.toolMockReport?.liveCalls).toEqual([{ toolName: 'lookupOrder', args: { id: 'A-1' } }]);
-    expect(result.toolMockReport?.failure).toBeUndefined();
+    expect(item.toolMockReport?.unconsumed).toEqual([]);
+    expect(item.toolMockReport?.liveCalls).toEqual([{ toolName: 'lookupOrder', args: { id: 'A-1' } }]);
+    expect(item.toolMockReport?.failure).toBeUndefined();
   });
 
   it('drains each tool queue in its own declared order when two tools are interleaved', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { item } = await runToolMockScenario({
       tools: {
         writeFile: recordingTool('writeFile', liveLog),
         sendEmail: recordingTool('sendEmail', liveLog),
@@ -121,22 +121,22 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
       ],
     });
 
-    expect(result.error).toBeNull();
+    expect(item.error).toBeNull();
     expect(liveLog).toEqual([]);
 
     // Each tool drains ITS OWN queue in declared order, independent of the other's
     // interleaved calls: writeFile -> [0, 1], sendEmail -> [2, 3].
-    const served = result.toolMockReport?.served ?? [];
+    const served = item.toolMockReport?.served ?? [];
     expect(served.filter(s => s.toolName === 'writeFile').map(s => s.mockIndex)).toEqual([0, 1]);
     expect(served.filter(s => s.toolName === 'sendEmail').map(s => s.mockIndex)).toEqual([2, 3]);
-    expect(result.toolMockReport?.unconsumed).toEqual([]);
-    expect(result.toolMockReport?.failure).toBeUndefined();
+    expect(item.toolMockReport?.unconsumed).toEqual([]);
+    expect(item.toolMockReport?.failure).toBeUndefined();
   });
 
   it('fails with TOOL_MOCK_EXHAUSTED when a tool is called more times than it has mocks', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { item } = await runToolMockScenario({
       tools: { appendLine: recordingTool('appendLine', liveLog) },
       // Two mocks provided, but the tool is called three times with the same args.
       turns: [
@@ -154,12 +154,12 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
     // The first two calls serve in order; the third has no remaining mock for
     // these (args matched but all consumed) so it fails EXHAUSTED — distinct from
     // a MISMATCH — and the abort prevents the tool from ever running live.
-    expect(result.error?.code).toBe(TOOL_MOCK_EXHAUSTED);
-    expect(result.output).toBeNull();
+    expect(item.error?.code).toBe(TOOL_MOCK_EXHAUSTED);
+    expect(item.output).toBeNull();
     expect(liveLog).toEqual([]);
 
-    expect(result.toolMockReport?.served.map(s => s.mockIndex)).toEqual([0, 1]);
-    expect(result.toolMockReport?.failure).toMatchObject({
+    expect(item.toolMockReport?.served.map(s => s.mockIndex)).toEqual([0, 1]);
+    expect(item.toolMockReport?.failure).toMatchObject({
       code: TOOL_MOCK_EXHAUSTED,
       toolName: 'appendLine',
       args: { file: 'log.txt' },

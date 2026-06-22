@@ -19,7 +19,7 @@ describe('Tool mock scenario: matchArgs ignore', () => {
   it('serves the mock even when the call args differ from the recorded args', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { item } = await runToolMockScenario({
       tools: { 'agent-balanceAgent': recordingTool('agent-balanceAgent', liveLog) },
       turns: [
         // The model authors a different prompt than the one recorded in the mock.
@@ -37,17 +37,17 @@ describe('Tool mock scenario: matchArgs ignore', () => {
     });
 
     // Then: served despite the arg mismatch; the live tool never ran; no failure.
-    expect(result.error).toBeNull();
+    expect(item.error).toBeNull();
     expect(liveLog).toEqual([]);
-    expect(result.toolMockReport?.served).toHaveLength(1);
-    expect(result.toolMockReport?.served[0]).toMatchObject({ toolName: 'agent-balanceAgent' });
-    expect(result.toolMockReport?.failure).toBeUndefined();
+    expect(item.toolMockReport?.served).toHaveLength(1);
+    expect(item.toolMockReport?.served[0]).toMatchObject({ toolName: 'agent-balanceAgent' });
+    expect(item.toolMockReport?.failure).toBeUndefined();
   });
 
   it('still consumes ignore mocks in declared order and fails EXHAUSTED when overcalled', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { item } = await runToolMockScenario({
       tools: { 'agent-sub': recordingTool('agent-sub', liveLog) },
       turns: [
         // Three calls with different args; only two ignore mocks are provided.
@@ -64,10 +64,10 @@ describe('Tool mock scenario: matchArgs ignore', () => {
 
     // The first two calls serve in order; the third exhausts the queue and fails
     // deterministically — the abort halts the loop before any live execution.
-    expect(result.error?.code).toBe('TOOL_MOCK_EXHAUSTED');
+    expect(item.error?.code).toBe('TOOL_MOCK_EXHAUSTED');
     expect(liveLog).toEqual([]);
-    expect(result.toolMockReport?.served.map(s => s.mockIndex)).toEqual([0, 1]);
-    expect(result.toolMockReport?.failure).toMatchObject({
+    expect(item.toolMockReport?.served.map(s => s.mockIndex)).toEqual([0, 1]);
+    expect(item.toolMockReport?.failure).toMatchObject({
       code: 'TOOL_MOCK_EXHAUSTED',
       toolName: 'agent-sub',
     });

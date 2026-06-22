@@ -15,7 +15,7 @@ describe('Tool mock scenario: item tool mock mismatch aborts the run', () => {
   it('fails with TOOL_MOCK_MISMATCH and prevents a later live tool from running', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { summary, item } = await runToolMockScenario({
       tools: {
         processRefund: recordingTool('processRefund', liveLog),
         sendReceipt: recordingTool('sendReceipt', liveLog),
@@ -30,20 +30,21 @@ describe('Tool mock scenario: item tool mock mismatch aborts the run', () => {
       toolMocks: [{ toolName: 'processRefund', args: { user: 'yj', amount: 100 }, output: { ok: true } }],
     });
 
-    // Then: deterministic coded failure, surfaced via error.code.
-    expect(result.error?.code).toBe(TOOL_MOCK_MISMATCH);
-    expect(result.output).toBeNull();
+    // Then: the item is counted as failed with a deterministic coded error.
+    expect(summary.failedCount).toBe(1);
+    expect(item.error?.code).toBe(TOOL_MOCK_MISMATCH);
+    expect(item.output).toBeNull();
 
     // And: neither tool executed live — the abort halted the loop.
     expect(liveLog).toEqual([]);
 
     // And: the report names the failing call and leaves the mock unconsumed.
-    expect(result.toolMockReport?.failure).toMatchObject({
+    expect(item.toolMockReport?.failure).toMatchObject({
       code: TOOL_MOCK_MISMATCH,
       toolName: 'processRefund',
       args: { user: 'yj', amount: 999 },
     });
-    expect(result.toolMockReport?.served).toEqual([]);
-    expect(result.toolMockReport?.unconsumed).toHaveLength(1);
+    expect(item.toolMockReport?.served).toEqual([]);
+    expect(item.toolMockReport?.unconsumed).toHaveLength(1);
   });
 });

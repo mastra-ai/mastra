@@ -14,7 +14,7 @@ describe('Tool mock scenario: item tool mock served', () => {
   it('serves the mocked output and skips live tool execution', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { summary, item } = await runToolMockScenario({
       tools: { getWeather: recordingTool('getWeather', liveLog) },
       turns: [
         { toolCalls: [{ id: 'c1', toolName: 'getWeather', args: { city: 'Seattle' } }] },
@@ -23,31 +23,33 @@ describe('Tool mock scenario: item tool mock served', () => {
       toolMocks: [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { tempF: 52 } }],
     });
 
-    // Then: no error, the live tool never ran, and the report shows it served.
-    expect(result.error).toBeNull();
+    // Then: the run succeeds, the live tool never ran, and the report shows it served.
+    expect(summary.status).toBe('completed');
+    expect(summary.succeededCount).toBe(1);
+    expect(item.error).toBeNull();
     expect(liveLog).toEqual([]);
 
-    expect(result.toolMockReport?.served).toHaveLength(1);
-    expect(result.toolMockReport?.served[0]).toMatchObject({
+    expect(item.toolMockReport?.served).toHaveLength(1);
+    expect(item.toolMockReport?.served[0]).toMatchObject({
       toolName: 'getWeather',
       args: { city: 'Seattle' },
     });
-    expect(result.toolMockReport?.failure).toBeUndefined();
-    expect(result.toolMockReport?.unconsumed).toEqual([]);
+    expect(item.toolMockReport?.failure).toBeUndefined();
+    expect(item.toolMockReport?.unconsumed).toEqual([]);
   });
 
   it('matches args independent of object key order', async () => {
     const liveLog: string[] = [];
 
-    const result = await runToolMockScenario({
+    const { item } = await runToolMockScenario({
       tools: { search: recordingTool('search', liveLog) },
       turns: [{ toolCalls: [{ id: 'c1', toolName: 'search', args: { q: 'mastra', limit: 5 } }] }, { text: 'done' }],
       // Mock declares the keys in the opposite order; strict matching is key-order independent.
       toolMocks: [{ toolName: 'search', args: { limit: 5, q: 'mastra' }, output: { hits: [] } }],
     });
 
-    expect(result.error).toBeNull();
+    expect(item.error).toBeNull();
     expect(liveLog).toEqual([]);
-    expect(result.toolMockReport?.served).toHaveLength(1);
+    expect(item.toolMockReport?.served).toHaveLength(1);
   });
 });

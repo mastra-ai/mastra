@@ -2,9 +2,10 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { Mastra } from '../../../../mastra';
+import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
-import { executeTarget } from '../../executor';
-import type { ExecutionResult } from '../../executor';
+import { runExperiment } from '../../index';
+import type { ExperimentSummary, ItemWithScores } from '../../types';
 import type { ItemToolMock } from '../../tool-mocks';
 
 /**
@@ -122,14 +123,31 @@ export interface RunToolMockScenarioOptions {
   toolMocks?: ItemToolMock[];
   /** Prompt for the dataset item input. */
   prompt?: string;
+  /** Max retries for the experiment run (default 0). Used by retry-skip scenarios. */
+  maxRetries?: number;
 }
 
 /**
- * Run one dataset item through the REAL experiment executor against a REAL agent
- * whose only fake is the scripted model. Returns the executor's
- * {@link ExecutionResult} (output, error code, toolMockReport).
+ * Result of a single-item scenario run: the full {@link ExperimentSummary} plus
+ * the single {@link ItemWithScores} result for convenient per-item assertions.
  */
-export async function runToolMockScenario(opts: RunToolMockScenarioOptions): Promise<ExecutionResult> {
+export interface ToolMockScenarioResult {
+  /** The full experiment summary (status, succeededCount, failedCount, ...). */
+  summary: ExperimentSummary;
+  /** The single item result (output, error, toolMockReport, ...). */
+  item: ItemWithScores;
+}
+
+/**
+ * Run one dataset item through the REAL {@link runExperiment} orchestration
+ * against a REAL agent whose only fake is the scripted model. A real
+ * {@link InMemoryStore} backs the run so retry-skip and report persistence
+ * exercise the same code paths as production.
+ *
+ * The single inline data item carries the tool mocks under test. Returns the
+ * full {@link ExperimentSummary} and the single item result.
+ */
+export async function runToolMockScenario(opts: RunToolMockScenarioOptions): Promise<ToolMockScenarioResult> {
   const agentId = `tool-mock-scenario-agent-${++counter}`;
   const agent = new Agent({
     id: agentId,
@@ -138,14 +156,28 @@ export async function runToolMockScenario(opts: RunToolMockScenarioOptions): Pro
     model: scriptedModel(opts.turns),
     tools: opts.tools,
   });
-  const mastra = new Mastra({ agents: { [agentId]: agent }, logger: false });
+  const mastra = new Mastra({
+    agents: { [agentId]: agent },
+    storage: new InMemoryStore(),
+    logger: false,
+  });
 
-  return executeTarget(
-    mastra.getAgent(agentId),
-    'agent',
-    { input: opts.prompt ?? 'run the scenario' },
-    { toolMocks: opts.toolMocks },
-  );
+  const summary = await runExperiment(mastra, {
+    targetType: 'agent',
+    targetId: agentId,
+    scorers: [],
+    maxConcurrency: 1,
+    maxRetries: opts.maxRetries ?? 0,
+    data: [
+      {
+        input: opts.prompt ?? 'run the scenario',
+        toolMocks: opts.toolMocks,
+      },
+    ],
+  });
+
+  const item = summary.results[0]!;
+  return { summary, item };
 }
 
 let counter = 0;
