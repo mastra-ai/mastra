@@ -287,14 +287,14 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Deploy to production' });
+    await session.sendMessage({ content: 'Deploy to production' });
 
     expect(events.some(e => e.type === 'tool_suspended')).toBe(true);
     const suspendedEndCount = events.filter(e => e.type === 'agent_end' && (e as any).reason === 'suspended').length;
@@ -304,7 +304,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     // Generic tool resume reuses the suspended runId and resumes from tool-result
     // chunks, not a fresh start chunk. The subscribed thread stream must own that
     // output; otherwise this waits forever or produces duplicate resume events.
-    await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
     await waitFor(() =>
       events.slice(resumeStartIndex).some(e => e.type === 'agent_end' && (e as any).reason === 'complete'),
     );
