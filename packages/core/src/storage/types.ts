@@ -2390,13 +2390,21 @@ export interface DatasetRecord {
   targetType?: TargetType | null;
   targetIds?: string[] | null;
   scorerIds?: string[] | null;
+  /** Multi-tenant organization/account scope. */
+  organizationId?: string | null;
+  /** Broader resource context (Mastra memory compatibility). */
+  resourceId?: string | null;
+  /** Recurring-problem fingerprint (e.g. detector-emitted candidate key). */
+  candidateKey?: string | null;
+  /** Incident-specific identifier minted by the detector. */
+  candidateId?: string | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface DatasetItemSource {
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   referenceId?: string;
 }
 
@@ -2404,6 +2412,10 @@ export interface DatasetItem {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  /** Inherited from the parent dataset at insert time. */
+  organizationId?: string | null;
+  /** Inherited from the parent dataset at insert time. */
+  resourceId?: string | null;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
@@ -2418,6 +2430,10 @@ export interface DatasetItemRow {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  /** Inherited from the parent dataset at insert time. */
+  organizationId?: string | null;
+  /** Inherited from the parent dataset at insert time. */
+  resourceId?: string | null;
   validTo: number | null;
   isDeleted: boolean;
   input: unknown;
@@ -2449,6 +2465,14 @@ export interface CreateDatasetInput {
   targetType?: TargetType;
   targetIds?: string[];
   scorerIds?: string[];
+  /** Multi-tenant organization/account scope. Stamped onto every item inserted into this dataset. */
+  organizationId?: string | null;
+  /** Broader resource context (Mastra memory compatibility). Stamped onto every item. */
+  resourceId?: string | null;
+  /** Recurring-problem fingerprint (e.g. detector-emitted candidate key). */
+  candidateKey?: string | null;
+  /** Incident-specific identifier minted by the detector. */
+  candidateId?: string | null;
 }
 
 export interface UpdateDatasetInput {
@@ -2463,6 +2487,10 @@ export interface UpdateDatasetInput {
   targetType?: TargetType | null;
   targetIds?: string[] | null;
   scorerIds?: string[] | null;
+  organizationId?: string | null;
+  resourceId?: string | null;
+  candidateKey?: string | null;
+  candidateId?: string | null;
 }
 
 export interface AddDatasetItemInput {
@@ -2486,8 +2514,19 @@ export interface UpdateDatasetItemInput {
   source?: DatasetItemSource;
 }
 
+export interface DatasetTenancyFilters {
+  organizationId?: string;
+  resourceId?: string;
+}
+
+export interface ListDatasetsFilters extends DatasetTenancyFilters {
+  candidateKey?: string;
+  candidateId?: string;
+}
+
 export interface ListDatasetsInput {
   pagination: StoragePagination;
+  filters?: ListDatasetsFilters;
 }
 
 export interface ListDatasetsOutput {
@@ -2500,6 +2539,7 @@ export interface ListDatasetItemsInput {
   version?: number;
   search?: string;
   pagination: StoragePagination;
+  filters?: DatasetTenancyFilters;
 }
 
 export interface ListDatasetItemsOutput {

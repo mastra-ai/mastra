@@ -26,6 +26,8 @@ function toDatasetItem(row: DatasetItemRow): DatasetItem {
     id: row.id,
     datasetId: row.datasetId,
     datasetVersion: row.datasetVersion,
+    organizationId: row.organizationId,
+    resourceId: row.resourceId,
     input: row.input,
     groundTruth: row.groundTruth,
     expectedTrajectory: row.expectedTrajectory,
@@ -83,6 +85,10 @@ export class DatasetsInMemory extends DatasetsStorage {
       targetType: input.targetType,
       targetIds: input.targetIds,
       scorerIds: input.scorerIds ?? null,
+      organizationId: input.organizationId ?? null,
+      resourceId: input.resourceId ?? null,
+      candidateKey: input.candidateKey ?? null,
+      candidateId: input.candidateId ?? null,
       version: 0,
       createdAt: now,
       updatedAt: now,
@@ -115,6 +121,10 @@ export class DatasetsInMemory extends DatasetsStorage {
       targetType: args.targetType !== undefined ? args.targetType : existing.targetType,
       targetIds: args.targetIds !== undefined ? args.targetIds : existing.targetIds,
       scorerIds: args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds,
+      organizationId: args.organizationId !== undefined ? args.organizationId : existing.organizationId,
+      resourceId: args.resourceId !== undefined ? args.resourceId : existing.resourceId,
+      candidateKey: args.candidateKey !== undefined ? args.candidateKey : existing.candidateKey,
+      candidateId: args.candidateId !== undefined ? args.candidateId : existing.candidateId,
       updatedAt: new Date(),
     } as DatasetRecord;
     this.db.datasets.set(args.id, updated);
@@ -145,7 +155,19 @@ export class DatasetsInMemory extends DatasetsStorage {
   }
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {
-    const datasets = Array.from(this.db.datasets.values());
+    let datasets = Array.from(this.db.datasets.values());
+
+    if (args.filters) {
+      const { organizationId, resourceId, candidateKey, candidateId } = args.filters;
+      datasets = datasets.filter(d => {
+        if (organizationId !== undefined && d.organizationId !== organizationId) return false;
+        if (resourceId !== undefined && d.resourceId !== resourceId) return false;
+        if (candidateKey !== undefined && d.candidateKey !== candidateKey) return false;
+        if (candidateId !== undefined && d.candidateId !== candidateId) return false;
+        return true;
+      });
+    }
+
     // Sort by createdAt descending (newest first)
     datasets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
@@ -183,6 +205,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       id,
       datasetId: args.datasetId,
       datasetVersion: newVersion,
+      // Tenancy inherited from parent dataset (Option B — never settable per item)
+      organizationId: dataset.organizationId ?? null,
+      resourceId: dataset.resourceId ?? null,
       validTo: null,
       isDeleted: false,
       input: args.input,
@@ -235,6 +260,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       id: args.id,
       datasetId: args.datasetId,
       datasetVersion: newVersion,
+      // Re-inherit tenancy from parent dataset (handles dataset-level retroactive tenancy backfill)
+      organizationId: dataset.organizationId ?? null,
+      resourceId: dataset.resourceId ?? null,
       validTo: null,
       isDeleted: false,
       input: args.input !== undefined ? args.input : currentRow.input,
@@ -281,12 +309,14 @@ export class DatasetsInMemory extends DatasetsStorage {
     // T3.9 — close old row
     currentRow.validTo = newVersion;
 
-    // T3.9 — insert tombstone
+    // T3.9 — insert tombstone (tenancy preserved from prior current row)
     const now = new Date();
     rows.push({
       id,
       datasetId,
       datasetVersion: newVersion,
+      organizationId: currentRow.organizationId ?? null,
+      resourceId: currentRow.resourceId ?? null,
       validTo: null,
       isDeleted: true,
       input: currentRow.input,
@@ -362,6 +392,15 @@ export class DatasetsInMemory extends DatasetsStorage {
           items.push(toDatasetItem(current));
         }
       }
+    }
+
+    if (args.filters) {
+      const { organizationId, resourceId } = args.filters;
+      items = items.filter(item => {
+        if (organizationId !== undefined && item.organizationId !== organizationId) return false;
+        if (resourceId !== undefined && item.resourceId !== resourceId) return false;
+        return true;
+      });
     }
 
     // Filter by search term if specified (case-insensitive partial match on input/groundTruth)
@@ -457,6 +496,9 @@ export class DatasetsInMemory extends DatasetsStorage {
         id,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
+        // Tenancy inherited from parent dataset (Option B)
+        organizationId: dataset.organizationId ?? null,
+        resourceId: dataset.resourceId ?? null,
         validTo: null,
         isDeleted: false,
         input: itemInput.input,
@@ -500,11 +542,13 @@ export class DatasetsInMemory extends DatasetsStorage {
       // Close old row
       currentRow.validTo = newVersion;
 
-      // Insert tombstone
+      // Insert tombstone (tenancy preserved from prior current row)
       rows.push({
         id: itemId,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
+        organizationId: currentRow.organizationId ?? null,
+        resourceId: currentRow.resourceId ?? null,
         validTo: null,
         isDeleted: true,
         input: currentRow.input,

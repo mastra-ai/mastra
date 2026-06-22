@@ -736,4 +736,170 @@ describe('DatasetsInMemory', () => {
       expect(datasets.datasets).toHaveLength(0);
     });
   });
+
+  // ------------- Tenancy + candidate identity -------------
+  describe('Tenancy + candidate identity', () => {
+    it('createDataset persists organizationId/resourceId/candidateKey/candidateId', async () => {
+      const dataset = await storage.createDataset({
+        name: 'candidates/missing-tool/abc-123',
+        organizationId: 'org-1',
+        resourceId: 'proj-1',
+        candidateKey: 'missing-tool',
+        candidateId: 'abc-123',
+      });
+
+      expect(dataset.organizationId).toBe('org-1');
+      expect(dataset.resourceId).toBe('proj-1');
+      expect(dataset.candidateKey).toBe('missing-tool');
+      expect(dataset.candidateId).toBe('abc-123');
+    });
+
+    it('createDataset defaults new fields to null when omitted', async () => {
+      const dataset = await storage.createDataset({ name: 'no-tenancy' });
+      expect(dataset.organizationId).toBeNull();
+      expect(dataset.resourceId).toBeNull();
+      expect(dataset.candidateKey).toBeNull();
+      expect(dataset.candidateId).toBeNull();
+    });
+
+    it('updateDataset can change tenancy + candidate identity fields', async () => {
+      const created = await storage.createDataset({ name: 'd', organizationId: 'org-1' });
+      const updated = await storage.updateDataset({
+        id: created.id,
+        resourceId: 'proj-2',
+        candidateKey: 'k',
+        candidateId: 'i',
+      });
+      expect(updated.organizationId).toBe('org-1');
+      expect(updated.resourceId).toBe('proj-2');
+      expect(updated.candidateKey).toBe('k');
+      expect(updated.candidateId).toBe('i');
+    });
+
+    it('addItem inherits tenancy from parent dataset', async () => {
+      const dataset = await storage.createDataset({
+        name: 'd',
+        organizationId: 'org-1',
+        resourceId: 'proj-1',
+      });
+
+      const item = await storage.addItem({ datasetId: dataset.id, input: { a: 1 } });
+      expect(item.organizationId).toBe('org-1');
+      expect(item.resourceId).toBe('proj-1');
+    });
+
+    it('batchInsertItems inherits tenancy from parent dataset', async () => {
+      const dataset = await storage.createDataset({
+        name: 'd',
+        organizationId: 'org-2',
+        resourceId: 'proj-2',
+      });
+
+      const items = await storage.batchInsertItems({
+        datasetId: dataset.id,
+        items: [{ input: { a: 1 } }, { input: { a: 2 } }],
+      });
+
+      expect(items).toHaveLength(2);
+      for (const item of items) {
+        expect(item.organizationId).toBe('org-2');
+        expect(item.resourceId).toBe('proj-2');
+      }
+    });
+
+    it('updateItem re-inherits tenancy from parent dataset', async () => {
+      const dataset = await storage.createDataset({
+        name: 'd',
+        organizationId: 'org-3',
+        resourceId: 'proj-3',
+      });
+      const item = await storage.addItem({ datasetId: dataset.id, input: { a: 1 } });
+
+      const updated = await storage.updateItem({
+        id: item.id,
+        datasetId: dataset.id,
+        input: { a: 2 },
+      });
+      expect(updated.organizationId).toBe('org-3');
+      expect(updated.resourceId).toBe('proj-3');
+    });
+
+    it('listDatasets filters by organizationId', async () => {
+      await storage.createDataset({ name: 'a', organizationId: 'org-1' });
+      await storage.createDataset({ name: 'b', organizationId: 'org-2' });
+      await storage.createDataset({ name: 'c', organizationId: 'org-1' });
+
+      const result = await storage.listDatasets({
+        pagination: { page: 0, perPage: 100 },
+        filters: { organizationId: 'org-1' },
+      });
+
+      expect(result.datasets).toHaveLength(2);
+      expect(result.datasets.every(d => d.organizationId === 'org-1')).toBe(true);
+    });
+
+    it('listDatasets filters by resourceId', async () => {
+      await storage.createDataset({ name: 'a', organizationId: 'org-1', resourceId: 'proj-1' });
+      await storage.createDataset({ name: 'b', organizationId: 'org-1', resourceId: 'proj-2' });
+
+      const result = await storage.listDatasets({
+        pagination: { page: 0, perPage: 100 },
+        filters: { resourceId: 'proj-2' },
+      });
+
+      expect(result.datasets).toHaveLength(1);
+      expect(result.datasets[0]!.resourceId).toBe('proj-2');
+    });
+
+    it('listDatasets filters by candidateKey + candidateId', async () => {
+      await storage.createDataset({ name: 'a', candidateKey: 'missing-tool', candidateId: 'abc' });
+      await storage.createDataset({ name: 'b', candidateKey: 'missing-tool', candidateId: 'xyz' });
+      await storage.createDataset({ name: 'c', candidateKey: 'wrong-arg', candidateId: 'abc' });
+
+      const byKey = await storage.listDatasets({
+        pagination: { page: 0, perPage: 100 },
+        filters: { candidateKey: 'missing-tool' },
+      });
+      expect(byKey.datasets).toHaveLength(2);
+
+      const byKeyAndId = await storage.listDatasets({
+        pagination: { page: 0, perPage: 100 },
+        filters: { candidateKey: 'missing-tool', candidateId: 'abc' },
+      });
+      expect(byKeyAndId.datasets).toHaveLength(1);
+      expect(byKeyAndId.datasets[0]!.name).toBe('a');
+    });
+
+    it('listItems filters by tenancy', async () => {
+      const a = await storage.createDataset({ name: 'a', organizationId: 'org-1' });
+      const b = await storage.createDataset({ name: 'b', organizationId: 'org-2' });
+      await storage.addItem({ datasetId: a.id, input: { a: 1 } });
+      await storage.addItem({ datasetId: b.id, input: { b: 1 } });
+
+      const aItems = await storage.listItems({
+        datasetId: a.id,
+        pagination: { page: 0, perPage: 100 },
+        filters: { organizationId: 'org-1' },
+      });
+      expect(aItems.items).toHaveLength(1);
+
+      const wrongOrg = await storage.listItems({
+        datasetId: a.id,
+        pagination: { page: 0, perPage: 100 },
+        filters: { organizationId: 'org-2' },
+      });
+      expect(wrongOrg.items).toHaveLength(0);
+    });
+
+    it('source.type accepts candidate-screener', async () => {
+      const dataset = await storage.createDataset({ name: 'd' });
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { a: 1 },
+        source: { type: 'candidate-screener', referenceId: 'verdict-123' },
+      });
+      expect(item.source?.type).toBe('candidate-screener');
+      expect(item.source?.referenceId).toBe('verdict-123');
+    });
+  });
 });
