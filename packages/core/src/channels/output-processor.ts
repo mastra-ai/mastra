@@ -156,7 +156,7 @@ export class ChatChannelOutputProcessor {
     // must NOT close on `finish`. Close only on the terminal `step-finish`
     // (`isContinued === false`) or on `error`.
     const isTerminalStepFinish = part.type === 'step-finish' && (part as any).payload?.stepResult?.isContinued !== true;
-    if (isTerminalStepFinish || part.type === 'error') {
+    if (isTerminalStepFinish || part.type === 'error' || part.type === 'abort') {
       session.queue.close();
       try {
         await session.driverPromise;

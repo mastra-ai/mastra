@@ -60,9 +60,6 @@ function createRecording() {
   return { calls, adapter, chatThread };
 }
 
-async function* chunkStream(chunks: any[]): AsyncIterable<any> {
-  for (const c of chunks) yield c;
-}
 
 function makeChannels(
   opts: {
