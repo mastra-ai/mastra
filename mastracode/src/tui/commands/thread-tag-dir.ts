@@ -1,6 +1,6 @@
-import { askModalQuestion } from '../modal-question.js';
-import { theme } from '../theme.js';
-import type { SlashCommandContext } from './types.js';
+import { askModalQuestion } from '../modal-question';
+import { theme } from '../theme';
+import type { SlashCommandContext } from './types';
 
 export async function handleThreadTagDirCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;

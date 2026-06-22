@@ -17,9 +17,9 @@ import type { JSONSchema7 } from '@mastra/schema-compat';
 import { applyCompatLayer, GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
-import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
-import type { CopilotModelEntry, GitHubCopilotCredentials } from '../auth/providers/github-copilot.js';
-import { AuthStorage } from '../auth/storage.js';
+import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot';
+import type { CopilotModelEntry, GitHubCopilotCredentials } from '../auth/providers/github-copilot';
+import { AuthStorage } from '../auth/storage';
 
 const COPILOT_PROVIDER_ID = 'github-copilot';
 

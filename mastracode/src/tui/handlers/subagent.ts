@@ -2,10 +2,10 @@
  * Event handlers for subagent delegation events:
  * subagent_start, subagent_tool_start, subagent_tool_end, subagent_end.
  */
-import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
-import { SubagentExecutionComponent } from '../components/subagent-execution.js';
+import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation';
+import { SubagentExecutionComponent } from '../components/subagent-execution';
 
-import type { EventHandlerContext } from './types.js';
+import type { EventHandlerContext } from './types';
 
 export function handleSubagentStart(
   ctx: EventHandlerContext,

@@ -1,4 +1,4 @@
-import type { SlashCommandContext } from './types.js';
+import type { SlashCommandContext } from './types';
 
 function formatDateWithLocal(date: Date): string {
   return `${date.toISOString()} [${date.toLocaleString()}]`;

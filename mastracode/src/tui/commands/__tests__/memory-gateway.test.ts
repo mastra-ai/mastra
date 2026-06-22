@@ -46,7 +46,7 @@ vi.mock('../../modal-question.js', () => ({
   }),
 }));
 
-import { handleMemoryGatewayCommand } from '../memory-gateway.js';
+import { handleMemoryGatewayCommand } from '../memory-gateway';
 
 function createCtx() {
   const authStorage = {

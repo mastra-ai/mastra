@@ -1,4 +1,4 @@
-import type { SlashCommandContext } from './types.js';
+import type { SlashCommandContext } from './types';
 
 export function handleCostCommand(ctx: SlashCommandContext): void {
   const formatNumber = (n: number) => n.toLocaleString();

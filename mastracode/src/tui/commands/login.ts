@@ -1,9 +1,9 @@
-import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
-import { LoginDialogComponent } from '../components/login-dialog.js';
-import { promptAuthMode } from '../components/login-mode-selector.js';
-import { LoginSelectorComponent } from '../components/login-selector.js';
-import { showModalOverlay } from '../overlay.js';
-import type { SlashCommandContext } from './types.js';
+import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../../auth/storage';
+import { LoginDialogComponent } from '../components/login-dialog';
+import { promptAuthMode } from '../components/login-mode-selector';
+import { LoginSelectorComponent } from '../components/login-selector';
+import { showModalOverlay } from '../overlay';
+import type { SlashCommandContext } from './types';
 
 async function performLogin(ctx: SlashCommandContext, providerId: string): Promise<void> {
   const provider = getOAuthProviders().find(p => p.id === providerId);

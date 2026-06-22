@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IdleCounterComponent, formatIdleDuration } from '../idle-counter.js';
+import { IdleCounterComponent, formatIdleDuration } from '../idle-counter';
 
 describe('formatIdleDuration', () => {
   it('formats idle time from whole minutes up through larger units', () => {

@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import type { SlashCommandMetadata } from './slash-command-loader.js';
+import type { SlashCommandMetadata } from './slash-command-loader';
 
 /**
  * Process a slash command by replacing variables and executing shell commands

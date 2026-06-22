@@ -6,10 +6,10 @@
 
 import { Box, getKeybindings, Input, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, Component, TUI } from '@earendil-works/pi-tui';
-import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
-import type { AskQuestionSelectionMode } from './ask-question-inline.js';
-import { MultilineInput } from './multiline-input.js';
-import { WrappingSelectList } from './wrapping-select-list.js';
+import { theme, getSelectListTheme, getEditorTheme } from '../theme';
+import type { AskQuestionSelectionMode } from './ask-question-inline';
+import { MultilineInput } from './multiline-input';
+import { WrappingSelectList } from './wrapping-select-list';
 
 export interface AskQuestionDialogOptions {
   question: string;

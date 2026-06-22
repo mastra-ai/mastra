@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { truncateLogFile, setupDebugLogging } from '../debug-log.js';
+import { truncateLogFile, setupDebugLogging } from '../debug-log';
 
 describe('truncateLogFile', () => {
   let tmpDir: string;

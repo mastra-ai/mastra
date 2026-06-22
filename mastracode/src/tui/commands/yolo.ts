@@ -1,4 +1,4 @@
-import type { SlashCommandContext } from './types.js';
+import type { SlashCommandContext } from './types';
 
 export function handleYoloCommand(ctx: SlashCommandContext): void {
   const current = (ctx.state.session.state.get() as any)?.yolo === true;

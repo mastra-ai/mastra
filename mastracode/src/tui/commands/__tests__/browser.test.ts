@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { handleBrowserCommand } from '../browser.js';
-import type { SlashCommandContext } from '../types.js';
+import { handleBrowserCommand } from '../browser';
+import type { SlashCommandContext } from '../types';
 
 const browserMocks = vi.hoisted(() => ({
   checkProfileProviderMismatch: vi.fn(),

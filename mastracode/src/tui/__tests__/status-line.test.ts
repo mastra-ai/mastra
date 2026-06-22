@@ -62,8 +62,8 @@ vi.mock('../theme.js', () => ({
   getTermWidth: () => process.stdout.columns || 200,
 }));
 
-import { formatObservationStatus, formatReflectionStatus } from '../components/om-progress.js';
-import { updateStatusLine } from '../status-line.js';
+import { formatObservationStatus, formatReflectionStatus } from '../components/om-progress';
+import { updateStatusLine } from '../status-line';
 
 function createState() {
   const setText = vi.fn();

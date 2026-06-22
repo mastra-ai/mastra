@@ -15,9 +15,9 @@ import { randomUUID } from 'node:crypto';
 import type { Agent } from '@mastra/core/agent';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
 
-import { loadSettings } from '../onboarding/settings.js';
+import { loadSettings } from '../onboarding/settings';
 
-import type { TUIState } from './state.js';
+import type { TUIState } from './state';
 
 // =============================================================================
 // Types

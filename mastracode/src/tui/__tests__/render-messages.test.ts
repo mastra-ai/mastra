@@ -2,19 +2,19 @@ import { Container } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AssistantMessageComponent } from '../components/assistant-message.js';
-import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
-import { JudgeDisplayComponent } from '../components/judge-display.js';
-import { NotificationSummaryComponent } from '../components/notification-summary.js';
-import { NotificationComponent } from '../components/notification.js';
-import { ReactiveSignalComponent } from '../components/reactive-signal.js';
-import { SlashCommandComponent } from '../components/slash-command.js';
-import { StateSignalComponent } from '../components/state-signal.js';
-import { SubagentExecutionComponent } from '../components/subagent-execution.js';
-import { TemporalGapComponent } from '../components/temporal-gap.js';
-import { UserMessageComponent } from '../components/user-message.js';
-import { addPendingUserMessage, addUserMessage, renderExistingMessages } from '../render-messages.js';
-import type { TUIState } from '../state.js';
+import { AssistantMessageComponent } from '../components/assistant-message';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer';
+import { JudgeDisplayComponent } from '../components/judge-display';
+import { NotificationComponent } from '../components/notification';
+import { NotificationSummaryComponent } from '../components/notification-summary';
+import { ReactiveSignalComponent } from '../components/reactive-signal';
+import { SlashCommandComponent } from '../components/slash-command';
+import { StateSignalComponent } from '../components/state-signal';
+import { SubagentExecutionComponent } from '../components/subagent-execution';
+import { TemporalGapComponent } from '../components/temporal-gap';
+import { UserMessageComponent } from '../components/user-message';
+import { addPendingUserMessage, addUserMessage, renderExistingMessages } from '../render-messages';
+import type { TUIState } from '../state';
 
 function createState(): TUIState {
   return {

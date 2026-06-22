@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
-import { showModalOverlay } from '../overlay.js';
-import type { SlashCommandContext } from './types.js';
+import { AskQuestionDialogComponent } from '../components/ask-question-dialog';
+import { showModalOverlay } from '../overlay';
+import type { SlashCommandContext } from './types';
 
 async function sandboxAddPath(ctx: SlashCommandContext, rawPath: string): Promise<void> {
   const harnessState = ctx.state.session.state.get() as

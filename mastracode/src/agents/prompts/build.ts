@@ -2,7 +2,7 @@
  * Build mode prompt — full tool access, make changes and verify.
  */
 
-import type { PromptContext } from './index.js';
+import type { PromptContext } from './index';
 
 /**
  * Dynamic build mode prompt function.

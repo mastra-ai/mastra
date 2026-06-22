@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { handleToolInputDelta } from '../tool.js';
+import { handleToolInputDelta } from '../tool';
 
 function createContext(bufferText: string | undefined) {
   const updateArgs = vi.fn();

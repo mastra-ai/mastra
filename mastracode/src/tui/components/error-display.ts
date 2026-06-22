@@ -5,9 +5,9 @@
 
 import { Box, Container, Text, Spacer } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import { BOX_INDENT, theme } from '../theme.js';
-import type { ChatSpacingKind } from './chat-spacing.js';
-import { CollapsibleComponent } from './collapsible.js';
+import { BOX_INDENT, theme } from '../theme';
+import type { ChatSpacingKind } from './chat-spacing';
+import { CollapsibleComponent } from './collapsible';
 
 export interface ErrorInfo {
   message: string;

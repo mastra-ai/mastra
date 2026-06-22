@@ -1,7 +1,7 @@
 import { Readable, Writable } from 'node:stream';
 import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type { Harness, HarnessMode } from '@mastra/core/harness';
-import { MastraCodeAcpAgent } from './agent.js';
+import { MastraCodeAcpAgent } from './agent';
 
 /**
  * Run the ACP server over stdio.
@@ -18,10 +18,7 @@ export async function runAcpServer(
   const stream = ndJsonStream(output, input);
 
   // Create the agent-side connection
-  const connection = new AgentSideConnection(
-    (conn) => new MastraCodeAcpAgent(conn, harness, modes),
-    stream,
-  );
+  const connection = new AgentSideConnection(conn => new MastraCodeAcpAgent(conn, harness, modes), stream);
 
   // Handle cleanup on disconnect
   await connection.closed;

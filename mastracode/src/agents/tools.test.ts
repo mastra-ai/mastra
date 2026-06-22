@@ -7,7 +7,7 @@ vi.mock('../tools/index.js', () => ({
   requestSandboxAccessTool: { description: 'request sandbox access' },
 }));
 
-import { createDynamicTools, createToolHooks } from './tools.js';
+import { createDynamicTools, createToolHooks } from './tools';
 
 function createRequestContext(state: Record<string, unknown>, modeId: string = 'build') {
   return {

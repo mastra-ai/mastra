@@ -1,11 +1,11 @@
 import { Container } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
-import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
-import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer';
 
-import type { TUIState } from '../state.js';
-import { handleToolEnd, handleToolInputDelta, handleToolInputStart, handleToolStart } from './tool.js';
-import type { EventHandlerContext } from './types.js';
+import type { TUIState } from '../state';
+import { handleToolEnd, handleToolInputDelta, handleToolInputStart, handleToolStart } from './tool';
+import type { EventHandlerContext } from './types';
 
 function visibleChildren(ctx: EventHandlerContext) {
   return ctx.state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));

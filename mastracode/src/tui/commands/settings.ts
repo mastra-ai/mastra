@@ -5,15 +5,15 @@ import { join } from 'node:path';
 
 import { Box, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/settings.js';
-import { loadSettings, saveSettings } from '../../onboarding/settings.js';
-import { SettingsComponent } from '../components/settings.js';
-import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
-import { askModalQuestion } from '../modal-question.js';
-import type { NotificationMode } from '../notify.js';
-import { showModalOverlay } from '../overlay.js';
-import { handleApiKeysCommand } from './api-keys.js';
-import type { SlashCommandContext } from './types.js';
+import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/settings';
+import { loadSettings, saveSettings } from '../../onboarding/settings';
+import { SettingsComponent } from '../components/settings';
+import type { IToolExecutionComponent } from '../components/tool-execution-interface';
+import { askModalQuestion } from '../modal-question';
+import type { NotificationMode } from '../notify';
+import { showModalOverlay } from '../overlay';
+import { handleApiKeysCommand } from './api-keys';
+import type { SlashCommandContext } from './types';
 
 function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
   const color = ctx.state.session.mode.resolve().metadata?.color;

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { getAppDataDir } from './project.js';
+import { getAppDataDir } from './project';
 
 const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5 MB
 const KEEP_SIZE = 4 * 1024 * 1024; // 4 MB

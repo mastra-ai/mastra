@@ -30,7 +30,7 @@ vi.mock('../components/ask-question-dialog.js', () => {
   return { AskQuestionDialogComponent: MockAskQuestionDialogComponent };
 });
 
-import { askModalQuestion } from '../modal-question.js';
+import { askModalQuestion } from '../modal-question';
 
 function createTui() {
   return {

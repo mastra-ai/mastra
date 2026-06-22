@@ -76,8 +76,8 @@ vi.mock('../multiline-input.js', () => {
   return { MultilineInput: StubMultilineInput };
 });
 
-import { AskQuestionInlineComponent } from '../ask-question-inline.js';
-import { MultilineInput } from '../multiline-input.js';
+import { AskQuestionInlineComponent } from '../ask-question-inline';
+import { MultilineInput } from '../multiline-input';
 
 describe('AskQuestionInlineComponent multiline opt-in', () => {
   beforeEach(() => {

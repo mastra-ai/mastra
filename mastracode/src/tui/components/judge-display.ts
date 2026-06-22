@@ -7,8 +7,8 @@ import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 
-import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
-import type { ChatSpacingKind } from './chat-spacing.js';
+import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme';
+import type { ChatSpacingKind } from './chat-spacing';
 
 /** Display-only decision derived from a goal evaluation. */
 export interface GoalJudgeResult {

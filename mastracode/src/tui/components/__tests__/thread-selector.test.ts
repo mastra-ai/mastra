@@ -86,7 +86,7 @@ vi.mock('../../theme.js', () => ({
   },
 }));
 
-import { ThreadSelectorComponent } from '../thread-selector.js';
+import { ThreadSelectorComponent } from '../thread-selector';
 
 function createThread(id: string, updatedAtOffsetMinutes: number): HarnessThread {
   const updatedAt = new Date(Date.now() - updatedAtOffsetMinutes * 60_000);

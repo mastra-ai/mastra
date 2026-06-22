@@ -1,8 +1,8 @@
 import { GITHUB_SIGNALS_METADATA_KEY } from '@mastra/github-signals';
 import type { GithubPRSignalInput } from '@mastra/github-signals';
-import { loadSettings } from '../../onboarding/settings.js';
-import { askModalQuestion } from '../modal-question.js';
-import type { SlashCommandContext } from './types.js';
+import { loadSettings } from '../../onboarding/settings';
+import { askModalQuestion } from '../modal-question';
+import type { SlashCommandContext } from './types';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

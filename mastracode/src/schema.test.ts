@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { stateSchema } from './schema.js';
+import { stateSchema } from './schema';
 
 describe('stateSchema', () => {
   it('preserves task ids in harness state', () => {

@@ -12,8 +12,8 @@ import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
-import { decodePrintableShortcut } from '../key-input.js';
-import { theme } from '../theme.js';
+import { decodePrintableShortcut } from '../key-input';
+import { theme } from '../theme';
 
 export type ApprovalAction =
   | { type: 'approve' }

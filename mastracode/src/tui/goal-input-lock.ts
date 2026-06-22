@@ -1,5 +1,5 @@
-import { showInfo } from './display.js';
-import type { TUIState } from './state.js';
+import { showInfo } from './display';
+import type { TUIState } from './state';
 
 export const GOAL_JUDGE_INPUT_LOCK_MESSAGE = 'Goal judge is evaluating; wait a moment or press Esc to pause the goal.';
 

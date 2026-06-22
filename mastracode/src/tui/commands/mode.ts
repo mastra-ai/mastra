@@ -1,5 +1,5 @@
-import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
-import type { SlashCommandContext } from './types.js';
+import type { IToolExecutionComponent } from '../components/tool-execution-interface';
+import type { SlashCommandContext } from './types';
 
 function applyCurrentModeColorToRenderedTools(ctx: SlashCommandContext): void {
   const color = ctx.state.session.mode.resolve().metadata?.color;

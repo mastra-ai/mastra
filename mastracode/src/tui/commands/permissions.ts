@@ -1,4 +1,4 @@
-import type { SlashCommandContext } from './types.js';
+import type { SlashCommandContext } from './types';
 
 export async function handlePermissionsCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   if (args[0] === 'set' && args.length >= 3) {

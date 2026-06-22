@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseError } from '../errors.js';
+import { parseError } from '../errors';
 
 describe('parseError', () => {
   it('preserves useful detail for network-style errors', () => {

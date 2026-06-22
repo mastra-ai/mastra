@@ -18,8 +18,8 @@ import {
 } from '@earendil-works/pi-tui';
 import type { Component, Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
-import type { ChatSpacingKind } from './chat-spacing.js';
+import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme';
+import type { ChatSpacingKind } from './chat-spacing';
 
 export interface PlanApprovalInlineOptions {
   toolCallId: string;

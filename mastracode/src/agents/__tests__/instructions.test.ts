@@ -17,7 +17,7 @@ vi.mock('../prompts/agent-instructions.js', () => ({
   formatAgentInstructions: vi.fn(() => ''),
 }));
 
-import { getDynamicInstructions } from '../instructions.js';
+import { getDynamicInstructions } from '../instructions';
 
 describe('getDynamicInstructions', () => {
   it('builds commit attribution guidance from restored harness model state', async () => {

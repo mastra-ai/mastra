@@ -1,8 +1,8 @@
 import type { TUI } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
-import type { ModelItem } from '../model-selector.js';
-import { ModelSelectorComponent } from '../model-selector.js';
+import type { ModelItem } from '../model-selector';
+import { ModelSelectorComponent } from '../model-selector';
 
 const WIDTH = 100;
 

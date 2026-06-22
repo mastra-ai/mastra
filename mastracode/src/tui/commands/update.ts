@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings } from '../../onboarding/settings.js';
+import { loadSettings, saveSettings } from '../../onboarding/settings';
 import {
   detectPackageManager,
   fetchChangelog,
@@ -6,9 +6,9 @@ import {
   getInstallCommand,
   isNewerVersion,
   runUpdate,
-} from '../../utils/update-check.js';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
-import type { SlashCommandContext } from './types.js';
+} from '../../utils/update-check';
+import { AskQuestionInlineComponent } from '../components/ask-question-inline';
+import type { SlashCommandContext } from './types';
 
 export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<void> {
   const currentVersion = ctx.state.options.version;

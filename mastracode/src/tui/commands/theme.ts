@@ -1,7 +1,7 @@
-import { loadSettings, saveSettings } from '../../onboarding/settings.js';
-import { detectTerminalTheme } from '../detect-theme.js';
-import { applyThemeMode, getThemeMode } from '../theme.js';
-import type { SlashCommandContext } from './types.js';
+import { loadSettings, saveSettings } from '../../onboarding/settings';
+import { detectTerminalTheme } from '../detect-theme';
+import { applyThemeMode, getThemeMode } from '../theme';
+import type { SlashCommandContext } from './types';
 
 /**
  * /theme [auto|dark|light] — show or change the color theme.

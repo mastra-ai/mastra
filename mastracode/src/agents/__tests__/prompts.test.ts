@@ -5,7 +5,7 @@ vi.mock('../../tools/index.js', () => ({
   hasTavilyKey: () => false,
 }));
 
-import { buildFullPrompt } from '../prompts/index.js';
+import { buildFullPrompt } from '../prompts/index';
 
 describe('buildFullPrompt', () => {
   it('includes model-specific prompt content for gpt-5.4', () => {

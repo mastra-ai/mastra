@@ -1,5 +1,5 @@
-import { sendSlashCommandMessage } from './send-slash-command-message.js';
-import type { SlashCommandContext } from './types.js';
+import { sendSlashCommandMessage } from './send-slash-command-message';
+import type { SlashCommandContext } from './types';
 
 const MASTRA_REPO = 'mastra-ai/mastra';
 const MASTRA_LABEL = 'mastracode';

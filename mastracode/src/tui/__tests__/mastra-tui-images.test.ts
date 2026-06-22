@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { consumePendingImages } from '../mastra-tui.js';
+import { consumePendingImages } from '../mastra-tui';
 
 describe('consumePendingImages', () => {
   it('uses only the images referenced by editor placeholders', () => {

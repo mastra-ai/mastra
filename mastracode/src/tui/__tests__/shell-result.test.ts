@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveShellPassthroughCompletion } from '../shell-result.js';
+import { resolveShellPassthroughCompletion } from '../shell-result';
 
 describe('resolveShellPassthroughCompletion', () => {
   it('uses the process exit code when one exists', () => {

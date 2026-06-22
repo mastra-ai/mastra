@@ -8,9 +8,9 @@
 
 import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi-tui';
-import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
-import { ModelSelectorComponent } from './model-selector.js';
-import type { ModelItem } from './model-selector.js';
+import { theme, getSettingsListTheme, getSelectListTheme } from '../theme';
+import { ModelSelectorComponent } from './model-selector';
+import type { ModelItem } from './model-selector';
 
 // =============================================================================
 // Types

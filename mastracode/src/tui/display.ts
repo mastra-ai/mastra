@@ -3,13 +3,13 @@
  */
 import { Container, Text } from '@earendil-works/pi-tui';
 
-import { parseError } from '../utils/errors.js';
-import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
-import type { ChatSpacingKind } from './components/chat-spacing.js';
-import type { NotificationMode, NotificationReason } from './notify.js';
-import { sendNotification } from './notify.js';
-import type { TUIState } from './state.js';
-import { theme } from './theme.js';
+import { parseError } from '../utils/errors';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation';
+import type { ChatSpacingKind } from './components/chat-spacing';
+import type { NotificationMode, NotificationReason } from './notify';
+import { sendNotification } from './notify';
+import type { TUIState } from './state';
+import { theme } from './theme';
 
 class InfoMessageComponent extends Container {
   constructor(lines: Text[]) {

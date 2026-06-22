@@ -15,7 +15,7 @@ vi.mock('node:os', async importOriginal => {
   };
 });
 
-import { loadAgentInstructions } from './agent-instructions.js';
+import { loadAgentInstructions } from './agent-instructions';
 
 function write(path: string, content: string): void {
   mkdirSync(join(path, '..'), { recursive: true });

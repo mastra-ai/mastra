@@ -56,9 +56,9 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: vi.fn(),
 }));
 
-import { showError, showInfo } from '../display.js';
-import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
+import { showError, showInfo } from '../display';
+import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock';
+import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup';
 
 const originalPlatform = process.platform;
 

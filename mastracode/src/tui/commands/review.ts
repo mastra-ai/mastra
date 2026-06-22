@@ -1,5 +1,5 @@
-import { sendSlashCommandMessage } from './send-slash-command-message.js';
-import type { SlashCommandContext } from './types.js';
+import { sendSlashCommandMessage } from './send-slash-command-message';
+import type { SlashCommandContext } from './types';
 
 export async function handleReviewCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   if (!ctx.state.session.model.hasSelection()) {

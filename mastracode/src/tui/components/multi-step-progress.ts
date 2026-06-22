@@ -5,8 +5,8 @@
 
 import { Container, matchesKey, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { theme, mastra } from '../theme.js';
-import type { ChatSpacingKind } from './chat-spacing.js';
+import { theme, mastra } from '../theme';
+import type { ChatSpacingKind } from './chat-spacing';
 
 export interface ProgressStep {
   id: string;

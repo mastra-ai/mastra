@@ -6,7 +6,7 @@
 import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { theme } from '../theme.js';
+import { theme } from '../theme';
 
 // =============================================================================
 // Types

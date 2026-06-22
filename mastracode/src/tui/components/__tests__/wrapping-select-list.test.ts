@@ -15,7 +15,7 @@ vi.mock('@earendil-works/pi-tui', async importOriginal => {
   };
 });
 
-import { WrappingSelectList } from '../wrapping-select-list.js';
+import { WrappingSelectList } from '../wrapping-select-list';
 
 const theme: SelectListTheme = {
   selectedPrefix: (s: string) => `[S]${s}`,

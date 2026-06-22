@@ -2,7 +2,7 @@ import type { ContentBlock } from '@agentclientprotocol/sdk';
 
 import { describe, it, expect } from 'vitest';
 
-import { extractTextFromContentBlocks, mapStopReason } from './agent.js';
+import { extractTextFromContentBlocks, mapStopReason } from './agent';
 
 describe('ACP Agent - Text Extraction', () => {
   it('extracts text from text blocks', () => {
@@ -43,9 +43,7 @@ describe('ACP Agent - Text Extraction', () => {
       },
     ];
 
-    expect(extractTextFromContentBlocks(blocks)).toBe(
-      'Here is the content:\n[resource: file:///path/to/file.ts]',
-    );
+    expect(extractTextFromContentBlocks(blocks)).toBe('Here is the content:\n[resource: file:///path/to/file.ts]');
   });
 
   it('handles mixed content blocks', () => {

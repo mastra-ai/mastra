@@ -1,5 +1,5 @@
-import type { ShellPassthroughSettings } from '../onboarding/settings.js';
-import { resolveShellPassthroughInvocation } from './shell-config.js';
+import type { ShellPassthroughSettings } from '../onboarding/settings';
+import { resolveShellPassthroughInvocation } from './shell-config';
 
 const SHELL_COMMAND_TIMEOUT_MS = 30_000;
 

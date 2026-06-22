@@ -15,7 +15,7 @@ vi.mock('node:fs', () => ({
   unlinkSync: mocks.unlinkSync,
 }));
 
-import { getClipboardImage } from '../index.js';
+import { getClipboardImage } from '../index';
 
 describe('getClipboardImage', () => {
   beforeEach(() => {

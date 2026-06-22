@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateConfigDirName, DEFAULT_CONFIG_DIR } from '../constants.js';
+import { validateConfigDirName, DEFAULT_CONFIG_DIR } from '../constants';
 
 describe('validateConfigDirName', () => {
   it('accepts the default config dir', () => {

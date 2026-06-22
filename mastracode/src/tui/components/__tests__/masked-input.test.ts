@@ -43,7 +43,7 @@ vi.mock('@earendil-works/pi-tui', () => {
   return { Input: MockInput };
 });
 
-import { MaskedInput } from '../masked-input.js';
+import { MaskedInput } from '../masked-input';
 
 describe('MaskedInput', () => {
   beforeEach(() => {

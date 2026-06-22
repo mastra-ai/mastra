@@ -6,7 +6,7 @@
  * Session-scoped grants let the user approve a category once per session.
  */
 
-import { MC_TOOLS } from './tool-names.js';
+import { MC_TOOLS } from './tool-names';
 
 // ---------------------------------------------------------------------------
 // Categories

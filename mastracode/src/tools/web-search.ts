@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily';
 
-import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
+import { truncateStringForTokenEstimate } from '../utils/token-estimator';
 
 const MAX_WEB_SEARCH_TOKENS = 2_000;
 const MAX_WEB_EXTRACT_TOKENS = 2_000;

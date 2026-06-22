@@ -9,7 +9,7 @@ import {
   applyThemeMode,
   ensureContrastUnlessNearBlack,
   ensureTerminalGlyphContrast,
-} from '../theme.js';
+} from '../theme';
 
 describe('luminance', () => {
   it('returns 0 for black', () => {

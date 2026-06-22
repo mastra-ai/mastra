@@ -1,7 +1,7 @@
 import process from 'node:process';
 import stripAnsi from 'strip-ansi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SystemReminderComponent } from '../system-reminder.js';
+import { SystemReminderComponent } from '../system-reminder';
 
 const WIDTH = 80;
 

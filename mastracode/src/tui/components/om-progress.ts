@@ -6,7 +6,7 @@ import { Container, Text } from '@earendil-works/pi-tui';
 import { defaultOMProgressState } from '@mastra/core/harness';
 import type { OMBufferedStatus, OMProgressState, OMStatus } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { theme, mastra } from '../theme.js';
+import { theme, mastra } from '../theme';
 
 // Re-export types from core for backward compatibility
 export type { OMBufferedStatus, OMProgressState, OMStatus };

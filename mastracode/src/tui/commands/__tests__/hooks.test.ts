@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handleHooksCommand } from '../hooks.js';
+import { handleHooksCommand } from '../hooks';
 
 function createCtx(hookManager?: any) {
   return {

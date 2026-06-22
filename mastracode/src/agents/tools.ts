@@ -14,7 +14,7 @@ import type { ToolHooks } from '@mastra/core/tools';
 import type { HookManager } from '../hooks';
 import type { McpManager } from '../mcp';
 import type { MastraCodeComposedState } from '../schema';
-import { MC_TOOLS } from '../tool-names.js';
+import { MC_TOOLS } from '../tool-names';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
 /** Minimal shape for tools passed to createDynamicTools. */

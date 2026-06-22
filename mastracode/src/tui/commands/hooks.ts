@@ -1,4 +1,4 @@
-import type { SlashCommandContext } from './types.js';
+import type { SlashCommandContext } from './types';
 
 export function handleHooksCommand(ctx: SlashCommandContext, args: string[]): void {
   const hm = ctx.hookManager;

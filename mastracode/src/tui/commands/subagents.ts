@@ -1,10 +1,10 @@
-import { loadSettings, saveSettings } from '../../onboarding/settings.js';
-import { ModelSelectorComponent } from '../components/model-selector.js';
-import type { ModelItem } from '../components/model-selector.js';
-import { askModalQuestion } from '../modal-question.js';
-import { showModalOverlay } from '../overlay.js';
-import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
-import type { SlashCommandContext } from './types.js';
+import { loadSettings, saveSettings } from '../../onboarding/settings';
+import { ModelSelectorComponent } from '../components/model-selector';
+import type { ModelItem } from '../components/model-selector';
+import { askModalQuestion } from '../modal-question';
+import { showModalOverlay } from '../overlay';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key';
+import type { SlashCommandContext } from './types';
 
 const BUILT_IN_SUBAGENT_TYPES: Array<{ id: string; label: string; description: string }> = [
   {

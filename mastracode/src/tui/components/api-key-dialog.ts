@@ -6,8 +6,8 @@
 
 import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable } from '@earendil-works/pi-tui';
-import { theme } from '../theme.js';
-import { MaskedInput } from './masked-input.js';
+import { theme } from '../theme';
+import { MaskedInput } from './masked-input';
 
 export interface ApiKeyDialogOptions {
   /** Provider name shown in the title (e.g., "Google") */

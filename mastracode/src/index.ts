@@ -34,34 +34,34 @@ import {
   SensitiveDataFilter,
 } from '@mastra/observability';
 
-import { getDynamicInstructions } from './agents/instructions.js';
-import { getDynamicMemory } from './agents/memory.js';
+import { getDynamicInstructions } from './agents/instructions';
+import { getDynamicMemory } from './agents/memory';
 import {
   createMastraCodeGateway,
   createMastraCodeModelCatalogProvider,
   getDynamicModel,
   getGoalJudgeModel,
   resolveModel,
-} from './agents/model.js';
-import { buildMode } from './agents/modes/build.js';
-import { fastMode } from './agents/modes/explore.js';
-import { planMode } from './agents/modes/plan.js';
-import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions.js';
-// import { executeSubagent } from './agents/subagents/execute.js';
-// import { exploreSubagent } from './agents/subagents/explore.js';
-// import { planSubagent } from './agents/subagents/plan.js';
-import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
-import { createDynamicTools, createToolHooks } from './agents/tools.js';
+} from './agents/model';
+import { buildMode } from './agents/modes/build';
+import { fastMode } from './agents/modes/explore';
+import { planMode } from './agents/modes/plan';
+import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions';
+// import { executeSubagent } from './agents/subagents/execute';
+// import { exploreSubagent } from './agents/subagents/explore';
+// import { planSubagent } from './agents/subagents/plan';
+import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state';
+import { createDynamicTools, createToolHooks } from './agents/tools';
 
-import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
-import { AuthStorage } from './auth/storage.js';
-import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
-import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { HookManager } from './hooks/index.js';
-import { createMcpManager } from './mcp/index.js';
-import type { McpServerConfig } from './mcp/index.js';
-import type { ProviderAccess } from './onboarding/packs.js';
-import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
+import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace';
+import { AuthStorage } from './auth/storage';
+import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants';
+import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index';
+import { HookManager } from './hooks/index';
+import { createMcpManager } from './mcp/index';
+import type { McpServerConfig } from './mcp/index';
+import type { ProviderAccess } from './onboarding/packs';
+import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs';
 import {
   loadSettings,
   MEMORY_GATEWAY_PROVIDER,
@@ -69,27 +69,22 @@ import {
   resolveModelDefaults,
   resolveOmRoleModel,
   saveSettings,
-} from './onboarding/settings.js';
-import { getToolCategory } from './permissions.js';
-import { setAuthStorage } from './providers/claude-max.js';
-import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
-import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
+} from './onboarding/settings';
+import { getToolCategory } from './permissions';
+import { setAuthStorage } from './providers/claude-max';
+import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot';
+import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex';
 
-import { stateSchema } from './schema.js';
-import type { MastraCodeState } from './schema.js';
+import { stateSchema } from './schema';
+import type { MastraCodeState } from './schema';
 
-import { mastra } from './tui/theme.js';
-import { syncGateways } from './utils/gateway-sync.js';
-import {
-  detectProject,
-  getObservabilityDatabasePath,
-  getStorageConfig,
-  getResourceIdOverride,
-} from './utils/project.js';
-import type { StorageConfig } from './utils/project.js';
-import { createSignalsPubSub } from './utils/signals-pubsub.js';
-import { createStorage, createVectorStore } from './utils/storage-factory.js';
-import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import { mastra } from './tui/theme';
+import { syncGateways } from './utils/gateway-sync';
+import { detectProject, getObservabilityDatabasePath, getStorageConfig, getResourceIdOverride } from './utils/project';
+import type { StorageConfig } from './utils/project';
+import { createSignalsPubSub } from './utils/signals-pubsub';
+import { createStorage, createVectorStore } from './utils/storage-factory';
+import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock';
 
 const CODE_AGENT_ID = 'code-agent';
 

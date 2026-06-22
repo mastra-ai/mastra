@@ -1,7 +1,7 @@
 import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT, mastra, theme } from '../theme.js';
-import type { ChatSpacingKind } from './chat-spacing.js';
+import { BOX_INDENT, mastra, theme } from '../theme';
+import type { ChatSpacingKind } from './chat-spacing';
 
 export interface StateSignalOptions {
   stateId: string;

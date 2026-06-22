@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { handleSubagentsCommand } from '../subagents.js';
-import type { SlashCommandContext } from '../types.js';
+import { handleSubagentsCommand } from '../subagents';
+import type { SlashCommandContext } from '../types';
 
 const askQuestionMock = vi.fn();
 

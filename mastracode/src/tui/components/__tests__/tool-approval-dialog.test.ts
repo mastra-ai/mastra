@@ -55,7 +55,7 @@ vi.mock('../../theme.js', () => ({
   },
 }));
 
-import { ToolApprovalDialogComponent } from '../tool-approval-dialog.js';
+import { ToolApprovalDialogComponent } from '../tool-approval-dialog';
 
 function makeDialog(onAction = vi.fn()) {
   const dialog = new ToolApprovalDialogComponent({

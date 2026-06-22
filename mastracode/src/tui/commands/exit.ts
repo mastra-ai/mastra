@@ -1,4 +1,4 @@
-import type { SlashCommandContext } from './types.js';
+import type { SlashCommandContext } from './types';
 
 export function handleExitCommand(ctx: SlashCommandContext): void {
   ctx.stop();

@@ -7,8 +7,8 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { DEFAULT_CONFIG_DIR } from '../constants.js';
-import type { HooksConfig, HookDefinition, HookEventName } from './types.js';
+import { DEFAULT_CONFIG_DIR } from '../constants';
+import type { HooksConfig, HookDefinition, HookEventName } from './types';
 
 const VALID_EVENTS: HookEventName[] = [
   'PreToolUse',

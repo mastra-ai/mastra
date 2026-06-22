@@ -1,8 +1,8 @@
 import type { HarnessMessage, HarnessThread } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { askModalQuestion } from '../../modal-question.js';
-import { handleThreadsCommand, showThreadLockPrompt } from '../threads.js';
-import type { SlashCommandContext } from '../types.js';
+import { askModalQuestion } from '../../modal-question';
+import { handleThreadsCommand, showThreadLockPrompt } from '../threads';
+import type { SlashCommandContext } from '../types';
 
 const selectorInstances: Array<any> = [];
 

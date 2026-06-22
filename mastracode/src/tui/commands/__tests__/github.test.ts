@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { handleGithubCommand } from '../github.js';
-import type { SlashCommandContext } from '../types.js';
+import { handleGithubCommand } from '../github';
+import type { SlashCommandContext } from '../types';
 
 const askModalQuestionMock = vi.fn();
 const execFileMock = vi.fn();

@@ -4,9 +4,9 @@ import {
   saveSettings,
   MEMORY_GATEWAY_PROVIDER,
   MEMORY_GATEWAY_DEFAULT_URL,
-} from '../../onboarding/settings.js';
-import { askModalQuestion } from '../modal-question.js';
-import type { SlashCommandContext } from './types.js';
+} from '../../onboarding/settings';
+import { askModalQuestion } from '../modal-question';
+import type { SlashCommandContext } from './types';
 
 async function askText(ctx: SlashCommandContext, question: string, defaultValue?: string): Promise<string | null> {
   const answer = await askModalQuestion(ctx.state.ui, { question, defaultValue });

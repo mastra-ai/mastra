@@ -1,9 +1,9 @@
-import { ThreadLockError } from '../../utils/thread-lock.js';
-import { ThreadSelectorComponent } from '../components/thread-selector.js';
-import { askModalQuestion } from '../modal-question.js';
-import { showModalOverlay } from '../overlay.js';
-import { askCloneName, confirmClone, resetUIAfterClone } from './clone.js';
-import type { SlashCommandContext } from './types.js';
+import { ThreadLockError } from '../../utils/thread-lock';
+import { ThreadSelectorComponent } from '../components/thread-selector';
+import { askModalQuestion } from '../modal-question';
+import { showModalOverlay } from '../overlay';
+import { askCloneName, confirmClone, resetUIAfterClone } from './clone';
+import type { SlashCommandContext } from './types';
 
 export function showThreadLockPrompt(
   ctx: SlashCommandContext,

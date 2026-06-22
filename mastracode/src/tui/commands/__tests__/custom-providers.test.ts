@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GlobalSettings, StorageSettings } from '../../../onboarding/settings.js';
+import type { GlobalSettings, StorageSettings } from '../../../onboarding/settings';
 import {
   addModelToCustomProviderInSettings,
   removeCustomProviderFromSettings,
   removeModelFromCustomProviderInSettings,
   upsertCustomProviderInSettings,
-} from '../custom-providers.js';
+} from '../custom-providers';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };

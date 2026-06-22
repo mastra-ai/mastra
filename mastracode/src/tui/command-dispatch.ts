@@ -1,9 +1,9 @@
 /**
  * Slash command dispatcher: routes command strings to extracted handlers.
  */
-import { processSlashCommand } from '../utils/slash-command-processor.js';
-import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
-import { startGoalWithDefaults } from './commands/goal.js';
+import { processSlashCommand } from '../utils/slash-command-processor';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation';
+import { startGoalWithDefaults } from './commands/goal';
 import {
   handleHelpCommand,
   handleCostCommand,
@@ -43,17 +43,17 @@ import {
   handleObservabilityCommand,
   handleGithubCommand,
   handleGoalCommand,
-} from './commands/index.js';
-import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
-import type { SlashCommandContext } from './commands/types.js';
-import { SlashCommandComponent } from './components/slash-command.js';
-import { showError, showInfo } from './display.js';
+} from './commands/index';
+import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message';
+import type { SlashCommandContext } from './commands/types';
+import { SlashCommandComponent } from './components/slash-command';
+import { showError, showInfo } from './display';
 import {
   canRunSlashCommandDuringGoalJudge,
   isGoalJudgeInputLocked,
   showGoalJudgeInputLockInfo,
-} from './goal-input-lock.js';
-import type { TUIState } from './state.js';
+} from './goal-input-lock';
+import type { TUIState } from './state';
 
 const TRACKED_COMMANDS = new Set(['login', 'models', 'mode', 'memory-gateway', 'custom-providers', 'threads', 'new']);
 

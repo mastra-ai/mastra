@@ -1,8 +1,8 @@
 import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { describe, it, expect } from 'vitest';
-import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme.js';
-import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
+import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme';
+import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced';
 
 const ui = { requestRender() {} } as any;
 

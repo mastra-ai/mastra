@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, it, expect, afterEach, afterAll } from 'vitest';
-import { savePlanToDisk } from '../plans.js';
+import { savePlanToDisk } from '../plans';
 
 const projectRoot = path.resolve(import.meta.dirname, '../../..');
 const tmpDir = path.join(projectRoot, '.test-tmp-plans');

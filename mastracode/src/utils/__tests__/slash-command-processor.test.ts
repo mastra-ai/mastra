@@ -4,8 +4,8 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import type { SlashCommandMetadata } from '../slash-command-loader.js';
-import { processSlashCommand } from '../slash-command-processor.js';
+import type { SlashCommandMetadata } from '../slash-command-loader';
+import { processSlashCommand } from '../slash-command-processor';
 
 const createCommand = (template: string): SlashCommandMetadata => ({
   name: 'test',

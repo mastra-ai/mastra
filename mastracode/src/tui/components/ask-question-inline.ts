@@ -21,10 +21,10 @@ import {
   wrapTextWithAnsi,
 } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
-import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
-import type { ChatSpacingKind } from './chat-spacing.js';
-import { MultilineInput } from './multiline-input.js';
-import { WrappingSelectList } from './wrapping-select-list.js';
+import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme';
+import type { ChatSpacingKind } from './chat-spacing';
+import { MultilineInput } from './multiline-input';
+import { WrappingSelectList } from './wrapping-select-list';
 
 /**
  * Selection mode for option prompts. `single_select` selects one option on Enter

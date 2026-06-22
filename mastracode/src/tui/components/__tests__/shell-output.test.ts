@@ -46,7 +46,7 @@ vi.mock('../../theme.js', () => ({
   },
 }));
 
-import { ShellStreamComponent } from '../shell-output.js';
+import { ShellStreamComponent } from '../shell-output';
 
 function renderedText() {
   return mocks.textNodes.join('\n');

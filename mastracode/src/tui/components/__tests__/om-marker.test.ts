@@ -21,7 +21,7 @@ vi.mock('../../theme.js', () => ({
   },
 }));
 
-import { OMMarkerComponent } from '../om-marker.js';
+import { OMMarkerComponent } from '../om-marker';
 
 describe('OMMarkerComponent activation rendering', () => {
   it('renders idle timeout suffix inline on activation line', () => {

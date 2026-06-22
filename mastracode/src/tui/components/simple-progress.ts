@@ -4,7 +4,7 @@
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
-import { theme } from '../theme.js';
+import { theme } from '../theme';
 
 export interface SimpleProgressOptions {
   prefix?: string;

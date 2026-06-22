@@ -7,8 +7,8 @@
 import { Container, Text, Spacer, visibleWidth } from '@earendil-works/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { getTermWidth, theme } from '../theme.js';
-import { truncateAnsi } from './ansi.js';
+import { getTermWidth, theme } from '../theme';
+import { truncateAnsi } from './ansi';
 
 export class TaskProgressComponent extends Container {
   private tasks: TaskItemInput[] = [];

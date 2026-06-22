@@ -165,8 +165,8 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
-import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
+import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max';
+import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex';
 import {
   createMastraCodeGateway,
   resolveModel,
@@ -175,7 +175,7 @@ import {
   getOpenAIApiKey,
   MastraCodeGateway,
   resolveAuth,
-} from '../model.js';
+} from '../model';
 
 function makeRequestContext({ threadId, resourceId }: { threadId?: string; resourceId?: string } = {}) {
   const values = new Map<string, unknown>();

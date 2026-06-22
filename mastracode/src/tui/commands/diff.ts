@@ -1,6 +1,6 @@
-import { DiffOutputComponent } from '../components/diff-output.js';
-import { theme } from '../theme.js';
-import type { SlashCommandContext } from './types.js';
+import { DiffOutputComponent } from '../components/diff-output';
+import { theme } from '../theme';
+import type { SlashCommandContext } from './types';
 
 export async function handleDiffCommand(ctx: SlashCommandContext, filePath?: string): Promise<void> {
   const { state } = ctx;

@@ -1,9 +1,9 @@
 import type { TaskItemSnapshot } from '@mastra/core/harness';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { dispatchEvent } from './event-dispatch.js';
-import type { EventHandlerContext } from './handlers/types.js';
-import type { TUIState } from './state.js';
+import { dispatchEvent } from './event-dispatch';
+import type { EventHandlerContext } from './handlers/types';
+import type { TUIState } from './state';
 
 function createMockHarness(initialState: Record<string, unknown> = {}, previousTasks: TaskItemSnapshot[] = []) {
   let state = { ...initialState };

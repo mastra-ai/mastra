@@ -3,7 +3,7 @@
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
-import { BOX_INDENT, theme } from '../theme.js';
+import { BOX_INDENT, theme } from '../theme';
 
 const MINUTE_MS = 60_000;
 const HOUR_MINUTES = 60;

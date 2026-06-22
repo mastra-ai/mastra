@@ -1,7 +1,7 @@
-import { loadSettings, OBSERVABILITY_AUTH_PREFIX, saveSettings } from '../../onboarding/settings.js';
-import { askModalQuestion } from '../modal-question.js';
-import { theme } from '../theme.js';
-import type { SlashCommandContext } from './types.js';
+import { loadSettings, OBSERVABILITY_AUTH_PREFIX, saveSettings } from '../../onboarding/settings';
+import { askModalQuestion } from '../modal-question';
+import { theme } from '../theme';
+import type { SlashCommandContext } from './types';
 
 const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
 

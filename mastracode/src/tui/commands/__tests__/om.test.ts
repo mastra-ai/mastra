@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { GlobalSettings, StorageSettings } from '../../../onboarding/settings.js';
-import { applyOmRoleOverride } from '../om.js';
+import type { GlobalSettings, StorageSettings } from '../../../onboarding/settings';
+import { applyOmRoleOverride } from '../om';
 
 function createSettings(overrides?: Partial<GlobalSettings['models']>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };

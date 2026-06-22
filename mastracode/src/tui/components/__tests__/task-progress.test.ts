@@ -24,7 +24,7 @@ vi.mock('../../theme.js', () => ({
   },
 }));
 
-import { TaskProgressComponent } from '../task-progress.js';
+import { TaskProgressComponent } from '../task-progress';
 
 describe('TaskProgressComponent', () => {
   it('reserves one blank line above the input when no tasks are visible', () => {

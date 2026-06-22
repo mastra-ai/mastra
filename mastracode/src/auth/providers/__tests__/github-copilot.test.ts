@@ -8,7 +8,7 @@ import {
   loginGitHubCopilot,
   normalizeDomain,
   refreshGitHubCopilotToken,
-} from '../github-copilot.js';
+} from '../github-copilot';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

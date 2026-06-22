@@ -44,7 +44,7 @@ vi.mock('../../components/ask-question-inline.js', () => ({
   },
 }));
 
-import { handleUpdateCommand } from '../update.js';
+import { handleUpdateCommand } from '../update';
 
 function createCtx(version = '0.1.0') {
   return {

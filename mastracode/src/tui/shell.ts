@@ -2,13 +2,13 @@
  * Shell passthrough: execute a shell command and display the output in the TUI.
  * Streams stdout/stderr in real-time using a bordered box that rebuilds on each chunk.
  */
-import { loadSettings } from '../onboarding/settings.js';
-import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
-import { ShellStreamComponent } from './components/shell-output.js';
-import { showError, showInfo } from './display.js';
-import { resolveShellPassthroughCompletion } from './shell-result.js';
-import { createShellPassthroughSubprocess } from './shell-runner.js';
-import type { TUIState } from './state.js';
+import { loadSettings } from '../onboarding/settings';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation';
+import { ShellStreamComponent } from './components/shell-output';
+import { showError, showInfo } from './display';
+import { resolveShellPassthroughCompletion } from './shell-result';
+import { createShellPassthroughSubprocess } from './shell-runner';
+import type { TUIState } from './state';
 
 export async function handleShellPassthrough(state: TUIState, command: string): Promise<void> {
   if (!command) {

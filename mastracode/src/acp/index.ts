@@ -1,8 +1,8 @@
 import type { HarnessMode } from '@mastra/core/harness';
 
-import { createMastraCode } from '../index.js';
-import { releaseAllThreadLocks } from '../utils/thread-lock.js';
-import { runAcpServer } from './server.js';
+import { createMastraCode } from '../index';
+import { releaseAllThreadLocks } from '../utils/thread-lock';
+import { runAcpServer } from './server';
 
 /**
  * Entry point for ACP server mode.
@@ -32,7 +32,7 @@ export async function acpMain(): Promise<void> {
     const modes: HarnessMode[] = [
       { id: 'build', name: 'Build' },
       { id: 'plan', name: 'Plan' },
-      { id: 'fast', name: 'Fast' },
+      { id: 'fast', name: 'Explore' },
     ];
 
     // Cleanup function (mirrors main.ts asyncCleanup)

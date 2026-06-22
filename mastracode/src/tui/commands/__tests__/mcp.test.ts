@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { handleMcpCommand } from '../mcp.js';
-import type { SlashCommandContext } from '../types.js';
+import { handleMcpCommand } from '../mcp';
+import type { SlashCommandContext } from '../types';
 
 const selectorConstructorMock = vi.fn();
 const showModalOverlayMock = vi.fn();

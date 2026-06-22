@@ -1,6 +1,6 @@
-import { askModalQuestion } from '../modal-question.js';
-import type { TUIState } from '../state.js';
-import type { SlashCommandContext } from './types.js';
+import { askModalQuestion } from '../modal-question';
+import type { TUIState } from '../state';
+import type { SlashCommandContext } from './types';
 
 /** Minimal interface accepted by resetUIAfterClone so it works from both
  *  slash-command handlers (SlashCommandContext) and the MastraTUI class. */

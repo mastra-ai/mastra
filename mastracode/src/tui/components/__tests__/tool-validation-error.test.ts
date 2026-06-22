@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseValidationErrors } from '../tool-validation-error.js';
+import { parseValidationErrors } from '../tool-validation-error';
 
 describe('parseValidationErrors', () => {
   it('parses a single Zod-style error', () => {

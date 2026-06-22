@@ -62,9 +62,9 @@ vi.mock('../../utils/project.js', () => ({
   getUserId: getUserIdMock,
 }));
 
-import { renderBanner } from '../components/banner.js';
-import { buildLayout } from '../setup.js';
-import { updateStatusLine } from '../status-line.js';
+import { renderBanner } from '../components/banner';
+import { buildLayout } from '../setup';
+import { updateStatusLine } from '../status-line';
 
 function textOf(child: unknown) {
   return stripAnsi((child as { text?: string }).text ?? '');

@@ -8,7 +8,7 @@ import type { Component } from '@earendil-works/pi-tui';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
-import { getOAuthProviders } from '../auth/storage.js';
+import { getOAuthProviders } from '../auth/storage';
 import {
   OnboardingInlineComponent,
   getAvailableModePacks,
@@ -16,13 +16,13 @@ import {
   ONBOARDING_VERSION,
   loadSettings,
   saveSettings,
-} from '../onboarding/index.js';
-import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
+} from '../onboarding/index';
+import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index';
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   MEMORY_GATEWAY_PROVIDER,
-} from '../onboarding/settings.js';
+} from '../onboarding/settings';
 import {
   detectPackageManager,
   fetchChangelog,
@@ -30,26 +30,26 @@ import {
   getInstallCommand,
   isNewerVersion,
   runUpdate,
-} from '../utils/update-check.js';
-import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
-import { dispatchSlashCommand } from './command-dispatch.js';
-import { startGoalWithDefaults } from './commands/goal.js';
+} from '../utils/update-check';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation';
+import { dispatchSlashCommand } from './command-dispatch';
+import { startGoalWithDefaults } from './commands/goal';
 
-import type { SlashCommandContext } from './commands/types.js';
-import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
-import { LoginDialogComponent } from './components/login-dialog.js';
-import { promptAuthMode } from './components/login-mode-selector.js';
-import { ModelSelectorComponent } from './components/model-selector.js';
-import type { ModelItem } from './components/model-selector.js';
-import { GradientAnimator } from './components/obi-loader.js';
-import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
-import { showError, showInfo, showFormattedError, notify } from './display.js';
-import { dispatchEvent } from './event-dispatch.js';
-import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
-import type { EventHandlerContext } from './handlers/types.js';
-import { askModalQuestion } from './modal-question.js';
-import { showModalOverlay } from './overlay.js';
-import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
+import type { SlashCommandContext } from './commands/types';
+import { AskQuestionInlineComponent } from './components/ask-question-inline';
+import { LoginDialogComponent } from './components/login-dialog';
+import { promptAuthMode } from './components/login-mode-selector';
+import { ModelSelectorComponent } from './components/model-selector';
+import type { ModelItem } from './components/model-selector';
+import { GradientAnimator } from './components/obi-loader';
+import type { IToolExecutionComponent } from './components/tool-execution-interface';
+import { showError, showInfo, showFormattedError, notify } from './display';
+import { dispatchEvent } from './event-dispatch';
+import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock';
+import type { EventHandlerContext } from './handlers/types';
+import { askModalQuestion } from './modal-question';
+import { showModalOverlay } from './overlay';
+import { promptForApiKeyIfNeeded } from './prompt-api-key';
 
 import {
   addPendingUserMessage,
@@ -57,7 +57,7 @@ import {
   removePendingUserMessage,
   renderClearedTasksInline,
   renderExistingMessages,
-} from './render-messages.js';
+} from './render-messages';
 import {
   setupKeyboardShortcuts,
   buildLayout,
@@ -69,17 +69,17 @@ import {
   updateTerminalTitle,
   promptForThreadSelection,
   renderExistingTasks,
-} from './setup.js';
-import { handleShellPassthrough } from './shell.js';
-import type { MastraTUIOptions, TUIState } from './state.js';
-import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
-import { updateStatusLine } from './status-line.js';
+} from './setup';
+import { handleShellPassthrough } from './shell';
+import type { MastraTUIOptions, TUIState } from './state';
+import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state';
+import { updateStatusLine } from './status-line';
 
 // =============================================================================
 // Types
 // =============================================================================
 
-export type { MastraTUIOptions } from './state.js';
+export type { MastraTUIOptions } from './state';
 
 // =============================================================================
 // MastraTUI Class

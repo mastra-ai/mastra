@@ -3,8 +3,8 @@
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
-import { BOX_INDENT, theme } from '../theme.js';
-import type { ChatSpacingKind } from './chat-spacing.js';
+import { BOX_INDENT, theme } from '../theme';
+import type { ChatSpacingKind } from './chat-spacing';
 
 export interface TemporalGapOptions {
   message?: string;

@@ -12,7 +12,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
-import { AuthStorage } from '../auth/storage.js';
+import { AuthStorage } from '../auth/storage';
 
 // Codex API endpoint (not standard OpenAI API)
 const CODEX_API_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';

@@ -10,10 +10,10 @@ vi.mock('../tools/index.js', () => ({
   requestSandboxAccessTool: { description: 'request sandbox access' },
 }));
 
-import { getToolCategory } from '../permissions.js';
-import { MC_TOOLS } from '../tool-names.js';
-import { buildToolGuidance } from './prompts/tool-guidance.js';
-import { createDynamicTools } from './tools.js';
+import { getToolCategory } from '../permissions';
+import { MC_TOOLS } from '../tool-names';
+import { buildToolGuidance } from './prompts/tool-guidance';
+import { createDynamicTools } from './tools';
 
 // Minimal mock of HarnessRequestContext shape that createDynamicTools reads
 function makeRequestContext(

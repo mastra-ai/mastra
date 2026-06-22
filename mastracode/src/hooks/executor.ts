@@ -4,8 +4,8 @@
  */
 
 import { spawn } from 'node:child_process';
-import type { HookDefinition, HookStdin, HookResult, HookStdout, HookEventResult } from './types.js';
-import { isBlockingEvent } from './types.js';
+import type { HookDefinition, HookStdin, HookResult, HookStdout, HookEventResult } from './types';
+import { isBlockingEvent } from './types';
 
 const DEFAULT_TIMEOUT = 10_000;
 

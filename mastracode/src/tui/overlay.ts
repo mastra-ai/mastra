@@ -1,7 +1,7 @@
 import type { Component, OverlayHandle, OverlayOptions, SizeValue, TUI } from '@earendil-works/pi-tui';
 import { visibleWidth } from '@earendil-works/pi-tui';
 
-import { theme } from './theme.js';
+import { theme } from './theme';
 
 type ModalOverlayOptions = {
   widthPercent?: number;

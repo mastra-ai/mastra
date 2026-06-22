@@ -6,7 +6,7 @@
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { highlight } from 'cli-highlight';
-import { theme } from '../theme.js';
+import { theme } from '../theme';
 
 export interface CollapsibleOptions {
   /** Initial expanded state */

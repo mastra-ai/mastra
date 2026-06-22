@@ -1,16 +1,12 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import type { ThinkingLevelSetting } from '../../onboarding/settings.js';
-import { loadSettings, saveSettings } from '../../onboarding/settings.js';
-import {
-  THINKING_LEVELS,
-  getThinkingLevelForModel,
-  getThinkingLevelsForModel,
-} from '../components/thinking-settings.js';
-import { showModalOverlay } from '../overlay.js';
-import { theme, getSelectListTheme } from '../theme.js';
-import type { SlashCommandContext } from './types.js';
+import type { ThinkingLevelSetting } from '../../onboarding/settings';
+import { loadSettings, saveSettings } from '../../onboarding/settings';
+import { THINKING_LEVELS, getThinkingLevelForModel, getThinkingLevelsForModel } from '../components/thinking-settings';
+import { showModalOverlay } from '../overlay';
+import { theme, getSelectListTheme } from '../theme';
+import type { SlashCommandContext } from './types';
 
 /** Models that support reasoning effort. */
 function supportsThinking(modelId: string): boolean {

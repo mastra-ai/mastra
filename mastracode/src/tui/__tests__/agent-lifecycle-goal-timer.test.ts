@@ -13,9 +13,9 @@ vi.mock('../../utils/project.js', () => ({
   getCurrentGitBranchAsync: vi.fn(() => Promise.resolve('main')),
 }));
 
-import { handleAgentAborted, handleAgentEnd, handleAgentError } from '../handlers/agent-lifecycle.js';
-import type { EventHandlerContext } from '../handlers/types.js';
-import type { TUIState } from '../state.js';
+import { handleAgentAborted, handleAgentEnd, handleAgentError } from '../handlers/agent-lifecycle';
+import type { EventHandlerContext } from '../handlers/types';
+import type { TUIState } from '../state';
 
 function createState(overrides: Partial<TUIState> = {}): TUIState {
   return {

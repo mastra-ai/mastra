@@ -1,6 +1,6 @@
 import stripAnsi from 'strip-ansi';
 import { describe, it, expect, afterEach } from 'vitest';
-import { renderBanner } from '../banner.js';
+import { renderBanner } from '../banner';
 
 describe('renderBanner', () => {
   const originalColumns = process.stdout.columns;

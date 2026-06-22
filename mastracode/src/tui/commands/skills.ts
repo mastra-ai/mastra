@@ -1,9 +1,9 @@
 import { formatSkillActivation } from '@mastra/core/workspace';
-import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
-import { SlashCommandComponent } from '../components/slash-command.js';
-import { isCurrentThreadActive, sendSlashCommandMessage } from './send-slash-command-message.js';
-import { isUserInvocable } from './skill-filters.js';
-import type { SlashCommandContext } from './types.js';
+import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation';
+import { SlashCommandComponent } from '../components/slash-command';
+import { isCurrentThreadActive, sendSlashCommandMessage } from './send-slash-command-message';
+import { isUserInvocable } from './skill-filters';
+import type { SlashCommandContext } from './types';
 
 // Keep the renderer's non-greedy `<skill>...</skill>` regex from terminating
 // on a literal closing tag inside the body. Other characters pass through.

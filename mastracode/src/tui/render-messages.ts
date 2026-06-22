@@ -10,30 +10,27 @@ import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import chalk from 'chalk';
-import {
-  insertChatComponentWithBoundarySpacing,
-  reconcileChatBoundarySpacers,
-} from './chat-boundary-reconciliation.js';
-import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
-import { AssistantMessageComponent } from './components/assistant-message.js';
-import type { ChatSpacingKind } from './components/chat-spacing.js';
-import { JudgeDisplayComponent } from './components/judge-display.js';
-import { NotificationSummaryComponent } from './components/notification-summary.js';
-import { NotificationComponent } from './components/notification.js';
-import { OMMarkerComponent } from './components/om-marker.js';
-import { OMOutputComponent } from './components/om-output.js';
-import { PlanResultComponent } from './components/plan-approval-inline.js';
-import { ReactiveSignalComponent } from './components/reactive-signal.js';
-import { SlashCommandComponent } from './components/slash-command.js';
-import { StateSignalComponent } from './components/state-signal.js';
-import { SubagentExecutionComponent } from './components/subagent-execution.js';
-import { SystemReminderComponent } from './components/system-reminder.js';
-import { TemporalGapComponent } from './components/temporal-gap.js';
-import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
-import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
-import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
-import type { TUIState } from './state.js';
-import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
+import { insertChatComponentWithBoundarySpacing, reconcileChatBoundarySpacers } from './chat-boundary-reconciliation';
+import { AskQuestionInlineComponent } from './components/ask-question-inline';
+import { AssistantMessageComponent } from './components/assistant-message';
+import type { ChatSpacingKind } from './components/chat-spacing';
+import { JudgeDisplayComponent } from './components/judge-display';
+import { NotificationComponent } from './components/notification';
+import { NotificationSummaryComponent } from './components/notification-summary';
+import { OMMarkerComponent } from './components/om-marker';
+import { OMOutputComponent } from './components/om-output';
+import { PlanResultComponent } from './components/plan-approval-inline';
+import { ReactiveSignalComponent } from './components/reactive-signal';
+import { SlashCommandComponent } from './components/slash-command';
+import { StateSignalComponent } from './components/state-signal';
+import { SubagentExecutionComponent } from './components/subagent-execution';
+import { SystemReminderComponent } from './components/system-reminder';
+import { TemporalGapComponent } from './components/temporal-gap';
+import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced';
+import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message';
+import { formatToolResult, isTaskMutationTool } from './handlers/tool';
+import type { TUIState } from './state';
+import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme';
 
 // Re-export so existing consumers can still import from here
 export { formatToolResult };

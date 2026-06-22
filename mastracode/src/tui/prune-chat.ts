@@ -1,6 +1,6 @@
 import type { Component } from '@earendil-works/pi-tui';
 
-import type { TUIState } from './state.js';
+import type { TUIState } from './state';
 
 const MAX_CHILDREN = 5000;
 const KEEP_CHILDREN = 3000;

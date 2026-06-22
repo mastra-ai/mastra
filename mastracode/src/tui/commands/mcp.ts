@@ -1,7 +1,7 @@
-import { McpSelectorComponent } from '../components/mcp-selector.js';
-import { showInfo } from '../display.js';
-import { showModalOverlay } from '../overlay.js';
-import type { SlashCommandContext } from './types.js';
+import { McpSelectorComponent } from '../components/mcp-selector';
+import { showInfo } from '../display';
+import { showModalOverlay } from '../overlay';
+import type { SlashCommandContext } from './types';
 
 export async function handleMcpCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const mm = ctx.mcpManager;

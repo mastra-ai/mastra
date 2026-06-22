@@ -12,7 +12,7 @@ vi.mock('../../agents/workspace.js', () => ({
   buildSkillPaths: buildSkillPathsMock,
 }));
 
-import { getAllowedPathsFromContext } from '../utils.js';
+import { getAllowedPathsFromContext } from '../utils';
 
 describe('getAllowedPathsFromContext', () => {
   it('returns a copy of skill paths when toolContext is undefined', () => {

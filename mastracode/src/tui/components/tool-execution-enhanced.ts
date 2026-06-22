@@ -10,18 +10,18 @@ import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
-import { MC_TOOLS } from '../../tool-names.js';
-import { BOX_INDENT, getTermWidth, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
-import { truncateAnsi } from './ansi.js';
-import type { ChatSpacingKind } from './chat-spacing.js';
-import { ErrorDisplayComponent } from './error-display.js';
+import { MC_TOOLS } from '../../tool-names';
+import { BOX_INDENT, getTermWidth, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme';
+import { truncateAnsi } from './ansi';
+import type { ChatSpacingKind } from './chat-spacing';
+import { ErrorDisplayComponent } from './error-display';
 import type {
   CompactToolLabelColor,
   IToolExecutionComponent,
   QuietToolDisplayMode,
   ToolResult,
-} from './tool-execution-interface.js';
-import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
+} from './tool-execution-interface';
+import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error';
 
 export type { ToolResult };
 

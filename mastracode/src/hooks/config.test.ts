@@ -18,7 +18,7 @@ vi.mock('node:os', async () => {
   };
 });
 
-import { loadHooksConfig } from './config.js';
+import { loadHooksConfig } from './config';
 
 let tempDir: string | undefined;
 

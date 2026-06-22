@@ -4,12 +4,12 @@
  */
 import type { Harness, HarnessMessage, Session } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
-import type { MastraCodeAnalytics } from '../../analytics.js';
-import type { AuthStorage } from '../../auth/storage.js';
-import type { HookManager } from '../../hooks/index.js';
-import type { McpManager } from '../../mcp/manager.js';
-import type { SlashCommandMetadata } from '../../utils/slash-command-loader.js';
-import type { TUIState } from '../state.js';
+import type { MastraCodeAnalytics } from '../../analytics';
+import type { AuthStorage } from '../../auth/storage';
+import type { HookManager } from '../../hooks/index';
+import type { McpManager } from '../../mcp/manager';
+import type { SlashCommandMetadata } from '../../utils/slash-command-loader';
+import type { TUIState } from '../state';
 
 export interface SlashCommandContext {
   state: TUIState;

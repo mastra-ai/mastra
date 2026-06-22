@@ -1,7 +1,7 @@
-import { loadSettings } from '../../onboarding/settings.js';
-import { buildHelpText } from '../components/help-overlay.js';
-import { describeShellPassthroughInvocation, resolveShellPassthroughInvocation } from '../shell-config.js';
-import type { SlashCommandContext } from './types.js';
+import { loadSettings } from '../../onboarding/settings';
+import { buildHelpText } from '../components/help-overlay';
+import { describeShellPassthroughInvocation, resolveShellPassthroughInvocation } from '../shell-config';
+import type { SlashCommandContext } from './types';
 
 export function handleHelpCommand(ctx: SlashCommandContext): void {
   const shellInvocation = resolveShellPassthroughInvocation('', loadSettings().shellPassthrough);
