@@ -12,6 +12,7 @@ import {
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
+  serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
@@ -577,10 +578,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
           const shouldRedact = this.streamOptions?.redact ?? true;
           const outputValue = shouldRedact ? redactStreamChunk(value) : value;
+          // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
+          const serialized = serializeStreamChunk(outputValue);
+          if (!serialized.ok) {
+            this.mastra.getLogger()?.error('Failed to serialize stream chunk, skipping', {
+              path: route.path,
+              chunkType: (outputValue as { type?: string })?.type,
+              error: serialized.error.message,
+            });
+            continue;
+          }
           if (streamFormat === 'sse') {
-            ctx.res.write(`data: ${JSON.stringify(outputValue)}\n\n`);
+            ctx.res.write(`data: ${serialized.json}\n\n`);
           } else {
-            ctx.res.write(JSON.stringify(outputValue) + '\x1E');
+            ctx.res.write(serialized.json + '\x1E');
           }
         }
       }

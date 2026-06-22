@@ -4,6 +4,8 @@ import { MockMemory } from '../../../../memory';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
+const isEvented = process.env.MASTRA_EVENTED_EXECUTION === 'true';
+
 /**
  * Scenario: Suspended tool snapshot integrity
  *
@@ -20,6 +22,12 @@ import { createSharedAgent, runLoopScenario, useLoopScenarioAimock } from '../ai
  * - Snapshot corruption: suspended tool loses its arguments
  * - ID mismatch: resume data applied to wrong tool call
  * - State leakage: one suspended tool's data affects another
+ *
+ * **Engine difference:** The evented engine suspends all tools in a batch
+ * simultaneously (all `tool-call-suspended` chunks appear on the initial run),
+ * whereas the default engine halts at the first suspending tool and only
+ * surfaces the remaining tools after the first is resumed. Assertions adapt
+ * via `isEvented`.
  */
 describe('AIMock loop scenario: suspended tool snapshot integrity', () => {
   const getMock = useLoopScenarioAimock();
@@ -221,40 +229,74 @@ describe('AIMock loop scenario: suspended tool snapshot integrity', () => {
       collectChunks: true,
     });
 
-    // Both tools are called in the same turn, but suspension halts the step at
-    // the first suspending tool: tool-a suspends and tool-b does not run yet.
-    // The remaining tool runs (and suspends) only after the first is resumed.
+    // Both tools are called in the same turn.
+    //
+    // Default engine: suspension halts the step at the first suspending tool;
+    // tool-a suspends and tool-b does not run yet.
+    //
+    // Evented engine: all tools in the batch suspend simultaneously so both
+    // `tool-call-suspended` chunks appear on the initial run.
     const suspendedChunks = chunks!.filter(c => c.type === 'tool-call-suspended');
-    expect(suspendedChunks.length).toBe(1);
 
-    const toolACallId = suspendedChunks.find(c => (c as any).payload.toolName === 'tool-a');
-    expect(toolACallId).toBeDefined();
+    if (isEvented) {
+      // Evented: both tools suspend on the initial run.
+      expect(suspendedChunks.length).toBe(2);
 
-    // Resume Tool A. This executes tool-a, then runs tool-b, which suspends.
-    const resumeA = await shared.agent.resumeStream(
-      { approvedA: true },
-      { runId: output.runId, toolCallId: (toolACallId as any).payload.toolCallId },
-    );
+      const toolAChunk = suspendedChunks.find(c => (c as any).payload.toolName === 'tool-a');
+      const toolBChunk = suspendedChunks.find(c => (c as any).payload.toolName === 'tool-b');
+      expect(toolAChunk).toBeDefined();
+      expect(toolBChunk).toBeDefined();
 
-    const resumeAChunks: any[] = [];
-    for await (const chunk of resumeA.fullStream) {
-      resumeAChunks.push(chunk);
-    }
+      // Resume Tool A first.
+      const resumeA = await shared.agent.resumeStream(
+        { approvedA: true },
+        { runId: output.runId, toolCallId: (toolAChunk as any).payload.toolCallId },
+      );
+      for await (const _chunk of resumeA.fullStream) {
+        // drain
+      }
 
-    // Tool B should now have suspended.
-    const toolBCallId = resumeAChunks
-      .filter(c => c.type === 'tool-call-suspended')
-      .find(c => (c as any).payload.toolName === 'tool-b');
-    expect(toolBCallId).toBeDefined();
+      // Resume Tool B second.
+      const resumeB = await shared.agent.resumeStream(
+        { approvedB: true },
+        { runId: output.runId, toolCallId: (toolBChunk as any).payload.toolCallId },
+      );
+      for await (const _chunk of resumeB.fullStream) {
+        // drain
+      }
+    } else {
+      // Default: only the first tool suspends.
+      expect(suspendedChunks.length).toBe(1);
 
-    // Resume Tool B second.
-    const resumeB = await shared.agent.resumeStream(
-      { approvedB: true },
-      { runId: output.runId, toolCallId: (toolBCallId as any).payload.toolCallId },
-    );
+      const toolACallId = suspendedChunks.find(c => (c as any).payload.toolName === 'tool-a');
+      expect(toolACallId).toBeDefined();
 
-    for await (const _chunk of resumeB.fullStream) {
-      // drain
+      // Resume Tool A. This executes tool-a, then runs tool-b, which suspends.
+      const resumeA = await shared.agent.resumeStream(
+        { approvedA: true },
+        { runId: output.runId, toolCallId: (toolACallId as any).payload.toolCallId },
+      );
+
+      const resumeAChunks: any[] = [];
+      for await (const chunk of resumeA.fullStream) {
+        resumeAChunks.push(chunk);
+      }
+
+      // Tool B should now have suspended.
+      const toolBCallId = resumeAChunks
+        .filter(c => c.type === 'tool-call-suspended')
+        .find(c => (c as any).payload.toolName === 'tool-b');
+      expect(toolBCallId).toBeDefined();
+
+      // Resume Tool B second.
+      const resumeB = await shared.agent.resumeStream(
+        { approvedB: true },
+        { runId: output.runId, toolCallId: (toolBCallId as any).payload.toolCallId },
+      );
+
+      for await (const _chunk of resumeB.fullStream) {
+        // drain
+      }
     }
 
     // Verify both tools executed with correct independent state
@@ -330,45 +372,63 @@ describe('AIMock loop scenario: suspended tool snapshot integrity', () => {
     const toolCallChunks = chunks!.filter(c => c.type === 'tool-call');
     expect(toolCallChunks.length).toBe(2);
 
-    // But only the first tool suspends — the batch halts at the first suspension.
-    const firstSuspended = chunks!.filter(c => c.type === 'tool-call-suspended');
-    expect(firstSuspended.length).toBe(1);
-    const firstToolName = (firstSuspended[0] as any).payload.toolName;
+    const allSuspended = chunks!.filter(c => c.type === 'tool-call-suspended');
 
-    // Resume the first suspended tool; the second tool then runs and suspends.
-    const resumeFirst = await shared.agent.resumeStream(
-      firstToolName === 'tool-x' ? { approvedX: true } : { approvedY: true },
-      { runId: output.runId, toolCallId: (firstSuspended[0] as any).payload.toolCallId },
-    );
+    if (isEvented) {
+      // Evented engine: both tools suspend simultaneously.
+      expect(allSuspended.length).toBe(2);
+      const names = allSuspended.map(c => (c as any).payload.toolName).sort();
+      expect(names).toEqual(['tool-x', 'tool-y']);
 
-    const resumeFirstChunks: any[] = [];
-    for await (const chunk of resumeFirst.fullStream) {
-      resumeFirstChunks.push(chunk);
+      // Resume each tool in order.
+      for (const chunk of allSuspended) {
+        const toolName = (chunk as any).payload.toolName;
+        const resumeData = toolName === 'tool-x' ? { approvedX: true } : { approvedY: true };
+        const resume = await shared.agent.resumeStream(resumeData, {
+          runId: output.runId,
+          toolCallId: (chunk as any).payload.toolCallId,
+        });
+        for await (const _c of resume.fullStream) {
+          // drain
+        }
+      }
+
+      expect(new Set(suspendOrder)).toEqual(new Set(['tool-x', 'tool-y']));
+      expect(executionOrder.length).toBe(2);
+      expect(new Set(executionOrder)).toEqual(new Set(['tool-x', 'tool-y']));
+    } else {
+      // Default engine: only the first tool suspends; the batch halts.
+      expect(allSuspended.length).toBe(1);
+      const firstToolName = (allSuspended[0] as any).payload.toolName;
+
+      // Resume the first suspended tool; the second tool then runs and suspends.
+      const resumeFirst = await shared.agent.resumeStream(
+        firstToolName === 'tool-x' ? { approvedX: true } : { approvedY: true },
+        { runId: output.runId, toolCallId: (allSuspended[0] as any).payload.toolCallId },
+      );
+
+      const resumeFirstChunks: any[] = [];
+      for await (const chunk of resumeFirst.fullStream) {
+        resumeFirstChunks.push(chunk);
+      }
+
+      const secondSuspended = resumeFirstChunks.filter(c => c.type === 'tool-call-suspended');
+      expect(secondSuspended.length).toBe(1);
+      const secondToolName = (secondSuspended[0] as any).payload.toolName;
+
+      expect([firstToolName, secondToolName].sort()).toEqual(['tool-x', 'tool-y']);
+
+      // Resume the second suspended tool to completion.
+      const resumeSecond = await shared.agent.resumeStream(
+        secondToolName === 'tool-x' ? { approvedX: true } : { approvedY: true },
+        { runId: output.runId, toolCallId: (secondSuspended[0] as any).payload.toolCallId },
+      );
+      for await (const _chunk of resumeSecond.fullStream) {
+        // drain
+      }
+
+      expect(new Set(suspendOrder)).toEqual(new Set(['tool-x', 'tool-y']));
+      expect(executionOrder).toEqual([firstToolName, secondToolName]);
     }
-
-    const secondSuspended = resumeFirstChunks.filter(c => c.type === 'tool-call-suspended');
-    expect(secondSuspended.length).toBe(1);
-    const secondToolName = (secondSuspended[0] as any).payload.toolName;
-
-    // The two suspensions cover both tools exactly once each (no double-suspend,
-    // no missing tool).
-    expect([firstToolName, secondToolName].sort()).toEqual(['tool-x', 'tool-y']);
-
-    // Resume the second suspended tool to completion.
-    const resumeSecond = await shared.agent.resumeStream(
-      secondToolName === 'tool-x' ? { approvedX: true } : { approvedY: true },
-      { runId: output.runId, toolCallId: (secondSuspended[0] as any).payload.toolCallId },
-    );
-    for await (const _chunk of resumeSecond.fullStream) {
-      // drain
-    }
-
-    // Both tools hit their suspend path (a tool may re-enter the suspend guard
-    // when the batch is re-evaluated on resume, so assert coverage, not count).
-    expect(new Set(suspendOrder)).toEqual(new Set(['tool-x', 'tool-y']));
-
-    // Execution is the strict invariant: each tool runs exactly once, in the
-    // order it was resumed (the tool resumed first executes first).
-    expect(executionOrder).toEqual([firstToolName, secondToolName]);
   });
 });
