@@ -121,7 +121,11 @@ jobs:
             git add "${CHANGESET_FILE}"
           fi
           git commit -m "chore: regenerate providers and docs [skip ci]"
-          git pull --rebase
+          # Use --autostash so any leftover unstaged changes from the generation
+          # and formatting steps (e.g. files touched by Prettier but not staged)
+          # don't abort the rebase with "cannot pull with rebase: You have
+          # unstaged changes." Autostash safely stashes and restores them.
+          git pull --rebase --autostash
           git push
 
       - name: Log summary
