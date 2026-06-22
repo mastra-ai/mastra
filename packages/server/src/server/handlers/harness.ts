@@ -1159,3 +1159,33 @@ export const SET_HARNESS_TOOL_PERMISSION_ROUTE = createRoute({
     }
   },
 });
+
+// ---------------------------------------------------------------------------
+// Session State
+// ---------------------------------------------------------------------------
+
+const setSessionStateBodySchema = z.object({ state: z.record(z.string(), z.unknown()) });
+
+export const SET_HARNESS_SESSION_STATE_ROUTE = createRoute({
+  method: 'PUT',
+  path: '/harness/:harnessId/sessions/:resourceId/state',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: setSessionStateBodySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Set session state',
+  description: 'Merges the provided key-value pairs into the session state. Existing keys not in the payload are preserved.',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, state }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      await session.state.set(state as Record<string, unknown>);
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error setting harness session state');
+    }
+  },
+});

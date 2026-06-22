@@ -376,6 +376,11 @@ export class HarnessSession extends BaseResource {
     return this.request(this.base());
   }
 
+  /** Merge key-value pairs into the session state. Existing keys not in the payload are preserved. */
+  async setState(updates: Record<string, unknown>): Promise<void> {
+    await this.request(`${this.base()}/state`, { method: 'PUT', body: { state: updates } });
+  }
+
   /** Switch the active mode (e.g. `build`, `plan`). */
   async switchMode(modeId: string): Promise<void> {
     await this.request(`${this.base()}/mode`, { method: 'POST', body: { modeId } });

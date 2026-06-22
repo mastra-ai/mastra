@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { GoalPanel, StatusLine, Transcript } from './components';
+import { ProjectPicker } from './ProjectPicker';
+import { loadProjects } from './projects';
+import type { Project } from './projects';
 import { ThreadSidebar } from './ThreadSidebar';
 import { useHarnessSession } from './useHarnessSession';
 
@@ -15,6 +18,18 @@ export default function App() {
   const [draft, setDraft] = useState('');
   const [showThreads, setShowThreads] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
+
+  // ── Projects ────────────────────────────────────────────────────────────
+  const [projects, setProjects] = useState<Project[]>(() => loadProjects());
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
+  const handleProjectSelect = async (project: Project | null) => {
+    setActiveProjectId(project?.id ?? null);
+    await session.setState({ projectPath: project?.path ?? '' });
+    session.pushNotice(
+      project ? `Project: ${project.name} (${project.path})` : 'Switched to default workspace',
+    );
+  };
 
   // Auto-scroll the transcript as it grows.
   useEffect(() => {
@@ -183,6 +198,12 @@ export default function App() {
       <div className={showThreads ? 'page-main' : 'page'}>
         <header className="header">
           <span className="header-title">MastraCode</span>
+          <ProjectPicker
+            projects={projects}
+            activeProjectId={activeProjectId}
+            onSelect={p => void handleProjectSelect(p)}
+            onProjectsChange={setProjects}
+          />
           <div className="header-actions">
             {modes.map(m => (
               <button
@@ -248,6 +269,7 @@ export default function App() {
           omPhase={transcript.omPhase}
           usage={transcript.usage}
           workspaceReady={transcript.workspaceReady}
+          projectName={projects.find(p => p.id === activeProjectId)?.name}
         />
       </div>
     </div>

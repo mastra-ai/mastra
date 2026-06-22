@@ -729,6 +729,146 @@ html, body, #root {
   max-width: 860px;
 }
 
+/* ── Project Picker ────────────────────────────────────────────────────── */
+
+.project-picker {
+  position: relative;
+}
+
+.project-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 200px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.project-picker-trigger:hover { border-color: var(--accent); color: var(--fg); }
+
+.project-picker-icon { font-size: 14px; }
+.project-picker-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-picker-caret { font-size: 10px; color: var(--fg-muted); }
+
+.project-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 280px;
+  max-width: 360px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: fadeIn 0.1s ease-out;
+}
+
+.project-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+.project-picker-item:hover { background: var(--bg-surface2); color: var(--fg); }
+.project-picker-item.active { background: var(--bg-surface3); color: var(--fg); }
+
+.project-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.project-item-path {
+  font-size: 11px;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+
+.project-item-remove {
+  font-size: 16px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.1s, background 0.1s;
+}
+.project-item-remove:hover { color: var(--error); background: rgba(248, 81, 73, 0.1); }
+
+.project-picker-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 8px;
+}
+
+.project-add-row {
+  display: flex;
+  align-items: center;
+}
+
+.project-add-btn {
+  color: var(--accent) !important;
+  font-weight: 500;
+  flex: 1;
+}
+
+.project-add-btn-alt {
+  flex: none !important;
+  width: auto !important;
+  padding: 8px 10px !important;
+  color: var(--fg-muted) !important;
+  font-size: 14px !important;
+}
+
+.project-add-form {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-add-input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 13px;
+  outline: none;
+}
+.project-add-input:focus { border-color: var(--accent); }
+
+.project-add-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 /* ── Scrollbar ──────────────────────────────────────────────────────────── */
 
 .transcript::-webkit-scrollbar { width: 6px; }

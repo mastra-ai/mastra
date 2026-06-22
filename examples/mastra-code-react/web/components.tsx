@@ -338,6 +338,7 @@ export function StatusLine({
   omPhase,
   usage,
   workspaceReady,
+  projectName,
 }: {
   status: string;
   modeId?: string;
@@ -347,12 +348,14 @@ export function StatusLine({
   omPhase?: OMPhase;
   usage?: UsageSnapshot;
   workspaceReady?: boolean;
+  projectName?: string;
 }) {
   return (
     <div className="status-line">
       <span className="badge">{modeId ?? '—'}</span>
       <span>{modelId ? lastSegment(modelId) : 'no model'}</span>
-      {workspaceReady !== undefined && (
+      {projectName && <span className="badge">📁 {projectName}</span>}
+      {!projectName && workspaceReady !== undefined && (
         <span>{workspaceReady ? '📁' : '⚠️ no workspace'}</span>
       )}
       {omPhase && omPhase !== 'idle' && <span>🧠 {omPhase}</span>}

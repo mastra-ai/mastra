@@ -3,6 +3,7 @@ import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import { Mastra } from '@mastra/core/mastra';
 import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
@@ -30,28 +31,46 @@ const memory = new Memory({
   },
 });
 
-// One sandboxed workspace over ./workspace. This gives the agent the real
-// Mastra file/shell/search tools (read, write, edit, list, run, …) with proper
-// path confinement — no need to hand-roll filesystem tools.
-const workspaceRoot = path.resolve(process.cwd(), 'workspace');
+// Default workspace directory (used when no project is selected).
+const defaultWorkspaceRoot = path.resolve(process.cwd(), 'workspace');
 
-const workspace = new Workspace({
-  id: 'mastra-code-example',
-  name: 'Mastra Code Example Workspace',
-  filesystem: new LocalFilesystem({ basePath: workspaceRoot, allowedPaths: [workspaceRoot] }),
-  sandbox: new LocalSandbox({ workingDirectory: workspaceRoot }),
-});
+/**
+ * Build a Workspace for the given base path. Each unique path gets a fresh
+ * Workspace with its own LocalFilesystem + LocalSandbox confined to that
+ * directory.
+ */
+function buildWorkspace(basePath: string): Workspace {
+  const resolved = path.resolve(basePath);
+  return new Workspace({
+    id: `workspace-${resolved}`,
+    name: path.basename(resolved),
+    filesystem: new LocalFilesystem({ basePath: resolved, allowedPaths: [resolved] }),
+    sandbox: new LocalSandbox({ workingDirectory: resolved }),
+  });
+}
 
-const workspaceTools = await createWorkspaceTools(workspace);
+// Create a default workspace so we can register tools on the agent eagerly.
+// At runtime, the workspace factory below overrides the actual workspace
+// per-request based on the session's `projectPath` state.
+const defaultWorkspace = buildWorkspace(defaultWorkspaceRoot);
+const workspaceTools = await createWorkspaceTools(defaultWorkspace);
 
 const codingAgent = new Agent({
   id: 'mastra-code',
   name: 'mastra-code',
-  instructions: [
-    'You are a coding assistant operating inside a small web IDE.',
-    'Use your workspace tools to read, write, and run code in the workspace.',
-    'Keep responses concise. When you change a file, say what you changed and why.',
-  ].join(' '),
+  instructions: ({ requestContext }) => {
+    const harness = requestContext.get('harness') as HarnessRequestContext<Record<string, unknown>> | undefined;
+    const projectPath = harness?.state?.projectPath as string | undefined;
+    const base = [
+      'You are a coding assistant operating inside a web IDE.',
+      'Use your workspace tools to read, write, and run code in the project directory.',
+      'Keep responses concise. When you change a file, say what you changed and why.',
+    ];
+    if (projectPath) {
+      base.push(`The active project directory is: ${projectPath}`);
+    }
+    return base.join(' ');
+  },
   model: openai('gpt-4o-mini'),
   tools: workspaceTools,
 });
@@ -59,13 +78,22 @@ const codingAgent = new Agent({
 export const codeHarness = new Harness({
   id: 'code',
   storage,
-  workspace,
   memory,
   omConfig: {
     defaultObserverModelId: 'openai/gpt-4o-mini',
     defaultReflectorModelId: 'openai/gpt-4o-mini',
     defaultObservationThreshold: 4000,
     defaultReflectionThreshold: 8000,
+  },
+  // Dynamic workspace factory: reads `projectPath` from session state.
+  // When a user selects a project in the web UI, the client calls
+  // `session.setState({ projectPath: '/abs/path' })` and subsequent
+  // messages resolve workspace tools to that directory.
+  workspace: ({ requestContext }) => {
+    const harness = requestContext.get('harness') as HarnessRequestContext<Record<string, unknown>> | undefined;
+    const projectPath = harness?.state?.projectPath as string | undefined;
+    const basePath = projectPath && typeof projectPath === 'string' ? projectPath : defaultWorkspaceRoot;
+    return buildWorkspace(basePath);
   },
   modes: [
     {

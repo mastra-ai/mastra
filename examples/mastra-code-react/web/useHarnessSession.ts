@@ -42,6 +42,8 @@ export interface HarnessSessionApi {
   getPermissions: () => Promise<PermissionRules>;
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
   setPermissionForTool: (toolName: string, policy: PermissionPolicy) => Promise<void>;
+  /** Merge key-value pairs into the server-side session state. */
+  setState: (updates: Record<string, unknown>) => Promise<void>;
   /** Push a local notice into the transcript (for slash-command output). */
   pushNotice: (text: string, level?: 'info' | 'error') => void;
 }
@@ -261,6 +263,10 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
     await sessionRef.current?.setPermissionForTool(toolName, policy);
   }, []);
 
+  const setState = useCallback(async (updates: Record<string, unknown>) => {
+    await sessionRef.current?.setState(updates);
+  }, []);
+
   return {
     transcript,
     status,
@@ -287,6 +293,7 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
     getPermissions,
     setPermissionForCategory,
     setPermissionForTool,
+    setState,
     pushNotice,
   };
 }
