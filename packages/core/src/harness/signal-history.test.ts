@@ -66,20 +66,27 @@ describe('Harness signal history rendering', () => {
     await memoryStorage.saveMessages({ messages });
 
     const originalListMessages = memoryStorage.listMessages.bind(memoryStorage);
-    vi.spyOn(memoryStorage, 'listMessages').mockImplementation(async input => {
-      if (input.perPage !== false && input.perPage === 2) {
+    const listMessages = vi.spyOn(memoryStorage, 'listMessages').mockImplementation(async input => {
+      if (input.perPage !== false && typeof input.perPage === 'number') {
         const all = await originalListMessages({
           ...input,
           perPage: false,
           orderBy: { field: 'createdAt', direction: 'ASC' },
         });
-        return { ...all, messages: all.messages.slice(0, 2), perPage: 2, hasMore: true };
+        return { ...all, messages: all.messages.slice(0, input.perPage), perPage: input.perPage, hasMore: false };
       }
       return originalListMessages(input);
     });
 
     const loaded = await session.thread.listActiveMessages({ limit: 2 });
 
+    expect(listMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: thread.id,
+        perPage: 5_000,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      }),
+    );
     expect(loaded.map(message => message.id)).toEqual(['message-4', 'message-5']);
   });
 
