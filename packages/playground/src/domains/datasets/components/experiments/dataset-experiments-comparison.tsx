@@ -3,7 +3,6 @@ import {
   Chip,
   ChipsGroup,
   Columns,
-  ItemList,
   Notice,
   Spinner,
   Tooltip,
@@ -11,6 +10,7 @@ import {
   TooltipTrigger,
   cn,
 } from '@mastra/playground-ui';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { useState, useMemo } from 'react';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
 import { useDatasetExperiment } from '../../hooks/use-dataset-experiments';
