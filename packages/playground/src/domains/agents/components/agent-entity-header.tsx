@@ -7,8 +7,8 @@ import {
   Icon,
   Skeleton,
   Txt,
-  useCopyToClipboard,
 } from '@mastra/playground-ui';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { CopyIcon, Check } from 'lucide-react';
 import { useAgent } from '../hooks/use-agent';
 
