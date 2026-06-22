@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
-import type { SlashCommand } from '@earendil-works/pi-tui';
+import type { AutocompleteItem, SlashCommand } from '@earendil-works/pi-tui';
 import type { HarnessEventListener } from '@mastra/core/harness';
 
 import { getUserId } from '../utils/project.js';

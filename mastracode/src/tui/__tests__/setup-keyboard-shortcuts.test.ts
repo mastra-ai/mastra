@@ -20,8 +20,18 @@ const autocompleteProviders: Array<{
   fdPath: string | null | undefined;
 }> = [];
 
+type MockAutocompleteItem = { value: string; label: string; description?: string };
+
 vi.mock('@earendil-works/pi-tui', () => ({
   CombinedAutocompleteProvider: class {
+    commands: Array<{
+      name: string;
+      description: string;
+      getArgumentCompletions?: (prefix: string) => Array<{ value: string }>;
+    }>;
+    cwd: string;
+    fdPath: string | null | undefined;
+
     constructor(
       commands: Array<{
         name: string;
@@ -31,7 +41,40 @@ vi.mock('@earendil-works/pi-tui', () => ({
       cwd: string,
       fdPath?: string,
     ) {
+      this.commands = commands;
+      this.cwd = cwd;
+      this.fdPath = fdPath;
       autocompleteProviders.push({ commands, cwd, fdPath });
+    }
+
+    getSuggestions(lines: string[], cursorLine: number, cursorCol: number) {
+      const prefix = (lines[cursorLine] || '').slice(0, cursorCol);
+      return {
+        prefix,
+        items: this.commands.map(command => ({
+          value: command.name,
+          label: command.name,
+          description: command.description,
+        })),
+      };
+    }
+
+    applyCompletion(
+      lines: string[],
+      cursorLine: number,
+      cursorCol: number,
+      item: MockAutocompleteItem,
+      prefix: string,
+    ) {
+      const currentLine = lines[cursorLine] || '';
+      const beforePrefix = currentLine.slice(0, cursorCol - prefix.length);
+      const updatedLines = [...lines];
+      updatedLines[cursorLine] = `${beforePrefix}${item.value}${currentLine.slice(cursorCol)}`;
+      return {
+        lines: updatedLines,
+        cursorLine,
+        cursorCol: beforePrefix.length + item.value.length,
+      };
     }
   },
   Container: class {},
