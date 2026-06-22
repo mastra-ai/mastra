@@ -1,6 +1,6 @@
 {
   "name": "@mastra/brightdata",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Bright Data web search and web fetch tools for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",
@@ -48,9 +48,6 @@
   "homepage": "https://mastra.ai",
   "engines": {
     "node": ">=22.13.0"
-  },
-  "dependencies": {
-    "@brightdata/sdk": "^1.1.0"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",

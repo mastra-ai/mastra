@@ -430,6 +430,8 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Tool provider route params
   if (route.path.includes(':providerId')) params.providerId = 'test-provider';
   if (route.path.includes(':toolSlug')) params.toolSlug = 'test-tool-slug';
+  if (route.path.includes(':authId')) params.authId = 'test-auth-id';
+  if (route.path.includes(':connectionId')) params.connectionId = 'test-connection-id';
 
   // Channel route params
   if (route.path.includes(':platform')) params.platform = 'test-platform';

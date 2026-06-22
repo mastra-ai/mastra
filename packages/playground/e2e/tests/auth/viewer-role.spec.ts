@@ -132,7 +132,7 @@ test.describe('Viewer Role', () => {
       await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page.locator('.entity-list-row').filter({ hasText: /workflow/i });
+      const workflowRow = page.locator('.data-list-row').filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 
@@ -142,7 +142,7 @@ test.describe('Viewer Role', () => {
 
       // Click on a workflow
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /workflow/i })
         .first()
         .click();
@@ -201,22 +201,10 @@ test.describe('Viewer Role', () => {
       await setupViewerAuth(page);
       await page.goto('/tools');
 
-      // Viewer does NOT have tools:read permission
-      // The page might show permission denied or redirect
-      // Either behavior is acceptable for no tools access
-
-      // Wait for page to load with a timeout
-      await page.waitForLoadState('domcontentloaded');
-
-      // Check if we're still on tools page or redirected
-      const currentUrl = page.url();
-
-      if (currentUrl.includes('/tools')) {
-        // If still on tools page, might see permission denied or empty state or the tools list
-        // The route header should still identify the page either way
-        await expectCurrentBreadcrumb(page, 'Tools');
-      }
-      // If redirected, that's also acceptable
+      // Viewer does NOT have tools:read permission.
+      // RoutePermissionGuard redirects to the first accessible route (/agents).
+      await page.waitForURL(/\/agents(\/|$)/);
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('viewer cannot access tool execution', async ({ page }) => {

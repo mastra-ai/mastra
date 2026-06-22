@@ -17,16 +17,19 @@ export type DataListTopCellProps = {
 export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>(
   ({ children, className, as, ...rest }, ref) => {
     const Component = as || 'span';
+    const isText = typeof children === 'string' || typeof children === 'number';
     return (
       <Component
         ref={ref}
         className={cn(
-          'h-8 py-1 flex items-center uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs',
+          'h-8 min-w-0 max-w-full overflow-hidden py-1 flex items-center whitespace-nowrap text-neutral2 font-semibold tracking-tight text-ui-sm',
           className,
         )}
         {...rest}
       >
-        {children}
+        {/* Plain string/number titles truncate with an ellipsis; element children
+            (icons, smart long/short labels, checkboxes) render as-is. */}
+        {isText ? <span className="min-w-0 truncate">{children}</span> : children}
       </Component>
     );
   },
@@ -110,7 +113,7 @@ export function DataListTopSelectCell({ checked, onToggle, ...rest }: DataListTo
   return (
     <DataListTopCell
       as="label"
-      className="cursor-pointer justify-center rounded-lg transition-colors duration-200 hover:bg-surface4 px-4"
+      className="w-8 cursor-pointer justify-center overflow-visible px-0 py-0!"
       onClick={e => e.stopPropagation()}
     >
       <Checkbox checked={checked} onCheckedChange={() => onToggle()} aria-label={rest['aria-label']} />

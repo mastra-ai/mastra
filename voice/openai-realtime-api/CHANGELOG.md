@@ -1,5 +1,94 @@
 # @mastra/voice-openai-realtime
 
+## 0.13.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Updated dependencies [[`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756)]:
+  - @mastra/schema-compat@1.3.0
+
+## 0.13.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Updated dependencies [[`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756)]:
+  - @mastra/schema-compat@1.3.0-alpha.0
+
+## 0.12.8
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/schema-compat@1.2.14
+
+## 0.12.8-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/schema-compat@1.2.14-alpha.0
+
+## 0.12.6
+
+### Patch Changes
+
+- Updated dependencies [[`9b1adf7`](https://github.com/mastra-ai/mastra/commit/9b1adf7f39943c869182106bc4016e793b3304ac)]:
+  - @mastra/schema-compat@1.2.12
+
+## 0.12.5
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
+- Fix `OpenAIRealtimeVoice` against the General Availability Realtime API. Previously, `connect()` failed against `wss://api.openai.com/v1/realtime` with errors like `Unknown parameter: 'session.voice'`, because the WebSocket handshake and initial session update were still using the legacy beta shape. Text-only responses also stopped emitting `writing` events because the GA endpoint renamed `response.text.*` to `response.output_text.*`. ([#16941](https://github.com/mastra-ai/mastra/pull/16941))
+
+  Also fix a separate duplicate-`response.create` issue when the model returned multiple `function_call` outputs in one response. Each call previously emitted its own `response.create` from `handleFunctionCall`'s `finally`, racing the server (which surfaced as `already has an active response in progress`). The send is now consolidated to a single `response.create` after all function calls in the response have been handled.
+
+  `voice.connect()` now succeeds against the GA endpoint, text-only responses fire `writing` events on both legacy beta and GA endpoints, and multi-function-call responses no longer race the server — all with no code changes required.
+
+- Remove the deprecated `OpenAI-Beta: realtime=v1` header from realtime voice connections. OpenAI removed the beta realtime interface, so sending this header broke all realtime voice connections. ([#17330](https://github.com/mastra-ai/mastra/pull/17330))
+
+- Updated dependencies [[`00eca42`](https://github.com/mastra-ai/mastra/commit/00eca4252393aa114dc8c9a5e1da68df91fa06cf), [`ff9d743`](https://github.com/mastra-ai/mastra/commit/ff9d743f71d7e072927725c0d700632aca0c1fee)]:
+  - @mastra/schema-compat@1.2.11
+
+## 0.12.5-alpha.1
+
+### Patch Changes
+
+- Fix `OpenAIRealtimeVoice` against the General Availability Realtime API. Previously, `connect()` failed against `wss://api.openai.com/v1/realtime` with errors like `Unknown parameter: 'session.voice'`, because the WebSocket handshake and initial session update were still using the legacy beta shape. Text-only responses also stopped emitting `writing` events because the GA endpoint renamed `response.text.*` to `response.output_text.*`. ([#16941](https://github.com/mastra-ai/mastra/pull/16941))
+
+  Also fix a separate duplicate-`response.create` issue when the model returned multiple `function_call` outputs in one response. Each call previously emitted its own `response.create` from `handleFunctionCall`'s `finally`, racing the server (which surfaced as `already has an active response in progress`). The send is now consolidated to a single `response.create` after all function calls in the response have been handled.
+
+  `voice.connect()` now succeeds against the GA endpoint, text-only responses fire `writing` events on both legacy beta and GA endpoints, and multi-function-call responses no longer race the server — all with no code changes required.
+
+- Remove the deprecated `OpenAI-Beta: realtime=v1` header from realtime voice connections. OpenAI removed the beta realtime interface, so sending this header broke all realtime voice connections. ([#17330](https://github.com/mastra-ai/mastra/pull/17330))
+
+- Updated dependencies [[`00eca42`](https://github.com/mastra-ai/mastra/commit/00eca4252393aa114dc8c9a5e1da68df91fa06cf), [`ff9d743`](https://github.com/mastra-ai/mastra/commit/ff9d743f71d7e072927725c0d700632aca0c1fee)]:
+  - @mastra/schema-compat@1.2.11-alpha.0
+
+## 0.12.5-alpha.0
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
 ## 0.12.4
 
 ### Patch Changes

@@ -24,7 +24,7 @@ async function setupFixture(fixtureName: string, registry: string, tag: string):
 
   await execa('pnpm', ['i', '--ignore-workspace'], {
     cwd: fixturePath,
-    env: { ...process.env, npm_config_registry: registry },
+    env: { ...process.env, pnpm_config_registry: registry },
   });
 
   return fixturePath;

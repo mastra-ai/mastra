@@ -135,6 +135,8 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.init();
+
     await this.#db.deleteData({ tableName: TABLE_MESSAGES });
     await this.#db.deleteData({ tableName: TABLE_THREADS });
     await this.#db.deleteData({ tableName: TABLE_RESOURCES });
@@ -1223,6 +1225,7 @@ export class MemoryLibSQL extends MemoryStorage {
       });
     }
 
+    const now = new Date();
     const updatedThread = {
       ...thread,
       title,
@@ -1230,12 +1233,13 @@ export class MemoryLibSQL extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
+      updatedAt: now,
     };
 
     try {
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?) WHERE id = ?`,
-        args: [title, JSON.stringify(updatedThread.metadata), id],
+        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
+        args: [title, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
       });
 
       return updatedThread;

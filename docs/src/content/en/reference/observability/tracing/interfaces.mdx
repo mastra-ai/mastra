@@ -194,6 +194,175 @@ wraps `ExportedLog` in `log`, `MetricEvent` wraps `ExportedMetric` in
 wraps `ExportedFeedback` in `feedback`. For Mastra platform exporter behavior for these
 callbacks, see [MastraPlatformExporter](/reference/observability/tracing/exporters/mastra-platform-exporter).
 
+Like `LogEvent`, `MetricEvent`, and `FeedbackEvent`, `ScoreEvent` is an
+observability bus envelope that wraps a bounded payload. For scores, that
+payload is `ExportedScore`.
+
+### `ScoreEvent`
+
+Score events are sent to exporters through `onScoreEvent`. The event is a small
+envelope with the signal type and the score payload:
+
+```typescript
+interface ScoreEvent {
+  type: 'score'
+  score: ExportedScore
+}
+```
+
+<PropertiesTable
+  props={[
+  {
+    name: 'type',
+    type: "'score'",
+    description: 'Identifies this observability bus event as a score signal.',
+    required: true,
+  },
+  {
+    name: 'score',
+    type: 'ExportedScore',
+    description: 'The score payload received by exporters.',
+    required: true,
+  },
+]}
+/>
+
+### `ExportedScore`
+
+`ExportedScore` is the bounded payload that exporters receive inside
+`ScoreEvent.score`. It contains the score identity, target trace or span anchor,
+scorer details, value, optional explanation, and correlation metadata.
+
+```typescript
+interface ExportedScore {
+  scoreId: string
+  timestamp: Date
+  traceId?: string
+  spanId?: string
+  scorerId: string
+  scorerName?: string
+  scorerVersion?: string
+  source?: string
+  scoreSource?: string
+  score: number
+  reason?: string
+  experimentId?: string
+  scoreTraceId?: string
+  targetEntityType?: EntityType
+  correlationContext?: CorrelationContext
+  metadata?: Record<string, unknown>
+}
+```
+
+<PropertiesTable
+  props={[
+  {
+    name: 'scoreId',
+    type: 'string',
+    description: 'Unique identifier for this score event, generated at emission time.',
+    required: true,
+  },
+  {
+    name: 'timestamp',
+    type: 'Date',
+    description:
+      'When the score was recorded. Exporters receive a Date object, which serializes to an ISO 8601 string through JSON.',
+    required: true,
+  },
+  {
+    name: 'traceId',
+    type: 'string',
+    description: 'Trace that anchors the scored target when available.',
+  },
+  {
+    name: 'spanId',
+    type: 'string',
+    description: 'Span anchor when the score is about a specific span.',
+  },
+  {
+    name: 'scorerId',
+    type: 'string',
+    description: 'Stable scorer identifier, such as a slug or registry key.',
+    required: true,
+  },
+  {
+    name: 'scorerName',
+    type: 'string',
+    description: 'Human-readable display name of the scorer.',
+  },
+  {
+    name: 'scorerVersion',
+    type: 'string',
+    description: 'Free-form scorer version string.',
+  },
+  {
+    name: 'source',
+    type: 'string',
+    description: 'Deprecated compatibility field. Use scoreSource for new exporters.',
+  },
+  {
+    name: 'scoreSource',
+    type: 'string',
+    description:
+      'Free-form string identifier for how the score was produced. Common values include manual, automated, and experiment.',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Numeric score value. Range depends on the scorer.',
+    required: true,
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description: 'Human-readable explanation of the score.',
+  },
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'Deprecated compatibility field. Use correlationContext.experimentId when present.',
+  },
+  {
+    name: 'scoreTraceId',
+    type: 'string',
+    description: 'Trace ID of the scoring run itself, useful for debugging score generation.',
+  },
+  {
+    name: 'targetEntityType',
+    type: 'EntityType',
+    description: 'Mastra observability entity type the scorer evaluated when known.',
+  },
+  {
+    name: 'correlationContext',
+    type: 'CorrelationContext',
+    description: 'Canonical correlation context for entity hierarchy, execution, deployment, and experiment metadata.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description:
+      'User-defined metadata inherited from the scored span or trace and merged with score-specific metadata. Score-specific keys override inherited keys on collision.',
+  },
+]}
+/>
+
+`traceId` and `spanId` identify the trace or span being scored. `scoreTraceId`
+identifies the trace of the scoring run itself when that scorer was traced. For
+new exporters, prefer `scoreSource` over the deprecated `source` field, and
+prefer `correlationContext.experimentId` over the deprecated top-level
+`experimentId` field.
+
+`EntityType` is Mastra's observability entity enum. Current values include
+`agent`, `scorer`, `rag_ingestion`, `trajectory`, `input_processor`,
+`input_step_processor`, `output_processor`, `output_step_processor`,
+`workflow_step`, `tool`, `workflow_run`, and `memory`.
+
+`CorrelationContext` is the shared context snapshot attached to observability
+signals. It can carry entity hierarchy fields, user or organization identifiers,
+run, session, thread, request, environment, source, service name, experiment,
+and tags. Prefer the top-level `traceId` and `spanId` fields on
+`ExportedScore` for the scored target.
+
 ### `ObservabilityDropEvent`
 
 Structured event emitted when the exporter pipeline drops observability events.

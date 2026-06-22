@@ -228,7 +228,7 @@ new DatadogBridge({
 })
 ```
 
-Note: APM data cannot be sent in agentless mode. If you only need LLM Observability data without `dd-trace` APM, the [Datadog Exporter](/reference/observability/tracing/exporters/datadog) is a simpler choice.
+Note: APM data can't be sent in agentless mode. If you only need LLM Observability data without `dd-trace` APM, the [Datadog Exporter](/reference/observability/tracing/exporters/datadog) is a simpler choice.
 
 ### With Additional Exporters
 
@@ -264,7 +264,7 @@ Don't combine `DatadogBridge` with `DatadogExporter` in the same configuration â
 
 The DatadogBridge requires `dd-trace` to be initialized before any other imports so its auto-instrumentation can patch HTTP, database, and framework libraries at load time.
 
-See the [DatadogBridge Guide](/docs/observability/tracing/bridges/datadog#configuration) for complete setup instructions, including dd-trace initialization, bundler externals, and agent configuration.
+See the [DatadogBridge Guide](/docs/observability/integrations/bridges/datadog#configuration) for complete setup instructions, including dd-trace initialization, bundler externals, and agent configuration.
 
 ## Span mapping
 
@@ -315,6 +315,6 @@ The bridge reads configuration from these environment variables:
 
 ## Related
 
-- [DatadogBridge Guide](/docs/observability/tracing/bridges/datadog) - Setup guide with examples
+- [DatadogBridge Guide](/docs/observability/integrations/bridges/datadog) - Setup guide with examples
 - [Tracing Overview](/docs/observability/tracing/overview) - General tracing concepts
 - [DatadogExporter Reference](/reference/observability/tracing/exporters/datadog) - LLM Observability only, no `dd-trace` APM

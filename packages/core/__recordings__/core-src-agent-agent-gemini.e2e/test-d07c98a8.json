@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-d07c98a8",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle basic generation with Gemini",
-    "createdAt": "2026-05-18T10:50:49.229Z",
-    "updatedAt": "2026-05-20T14:04:34.603Z"
+    "createdAt": "2026-05-28T17:33:22.007Z",
+    "updatedAt": "2026-05-28T17:33:32.333Z"
   },
   "recordings": [
     {
@@ -32,7 +32,7 @@
             ]
           }
         },
-        "timestamp": 1779285873748
+        "timestamp": 1779989610685
       },
       "response": {
         "status": 200,
@@ -40,9 +40,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:04:34 GMT",
+          "date": "Thu, 28 May 2026 17:33:32 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=711",
+          "server-timing": "gfet4t7; dur=1198",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -55,19 +55,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "I am doing well, thank you for asking! How are you today?\n"
+                    "text": "Hello! As a large language model, I don't experience feelings like humans do, so I can't say I'm \"good\" or \"bad\" in the same way. However, I am functioning well and ready to assist you! How can I help you today?\n"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.051370665431022644
+              "avgLogprobs": -0.18253163159903835
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 11,
-            "candidatesTokenCount": 16,
-            "totalTokenCount": 27,
+            "candidatesTokenCount": 59,
+            "totalTokenCount": 70,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -77,13 +77,13 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 16
+                "tokenCount": 59
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "cb8NauHZPOaF7M8P--yl4QM"
+          "responseId": "a3wYasSeE-3XjMcP5OPxwQE"
         },
         "isStreaming": false
       }

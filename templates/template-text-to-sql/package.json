@@ -10,7 +10,7 @@
     "start": "mastra start"
   },
   "license": "Apache-2.0",
-  "packageManager": "pnpm@10.23.0",
+  "packageManager": "pnpm@11.3.0",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
@@ -27,7 +27,7 @@
   "devDependencies": {
     "@types/node": "^22.19.7",
     "mastra": "latest",
-    "tsx": "^4.19.4",
+    "tsx": "catalog:",
     "typescript": "^5.9.3"
   }
 }

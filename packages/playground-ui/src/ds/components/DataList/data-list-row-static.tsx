@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
-import { dataListRowOuterStyles } from './shared';
+import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
+import { dataListRowStaticStyles, dataListRowVariants } from './shared';
 import type { DataListRowSharedProps } from './shared';
 import { cn } from '@/lib/utils';
 
@@ -11,18 +12,23 @@ export type DataListRowStaticProps = ComponentPropsWithoutRef<'div'> & DataListR
  * has no link target or click handler
  */
 export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticProps>(
-  ({ children, className, flushLeft, flushRight, colStart, colEnd, featured, style, ...rest }, ref) => {
+  ({ children, className, flushLeft, flushRight, colStart, colEnd, featured, variant, style, ...rest }, ref) => {
+    const isWrapped = useDataListRowWrapperContext();
     const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
     const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
     return (
       <div
         ref={ref}
         className={cn(
-          'mx-1 grid grid-cols-subgrid gap-8 px-5',
-          ...dataListRowOuterStyles,
-          flushLeft && 'ml-0!',
-          flushRight && 'mr-0!',
-          featured && 'bg-surface4',
+          isWrapped
+            ? 'grid grid-cols-subgrid gap-8 px-5 transition-colors duration-200 rounded-lg'
+            : dataListRowStaticStyles,
+          !isWrapped && flushLeft && 'ml-0!',
+          !isWrapped && flushRight && 'mr-0!',
+          // `!` so the selection fill wins over borderless table root styling
+          // (higher-specificity descendant rules); same color in `default`.
+          featured && 'bg-surface4!',
+          dataListRowVariants({ variant }),
           className,
         )}
         style={resolvedStyle}

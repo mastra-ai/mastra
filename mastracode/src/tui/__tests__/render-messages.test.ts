@@ -1,10 +1,15 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { JudgeDisplayComponent } from '../components/judge-display.js';
+import { NotificationSummaryComponent } from '../components/notification-summary.js';
+import { NotificationComponent } from '../components/notification.js';
+import { ReactiveSignalComponent } from '../components/reactive-signal.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
+import { StateSignalComponent } from '../components/state-signal.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
@@ -25,9 +30,8 @@ function createState(): TUIState {
     messageComponentsById: new Map(),
     pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],
-    harness: {
-      getDisplayState: () => ({ isRunning: false }),
-    },
+    session: { displayState: { get: () => ({ isRunning: false }) } },
+    harness: { session: { displayState: { get: () => ({ isRunning: false }) } } },
   } as unknown as TUIState;
 }
 
@@ -56,6 +60,158 @@ function createReminderMessage(
 }
 
 describe('addUserMessage', () => {
+  it('renders state signals as inline state components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'browser',
+          mode: 'delta',
+          version: 2,
+          message: 'changed: active tab URL changed to https://example.com',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(true);
+    expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
+  });
+
+  it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'tasks-state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'tasks',
+          mode: 'snapshot',
+          version: 1,
+          message: '<current-task-list>\n  ○ [pending] {id: alpha} Alpha\n</current-task-list>',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('tasks-state-signal-1')).toBe(false);
+  });
+
+  it('does not render the goal state signal inline (the goal/judge UI shows it)', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'goal-state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'goal',
+          mode: 'snapshot',
+          version: 1,
+          message: '<current-objective>\n  Ship the goal feature\n</current-objective>',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('goal-state-signal-1')).toBe(false);
+  });
+
+  it('renders generic reactive signals as inline signal components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'reactive-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'reactive_signal',
+          tagName: 'build-status',
+          message: 'Build is still running',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof ReactiveSignalComponent)).toBe(true);
+    expect(state.messageComponentsById.get('reactive-signal-1')).toBeInstanceOf(ReactiveSignalComponent);
+  });
+
+  it('does not render GitHub subscribe operation signals from history', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'github-subscribe-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'reactive_signal',
+          tagName: 'github-subscribe-pr',
+          message: 'Subscribe to GitHub PR #17241',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof ReactiveSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('github-subscribe-signal-1')).toBe(false);
+  });
+
+  it('renders notification summaries as inline notification components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'notification-summary-1',
+      role: 'user',
+      content: [
+        {
+          type: 'notification_summary',
+          message: 'mastracode: 1',
+          pending: 1,
+          bySource: { mastracode: 1 },
+          byPriority: { low: 1 },
+          notificationIds: ['notification-1'],
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof NotificationSummaryComponent)).toBe(true);
+    expect(state.messageComponentsById.get('notification-summary-1')).toBeInstanceOf(NotificationSummaryComponent);
+  });
+
+  it('renders full notifications as inline notification components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'notification-1',
+      role: 'user',
+      content: [
+        {
+          type: 'notification',
+          message: 'CI failed on main',
+          source: 'github',
+          kind: 'ci-status',
+          priority: 'high',
+          status: 'delivered',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(true);
+    expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
+  });
+
   it('dedupes echoed slash command messages against the optimistic slash component', () => {
     const state = createState();
     const slashComp = new SlashCommandComponent('deploy', 'custom output');
@@ -174,10 +330,11 @@ describe('addUserMessage', () => {
       }),
     );
 
-    expect(state.chatContainer.children).toHaveLength(2);
+    // 3 children: TemporalGap, boundary-spacer, UserMessage
+    expect(state.chatContainer.children).toHaveLength(3);
     expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
-    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[1]);
+    expect(state.chatContainer.children[2]).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[2]);
   });
 
   it('renders a legacy persisted temporal-gap marker from whole-message XML', () => {
@@ -215,6 +372,47 @@ describe('addUserMessage', () => {
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(rendered).toContain('Goal');
     expect(rendered).toContain('Continue & handle <tags>');
+  });
+
+  it('renders persisted goal-judge evaluations as judge display components', () => {
+    const state = createState();
+
+    addUserMessage(
+      state,
+      createReminderMessage(
+        {
+          type: 'system_reminder',
+          reminderType: 'goal-judge',
+          message: '[Goal attempt 2/20] The goal is not yet complete. Judge feedback: Need another fact.',
+          goalEvaluation: {
+            objective: 'List whale facts',
+            iteration: 2,
+            maxRuns: 20,
+            passed: false,
+            status: 'active',
+            results: [],
+            reason: 'Need another fact.',
+            duration: 0,
+            timedOut: false,
+            maxRunsReached: false,
+            suppressFeedback: false,
+          },
+        } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>,
+        'goal-judge-1',
+      ),
+    );
+
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(JudgeDisplayComponent);
+    expect(state.allSystemReminderComponents).toHaveLength(0);
+    expect(state.messageComponentsById.get('goal-judge-1')).toBe(state.chatContainer.children[0]);
+    const rendered = (state.chatContainer.children[0] as JudgeDisplayComponent)
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('continue');
+    expect(rendered).toContain('(2/20)');
+    expect(rendered).toContain('Need another fact.');
   });
 
   it('renders canonical initial goal reminders as system reminders', () => {
@@ -365,6 +563,44 @@ describe('addUserMessage', () => {
   });
 });
 
+describe('renderExistingMessages signals', () => {
+  it('reconstructs persisted active signal messages without resurrecting pending previews', async () => {
+    const state = createState();
+    addPendingUserMessage(state, 'stale-signal', 'stale preview', undefined, { isInterjection: true });
+
+    state.session = {
+      ...state.session,
+      thread: {
+        listActiveMessages: vi
+          .fn()
+          .mockResolvedValue([
+            createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
+          ]),
+      },
+    } as unknown as TUIState['session'];
+    state.harness = {
+      session: {
+        displayState: { get: () => ({ isRunning: false }) },
+      },
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('signal-history-1')).toBe(state.chatContainer.children[0]);
+
+    const rendered = (state.chatContainer.children[0] as UserMessageComponent)
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('╭ steer ');
+    expect(rendered).toContain('continue from history');
+    expect(rendered).not.toContain('stale preview');
+  });
+});
+
 describe('renderExistingMessages subagents', () => {
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
     const message: HarnessMessage = {
@@ -393,10 +629,13 @@ describe('renderExistingMessages subagents', () => {
     };
     const state = createState();
     state.quietMode = true;
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+      model: { get: () => 'openai/gpt-5.5' },
+    } as unknown as TUIState['session'];
     state.harness = {
-      listMessages: vi.fn().mockResolvedValue([message]),
-      getDisplayState: () => ({ isRunning: false }),
-      getFullModelId: () => 'openai/gpt-5.5',
+      session: state.session,
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);

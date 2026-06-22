@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryServerCache } from '../cache/inmemory';
 import { CachingPubSub, withCaching } from './caching-pubsub';
 import { EventEmitterPubSub } from './event-emitter';
+import { isLeaseProvider, PubSub } from './pubsub';
 import type { Event } from './types';
 
 describe('CachingPubSub', () => {
@@ -169,6 +170,44 @@ describe('CachingPubSub', () => {
         expect.any(Function),
         expect.any(Function),
       );
+    });
+
+    it('forwards options (including batch) verbatim to the inner PubSub', async () => {
+      const subscribeSpy = vi.fn(async () => {});
+      class StubInner extends PubSub {
+        get supportsNativeBatching() {
+          return true;
+        }
+        async publish() {}
+        subscribe = subscribeSpy;
+        async unsubscribe() {}
+        async flush() {}
+      }
+      const wrapped = new CachingPubSub(new StubInner(), cache);
+      const cb = () => {};
+      const options = { batch: { maxSize: 2, maxWaitMs: 50 } };
+      await wrapped.subscribe('t', cb, options);
+      expect(subscribeSpy).toHaveBeenCalledWith('t', cb, options);
+    });
+
+    it('reports supportsNativeBatching by delegating to the inner PubSub', () => {
+      class NativeInner extends PubSub {
+        get supportsNativeBatching() {
+          return true;
+        }
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      class NonNativeInner extends PubSub {
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      expect(new CachingPubSub(new NativeInner(), cache).supportsNativeBatching).toBe(true);
+      expect(new CachingPubSub(new NonNativeInner(), cache).supportsNativeBatching).toBe(false);
     });
   });
 
@@ -343,6 +382,46 @@ describe('CachingPubSub', () => {
   describe('getInner', () => {
     it('should return the inner pubsub instance', () => {
       expect(cachingPubsub.getInner()).toBe(innerPubsub);
+    });
+  });
+
+  describe('lease provider', () => {
+    it('exposes the inner pubsub as the lease provider when the inner can lease', () => {
+      const leaseProvider = cachingPubsub.getLeaseProvider();
+      expect(leaseProvider).toBe(innerPubsub);
+      expect(isLeaseProvider(leaseProvider)).toBe(true);
+    });
+
+    it('returns undefined when the inner pubsub cannot lease', () => {
+      class NonLeaseInner extends PubSub {
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      const wrapped = new CachingPubSub(new NonLeaseInner(), cache);
+      expect(wrapped.getLeaseProvider()).toBeUndefined();
+    });
+
+    it('preserves real lease semantics through the inner lease provider', async () => {
+      // Caching is transparent to leasing: callers resolve the inner's
+      // provider and coordinate through it, so wrapping with caching must
+      // not fake or weaken the lock. This guards against a regression where
+      // a second owner could "acquire" an already-held lease.
+      const leaseProvider = cachingPubsub.getLeaseProvider();
+      expect(leaseProvider).toBeDefined();
+
+      const first = await leaseProvider!.acquireLease('thread-1', 'owner-a', 5000);
+      expect(first).toEqual({ acquired: true, owner: 'owner-a' });
+
+      const second = await leaseProvider!.acquireLease('thread-1', 'owner-b', 5000);
+      expect(second.acquired).toBe(false);
+      expect(second.owner).toBe('owner-a');
+
+      expect(await leaseProvider!.getLeaseOwner('thread-1')).toBe('owner-a');
+
+      await leaseProvider!.releaseLease('thread-1', 'owner-a');
+      expect(await leaseProvider!.getLeaseOwner('thread-1')).toBeUndefined();
     });
   });
 

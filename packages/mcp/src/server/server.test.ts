@@ -10,6 +10,7 @@ import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type {
   Resource,
   ResourceTemplate,
@@ -22,7 +23,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v3';
-import { weatherTool } from '../__fixtures__/tools';
+import { mockWeatherTool } from '../__fixtures__/tools';
 import { InternalMastraMCPClient } from '../client/client';
 import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
@@ -158,7 +159,6 @@ describe('MCPServer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // @ts-expect-error - accessing internal for testing - Mocking Date completely
     // Must use a regular function (not arrow function) to support `new Date()` constructor calls
     global.Date = vi.fn(function (this: any, ...args: any[]) {
       if (args.length === 0) {
@@ -169,7 +169,6 @@ describe('MCPServer', () => {
       return new OriginalDate(...args); // new Date('some-string') or new Date(timestamp)
     }) as any;
 
-    // @ts-expect-error - accessing internal for testing
     global.Date.now = vi.fn(() => mockDate.getTime());
     // @ts-expect-error - accessing internal for testing
     global.Date.prototype = OriginalDate.prototype;
@@ -537,9 +536,10 @@ describe('MCPServer', () => {
 
     it('should throw an error when reading a non-existent resource URI', async () => {
       const uri = 'weather://nonexistent';
-      await expect(resourceTestInternalClient.readResource(uri)).rejects.toThrow(
-        'Resource not found: weather://nonexistent',
-      );
+      await expect(resourceTestInternalClient.readResource(uri)).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('Resource not found: weather://nonexistent'),
+      });
     });
   });
 
@@ -679,9 +679,10 @@ describe('MCPServer', () => {
 
     it('should throw an error when reading a non-existent resource', async () => {
       const uri = 'test://resource/nonexistent';
-      await expect(notificationTestInternalClient.readResource(uri)).rejects.toThrow(
-        'Resource not found: test://resource/nonexistent',
-      );
+      await expect(notificationTestInternalClient.readResource(uri)).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('Resource not found: test://resource/nonexistent'),
+      });
     });
 
     it('should list resource templates', async () => {
@@ -853,7 +854,10 @@ describe('MCPServer', () => {
     it('should throw error if required argument is missing', async () => {
       await expect(
         promptInternalClient.getPrompt({ name: 'explain-code', args: {} }), // missing 'code'
-      ).rejects.toThrow(/Missing required argument/);
+      ).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('Missing required argument: code'),
+      });
     });
 
     it('should succeed if all required arguments are provided', async () => {
@@ -920,7 +924,7 @@ describe('MCPServer', () => {
       server = new MCPServer({
         name: 'Test MCP Server',
         version: '0.1.0',
-        tools: { weatherTool },
+        tools: { weatherTool: mockWeatherTool },
       });
 
       httpServer = http.createServer(async (req, res) => {
@@ -1058,7 +1062,7 @@ describe('MCPServer', () => {
         name: 'Test MCP Server',
         version: '0.1.0',
         tools: {
-          weatherTool,
+          weatherTool: mockWeatherTool,
           testAuthTool: {
             description: 'Test tool to validate auth information from extra params',
             parameters: z.object({
@@ -1212,7 +1216,7 @@ describe('MCPServer', () => {
       server = new MCPServer({
         name: 'Test MCP Server',
         version: '0.1.0',
-        tools: { weatherTool },
+        tools: { weatherTool: mockWeatherTool },
       });
 
       hono = new Hono();

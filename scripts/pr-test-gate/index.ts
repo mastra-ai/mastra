@@ -8,8 +8,8 @@ const PHASE = process.env.PHASE ?? 'label';
 const PR_NUMBER = Number(process.env.PR_NUMBER ?? '0');
 
 const TEST_LABELS = [
-  { name: 'tests: green ✅', color: '0e8a16', description: 'Changed tests passed' },
-  { name: 'tests: failing ❌', color: 'b60205', description: 'Changed tests failed' },
+  { name: 'tests: green ✅', color: '0e8a16', description: 'Changed tests failed against base as expected' },
+  { name: 'tests: failing ❌', color: 'b60205', description: 'Changed tests passed against base' },
   { name: 'tests: no tests added', color: 'cccccc', description: 'PR does not change test files' },
 ];
 
@@ -53,9 +53,9 @@ async function label() {
     return;
   }
 
-  const passed = result === 'success';
-  await replaceTestLabel(passed ? 'tests: green ✅' : 'tests: failing ❌');
-  setOutput('summary', buildCompletedTestsSummary(passed));
+  const failedAgainstBase = result === 'success';
+  await replaceTestLabel(failedAgainstBase ? 'tests: green ✅' : 'tests: failing ❌');
+  setOutput('summary', buildCompletedTestsSummary(failedAgainstBase));
 }
 
 async function listPullFiles(): Promise<PullFile[]> {
@@ -91,12 +91,12 @@ No changed test files were detected.
 Applied label: \`tests: no tests added\``;
 }
 
-function buildCompletedTestsSummary(passed: boolean) {
+function buildCompletedTestsSummary(failedAgainstBase: boolean) {
   return `## Changed test gate
 
-Changed test files ${passed ? 'passed' : 'failed'}.
+Changed test files ${failedAgainstBase ? 'failed against the base branch as expected' : 'passed against the base branch'}.
 
-Applied label: \`${passed ? 'tests: green ✅' : 'tests: failing ❌'}\``;
+Applied label: \`${failedAgainstBase ? 'tests: green ✅' : 'tests: failing ❌'}\``;
 }
 
 async function ensureTestLabels() {

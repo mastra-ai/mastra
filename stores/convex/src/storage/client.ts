@@ -10,6 +10,7 @@ export type ConvexAdminClientConfig = {
 export type RawStorageResult<T = any> = {
   result: T;
   hasMore?: boolean;
+  continuationCursor?: string | null;
 };
 
 const DEFAULT_STORAGE_FUNCTION = 'mastra/storage:handle';
@@ -73,6 +74,7 @@ export class ConvexAdminClient {
     return {
       result: storageResponse.result as T,
       hasMore: storageResponse.hasMore,
+      continuationCursor: storageResponse.continuationCursor,
     };
   }
 

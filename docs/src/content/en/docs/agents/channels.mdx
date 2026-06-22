@@ -91,9 +91,11 @@ When a user mentions the agent mid-conversation in a channel thread, the agent m
 1. On the **first mention** in a thread, the agent fetches recent messages from the platform.
 1. These messages are prepended to the user's message as conversation context.
 1. After responding, the agent subscribes to the thread and has full history via Mastra's memory.
-1. Subsequent messages in that thread do **not** re-fetch from the platform.
+1. Subsequent messages in that thread **don't** re-fetch from the platform.
 
 Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-DM threads.
+
+Mastra also adds a short system message telling the agent which channel and platform the request came from (DM vs public channel, platform name, bot display name). Set `threadContext: { addSystemMessage: false }` to skip it.
 
 ## Tool approval
 
@@ -119,7 +121,7 @@ const deleteFile = createTool({
 
 When the agent calls this tool, users see a card with the tool name, arguments, and Approve/Deny buttons. The tool only executes after approval.
 
-Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context, since hidden mode does not post approval buttons.
+Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context, since hidden mode doesn't post approval buttons.
 
 ## Multi-user awareness
 

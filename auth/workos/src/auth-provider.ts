@@ -22,8 +22,23 @@ import { AuthService, sessionEncryption } from '@workos/authkit-session';
 import type { AuthKitConfig } from '@workos/authkit-session';
 import { WorkOS } from '@workos-inc/node';
 import type { OrganizationMembership } from '@workos-inc/node';
-import type { HonoRequest } from 'hono';
 import { LRUCache } from 'lru-cache';
+
+type HonoRequestLike = {
+  raw?: Request;
+  headers?: Headers;
+  header(name: string): string | undefined;
+};
+
+type MastraAuthRequest = Request | HonoRequestLike;
+
+function getWebRequest(request: MastraAuthRequest): Request | undefined {
+  if (request instanceof Request) {
+    return request;
+  }
+
+  return request.raw instanceof Request ? request.raw : undefined;
+}
 
 import { WebSessionStorage } from './session-storage.js';
 import type { WorkOSUser, MastraAuthWorkosOptions } from './types.js';
@@ -156,13 +171,11 @@ export class MastraAuthWorkos
    * Uses AuthKit's withAuth() for cookie-based sessions, falls back to
    * JWT verification for bearer tokens.
    */
-  async authenticateToken(token: string, request: HonoRequest | Request): Promise<WorkOSUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<WorkOSUser | null> {
     try {
-      // Get the raw Request object - handle both HonoRequest and plain Request
-      const rawRequest = 'raw' in request ? request.raw : request;
-
       // First try session-based auth via AuthKit
-      const { auth } = await this.authService.withAuth(rawRequest);
+      const webRequest = getWebRequest(request);
+      const { auth } = webRequest ? await this.authService.withAuth(webRequest) : { auth: { user: null } };
 
       if (auth.user) {
         // Fetch memberships only when FGA is configured (fetchMemberships: true).
@@ -507,31 +520,62 @@ export class MastraAuthWorkos
   /**
    * Handle the OAuth callback from WorkOS.
    *
-   * Uses AuthKit's handleCallback for proper session creation.
+   * Uses WorkOS SDK's authenticateWithCode directly instead of AuthKit's handleCallback.
+   * AuthKit's handleCallback requires PKCE cookies that must be set during getLoginUrl()
+   * and read during handleCallback(), but our ISSOProvider interface separates these
+   * calls across different requests without cookie propagation.
+   *
+   * This approach was the original implementation before commit 6e4d4f5cf3 introduced
+   * a regression by switching to AuthKit's handleCallback with dummy Request/Response
+   * objects that couldn't provide the required PKCE cookies.
    */
   async handleCallback(code: string, _state: string): Promise<SSOCallbackResult<EEUser>> {
-    // Use AuthService's handleCallback for session creation
-    const result = await this.authService.handleCallback(
-      new Request('http://localhost'), // Dummy request, not used
-      new Response(), // Dummy response to get headers
-      { code, state: _state },
-    );
+    // Use WorkOS SDK directly to exchange code for tokens (server-side, no PKCE required)
+    const authResponse = await this.workos.userManagement.authenticateWithCode({
+      clientId: this.clientId,
+      code,
+    });
 
     const user: WorkOSUser = {
-      ...mapWorkOSUserToEEUser(result.authResponse.user),
-      workosId: result.authResponse.user.id,
-      organizationId: result.authResponse.organizationId,
+      ...mapWorkOSUserToEEUser(authResponse.user),
+      workosId: authResponse.user.id,
+      organizationId: authResponse.organizationId,
     };
 
-    // Extract session cookie from headers
-    const sessionCookie = result.headers?.['Set-Cookie'];
-    const cookies = sessionCookie ? (Array.isArray(sessionCookie) ? sessionCookie : [sessionCookie]) : undefined;
+    // Create encrypted session cookie using AuthKit's encryption
+    const sessionData = {
+      accessToken: authResponse.accessToken,
+      refreshToken: authResponse.refreshToken,
+      user: authResponse.user,
+      organizationId: authResponse.organizationId,
+      impersonator: authResponse.impersonator,
+    };
+
+    // Use this.config for cookie settings to ensure consistency with read/clear paths
+    const cookiePassword = this.config.cookiePassword;
+    const cookieName = this.config.cookieName ?? 'wos_session';
+    let cookies: string[] | undefined;
+
+    if (cookiePassword) {
+      const encryptedSession = await sessionEncryption.sealData(sessionData, { password: cookiePassword });
+      // Set cookie with secure defaults matching AuthKit config
+      const cookieOptions = [
+        `${cookieName}=${encryptedSession}`,
+        'Path=/',
+        'HttpOnly',
+        `SameSite=${this.config.cookieSameSite ?? 'Lax'}`,
+        process.env['NODE_ENV'] === 'production' ? 'Secure' : '',
+      ]
+        .filter(Boolean)
+        .join('; ');
+      cookies = [cookieOptions];
+    }
 
     return {
       user,
       tokens: {
-        accessToken: result.authResponse.accessToken,
-        refreshToken: result.authResponse.refreshToken,
+        accessToken: authResponse.accessToken,
+        refreshToken: authResponse.refreshToken,
       },
       cookies,
     };

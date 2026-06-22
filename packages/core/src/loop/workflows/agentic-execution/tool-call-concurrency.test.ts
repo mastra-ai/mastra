@@ -22,6 +22,20 @@ describe('tool call concurrency resolution', () => {
     ).toBe(true);
   });
 
+  it('requires sequential execution when global approval is a function', () => {
+    // A function policy can only be evaluated per call once args are known, so before
+    // execution we conservatively force sequential to avoid approval suspensions racing.
+    expect(
+      effectiveToolSetRequiresSequentialExecution({
+        requireToolApproval: () => false,
+        tools: {
+          safe: safeTool,
+        },
+        activeTools: ['safe'],
+      }),
+    ).toBe(true);
+  });
+
   it('scans all current tools when activeTools is undefined', () => {
     expect(
       effectiveToolSetRequiresSequentialExecution({
@@ -56,6 +70,20 @@ describe('tool call concurrency resolution', () => {
         activeTools: ['safe'],
       }),
     ).toBe(false);
+  });
+
+  it('keeps parallel tool calls concurrent when unrelated available tools can suspend', () => {
+    expect(
+      resolveToolCallConcurrency({
+        tools: {
+          subagent: safeTool,
+          ask_user: suspendTool,
+          submit_plan: suspendTool,
+        },
+        activeTools: ['subagent'],
+        configuredConcurrency: 4,
+      }),
+    ).toBe(4);
   });
 
   it('ignores unknown active tool names', () => {

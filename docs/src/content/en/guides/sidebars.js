@@ -109,6 +109,11 @@ const sidebars = {
           id: 'build-your-ui/assistant-ui',
           label: 'Assistant UI',
         },
+        {
+          type: 'doc',
+          id: 'build-your-ui/openui',
+          label: 'OpenUI',
+        },
       ],
     },
     {
@@ -215,6 +220,11 @@ const sidebars = {
               type: 'doc',
               id: 'guide/notes-mcp-server',
               label: 'MCP Server: Notes MCP Server',
+            },
+            {
+              type: 'doc',
+              id: 'guide/signal-provider',
+              label: 'Signals: CI Signal Provider',
             },
           ],
         },

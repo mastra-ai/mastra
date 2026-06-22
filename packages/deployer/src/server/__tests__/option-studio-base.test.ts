@@ -82,6 +82,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
     window.MASTRA_CLOUD_API_ENDPOINT = '%%MASTRA_CLOUD_API_ENDPOINT%%';
     window.MASTRA_EXPERIMENTAL_FEATURES = '%%MASTRA_EXPERIMENTAL_FEATURES%%';
     window.MASTRA_REQUEST_CONTEXT_PRESETS = '%%MASTRA_REQUEST_CONTEXT_PRESETS%%';
+    window.MASTRA_AGENT_SIGNALS = '%%MASTRA_AGENT_SIGNALS%%';
   </script>
 </body>
 </html>`;
@@ -92,6 +93,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     mockMastra = {
       getServer: vi.fn(() => ({})),
+      getStudio: vi.fn(() => undefined),
       getServerMiddleware: vi.fn(() => []),
       getLogger: vi.fn(() => ({
         info: vi.fn(),
@@ -366,6 +368,34 @@ describe('Mastra Studio "studioBase" functionality', () => {
           process.env.MASTRA_TEMPLATES = originalEnv;
         } else {
           delete process.env.MASTRA_TEMPLATES;
+        }
+      }
+    });
+
+    it('should enable agent signals by default and preserve explicit opt-out', async () => {
+      const originalEnv = process.env.MASTRA_AGENT_SIGNALS;
+      try {
+        delete process.env.MASTRA_AGENT_SIGNALS;
+        vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin', port: 4111, host: 'localhost' });
+        const defaultApp = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+        const defaultResponse = await defaultApp.request('/admin');
+        const defaultHtml = await defaultResponse.text();
+
+        expect(defaultHtml).toContain("window.MASTRA_AGENT_SIGNALS = 'true'");
+
+        process.env.MASTRA_AGENT_SIGNALS = 'false';
+        const optOutApp = await createHonoServer(mockMastra, { tools: {}, studio: true });
+
+        const optOutResponse = await optOutApp.request('/admin');
+        const optOutHtml = await optOutResponse.text();
+
+        expect(optOutHtml).toContain("window.MASTRA_AGENT_SIGNALS = 'false'");
+      } finally {
+        if (originalEnv !== undefined) {
+          process.env.MASTRA_AGENT_SIGNALS = originalEnv;
+        } else {
+          delete process.env.MASTRA_AGENT_SIGNALS;
         }
       }
     });

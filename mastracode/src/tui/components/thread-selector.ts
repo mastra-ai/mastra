@@ -3,9 +3,10 @@
  * Uses pi-tui overlay pattern with search and navigation.
  */
 
-import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, TUI } from '@mariozechner/pi-tui';
+import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import type { HarnessThread } from '@mastra/core/harness';
+import { decodePrintableShortcut } from '../key-input.js';
 import { theme } from '../theme.js';
 
 // =============================================================================
@@ -350,7 +351,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       }
     } else if (kb.matches(keyData, 'tui.select.cancel')) {
       this.onCancelCallback();
-    } else if (keyData === 'c' && this.onCloneCallback && !this.searchInput.getValue()) {
+    } else if (decodePrintableShortcut(keyData) === 'c' && this.onCloneCallback && !this.searchInput.getValue()) {
       const selected = this.filteredThreads[this.selectedIndex];
       if (selected) {
         this.onCloneCallback(selected);

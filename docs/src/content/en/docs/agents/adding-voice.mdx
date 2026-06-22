@@ -151,6 +151,37 @@ agent.voice.send(microphoneStream)
 agent.voice.close()
 ```
 
+### Per-session voice for concurrent sessions
+
+A static `voice` instance is shared across every request. For one-shot text-to-speech this is fine, but realtime and speech-to-speech providers store one WebSocket, one set of tools, and one request context per instance. If you deploy a single agent that handles several live sessions at once, a shared instance lets one session overwrite another session's tools, instructions, and request context.
+
+To give each session its own voice, provide `voice` as a resolver. Mastra runs the resolver on every `getVoice()` call and returns a fresh, session-owned instance:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+
+export const agent = new Agent({
+  id: 'support-line',
+  name: 'Support Line',
+  instructions: ({ requestContext }) => `Help user ${requestContext.get('user')}.`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  voice: ({ requestContext }) => new OpenAIRealtimeVoice({ apiKey: requestContext.get('apiKey') }),
+})
+
+// Each concurrent session resolves its own voice instance
+const voice = await agent.getVoice({ requestContext })
+await voice.connect()
+```
+
+When you use a resolver:
+
+- Each call to `getVoice()` returns a new instance, so concurrent sessions never share state.
+- Mastra doesn't add tools or instructions to a resolver instance. Configure those inside the resolver or on the provider.
+- You own the lifecycle of the returned instance, so call `disconnect()` or `close()` when the session ends.
+
+The `agent.voice` getter has no request context, so it throws when `voice` is a resolver. Use `agent.getVoice({ requestContext })` instead.
+
 ### Event System
 
 The realtime voice provider emits several events you can listen for:

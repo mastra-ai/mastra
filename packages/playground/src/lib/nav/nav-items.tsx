@@ -27,8 +27,6 @@ export interface NavItem {
   Icon: NavIcon;
   docs?: { href: string; label?: string };
   isOnMastraPlatform?: boolean;
-  requiredPermission?: string;
-  requiredAnyPermission?: string[];
   activePaths?: string[];
 }
 
@@ -50,7 +48,6 @@ export const mainNav: NavSection[] = [
         Icon: AgentIcon,
         docs: { href: 'https://mastra.ai/en/docs/agents/overview', label: 'Agents documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'agents:read',
       },
       {
         name: 'Prompts',
@@ -68,7 +65,6 @@ export const mainNav: NavSection[] = [
         Icon: WorkflowIcon,
         docs: { href: 'https://mastra.ai/en/docs/workflows/overview', label: 'Workflows documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'workflows:read',
       },
       {
         name: 'Processors',
@@ -76,7 +72,6 @@ export const mainNav: NavSection[] = [
         Icon: ProcessorIcon,
         docs: { href: 'https://mastra.ai/en/docs/agents/processors', label: 'Processors documentation' },
         isOnMastraPlatform: false,
-        requiredPermission: 'processors:read',
       },
       {
         name: 'MCP Servers',
@@ -84,7 +79,6 @@ export const mainNav: NavSection[] = [
         Icon: McpServerIcon,
         docs: { href: 'https://mastra.ai/en/docs/tools-mcp/mcp-overview', label: 'MCP documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'mcps:read',
       },
       {
         name: 'Tools',
@@ -92,7 +86,6 @@ export const mainNav: NavSection[] = [
         Icon: ToolsIcon,
         docs: { href: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp', label: 'Tools documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'tools:read',
       },
       {
         name: 'Workspaces',
@@ -100,7 +93,6 @@ export const mainNav: NavSection[] = [
         Icon: WorkspacesIcon,
         docs: { href: 'https://mastra.ai/en/docs/workspace/overview', label: 'Workspaces documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'workspaces:read',
       },
       {
         name: 'Request Context',
@@ -126,7 +118,6 @@ export const mainNav: NavSection[] = [
         Icon: ScorersIcon,
         docs: { href: 'https://mastra.ai/en/docs/evals/overview', label: 'Scorers documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'scorers:read',
       },
       {
         name: 'Datasets',
@@ -134,7 +125,6 @@ export const mainNav: NavSection[] = [
         Icon: DatasetsIcon,
         docs: { href: 'https://mastra.ai/en/docs/evals/datasets/overview', label: 'Datasets documentation' },
         isOnMastraPlatform: true,
-        requiredAnyPermission: ['datasets:read'],
       },
       {
         name: 'Experiments',
@@ -145,7 +135,6 @@ export const mainNav: NavSection[] = [
           label: 'Experiments documentation',
         },
         isOnMastraPlatform: true,
-        requiredAnyPermission: ['datasets:read'],
       },
     ],
   },
@@ -159,7 +148,6 @@ export const mainNav: NavSection[] = [
         Icon: MetricsIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/overview', label: 'Metrics documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'observability:read',
       },
       {
         name: 'Traces',
@@ -168,7 +156,6 @@ export const mainNav: NavSection[] = [
         Icon: TraceIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Traces documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'observability:read',
       },
       {
         name: 'Logs',
@@ -176,7 +163,6 @@ export const mainNav: NavSection[] = [
         Icon: LogsIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/logging', label: 'Logs documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'observability:read',
       },
     ],
   },

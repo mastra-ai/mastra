@@ -2,20 +2,28 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
-import { Agent } from '../../agent/agent';
+import type { Agent } from '../../agent/agent';
 import { MessageList, messagesAreEqual } from '../../agent/message-list';
 import type { MastraDBMessage, MessageInput } from '../../agent/message-list';
 import { isAgentCompatible } from '../../agent/subagent';
 import type { SubAgent } from '../../agent/subagent';
 import { TripWire } from '../../agent/trip-wire';
 import { isSupportedLanguageModel } from '../../agent/utils';
+import type { MastraBase } from '../../base';
 import { RequestContext } from '../../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
+import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
-import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
-import type { ObservabilityContext } from '../../observability';
+import {
+  EntityType,
+  SpanType,
+  createObservabilityContext,
+  getOrCreateSpan,
+  resolveObservabilityContext,
+} from '../../observability';
+import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
 import {
@@ -62,7 +70,7 @@ import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
-import { Workflow, Run, __registerEventedCreateWorkflow } from '../workflow';
+import { Workflow, Run } from '../workflow';
 import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
@@ -132,13 +140,23 @@ function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> 
   return input instanceof Tool;
 }
 
+/**
+ * Check if something is an Agent without importing the Agent class
+ * (which would create an ESM init-time cycle with agent.ts).
+ * Uses the `component` discriminator from MastraBase instead of instanceof.
+ */
+function isAgent(input: unknown): boolean {
+  const base = input as MastraBase;
+  return !!base && base.component === RegisteredLogger.AGENT;
+}
+
 function isStepParams(input: unknown): input is StepParams<any, any, any, any, any, any> {
   return (
     input !== null &&
     typeof input === 'object' &&
     'id' in input &&
     'execute' in input &&
-    !(input instanceof Agent) &&
+    !isAgent(input) &&
     !(input instanceof Tool)
   );
 }
@@ -153,13 +171,14 @@ function isProcessor(obj: unknown): obj is Processor {
     typeof obj === 'object' &&
     'id' in obj &&
     typeof (obj as any).id === 'string' &&
-    !(obj instanceof Agent) &&
+    !isAgent(obj) &&
     !(obj instanceof Tool) &&
     (typeof (obj as any).processInput === 'function' ||
       typeof (obj as any).processInputStep === 'function' ||
       typeof (obj as any).processOutputStream === 'function' ||
       typeof (obj as any).processOutputResult === 'function' ||
-      typeof (obj as any).processOutputStep === 'function')
+      typeof (obj as any).processOutputStep === 'function' ||
+      typeof (obj as any).computeStateSignal === 'function')
   );
 }
 
@@ -264,7 +283,8 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processInputStep: Function })
     | (Processor<TProcessorId> & { processOutputStream: Function })
     | (Processor<TProcessorId> & { processOutputResult: Function })
-    | (Processor<TProcessorId> & { processOutputStep: Function }),
+    | (Processor<TProcessorId> & { processOutputStep: Function })
+    | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
@@ -1137,7 +1157,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1163,7 +1183,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1230,6 +1250,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                systemMessages: passThrough.messageList!.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1345,7 +1366,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1371,7 +1392,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1425,7 +1446,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1451,7 +1472,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1528,13 +1549,6 @@ export function createWorkflow<
     executionEngine,
   });
 }
-
-// Register this factory with the default `createWorkflow` so that workflows
-// declared with the default factory are auto-promoted to evented when they
-// declare a `schedule`. Done at module-load time; the registration slot is
-// initialized as `undefined` in `../workflow.ts` and is read lazily on user
-// call, so module evaluation order doesn't matter.
-__registerEventedCreateWorkflow(createWorkflow as Parameters<typeof __registerEventedCreateWorkflow>[0]);
 
 export class EventedWorkflow<
   TEngineType = EventedEngineType,
@@ -1623,6 +1637,7 @@ export class EventedWorkflow<
         inputSchema: this.inputSchema,
         stateSchema: this.stateSchema,
         workflowEngineType: this.engineType,
+        tracingPolicy: this.options?.tracingPolicy,
       });
 
     this.runs.set(runIdToUse, run);
@@ -1696,6 +1711,7 @@ export class EventedRun<
     inputSchema?: StandardSchemaWithJSON<TInput>;
     stateSchema?: StandardSchemaWithJSON<TState>;
     workflowEngineType: WorkflowEngineType;
+    tracingPolicy?: TracingPolicy;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
@@ -1729,6 +1745,7 @@ export class EventedRun<
     requestContext,
     perStep,
     outputOptions,
+    tracingContext,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
@@ -1738,6 +1755,7 @@ export class EventedRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    tracingContext?: TracingContext;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -1751,7 +1769,13 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
+    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    // Always persist the initial run record regardless of shouldPersistSnapshot.
+    // The evented engine relies on this record for parallel branch result
+    // aggregation (aggregateBranchResults reads stepResults via storage).
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -1761,7 +1785,7 @@ export class EventedRun<
         serializedStepGraph: this.serializedStepGraph,
         status: 'running',
         value: {},
-        context: {} as any,
+        context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
         requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
@@ -1772,34 +1796,64 @@ export class EventedRun<
       },
     });
 
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
-    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
-
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
 
     this.setupAbortHandler();
 
-    const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
-      workflowId: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      graph: this.executionGraph,
-      serializedStepGraph: this.serializedStepGraph,
+    // The evented engine runs steps from serialized pubsub events, which can't
+    // carry the non-serializable AISpan. Create the WORKFLOW_RUN span here and
+    // hold it on Mastra keyed by runId; the event processor nests each step's
+    // spans under it (see `WorkflowEventProcessor.resolveRunTracingContext`).
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
+      name: `workflow run: '${this.workflowId}'`,
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
+      entityName: this.workflowId,
       input: inputDataToUse,
-      initialState: initialStateToUse,
-      pubsub: this.mastra.pubsub,
-      retryConfig: this.retryConfig,
+      metadata: { resourceId: this.resourceId, runId: this.runId },
+      tracingPolicy: this.tracingPolicy,
+      tracingContext,
       requestContext,
-      abortController: this.abortController,
-      perStep,
-      outputOptions,
+      mastra: this.mastra,
     });
+    if (workflowSpan) {
+      this.mastra?.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
+    }
 
-    // console.dir({ startResult: result }, { depth: null });
+    let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
+    try {
+      result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        input: inputDataToUse,
+        initialState: initialStateToUse,
+        pubsub: this.mastra.pubsub,
+        retryConfig: this.retryConfig,
+        requestContext,
+        abortController: this.abortController,
+        perStep,
+        outputOptions,
+      });
+    } catch (error) {
+      workflowSpan?.error({ error: error instanceof Error ? error : new Error(String(error)) });
+      this.mastra?.__unregisterRunTracingContext(this.runId);
+      throw error;
+    }
 
     if (result.status !== 'suspended') {
+      if (result.status === 'failed') {
+        const err = (result as { error?: unknown }).error;
+        workflowSpan?.error({ error: err instanceof Error ? err : new Error(String(err)) });
+      } else {
+        workflowSpan?.end({ output: (result as { result?: unknown }).result });
+      }
+      this.mastra?.__unregisterRunTracingContext(this.runId);
       this.cleanup?.();
     }
 
@@ -1834,7 +1888,13 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
+    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    // Always persist the initial run record regardless of shouldPersistSnapshot.
+    // The evented engine relies on this record for parallel branch result
+    // aggregation (aggregateBranchResults reads stepResults via storage).
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -1844,7 +1904,7 @@ export class EventedRun<
         serializedStepGraph: this.serializedStepGraph,
         status: 'running',
         value: {},
-        context: {} as any,
+        context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
         requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
@@ -1854,9 +1914,6 @@ export class EventedRun<
         timestamp: Date.now(),
       },
     });
-
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
-    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');

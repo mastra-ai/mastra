@@ -6,8 +6,8 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
+import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
+import type { Focusable, SelectItem, SettingItem } from '@earendil-works/pi-tui';
 import type { StorageBackend } from '../../onboarding/settings.js';
 import type { NotificationMode } from '../notify.js';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
@@ -28,6 +28,7 @@ export interface SettingsConfig {
   storageBackend: StorageBackend;
   pgConnectionString: string;
   libsqlUrl: string;
+  experimentalGithubSignals: boolean;
 }
 
 export interface SettingsCallbacks {
@@ -38,6 +39,7 @@ export interface SettingsCallbacks {
   onQuietModeChange: (enabled: boolean) => void;
   onQuietModeMaxToolPreviewLinesChange: (lines: number) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
+  onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onApiKeys?: () => void;
   onClose: () => void;
 }
@@ -47,7 +49,12 @@ export interface SettingsCallbacks {
 // =============================================================================
 
 class SelectSubmenu extends SelectList {
-  constructor(items: SelectItem[], currentValue: string, onSelect: (value: string) => void, onBack: () => void) {
+  constructor(
+    items: SelectItem[],
+    currentValue: string,
+    onSelect: (value: string) => void | Promise<void>,
+    onBack: () => void,
+  ) {
     super(items, Math.min(items.length, 8), getSelectListTheme());
 
     const currentIndex = items.findIndex(i => i.value === currentValue);
@@ -55,8 +62,8 @@ class SelectSubmenu extends SelectList {
       this.setSelectedIndex(currentIndex);
     }
 
-    this.onSelect = (item: SelectItem) => {
-      onSelect(item.value);
+    this.onSelect = async (item: SelectItem) => {
+      await onSelect(item.value);
     };
     this.onCancel = onBack;
   }
@@ -387,6 +394,35 @@ export class SettingsComponent extends Box implements Focusable {
             },
           ]
         : []),
+      {
+        id: 'experimentalGithubSignals',
+        label: 'Experimental GitHub signals',
+        description: 'Enable local-first GitHub PR subscriptions with gitcrawl (restart required).',
+        currentValue: config.experimentalGithubSignals ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Enable GitHub signal processor and PR subscription tools',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Disable GitHub signal processor and tools',
+              },
+            ],
+            config.experimentalGithubSignals ? 'on' : 'off',
+            async value => {
+              const nextValue = value === 'on';
+              const accepted = await callbacks.onExperimentalGithubSignalsChange(nextValue);
+              config.experimentalGithubSignals = accepted === false ? !nextValue : nextValue;
+              done(config.experimentalGithubSignals ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
       {
         id: 'storageBackend',
         label: 'Storage backend',

@@ -498,7 +498,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
             // but the messageList reference takes precedence for preserving source info.
             await processor.processInput({
               messages: messageList.get.input.db(),
-              systemMessages: messageList.getAllSystemMessages(),
+              systemMessages: messageList.getSystemMessages(),
               messageList,
               requestContext,
               abort: (reason?: string): never => {

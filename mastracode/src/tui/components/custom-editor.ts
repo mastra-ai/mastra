@@ -5,13 +5,21 @@
 import { readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Editor, matchesKey } from '@mariozechner/pi-tui';
-import type { EditorTheme, TUI } from '@mariozechner/pi-tui';
+import { Editor, matchesKey } from '@earendil-works/pi-tui';
+import type { EditorTheme, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';
 import { mastra, theme } from '../theme.js';
 import type { GradientAnimator } from './obi-loader.js';
+import { WrappingAutocompleteList } from './wrapping-autocomplete-list.js';
+
+// Mirrors pi-tui's SLASH_COMMAND_SELECT_LIST_LAYOUT so slash-command rows keep
+// the same primary-column sizing as the upstream SelectList.
+const SLASH_COMMAND_LIST_LAYOUT = {
+  minPrimaryColumnWidth: 12,
+  maxPrimaryColumnWidth: 32,
+};
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
@@ -126,6 +134,17 @@ export class CustomEditor extends Editor {
       }
 
       return firstPrefixIndex;
+    };
+
+    // Override pi-tui's private `createAutocompleteList` so the slash-command /
+    // autocomplete dropdown uses WrappingAutocompleteList. This wraps long
+    // command/skill descriptions across multiple rows instead of truncating
+    // them on a single line. Wired here (rather than as a class method) because
+    // the base declares it `private`, so a normal override would be a type clash.
+    (this as any).createAutocompleteList = (prefix: string, items: SelectItem[]) => {
+      const layout = prefix.startsWith('/') ? SLASH_COMMAND_LIST_LAYOUT : undefined;
+      const internals = this as unknown as { autocompleteMaxVisible: number; theme: EditorTheme };
+      return new WrappingAutocompleteList(items, internals.autocompleteMaxVisible, internals.theme.selectList, layout);
     };
   }
 

@@ -246,8 +246,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       ? lightSpans?.find(s => s.spanId === anchorSpanId)
       : lightSpans?.find(s => s.parentSpanId == null);
     if (!anchorSpan) return;
-    url.handleSpanChange(anchorSpan.spanId);
-    url.handleSpanTabChange('scoring');
+    // Select span + switch to scoring in ONE URL update. Two separate calls race (each reads the
+    // same pre-update searchParams snapshot, last write wins) and the tab switch was lost on the
+    // first click.
+    url.handleSpanChangeWithTab(anchorSpan.spanId, 'scoring');
   }, [lightSpans, anchorSpanId, url]);
 
   const filtersApplied =
@@ -492,14 +494,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         }
       />
 
-      {datasetDialogTarget && (
-        <TraceAsItemDialog
-          rootSpanId={datasetDialogTarget.rootSpanId}
-          traceId={datasetDialogTarget.traceId}
-          isOpen
-          onClose={() => setDatasetDialogTarget(null)}
-        />
-      )}
+      <TraceAsItemDialog
+        rootSpanId={datasetDialogTarget?.rootSpanId}
+        traceId={datasetDialogTarget?.traceId}
+        isOpen={!!datasetDialogTarget}
+        onClose={() => setDatasetDialogTarget(null)}
+      />
     </PageLayout>
   );
 }

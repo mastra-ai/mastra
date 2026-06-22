@@ -19,7 +19,12 @@ import type {
   BackgroundTasksStorage,
   SchedulesStorage,
   ChannelsStorage,
+  HarnessStorage,
+  ToolProviderConnectionsStorage,
+  NotificationsStorage,
+  ThreadStateStorage,
 } from './domains';
+import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
@@ -27,6 +32,7 @@ export type StorageDomains = {
   scores?: ScoresStorage;
   memory?: MemoryStorage;
   channels?: ChannelsStorage;
+  notifications?: NotificationsStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
   datasets?: DatasetsStorage;
@@ -41,6 +47,9 @@ export type StorageDomains = {
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
   schedules?: SchedulesStorage;
+  harness?: HarnessStorage;
+  toolProviderConnections?: ToolProviderConnectionsStorage;
+  threadState?: ThreadStateStorage;
 };
 
 /**
@@ -57,6 +66,7 @@ export const EDITOR_DOMAINS = [
   'workspaces',
   'skills',
   'favorites',
+  'toolProviderConnections',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 /**
@@ -225,12 +235,24 @@ export interface MastraCompositeStoreConfig {
  * await memory?.saveThread({ thread });
  * ```
  */
+/**
+ * Minimal interface a storage adapter sees from the Mastra instance.
+ * Kept narrow on purpose to avoid pulling the full Mastra type into the
+ * storage layer (which would create a circular import).
+ */
+export interface StorageMastraRef {
+  getAgentById?: (id: string) => { source?: string; __getEditorConfig?: () => unknown } | undefined;
+  listAgents?: () => Record<string, { id: string; source?: string; __getEditorConfig?: () => unknown }> | undefined;
+  getEditor?: () => { getSource?: () => 'code' | 'db' | undefined } | undefined;
+}
+
 export class MastraCompositeStore extends MastraBase {
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
 
   id: string;
   stores?: StorageDomains;
+  protected mastra?: StorageMastraRef;
 
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
@@ -313,9 +335,44 @@ export class MastraCompositeStore extends MastraBase {
         backgroundTasks: resolve('backgroundTasks'),
         schedules: resolve('schedules'),
         channels: resolve('channels'),
+        harness: resolve('harness'),
+        toolProviderConnections: resolve('toolProviderConnections'),
+        notifications: resolve('notifications'),
+        // The thread-state domain always has an in-memory store wired by default
+        // so the built-in task tools work out of the box without a configured
+        // backend. Configure a durable backend for state that must survive a
+        // process restart.
+        threadState: resolve('threadState') ?? new InMemoryThreadStateStorage(),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
+  }
+
+  /**
+   * Register the Mastra instance with this storage adapter and cascade the
+   * reference to all owned domain stores and parent composites. Storage
+   * adapters that need to look up agents, editor config, etc. can read
+   * `this.mastra` after this is called.
+   * @internal
+   */
+  __registerMastra(mastra: StorageMastraRef, seen: Set<unknown> = new Set<unknown>()): void {
+    if (seen.has(this)) return;
+    seen.add(this);
+    this.mastra = mastra;
+    const cascade = (target: unknown) => {
+      if (!target || typeof target !== 'object' || seen.has(target)) return;
+      const fn = (target as { __registerMastra?: (m: StorageMastraRef, s?: Set<unknown>) => void }).__registerMastra;
+      if (typeof fn === 'function') {
+        fn.call(target, mastra, seen);
+      } else {
+        seen.add(target);
+      }
+    };
+    if (this.parentDefault) cascade(this.parentDefault);
+    if (this.parentEditor) cascade(this.parentEditor);
+    if (this.stores) {
+      for (const domain of Object.values(this.stores)) cascade(domain);
+    }
   }
 
   /**
@@ -412,11 +469,22 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.backgroundTasks);
       maybeInit(this.stores.schedules);
       maybeInit(this.stores.channels);
+      maybeInit(this.stores.harness);
+      maybeInit(this.stores.toolProviderConnections);
+      maybeInit(this.stores.notifications);
+      maybeInit(this.stores.threadState);
     }
 
     await Promise.all(initTasks);
     return true;
   }
+  /**
+   * Optional lifecycle hook: release underlying client/connection handles.
+   * Implementations (e.g. LibSQLStore) override this to checkpoint WAL files
+   * and close the database client so OS handles are freed synchronously.
+   * Called automatically by Mastra.shutdown().
+   */
+  close?(): Promise<void>;
 }
 
 /**

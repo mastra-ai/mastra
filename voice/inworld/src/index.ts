@@ -1,5 +1,5 @@
 import { PassThrough } from 'node:stream';
-import { MastraVoice } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
 
 const INWORLD_API_BASE = 'https://api.inworld.ai';
 
@@ -360,3 +360,5 @@ export class InworldVoice extends MastraVoice {
     return Buffer.concat(chunks).toString('utf-8');
   }
 }
+
+export * from './realtime';

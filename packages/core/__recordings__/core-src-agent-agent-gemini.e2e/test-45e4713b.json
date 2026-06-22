@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-45e4713b",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle single turn with maxSteps=1 and messages ending with assistant in network",
     "createdAt": "2026-05-18T10:51:09.310Z",
-    "updatedAt": "2026-05-20T14:05:07.930Z"
+    "updatedAt": "2026-05-28T17:34:12.068Z"
   },
   "recordings": [
     {
@@ -73,7 +73,7 @@
             ]
           }
         },
-        "timestamp": 1779285905038
+        "timestamp": 1779989648501
       },
       "response": {
         "status": 200,
@@ -81,9 +81,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:05:06 GMT",
+          "date": "Thu, 28 May 2026 17:34:09 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1005",
+          "server-timing": "gfet4t7; dur=941",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -102,7 +102,7 @@
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.03652335385807225
+              "avgLogprobs": -0.03313693453053959
             }
           ],
           "usageMetadata": {
@@ -124,7 +124,7 @@
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "kb8Nati3CoGMkdUPis3z4QE"
+          "responseId": "kHwYap6VMsTg_uMPoeT4yAI"
         },
         "isStreaming": false
       }
@@ -170,7 +170,7 @@
             ]
           }
         },
-        "timestamp": 1779285906078
+        "timestamp": 1779989649610
       },
       "response": {
         "status": 200,
@@ -179,17 +179,17 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:05:06 GMT",
+          "date": "Thu, 28 May 2026 17:34:10 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=682",
+          "server-timing": "gfet4t7; dur=367",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"8\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 43,\"totalTokenCount\": 43,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 43}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"kr8NaoCQDZCD6MEP3p_kmQw\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 40,\"candidatesTokenCount\": 2,\"totalTokenCount\": 42,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 40}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"kr8NaoCQDZCD6MEP3p_kmQw\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"8\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 43,\"totalTokenCount\": 43,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 43}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"kXwYao6_OZy1gLUP54ylyA4\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 40,\"candidatesTokenCount\": 2,\"totalTokenCount\": 42,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 40}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"kXwYao6_OZy1gLUP54ylyA4\"}\r\n\r\n"
         ],
         "chunkTimings": [0, 0],
         "isStreaming": true
@@ -240,7 +240,7 @@
             ]
           }
         },
-        "timestamp": 1779285906790
+        "timestamp": 1779989650109
       },
       "response": {
         "status": 200,
@@ -249,22 +249,22 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:05:07 GMT",
+          "date": "Thu, 28 May 2026 17:34:11 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=701",
+          "server-timing": "gfet4t7; dur=944",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"k78Nar2kCZizgLUPt6r40A8\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"k78Nar2kCZizgLUPt6r40A8\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The agent has provided\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"k78Nar2kCZizgLUPt6r40A8\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" a result for the calculation.\\\",\\n  \\\"finalResult\\\": \\\"The result of\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"k78Nar2kCZizgLUPt6r40A8\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the calculation is 8.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 802,\"candidatesTokenCount\": 44,\"totalTokenCount\": 846,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 802}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 44}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"k78Nar2kCZizgLUPt6r40A8\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"knwYave6LcHh1PIP8di4yAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"knwYave6LcHh1PIP8di4yAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The helperAgent provided\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"knwYave6LcHh1PIP8di4yAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the answer, and the task is complete.\\\",\\n  \\\"finalResult\\\": \\\"The answer\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 758,\"totalTokenCount\": 758,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 758}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"knwYave6LcHh1PIP8di4yAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" is 8.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 802,\"candidatesTokenCount\": 44,\"totalTokenCount\": 846,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 802}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 44}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"knwYave6LcHh1PIP8di4yAU\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 0, 22, 75, 56],
+        "chunkTimings": [0, 0, 74, 141, 72],
         "isStreaming": true
       }
     }

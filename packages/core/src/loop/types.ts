@@ -12,7 +12,8 @@ import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { CreatedAgentSignal } from '../agent/signals';
-import type { StructuredOutputOptions } from '../agent/types';
+import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
+import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import type { ModelRouterModelId } from '../llm/model';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
@@ -38,12 +39,19 @@ import type {
   StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
-import type { ToolPayloadTransformPolicy } from '../tools';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
 
 type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
+
+/**
+ * Goal configuration threaded into the loop, resolved from the agent's `goal`
+ * config. Structurally the agent {@link GoalConfig}; the goal step resolves the
+ * effective per-thread settings (overriding these with the objective record).
+ */
+export type GoalLoopConfig = GoalConfig;
 
 export type StreamInternal = {
   now?: () => number;
@@ -77,7 +85,7 @@ export type StreamInternal = {
   // running tasks to complete. Used by `agent.streamUntilIdle`, which handles
   // continuation from the outside — the inner loop shouldn't also wait.
   skipBgTaskWait?: boolean;
-  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   // Signal inputs already stored in the initial message list that still need
   // stream data-part echoes before the first model step.
   initialSignalEchoes?: CreatedAgentSignal[];
@@ -148,12 +156,14 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   downloadRetries?: number;
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
   toolCallConcurrency?: number;
   agentName?: string;
   requestContext?: RequestContext;
+  /** Trusted server-side signal for this loop's FGA checks. */
+  actor?: ActorSignal;
   methodType: ModelMethodType;
   /**
    * Maximum number of processor-triggered retries allowed for this generation.
@@ -170,6 +180,13 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * so the LLM can see why the task isn't complete and adjust its approach.
    */
   isTaskComplete?: IsTaskCompleteConfig;
+
+  /**
+   * Native goal configuration, resolved from the agent's `goal` config. When
+   * set, the in-loop goal step judges the thread's active objective each
+   * qualifying iteration. See {@link GoalLoopConfig}.
+   */
+  goal?: GoalLoopConfig;
 
   /**
    * Callback fired after each iteration completes.
@@ -194,6 +211,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
   runId: string;
   startTimestamp: number;
   _internal: StreamInternal;
+  rotateResponseMessageId: () => string;
   streamState: {
     serialize: () => any;
     deserialize: (state: any) => void;

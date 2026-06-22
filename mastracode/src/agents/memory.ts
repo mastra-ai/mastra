@@ -4,9 +4,8 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
-import type { z } from 'zod';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
-import type { stateSchema } from '../schema';
+import type { MastraCodeState } from '../schema';
 import { getOmScope } from '../utils/project';
 import { resolveModel } from './model';
 
@@ -17,10 +16,9 @@ let cachedMemoryKey: string | null = null;
  * Read harness state from requestContext.
  * Used by both the memory factory and the OM model functions.
  */
-type MastraCodeState = z.infer<typeof stateSchema>;
-
 function getHarnessState(requestContext: RequestContext): MastraCodeState | undefined {
-  return (requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined)?.getState?.();
+  const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+  return ctx?.session.state.get() as MastraCodeState | undefined;
 }
 
 /**

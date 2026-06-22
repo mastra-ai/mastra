@@ -239,14 +239,6 @@ export function workflowRoute({
         throw new Error('Workflow ID is required');
       }
 
-      if (contextRequestContext && params.requestContext) {
-        mastra
-          .getLogger()
-          ?.warn(
-            `"requestContext" from the request body will be ignored because "requestContext" is already set in the route options.`,
-          );
-      }
-
       const handlerOptions = {
         mastra,
         workflowId: workflowToUse,

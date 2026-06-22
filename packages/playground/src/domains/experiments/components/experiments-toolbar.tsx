@@ -1,6 +1,6 @@
 import { Button, ButtonsGroup, SelectFieldBlock, ListSearch } from '@mastra/playground-ui';
 import { XIcon } from 'lucide-react';
-import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list';
+import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
 
 export interface ExperimentsToolbarDatasetOption {
   value: string;

@@ -1,4 +1,4 @@
-import { useBuilderSettings } from '../hooks/use-builder-settings';
+import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 
 export const useBuilderAgentFeatures = () => {
   const { data } = useBuilderSettings();

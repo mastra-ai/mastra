@@ -7,6 +7,7 @@ import type {
   ToolsInput,
   UIMessageWithMetadata,
   AgentInstructions,
+  AgentEditorConfig,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
@@ -35,7 +36,7 @@ import type {
   StorageConditionalField,
   StoredProcessorGraph,
 } from '@mastra/core/storage';
-
+import type { ChunkType } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type {
   TimeTravelContext,
@@ -126,11 +127,36 @@ export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
 
 /**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/send-message'>>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-message'>>;
+
+/**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
+}
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface ProcessAgentThreadStreamOptions {
+  onChunk: (chunk: ChunkType) => void | Promise<void>;
+  reconnect?:
+    | boolean
+    | {
+        /** Maximum reconnect attempts after the initial stream ends or errors. Defaults to Infinity. */
+        maxRetries?: number;
+        /** Delay between reconnect attempts in milliseconds. Defaults to 1000. */
+        delayMs?: number;
+      };
 }
 
 export interface RequestOptions {
@@ -452,6 +478,7 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
+  supportsMemory?: boolean;
   modelList:
     | Array<{
         id: string;
@@ -475,6 +502,7 @@ export interface GetAgentResponse {
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
+  editor?: AgentEditorConfig;
 }
 
 /**
@@ -587,6 +615,7 @@ export type GetWorkflowRunByIdResponse = WorkflowState;
 export interface GetWorkflowResponse {
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   steps: {
     [key: string]: {
       id: string;
@@ -1104,6 +1133,64 @@ export interface StoredMCPClientToolsConfig {
 }
 
 /**
+ * One pinned connection on a `toolProviders[providerId].connections[toolkit]` bucket.
+ * Part of the Agent Builder / CMS tool-providers shape
+ * (`StoredAgentSnapshot.toolProviders`).
+ */
+export interface StoredToolProviderConnection {
+  /**
+   * Identity binding kind.
+   *
+   * - `'author'` — uses the agent author's connection (v1 default).
+   * - `'invoker'` — uses the end-user's connection (v1.5, reserved).
+   * - `'platform'` — uses a shared platform account (v2, reserved).
+   */
+  kind: 'author' | 'invoker' | 'platform';
+  /** Parent toolkit slug. Denormalized for callsite clarity. */
+  toolkit: string;
+  /**
+   * Provider-opaque identifier for the OAuth bucket.
+   *
+   * Required for `'author'` and `'platform'`; reserved (empty) for `'invoker'`.
+   */
+  connectionId: string;
+  /**
+   * Display label and LLM disambiguator. Optional when this is the only
+   * connection on a `toolkit`; required (non-empty, ≤ 32 chars,
+   * `[A-Za-z0-9 _-]+`, case-insensitively unique) once ≥ 2 connections share
+   * the same `toolkit`.
+   */
+  label?: string;
+  /**
+   * Ownership scope of the underlying OAuth bucket.
+   *
+   * - `'per-author'` (default) — bucketed under the agent author's id.
+   * - `'shared'` — bucketed under a constant shared id; visible to and
+   *   usable by anyone with edit access.
+   * - `'caller-supplied'` — bucketed under the request-context
+   *   `MASTRA_RESOURCE_ID_KEY` value at runtime. Used for multi-tenant
+   *   deployments where the host app sets the user id per request.
+   */
+  scope?: 'per-author' | 'shared' | 'caller-supplied';
+}
+
+/** Per-tool override stored alongside the selected tool slug. */
+export interface StoredToolProviderToolMeta {
+  /**
+   * Toolkit this slug belongs to. The runtime groups selected slugs
+   * by this field when fanning out across connections.
+   */
+  toolkit?: string;
+  description?: string;
+}
+
+/** Stored shape for one tool provider's configuration on one agent. */
+export interface StoredToolProviderConfig {
+  tools: Record<string, StoredToolProviderToolMeta>;
+  connections: Record<string, StoredToolProviderConnection[]>;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
@@ -1160,6 +1247,18 @@ export type ConditionalVariant<T> = StorageConditionalVariant<T>;
 export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
+ * Resolved author identity. Returned by the server when an auth provider is
+ * configured and the agent's `authorId` could be looked up. All fields except
+ * `id` are optional — providers may not expose every field.
+ */
+export interface ResolvedAuthor {
+  id: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+/**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
@@ -1168,6 +1267,7 @@ export interface StoredAgentResponse {
   status: string;
   activeVersionId?: string;
   authorId?: string;
+  author?: ResolvedAuthor;
   visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -1186,6 +1286,7 @@ export interface StoredAgentResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1286,6 +1387,7 @@ export interface CreateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1301,6 +1403,29 @@ export interface CreateStoredAgentParams {
 /**
  * Parameters for updating a stored agent
  */
+export type ExportStoredAgentParams = Partial<
+  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
+>;
+
+export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
+  changeMessage?: string;
+  userName?: string;
+  inspectOnly?: boolean;
+};
+
+export interface ExportStoredAgentResponse {
+  agentId: string;
+  fileName: string;
+  content: string;
+  config: Record<string, unknown>;
+}
+
+export interface OpenStoredAgentChangeRequestResponse {
+  id?: string | number;
+  url: string;
+  ref?: string;
+}
+
 export interface UpdateStoredAgentParams {
   authorId?: string;
   /** Visibility of the agent. */
@@ -1319,6 +1444,7 @@ export interface UpdateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1339,6 +1465,26 @@ export interface UpdateStoredAgentParams {
 export interface DeleteStoredAgentResponse {
   success: boolean;
   message: string;
+}
+
+/**
+ * A single agent that references another agent as a sub-agent. Includes both
+ * public and the caller's own private agents — anything the caller can read.
+ */
+export interface StoredAgentDependent {
+  id: string;
+  name: string;
+}
+
+/**
+ * Response for listing dependents of a stored agent.
+ * `dependents` lists caller-readable references (with names).
+ * `hiddenCount` aggregates dependents the caller cannot read; it is only
+ * non-zero when the target agent is public.
+ */
+export interface StoredAgentDependentsResponse {
+  dependents: StoredAgentDependent[];
+  hiddenCount: number;
 }
 
 // ============================================================================
@@ -1584,6 +1730,7 @@ export interface AgentVersionResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -2301,6 +2448,57 @@ export type ListToolProviderToolsResponse = GeneratedResponse<'GET /tool-provide
 export type GetToolProviderToolSchemaResponse =
   GeneratedResponse<'GET /tool-providers/:providerId/tools/:toolSlug/schema'>;
 
+// ── v2 surface: authorize / connections / fields / status / health ──────────
+
+export type AuthorizeToolProviderParams = GeneratedRequest<Body<'POST /tool-providers/:providerId/authorize'>>;
+
+export type AuthorizeToolProviderResponse = GeneratedResponse<'POST /tool-providers/:providerId/authorize'>;
+
+export type ToolProviderAuthStatusResponse = GeneratedResponse<'GET /tool-providers/:providerId/auth-status/:authId'>;
+
+export type ToolProviderConnectionStatusParams = GeneratedRequest<
+  Body<'POST /tool-providers/:providerId/connection-status'>
+>;
+
+export type ToolProviderConnectionStatusResponse =
+  GeneratedResponse<'POST /tool-providers/:providerId/connection-status'>;
+
+export type ListToolProviderConnectionsParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connections'>
+>;
+
+export type ListToolProviderConnectionsResponse = GeneratedResponse<'GET /tool-providers/:providerId/connections'>;
+
+export type ListToolProviderConnectionFieldsParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connection-fields'>
+>;
+
+export type ListToolProviderConnectionFieldsResponse =
+  GeneratedResponse<'GET /tool-providers/:providerId/connection-fields'>;
+
+export type DisconnectToolProviderConnectionParams = GeneratedRequest<
+  QueryParams<'DELETE /tool-providers/:providerId/connections/:connectionId'>
+>;
+
+export type DisconnectToolProviderConnectionResponse =
+  GeneratedResponse<'DELETE /tool-providers/:providerId/connections/:connectionId'>;
+
+export type UpdateToolProviderConnectionParams = GeneratedRequest<
+  Body<'PATCH /tool-providers/:providerId/connections/:connectionId'>
+>;
+
+export type UpdateToolProviderConnectionResponse =
+  GeneratedResponse<'PATCH /tool-providers/:providerId/connections/:connectionId'>;
+
+export type GetToolProviderConnectionUsageParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connections/:connectionId/usage'>
+>;
+
+export type GetToolProviderConnectionUsageResponse =
+  GeneratedResponse<'GET /tool-providers/:providerId/connections/:connectionId/usage'>;
+
+export type ToolProviderHealthResponse = GeneratedResponse<'GET /tool-providers/:providerId/health'>;
+
 // ============================================================================
 // Processor Provider Types
 // ============================================================================
@@ -2919,6 +3117,29 @@ export interface BuilderSettingsResponse {
    */
   modelPolicyWarnings?: string[];
 }
+
+/**
+ * Response from GET /editor/builder/models/available.
+ *
+ * Same provider shape as {@link ListAgentsModelProvidersResponse}, but each
+ * provider's `models` list is already filtered by the active builder model
+ * policy (the server applies the EE allowlist). Providers with no allowed
+ * models are omitted, so the picker can render this verbatim.
+ */
+export type BuilderAvailableModelsResponse = GeneratedResponse<'GET /editor/builder/models/available'>;
+
+/**
+ * A valid permission-pattern string (e.g. `agents:read`, `*`).
+ *
+ * Kept as a string alias so the Playground can name the type while the
+ * authoritative set is fetched from the server at runtime.
+ */
+export type PermissionPattern = string;
+
+/**
+ * Response from GET /auth/permission-patterns.
+ */
+export type PermissionPatternsResponse = GeneratedResponse<'GET /auth/permission-patterns'>;
 
 /**
  * Resolved picker visibility section returned in {@link BuilderSettingsResponse}.

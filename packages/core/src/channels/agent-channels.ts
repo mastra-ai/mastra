@@ -16,7 +16,7 @@ import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
 import { runStaticDriver } from './chat-driver-static';
 import { runStreamingDriver } from './chat-driver-streaming';
-import { getChatModule } from './chat-lazy';
+import { chatModule, getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
@@ -37,6 +37,7 @@ import type {
   ChannelContext,
   ChannelHandlers,
   PostableMessage,
+  ResolveResourceId,
   StreamingConfig,
   ThreadHistoryMessage,
   ToolDisplay,
@@ -77,6 +78,8 @@ export class AgentChannels {
   private inlineLinkRules: InlineLinkRule[] | undefined;
   /** Whether channel tools (reactions, etc.) are enabled. */
   private toolsEnabled: boolean;
+  /** Optional hook to resolve the memory resourceId (owner) for newly-created channel threads. */
+  private resolveResourceId: ResolveResourceId | undefined;
   /**
    * The original `ChannelConfig` passed to the constructor.
    *
@@ -157,6 +160,7 @@ export class AgentChannels {
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
     this.toolsEnabled = config.tools !== false;
+    this.resolveResourceId = config.resolveResourceId;
     this.channelConfig = config;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
   }
@@ -671,9 +675,12 @@ export class AgentChannels {
 
   /**
    * Returns channel input processors (e.g. system prompt injection).
-   * Skips if the user already added a processor with the same id.
+   *
+   * - Skipped entirely when `channels.threadContext.addSystemMessage` is `false`.
+   * - Skipped if the user already added a processor with the same id.
    */
   getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
+    if (this.channelConfig.threadContext?.addSystemMessage === false) return [];
     const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
     if (hasProcessor) return [];
     return [new ChatChannelProcessor()];
@@ -732,8 +739,8 @@ export class AgentChannels {
    *
    *   - `channelContext` — goes on `requestContext` under the 'channel' key, consumed by
    *     `ChatChannelProcessor` and other input processors.
-   *   - `attributes` — serialized as XML on the signal element the LLM sees (e.g. on
-   *     `<user-message messageId=... authorId=... />`). Strings only.
+   *   - `attributes` — serialized as XML on the user message element the LLM sees (e.g. on
+   *     `<user messageId=... authorId=... />`). Strings only.
    *   - `providerOptions` — written to the stored message's `content.providerMetadata`
    *     under `mastra.channels.<platform>` so UI/query callers can read author/channel
    *     facts off the message (e.g. show a Slack icon + author name) without unpacking
@@ -859,11 +866,16 @@ export class AgentChannels {
     // each Slack thread (including top-level DM, DM thread reply, channel mention, and
     // channel thread reply) gets its own mastra thread.
     const externalThreadId = chatThread.id;
+    const defaultResourceId = `${platform}:${message.author.userId}`;
     const mastraThread = await this.getOrCreateThread({
       externalThreadId,
       channelId: chatThread.channelId,
       platform,
-      resourceId: `${platform}:${message.author.userId}`,
+      // Lazily resolved: the hook only runs when we're actually creating a new
+      // thread, never when reusing an existing one (which keeps its stored owner).
+      resourceId: this.resolveResourceId
+        ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId })
+        : defaultResourceId,
       mastra,
     });
 
@@ -900,7 +912,8 @@ export class AgentChannels {
       }
     }
 
-    const text = [historyBlock, message.text].filter(Boolean).join('\n\n');
+    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : undefined;
+    const text = [historyBlock, richText || message.text].filter(Boolean).join('\n\n');
     const parts: Exclude<AgentSignalContents, string> = [{ type: 'text', text }];
     const attachments = message.attachments.filter(a => a.url || a.fetchData);
 
@@ -1029,27 +1042,16 @@ export class AgentChannels {
       platform,
     });
 
-    // Subscribe BEFORE sending the signal so the subscription metadata write
-    // happens before the agent run loads the thread snapshot. Otherwise the
-    // in-flight agent run can read the thread pre-subscribe and later
-    // overwrite the `channel_subscribed` field via its own thread persistence.
-    await chatThread.subscribe();
-
-    // Refresh the thread snapshot so the agent run sees the post-subscribe
-    // metadata. Without this, `prepareMemoryStep`'s deepEqual would detect a
-    // metadata mismatch and overwrite the freshly-written `channel_subscribed`
-    // with the stale pre-subscribe value.
-    const memoryStore = await mastra.getStorage()?.getStore('memory');
-    const refreshedThread = memoryStore ? await memoryStore.getThreadById({ threadId: mastraThread.id }) : null;
-    const threadForRun = refreshedThread ?? mastraThread;
+    void chatThread.subscribe().catch(err => {
+      this.log('debug', 'chatThread.subscribe failed', err);
+    });
 
     // When the message is text-only, pass the bare string to the signal pipeline.
     // Otherwise pass the parts array directly — both shapes match AgentSignalContents.
     const signalContents: AgentSignalContents = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
 
-    this.agent.sendSignal(
+    this.agent.sendMessage(
       {
-        type: 'user-message',
         contents: signalContents,
         attributes,
         providerOptions,
@@ -1062,7 +1064,7 @@ export class AgentChannels {
           streamOptions: {
             requestContext,
             memory: {
-              thread: threadForRun,
+              thread: mastraThread.id,
               resource: threadResourceId,
             },
             // Without approval-button rendering, auto-approve tools to
@@ -1092,11 +1094,12 @@ export class AgentChannels {
         // Skip the current message that triggered this request
         if (msg.id === currentMessageId) continue;
 
+        const historyText = msg.formatted ? chatModule().stringifyMarkdown(msg.formatted).trim() : undefined;
         messages.push({
           id: msg.id,
           author: msg.author.fullName || msg.author.userName || 'Unknown',
           userId: msg.author.userId,
-          text: msg.text,
+          text: historyText || msg.text,
           isBot: msg.author.isBot === true,
         });
 
@@ -1342,7 +1345,12 @@ export class AgentChannels {
     externalThreadId: string;
     channelId: string;
     platform: string;
-    resourceId: string;
+    /**
+     * The owner for a newly-created thread. Pass a function to defer resolution
+     * until we know a new thread is actually needed; it is never called when an
+     * existing thread is reused.
+     */
+    resourceId: string | (() => string | Promise<string>);
     mastra: Mastra;
   }): Promise<StorageThreadType> {
     const storage = mastra.getStorage();
@@ -1372,11 +1380,13 @@ export class AgentChannels {
       return threads[0]!;
     }
 
+    const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
+
     return memoryStore.saveThread({
       thread: {
         id: crypto.randomUUID(),
         title: `${platform} conversation`,
-        resourceId,
+        resourceId: resolvedResourceId,
         createdAt: new Date(),
         updatedAt: new Date(),
         metadata,

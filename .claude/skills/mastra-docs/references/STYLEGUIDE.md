@@ -33,6 +33,10 @@ Use this file as the default writing guide for Mastra's documentation.
 - Address the reader in the present tense.
 - Use sentence case for titles.
 - Use conjunctions where they make the sentence sound more natural.
+- Use contractions for common phrases like `don't`, `doesn't`, `can't`, and `isn't`.
+- Remove filler, weak adverbs, weasel words, clichés, and wordy phrases.
+- Do not start sentences with `So`, `There is`, or `There are`.
+- Use inclusive, gender-neutral, person-first wording.
 - Write out abbreviations on first use, then add the abbreviation in parentheses.
 - Avoid gerunds in titles when a clearer verb phrase works.
 - Prefer active voice.

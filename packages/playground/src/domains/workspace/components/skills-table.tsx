@@ -128,7 +128,7 @@ export function SkillsTable({
             }
 
             return (
-              <DataList.Row key={skill.path}>
+              <DataList.RowWrapper key={skill.path}>
                 <DataList.RowButton flushRight flushLeft colEnd={-2} onClick={onClick}>
                   {rowContent}
                 </DataList.RowButton>
@@ -154,7 +154,7 @@ export function SkillsTable({
                     )}
                   </div>
                 </DataList.Cell>
-              </DataList.Row>
+              </DataList.RowWrapper>
             );
           })
         )}

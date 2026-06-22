@@ -1,6 +1,6 @@
 {
   "name": "@mastra/elasticsearch",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "ElasticSearch vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "pretest": "docker compose up -d && (for i in $(seq 1 120); do curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"' && break || (sleep 2; [ $i -eq 120 ] && exit 1); done)",
     "test": "vitest run",
@@ -38,11 +38,12 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

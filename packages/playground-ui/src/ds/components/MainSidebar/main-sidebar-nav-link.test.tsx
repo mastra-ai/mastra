@@ -43,6 +43,16 @@ afterEach(() => cleanup());
 //     producing an arrow stranded in the middle of empty space.
 
 describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
+  it('applies a pointer cursor to sidebar nav items', () => {
+    render(
+      <ul>
+        <MainSidebarNavLink state="default" link={{ name: 'Agents', url: '/agents' }} />
+      </ul>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Agents' }).className).toContain('cursor-pointer');
+  });
+
   it('renders the trigger as a real <a> so Floating UI can anchor to it', () => {
     render(
       <MainSidebarProvider defaultState="collapsed">
@@ -57,6 +67,16 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     const trigger = screen.getByRole('link', { name: 'Agents' });
     expect(trigger.tagName).toBe('A');
     expect(trigger.getAttribute('href')).toBe('/agents');
+  });
+
+  it('throws when asChild receives a non-element child', () => {
+    expect(() =>
+      render(
+        <ul>
+          <MainSidebarNavLink asChild>Agents</MainSidebarNavLink>
+        </ul>,
+      ),
+    ).toThrow(/asChild.*SlottedNavChildProps.*itemClassName/);
   });
 
   it('does not apply CSS margin utilities on TooltipContent that would dislocate the arrow', async () => {
@@ -122,7 +142,7 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
       <TooltipProvider delay={0}>
         <TooltipPrimitive.Root open>
           <TooltipTrigger asChild>
-            <span tabIndex={0}>Traces</span>
+            <button type="button">Traces</button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Add @mastra/observability to enable this tab.</TooltipContent>
         </TooltipPrimitive.Root>

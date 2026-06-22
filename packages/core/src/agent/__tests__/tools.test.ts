@@ -188,6 +188,137 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
       expect(message).toBe('Executed successfully');
     });
 
+    it('runs agent hooks through the public generate path', async () => {
+      const calls: Array<{ phase: 'before' | 'after'; toolName: string; input: unknown; output?: unknown }> = [];
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: integration.getStaticTools(),
+        hooks: {
+          beforeToolCall: ({ toolName, input }) => calls.push({ phase: 'before', toolName, input }),
+          afterToolCall: ({ toolName, input, output }) => calls.push({ phase: 'after', toolName, input, output }),
+        },
+      });
+
+      const mastra = new Mastra({
+        agents: {
+          testAgent,
+        },
+        logger: false,
+      });
+      const agentOne = mastra.getAgent('testAgent');
+
+      if (version === 'v1') {
+        await agentOne.generateLegacy('Call testTool', { toolChoice: 'required' });
+      } else {
+        await agentOne.generate('Call testTool');
+      }
+
+      expect(calls.slice(0, 2)).toEqual([
+        { phase: 'before', toolName: 'testTool', input: {} },
+        {
+          phase: 'after',
+          toolName: 'testTool',
+          input: {},
+          output: { message: 'Executed successfully' },
+        },
+      ]);
+    });
+
+    it('uses per-execution hooks through the public generate path', async () => {
+      const configBeforeToolCall = vi.fn();
+      const runBeforeToolCall = vi.fn(() => ({ proceed: false as const, output: { message: 'blocked' } }));
+      const execute = vi.fn(async () => ({ message: 'executed' }));
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
+        inputSchema: z.object({}),
+        execute,
+      });
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: { testTool },
+        hooks: { beforeToolCall: configBeforeToolCall },
+      });
+      const mastra = new Mastra({
+        agents: {
+          testAgent,
+        },
+        logger: false,
+      });
+      const agentOne = mastra.getAgent('testAgent');
+
+      let toolResult;
+      if (version === 'v1') {
+        const response = await agentOne.generateLegacy('Call testTool', {
+          toolChoice: 'required',
+          hooks: {
+            beforeToolCall: runBeforeToolCall,
+          },
+        });
+        toolResult = response.toolResults.find((result: any) => result.toolName === 'testTool');
+      } else {
+        const response = await agentOne.generate('Call testTool', {
+          hooks: {
+            beforeToolCall: runBeforeToolCall,
+          },
+        });
+        toolResult = response.toolResults.find((result: any) => result.payload.toolName === 'testTool')?.payload;
+      }
+
+      expect(toolResult?.result?.message).toBe('blocked');
+      expect(configBeforeToolCall).not.toHaveBeenCalled();
+      expect(runBeforeToolCall).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'testTool', input: {} }));
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('runs afterToolCall when a tool errors', async () => {
+      const afterToolCall = vi.fn();
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
+        inputSchema: z.object({}),
+        execute: async () => {
+          throw new Error('tool failed');
+        },
+      });
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: { testTool },
+        hooks: { afterToolCall },
+      });
+      const mastra = new Mastra({
+        agents: {
+          testAgent,
+        },
+        logger: false,
+      });
+      const agentOne = mastra.getAgent('testAgent');
+
+      if (version === 'v1') {
+        await agentOne.generateLegacy('Call testTool', { toolChoice: 'required' }).catch(() => undefined);
+      } else {
+        await agentOne.generate('Call testTool').catch(() => undefined);
+      }
+
+      expect(afterToolCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'testTool',
+          input: {},
+          output: undefined,
+          error: expect.any(Error),
+        }),
+      );
+    });
+
     it('should call findUserTool with parameters', async () => {
       // Create a new mock model for this test that calls findUserTool
       let findUserToolModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;
@@ -1386,6 +1517,133 @@ describe('requireApproval property preservation', () => {
         expect(chunk.payload.toolName).toBe('criticalAction');
       }
     }
+  });
+
+  it('should preserve a needsApprovalFn attached directly to a tool (MCP shape) through convertTools', async () => {
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        text: 'ok',
+        content: [{ type: 'text', text: 'ok' }],
+        warnings: [],
+      }),
+    });
+
+    // Mirror how the MCP client builds tools: boolean requireApproval plus a
+    // server-level approval function attached directly as needsApprovalFn.
+    const needsApprovalFn = (args: any) => args.amount > 100;
+    const mcpStyleTool = createTool({
+      id: 'transfer-funds',
+      description: 'Transfer funds',
+      inputSchema: z.object({ amount: z.number() }),
+      requireApproval: true,
+      execute: async ({ amount }) => ({ success: true, amount }),
+    });
+    mcpStyleTool.needsApprovalFn = needsApprovalFn;
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for conditional approval',
+      model: mockModel,
+    });
+
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      toolsets: {
+        banking: {
+          transferFunds: mcpStyleTool,
+        },
+      },
+    });
+
+    expect(tools.transferFunds).toBeDefined();
+    expect((tools.transferFunds as any).requireApproval).toBe(true);
+    // The conditional approval function must survive conversion so tool-call-step
+    // can evaluate it per call instead of falling back to the boolean flag.
+    expect((tools.transferFunds as any).needsApprovalFn).toBe(needsApprovalFn);
+  });
+
+  it('runs configured hooks around agent tool execution', async () => {
+    const calls: Array<{ phase: string; toolName: string; input: unknown; output?: unknown }> = [];
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'Test tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => ({ value }),
+    });
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for hooks',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'ok' }],
+          warnings: [],
+        }),
+      }),
+      tools: { testTool },
+      hooks: {
+        beforeToolCall: ({ toolName, input }) => calls.push({ phase: 'before', toolName, input }),
+        afterToolCall: ({ toolName, input, output }) => calls.push({ phase: 'after', toolName, input, output }),
+      },
+    });
+
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+    });
+    const input = { value: 'ok' };
+    const output = await tools.testTool.execute?.(input, {} as any);
+
+    expect(output).toEqual({ value: 'ok' });
+    expect(calls).toEqual([
+      { phase: 'before', toolName: 'testTool', input },
+      { phase: 'after', toolName: 'testTool', input, output: { value: 'ok' } },
+    ]);
+  });
+
+  it('allows per-execution hooks to short-circuit agent tool execution', async () => {
+    const execute = vi.fn(async () => ({ value: 'executed' }));
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'Test tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute,
+    });
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for hooks',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'ok' }],
+          warnings: [],
+        }),
+      }),
+      tools: { testTool },
+    });
+
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      hooks: {
+        beforeToolCall: () => ({ proceed: false, output: { value: 'blocked' } }),
+      },
+    });
+    const output = await tools.testTool.execute?.({ value: 'ok' }, {} as any);
+
+    expect(output).toEqual({ value: 'blocked' });
+    expect(execute).not.toHaveBeenCalled();
   });
 });
 

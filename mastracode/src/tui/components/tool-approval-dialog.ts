@@ -8,10 +8,11 @@
  *   a       — always allow this category for the session
  *   Y       — switch to YOLO mode (approve all)
  */
-import { Box, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable } from '@mariozechner/pi-tui';
+import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
+import { decodePrintableShortcut } from '../key-input.js';
 import { theme } from '../theme.js';
 
 export type ApprovalAction =
@@ -34,6 +35,7 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
   private args: unknown;
   private categoryLabel: string | undefined;
   private onAction: (action: ApprovalAction) => void;
+  private resolved = false;
 
   // Focusable implementation
   private _focused = false;
@@ -131,24 +133,35 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
     return lines.join('\n');
   }
 
+  private emit(action: ApprovalAction): void {
+    if (this.resolved) return;
+    this.resolved = true;
+    this.onAction(action);
+  }
+
   handleInput(data: string): void {
+    if (this.resolved) return;
     const kb = getKeybindings();
 
     // Escape to decline
     if (kb.matches(data, 'tui.select.cancel')) {
-      this.onAction({ type: 'decline' });
+      this.emit({ type: 'decline' });
       return;
     }
 
-    // Single keypress shortcuts
-    if (data === 'y') {
-      this.onAction({ type: 'approve' });
-    } else if (data === 'n') {
-      this.onAction({ type: 'decline' });
-    } else if (data === 'a') {
-      this.onAction({ type: 'always_allow_category' });
-    } else if (data === 'Y') {
-      this.onAction({ type: 'yolo' });
+    switch (decodePrintableShortcut(data)) {
+      case 'y':
+        this.emit({ type: 'approve' });
+        break;
+      case 'n':
+        this.emit({ type: 'decline' });
+        break;
+      case 'a':
+        this.emit({ type: 'always_allow_category' });
+        break;
+      case 'Y':
+        this.emit({ type: 'yolo' });
+        break;
     }
   }
 
