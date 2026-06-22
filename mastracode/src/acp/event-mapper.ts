@@ -5,6 +5,15 @@ import type {
 } from '@agentclientprotocol/sdk';
 import type { Harness, HarnessEvent, TokenUsage } from '@mastra/core/harness';
 
+let autoApprove = false;
+
+/**
+ * Enable or disable automatic tool approval (set via --dangerous-auto-approve CLI flag).
+ */
+export function setAutoApprove(value: boolean): void {
+  autoApprove = value;
+}
+
 /**
  * Map a mastracode tool name to an ACP ToolKind.
  */
@@ -131,8 +140,8 @@ async function handleToolApproval(
   harness: Harness,
   event: Extract<HarnessEvent, { type: 'tool_approval_required' }>,
 ): Promise<void> {
-  // Auto-approve if env var is set
-  if (process.env.MASTRACODE_ACP_AUTO_APPROVE === '1') {
+  // Auto-approve if --dangerous-auto-approve flag is set
+  if (autoApprove) {
     harness.session.respondToToolApproval({ decision: 'approve' });
     return;
   }

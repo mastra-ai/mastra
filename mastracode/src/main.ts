@@ -212,7 +212,7 @@ async function main() {
 
   if (process.argv.includes('--acp')) {
     const { acpMain } = await import('./acp/index.js');
-    return acpMain();
+    return acpMain({ dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve') });
   }
 
   // When stdin is piped (e.g. `cat foo | mastracode`), drain the pipe fully

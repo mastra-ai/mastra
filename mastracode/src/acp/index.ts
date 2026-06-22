@@ -3,12 +3,16 @@ import type { HarnessMode } from '@mastra/core/harness';
 import { createMastraCode } from '../index.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
 import { runAcpServer } from './server.js';
+import { setAutoApprove } from './event-mapper.js';
 
 /**
  * Entry point for ACP server mode.
  * Initializes mastracode and runs the ACP protocol over stdio.
  */
-export async function acpMain(): Promise<void> {
+export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Promise<void> {
+  if (options?.dangerousAutoApprove) {
+    setAutoApprove(true);
+  }
   // Redirect console.log to stderr to avoid polluting the JSON-RPC stream on stdout.
   // eslint-disable-next-line no-console
   const originalConsoleLog = console.log;

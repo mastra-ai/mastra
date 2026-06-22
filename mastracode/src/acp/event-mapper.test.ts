@@ -281,9 +281,9 @@ describe('ACP Event Mapper', () => {
       });
     });
 
-    it('auto-approves when MASTRACODE_ACP_AUTO_APPROVE=1', async () => {
-      const originalEnv = process.env.MASTRACODE_ACP_AUTO_APPROVE;
-      process.env.MASTRACODE_ACP_AUTO_APPROVE = '1';
+    it('auto-approves when --dangerous-auto-approve is set', async () => {
+      const { setAutoApprove } = await import('./event-mapper.js');
+      setAutoApprove(true);
 
       try {
         const state = createPromptState('session-1');
@@ -303,7 +303,7 @@ describe('ACP Event Mapper', () => {
           decision: 'approve',
         });
       } finally {
-        process.env.MASTRACODE_ACP_AUTO_APPROVE = originalEnv;
+        setAutoApprove(false);
       }
     });
   });
