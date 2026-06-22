@@ -217,7 +217,7 @@ export function confirmPendingUserMessage(state: TUIState, messageId: string, te
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  if (state.streamingComponent && state.harness.session.displayState.get().isRunning) {
+  if (state.streamingComponent && state.session.displayState.get().isRunning) {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   }
@@ -569,7 +569,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     state.messageComponentsById.set(message.id, userComponent);
 
-    if (state.streamingComponent && state.harness.session.displayState.get().isRunning) {
+    if (state.streamingComponent && state.session.displayState.get().isRunning) {
       state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
       reconcileChatBoundarySpacers(state.chatContainer);
@@ -739,7 +739,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             // Parse embedded metadata for model ID, duration, tool calls
             const meta = rawResult ? parseSubagentMeta(rawResult) : null;
             const resultText = meta?.text ?? rawResult;
-            const currentModelId = state.harness.session.model.get() || undefined;
+            const currentModelId = state.session.model.get() || undefined;
             const modelId = meta?.modelId ?? subArgs?.modelId ?? (subArgs?.forked ? currentModelId : undefined);
             const durationMs = meta?.durationMs ?? 0;
 
@@ -963,7 +963,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
         // Keep the reconstructed task list local to display state in that case.
       }
     }
-    state.harness.session.displayState.restoreTasks(previousTasksAcc);
+    state.session.displayState.restoreTasks(previousTasksAcc);
   }
 
   reconcileChatBoundarySpacers(state.chatContainer);

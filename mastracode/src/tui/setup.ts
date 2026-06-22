@@ -65,7 +65,7 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
-      state.harness.abort();
+      state.session.abort();
     } else {
       const current = state.editor.getText();
       if (current.length > 0) {
@@ -219,7 +219,7 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   // continue on the next iteration. Abort the active harness run too: the core
   // scorer owns the judge stream, so the TUI-local controller alone only changes
   // the visual component and lets the judge continue in the background.
-  state.harness.abort();
+  state.session.abort();
   // Persist the paused state immediately so a thread switch or exit before the
   // next save does not reload the old active objective and effectively undo the
   // pause. `saveToThread` is best-effort, so run it fire-and-forget to keep this
@@ -472,7 +472,7 @@ export async function loadSkillCommands(state: TUIState): Promise<void> {
   try {
     let workspace = state.harness.getWorkspace() ?? state.workspace;
     if (!workspace && state.harness.hasWorkspace()) {
-      workspace = await state.harness.resolveWorkspace();
+      workspace = await state.harness.resolveWorkspace({ session: state.session });
     }
     if (!workspace?.skills) {
       state.skillCommands = [];
@@ -518,18 +518,13 @@ export function setupKeyHandlers(
     }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
-      state.activeInlinePlanApproval = undefined;
-      state.activeInlineQuestion = undefined;
-      state.pendingInlineQuestions.length = 0;
-      state.pendingAskUserComponents?.clear();
-      return;
     }
     state.activeInlinePlanApproval = undefined;
     state.activeInlineQuestion = undefined;
     state.pendingInlineQuestions.length = 0;
     state.pendingAskUserComponents?.clear();
     state.userInitiatedAbort = true;
-    state.harness.abort();
+    state.session.abort();
   };
   process.on('SIGINT', sigintHandler);
 
@@ -564,7 +559,7 @@ export function subscribeToHarness(state: TUIState, handleEvent: (event: any) =>
     });
     return eventQueue;
   };
-  state.unsubscribe = state.harness.subscribe(listener);
+  state.unsubscribe = state.session.subscribe(listener);
 }
 
 // =============================================================================
@@ -613,7 +608,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   if (sortedThreads.length === 1) {
     const thread = sortedThreads[0]!;
     try {
-      await state.harness.switchThread({ threadId: thread.id });
+      await state.session.thread.switch({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
         await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }
@@ -633,7 +628,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   // Multiple threads — try each in order until one is unlocked
   for (const thread of sortedThreads) {
     try {
-      await state.harness.switchThread({ threadId: thread.id });
+      await state.session.thread.switch({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
         await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }
@@ -656,7 +651,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
-    const tasks = state.harness.session.displayState.get().tasks;
+    const tasks = state.session.displayState.get().tasks;
 
     if (tasks.length > 0 && state.taskProgress) {
       state.taskProgress.updateTasks(tasks);

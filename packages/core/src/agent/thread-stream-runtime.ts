@@ -1541,7 +1541,11 @@ export class AgentThreadStreamRuntime {
                   break;
                 }
                 const typedPart = part as any;
-                yield typedPart;
+                const partWithRunId =
+                  typedPart && typeof typedPart === 'object' && !('runId' in typedPart)
+                    ? { ...typedPart, runId: run.runId }
+                    : typedPart;
+                yield partWithRunId;
                 if (done) break;
                 const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
                 const terminalBoundary =

@@ -161,7 +161,7 @@ describe('buildLayout startup header', () => {
   it('serializes harness event handling so abort cleanup cannot interleave with stream updates', async () => {
     let listener: ((event: { type: string }) => Promise<void>) | undefined;
     const state = {
-      harness: {
+      session: {
         subscribe: vi.fn((handler: typeof listener) => {
           listener = handler;
           return vi.fn();

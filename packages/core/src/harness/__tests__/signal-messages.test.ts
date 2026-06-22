@@ -31,14 +31,16 @@ describe('Harness signal messages', () => {
       resourceId: 'resource-1',
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
-    const threadId = 'thread-1';
+    await harness.init();
+    const session = await harness.createSession();
+    const threadId = session.thread.getId()!;
     const subscription = createSubscription(() => activeRunId);
 
-    harness.session.thread.set({ threadId });
-    harness.session.run.setRunId({ runId: 'run-1' });
-    harness.session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
+    agent.subscribeToThread.mockClear();
 
-    const result = harness.sendSignal({
+    const result = session.sendSignal({
       content: 'steer while active',
       ifActive: { attributes: { path: 'active' } },
       ifIdle: { attributes: { path: 'idle' } },
@@ -67,15 +69,16 @@ describe('Harness signal messages', () => {
       resourceId: 'resource-1',
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
-    const threadId = 'thread-1';
+    await harness.init();
+    const session = await harness.createSession();
+    const threadId = session.thread.getId()!;
     const subscription = createSubscription(() => activeRunId);
 
-    harness.session.thread.set({ threadId });
-    harness.session.run.setRunId({ runId: 'run-1' });
-    harness.session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
-    const approval = harness.session.approval.arm({ toolName: 'request_access' });
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
+    const approval = session.approval.arm({ toolName: 'request_access' });
 
-    const result = harness.sendSignal({ content: 'actually do this first' });
+    const result = session.sendSignal({ content: 'actually do this first' });
 
     await expect(approval).resolves.toEqual({
       decision: 'decline',

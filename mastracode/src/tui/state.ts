@@ -92,6 +92,9 @@ export interface MastraTUIOptions {
   /** The harness instance to control */
   harness: Harness<any>;
 
+  /** The session created from the harness that all work runs through */
+  session: Session<any>;
+
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
 
@@ -309,7 +312,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const result: TUIState = {
     // Core dependencies
     harness: options.harness,
-    session: options.harness.session,
+    session: options.session,
     options,
     hookManager: options.hookManager,
     analytics: options.analytics,

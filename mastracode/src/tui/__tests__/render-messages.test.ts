@@ -30,9 +30,8 @@ function createState(): TUIState {
     messageComponentsById: new Map(),
     pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],
-    harness: {
-      session: { displayState: { get: () => ({ isRunning: false }) } },
-    },
+    session: { displayState: { get: () => ({ isRunning: false }) } },
+    harness: { session: { displayState: { get: () => ({ isRunning: false }) } } },
   } as unknown as TUIState;
 }
 
@@ -647,12 +646,10 @@ describe('renderExistingMessages subagents', () => {
     state.session = {
       ...state.session,
       thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+      model: { get: () => 'openai/gpt-5.5' },
     } as unknown as TUIState['session'];
     state.harness = {
-      session: {
-        displayState: { get: () => ({ isRunning: false }) },
-        model: { get: () => 'openai/gpt-5.5' },
-      },
+      session: state.session,
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);

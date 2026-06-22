@@ -16,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { Agent } from '../../agent';
 import { InMemoryStore } from '../../storage/mock';
 import { Harness } from '../harness';
+import type { Session } from '../session';
 import type { HarnessEvent } from '../types';
 
 function createHarness() {
@@ -33,7 +34,7 @@ function createHarness() {
   });
 }
 
-async function processSubscribedChunks(harness: Harness, chunks: any[], activeRunId = 'run-b') {
+async function processSubscribedChunks(session: Session<any>, chunks: any[], activeRunId = 'run-b') {
   const subscription = {
     stream: (async function* () {
       for (const chunk of chunks) yield chunk;
@@ -43,28 +44,30 @@ async function processSubscribedChunks(harness: Harness, chunks: any[], activeRu
     unsubscribe: () => {},
   };
 
-  harness.session.stream.attach({ subscription: subscription as any, key: 'test-agent:test-resource:test-thread' });
-  await (harness as any).processSubscribedThreadStream(subscription);
+  session.stream.attach({ subscription: subscription as any, key: 'test-agent:test-resource:test-thread' });
+  await session.processSubscribedThreadStream(subscription as any);
 }
 
 describe('Trailing guard does not swallow new-run null-runId chunks', () => {
   it('delivers null-runId chunks from a new run after a different run was aborted', async () => {
     const harness = createHarness();
+    await harness.init();
+    const session = await harness.createSession();
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
     // Track which chunk types reach processStreamChunk.
     const processedChunkTypes: string[] = [];
-    const origProcessStreamChunk = (harness as any).processStreamChunk.bind(harness);
-    (harness as any).processStreamChunk = async (...args: any[]) => {
+    const origProcessStreamChunk = session.runEngine.processStreamChunk.bind(session.runEngine);
+    session.runEngine.processStreamChunk = async (...args: any[]) => {
       const chunk = args[1];
       processedChunkTypes.push(chunk?.type ?? 'unknown');
       return origProcessStreamChunk(...args);
     };
 
-    await processSubscribedChunks(harness, [
+    await processSubscribedChunks(session, [
       // --- Run A: starts, then aborts (no step state needed for abort) ---
       { type: 'start', runId: 'run-a' },
       { type: 'abort', runId: 'run-a' },
