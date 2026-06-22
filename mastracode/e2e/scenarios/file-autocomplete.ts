@@ -29,9 +29,13 @@ export const fileAutocompleteScenario = {
     runtime.startLiveOutput(terminal);
 
     await runtime.waitForScreenText(/Branch: feature\/super-long-branch-name/i, terminal);
+    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
 
-    terminal.write('Attach @auto');
-    await runtime.waitForScreenText(/autocomplete-target\.ts/i, terminal, 20_000);
+    for (const char of 'Attach @auto') {
+      terminal.write(char);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    await runtime.waitForScreenText(/autocomplete-target\.ts/i, terminal, 30_000);
     runtime.printScreen('file autocomplete suggestions', terminal);
 
     terminal.write('\t');
