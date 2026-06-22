@@ -485,6 +485,7 @@ export type ProviderModelsMap = {
     'recraft/recraft-v4.1-pro',
     'recraft/recraft-v4.1-utility',
     'recraft/recraft-v4.1-utility-pro',
+    'sakana/fugu-ultra',
     'stepfun/step-3.5-flash',
     'stepfun/step-3.7-flash',
     'voyage/rerank-2.5',
@@ -682,6 +683,7 @@ export type ProviderModelsMap = {
     'zai-org/glm-4.7-flash',
     'zai-org/glm-5',
     'zai-org/glm-5.1',
+    'zai-org/glm-5.2',
   ];
   readonly xai: readonly [
     'grok-4.20-0309-non-reasoning',
@@ -3332,7 +3334,6 @@ export type ProviderModelsMap = {
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'nex-agi/nex-n2-pro',
-    'nex-agi/nex-n2-pro:free',
     'nousresearch/hermes-3-llama-3.1-405b',
     'nousresearch/hermes-3-llama-3.1-405b:free',
     'nousresearch/hermes-3-llama-3.1-70b',
