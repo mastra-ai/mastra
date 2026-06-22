@@ -1,7 +1,7 @@
 import { Badge, Button, CodeEditor, Icon, cn } from '@mastra/playground-ui';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
 import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
@@ -58,7 +58,7 @@ export const FileTreeBadge = ({
 }: FileTreeBadgeProps) => {
   // Expand by default when approval is required (so buttons are visible)
   const [isCollapsed, setIsCollapsed] = useState(!toolApprovalMetadata);
-  const { isCopied, copyToClipboard } = useCopyToClipboard();
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
 
   // Sync collapsed state when toolApprovalMetadata changes (like BadgeWrapper does)
   useEffect(() => {

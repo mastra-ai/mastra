@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.45.0",
+  "version": "1.46.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -847,6 +847,7 @@
     "@ai-sdk/xai-v6": "npm:@ai-sdk/xai@3.0.89",
     "@ast-grep/napi": "^0.40.5",
     "@babel/core": "^7.29.7",
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",

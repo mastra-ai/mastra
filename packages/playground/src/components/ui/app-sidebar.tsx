@@ -1,5 +1,6 @@
-import { LogoWithoutText, MainSidebar, cn, useKeyboardShortcutLabel, useMainSidebar } from '@mastra/playground-ui';
+import { LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink } from '@mastra/playground-ui';
+import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import { Search, Wrench } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
@@ -126,37 +127,39 @@ export function AppSidebar() {
         )}
       </div>
 
-      <div className="mb-2">
-        <MainSidebar.NavList>
-          <MainSidebar.NavLink
-            asChild
-            state={state}
-            link={{
-              name: 'Search',
-              url: '#',
-              icon: <Search />,
-            }}
-          >
-            <button
-              type="button"
-              onClick={openNavigationCommand}
-              aria-label="Search and navigate"
-              className="border border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5"
+      {!isMobile && (
+        <div className="mb-2">
+          <MainSidebar.NavList>
+            <MainSidebar.NavLink
+              asChild
+              state={state}
+              link={{
+                name: 'Search',
+                url: '#',
+                icon: <Search />,
+              }}
             >
-              <Search />
-              <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
-              {state !== 'collapsed' && (
-                <kbd
-                  aria-hidden="true"
-                  className="ml-auto rounded border border-border1 bg-surface4 px-1.5 py-0.5 font-mono text-[10px] leading-none text-neutral3"
-                >
-                  {commandShortcutLabel}
-                </kbd>
-              )}
-            </button>
-          </MainSidebar.NavLink>
-        </MainSidebar.NavList>
-      </div>
+              <button
+                type="button"
+                onClick={openNavigationCommand}
+                aria-label="Search and navigate"
+                className="border border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5"
+              >
+                <Search />
+                <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
+                {state !== 'collapsed' && (
+                  <kbd
+                    aria-hidden="true"
+                    className="ml-auto rounded border border-border1 bg-surface4 px-1.5 py-0.5 font-mono text-[10px] leading-none text-neutral3"
+                  >
+                    {commandShortcutLabel}
+                  </kbd>
+                )}
+              </button>
+            </MainSidebar.NavLink>
+          </MainSidebar.NavList>
+        </div>
+      )}
 
       {isAgentBuilderVisible && (
         <div className="mb-1">

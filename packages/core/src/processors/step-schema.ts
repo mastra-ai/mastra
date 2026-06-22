@@ -328,7 +328,10 @@ export const DataPartSchema: z.ZodType<DataPartType> = z
   .object({
     type: z.string().refine(t => t.startsWith('data-'), { message: 'Type must start with "data-"' }),
     id: z.string().optional(),
-    data: z.unknown(),
+    // In Zod v4, a bare z.unknown() field is treated as non-optional, so a
+    // missing `data` key would fail validation. data-* parts may omit data
+    // (see DataPartType where `data` is optional), so mark it optional.
+    data: z.unknown().optional(),
   })
   .passthrough();
 

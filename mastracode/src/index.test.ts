@@ -23,7 +23,18 @@ vi.mock('@mastra/core/harness', () => ({
       }
     }
 
-    subscribe() {}
+    async init() {}
+
+    getMastra() {
+      return undefined;
+    }
+
+    async createSession() {
+      return {
+        subscribe() {},
+        thread: { getId: () => undefined },
+      };
+    }
   },
   taskWriteTool: {},
   taskCheckTool: {},

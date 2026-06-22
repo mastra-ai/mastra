@@ -2,8 +2,8 @@ import type { Edge, EdgeProps, NodeProps } from '@xyflow/react';
 import { useMemo } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
-import { WorkflowDataEdge, WORKFLOW_DATA_EDGE_TYPE } from './workflow-data-edge';
 import { WorkflowBoundaryNode } from './workflow-boundary-node';
+import { WorkflowDataEdge, WORKFLOW_DATA_EDGE_TYPE } from './workflow-data-edge';
 import { WorkflowGraphNode } from './workflow-graph-node';
 import { WORKFLOW_BOUNDARY_NODE_TYPE, WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
 import type { WorkflowBoundaryNode as WorkflowBoundaryNodeType, WorkflowStepNode } from './workflow-step-node-utils';
