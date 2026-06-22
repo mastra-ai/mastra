@@ -97,6 +97,9 @@ describe('composer attachments', () => {
     expect(pdfPart!.type).toBe('file');
     expect(pdfPart!.filename).toBe('doc.pdf');
     expect(pdfPart!.data).toMatch(/^data:application\/pdf;base64,/);
+    // The data URL prefix must appear exactly once; `fileToBase64` already
+    // returns a full data URL, so it must not be prepended a second time.
+    expect(pdfPart!.data).not.toMatch(/data:application\/pdf;base64,data:/);
 
     // text -> plain string content
     expect(text!.content).toBe('hello world');
