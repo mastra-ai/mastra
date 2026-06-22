@@ -44,7 +44,7 @@ values
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
-    await runtime.waitForScreenText(/Mastra Code|Project:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/LONG_THREAD_HISTORY_MESSAGE_3000|│ ›/i, terminal, 15_000);
 
     terminal.submit('/threads');
     await runtime.waitForScreenText(/E2E long startup history fixture/i, terminal, 8_000);
