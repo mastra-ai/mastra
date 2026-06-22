@@ -31,7 +31,15 @@ class InMemoryPubSub extends PubSub {
     const pending = new Promise<void>(resolve => {
       setTimeout(() => {
         try {
-          for (const subscriber of subscribers) subscriber(envelope);
+          // Best-effort delivery: a throwing subscriber must not stop others
+          // or bubble as an uncaught async error.
+          for (const subscriber of subscribers) {
+            try {
+              subscriber(envelope);
+            } catch {
+              // ignore individual subscriber failures
+            }
+          }
         } finally {
           resolve();
         }
@@ -79,14 +87,17 @@ async function readNextRun(iterator: AsyncIterator<any>) {
 
 function withTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 2000): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  // Attach cleanup to the race result so the timer is cleared whether `promise`
+  // wins or the timeout fires. Attaching `.finally` to the timeout promise alone
+  // would leak the timer when `promise` resolves first (it never settles).
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => {
       timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
-    }).finally(() => {
-      if (timeout) clearTimeout(timeout);
     }),
-  ]) as Promise<T>;
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  }) as Promise<T>;
 }
 
 describe('AIMock scenario: signal edge cases', () => {
@@ -147,8 +158,8 @@ describe('AIMock scenario: signal edge cases', () => {
     // Same runId for both
     expect(run1.runId).toBe(run2.runId);
 
-    sub1.unsubscribe();
-    sub2.unsubscribe();
+    await sub1.unsubscribe();
+    await sub2.unsubscribe();
   });
 
   it('unsubscribed subscriber stops receiving messages', async () => {
@@ -176,14 +187,17 @@ describe('AIMock scenario: signal edge cases', () => {
     // Subscribe, then immediately unsubscribe
     const sub = await agent.subscribeToThread({ threadId, resourceId });
     let received = false;
-    const readPromise = (async () => {
+    // Background reader: should never observe a part once unsubscribed. Marked
+    // void deliberately — the test asserts `received` stays false rather than
+    // awaiting this (it would otherwise hang, since no part is delivered).
+    void (async () => {
       for await (const _part of sub.stream) {
         received = true;
         break;
       }
     })();
 
-    sub.unsubscribe();
+    await sub.unsubscribe();
 
     // Send a message — the unsubscribed subscriber should NOT receive it
     await agent.sendMessage(
@@ -261,7 +275,8 @@ describe('AIMock scenario: signal edge cases', () => {
 
     expect(result2.skipped).toBe(true);
 
-    // Third state signal with same cacheKey but different contents — should be accepted
+    // Third state signal with a changed cacheKey (and changed contents) — the
+    // changed cacheKey means it is not deduplicated, so it is accepted.
     const result3 = await agent.sendStateSignal(
       {
         id: 'browser',

@@ -5,13 +5,19 @@ import { z } from 'zod/v4';
 import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
- * Regression class: processor retry mechanism.
+ * Regression class: input/output processor observation, transformation, and
+ * sequencing.
  *
- * When an input processor throws an error or returns a retry signal,
- * the loop should retry the processor up to the configured max retries.
- * This pins the retry path, ensuring error recovery works correctly.
+ * Input processors run before the model request and can observe/transform the
+ * message list; output processors run over the stream and can transform chunks;
+ * multiple processors run in registration order. This pins those paths.
+ *
+ * (Processor *retry* — re-running a processor after an error — is a separate
+ * mechanism covered by the error-processor scenarios; it is not exercised here,
+ * so this file is scoped to the observe/transform/sequence behavior it actually
+ * verifies.)
  */
-describe('AIMock loop scenario: processor retry mechanism', () => {
+describe('AIMock loop scenario: processor observation, transformation & sequencing', () => {
   const getMock = useLoopScenarioAimock();
 
   it('input processor can observe and transform messages', async () => {
@@ -52,8 +58,8 @@ describe('AIMock loop scenario: processor retry mechanism', () => {
     // Processor should have been called
     expect(processorCalled).toBe(true);
 
-    // Loop should complete successfully
-    expect(requests.length).toBeGreaterThan(0);
+    // The model returns final text immediately, so exactly one request is made.
+    expect(requests).toHaveLength(1);
   });
 
   it('output processor can observe and transform stream', async () => {
@@ -127,11 +133,10 @@ describe('AIMock loop scenario: processor retry mechanism', () => {
       },
     });
 
-    // Both processors should have run
-    expect(processorOrder).toContain('processor-1');
-    expect(processorOrder).toContain('processor-2');
+    // Both processors ran, in registration order.
+    expect(processorOrder).toEqual(['processor-1', 'processor-2']);
 
-    // Loop should complete successfully
-    expect(requests.length).toBeGreaterThan(0);
+    // The model returns final text immediately, so exactly one request is made.
+    expect(requests).toHaveLength(1);
   });
 });

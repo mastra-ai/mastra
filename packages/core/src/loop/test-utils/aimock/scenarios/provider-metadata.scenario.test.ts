@@ -1,13 +1,23 @@
 /**
  * AIMock Scenario: Provider Options Passthrough
  *
- * Tests that providerOptions can be passed through the agent stream without errors.
- * This verifies the passthrough mechanism works, though actual provider SDK behavior
- * with these options is outside the scope of core loop tests.
+ * Tests that `providerOptions` can be forwarded through `agent.stream()` and
+ * coexist with model settings that ARE observable on the wire.
  *
- * Note: Whether provider-specific options (like OpenAI's prediction or store) actually
- * affect the request depends on the provider SDK implementation. This test verifies
- * that the options flow through the Mastra agent.stream() call without errors.
+ * Important harness limitation: the OpenAI v5 provider does not serialize
+ * `providerOptions` (e.g. `openai.store`, `openai.user`) into the
+ * chat-completions request body that AIMock captures — they are carried through
+ * a separate provider channel. So we cannot assert those keys directly on the
+ * captured request body.
+ *
+ * To keep these tests falsifiable, each one pairs `providerOptions` with a
+ * `modelSettings` value (temperature) that DOES land in the request body. We
+ * assert that:
+ *   1. the observable setting reaches the body (proving the request was built
+ *      from our options, not silently dropped), and
+ *   2. passing `providerOptions` alongside it does not break loop execution.
+ * A regression that drops model settings during request building fails (1);
+ * a regression where `providerOptions` throws fails (2).
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
@@ -17,44 +27,39 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 describe('AIMock loop scenario: provider options passthrough', () => {
   const getMock = useLoopScenarioAimock();
 
-  it('accepts providerOptions without errors', async () => {
+  it('forwards providerOptions while observable model settings reach the body', async () => {
     const { output, requests } = await runLoopScenario({
       llm: getMock(),
       prompt: 'Hello with metadata.',
       stopWhen: stepCountIs(1),
-      fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: 'Response received.' },
-        );
-      },
-      // Pass provider-specific options that should flow through without errors
+      modelSettings: { temperature: 0.42 },
       providerOptions: {
         openai: {
           prediction: { type: 'content', content: 'Hello with metadata.' },
           store: true,
         },
       },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Response received.' });
+      },
     });
 
-    // Verify the request was made successfully
     expect(requests).toHaveLength(1);
-    
-    // Verify the output was received
-    expect(output).toBeDefined();
+
+    // The observable setting reached the request body, proving the request was
+    // assembled from our options rather than silently dropped.
+    expect((requests[0]?.body as { temperature?: number })?.temperature).toBe(0.42);
+
+    // The loop completed with providerOptions present.
+    expect(await output.text).toBe('Response received.');
   });
 
-  it('accepts multiple provider options without errors', async () => {
+  it('forwards multiple provider option namespaces without breaking the loop', async () => {
     const { output, requests } = await runLoopScenario({
       llm: getMock(),
       prompt: 'Request with multiple provider options.',
       stopWhen: stepCountIs(1),
-      fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: 'Response with metadata.' },
-        );
-      },
+      modelSettings: { temperature: 0.13 },
       providerOptions: {
         openai: {
           parallel_tool_calls: false,
@@ -64,12 +69,13 @@ describe('AIMock loop scenario: provider options passthrough', () => {
           cache_control: { type: 'ephemeral' },
         },
       },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Response with metadata.' });
+      },
     });
 
-    // Verify the request was made successfully
     expect(requests).toHaveLength(1);
-    
-    // Verify the output was received
-    expect(output).toBeDefined();
+    expect((requests[0]?.body as { temperature?: number })?.temperature).toBe(0.13);
+    expect(await output.text).toBe('Response with metadata.');
   });
 });

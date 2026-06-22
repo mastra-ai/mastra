@@ -29,36 +29,27 @@ describe('AIMock loop scenario: error processor recovery', () => {
       },
     };
 
-    try {
-      await runLoopScenario({
-        llm: getMock(),
-        prompt: 'Test error recovery.',
-        stopWhen: stepCountIs(1),
-        errorProcessors: [errorProcessor],
-        fixtures: llm => {
-          // Return 400 error
-          llm.onMessage(/.*/, {
-            error: { message: 'Invalid request', type: 'invalid_request_error', code: 'invalid_request' },
-            status: 400,
-          });
-        },
-      });
+    const { output } = await runLoopScenario({
+      llm: getMock(),
+      prompt: 'Test error recovery.',
+      stopWhen: stepCountIs(1),
+      errorProcessors: [errorProcessor],
+      fixtures: llm => {
+        // Return 400 error
+        llm.onMessage(/.*/, {
+          error: { message: 'Invalid request', type: 'invalid_request_error', code: 'invalid_request' },
+          status: 400,
+        });
+      },
+    });
 
-      // Should not reach here - error should be thrown
-      expect(true).toBe(false);
-    } catch (error) {
-      // Processor should have been called
-      expect(processorCalled).toBe(true);
-      
-      // Should have seen the error
-      expect(errorSeen).toBeDefined();
-      
-      // Should have seen retry count
-      expect(typeof retryCountSeen).toBe('number');
-      
-      // Should have thrown an error
-      expect(error).toBeDefined();
-    }
+    // The run surfaces the API error on its finish reason.
+    expect(await output.finishReason).toBe('error');
+
+    // The processor was invoked with the error and a numeric retry count.
+    expect(processorCalled).toBe(true);
+    expect(errorSeen).toBeDefined();
+    expect(typeof retryCountSeen).toBe('number');
   });
 
   it('processAPIError can access messages and state', async () => {
@@ -74,30 +65,28 @@ describe('AIMock loop scenario: error processor recovery', () => {
       },
     };
 
-    try {
-      await runLoopScenario({
-        llm: getMock(),
-        prompt: 'Test context access.',
-        stopWhen: stepCountIs(1),
-        errorProcessors: [errorProcessor],
-        fixtures: llm => {
-          llm.onMessage(/.*/, {
-            error: { message: 'Bad request', type: 'invalid_request_error', code: 'invalid_request' },
-            status: 400,
-          });
-        },
-      });
+    const { output } = await runLoopScenario({
+      llm: getMock(),
+      prompt: 'Test context access.',
+      stopWhen: stepCountIs(1),
+      errorProcessors: [errorProcessor],
+      fixtures: llm => {
+        llm.onMessage(/.*/, {
+          error: { message: 'Bad request', type: 'invalid_request_error', code: 'invalid_request' },
+          status: 400,
+        });
+      },
+    });
 
-      expect(true).toBe(false);
-    } catch (error) {
-      // Should have access to messages
-      expect(messagesSeen).toBeDefined();
-      expect(Array.isArray(messagesSeen)).toBe(true);
-      
-      // Should have access to state
-      expect(stateSeen).toBeDefined();
-      expect(typeof stateSeen).toBe('object');
-    }
+    expect(await output.finishReason).toBe('error');
+
+    // Should have access to messages
+    expect(messagesSeen).toBeDefined();
+    expect(Array.isArray(messagesSeen)).toBe(true);
+
+    // Should have access to state
+    expect(stateSeen).toBeDefined();
+    expect(typeof stateSeen).toBe('object');
   });
 
   it('processAPIError returning void does not retry', async () => {
@@ -111,27 +100,21 @@ describe('AIMock loop scenario: error processor recovery', () => {
       },
     };
 
-    try {
-      await runLoopScenario({
-        llm: getMock(),
-        prompt: 'Test no retry.',
-        stopWhen: stepCountIs(1),
-        errorProcessors: [errorProcessor],
-        fixtures: llm => {
-          llm.onMessage(/.*/, {
-            error: { message: 'Permanent error', type: 'invalid_request_error', code: 'invalid_request' },
-            status: 400,
-          });
-        },
-      });
+    const { output } = await runLoopScenario({
+      llm: getMock(),
+      prompt: 'Test no retry.',
+      stopWhen: stepCountIs(1),
+      errorProcessors: [errorProcessor],
+      fixtures: llm => {
+        llm.onMessage(/.*/, {
+          error: { message: 'Permanent error', type: 'invalid_request_error', code: 'invalid_request' },
+          status: 400,
+        });
+      },
+    });
 
-      expect(true).toBe(false);
-    } catch (error) {
-      // Processor should have been called once
-      expect(processorCallCount).toBe(1);
-
-      // Should have thrown an error
-      expect(error).toBeDefined();
-    }
+    // A void return means "do not retry": processor runs once and the run errors.
+    expect(await output.finishReason).toBe('error');
+    expect(processorCallCount).toBe(1);
   });
 });

@@ -1,6 +1,5 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
 import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
@@ -47,12 +46,14 @@ describe('AIMock loop scenario: very long tool chains capped by maxSteps', () =>
       },
     });
 
-    // Should stop at maxSteps (5), not run indefinitely
-    expect(executionCount).toBeLessThanOrEqual(5);
-    expect(requests.length).toBeLessThanOrEqual(5);
+    // The model would loop forever, but maxSteps caps it at exactly 5 model
+    // requests (and therefore 5 tool executions). Asserting the exact count
+    // means a regression that runs past the cap fails the test.
+    expect(requests).toHaveLength(5);
+    expect(executionCount).toBe(5);
   });
 
-  it('stopWhen and maxSteps can both bound execution', async () => {
+  it('stopWhen bounds an otherwise-infinite tool chain at the exact step', async () => {
     let executionCount = 0;
 
     const countingTool = createTool({
@@ -69,7 +70,6 @@ describe('AIMock loop scenario: very long tool chains capped by maxSteps', () =>
       llm: getMock(),
       prompt: 'Count to 3',
       tools: { countingTool },
-      maxSteps: 10,
       stopWhen: stepCountIs(3),
       fixtures: llm => {
         // Every turn: call the counter tool (never finish with text)
@@ -84,9 +84,10 @@ describe('AIMock loop scenario: very long tool chains capped by maxSteps', () =>
       },
     });
 
-    // Both stopWhen and maxSteps can bound execution - whichever triggers first
-    expect(executionCount).toBeLessThanOrEqual(10);
-    expect(requests.length).toBeLessThanOrEqual(10);
+    // stepCountIs(3) halts the loop at exactly 3 model requests. Without the
+    // stop condition this model would loop forever.
+    expect(requests).toHaveLength(3);
+    expect(executionCount).toBe(3);
   });
 
   it('model can finish naturally before maxSteps is reached', async () => {

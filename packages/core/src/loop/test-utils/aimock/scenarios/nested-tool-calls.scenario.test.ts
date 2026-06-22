@@ -106,30 +106,36 @@ describe('AIMock loop scenario: nested/recursive tool calls', () => {
     // planner summary, parent final = 5 requests.
     expect(requests.length).toBeGreaterThanOrEqual(5);
 
-    // Find the planner's delegation to researcher in the requests.
-    const plannerDelegationRequest = requests.find(
-      req => {
-        const messages = req.body?.messages ?? [];
-        return messages.some(
-          (m: any) => m.role === 'user' && JSON.stringify(m.content).includes('Plan research on quantum computing'),
-        );
-      },
+    // Level 1: the parent actually delegated to the planner — a request must
+    // carry the planner's delegated prompt as a user message.
+    const plannerInvocation = requests.find(req =>
+      (req.body?.messages ?? []).some(
+        (m: any) =>
+          m.role === 'user' && JSON.stringify(m.content).includes('Plan research on quantum computing'),
+      ),
     );
-    expect(plannerDelegationRequest).toBeDefined();
+    expect(plannerInvocation).toBeDefined();
 
-    // The planner's request should have called agent-researcher.
-    const plannerToolCalls = plannerDelegationRequest?.body?.messages?.flatMap((m: any) => {
-      if (m.role === 'assistant' && Array.isArray(m.content)) {
-        return m.content.filter((p: any) => p.type === 'tool-call');
-      }
-      return [];
-    }) ?? [];
-    
-    // Verify the researcher was called (tool name check).
-    const researcherCalls = plannerToolCalls.filter(
-      (tc: any) => tc.toolName === 'agent-researcher',
+    // Level 2: the planner actually delegated to the researcher (grandchild) —
+    // a request must carry the researcher's delegated prompt. This proves the
+    // full parent → planner → researcher chain was traversed, not short-circuited.
+    const researcherInvocation = requests.find(req =>
+      (req.body?.messages ?? []).some(
+        (m: any) =>
+          m.role === 'user' && JSON.stringify(m.content).includes('Research quantum computing fundamentals'),
+      ),
     );
-    expect(researcherCalls.length).toBeGreaterThanOrEqual(0); // Planner may or may not have called it yet
+    expect(researcherInvocation).toBeDefined();
+
+    // And the grandchild's result must have propagated back up to the parent's
+    // final turn: the parent's last request includes the planner's summary that
+    // itself was derived from the researcher's findings.
+    const parentFinalRequest = requests.find(req =>
+      (req.body?.messages ?? []).some(
+        (m: any) => m.role === 'tool' && JSON.stringify(m.content).includes('Research complete'),
+      ),
+    );
+    expect(parentFinalRequest).toBeDefined();
   });
 
   it('a tool can call another tool in sequence (recursive tool chaining)', async () => {

@@ -4,13 +4,19 @@ import { z } from 'zod/v4';
 import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
- * Regression class: structured output validation failure repair.
+ * Regression class: structured output validation failure surfacing.
  *
- * When the model returns invalid JSON that violates the schema, the loop
- * should be able to retry and eventually succeed with valid output. This
- * tests the repair/retry path for structured output validation failures.
+ * When the model returns JSON that violates the schema, the loop surfaces an
+ * `error` chunk carrying the validation message rather than resolving an
+ * invalid object. When the model returns schema-valid JSON, the object stream
+ * assembles and parses it. These tests pin both paths.
+ *
+ * (The AIMock fixture returns each response body as a single block, so this
+ * file cannot script a genuinely *partial/torn* JSON stream that is later
+ * repaired mid-flight; that streaming-assembly edge is covered by the
+ * output-format-handlers unit tests.)
  */
-describe('AIMock loop scenario: structured output validation repair', () => {
+describe('AIMock loop scenario: structured output validation surfacing', () => {
   const getMock = useLoopScenarioAimock();
 
   it('reports validation failure with detailed error information', async () => {
@@ -34,16 +40,14 @@ describe('AIMock loop scenario: structured output validation repair', () => {
       },
     });
 
-    // Should have made at least one request
-    expect(requests!.length).toBeGreaterThanOrEqual(1);
+    // Exactly one model request (single-step structured output).
+    expect(requests).toHaveLength(1);
 
-    // Should have error chunks with validation details
-    const errorChunks = chunks?.filter(c => c?.type === 'error');
-    expect(errorChunks?.length).toBeGreaterThan(0);
+    // The schema-invalid response surfaces an error chunk with a validation message.
+    const errorChunks = chunks?.filter(c => c?.type === 'error') ?? [];
+    expect(errorChunks.length).toBeGreaterThan(0);
 
-    // Error should mention validation failure
-    const errorChunk = errorChunks?.[0];
-    const errorMessage = (errorChunk?.payload?.error as Error)?.message || '';
+    const errorMessage = (errorChunks[0]?.payload?.error as Error)?.message || '';
     expect(errorMessage).toContain('validation');
   });
 
@@ -67,15 +71,17 @@ describe('AIMock loop scenario: structured output validation repair', () => {
       },
     });
 
-    // Should have error chunks from validation failures
-    const errorChunks = chunks?.filter(c => c?.type === 'error');
-    expect(errorChunks?.length).toBeGreaterThan(0);
+    // Invalid output surfaces a validation error chunk on every attempt.
+    const errorChunks = chunks?.filter(c => c?.type === 'error') ?? [];
+    expect(errorChunks.length).toBeGreaterThan(0);
 
-    // Should have made at least one request
+    const errorMessage = (errorChunks[0]?.payload?.error as Error)?.message || '';
+    expect(errorMessage).toContain('validation');
+
     expect(requests!.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('handles partial JSON repair through streaming', async () => {
+  it('assembles and parses schema-valid streamed JSON', async () => {
     const schema = z.object({
       items: z.array(z.string()),
     });
@@ -86,7 +92,6 @@ describe('AIMock loop scenario: structured output validation repair', () => {
       stopWhen: stepCountIs(1),
       structuredOutput: { schema },
       fixtures: llm => {
-        // Model streams partial JSON that becomes valid
         llm.on(
           { endpoint: 'chat' },
           { content: '{"items":["apple","banana","cherry"]}' },
@@ -94,7 +99,7 @@ describe('AIMock loop scenario: structured output validation repair', () => {
       },
     });
 
-    // Should successfully parse the streamed JSON
+    // The streamed JSON assembles into the exact schema-valid object.
     const object = await (output as unknown as { object: Promise<unknown> }).object;
     expect(object).toEqual({
       items: ['apple', 'banana', 'cherry'],

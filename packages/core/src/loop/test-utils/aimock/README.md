@@ -426,7 +426,31 @@ The assertions are pinned to real loop behavior. To prove it:
 - Corrupt tool result `toolCallId` in `tool-call-step.ts` (e.g. replace `toolCallId: inputData.toolCallId` with `toolCallId: 'CORRUPTED_ID'`)
   and the **multi-tool-parallel** scenario goes red (tool call IDs no longer match expected values).
 
+- Disable the abort wiring in `aimock-scenario.ts` (drop `abortSignal` from the stream options)
+  and the **abort-signal**, **abort-structured-output**, and **abort-during-tool-execution**
+  scenarios go red while unrelated ones stay green.
+
 Revert any injection to restore the full suite to green.
+
+### Assertion quality — avoid fake success
+
+Scenarios must assert **falsifiable** outcomes. A test that passes no matter what the loop does
+is worse than no test: it gives false confidence. When writing or reviewing a scenario, avoid
+these anti-patterns (all of which were found and removed during a test-quality audit):
+
+- **`if (caughtError) { expect(...) }` with no `else`.** If the loop silently stops aborting,
+  nothing throws, the block is skipped, and the test passes. Instead, assert a deterministic
+  outcome directly: e.g. `finishReason` matches `/abort|tripwire/i`, or the post-abort model
+  request was never sent (`expect(requests).toHaveLength(1)`).
+- **`expect(x).toBeGreaterThanOrEqual(0)` on a length or count.** Always true — asserts nothing.
+  Assert the actual expected value/order (`toEqual([...])`) or, for `indexOf` presence checks,
+  pair `>= 0` with a strict ordering assertion.
+- **Timing races (`setTimeout(() => abort(), N)`) to trigger mid-loop events.** Flaky and often
+  fires after the run already resolved. Trigger the event **deterministically from inside a tool
+  `execute`** so it lands between turns (see `abort-signal.scenario.test.ts`).
+- **`expect(true).toBe(false)` before a `catch` is fine** — it forces the throw so the catch body
+  must run. But the catch body must then assert something specific (exact call order, message
+  content), not just `expect(error).toBeDefined()`.
 
 ## Coverage summary (final)
 

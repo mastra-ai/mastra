@@ -31,29 +31,26 @@ describe('AIMock loop scenario: error processor retry exhaustion', () => {
       },
     };
 
-    try {
-      await runLoopScenario({
-        llm: getMock(),
-        prompt: 'Test retry counting.',
-        errorProcessors: [errorProcessor],
-        fixtures: llm => {
-          // Always return 400 error
-          llm.onMessage(/.*/, {
-            error: { message: 'Persistent error', type: 'invalid_request_error', code: 'invalid_request' },
-            status: 400,
-          });
-        },
-      });
+    const { output } = await runLoopScenario({
+      llm: getMock(),
+      prompt: 'Test retry counting.',
+      errorProcessors: [errorProcessor],
+      fixtures: llm => {
+        // Always return 400 error
+        llm.onMessage(/.*/, {
+          error: { message: 'Persistent error', type: 'invalid_request_error', code: 'invalid_request' },
+          status: 400,
+        });
+      },
+    });
 
-      // Should not reach here - error should be thrown after exhaustion
-      expect(true).toBe(false);
-    } catch (error) {
-      // Should have seen retry counts 0, 1, 2, 3
-      expect(retryCounts).toEqual([0, 1, 2, 3]);
+    // After exhaustion the run terminates with an error finish reason. This is
+    // asserted directly (not via a swallowed sentinel) so a regression where the
+    // error is no longer surfaced fails the test.
+    expect(await output.finishReason).toBe('error');
 
-      // Should have thrown an error after exhaustion
-      expect(error).toBeDefined();
-    }
+    // The processor saw retryCount increment 0 → 3 across attempts.
+    expect(retryCounts).toEqual([0, 1, 2, 3]);
   });
 
   it('processor can exhaust retries and stop based on custom logic', async () => {
@@ -80,27 +77,22 @@ describe('AIMock loop scenario: error processor retry exhaustion', () => {
       },
     };
 
-    try {
-      await runLoopScenario({
-        llm: getMock(),
-        prompt: 'Test custom exhaustion.',
-        errorProcessors: [errorProcessor],
-        fixtures: llm => {
-          llm.onMessage(/.*/, {
-            error: { message: 'Still failing', type: 'invalid_request_error', code: 'invalid_request' },
-            status: 400,
-          });
-        },
-      });
+    const { output } = await runLoopScenario({
+      llm: getMock(),
+      prompt: 'Test custom exhaustion.',
+      errorProcessors: [errorProcessor],
+      fixtures: llm => {
+        llm.onMessage(/.*/, {
+          error: { message: 'Still failing', type: 'invalid_request_error', code: 'invalid_request' },
+          status: 400,
+        });
+      },
+    });
 
-      expect(true).toBe(false);
-    } catch (error) {
-      // Should have called processor exactly maxRetries times
-      expect(callCount).toBe(maxRetries);
-
-      // Should have thrown an error
-      expect(error).toBeDefined();
-    }
+    // The run errors out, and the processor stopped itself after maxRetries
+    // (via its own state counter) even though retryCount would have allowed more.
+    expect(await output.finishReason).toBe('error');
+    expect(callCount).toBe(maxRetries);
   });
 
   it('processor state persists across retry attempts', async () => {
@@ -123,32 +115,27 @@ describe('AIMock loop scenario: error processor retry exhaustion', () => {
       },
     };
 
-    try {
-      await runLoopScenario({
-        llm: getMock(),
-        prompt: 'Test state persistence.',
-        errorProcessors: [errorProcessor],
-        fixtures: llm => {
-          llm.onMessage(/.*/, {
-            error: { message: 'Retry me', type: 'invalid_request_error', code: 'invalid_request' },
-            status: 400,
-          });
-        },
-      });
+    const { output } = await runLoopScenario({
+      llm: getMock(),
+      prompt: 'Test state persistence.',
+      errorProcessors: [errorProcessor],
+      fixtures: llm => {
+        llm.onMessage(/.*/, {
+          error: { message: 'Retry me', type: 'invalid_request_error', code: 'invalid_request' },
+          status: 400,
+        });
+      },
+    });
 
-      expect(true).toBe(false);
-    } catch (error) {
-      // Should have recorded state 3 times (retryCount 0, 1, 2)
-      expect(stateValues).toHaveLength(3);
+    expect(await output.finishReason).toBe('error');
 
-      // State should have persisted and incremented
-      expect(stateValues[0].counter).toBe(1);
-      expect(stateValues[1].counter).toBe(2);
-      expect(stateValues[2].counter).toBe(3);
+    // Should have recorded state 3 times (retryCount 0, 1, 2)
+    expect(stateValues).toHaveLength(3);
 
-      // Should have thrown an error
-      expect(error).toBeDefined();
-    }
+    // State should have persisted and incremented
+    expect(stateValues[0].counter).toBe(1);
+    expect(stateValues[1].counter).toBe(2);
+    expect(stateValues[2].counter).toBe(3);
   });
 
   it('error is properly propagated after retry exhaustion', async () => {
@@ -163,33 +150,28 @@ describe('AIMock loop scenario: error processor retry exhaustion', () => {
       },
     };
 
-    let caughtError: any = null;
-    try {
-      await runLoopScenario({
-        llm: getMock(),
-        prompt: 'Test error propagation.',
-        errorProcessors: [errorProcessor],
-        fixtures: llm => {
-          llm.onMessage(/.*/, {
-            error: { 
-              message: 'Specific error message', 
-              type: 'specific_error', 
-              code: 'specific_code' 
-            },
-            status: 400,
-          });
-        },
-      });
-    } catch (error) {
-      caughtError = error;
-    }
+    const { output } = await runLoopScenario({
+      llm: getMock(),
+      prompt: 'Test error propagation.',
+      errorProcessors: [errorProcessor],
+      fixtures: llm => {
+        llm.onMessage(/.*/, {
+          error: {
+            message: 'Specific error message',
+            type: 'specific_error',
+            code: 'specific_code',
+          },
+          status: 400,
+        });
+      },
+    });
 
-    // Processor should have seen the error
+    // Processor should have seen the exact error payload.
     expect(lastError).toBeDefined();
     expect(lastError.message).toBe('Specific error message');
 
-    // Error should have been propagated
-    expect(caughtError).toBeDefined();
+    // The error is surfaced on the run's finish reason.
+    expect(await output.finishReason).toBe('error');
   });
 
   it('multiple error processors chain correctly during retry exhaustion', async () => {
@@ -211,26 +193,24 @@ describe('AIMock loop scenario: error processor retry exhaustion', () => {
       },
     };
 
-    try {
-      await runLoopScenario({
-        llm: getMock(),
-        prompt: 'Test processor chaining.',
-        errorProcessors: [processor1, processor2],
-        fixtures: llm => {
-          llm.onMessage(/.*/, {
-            error: { message: 'Chain test', type: 'invalid_request_error', code: 'invalid_request' },
-            status: 400,
-          });
-        },
-      });
+    const { output } = await runLoopScenario({
+      llm: getMock(),
+      prompt: 'Test processor chaining.',
+      errorProcessors: [processor1, processor2],
+      fixtures: llm => {
+        llm.onMessage(/.*/, {
+          error: { message: 'Chain test', type: 'invalid_request_error', code: 'invalid_request' },
+          status: 400,
+        });
+      },
+    });
 
-      expect(true).toBe(false);
-    } catch (error) {
-      // Both processors should have been called for each retry
-      expect(callOrder.length).toBeGreaterThan(0);
+    expect(await output.finishReason).toBe('error');
 
-      // Should have thrown an error
-      expect(error).toBeDefined();
-    }
+    // processor1 drives the retries until it stops requesting them
+    // (retry on retryCount 0 and 1, no retry at 2), with retryCount
+    // incrementing on each attempt. Then processor2 runs at the final
+    // retryCount. This pins the exact chaining + retryCount accounting.
+    expect(callOrder).toEqual(['p1-retry0', 'p1-retry1', 'p1-retry2', 'p2-retry2']);
   });
 });

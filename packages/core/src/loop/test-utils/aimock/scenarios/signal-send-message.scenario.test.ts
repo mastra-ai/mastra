@@ -33,7 +33,16 @@ class InMemoryPubSub extends PubSub {
     const pending = new Promise<void>(resolve => {
       setTimeout(() => {
         try {
-          for (const subscriber of subscribers) subscriber(envelope);
+          // Best-effort delivery: one subscriber throwing must not stop the
+          // others from being notified, and must not bubble as an uncaught
+          // async error (mirrors PubSub semantics in core/src/events/pubsub.ts).
+          for (const subscriber of subscribers) {
+            try {
+              subscriber(envelope);
+            } catch {
+              // ignore individual subscriber failures
+            }
+          }
         } finally {
           resolve();
         }
@@ -144,7 +153,7 @@ describe('AIMock scenario: signal sendMessage integration', () => {
     expect(subscribedRun.done).toBe(false);
     expect(subscribedRun.text).toBe('Initial response');
 
-    subscription.unsubscribe();
+    await subscription.unsubscribe();
   });
 
   it('sendStateSignal persists state without waking agent', async () => {

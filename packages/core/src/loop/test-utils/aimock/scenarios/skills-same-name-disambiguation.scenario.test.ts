@@ -81,13 +81,18 @@ describe('AIMock scenario: skills same-name disambiguation', () => {
 
     expect(requests.length).toBeGreaterThanOrEqual(1);
     
-    // The system prompt should list both skills with their paths
+    // The system prompt should list both skills with their paths. Normalize
+    // path separators so the assertions hold on Windows (backslashes) too.
     const messages = requests[0]?.body?.messages ?? [];
-    const allContent = messages.map((m: any) => JSON.stringify(m.content)).join('\n');
-    
+    const allContent = messages
+      .map((m: any) => JSON.stringify(m.content))
+      .join('\n')
+      .replace(/\\\\/g, '/') // JSON-escaped backslashes (\\) → /
+      .replace(/\\/g, '/'); // any remaining backslashes → /
+
     // Both skills should appear
     expect(allContent).toContain('brand-guidelines');
-    
+
     // Paths should appear to disambiguate
     expect(allContent).toContain('skills/brand-guidelines');
     expect(allContent).toContain('node_modules/@myorg/skills/brand-guidelines');

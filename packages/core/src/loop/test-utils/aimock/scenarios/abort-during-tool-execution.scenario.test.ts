@@ -69,9 +69,10 @@ describe('AIMock loop scenario: abort during tool execution', () => {
     expect(toolCheckedAbort).toBe(false);
   });
 
-  it('tool can bail early when abort is triggered during execution', async () => {
+  it('tool bails early when it observes the abort signal during execution', async () => {
     const abortController = new AbortController();
     let toolStarted = false;
+    let toolCompleted: boolean | null = null;
 
     const longRunningTool = createTool({
       id: 'long_running',
@@ -81,22 +82,24 @@ describe('AIMock loop scenario: abort during tool execution', () => {
       execute: async (_, context) => {
         toolStarted = true;
 
-        // Simulate work in chunks, checking abort periodically
+        // Deterministically abort from inside the tool, then observe the signal
+        // on the very next loop iteration. No timers, no races.
+        abortController.abort();
+
         for (let i = 0; i < 10; i++) {
           if ((context as any)?.abortSignal?.aborted) {
+            toolCompleted = false;
             return { completed: false };
           }
-          await new Promise(resolve => setTimeout(resolve, 10));
+          await new Promise(resolve => setTimeout(resolve, 5));
         }
 
+        toolCompleted = true;
         return { completed: true };
       },
     });
 
-    // Trigger abort shortly after tool starts (give time for model request + tool dispatch)
-    setTimeout(() => abortController.abort(), 500);
-
-    const { output } = await runLoopScenario({
+    const { output, requests } = await runLoopScenario({
       llm: getMock(),
       prompt: 'Run the long tool',
       tools: { long_running: longRunningTool },
@@ -116,13 +119,18 @@ describe('AIMock loop scenario: abort during tool execution', () => {
       },
     });
 
-    // Tool should have started
+    // The tool started and observed the abort via its execution context, so it
+    // bailed early instead of completing its work. If the abort signal were not
+    // propagated to the tool context, `toolCompleted` would be true.
     expect(toolStarted).toBe(true);
+    expect(toolCompleted).toBe(false);
 
-    // Tool may or may not complete depending on abort timing
-    // But the important thing is the loop handles it gracefully
+    // The loop halted before issuing the post-tool model request.
+    expect(requests).toHaveLength(1);
+
+    // And the run terminated with an abort/tripwire reason.
     const finishReason = await output.finishReason;
-    expect(finishReason).toBeDefined();
+    expect(finishReason).toMatch(/abort|cancelled|error|tripwire/i);
   });
 
   it('loop does not make additional requests after abort during tool execution', async () => {
