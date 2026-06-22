@@ -53,7 +53,7 @@ describe('Harness signal history rendering', () => {
   }
 
   it('loads the newest bounded history window even when storage pagination returns the oldest rows', async () => {
-    const { harness, memoryStorage, thread } = await createHarnessWithThread();
+    const { session, memoryStorage, thread } = await createHarnessWithThread();
     const messages = Array.from({ length: 5 }, (_, index) =>
       createTextDbMessage({
         id: `message-${index + 1}`,
@@ -78,7 +78,7 @@ describe('Harness signal history rendering', () => {
       return originalListMessages(input);
     });
 
-    const loaded = await harness.session.thread.listActiveMessages({ limit: 2 });
+    const loaded = await session.thread.listActiveMessages({ limit: 2 });
 
     expect(loaded.map(message => message.id)).toEqual(['message-4', 'message-5']);
   });
