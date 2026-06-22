@@ -118,6 +118,8 @@ export function getCurrentVersion(): string {
  * Returns null if the fetch fails (network error, timeout, etc.).
  */
 export async function fetchLatestVersion(): Promise<string | null> {
+  if (process.env.MASTRACODE_UPDATE_LATEST_VERSION) return process.env.MASTRACODE_UPDATE_LATEST_VERSION;
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -161,6 +163,8 @@ const MAX_CHANGELOG_ENTRIES = 20;
  * Returns null if the fetch fails or the changelog can't be parsed.
  */
 export async function fetchChangelog(version: string): Promise<string | null> {
+  if (process.env.MASTRACODE_UPDATE_CHANGELOG) return process.env.MASTRACODE_UPDATE_CHANGELOG;
+
   try {
     const url = `https://unpkg.com/${PACKAGE_NAME}@${version}/CHANGELOG.md`;
     const controller = new AbortController();

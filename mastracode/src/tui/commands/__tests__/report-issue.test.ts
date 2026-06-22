@@ -13,8 +13,8 @@ import { handleReportIssueCommand } from '../report-issue.js';
 function createCtx(options?: { hasModelSelected?: boolean; pendingNewThread?: boolean }) {
   const state = {
     pendingNewThread: options?.pendingNewThread ?? false,
+    session: { model: { hasSelection: vi.fn(() => options?.hasModelSelected ?? true) } },
     harness: {
-      hasModelSelected: vi.fn(() => options?.hasModelSelected ?? true),
       createThread: vi.fn().mockResolvedValue(undefined),
     },
   };
