@@ -9,17 +9,15 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: read
 
 jobs:
   label:
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0].number != null }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -33,6 +31,9 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-pull-requests: write
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node

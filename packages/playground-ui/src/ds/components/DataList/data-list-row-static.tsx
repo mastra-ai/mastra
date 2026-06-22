@@ -25,8 +25,8 @@ export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticPro
             : dataListRowStaticStyles,
           !isWrapped && flushLeft && 'ml-0!',
           !isWrapped && flushRight && 'mr-0!',
-          // `!` so the selection fill wins over the striped variant's zebra tint
-          // (a higher-specificity root descendant rule); same color in `default`.
+          // `!` so the selection fill wins over borderless table root styling
+          // (higher-specificity descendant rules); same color in `default`.
           featured && 'bg-surface4!',
           dataListRowVariants({ variant }),
           className,

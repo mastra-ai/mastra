@@ -2,7 +2,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, fireEvent } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
@@ -86,6 +86,33 @@ describe('MessageRow chrome', () => {
     const copyButton = screen.getByRole('button', { name: /copy/i });
     fireEvent.click(copyButton);
     expect(writeText).toHaveBeenCalledWith('copy me please');
+  });
+
+  it('falls back when the browser blocks async clipboard writes', async () => {
+    const writeText = vi.fn().mockRejectedValue(new DOMException('Write permission denied', 'NotAllowedError'));
+    const execCommand = vi.fn(() => true);
+    Object.assign(navigator, { clipboard: { writeText } });
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: execCommand,
+    });
+
+    render(
+      <MessageRow
+        message={baseMessage({
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'fallback copy text' }] },
+        })}
+      />,
+      { wrapper: Providers },
+    );
+
+    const copyButton = screen.getByRole('button', { name: /copy/i });
+    fireEvent.click(copyButton);
+
+    expect(writeText).toHaveBeenCalledWith('fallback copy text');
+    await waitFor(() => expect(execCommand).toHaveBeenCalledWith('copy'));
+    expect(document.querySelector('textarea')).toBeNull();
   });
 
   it('shows a read-aloud action that calls onReadAloud with the message text', () => {

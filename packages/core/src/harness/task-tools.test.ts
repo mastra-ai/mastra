@@ -155,24 +155,24 @@ describe('assignTaskIds', () => {
 
 // Generic harness state serialization. Tasks are no longer a harness session
 // state source of truth (they live on the agent state-signal lane), so these
-// tests exercise `updateState`/`setState` ordering with neutral state keys.
+// tests exercise `session.state.update`/`session.state.set` ordering with neutral state keys.
 describe('harness state transactions', () => {
   it('serializes state updates against the latest committed state', async () => {
     const harness = createHarness();
-    await harness.setState({ counter: 0 });
+    await harness.session.state.set({ counter: 0 });
 
     let releaseFirst!: () => void;
     const firstUpdateGate = new Promise<void>(resolve => {
       releaseFirst = resolve;
     });
 
-    const firstUpdate = (harness as any).updateState(async (state: Record<string, unknown>) => {
+    const firstUpdate = harness.session.state.update(async (state: Record<string, unknown>) => {
       await firstUpdateGate;
       const next = (state.counter as number) + 1;
       return { updates: { counter: next }, result: next };
     });
 
-    const secondUpdate = (harness as any).updateState((state: Record<string, unknown>) => {
+    const secondUpdate = harness.session.state.update((state: Record<string, unknown>) => {
       expect(state.counter).toBe(1);
       const next = (state.counter as number) + 1;
       return { updates: { counter: next }, result: next };
@@ -181,7 +181,7 @@ describe('harness state transactions', () => {
     releaseFirst();
     await Promise.all([firstUpdate, secondUpdate]);
 
-    expect(harness.getState().counter).toBe(2);
+    expect(harness.session.state.get().counter).toBe(2);
   });
 
   it('serializes direct setState calls with queued state transactions', async () => {
@@ -219,8 +219,8 @@ describe('harness state transactions', () => {
       ],
     });
 
-    const setStatePromise = harness.setState({ seed: 'initial' });
-    const transactionPromise = (harness as any).updateState((state: Record<string, unknown>) => {
+    const setStatePromise = harness.session.state.set({ seed: 'initial' });
+    const transactionPromise = harness.session.state.update((state: Record<string, unknown>) => {
       expect(state.seed).toBe('initial');
       return { updates: { marker: 'after-set-state' }, result: undefined };
     });
@@ -228,7 +228,7 @@ describe('harness state transactions', () => {
     releaseValidation();
     await Promise.all([setStatePromise, transactionPromise]);
 
-    expect(harness.getState()).toMatchObject({
+    expect(harness.session.state.get()).toMatchObject({
       seed: 'initial',
       marker: 'after-set-state',
     });
@@ -316,11 +316,11 @@ describe('task tool display bridge', () => {
 
     // The harness display snapshot tracks the emitted task list (display-only;
     // the task list itself lives on the agent state-signal lane, not in state).
-    expect(harness.getDisplayState().tasks).toEqual([
+    expect(harness.session.displayState.get().tasks).toEqual([
       { id: 'task_write_tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
     ]);
 
     // Tasks are no longer mirrored into harness session state.
-    expect(harness.getState().tasks).toBeUndefined();
+    expect(harness.session.state.get().tasks).toBeUndefined();
   });
 });

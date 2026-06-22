@@ -1,6 +1,6 @@
 // Typescript tooling really sucks so we are going to do some transfomrations ourselves
 import { readFile, mkdir, copyFile, stat } from 'node:fs/promises';
-import { join, dirname, relative, resolve, extname } from 'node:path';
+import { join, dirname, relative, resolve, extname, sep } from 'node:path';
 import { Project, SyntaxKind } from 'ts-morph';
 import { getPackageInfo } from 'local-pkg';
 import { pathToFileURL } from 'node:url';
@@ -242,7 +242,11 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
 
     await copyDeclarationGraph(sourceTypesPath, sourcePkgRootPath, destTypesRoot, rootDir, bundledPackages, visited);
 
-    let relativeImport = relative(fileDirname, destTypesPath);
+    // Module specifiers must always use POSIX separators ('/'), but path.relative()
+    // returns OS-native separators (backslashes on Windows). Without this normalization,
+    // generated .d.ts files contain unresolvable specifiers like '..\_types\...' that
+    // break `moduleResolution: "bundler"` on Windows. On POSIX, sep === '/' so this is a no-op.
+    let relativeImport = relative(fileDirname, destTypesPath).split(sep).join('/');
     if (!relativeImport.startsWith('.')) {
       relativeImport = './' + relativeImport;
     }
