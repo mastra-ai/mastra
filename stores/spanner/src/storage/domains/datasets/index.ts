@@ -56,6 +56,10 @@ function rowToDataset(row: Record<string, any>): DatasetRecord {
     targetIds: t.targetIds ?? null,
     scorerIds: t.scorerIds ?? null,
     version: Number(t.version ?? 0),
+    organizationId: (t.organizationId as string | null | undefined) ?? null,
+    resourceId: (t.resourceId as string | null | undefined) ?? null,
+    candidateKey: (t.candidateKey as string | null | undefined) ?? null,
+    candidateId: (t.candidateId as string | null | undefined) ?? null,
     createdAt: toDate(t.createdAt),
     updatedAt: toDate(t.updatedAt),
   };
@@ -67,6 +71,8 @@ function rowToItem(row: Record<string, any>): DatasetItem {
     id: String(t.id),
     datasetId: String(t.datasetId),
     datasetVersion: Number(t.datasetVersion),
+    organizationId: (t.organizationId as string | null | undefined) ?? null,
+    resourceId: (t.resourceId as string | null | undefined) ?? null,
     input: t.input,
     groundTruth: t.groundTruth ?? undefined,
     expectedTrajectory: t.expectedTrajectory ?? undefined,
@@ -197,6 +203,10 @@ export class DatasetsSpanner extends DatasetsStorage {
         targetIds: input.targetIds ?? null,
         scorerIds: input.scorerIds ?? null,
         version: 0,
+        organizationId: input.organizationId ?? null,
+        resourceId: input.resourceId ?? null,
+        candidateKey: input.candidateKey ?? null,
+        candidateId: input.candidateId ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -215,6 +225,10 @@ export class DatasetsSpanner extends DatasetsStorage {
           targetIds: record.targetIds,
           scorerIds: record.scorerIds,
           version: 0,
+          organizationId: record.organizationId,
+          resourceId: record.resourceId,
+          candidateKey: record.candidateKey,
+          candidateId: record.candidateId,
           createdAt: now,
           updatedAt: now,
         },
@@ -353,8 +367,30 @@ export class DatasetsSpanner extends DatasetsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     try {
       const tableName = quoteIdent(TABLE_DATASETS, 'table name');
+
+      const filterConditions: string[] = [];
+      const filterParams: Record<string, any> = {};
+      if (args.filters?.organizationId !== undefined) {
+        filterConditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+        filterParams.organizationId = args.filters.organizationId;
+      }
+      if (args.filters?.resourceId !== undefined) {
+        filterConditions.push(`${quoteIdent('resourceId', 'column name')} = @resourceId`);
+        filterParams.resourceId = args.filters.resourceId;
+      }
+      if (args.filters?.candidateKey !== undefined) {
+        filterConditions.push(`${quoteIdent('candidateKey', 'column name')} = @candidateKey`);
+        filterParams.candidateKey = args.filters.candidateKey;
+      }
+      if (args.filters?.candidateId !== undefined) {
+        filterConditions.push(`${quoteIdent('candidateId', 'column name')} = @candidateId`);
+        filterParams.candidateId = args.filters.candidateId;
+      }
+      const whereClause = filterConditions.length > 0 ? `WHERE ${filterConditions.join(' AND ')}` : '';
+
       const [countRows] = await this.database.run({
-        sql: `SELECT COUNT(*) AS count FROM ${tableName}`,
+        sql: `SELECT COUNT(*) AS count FROM ${tableName} ${whereClause}`,
+        params: filterParams,
         json: true,
       });
       const total = Number((countRows as Array<{ count: number | string }>)[0]?.count ?? 0);
@@ -363,10 +399,10 @@ export class DatasetsSpanner extends DatasetsStorage {
       }
       const limit = perPageInput === false ? total : perPage;
       const [rows] = await this.database.run({
-        sql: `SELECT * FROM ${tableName}
+        sql: `SELECT * FROM ${tableName} ${whereClause}
               ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
-        params: { limit, offset },
+        params: { ...filterParams, limit, offset },
         json: true,
       });
       const datasets = (rows as Array<Record<string, any>>).map(rowToDataset);
@@ -395,15 +431,22 @@ export class DatasetsSpanner extends DatasetsStorage {
   // SCD-2 helpers
   // ==========================================================================
 
-  /** Reads and increments the dataset version inside `tx`; throws if missing. */
-  private async bumpVersion(tx: Transaction, datasetId: string, now: Date): Promise<number> {
+  /** Reads and increments the dataset version inside `tx`; throws if missing. Also returns parent tenancy. */
+  private async bumpVersion(
+    tx: Transaction,
+    datasetId: string,
+    now: Date,
+  ): Promise<{ version: number; organizationId: string | null; resourceId: string | null }> {
     const [rows] = await tx.run({
-      sql: `SELECT ${quoteIdent('version', 'column name')} AS version FROM ${quoteIdent(TABLE_DATASETS, 'table name')}
+      sql: `SELECT ${quoteIdent('version', 'column name')} AS version,
+                   ${quoteIdent('organizationId', 'column name')} AS organizationId,
+                   ${quoteIdent('resourceId', 'column name')} AS resourceId
+            FROM ${quoteIdent(TABLE_DATASETS, 'table name')}
             WHERE ${quoteIdent('id', 'column name')} = @id LIMIT 1`,
       params: { id: datasetId },
       json: true,
     });
-    const row = (rows as Array<{ version: number | string }>)[0];
+    const row = (rows as Array<{ version: number | string; organizationId: string | null; resourceId: string | null }>)[0];
     if (!row) {
       throw new MastraError({
         id: createStorageErrorId('SPANNER', 'DATASET_ITEM', 'DATASET_NOT_FOUND'),
@@ -422,7 +465,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       params: { newVersion, now: now.toISOString(), id: datasetId },
       types: { now: 'timestamp' },
     });
-    return newVersion;
+    return { version: newVersion, organizationId: row.organizationId ?? null, resourceId: row.resourceId ?? null };
   }
 
   /** Inserts a dataset version snapshot row inside `tx`. */
@@ -472,13 +515,19 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const newVersion = await this.bumpVersion(tx, args.datasetId, now);
+            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(
+              tx,
+              args.datasetId,
+              now,
+            );
             await this.db.insert({
               tableName: TABLE_DATASET_ITEMS,
               record: {
                 id: itemId,
                 datasetId: args.datasetId,
                 datasetVersion: newVersion,
+                organizationId,
+                resourceId,
                 validTo: null,
                 isDeleted: false,
                 input: args.input,
@@ -498,6 +547,8 @@ export class DatasetsSpanner extends DatasetsStorage {
               id: itemId,
               datasetId: args.datasetId,
               datasetVersion: newVersion,
+              organizationId,
+              resourceId,
               input: args.input,
               groundTruth: args.groundTruth,
               expectedTrajectory: args.expectedTrajectory,
@@ -564,7 +615,11 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const newVersion = await this.bumpVersion(tx, args.datasetId, now);
+            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(
+              tx,
+              args.datasetId,
+              now,
+            );
             await this.closeCurrentRow(tx, args.id, newVersion);
             await this.db.insert({
               tableName: TABLE_DATASET_ITEMS,
@@ -572,6 +627,8 @@ export class DatasetsSpanner extends DatasetsStorage {
                 id: args.id,
                 datasetId: args.datasetId,
                 datasetVersion: newVersion,
+                organizationId,
+                resourceId,
                 validTo: null,
                 isDeleted: false,
                 input: merged.input,
@@ -591,6 +648,8 @@ export class DatasetsSpanner extends DatasetsStorage {
               id: args.id,
               datasetId: args.datasetId,
               datasetVersion: newVersion,
+              organizationId,
+              resourceId,
               input: merged.input,
               groundTruth: merged.groundTruth,
               expectedTrajectory: merged.expectedTrajectory,
@@ -638,7 +697,11 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const newVersion = await this.bumpVersion(tx, args.datasetId, now);
+            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(
+              tx,
+              args.datasetId,
+              now,
+            );
             await this.closeCurrentRow(tx, args.id, newVersion);
             await this.db.insert({
               tableName: TABLE_DATASET_ITEMS,
@@ -646,6 +709,8 @@ export class DatasetsSpanner extends DatasetsStorage {
                 id: args.id,
                 datasetId: args.datasetId,
                 datasetVersion: newVersion,
+                organizationId,
+                resourceId,
                 validTo: null,
                 isDeleted: true,
                 input: existing.input,
@@ -688,6 +753,14 @@ export class DatasetsSpanner extends DatasetsStorage {
     try {
       const conditions: string[] = [`${quoteIdent('datasetId', 'column name')} = @datasetId`];
       const params: Record<string, any> = { datasetId: args.datasetId };
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+        params.organizationId = args.filters.organizationId;
+      }
+      if (args.filters?.resourceId !== undefined) {
+        conditions.push(`${quoteIdent('resourceId', 'column name')} = @resourceId`);
+        params.resourceId = args.filters.resourceId;
+      }
       if (args.version !== undefined) {
         conditions.push(`${quoteIdent('datasetVersion', 'column name')} <= @version`);
         conditions.push(
@@ -921,7 +994,11 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const newVersion = await this.bumpVersion(tx, input.datasetId, now);
+            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(
+              tx,
+              input.datasetId,
+              now,
+            );
             for (const { id, item } of prepared) {
               await this.db.insert({
                 tableName: TABLE_DATASET_ITEMS,
@@ -929,6 +1006,8 @@ export class DatasetsSpanner extends DatasetsStorage {
                   id,
                   datasetId: input.datasetId,
                   datasetVersion: newVersion,
+                  organizationId,
+                  resourceId,
                   validTo: null,
                   isDeleted: false,
                   input: item.input,
@@ -949,6 +1028,8 @@ export class DatasetsSpanner extends DatasetsStorage {
               id,
               datasetId: input.datasetId,
               datasetVersion: newVersion,
+              organizationId,
+              resourceId,
               input: item.input,
               groundTruth: item.groundTruth,
               expectedTrajectory: item.expectedTrajectory,
@@ -993,7 +1074,11 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const newVersion = await this.bumpVersion(tx, input.datasetId, now);
+            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(
+              tx,
+              input.datasetId,
+              now,
+            );
             for (const existing of current) {
               await this.closeCurrentRow(tx, existing.id, newVersion);
               await this.db.insert({
@@ -1002,6 +1087,8 @@ export class DatasetsSpanner extends DatasetsStorage {
                   id: existing.id,
                   datasetId: input.datasetId,
                   datasetVersion: newVersion,
+                  organizationId,
+                  resourceId,
                   validTo: null,
                   isDeleted: true,
                   input: existing.input,
