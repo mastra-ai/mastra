@@ -9,7 +9,18 @@ import { EmptyState } from '../../../ds/components/EmptyState';
 import { MarkdownRenderer } from '../../../ds/components/MarkdownRenderer';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { cn } from '../../../lib/utils';
+import type { DataOmPart } from '@mastra/memory/processors';
 import type { MemoryMessage } from '../types';
+
+/**
+ * Union of the `data` payloads across all OM marker parts, with every field
+ * optional so the renderer can read marker fields defensively via `?.`.
+ * Derived from the canonical `DataOmPart` shapes in `@mastra/memory` so the UI
+ * stays in sync with the wire format.
+ */
+type OmMarkerPartData = Partial<UnionToIntersection<NonNullable<DataOmPart['data']>>>;
+
+type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
 
 interface ContentPart {
   type: string;
@@ -23,20 +34,7 @@ interface ContentPart {
     result?: unknown;
     state?: 'call' | 'partial-call' | 'result';
   };
-  data?: {
-    cycleId?: string;
-    startedAt?: string;
-    completedAt?: string;
-    activatedAt?: string;
-    tokensToObserve?: number;
-    tokensObserved?: number;
-    observationTokens?: number;
-    tokensToBuffer?: number;
-    tokensBuffered?: number;
-    bufferedTokens?: number;
-    tokensActivated?: number;
-    config?: { messageTokens?: number; observationTokens?: number };
-  };
+  data?: OmMarkerPartData;
 }
 
 interface MastraV2Content {
@@ -99,8 +97,8 @@ function formatToolValue(value: unknown): { text: string; language: 'json' | 'te
 function ToolPayload({ title, text }: { title: string; text: string }) {
   return (
     <div>
-      <span className="mb-1 block text-[10px] font-medium text-icon3">{title}</span>
-      <pre className="max-h-48 overflow-auto rounded-md bg-[var(--mastra-bg-2)] p-3 text-xs whitespace-pre-wrap break-all font-mono text-[var(--mastra-el-5)]">
+      <span className="mb-1 block text-ui-xs font-medium text-icon3">{title}</span>
+      <pre className="max-h-48 overflow-auto rounded-md bg-surface2 p-3 text-xs whitespace-pre-wrap break-all font-mono text-neutral3">
         {text}
       </pre>
     </div>
@@ -120,8 +118,8 @@ function ToolMessage({ parts }: { parts: ToolInvocationPart[] }) {
       <CollapsibleTrigger className="flex cursor-pointer items-center gap-2">
         <Badge variant="default" size="xs" className="gap-1">
           <WrenchIcon className="size-3" />
-          <span className="font-mono text-[11px]">{inv.toolName}</span>
-          <span className="text-[10px] opacity-70">{result ? '(call + result)' : `(${inv.state})`}</span>
+          <span className="font-mono text-ui-sm">{inv.toolName}</span>
+          <span className="text-ui-xs opacity-70">{result ? '(call + result)' : `(${inv.state})`}</span>
         </Badge>
         <ChevronDownIcon className="size-3.5 transition-transform [[data-panel-open]>&]:rotate-180" />
       </CollapsibleTrigger>
@@ -145,7 +143,7 @@ function ReasoningMessage({ part }: { part: ContentPart }) {
       <CollapsibleTrigger className="flex items-center gap-2">
         <Badge variant="default" size="xs" className="gap-1">
           <BrainIcon className="size-3" />
-          <span className="text-[11px]">Reasoning</span>
+          <span className="text-ui-sm">Reasoning</span>
         </Badge>
         <span className="text-xs text-icon3 italic truncate">{preview}</span>
       </CollapsibleTrigger>
@@ -160,7 +158,7 @@ function ReasoningMessage({ part }: { part: ContentPart }) {
 
 function ContentBubble({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn('rounded-lg px-3 py-2 bg-[var(--mastra-bg-3)] min-w-0 text-[var(--mastra-el-6)]', className)}>
+    <div className={cn('rounded-lg px-3 py-2 bg-surface3 min-w-0 text-neutral6', className)}>
       {children}
     </div>
   );
@@ -324,11 +322,11 @@ function OmMarker({ marker }: { marker: OmMarkerData }) {
   return (
     <div className="flex justify-center py-0.5">
       <div className="w-full max-w-3xl px-3 py-1.5">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-mono uppercase tracking-wide text-icon3">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ui-xs font-mono uppercase tracking-wide text-icon3">
           {primaryStatus ? (
             <span
               className={cn(
-                'h-5 rounded-full border px-2 inline-flex items-center text-[10px] shadow-none',
+                'h-5 rounded-full border px-2 inline-flex items-center text-ui-xs shadow-none',
                 primaryStatus.className,
               )}
             >
@@ -575,13 +573,13 @@ function MessageBubble({ message }: { message: MemoryMessage }) {
             <>
               <span className="text-xs font-mono text-icon3">{format(new Date(message.createdAt), 'HH:mm:ss')}</span>
               <span className="text-icon3">·</span>
-              <span className="text-[10px] font-semibold font-mono uppercase text-[var(--mastra-el-accent)]">User</span>
+              <span className="text-ui-xs font-semibold font-mono uppercase text-accent1">User</span>
             </>
           ) : (
             <>
               <span
                 className={cn(
-                  'text-[10px] font-semibold font-mono uppercase',
+                  'text-ui-xs font-semibold font-mono uppercase',
                   isTool ? 'text-violet-400' : 'text-emerald-400',
                 )}
               >
@@ -592,11 +590,11 @@ function MessageBubble({ message }: { message: MemoryMessage }) {
             </>
           )}
         </div>
-        <div className="flex min-w-0 w-full flex-col gap-2 break-words text-xs text-[var(--mastra-el-5)]">
+        <div className="flex min-w-0 w-full flex-col gap-2 break-words text-xs text-neutral3">
           <div className={cn('relative', !expanded && 'max-h-[28rem] overflow-hidden')}>
             <MessageContent content={message.content} />
             {!expanded ? (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[var(--mastra-bg-1)] via-[var(--mastra-bg-1)]/85 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-surface1 via-surface1/85 to-transparent" />
             ) : null}
           </div>
           {shouldCollapseMessage(message) ? (
@@ -604,7 +602,7 @@ function MessageBubble({ message }: { message: MemoryMessage }) {
               type="button"
               onClick={() => setExpanded(c => !c)}
               className={cn(
-                'text-[11px] font-mono tracking-wide text-icon3 transition-colors hover:text-[var(--mastra-el-6)]',
+                'text-ui-sm font-mono tracking-wide text-icon3 transition-colors hover:text-neutral6',
                 isUser ? 'self-end' : 'self-start',
               )}
             >

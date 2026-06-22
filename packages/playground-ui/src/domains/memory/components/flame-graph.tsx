@@ -113,10 +113,10 @@ function TimeAxis({ domain }: { domain: TDomain }) {
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   return (
     <div className="grid grid-cols-[6rem_1fr] items-center">
-      <p className="flex items-center self-stretch border-r border-[var(--mastra-border-1)]/50 pl-3 text-[10px] font-medium text-icon3">
+      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
         Time
       </p>
-      <div className="flex justify-between px-1 py-1.5 font-mono text-[9px] text-icon3">
+      <div className="flex justify-between px-1 py-1.5 font-mono text-ui-xs text-icon3">
         {ticks.map(t => (
           <span key={t}>{formatTimeDisplay(tToTimestamp(t, domain))}</span>
         ))}
@@ -143,17 +143,17 @@ function FlameTooltip({
 
   if (showValue) {
     return (
-      <div className="flex flex-col gap-0.5 rounded border border-[var(--mastra-border-1)] bg-[var(--mastra-bg-3)] px-2 py-1.5 font-mono text-[9px] shadow">
+      <div className="flex flex-col gap-0.5 rounded border border-border1 bg-surface3 px-2 py-1.5 font-mono text-ui-xs shadow">
         {time && (
           <div className="flex items-center justify-between gap-3">
             <span className="text-icon3">time</span>
-            <span className="text-[var(--mastra-el-6)]">{time}</span>
+            <span className="text-neutral6">{time}</span>
           </div>
         )}
         {visibleEntries.map(entry => (
           <div key={entry.name} className="flex items-center justify-between gap-3">
             <span className="text-icon3">{entry.name}</span>
-            <span className="text-[var(--mastra-el-6)]">
+            <span className="text-neutral6">
               {typeof entry.value === 'number' ? Math.round(entry.value).toLocaleString() : String(entry.value)}
             </span>
           </div>
@@ -163,8 +163,8 @@ function FlameTooltip({
   }
 
   return (
-    <div className="rounded border border-[var(--mastra-border-1)] bg-[var(--mastra-bg-3)] px-2 py-1 font-mono text-[9px] shadow">
-      {time && <span className="text-[var(--mastra-el-6)]">{time}</span>}
+    <div className="rounded border border-border1 bg-surface3 px-2 py-1 font-mono text-ui-xs shadow">
+      {time && <span className="text-neutral6">{time}</span>}
     </div>
   );
 }
@@ -185,8 +185,8 @@ function AreaRow({ label, data, dataKey, color, gradientId, domain, zoomDomain, 
   const yMax = threshold != null ? Math.max(maxValue, threshold) : undefined;
 
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-[var(--mastra-border-1)]/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-[var(--mastra-border-1)]/50 pl-3 text-[10px] font-medium text-icon3">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
+      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
         {label}
       </p>
       <div>
@@ -234,8 +234,8 @@ interface EventRowProps {
 
 function EventRow({ label, data, color, height = 32, domain, zoomDomain }: EventRowProps) {
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-[var(--mastra-border-1)]/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-[var(--mastra-border-1)]/50 pl-3 text-[10px] font-medium text-icon3">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
+      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
         {label}
       </p>
       <div>
@@ -321,8 +321,8 @@ function CombinedRow({
   }
 
   return (
-    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-[var(--mastra-border-1)]/50 hover:z-10">
-      <p className="flex items-center self-stretch border-r border-[var(--mastra-border-1)]/50 pl-3 text-[10px] font-medium text-icon3">
+    <div className="relative grid grid-cols-[6rem_1fr] items-center border-b border-border1/50 hover:z-10">
+      <p className="flex items-center self-stretch border-r border-border1/50 pl-3 text-ui-xs font-medium text-icon3">
         {label}
       </p>
       <div>
@@ -420,9 +420,9 @@ function ZoomTrack({
   }, [toTimestamp, zoomLeft, zoomRight, onZoomLeftChange, onZoomRightChange]);
 
   return (
-    <div className="grid grid-cols-[6rem_1fr] items-center border-b border-[var(--mastra-border-1)]/50">
-      <div className="flex items-center gap-1 self-stretch border-r border-[var(--mastra-border-1)]/50 pl-3">
-        <p className="text-[10px] font-medium text-icon3">Zoom</p>
+    <div className="grid grid-cols-[6rem_1fr] items-center border-b border-border1/50">
+      <div className="flex items-center gap-1 self-stretch border-r border-border1/50 pl-3">
+        <p className="text-ui-xs font-medium text-icon3">Zoom</p>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
           <RotateCcw className="size-3" />
         </Button>
@@ -445,17 +445,17 @@ function ZoomTrack({
           }
         }}
       >
-        <div className="absolute inset-y-0 left-0 bg-[var(--mastra-bg-2)]/60" style={{ width: `${leftPercent}%` }} />
+        <div className="absolute inset-y-0 left-0 bg-surface2/60" style={{ width: `${leftPercent}%` }} />
         <div
-          className="absolute inset-y-0 border-y border-[var(--mastra-border-1)]/30 bg-[var(--mastra-el-6)]/5"
+          className="absolute inset-y-0 border-y border-border1/30 bg-neutral6/5"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
         <div
-          className="absolute inset-y-0 right-0 bg-[var(--mastra-bg-2)]/60"
+          className="absolute inset-y-0 right-0 bg-surface2/60"
           style={{ width: `${100 - rightPercent}%` }}
         />
         <div
-          className="absolute inset-y-0 w-1 cursor-col-resize bg-[var(--mastra-el-6)]/50 hover:bg-[var(--mastra-el-6)]"
+          className="absolute inset-y-0 w-1 cursor-col-resize bg-neutral6/50 hover:bg-neutral6"
           style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();
@@ -464,7 +464,7 @@ function ZoomTrack({
           }}
         />
         <div
-          className="absolute inset-y-0 w-1 cursor-col-resize bg-[var(--mastra-el-6)]/50 hover:bg-[var(--mastra-el-6)]"
+          className="absolute inset-y-0 w-1 cursor-col-resize bg-neutral6/50 hover:bg-neutral6"
           style={{ left: `${rightPercent}%`, transform: 'translateX(-50%)' }}
           onMouseDown={e => {
             e.preventDefault();

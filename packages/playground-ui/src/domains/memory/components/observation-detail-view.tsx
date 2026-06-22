@@ -43,7 +43,7 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
   if (nested) {
     return {
       card: 'bg-transparent border-transparent',
-      text: 'text-[var(--mastra-el-5)]',
+      text: 'text-neutral3',
       time: 'text-icon3',
     };
   }
@@ -51,31 +51,31 @@ function priorityClasses(priority: ParsedItem['priority'], nested: boolean) {
     case 'high':
       return {
         card: 'border-purple-400/30 bg-purple-500/10',
-        text: 'text-[var(--mastra-el-6)]',
+        text: 'text-neutral6',
         time: 'text-purple-200/80',
       };
     case 'medium':
       return {
         card: 'border-blue-400/30 bg-blue-500/10',
-        text: 'text-[var(--mastra-el-6)]',
+        text: 'text-neutral6',
         time: 'text-blue-200/80',
       };
     case 'low':
       return {
         card: 'border-emerald-400/30 bg-emerald-500/10',
-        text: 'text-[var(--mastra-el-6)]',
+        text: 'text-neutral6',
         time: 'text-emerald-200/80',
       };
     case 'complete':
       return {
         card: 'border-green-400/30 bg-green-500/10',
-        text: 'text-[var(--mastra-el-6)]',
+        text: 'text-neutral6',
         time: 'text-green-200/80',
       };
     default:
       return {
-        card: 'border-[var(--mastra-border-1)] bg-[var(--mastra-bg-2)]',
-        text: 'text-[var(--mastra-el-6)]',
+        card: 'border-border1 bg-surface2',
+        text: 'text-neutral6',
         time: 'text-icon3',
       };
   }
@@ -138,7 +138,7 @@ function parseObservations(raw: string): ParsedSection[] {
 
 function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nested?: boolean }) {
   return (
-    <div className={nested ? 'space-y-2 border-l border-[var(--mastra-border-1)] pl-4' : 'space-y-3'}>
+    <div className={nested ? 'space-y-2 border-l border-border1 pl-4' : 'space-y-3'}>
       {items.map((item, i) => {
         const styles = priorityClasses(item.priority, nested);
         return (
@@ -146,7 +146,7 @@ function ObservationItems({ items, nested = false }: { items: ParsedItem[]; nest
             <div className="flex items-start gap-3">
               <div className="w-12 shrink-0 pt-2 text-right">
                 {item.time && (
-                  <span className={`font-mono text-[10px] ${styles.time}`}>{formatObservationTime(item.time)}</span>
+                  <span className={`font-mono text-ui-xs ${styles.time}`}>{formatObservationTime(item.time)}</span>
                 )}
               </div>
               <div className={cn('min-w-0 flex-1 rounded-md border px-3 py-2', styles.card)}>
@@ -174,10 +174,10 @@ function ObservationContent({ observations }: { observations: string }) {
     <div className="space-y-5">
       {sections.map((section, i) => (
         <section key={`${section.title}-${i}`} className="space-y-3">
-          <div className="flex items-baseline justify-between gap-3 border-b border-[var(--mastra-border-1)] pb-2">
+          <div className="flex items-baseline justify-between gap-3 border-b border-border1 pb-2">
             <div className="min-w-0">
-              <h3 className="text-xs font-medium text-[var(--mastra-el-6)]">{section.title}</h3>
-              {section.relativeTime && <p className="text-[10px] text-icon3">{section.relativeTime}</p>}
+              <h3 className="text-xs font-medium text-neutral6">{section.title}</h3>
+              {section.relativeTime && <p className="text-ui-xs text-icon3">{section.relativeTime}</p>}
             </div>
           </div>
           <ObservationItems items={section.items} />
@@ -199,9 +199,9 @@ function ObservationHistoryPanel({
   if (records.length <= 1) return null;
 
   return (
-    <div className="border-l border-[var(--mastra-border-1)] min-w-[180px] w-[200px] flex flex-col overflow-hidden">
-      <div className="border-b border-[var(--mastra-border-1)] px-4 py-2">
-        <p className="text-sm font-normal text-[var(--mastra-el-6)]">History</p>
+    <div className="border-l border-border1 min-w-[180px] w-[200px] flex flex-col overflow-hidden">
+      <div className="border-b border-border1 px-4 py-2">
+        <p className="text-sm font-normal text-neutral6">History</p>
       </div>
       <div className="flex-1 overflow-y-auto">
         {records.map(record => {
@@ -211,8 +211,8 @@ function ObservationHistoryPanel({
               key={record.id}
               type="button"
               className={cn(
-                'w-full cursor-pointer border-l-2 border-l-transparent px-3 py-2 text-left truncate text-xs text-icon3 transition-all hover:bg-[var(--mastra-bg-3)]/50',
-                isSelected && 'bg-[var(--mastra-bg-3)]/50 border-l-[var(--mastra-el-accent)]',
+                'w-full cursor-pointer border-l-2 border-l-transparent px-3 py-2 text-left truncate text-xs text-icon3 transition-all hover:bg-surface3/50',
+                isSelected && 'bg-surface3/50 border-l-accent1',
               )}
               onClick={() => onSelectRecord(record.id)}
             >
@@ -287,16 +287,16 @@ export function ObservationDetailView({
     <div className="flex h-full w-full overflow-hidden">
       {/* Main observation content */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="border-b border-[var(--mastra-border-1)] px-4 py-2">
+        <div className="border-b border-border1 px-4 py-2">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm font-normal text-[var(--mastra-el-6)]">
+              <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm font-normal text-neutral6">
                 <span>Memory</span>
-                <span className="font-mono text-[10px] text-icon3 tabular-nums">
+                <span className="font-mono text-ui-xs text-icon3 tabular-nums">
                   {showDiff && previousRecord ? (
                     <>
                       {previousRecord.observationTokenCount} →{' '}
-                      <span className="font-semibold text-[var(--mastra-el-6)]">{selected.observationTokenCount}</span>{' '}
+                      <span className="font-semibold text-neutral6">{selected.observationTokenCount}</span>{' '}
                       tokens
                     </>
                   ) : (

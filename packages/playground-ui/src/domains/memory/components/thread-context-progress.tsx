@@ -29,7 +29,7 @@ function ProgressBar({
 
   return (
     <div className="min-w-0 flex-1">
-      <div className="mb-1 flex items-center justify-between gap-2 font-mono text-[10px] text-icon3">
+      <div className="mb-1 flex items-center justify-between gap-2 font-mono text-ui-xs text-icon3">
         <span className="uppercase tracking-wide text-icon6">{label}</span>
         <span className="tabular-nums text-icon3">
           {formatCompactTokens(value)}/{formatCompactTokens(max)}k
@@ -56,7 +56,7 @@ export function ThreadContextProgress({
   }
 
   return (
-    <div className="border-b border-[var(--mastra-border-1)] px-3 py-2">
+    <div className="border-b border-border1 px-3 py-2">
       <div className="flex flex-col gap-2 sm:flex-row">
         {showMessages ? (
           <ProgressBar label="Messages" value={messageTokens} max={messageThreshold} tone="message" />

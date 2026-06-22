@@ -60,22 +60,22 @@ export function ThreadDetailView({
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       {/* Header bar */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-[var(--mastra-border-1)] px-4 py-2.5">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border1 px-4 py-2.5">
         {(onBack || backHref) && (
           <BackWrapper
             {...backProps}
-            className="flex items-center gap-1.5 text-xs text-icon3 hover:text-[var(--mastra-el-6)] transition-colors"
+            className="flex items-center gap-1.5 text-xs text-icon3 hover:text-neutral6 transition-colors"
           >
             <ArrowLeftIcon className="size-3" />
             <span>Threads</span>
           </BackWrapper>
         )}
-        <div className="h-4 w-px bg-[var(--mastra-border-1)]" />
+        <div className="h-4 w-px bg-border1" />
         {isThreadLoading ? (
           <Skeleton className="h-4 w-48" />
         ) : (
           <>
-            <h1 className="truncate text-sm font-medium text-[var(--mastra-el-6)]">
+            <h1 className="truncate text-sm font-medium text-neutral6">
               {thread?.title || thread?.id || '—'}
             </h1>
             {thread?.resourceId && (
@@ -98,14 +98,14 @@ export function ThreadDetailView({
       {/* Split content: Messages | Observation detail */}
       <div
         className={cn(
-          'flex min-h-0 flex-1 divide-x divide-[var(--mastra-border-1)]',
+          'flex min-h-0 flex-1 divide-x divide-border1',
           showOM && hasOM ? 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)]' : '',
         )}
       >
         {/* Left: Messages */}
         <div className="min-w-0 flex flex-col overflow-hidden">
-          <div className="shrink-0 border-b border-[var(--mastra-border-1)] px-4 py-2">
-            <p className="text-sm font-normal text-[var(--mastra-el-6)]">
+          <div className="shrink-0 border-b border-border1 px-4 py-2">
+            <p className="text-sm font-normal text-neutral6">
               Messages{!isMessagesLoading && messages.length > 0 ? ` (${messages.length})` : ''}
             </p>
           </div>
@@ -125,7 +125,7 @@ export function ThreadDetailView({
                 isLoading={isOMLoading}
               />
             </div>
-            <div className="border-t border-[var(--mastra-border-1)]">
+            <div className="border-t border-border1">
               <ThreadContextProgress
                 messageTokens={currentWindowState?.messageTokens}
                 messageThreshold={currentWindowState?.messageThreshold}
