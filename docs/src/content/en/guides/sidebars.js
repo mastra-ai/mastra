@@ -226,6 +226,11 @@ const sidebars = {
               id: 'guide/signal-provider',
               label: 'Signals: CI Signal Provider',
             },
+            {
+              type: 'doc',
+              id: 'guide/pay-x402-apis',
+              label: 'MCP: Pay for x402 APIs',
+            },
           ],
         },
         {
