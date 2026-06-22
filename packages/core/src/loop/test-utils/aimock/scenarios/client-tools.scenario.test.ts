@@ -1,8 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Client tools scenario.
@@ -10,7 +10,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * Tests that client-side tools (defined via clientTools parameter) are properly
  * merged with agent-level tools and can be called by the model during execution.
  */
-describe('AIMock scenario: client tools', () => {
+describeForAllEngines('AIMock scenario: client tools', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('should merge client tools with agent tools in request', async () => {
@@ -31,6 +31,7 @@ describe('AIMock scenario: client tools', () => {
     });
 
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Hello',
       tools: { 'agent-tool': agentTool },
@@ -65,6 +66,7 @@ describe('AIMock scenario: client tools', () => {
     });
 
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Use the client tool',
       clientTools: { 'client-tool': clientTool },
