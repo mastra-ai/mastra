@@ -223,7 +223,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(result.lines[0]).toBe('//deploy ');
   });
 
-  it('does not duplicate @ when accepting file completions with a narrowed prefix', () => {
+  it('does not duplicate partial @ prefixes when accepting file completions', () => {
     autocompleteProviders.length = 0;
     const { state } = createState(false);
 
@@ -236,7 +236,16 @@ describe('setupKeyboardShortcuts', () => {
       { value: '@src/autocomplete-target.ts', label: 'autocomplete-target.ts' },
       'auto',
     );
-    expect(result.lines[0]).toBe('Attach @src/autocomplete-target.ts');
+    expect(result.lines[0]).toBe('Attach @src/autocomplete-target.ts ');
+
+    const partialResult = state.autocompleteProvider.applyCompletion(
+      ['Attach @auto'],
+      0,
+      'Attach @auto'.length,
+      { value: '@src/autocomplete-target.ts', label: 'autocomplete-target.ts' },
+      'uto',
+    );
+    expect(partialResult.lines[0]).toBe('Attach @src/autocomplete-target.ts ');
   });
 
   it('passes detected fd path and cwd into the autocomplete provider', () => {

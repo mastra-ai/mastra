@@ -372,18 +372,23 @@ class MastraCodeAutocompleteProvider extends CombinedAutocompleteProvider {
       };
     }
 
+    if (item.value.startsWith('@') && !prefix.startsWith('@')) {
+      const atIndex = beforePrefix.lastIndexOf('@');
+      const delimiterIndex = Math.max(beforePrefix.lastIndexOf(' '), beforePrefix.lastIndexOf('\t'));
+      if (atIndex > delimiterIndex) {
+        const updatedLines = [...lines];
+        const suffix = item.label.endsWith('/') ? '' : ' ';
+        updatedLines[cursorLine] = `${beforePrefix.slice(0, atIndex)}${item.value}${suffix}${afterCursor}`;
+        return {
+          lines: updatedLines,
+          cursorLine,
+          cursorCol: beforePrefix.slice(0, atIndex).length + item.value.length + suffix.length,
+        };
+      }
+    }
+
     const result = super.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
     const completedLine = result.lines[cursorLine] || '';
-
-    if (item.value.startsWith('@') && beforePrefix.endsWith('@') && completedLine.includes('@@')) {
-      const updatedLines = [...result.lines];
-      updatedLines[cursorLine] = completedLine.replace('@@', '@');
-      return {
-        ...result,
-        lines: updatedLines,
-        cursorCol: Math.max(result.cursorCol - 1, beforePrefix.length),
-      };
-    }
 
     if (
       prefix.startsWith('/') &&
