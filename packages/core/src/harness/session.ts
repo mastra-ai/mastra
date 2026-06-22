@@ -293,6 +293,15 @@ export class SessionThread {
     this.#threadId = null;
   }
 
+  /** Clear the session's thread binding and release its lock when one is held. */
+  async clearAndReleaseLock(): Promise<void> {
+    const threadId = this.#threadId;
+    this.#threadId = null;
+    if (threadId) {
+      await this.#store?.releaseLock(threadId);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Data domain: reads/queries scoped to this session, backed by host storage.
   // ---------------------------------------------------------------------------
@@ -570,7 +579,7 @@ export class SessionThread {
   }
 
   /** Switch the session to an existing thread, hydrating its persisted settings and rebinding the stream. */
-  async switch({ threadId }: { threadId: string }): Promise<void> {
+  async switch({ threadId, emitEvent = true }: { threadId: string; emitEvent?: boolean }): Promise<void> {
     const session = this.#owner;
     const store = this.#store;
     session.abort();
@@ -596,7 +605,9 @@ export class SessionThread {
 
     await this.loadMetadata();
 
-    session.emit({ type: 'thread_changed', threadId, previousThreadId });
+    if (emitEvent) {
+      session.emit({ type: 'thread_changed', threadId, previousThreadId });
+    }
     await this.ensureCurrentSubscription();
   }
 

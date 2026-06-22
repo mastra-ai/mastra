@@ -963,18 +963,20 @@ export class Harness<TState = {}> {
    * surrounding teardown — dropping the current thread subscription and clearing
    * the active thread — since those are Harness-owned.
    */
-  setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): void {
+  async setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): Promise<void> {
     const previousResourceId = session.identity.getResourceId();
     session.thread.cleanupSubscription();
     session.identity.setResourceId({ resourceId });
-    session.thread.clear();
+    const releasePreviousThreadLock = session.thread.clearAndReleaseLock();
 
     // Re-key the resource registry so this session is the one resolved for its
     // new resourceId (and is no longer resolved for the old one). This session
     // becomes the authoritative owner of the target resource, replacing any
     // prior session registered there.
-    void this.#dropSessionFromRegistry(previousResourceId, session);
+    const dropPreviousResource = this.#dropSessionFromRegistry(previousResourceId, session);
     this.#sessionsByResource.set(resourceId, Promise.resolve(session));
+    await releasePreviousThreadLock;
+    await dropPreviousResource;
   }
 
   /** Remove `resourceId` from the registry only if it still resolves to `session`. */
