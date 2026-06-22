@@ -205,7 +205,7 @@ ${patchToolGuidance}
     sections.push(taskTools.join('\n'));
   }
 
-  // --- Plan submission tool (plan mode) ---
+  // --- Plan tools (plan mode) ---
 
   if (modeId === 'plan' && !denied.has('submit_plan')) {
     sections.push(`
@@ -214,6 +214,15 @@ ${patchToolGuidance}
 - The plan will be rendered as markdown and the user can approve, reject, or request changes.
 - On approval, the system automatically switches to the default mode so you can implement.
 - Takes two arguments: \`title\` (short descriptive title) and \`plan\` (full plan in markdown).`);
+  }
+
+  if (modeId === 'plan' && !denied.has('plan_file')) {
+    sections.push(`
+**plan_file** — Read or update the plan file for the current resource
+- Plan files live outside the workspace sandbox — use this tool, not regular file tools.
+- \`action: "read"\` returns the current plan content (or a message if none exists).
+- \`action: "write"\` creates or overwrites the plan file. Requires \`content\` parameter.
+- Use this to read the previous plan before making targeted revisions after a rejection.`);
   }
 
   // --- Subagent tool (all modes) ---

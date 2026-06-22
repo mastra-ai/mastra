@@ -323,13 +323,13 @@ export async function handlePlanApproval(
       onReject: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        // Resume with rejection (no inline feedback — user provides it via chat)
+        // Reject: the session drops the suspension and aborts the run immediately
+        // so no message is sent back to the model. The user provides revision
+        // feedback as a normal chat message.
         await state.session.respondToToolSuspension({
           toolCallId,
           resumeData: { action: 'rejected' },
         });
-        // Abort the agent loop so it stops and waits for user's next message
-        state.session.abort();
         resolve();
       },
     };

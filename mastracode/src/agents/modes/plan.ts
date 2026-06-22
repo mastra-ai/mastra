@@ -2,6 +2,7 @@
  * Plan mode — read-only analysis and planning.
  */
 import type { HarnessMode } from '@mastra/core/harness';
+import { planFileTool } from '../../tools/plan-file.js';
 
 export const planMode: HarnessMode = {
   id: 'plan',
@@ -28,6 +29,10 @@ export const planMode: HarnessMode = {
 - Do NOT output the plan as text — it MUST go through the submit_plan tool call.
 - Be concise: reference files by path and line number, don't include raw contents.
 - Focus on actionable details, not general observations.`,
+
+  additionalTools: {
+    plan_file: planFileTool,
+  },
 
   metadata: {
     default: false,

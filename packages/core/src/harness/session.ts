@@ -3154,22 +3154,29 @@ export class Session<TState = unknown> {
   }
 
   /**
-   * Respond to a suspended `submit_plan` tool call. Rejections resume the plan
-   * tool with feedback. Approvals switch to the transition mode when needed,
-   * then resume the same suspended tool so the approved tool result is persisted
-   * and the model continues naturally in the target mode.
+   * Respond to a suspended `submit_plan` tool call. On rejection the suspension
+   * is dropped and the run is aborted so the agent stops immediately; the user
+   * provides revision feedback as a normal chat message in the next turn. On
+   * approval the session switches to the transition mode when needed, then
+   * resumes the suspended tool so the approved tool result is persisted and the
+   * model continues naturally in the target mode.
    */
   private async handlePlanApprovalResume({
     toolCallId,
     response,
-    requestContext,
+    requestContext: _requestContext,
   }: {
     toolCallId: string;
     response: { action: 'approved' | 'rejected'; feedback?: string };
     requestContext?: RequestContext;
   }): Promise<void> {
     if (response.action === 'rejected') {
-      await this.resumeToolCall({ resumeData: response, toolCallId, requestContext });
+      // Drop the suspension and abort the run immediately. The incomplete tool
+      // call is stripped from the next run's message history by the default
+      // `filterIncompleteToolCalls: true` behavior, so no tool result is needed.
+      this.suspensions.delete({ toolCallId });
+      this.displayState.deletePendingSuspension(toolCallId);
+      this.abortRun();
       return;
     }
 

@@ -1769,6 +1769,16 @@ export class Harness<TState = {}> {
       });
     }
 
+    // submit_plan is only meaningful in modes that transition to another mode
+    // (i.e. planning modes). Remove it in non-transitioning modes so the model
+    // cannot loop by resubmitting the same plan after approval.
+    {
+      const currentMode = session.mode.resolve();
+      if (!currentMode?.transitionsTo) {
+        delete builtInTools.submit_plan;
+      }
+    }
+
     // Remove any explicitly disabled built-in tools
     if (this.config.disableBuiltinTools?.length) {
       for (const toolId of this.config.disableBuiltinTools) {
