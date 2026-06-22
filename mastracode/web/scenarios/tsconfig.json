@@ -4,13 +4,13 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "types": ["vite/client"]
+    "jsx": "react-jsx",
+    "types": ["node"]
   },
-  "include": ["."]
+  "include": [".", "../ui/transcript.ts", "../../src/web/hono-routes.ts"]
 }

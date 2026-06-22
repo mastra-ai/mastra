@@ -10,6 +10,7 @@ export default defineConfig({
     index: 'src/index.ts',
     cli: 'src/main.ts',
     tui: 'src/tui/index.ts',
+    'web/server': 'src/web/server.ts',
   },
   format: ['esm', 'cjs'],
   clean: true,

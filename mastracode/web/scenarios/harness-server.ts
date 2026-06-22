@@ -1,8 +1,8 @@
 import { mkdtempSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { createOpenAI } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import { Mastra } from '@mastra/core/mastra';
@@ -10,31 +10,14 @@ import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
-import { z } from 'zod';
 // Real server routes — the same objects `mastra dev` registers. We mount them
 // on a real Hono app below, so scenarios exercise the production routing.
 import { SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { Hono } from 'hono';
+import { z } from 'zod';
 
-// Hono is a dependency of @mastra/server; resolve it through that package so the
-// example doesn't need its own copy pinned.
-interface HonoApp {
-  get(path: string, handler: (c: any) => Promise<Response> | Response): void;
-  post(path: string, handler: (c: any) => Promise<Response> | Response): void;
-  put(path: string, handler: (c: any) => Promise<Response> | Response): void;
-  delete(path: string, handler: (c: any) => Promise<Response> | Response): void;
-  fetch(request: Request): Promise<Response>;
-}
-type HonoCtor = new () => HonoApp;
-
-const requireHere = createRequire(import.meta.url);
-const requireFromServer = createRequire(requireHere.resolve('@mastra/server/package.json'));
-const { Hono } = requireFromServer('hono') as { Hono: HonoCtor };
-
-// Resolve the AI SDK v5 OpenAI provider via mastracode (the example's own copy
-// is an older AI SDK v4 build, which the harness `stream()` path rejects).
-type CreateOpenAI = (opts: { apiKey: string; baseURL: string }) => (modelId: string) => any;
-const requireFromMastraCode = createRequire(requireHere.resolve('../../../mastracode/package.json'));
-const { createOpenAI } = requireFromMastraCode('@ai-sdk/openai') as { createOpenAI: CreateOpenAI };
+import { mountHarnessRoutes } from '../../src/web/hono-routes.js';
+import type { ServerRouteLike } from '../../src/web/hono-routes.js';
 
 /**
  * In-process Mastra harness server for scenario tests.
@@ -64,13 +47,6 @@ export interface ScenarioServer {
   /** The workspace root dir, when `workspace: true`. */
   workspaceRoot?: string;
   stop: () => Promise<void>;
-}
-
-interface ServerRouteLike {
-  method: string;
-  path: string;
-  responseType?: string;
-  handler: (args: any) => Promise<unknown> | unknown;
 }
 
 export async function startHarnessServer(
@@ -158,81 +134,16 @@ export async function startHarnessServer(
   const mastra = new Mastra({ harnesses: { [HARNESS_ID]: harness }, storage: compositeStorage });
 
   const app = new Hono();
-
-  for (const route of SERVER_ROUTES as ServerRouteLike[]) {
-    if (typeof route.path !== 'string' || !route.path.includes('harness')) continue;
-    const honoPath = `/api${route.path}`; // MastraClient prefixes /api
-    const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete';
-    (app as any)[method](honoPath, (c: any) => invokeRoute(route, c, mastra));
-  }
+  mountHarnessRoutes(app, SERVER_ROUTES as unknown as ServerRouteLike[], mastra);
 
   const BASE = 'http://scenario.local';
   return {
-    fetch: (url, init) => {
+    fetch: (url: string, init?: RequestInit) => {
       const fullUrl = url.startsWith('http') ? url : `${BASE}${url}`;
-      return app.fetch(new Request(fullUrl, init));
+      return Promise.resolve(app.fetch(new Request(fullUrl, init)));
     },
     baseUrl: BASE,
     workspaceRoot,
     stop: async () => {},
   };
-}
-
-/**
- * Generic Hono → route-handler binding. Mirrors how the real Hono server
- * adapter calls a route: collect path + body params, invoke the handler, then
- * stream (SSE) or JSON-encode the result.
- */
-async function invokeRoute(route: ServerRouteLike, c: any, mastra: Mastra): Promise<Response> {
-  /* c is a Hono Context */
-  const params: Record<string, unknown> = { mastra, ...c.req.param() };
-  // Merge query params for GET requests (e.g. ?limit=10 on listMessages).
-  const url = new URL(c.req.url);
-  for (const [key, value] of url.searchParams.entries()) {
-    params[key] = value;
-  }
-  const method = route.method.toUpperCase();
-  if (method === 'POST' || method === 'PUT') {
-    try {
-      Object.assign(params, await c.req.json());
-    } catch {
-      /* no body */
-    }
-  }
-
-  if (route.responseType === 'stream') {
-    const abortController = new AbortController();
-    params.abortSignal = abortController.signal;
-    c.req.raw.signal?.addEventListener('abort', () => abortController.abort(), { once: true });
-    const stream = (await route.handler(params)) as ReadableStream<string>;
-    return new Response(encodeStream(stream), {
-      headers: {
-        'content-type': 'text/event-stream',
-        'cache-control': 'no-cache',
-        connection: 'keep-alive',
-      },
-    });
-  }
-
-  const result = await route.handler(params);
-  return new Response(JSON.stringify(result), { headers: { 'content-type': 'application/json' } });
-}
-
-/** The stream handler yields strings; encode them to bytes for the Response. */
-function encodeStream(stream: ReadableStream<string>): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-  const reader = stream.getReader();
-  return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      const { done, value } = await reader.read();
-      if (done) {
-        controller.close();
-        return;
-      }
-      controller.enqueue(encoder.encode(value));
-    },
-    cancel(reason) {
-      void reader.cancel(reason);
-    },
-  });
 }

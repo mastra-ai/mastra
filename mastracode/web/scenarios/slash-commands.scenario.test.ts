@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { transcriptReducer, initialTranscript } from '../web/transcript';
+import { transcriptReducer, initialTranscript } from '../ui/transcript';
 
 /**
  * Slash commands are client-side only (they push local notices into the

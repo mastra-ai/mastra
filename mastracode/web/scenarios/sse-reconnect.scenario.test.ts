@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
 import { MastraClient } from '@mastra/client-js';
 import type { HarnessEvent } from '@mastra/client-js';
+import { describe, it, expect } from 'vitest';
 
+import { initialTranscript, transcriptReducer } from '../ui/transcript';
 import { startAimock } from './aimock';
 import { startHarnessServer } from './harness-server';
-import { initialTranscript, transcriptReducer } from '../web/transcript';
 
 /**
  * SSE reconnect scenario — validates the reconnection contract:

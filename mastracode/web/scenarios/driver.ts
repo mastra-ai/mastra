@@ -1,8 +1,8 @@
 import { MastraClient } from '@mastra/client-js';
 import type { PlanResume, SendNotificationInput } from '@mastra/client-js';
 
-import { initialTranscript, transcriptReducer } from '../web/transcript';
-import type { ApprovalPrompt, NotificationEntry, SubagentEntry, SuspensionPrompt, TimelineEntry, TranscriptState } from '../web/transcript';
+import { initialTranscript, transcriptReducer } from '../ui/transcript';
+import type { ApprovalPrompt, NotificationEntry, SubagentEntry, SuspensionPrompt, TimelineEntry, TranscriptState } from '../ui/transcript';
 
 /**
  * Scenario driver — the web equivalent of MastraCode's `McE2eTerminal`.

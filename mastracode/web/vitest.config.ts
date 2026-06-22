@@ -1,6 +1,10 @@
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  root: dirname(fileURLToPath(import.meta.url)),
   test: {
     // Scenarios drive a real in-process harness server + AIMock; they need
     // network + node builtins, so run in the node environment.
