@@ -390,6 +390,17 @@ class MastraCodeAutocompleteProvider extends CombinedAutocompleteProvider {
     const result = super.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
     const completedLine = result.lines[cursorLine] || '';
 
+    if (currentLine.slice(0, cursorCol).includes('@') && /@[^@\s]*@/.test(completedLine)) {
+      const updatedLines = [...result.lines];
+      const normalizedLine = completedLine.replace(/@[^@\s]*@/, '@');
+      updatedLines[cursorLine] = normalizedLine;
+      return {
+        ...result,
+        lines: updatedLines,
+        cursorCol: Math.max(result.cursorCol - (completedLine.length - normalizedLine.length), 0),
+      };
+    }
+
     if (
       prefix.startsWith('/') &&
       beforePrefix.trim() === '' &&
