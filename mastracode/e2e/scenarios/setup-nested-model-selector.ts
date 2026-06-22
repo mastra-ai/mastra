@@ -1,11 +1,5 @@
-import type { McE2eScenario, McE2eTerminal } from './types.js';
-
-async function typeTextSlowly(terminal: McE2eTerminal, text: string): Promise<void> {
-  for (const char of text) {
-    terminal.write(char);
-    await terminal.flushInput?.();
-  }
-}
+import { typeTextSlowly } from './typing-utils.js';
+import type { McE2eScenario } from './types.js';
 
 export const setupNestedModelSelectorScenario: McE2eScenario = {
   name: 'setup-nested-model-selector',
