@@ -1,61 +1,5 @@
+import type { DataOmPart } from '@mastra/memory/processors';
 import type { MemoryMessage } from '../types';
-
-interface ObservationMarkerConfig {
-  messageTokens: number;
-  observationTokens: number;
-  scope: 'thread' | 'resource';
-}
-
-interface OmObservationStartPart {
-  type: 'data-om-observation-start';
-  data: { startedAt: string; tokensToObserve: number; config: ObservationMarkerConfig };
-}
-
-interface OmObservationEndPart {
-  type: 'data-om-observation-end';
-  data: { completedAt: string; tokensObserved: number; observationTokens: number };
-}
-
-interface OmBufferingStartPart {
-  type: 'data-om-buffering-start';
-  data: { startedAt: string; tokensToBuffer: number; config: ObservationMarkerConfig };
-}
-
-interface OmBufferingEndPart {
-  type: 'data-om-buffering-end';
-  data: { completedAt: string; tokensBuffered: number; bufferedTokens: number };
-}
-
-interface OmActivationPart {
-  type: 'data-om-activation';
-  data: {
-    activatedAt: string;
-    tokensActivated: number;
-    observationTokens: number;
-    generationCount: number;
-    config: ObservationMarkerConfig;
-  };
-}
-
-interface OmStatusPart {
-  type: 'data-om-status';
-  data: {
-    windows?: {
-      active?: {
-        messages?: { tokens?: number; threshold?: number };
-        observations?: { tokens?: number; threshold?: number };
-      };
-    };
-  };
-}
-
-type OmMarkerPart =
-  | OmObservationStartPart
-  | OmObservationEndPart
-  | OmBufferingStartPart
-  | OmBufferingEndPart
-  | OmActivationPart
-  | OmStatusPart;
 
 export interface ExtractedOmMarker {
   type: 'status' | 'observation-start' | 'observation-end' | 'buffering-start' | 'buffering-end' | 'activation';
@@ -98,6 +42,19 @@ function isMastraV2(content: unknown): content is MastraV2Content {
     Array.isArray((content as { parts?: unknown }).parts)
   );
 }
+
+type OmMarkerPart = Extract<
+  DataOmPart,
+  {
+    type:
+      | 'data-om-status'
+      | 'data-om-observation-start'
+      | 'data-om-observation-end'
+      | 'data-om-buffering-start'
+      | 'data-om-buffering-end'
+      | 'data-om-activation';
+  }
+>;
 
 function isOmMarkerPart(part: { type: string }): part is OmMarkerPart {
   const t = part.type;

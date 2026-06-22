@@ -2,16 +2,18 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { readOnlyAuthCapabilities } from '../../__tests__/fixtures/auth';
+import { observationalMemory, threadMessages } from '../../__tests__/fixtures/memory-panel';
 import { MemorySidebar } from '../memory-sidebar';
-import { memoryEnabledStatus, semanticRecallConfig } from './fixtures/memory';
+import { memoryEnabledStatus, observationalMemoryConfig, semanticRecallConfig } from './fixtures/memory';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
@@ -94,14 +96,16 @@ function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
         <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={paths}>
           <ThreadInputProvider>
             <WorkingMemoryProvider agentId={AGENT_ID} threadId={THREAD_ID} resourceId={AGENT_ID}>
-              <MemorySidebar
-                agentId={AGENT_ID}
-                threadId={THREAD_ID}
-                threads={threads}
-                isLoading={false}
-                onDelete={vi.fn()}
-                hasMemory={hasMemory}
-              />
+              <MemoryTimelineProvider>
+                <MemorySidebar
+                  agentId={AGENT_ID}
+                  threadId={THREAD_ID}
+                  threads={threads}
+                  isLoading={false}
+                  onDelete={vi.fn()}
+                  hasMemory={hasMemory}
+                />
+              </MemoryTimelineProvider>
             </WorkingMemoryProvider>
           </ThreadInputProvider>
         </LinkComponentProvider>
@@ -192,6 +196,52 @@ describe('MemorySidebar', () => {
     const agentMemoryRoot = panel?.firstElementChild;
     expect(agentMemoryRoot?.className).not.toContain('overflow-hidden');
     expect(agentMemoryRoot?.className).not.toContain('h-full');
+  });
+
+  it('opens the observational memory detail view as an adjacent subpanel and gates its data fetching until toggled', async () => {
+    const onOM = vi.fn();
+    const onMessages = vi.fn();
+
+    server.use(
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfig)),
+      http.get(`${BASE_URL}/api/memory/observational-memory`, () => {
+        onOM();
+        return HttpResponse.json(observationalMemory);
+      }),
+      http.get(`${BASE_URL}/api/memory/threads/${THREAD_ID}/messages`, () => {
+        onMessages();
+        return HttpResponse.json(threadMessages);
+      }),
+    );
+
+    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
+
+    fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
+
+    const toggle = await screen.findByTestId('memory-sidebar-om-detail-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText('Clone Thread')).not.toBeNull();
+    expect(screen.queryByTestId('memory-sidebar-om-detail-subpanel')).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Close memory panel' })).toBeNull();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onOM).not.toHaveBeenCalled();
+    expect(onMessages).not.toHaveBeenCalled();
+
+    fireEvent.click(toggle);
+
+    const subpanel = await screen.findByTestId('memory-sidebar-om-detail-subpanel');
+    expect(subpanel.closest('[data-testid="memory-sidebar-panel"]')).not.toBeNull();
+    expect(screen.getByText('Clone Thread')).not.toBeNull();
+    expect(await screen.findByRole('checkbox', { name: 'Close memory panel' })).not.toBeNull();
+    await waitFor(() => expect(onOM).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onMessages).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('memory-sidebar-om-detail-toggle').getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('memory-sidebar-om-detail-toggle'));
+
+    await waitFor(() => expect(screen.queryByTestId('memory-sidebar-om-detail-subpanel')).toBeNull());
+    expect(screen.queryByRole('checkbox', { name: 'Close memory panel' })).toBeNull();
+    expect(screen.getByTestId('memory-sidebar-om-detail-toggle').getAttribute('aria-pressed')).toBe('false');
   });
 
   it('returns to the thread list when the card is clicked again', async () => {

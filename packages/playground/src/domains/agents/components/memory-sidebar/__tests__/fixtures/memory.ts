@@ -13,3 +13,13 @@ export const semanticRecallConfig: GetMemoryConfigResponse = {
     workingMemory: { enabled: true },
   },
 };
+
+export const observationalMemoryConfig: GetMemoryConfigResponse = {
+  memoryType: 'local',
+  config: {
+    lastMessages: 10,
+    semanticRecall: true,
+    workingMemory: { enabled: true },
+    observationalMemory: { enabled: true },
+  },
+};

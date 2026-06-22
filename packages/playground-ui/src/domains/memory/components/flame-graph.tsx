@@ -15,6 +15,7 @@ import {
 
 import { Button } from '../../../ds/components/Button';
 import type { ExtractedOmMarker } from '../lib/extract-markers';
+import { tToTimestampMs } from '../lib/replay-selection';
 import type { TDomain } from '../lib/timeline';
 import { formatTimeDisplay, toT, tToTimestamp } from '../lib/timeline';
 import type { MemoryMessage, OMHistoryRecord } from '../types';
@@ -26,7 +27,10 @@ interface FlameGraphProps {
   tDomain: TDomain;
   observationThreshold?: number;
   reflectionThreshold?: number;
+  onSelectTimestamp?: (timestamp: number | null) => void;
 }
+
+type RechartsClickState = { activeLabel?: string | number } | null | undefined;
 
 const MSG_COLOR = 'var(--color-green-500, #22c55e)';
 const OBS_COLOR = '#f59e0b';
@@ -276,6 +280,7 @@ interface CombinedRowProps {
   zoomDomain: [number, number];
   threshold?: number;
   height?: number;
+  onSelectT?: (t: number) => void;
 }
 
 function CombinedRow({
@@ -289,6 +294,7 @@ function CombinedRow({
   zoomDomain,
   threshold,
   height = 44,
+  onSelectT,
 }: CombinedRowProps) {
   const areaValueByTime = new Map(areaData.map(point => [point.t, Number(point[areaDataKey] ?? 0)]));
   const eventsByTime = eventData.reduce<Map<number, Array<(typeof eventData)[number]>>>((acc, event) => {
@@ -327,7 +333,14 @@ function CombinedRow({
       </p>
       <div>
         <ResponsiveContainer width="100%" height={height}>
-          <ComposedChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+          <ComposedChart
+            margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+            onClick={(state: RechartsClickState) => {
+              const label = state?.activeLabel;
+              if (label != null && onSelectT) onSelectT(Number(label));
+            }}
+            className={onSelectT ? 'cursor-pointer' : undefined}
+          >
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={color} stopOpacity={0.35} />
@@ -450,10 +463,7 @@ function ZoomTrack({
           className="absolute inset-y-0 border-y border-border1/30 bg-neutral6/5"
           style={{ left: `${leftPercent}%`, right: `${100 - rightPercent}%` }}
         />
-        <div
-          className="absolute inset-y-0 right-0 bg-surface2/60"
-          style={{ width: `${100 - rightPercent}%` }}
-        />
+        <div className="absolute inset-y-0 right-0 bg-surface2/60" style={{ width: `${100 - rightPercent}%` }} />
         <div
           className="absolute inset-y-0 w-1 cursor-col-resize bg-neutral6/50 hover:bg-neutral6"
           style={{ left: `${leftPercent}%`, transform: 'translateX(-50%)' }}
@@ -486,8 +496,16 @@ export function FlameGraph({
   tDomain: tDomainProp,
   observationThreshold,
   reflectionThreshold,
+  onSelectTimestamp,
 }: FlameGraphProps) {
   const domain = tDomainProp ?? FALLBACK_DOMAIN;
+
+  const handleSelectT = useCallback(
+    (t: number) => {
+      onSelectTimestamp?.(tToTimestampMs(t, domain));
+    },
+    [onSelectTimestamp, domain],
+  );
 
   const [zoomLeft, setZoomLeft] = useState<number>(domain.tMin);
   const [zoomRight, setZoomRight] = useState<number>(domain.tMax);
@@ -533,6 +551,7 @@ export function FlameGraph({
         domain={domain}
         zoomDomain={zoomDomain}
         threshold={observationThreshold}
+        onSelectT={onSelectTimestamp ? handleSelectT : undefined}
       />
 
       <CombinedRow
@@ -545,6 +564,7 @@ export function FlameGraph({
         domain={domain}
         zoomDomain={zoomDomain}
         threshold={reflectionThreshold}
+        onSelectT={onSelectTimestamp ? handleSelectT : undefined}
       />
 
       {bufferedObservationData.length > 0 && (

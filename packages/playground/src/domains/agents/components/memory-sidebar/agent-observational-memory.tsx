@@ -1,5 +1,6 @@
 import type { GetObservationalMemoryResponse } from '@mastra/client-js';
 import {
+  Button,
   ScrollArea,
   Skeleton,
   Tooltip,
@@ -10,7 +11,7 @@ import {
 } from '@mastra/playground-ui';
 import { ChevronRight, ChevronDown, Brain, ExternalLink, Info } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useObservationalMemoryContext } from '@/domains/agents/context';
+import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
 import type { OmProgressData } from '@/domains/agents/context';
 import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
 import { ObservationRenderer } from '@/lib/ai-ui/tools/badges/observation-renderer';
@@ -586,6 +587,7 @@ interface AgentObservationalMemoryProps {
 
 export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: AgentObservationalMemoryProps) => {
   // Get real-time observation status and progress from streaming context
+  const { isPanelOpen: isDetailViewOpen, openPanel: openDetailView, closePanel: closeDetailView } = useMemoryTimeline();
   const { isObservingFromStream, isReflectingFromStream, streamProgress, clearProgress } =
     useObservationalMemoryContext();
 
@@ -806,7 +808,10 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
         isCopied={isCopied}
         onCopy={handleCopy}
       />
+
       <BackgroundProcessingStatus streamProgress={liveProgress} />
+
+      <Button onClick={() => (isDetailViewOpen ? closeDetailView() : openDetailView())}>Analyze Observations</Button>
     </div>
   );
 };

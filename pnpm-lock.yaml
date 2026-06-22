@@ -4962,6 +4962,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@mastra/react':
         specifier: workspace:*
         version: link:../../client-sdks/react

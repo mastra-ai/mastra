@@ -64,8 +64,6 @@ import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
-import Memory from './pages/memory';
-import MemoryThread from './pages/memory/thread';
 import Metrics from './pages/metrics';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
@@ -369,12 +367,6 @@ export const routes: RouteObject[] = [
           ]),
 
       { path: '/logs', element: <Logs />, handle: navHandle('/logs') },
-      { path: '/memory', element: <Memory />, handle: navHandle('/memory') },
-      {
-        path: '/memory/:threadId',
-        element: <MemoryThread />,
-        handle: navHandleWithChildren('/memory', [{ id: 'memory-thread', label: 'Thread' }]),
-      },
       { path: '/evaluation', element: <Evaluation />, handle: navHandle('/evaluation') },
       { path: '/scorers', element: <Scorers />, handle: navHandle('/scorers') },
       {
