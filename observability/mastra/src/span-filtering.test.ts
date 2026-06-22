@@ -513,9 +513,6 @@ describe('Span Filtering', () => {
       async onMetricEvent(event: MetricEvent): Promise<void> {
         this.metricEvents.push(event);
       }
-      async exportTracingEvent(event: TracingEvent): Promise<void> {
-        this.tracingEvents.push(event);
-      }
       async shutdown(): Promise<void> {}
       async flush(): Promise<void> {}
     }
@@ -611,6 +608,59 @@ describe('Span Filtering', () => {
           costUnit: 'USD',
           estimatedCost: 0.000007,
         });
+      } finally {
+        await tracing.shutdown();
+        pricingRegistrySpy.mockRestore();
+      }
+    });
+
+    it('should preserve cost context when provider/model are only in start attributes (real AI SDK pattern)', async () => {
+      const pricingRegistrySpy = vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(testPricingRegistry);
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        excludeSpanTypes: [SpanType.MODEL_GENERATION],
+      });
+
+      try {
+        const agentSpan = tracing.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+        });
+        // provider/model set at creation time, matching real AI SDK behaviour
+        const modelSpan = agentSpan.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: "llm: 'mock'",
+          attributes: {
+            provider: 'mock-provider',
+            model: 'mock-model-id',
+          },
+        });
+        // end() only passes responseModel + usage (not provider/model)
+        modelSpan.end({
+          attributes: {
+            responseModel: 'mock-model-id',
+            usage: { inputTokens: 20, outputTokens: 15 },
+          },
+        });
+        agentSpan.end();
+        await tracing.flush();
+
+        const inputTokenMetrics = collector.metricEvents.filter(
+          e => e.metric.name === 'mastra_model_total_input_tokens',
+        );
+        expect(inputTokenMetrics).toHaveLength(1);
+        expect(inputTokenMetrics[0]?.metric.value).toBe(20);
+        // costContext must have provider from start attributes
+        expect(inputTokenMetrics[0]?.metric.costContext).toMatchObject({
+          provider: 'mock-provider',
+          model: 'mock-model-id',
+          costUnit: 'USD',
+        });
+        expect(inputTokenMetrics[0]?.metric.costContext?.estimatedCost).toBeGreaterThan(0);
       } finally {
         await tracing.shutdown();
         pricingRegistrySpy.mockRestore();

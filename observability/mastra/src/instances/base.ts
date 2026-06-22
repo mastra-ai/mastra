@@ -69,6 +69,13 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   #mastraEnvironment?: string;
 
+  /**
+   * For excluded MODEL_GENERATION spans whose constructor clears `attributes`,
+   * we stash the lightweight provider/model from creation options so
+   * `captureExcludedModelUsage` can still build cost context.
+   */
+  #excludedModelMeta = new WeakMap<AnySpan, { provider?: string; model?: string }>();
+
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
@@ -233,6 +240,17 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       tags,
       requestContext,
     });
+
+    // For excluded MODEL_GENERATION spans the constructor clears attributes,
+    // losing provider/model needed for cost estimation. Stash them from the
+    // original creation options so captureExcludedModelUsage can use them.
+    if (rest.type === SpanType.MODEL_GENERATION && this.config.excludeSpanTypes?.includes(SpanType.MODEL_GENERATION)) {
+      const attrs = rest.attributes as ModelGenerationAttributes | undefined;
+      const model = attrs?.responseModel ?? attrs?.model;
+      if (attrs?.provider || model) {
+        this.#excludedModelMeta.set(span, { provider: attrs?.provider, model });
+      }
+    }
 
     if (span.isEvent) {
       this.emitSpanEnded(span);
@@ -693,6 +711,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
         if (!this.config.spanFilter(exportedSpan)) return undefined;
       } catch (error) {
         this.logger.error(`[Observability] spanFilter error`, error);
+        // On filter error, keep the span to avoid silent data loss
       }
     }
 
@@ -808,9 +827,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
   /**
    * When a non-internal MODEL_GENERATION span is excluded by `excludeSpanTypes`,
-   * DefaultSpan.end() drops end-time attributes before auto-extraction can read
-   * them. Capture usage before that happens so token and cost metrics still emit
-   * even though the trace span itself is filtered out.
+   * the BaseSpan constructor clears start-time attributes and DefaultSpan.end()
+   * drops end-time attributes before auto-extraction can read them. Capture
+   * usage from end options and provider/model from the creation-time stash so
+   * token and cost metrics still emit even though the trace span is filtered out.
    */
   private captureExcludedModelUsage<TType extends SpanType>(
     span: Span<TType>,
@@ -825,8 +845,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const usage = endAttrs?.usage ?? liveAttrs?.usage;
     if (!usage) return undefined;
 
-    const provider = endAttrs?.provider ?? liveAttrs?.provider;
-    const model = endAttrs?.responseModel ?? endAttrs?.model ?? liveAttrs?.responseModel ?? liveAttrs?.model;
+    // For excluded spans, the constructor clears start-time attributes
+    // (provider, model). Fall back to the stash populated at creation time.
+    const stashed = this.#excludedModelMeta.get(span);
+    const provider = endAttrs?.provider ?? liveAttrs?.provider ?? stashed?.provider;
+    const model =
+      endAttrs?.responseModel ?? endAttrs?.model ?? liveAttrs?.responseModel ?? liveAttrs?.model ?? stashed?.model;
 
     return { usage, provider, model };
   }
