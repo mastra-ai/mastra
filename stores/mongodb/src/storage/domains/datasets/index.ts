@@ -385,7 +385,12 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
 
-      const rows = await collection.find(filter).sort({ createdAt: -1, id: 1 }).skip(offset).limit(limitValue).toArray();
+      const rows = await collection
+        .find(filter)
+        .sort({ createdAt: -1, id: 1 })
+        .skip(offset)
+        .limit(limitValue)
+        .toArray();
 
       return {
         datasets: rows.map(row => this.transformDatasetRow(row)),

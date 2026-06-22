@@ -446,7 +446,9 @@ export class DatasetsSpanner extends DatasetsStorage {
       params: { id: datasetId },
       json: true,
     });
-    const row = (rows as Array<{ version: number | string; organizationId: string | null; resourceId: string | null }>)[0];
+    const row = (
+      rows as Array<{ version: number | string; organizationId: string | null; resourceId: string | null }>
+    )[0];
     if (!row) {
       throw new MastraError({
         id: createStorageErrorId('SPANNER', 'DATASET_ITEM', 'DATASET_NOT_FOUND'),
@@ -515,11 +517,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(
-              tx,
-              args.datasetId,
-              now,
-            );
+            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(tx, args.datasetId, now);
             await this.db.insert({
               tableName: TABLE_DATASET_ITEMS,
               record: {
@@ -615,11 +613,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(
-              tx,
-              args.datasetId,
-              now,
-            );
+            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(tx, args.datasetId, now);
             await this.closeCurrentRow(tx, args.id, newVersion);
             await this.db.insert({
               tableName: TABLE_DATASET_ITEMS,
@@ -697,11 +691,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(
-              tx,
-              args.datasetId,
-              now,
-            );
+            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(tx, args.datasetId, now);
             await this.closeCurrentRow(tx, args.id, newVersion);
             await this.db.insert({
               tableName: TABLE_DATASET_ITEMS,
@@ -994,11 +984,11 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(
-              tx,
-              input.datasetId,
-              now,
-            );
+            const {
+              version: newVersion,
+              organizationId,
+              resourceId,
+            } = await this.bumpVersion(tx, input.datasetId, now);
             for (const { id, item } of prepared) {
               await this.db.insert({
                 tableName: TABLE_DATASET_ITEMS,
@@ -1074,11 +1064,11 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const { version: newVersion, organizationId, resourceId } = await this.bumpVersion(
-              tx,
-              input.datasetId,
-              now,
-            );
+            const {
+              version: newVersion,
+              organizationId,
+              resourceId,
+            } = await this.bumpVersion(tx, input.datasetId, now);
             for (const existing of current) {
               await this.closeCurrentRow(tx, existing.id, newVersion);
               await this.db.insert({
