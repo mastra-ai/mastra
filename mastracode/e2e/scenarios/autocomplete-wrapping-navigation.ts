@@ -39,6 +39,7 @@ export const autocompleteWrappingNavigationScenario = {
     runtime.printScreen('wrapped custom slash autocomplete list', terminal);
 
     terminal.write(DOWN);
+    await runtime.waitForScreenText(/→ \/wrap-bravo/i, terminal, 8_000);
     terminal.write(ENTER);
 
     await runtime.waitForScreenText(/Bravo wrapped autocomplete navigation template\./i, terminal, 8_000);
