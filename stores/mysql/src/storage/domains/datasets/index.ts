@@ -136,6 +136,18 @@ export class DatasetsMySQL extends DatasetsStorage {
     await this.operations.createTable({ tableName: TABLE_DATASETS, schema: DATASETS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_DATASET_ITEMS as any, schema: DATASET_ITEMS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: DATASET_VERSIONS_SCHEMA });
+    // Backfill tenancy + candidate identity columns on pre-existing tables so
+    // older deployments keep working when they upgrade in place.
+    await this.operations.alterTable({
+      tableName: TABLE_DATASETS,
+      schema: DATASETS_SCHEMA,
+      ifNotExists: ['organizationId', 'resourceId', 'candidateKey', 'candidateId'],
+    });
+    await this.operations.alterTable({
+      tableName: TABLE_DATASET_ITEMS as any,
+      schema: DATASET_ITEMS_SCHEMA,
+      ifNotExists: ['organizationId', 'resourceId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }

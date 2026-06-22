@@ -137,6 +137,18 @@ export class DatasetsSpanner extends DatasetsStorage {
     await this.db.createTable({ tableName: TABLE_DATASETS, schema: TABLE_SCHEMAS[TABLE_DATASETS] });
     await this.db.createTable({ tableName: TABLE_DATASET_ITEMS, schema: TABLE_SCHEMAS[TABLE_DATASET_ITEMS] });
     await this.db.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: TABLE_SCHEMAS[TABLE_DATASET_VERSIONS] });
+    // Backfill tenancy + candidate identity columns on pre-existing tables so
+    // older deployments keep working when they upgrade in place.
+    await this.db.alterTable({
+      tableName: TABLE_DATASETS,
+      schema: TABLE_SCHEMAS[TABLE_DATASETS],
+      ifNotExists: ['organizationId', 'resourceId', 'candidateKey', 'candidateId'],
+    });
+    await this.db.alterTable({
+      tableName: TABLE_DATASET_ITEMS,
+      schema: TABLE_SCHEMAS[TABLE_DATASET_ITEMS],
+      ifNotExists: ['organizationId', 'resourceId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
