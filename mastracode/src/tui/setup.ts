@@ -2,7 +2,6 @@
  * TUI setup: keyboard shortcuts, layout building, autocomplete, key handlers.
  */
 import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
@@ -579,23 +578,12 @@ export function updateTerminalTitle(state: TUIState): void {
 export async function promptForThreadSelection(state: TUIState): Promise<void> {
   const allThreads = await state.session.thread.list();
 
-  // Filter to threads matching the current working directory.
+  // Filter to threads explicitly tagged for the current working directory.
   const currentPath = state.projectInfo.rootPath;
-  let dirCreatedAt: Date | undefined;
-  try {
-    const stat = fs.statSync(currentPath);
-    dirCreatedAt = stat.birthtime;
-  } catch {
-    // fall through – treat all untagged threads as candidates
-  }
   const threads = allThreads.filter(t => {
     const threadPath = t.metadata?.projectPath as string | undefined;
-    if (threadPath) return threadPath === currentPath;
-    // In a worktree, only show threads explicitly tagged for this path.
-    // Untagged threads likely belong to the main repo or another worktree.
-    if (state.projectInfo.isWorktree) return false;
-    if (dirCreatedAt) return t.createdAt >= dirCreatedAt;
-    return true;
+    if (!threadPath) return false;
+    return threadPath === currentPath;
   });
 
   if (threads.length === 0) {
