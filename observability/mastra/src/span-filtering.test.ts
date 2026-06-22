@@ -2,6 +2,12 @@ import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/obse
 import type { TracingEvent, MetricEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
+import { PricingRegistry } from './metrics/pricing-registry';
+import { SensitiveDataFilter } from './span_processors';
+
+const testPricingRegistry = PricingRegistry.fromText(`
+{"i":"mock-provider-mock-model-id","p":"mock-provider","m":"mock-model-id","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-7},"ot":{"c":2e-7}}}]}}}
+`);
 
 // Mock console to avoid noise in test output
 const mockConsole = {
@@ -542,6 +548,73 @@ describe('Span Filtering', () => {
       await tracing.shutdown();
     });
 
+    it('should emit token and cost metrics for model spans excluded via excludeSpanTypes', async () => {
+      const pricingRegistrySpy = vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(testPricingRegistry);
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        excludeSpanTypes: [SpanType.MODEL_GENERATION],
+      });
+
+      try {
+        const agentSpan = tracing.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: 'test-agent',
+        });
+        const modelSpan = agentSpan.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: "llm: 'mock'",
+        });
+        modelSpan.end({
+          attributes: {
+            provider: 'mock-provider',
+            model: 'mock-model-id',
+            usage: { inputTokens: 30, outputTokens: 35 },
+          },
+        });
+        agentSpan.end();
+        await tracing.flush();
+
+        // MODEL_GENERATION should NOT be exported
+        const exportedTypes = collector.tracingEvents.map(e => e.exportedSpan.type);
+        expect(exportedTypes).not.toContain(SpanType.MODEL_GENERATION);
+
+        // Duration, token, and cost metrics SHOULD still be emitted
+        const durationMetric = collector.metricEvents.find(e => e.metric.name === 'mastra_model_duration_ms');
+        expect(durationMetric).toBeDefined();
+
+        const inputTokenMetrics = collector.metricEvents.filter(e => e.metric.name === 'mastra_model_total_input_tokens');
+        expect(inputTokenMetrics).toHaveLength(1);
+        const inputTokenMetric = inputTokenMetrics[0];
+        expect(inputTokenMetric?.metric.value).toBe(30);
+        expect(inputTokenMetric?.metric.costContext).toMatchObject({
+          provider: 'mock-provider',
+          model: 'mock-model-id',
+          costUnit: 'USD',
+          estimatedCost: 0.000003,
+        });
+
+        const outputTokenMetrics = collector.metricEvents.filter(
+          e => e.metric.name === 'mastra_model_total_output_tokens',
+        );
+        expect(outputTokenMetrics).toHaveLength(1);
+        const outputTokenMetric = outputTokenMetrics[0];
+        expect(outputTokenMetric?.metric.value).toBe(35);
+        expect(outputTokenMetric?.metric.costContext).toMatchObject({
+          provider: 'mock-provider',
+          model: 'mock-model-id',
+          costUnit: 'USD',
+          estimatedCost: 0.000007,
+        });
+      } finally {
+        await tracing.shutdown();
+        pricingRegistrySpy.mockRestore();
+      }
+    });
+
     it('should emit duration metrics for spans dropped by spanFilter', async () => {
       const collector = new MetricCollectingExporter();
       const tracing = new DefaultObservabilityInstance({
@@ -634,6 +707,32 @@ describe('Span Filtering', () => {
       // Duration metric SHOULD also be emitted
       const durationMetric = collector.metricEvents.find(e => e.metric.name === 'mastra_agent_duration_ms');
       expect(durationMetric).toBeDefined();
+
+      await tracing.shutdown();
+    });
+
+    it('should apply span output processors before emitting auto-extracted metrics', async () => {
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      });
+
+      const agentSpan = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+      });
+      agentSpan.end({ metadata: { apiKey: 'sk-real-secret' } });
+      await tracing.flush();
+
+      const endedSpan = collector.tracingEvents.find(e => e.type === 'span_ended')?.exportedSpan;
+      expect(endedSpan?.metadata?.apiKey).toBe('[REDACTED]');
+
+      const durationMetric = collector.metricEvents.find(e => e.metric.name === 'mastra_agent_duration_ms');
+      expect(durationMetric?.metric.metadata?.apiKey).toBe('[REDACTED]');
 
       await tracing.shutdown();
     });
