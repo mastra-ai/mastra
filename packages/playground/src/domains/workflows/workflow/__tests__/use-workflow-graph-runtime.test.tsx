@@ -129,6 +129,84 @@ describe('useWorkflowGraphRuntime', () => {
     expect(longEdge?.data?.edgeStatus).toBe('success');
   });
 
+  it('keeps the workflow-input boundary edge idle before the first step starts', () => {
+    const idleContext = {
+      result: {
+        status: 'running',
+        steps: {},
+      },
+      debugMode: false,
+    } as React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
+
+    const idleWrapper = ({ children }: PropsWithChildren) => (
+      <WorkflowRunContext.Provider value={idleContext}>{children}</WorkflowRunContext.Provider>
+    );
+
+    const edges: Edge[] = [
+      {
+        id: 'e-__workflow-start__-add-letter',
+        source: '__workflow-start__',
+        target: 'add-letter',
+        data: { boundaryPayload: 'workflow-input', nextStepId: 'add-letter' },
+      },
+    ];
+
+    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper: idleWrapper });
+
+    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('idle');
+    expect(result.current.styledEdges[0].style?.stroke).toBe('#8e8e8e');
+  });
+
+  it('lights the workflow-input boundary edge green once the first step starts', () => {
+    const edges: Edge[] = [
+      {
+        id: 'e-__workflow-start__-transform',
+        source: '__workflow-start__',
+        target: 'transform',
+        animated: true,
+        style: { strokeDasharray: '5 5' },
+        data: { boundaryPayload: 'workflow-input', nextStepId: 'transform' },
+      },
+    ];
+
+    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper });
+
+    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('success');
+    expect(result.current.styledEdges[0].style?.stroke).toBe('#22c55e');
+    expect(result.current.styledEdges[0].style?.strokeDasharray).toBe('none');
+    expect(result.current.styledEdges[0].animated).toBe(false);
+  });
+
+  it('keeps the workflow-input boundary edge idle for a skipped first step', () => {
+    const skippedContext = {
+      result: {
+        status: 'running',
+        steps: {
+          'add-letter': { status: 'skipped', startedAt: Date.now() },
+        },
+      },
+      debugMode: false,
+    } as React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
+
+    const skippedWrapper = ({ children }: PropsWithChildren) => (
+      <WorkflowRunContext.Provider value={skippedContext}>{children}</WorkflowRunContext.Provider>
+    );
+
+    const edges: Edge[] = [
+      {
+        id: 'e-__workflow-start__-add-letter',
+        source: '__workflow-start__',
+        target: 'add-letter',
+        data: { boundaryPayload: 'workflow-input', nextStepId: 'add-letter' },
+      },
+    ];
+
+    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper: skippedWrapper });
+
+    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('idle');
+    expect(result.current.styledEdges[0].style?.stroke).toBe('#8e8e8e');
+  });
+
   it('keeps the workflow-output boundary edge idle until the run succeeds', () => {
     // The boundary edge into the End node carries no step ids, so it cannot rely on a
     // predecessor step. It should only light once the whole run reaches `success`.

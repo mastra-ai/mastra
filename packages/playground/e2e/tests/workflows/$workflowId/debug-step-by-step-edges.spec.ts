@@ -153,6 +153,7 @@ test('every edge of the short-text branch run is deterministically colored', asy
   await driveFullRun(page, 'short-text');
 
   // ASSERT: the COMPLETE edge map for the short-text path.
+  await expect(page.locator('[data-edge-to="add-letter"]')).toHaveAttribute('data-edge-status', 'success');
   const { mapParallel, mapBranch } = await resolveMappingIds(page);
   await expectExactEdgeStatuses(page, expectedEdges(mapParallel, mapBranch, 'short-text', 'long-text'));
 });
@@ -170,6 +171,7 @@ test('every edge of the long-text branch run is deterministically colored', asyn
   await driveFullRun(page, 'long-text');
 
   // ASSERT: the COMPLETE edge map for the long-text path (mirror of short-text).
+  await expect(page.locator('[data-edge-to="add-letter"]')).toHaveAttribute('data-edge-status', 'success');
   const { mapParallel, mapBranch } = await resolveMappingIds(page);
   await expectExactEdgeStatuses(page, expectedEdges(mapParallel, mapBranch, 'long-text', 'short-text'));
 });

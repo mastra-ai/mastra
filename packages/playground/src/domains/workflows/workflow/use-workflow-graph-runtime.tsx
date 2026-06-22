@@ -61,6 +61,23 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
             },
           };
         }
+        // The Start boundary edge has no predecessor step. It turns green once the
+        // first step exists in run state, which means workflow input reached that step.
+        if (edge.data?.boundaryPayload === 'workflow-input') {
+          const firstStepStarted = Boolean(nextStepStatus) && nextStepStatus !== 'skipped';
+
+          return {
+            ...edge,
+            type: WORKFLOW_DATA_EDGE_TYPE,
+            animated: firstStepStarted ? false : edge.animated,
+            data: { ...edge.data, edgeStatus: firstStepStarted ? 'success' : 'idle' },
+            style: {
+              ...edge.style,
+              stroke: firstStepStarted ? '#22c55e' : '#8e8e8e',
+              strokeDasharray: firstStepStarted ? 'none' : edge.style?.strokeDasharray,
+            },
+          };
+        }
         // A conditional arm edge must only light when that specific arm was actually taken — i.e.
         // the arm step has run (any status other than the un-taken `skipped`). Lighting it purely
         // off the shared predecessor would falsely show the un-taken branch as active, since both

@@ -570,7 +570,7 @@ export const constructNodesAndEdges = ({
       id: `e${WORKFLOW_START_NODE_ID}-${nodeId}`,
       source: WORKFLOW_START_NODE_ID,
       target: nodeId,
-      data: { boundaryPayload: 'workflow-input' },
+      data: { boundaryPayload: 'workflow-input', nextStepId: nodeId },
       ...defaultEdgeOptions,
     })),
     ...edges,
