@@ -3,6 +3,7 @@ import type { GetWorkflowResponse } from '@mastra/client-js';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type * as XyFlowReact from '@xyflow/react';
+import type * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useWorkflowSelectedStep } from '../../context/use-workflow-selected-step';
@@ -34,19 +35,27 @@ afterEach(() => {
   reactFlowViewport.setCenter.mockReset();
 });
 
-function stepGraph(stepId: string): GetWorkflowResponse['stepGraph'] {
-  return [{ type: 'step', step: { id: stepId, description: '' } }] as GetWorkflowResponse['stepGraph'];
+function stepGraph(...stepIds: string[]): GetWorkflowResponse['stepGraph'] {
+  return stepIds.map(stepId => ({
+    type: 'step',
+    step: { id: stepId, description: '' },
+  })) as GetWorkflowResponse['stepGraph'];
 }
 
-const workflow = {
+const singleStepWorkflow = {
   name: 'Wf',
   stepGraph: stepGraph('step-a'),
 } as unknown as GetWorkflowResponse;
 
-function makeSnapshot(runId: string, stepId: string): WorkflowRunState {
+const twoStepWorkflow = {
+  name: 'Wf',
+  stepGraph: stepGraph('step-a', 'step-b'),
+} as unknown as GetWorkflowResponse;
+
+function makeSnapshot(runId: string, ...stepIds: string[]): WorkflowRunState {
   return {
     runId,
-    serializedStepGraph: stepGraph(stepId),
+    serializedStepGraph: stepGraph(...stepIds),
   } as WorkflowRunState;
 }
 
@@ -62,18 +71,41 @@ function SelectStepButton({ stepId }: { stepId: string }) {
 
 // Mirrors the page-level provider arrangement: WorkflowSelectedStepProvider and
 // WorkflowRunContext live above WorkflowGraph, which owns ReactFlowProvider.
-function Harness({ snapshot, selectableStepId }: { snapshot: WorkflowRunState; selectableStepId: string }) {
+function Harness({
+  contextValue,
+  workflow,
+  selectableStepId,
+}: {
+  contextValue: React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
+  workflow: GetWorkflowResponse;
+  selectableStepId?: string;
+}) {
   return (
     <WorkflowSelectedStepProvider>
       <WorkflowStepDetailProvider>
-        <WorkflowRunContext.Provider value={{ snapshot } as never}>
+        <WorkflowRunContext.Provider value={contextValue}>
           <WorkflowGraph workflowId="wf" workflow={workflow} />
-          <SelectStepButton stepId={selectableStepId} />
+          {selectableStepId ? <SelectStepButton stepId={selectableStepId} /> : null}
         </WorkflowRunContext.Provider>
       </WorkflowStepDetailProvider>
     </WorkflowSelectedStepProvider>
   );
 }
+
+const twoNodes = [
+  {
+    id: 'step-a',
+    data: { stepId: 'step-a', label: 'step-a' },
+    measured: { width: 300, height: 120 },
+    position: { x: 40, y: 80 },
+  },
+  {
+    id: 'step-b',
+    data: { stepId: 'step-b', label: 'step-b' },
+    measured: { width: 300, height: 120 },
+    position: { x: 440, y: 80 },
+  },
+];
 
 describe('WorkflowGraph', () => {
   it('focuses and zooms the graph viewport when a workflow step is selected', async () => {
@@ -86,7 +118,13 @@ describe('WorkflowGraph', () => {
       },
     ] as never);
 
-    render(<Harness snapshot={makeSnapshot('run-a', 'step-a')} selectableStepId="step-a" />);
+    render(
+      <Harness
+        contextValue={{ snapshot: makeSnapshot('run-a', 'step-a') } as never}
+        workflow={singleStepWorkflow}
+        selectableStepId="step-a"
+      />,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Select step-a' }));
 
@@ -94,5 +132,51 @@ describe('WorkflowGraph', () => {
       expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(190, 140, { duration: 300, zoom: 1 });
     });
     expect(document.activeElement).toBe(screen.getByTestId('workflow-graph-viewport'));
+  });
+
+  it('auto-focuses the step a paused run is waiting on, without any selection', async () => {
+    reactFlowViewport.getNodes.mockReturnValue(twoNodes as never);
+
+    // step-a already succeeded, so the paused run is waiting on step-b.
+    render(
+      <Harness
+        contextValue={
+          {
+            workflow: twoStepWorkflow,
+            result: { status: 'paused', steps: { 'step-a': { status: 'success' } } },
+          } as never
+        }
+        workflow={twoStepWorkflow}
+      />,
+    );
+
+    // Center of step-b: x 440 + 300/2 = 590, y 80 + 120/2 = 140.
+    await waitFor(() => {
+      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(590, 140, { duration: 300, zoom: 1 });
+    });
+  });
+
+  it('lets an explicit selection override the waited step', async () => {
+    reactFlowViewport.getNodes.mockReturnValue(twoNodes as never);
+
+    render(
+      <Harness
+        contextValue={
+          {
+            workflow: twoStepWorkflow,
+            result: { status: 'paused', steps: { 'step-a': { status: 'success' } } },
+          } as never
+        }
+        workflow={twoStepWorkflow}
+        selectableStepId="step-a"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select step-a' }));
+
+    // Selection wins: center of step-a (190, 140), not step-b (590, 140).
+    await waitFor(() => {
+      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(190, 140, { duration: 300, zoom: 1 });
+    });
   });
 });

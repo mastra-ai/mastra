@@ -85,13 +85,18 @@ function useWorkflowStepGraphInfo(stepGraph: GetWorkflowResponse['stepGraph'] | 
   }, [stepGraph]);
 }
 
-export function useNextPerStep() {
-  const { result, runId, workflowId, workflow, setDebugMode, timeTravelWorkflowStream } =
-    useContext(WorkflowRunContext);
-  const requestContext = useMergedRequestContext();
+/**
+ * Read-only derivation of the step a paused (per-step/debug) run is waiting on.
+ * Pulls run + graph state from context so any component (e.g. the graph viewport)
+ * can react to the waited step declaratively without props being drilled through.
+ * Returns `undefined` when the run is not paused or there is no next step.
+ */
+export function useWaitingStepKey(): string | undefined {
+  const { result, workflow } = useContext(WorkflowRunContext);
 
-  const { stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds, nestedWorkflowStepIds } =
-    useWorkflowStepGraphInfo(workflow?.stepGraph);
+  const { stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds } = useWorkflowStepGraphInfo(
+    workflow?.stepGraph,
+  );
 
   const steps = result?.steps;
 
@@ -107,10 +112,29 @@ export function useNextPerStep() {
     [conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess],
   );
 
-  const nextStepKey = useMemo(
+  return useMemo(
     () => (isPaused ? selectNextStepKey({ stepNodesInOrder, isStepSuccess, isStepBypassed }) : undefined),
     [isPaused, stepNodesInOrder, isStepSuccess, isStepBypassed],
   );
+}
+
+export function useNextPerStep() {
+  const { result, runId, workflowId, workflow, setDebugMode, timeTravelWorkflowStream } =
+    useContext(WorkflowRunContext);
+  const requestContext = useMergedRequestContext();
+
+  const { stepsFlow, stepNodesInOrder, nestedWorkflowStepIds, conditionalStepIds, stepSuccessors } =
+    useWorkflowStepGraphInfo(workflow?.stepGraph);
+
+  const steps = result?.steps;
+
+  const isStepSuccess = useCallback((stepId: string) => steps?.[stepId]?.status === 'success', [steps]);
+  const isStepBypassed = useCallback(
+    (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess }),
+    [conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess],
+  );
+
+  const nextStepKey = useWaitingStepKey();
 
   const stepPayload = useMemo(
     () => buildNextStepInput({ nextStepKey, stepsFlow, steps }),

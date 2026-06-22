@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
+import { useWaitingStepKey } from './use-workflow-trigger';
 import { constructNodesAndEdges } from './utils';
 import { ZoomSlider } from './zoom-slider';
 
@@ -23,23 +24,28 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
 
   const graphRef = useRef<HTMLDivElement>(null);
   const { selectedStepId } = useWorkflowSelectedStep();
+  const waitingStepKey = useWaitingStepKey();
   const { getNodes, setCenter } = useReactFlow();
 
+  // An explicit timeline selection always wins; otherwise, in step-by-step (debug)
+  // mode, fall back to centering the step the paused run is waiting to run next.
+  const focusStepId = selectedStepId ?? waitingStepKey;
+
   useEffect(() => {
-    if (!selectedStepId) return;
-    const selectedNode = getNodes().find(node => {
+    if (!focusStepId) return;
+    const focusNode = getNodes().find(node => {
       const nodeStepId = node.data?.stepId ?? node.data?.label;
-      return nodeStepId === selectedStepId;
+      return nodeStepId === focusStepId;
     });
-    if (!selectedNode) return;
+    if (!focusNode) return;
     graphRef.current?.focus({ preventScroll: true });
-    const width = selectedNode.measured?.width ?? selectedNode.width ?? 274;
-    const height = selectedNode.measured?.height ?? selectedNode.height ?? 100;
-    void setCenter(selectedNode.position.x + width / 2, selectedNode.position.y + height / 2, {
+    const width = focusNode.measured?.width ?? focusNode.width ?? 274;
+    const height = focusNode.measured?.height ?? focusNode.height ?? 100;
+    void setCenter(focusNode.position.x + width / 2, focusNode.position.y + height / 2, {
       duration: 300,
       zoom: 1,
     });
-  }, [getNodes, selectedStepId, setCenter]);
+  }, [getNodes, focusStepId, setCenter]);
 
   return (
     <div
