@@ -1,8 +1,12 @@
 Basic message history has limits. As conversations grow, raw history piles up fast: tool calls, wait time lookups, weather checks, scraped park data. In this lesson, you'll enable Observational Memory, which compresses that growing history into denser context the agent can actually use.
 
-You'll switch the agent to `observationalMemory`, set the scope to `resource` so memory follows the user across threads, and test it in Studio by starting a conversation in one thread and picking it back up in a new one. Earlier preferences carry over even though the thread is fresh.
+You'll switch the agent to `observationalMemory` and test it in Studio by starting a conversation and watching how observations compress the growing history automatically.
 
-This matters because Observational Memory replaces manual `lastMessages` tuning with automatic compression. The conversation stays coherent across long sessions and multiple threads without dragging all the raw history forward on every call.
+:::note
+The video lesson uses `scope: 'resource'` to demonstrate cross-thread memory. Resource scope is now deprecated due to context bloat issues. For cross-session continuity, use thread scope with `retrieval: true` instead — see [recommended alternatives](/docs/memory/observational-memory#recommended-alternatives-for-cross-session-continuity).
+:::
+
+This matters because Observational Memory replaces manual `lastMessages` tuning with automatic compression. The conversation stays coherent across long sessions without dragging all the raw history forward on every call.
 
 > "You don't remember every word of every conversation you've ever had. You observe what happened, and over time that condenses into something more useful. OM is built around that same idea."
 >

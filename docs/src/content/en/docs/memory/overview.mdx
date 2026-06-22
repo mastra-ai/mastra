@@ -191,7 +191,7 @@ To go beyond this default isolation, you can share memory between agents by pass
 
 When you call agents directly (outside the delegation flow), memory sharing is controlled by two identifiers: `resourceId` and `threadId`. Agents that use the same values read and write to the same data. This is useful when agents collaborate on a shared context — for example, a researcher that saves notes and a writer that reads them.
 
-**Resource-scoped sharing** is the most common pattern. [Working memory](../memory/working-memory) and [semantic recall](../memory/semantic-recall) default to `scope: 'resource'`. If two agents share a `resourceId`, they share observations, working memory, and embeddings — even across different threads:
+**Resource-scoped sharing** is the most common pattern. [Working memory](../memory/working-memory) and [semantic recall](../memory/semantic-recall) default to `scope: 'resource'`. If two agents share a `resourceId`, they share working memory and embeddings — even across different threads:
 
 ```typescript
 // Both agents share the same resource-scoped memory
@@ -204,7 +204,7 @@ await writer.generate('Write a summary from the research notes.', {
 })
 ```
 
-Because both calls use `resource: 'project-42'`, the writer can access the researcher's observations, working memory, and semantic embeddings. Each agent still has its own thread, so message histories stay separate.
+Because both calls use `resource: 'project-42'`, the writer can access the researcher's working memory and semantic embeddings. Each agent still has its own thread, so message histories stay separate. Note: resource-scoped Observational Memory is deprecated — use thread scope with [retrieval mode](/docs/memory/observational-memory#retrieval-mode-experimental) for cross-thread recall.
 
 **Thread-scoped sharing** gives tighter coupling. [Observational Memory](../memory/observational-memory) uses `scope: 'thread'` by default. If two agents use the same `resource` _and_ `thread`, they share the full message history. Each agent sees every message the other has written. This is useful when agents need to build on each other's exact outputs.
 
