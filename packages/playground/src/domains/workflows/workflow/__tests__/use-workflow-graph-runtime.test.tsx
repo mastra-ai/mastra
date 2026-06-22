@@ -128,4 +128,52 @@ describe('useWorkflowGraphRuntime', () => {
     expect(shortEdge?.data?.edgeStatus).toBe('idle');
     expect(longEdge?.data?.edgeStatus).toBe('success');
   });
+
+  it('keeps the workflow-output boundary edge idle until the run succeeds', () => {
+    // The boundary edge into the End node carries no step ids, so it cannot rely on a
+    // predecessor step. It should only light once the whole run reaches `success`.
+    const edges: Edge[] = [
+      {
+        id: 'e-final-step-__workflow-end__',
+        source: 'final-step',
+        target: '__workflow-end__',
+        data: { boundaryPayload: 'workflow-output' },
+      },
+    ];
+
+    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper });
+
+    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('idle');
+  });
+
+  it('lights the workflow-output boundary edge green once the run succeeds', () => {
+    const successContext = {
+      result: {
+        status: 'success',
+        result: { output: true },
+        steps: {
+          'final-step': { status: 'success', output: { output: true }, startedAt: Date.now() },
+        },
+      },
+      debugMode: false,
+    } as React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
+
+    const successWrapper = ({ children }: PropsWithChildren) => (
+      <WorkflowRunContext.Provider value={successContext}>{children}</WorkflowRunContext.Provider>
+    );
+
+    const edges: Edge[] = [
+      {
+        id: 'e-final-step-__workflow-end__',
+        source: 'final-step',
+        target: '__workflow-end__',
+        data: { boundaryPayload: 'workflow-output' },
+      },
+    ];
+
+    const { result } = renderHook(() => useWorkflowGraphRuntime({ edges }), { wrapper: successWrapper });
+
+    expect(result.current.styledEdges[0].data?.edgeStatus).toBe('success');
+    expect(result.current.styledEdges[0].style?.stroke).toBe('#22c55e');
+  });
 });

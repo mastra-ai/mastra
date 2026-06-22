@@ -249,16 +249,68 @@ test('takes the condition-selected branch on the live graph page (no reload)', a
 });
 
 test('check edges', async ({ page }) => {
+  // Drive complexWorkflow per-step all the way to a successful finish, then verify
+  // both the post-branch map -> nested edge AND the boundary edge into the End node
+  // are colored green. The End edge has no step ids, so it can only light once the
+  // whole run reaches `success` (after the suspend boundary is resumed).
   await page.goto('/workflows/complexWorkflow/graph');
   await page.getByRole('textbox', { name: 'Text' }).fill('HELLO');
+  await page.getByRole('switch', { name: 'Debug' }).click();
+  await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
 
   await runButton(page).click();
+  await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
 
-  await page.waitForTimeout(10000);
+  await runNextStep(page); // add-letter
+  await expectStepSuccess(page, 0);
 
-  const edgeMap = await page.locator('[id="emapping_b637d0ca-35c1-4aeb-b6da-4044be8ace93-nested-text-processor"]');
-  const finalEge = await page.locator('[id="efinal-step-__workflow-end__"]');
+  await runNextStep(page); // parallel: add-letter-b + add-letter-c
+  await expectStepSuccess(page, 1);
+  await expectStepSuccess(page, 2);
 
-  await expect(await edgeMap.getAttribute('data-edge-status')).toBe('success');
-  await expect(await finalEge.getAttribute('data-edge-status')).toBe('success');
+  await runNextStep(page); // post-parallel map
+  await expectStepSuccess(page, 3);
+
+  await runNextStep(page); // conditional arm (long-text for "HELLO")
+  await expect(stepNode(page, 'long-text')).toHaveAttribute('data-workflow-step-status', 'success', {
+    timeout: 20000,
+  });
+
+  await runNextStep(page); // post-branch map
+  await expectStepSuccess(page, 8);
+
+  // Nested workflow runs atomically; this advance also runs the doUntil body and
+  // stops at the suspend boundary (step 12).
+  const nestedButton = runNextStepButton(page);
+  await expect(nestedButton).toBeEnabled({ timeout: 20000 });
+  await nestedButton.click();
+  await expectStepSuccess(page, 9); // nested-text-processor
+  await expectStepSuccess(page, 10); // add-letter-with-count
+  await expect(nodes(page).nth(12)).toHaveAttribute('data-workflow-step-status', 'suspended', { timeout: 20000 });
+
+  // Resume the suspended step so the run can finish.
+  const suspendedSteps = page.getByTestId('workflow-suspended-steps');
+  await suspendedSteps.getByRole('textbox', { name: 'User Input' }).fill('Hello');
+  await suspendedSteps.getByRole('button', { name: 'Resume' }).click();
+  await expectStepSuccess(page, 12); // suspend-resume
+
+  // Final step finishes the whole run.
+  const finalButton = runNextStepButton(page);
+  await expect(finalButton).toBeEnabled({ timeout: 20000 });
+  await finalButton.click();
+  await expectStepSuccess(page, 13); // final-step
+
+  // The post-branch map step serializes to a synthetic `mapping_<uuid>` id that
+  // changes per build, so resolve it from the DOM. complexWorkflow has two `.map()`
+  // steps; the SECOND mapping node is the post-branch join that feeds the nested workflow.
+  const mappingNodes = page.locator('[data-workflow-node][data-workflow-step-key^="mapping_"]');
+  await expect(mappingNodes).toHaveCount(2, { timeout: 20000 });
+  const mapBranch = await mappingNodes.nth(1).getAttribute('data-workflow-step-key');
+  expect(mapBranch).toBeTruthy();
+
+  const edgeMap = page.locator(`[data-edge-from="${mapBranch}"][data-edge-to="nested-text-processor"]`).first();
+  const finalEdge = page.locator('[id="efinal-step-__workflow-end__"]').first();
+
+  await expect(edgeMap).toHaveAttribute('data-edge-status', 'success', { timeout: 20000 });
+  await expect(finalEdge).toHaveAttribute('data-edge-status', 'success', { timeout: 20000 });
 });

@@ -1,7 +1,8 @@
 import type { Edge, EdgeProps, NodeProps } from '@xyflow/react';
-import { useMemo } from 'react';
+import { useContext, useMemo } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
+import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowDataEdge, WORKFLOW_DATA_EDGE_TYPE } from './workflow-data-edge';
 import { WorkflowBoundaryNode } from './workflow-boundary-node';
 import { WorkflowGraphNode } from './workflow-graph-node';
@@ -14,6 +15,8 @@ const getScopedStepId = (stepId: string | undefined, workflowName?: string) =>
 
 export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]; workflowName?: string }) => {
   const { steps } = useCurrentRun();
+  const workflowRun = useContext(WorkflowRunContext);
+  const workflowSucceeded = workflowRun.result?.status === 'success';
   const stepsFlow = useMemo(() => buildStepsFlow(edges), [edges]);
   const nodeTypes = useMemo(
     () => ({
@@ -41,6 +44,23 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
         const nextStepId = getScopedStepId(edge.data?.nextStepId as string | undefined, workflowName);
         const previousStepSucceeded = steps[previousStepId ?? '']?.status === 'success';
         const nextStepStatus = steps[nextStepId ?? '']?.status as string | undefined;
+        // The boundary edge into the End node carries no step ids; it should light
+        // green once the whole workflow run has finished successfully.
+        if (edge.data?.boundaryPayload === 'workflow-output') {
+          const isFinishedEdge = workflowSucceeded;
+
+          return {
+            ...edge,
+            type: WORKFLOW_DATA_EDGE_TYPE,
+            animated: isFinishedEdge ? false : edge.animated,
+            data: { ...edge.data, edgeStatus: isFinishedEdge ? 'success' : 'idle' },
+            style: {
+              ...edge.style,
+              stroke: isFinishedEdge ? '#22c55e' : '#8e8e8e',
+              strokeDasharray: isFinishedEdge ? 'none' : edge.style?.strokeDasharray,
+            },
+          };
+        }
         // A conditional arm edge must only light when that specific arm was actually taken — i.e.
         // the arm step has run (any status other than the un-taken `skipped`). Lighting it purely
         // off the shared predecessor would falsely show the un-taken branch as active, since both
@@ -82,7 +102,7 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
           },
         };
       }),
-    [edges, steps, workflowName],
+    [edges, steps, workflowName, workflowSucceeded],
   );
 
   return { edgeTypes, nodeTypes, stepsFlow, styledEdges };
