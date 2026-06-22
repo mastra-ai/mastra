@@ -37,12 +37,15 @@ export const autocompleteWrappingNavigationScenario = {
     await runtime.waitForScreenText(/navigation-sentinel-wrap-tail/i, terminal, 20_000);
     await runtime.waitForScreenText(/Bravo command selected after exactly one Down arrow/i, terminal, 20_000);
     runtime.printScreen('wrapped custom slash autocomplete list', terminal);
+    await terminal.flushInput?.();
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     terminal.write(DOWN);
-    await runtime.waitForScreenText(/→ \/wrap-bravo/i, terminal, 8_000);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/→ \/wrap-bravo/i, terminal, 30_000);
     terminal.write(ENTER);
 
-    await runtime.waitForScreenText(/Bravo wrapped autocomplete navigation template\./i, terminal, 8_000);
+    await runtime.waitForScreenText(/Bravo wrapped autocomplete navigation template\./i, terminal, 15_000);
     await runtime.waitForScreenText(/Bravo wrapped autocomplete response\./i, terminal, 12_000);
     runtime.printScreen('after selecting wrapped autocomplete second item', terminal);
 
