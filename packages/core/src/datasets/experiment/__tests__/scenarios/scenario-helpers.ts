@@ -23,6 +23,10 @@ export type ScriptedTurn = { toolCalls: { id: string; toolName: string; args: un
  * the experiment executor, the mock matcher) is the real system.
  */
 export function scriptedModel(turns: ScriptedTurn[]): MockLanguageModelV2 {
+  if (turns.length === 0) {
+    throw new Error('scriptedModel requires at least one turn');
+  }
+
   // The experiment executor calls `agent.generate()` (the `doGenerate` path), but
   // wire up `doStream` too so the same model works regardless of execution path.
   // A single counter advances one turn per model invocation.
