@@ -389,16 +389,24 @@ class MastraCodeAutocompleteProvider extends CombinedAutocompleteProvider {
 
     const result = super.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
     const completedLine = result.lines[cursorLine] || '';
+    const atIndexBeforeCursor = currentLine.slice(0, cursorCol).lastIndexOf('@');
 
-    if (currentLine.slice(0, cursorCol).includes('@') && /@[^@\s]*@/.test(completedLine)) {
-      const updatedLines = [...result.lines];
-      const normalizedLine = completedLine.replace(/@[^@\s]*@/, '@');
-      updatedLines[cursorLine] = normalizedLine;
-      return {
-        ...result,
-        lines: updatedLines,
-        cursorCol: Math.max(result.cursorCol - (completedLine.length - normalizedLine.length), 0),
-      };
+    if (item.value.startsWith('@') && atIndexBeforeCursor >= 0) {
+      const typedToken = currentLine.slice(atIndexBeforeCursor + 1, cursorCol);
+      const duplicatedPrefix = `@${typedToken}${item.value}`;
+      if (completedLine.startsWith(duplicatedPrefix, atIndexBeforeCursor)) {
+        const updatedLines = [...result.lines];
+        const normalizedLine =
+          completedLine.slice(0, atIndexBeforeCursor) +
+          item.value +
+          completedLine.slice(atIndexBeforeCursor + duplicatedPrefix.length);
+        updatedLines[cursorLine] = normalizedLine;
+        return {
+          ...result,
+          lines: updatedLines,
+          cursorCol: Math.max(result.cursorCol - (duplicatedPrefix.length - item.value.length), 0),
+        };
+      }
     }
 
     if (

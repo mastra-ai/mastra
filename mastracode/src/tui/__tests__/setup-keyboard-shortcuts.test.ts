@@ -289,6 +289,15 @@ describe('setupKeyboardShortcuts', () => {
       'uto',
     );
     expect(partialResult.lines[0]).toBe('Attach @src/autocomplete-target.ts ');
+
+    const scopedPackageResult = state.autocompleteProvider.applyCompletion(
+      ['Install @scope/pkg and run /he'],
+      0,
+      'Install @scope/pkg and run /he'.length,
+      { value: 'help', label: 'help' },
+      'he',
+    );
+    expect(scopedPackageResult.lines[0]).toBe('Install @scope/pkg and run /help');
   });
 
   it('passes detected fd path and cwd into the autocomplete provider', () => {

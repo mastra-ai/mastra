@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { McE2eScenario } from './types.js';
+import { typeTextSlowly } from './typing-utils.js';
 
 export const fileAutocompleteScenario = {
   name: 'file-autocomplete',
@@ -31,10 +32,7 @@ export const fileAutocompleteScenario = {
     await runtime.waitForScreenText(/Branch: feature\/super-long-branch-name/i, terminal);
     await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
 
-    for (const char of 'Attach @auto') {
-      terminal.write(char);
-      await new Promise(resolve => setTimeout(resolve, 10));
-    }
+    await typeTextSlowly(terminal, 'Attach @auto', 10);
     await terminal.flushInput?.();
     await runtime.waitForScreenText(/Attach @auto/i, terminal, 10_000);
     await runtime.waitForScreenText(/autocomplete-target\.ts/i, terminal, 30_000);

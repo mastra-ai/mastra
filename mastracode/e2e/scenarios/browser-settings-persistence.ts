@@ -62,7 +62,7 @@ export const browserSettingsPersistenceScenario = {
     await runtime.waitForScreenText(/BROWSER_STAGEHAND_ENV=LOCAL/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSER_PRESERVE=false/i, terminal, 8_000);
 
-    terminal.flushInput?.();
+    await terminal.flushInput?.();
     await runtime.waitForScreenText(/│ ›/i, terminal, 8_000);
     terminal.submit('/browser clear');
     await runtime.waitForScreenText(/Browser settings reset to defaults\./i, terminal, 15_000);

@@ -1,19 +1,13 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { McE2eScenario } from './types.js';
+import { typeTextSlowly } from './typing-utils.js';
 
 const DOWN = '\x1b[B';
 const ENTER = '\r';
 const ALPHA_DESCRIPTION =
   'Alpha wrapped autocomplete description begins with readable context and continues across the terminal width until navigation-sentinel-wrap-tail remains visible on a wrapped continuation row.';
 const BRAVO_TEMPLATE = 'Bravo wrapped autocomplete navigation template.';
-
-async function typeTextSlowly(terminal: { write: (text: string) => void }, text: string): Promise<void> {
-  for (const char of text) {
-    terminal.write(char);
-    await new Promise(resolve => setTimeout(resolve, 25));
-  }
-}
 
 export const autocompleteWrappingNavigationScenario = {
   name: 'autocomplete-wrapping-navigation',
