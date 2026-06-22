@@ -16,6 +16,7 @@ import type {
   AudioConfig,
   GeminiLiveServerMessage,
   GeminiSessionConfig,
+  IncrementalTurn,
   UpdateMessage,
 } from './types';
 import { GeminiLiveError } from './utils/errors';
@@ -651,6 +652,61 @@ export class GeminiLiveVoice extends MastraVoice<
     } catch (error) {
       this.log('Failed to send text message', error);
       throw this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Failed to send text message', error);
+    }
+  }
+
+  /**
+   * Send conversation history into the live session without triggering a model response.
+   *
+   * Maps to a single Gemini Live `client_content` frame with `turnComplete` defaulting
+   * to `false`, which loads the turns into context silently. The model only responds
+   * once a subsequent turn completes (e.g. via {@link speak} or user audio).
+   *
+   * @param turns Prior conversation turns to seed into the session.
+   * @param options.turnComplete Whether to mark the turn as complete (default `false`).
+   *
+   * @example
+   * ```typescript
+   * await voice.connect();
+   *
+   * // Replay prior conversation without triggering a reply.
+   * await voice.sendContext([
+   *   { role: 'user', content: 'What is the weather?' },
+   *   { role: 'assistant', content: 'It is 72°F in San Francisco.' },
+   * ]);
+   *
+   * // Agent stays silent until the user actually speaks.
+   * await voice.send(micStream);
+   * ```
+   */
+  async sendContext(turns: IncrementalTurn[], options?: { turnComplete?: boolean }): Promise<void> {
+    this.validateConnectionState();
+
+    if (!turns || turns.length === 0) {
+      this.log('sendContext called with empty turns, skipping');
+      return;
+    }
+
+    const message = {
+      client_content: {
+        turns: turns.map(t => ({
+          role: t.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: t.content }],
+        })),
+        turnComplete: options?.turnComplete ?? false,
+      },
+    };
+
+    try {
+      this.sendEvent('client_content', message);
+      this.log('Context seeded', { turnCount: turns.length, turnComplete: options?.turnComplete ?? false });
+
+      for (const turn of turns) {
+        this.addToContext(turn.role, turn.content);
+      }
+    } catch (error) {
+      this.log('Failed to send context', error);
+      throw this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Failed to send context', error);
     }
   }
 
@@ -2203,3 +2259,5 @@ export class GeminiLiveVoice extends MastraVoice<
     }
   }
 }
+
+export type { IncrementalTurn } from './types';
