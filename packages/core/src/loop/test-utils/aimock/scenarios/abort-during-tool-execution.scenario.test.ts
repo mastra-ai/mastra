@@ -55,10 +55,7 @@ describe('AIMock loop scenario: abort during tool execution', () => {
             toolCalls: [{ id: 'call_slow', name: 'slow_tool', arguments: {} }],
           },
         );
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Tool completed' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Tool completed' });
       },
     });
 
@@ -112,10 +109,7 @@ describe('AIMock loop scenario: abort during tool execution', () => {
             toolCalls: [{ id: 'call_long', name: 'long_running', arguments: {} }],
           },
         );
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Should not reach here' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Should not reach here' });
       },
     });
 

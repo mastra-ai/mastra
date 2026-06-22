@@ -42,12 +42,12 @@ describe('AIMock scenario: skills integration', () => {
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aimock-skills-scenario-'));
-    
+
     // Create a real skill on disk
     const skillDir = path.join(tempDir, 'skills', 'code-review');
     await fs.mkdir(skillDir, { recursive: true });
     await fs.writeFile(path.join(skillDir, 'SKILL.md'), SKILL_MD);
-    
+
     // Create a real workspace with LocalFilesystem and skills config
     workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
@@ -66,14 +66,17 @@ describe('AIMock scenario: skills integration', () => {
       workspace,
       stopWhen: stepCountIs(2),
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          content: 'I have access to the code-review skill for quality checks.',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            content: 'I have access to the code-review skill for quality checks.',
+          },
+        );
       },
     });
 
     expect(requests.length).toBeGreaterThanOrEqual(1);
-    
+
     // The SkillsProcessor injects <available_skills> XML into a system message
     const messages = requests[0]?.body?.messages ?? [];
     const allContent = messages.map((m: any) => JSON.stringify(m.content)).join('\n');
@@ -90,42 +93,48 @@ describe('AIMock scenario: skills integration', () => {
       stopWhen: stepCountIs(4),
       fixtures: llm => {
         // Turn 1: Model calls the skill tool
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          toolCalls: [{
-            id: 'call_skill_1',
-            name: 'skill',
-            arguments: { name: 'code-review' },
-          }],
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              {
+                id: 'call_skill_1',
+                name: 'skill',
+                arguments: { name: 'code-review' },
+              },
+            ],
+          },
+        );
 
         // Turn 2: Model receives skill instructions and responds
-        llm.on({ endpoint: 'chat', hasToolResult: true }, {
-          content: 'The code-review skill reviews code for bugs, style, and readability.',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: true },
+          {
+            content: 'The code-review skill reviews code for bugs, style, and readability.',
+          },
+        );
       },
     });
 
     // Verify two turns occurred
     expect(requests.length).toBe(2);
-    
+
     // The skill tool was actually executed (toolResults from output)
     const toolResults = await output.toolResults;
     expect(toolResults.length).toBeGreaterThanOrEqual(1);
     expect(toolResults[0]!.payload.toolName).toBe('skill');
-    
+
     // Cross-turn plumbing: turn-2 request carries the skill instructions
     // as a tool result so the model can produce its answer
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const serializedTurn2 = JSON.stringify(turn2Messages);
     expect(serializedTurn2).toContain('Code Review');
     expect(serializedTurn2).toContain('bugs and edge cases');
-    
+
     // The tool-result message references the original tool call id
-    const toolMessage = turn2Messages.find(
-      (m: any) => m.role === 'tool',
-    ) as { tool_call_id?: string } | undefined;
+    const toolMessage = turn2Messages.find((m: any) => m.role === 'tool') as { tool_call_id?: string } | undefined;
     expect(toolMessage?.tool_call_id).toBe('call_skill_1');
-    
+
     // Final output references the skill
     const text = await output.text;
     expect(text).toContain('code-review');
@@ -139,29 +148,37 @@ describe('AIMock scenario: skills integration', () => {
       stopWhen: stepCountIs(4),
       fixtures: llm => {
         // Model calls a non-existent skill
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          toolCalls: [{
-            id: 'call_skill_2',
-            name: 'skill',
-            arguments: { name: 'non-existent-skill' },
-          }],
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              {
+                id: 'call_skill_2',
+                name: 'skill',
+                arguments: { name: 'non-existent-skill' },
+              },
+            ],
+          },
+        );
 
         // Model receives error and responds
-        llm.on({ endpoint: 'chat', hasToolResult: true }, {
-          content: 'That skill is not available.',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: true },
+          {
+            content: 'That skill is not available.',
+          },
+        );
       },
     });
 
     // Verify the loop handled the missing skill gracefully
     expect(requests.length).toBe(2);
-    
+
     // The tool result should indicate skill not found
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const serializedTurn2 = JSON.stringify(turn2Messages);
     expect(serializedTurn2).toMatch(/not found|Available skills/i);
-    
+
     const text = await output.text;
     expect(text).toMatch(/not available/i);
   });

@@ -40,10 +40,7 @@ describe('AIMock loop scenario: onStepFinish callback', () => {
           { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] },
         );
         // Step 2: finish
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Done.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
       },
     });
 
@@ -74,7 +71,7 @@ describe('AIMock loop scenario: onStepFinish callback', () => {
 
     // Should have at least one step
     expect(stepsSeen.length).toBeGreaterThan(0);
-    
+
     // Steps should have some context
     expect(stepsSeen[0]).toBeDefined();
   });

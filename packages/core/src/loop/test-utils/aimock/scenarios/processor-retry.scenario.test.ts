@@ -48,10 +48,7 @@ describe('AIMock loop scenario: processor observation, transformation & sequenci
         },
       ],
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: 'Task complete.' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: 'Task complete.' });
       },
     });
 
@@ -84,10 +81,7 @@ describe('AIMock loop scenario: processor observation, transformation & sequenci
         },
       ],
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: 'The value is SECRET and must be hidden.' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: 'The value is SECRET and must be hidden.' });
       },
     });
 
@@ -126,10 +120,7 @@ describe('AIMock loop scenario: processor observation, transformation & sequenci
         },
       ],
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: 'Task complete.' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: 'Task complete.' });
       },
     });
 

@@ -44,10 +44,7 @@ describe('AIMock loop scenario: savePerStep incremental persistence', () => {
           { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] },
         );
         // Step 2: finish
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Done.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
       },
     });
 

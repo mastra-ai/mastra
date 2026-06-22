@@ -96,19 +96,25 @@ describe('AIMock loop scenario: autoResumeSuspendedTools', () => {
       fixtures: llm => {
         // Turn 1 of second call: model re-calls the tool with resumeData
         // (responding to the auto-resume instruction in the system prompt)
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          toolCalls: [
-            {
-              id: 'call-2',
-              name: 'find-user',
-              arguments: { name: 'Dero Israel', resumeData: { approved: true } },
-            },
-          ],
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              {
+                id: 'call-2',
+                name: 'find-user',
+                arguments: { name: 'Dero Israel', resumeData: { approved: true } },
+              },
+            ],
+          },
+        );
         // Turn 2 of second call: after tool executes, model gets result and returns text
-        llm.on({ endpoint: 'chat', toolCallId: 'call-2', hasToolResult: true }, {
-          content: 'User found: Dero Israel (dero.israel@test.com)',
-        });
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call-2', hasToolResult: true },
+          {
+            content: 'User found: Dero Israel (dero.israel@test.com)',
+          },
+        );
       },
     });
 

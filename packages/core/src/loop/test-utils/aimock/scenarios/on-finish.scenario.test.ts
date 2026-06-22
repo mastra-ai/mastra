@@ -39,10 +39,7 @@ describe('AIMock loop scenario: onFinish callback', () => {
           { endpoint: 'chat', hasToolResult: false },
           { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] },
         );
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Done.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
       },
     });
 
@@ -102,10 +99,7 @@ describe('AIMock loop scenario: onFinish callback', () => {
           { endpoint: 'chat', hasToolResult: false },
           { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] },
         );
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Done.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
       },
     });
 

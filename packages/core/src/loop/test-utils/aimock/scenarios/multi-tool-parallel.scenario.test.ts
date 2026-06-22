@@ -116,9 +116,10 @@ describe('AIMock loop scenario: multi-tool parallel execution', () => {
     const turn2Messages = requests[1]?.body?.messages ?? [];
 
     // Find tool result messages
-    const toolResultMessages = turn2Messages.filter(
-      (msg: any) => msg.role === 'tool',
-    ) as Array<{ tool_call_id?: string; content?: unknown }>;
+    const toolResultMessages = turn2Messages.filter((msg: any) => msg.role === 'tool') as Array<{
+      tool_call_id?: string;
+      content?: unknown;
+    }>;
     expect(toolResultMessages).toHaveLength(3);
 
     // Verify each tool result message has correct tool_call_id

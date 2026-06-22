@@ -30,17 +30,13 @@ describe('AIMock loop scenario: very long tool chains capped by maxSteps', () =>
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_inc_1', name: 'increment', arguments: {} },
-            ],
+            toolCalls: [{ id: 'call_inc_1', name: 'increment', arguments: {} }],
           },
         );
         llm.on(
           { endpoint: 'chat', hasToolResult: true },
           {
-            toolCalls: [
-              { id: 'call_inc_more', name: 'increment', arguments: {} },
-            ],
+            toolCalls: [{ id: 'call_inc_more', name: 'increment', arguments: {} }],
           },
         );
       },
@@ -76,9 +72,7 @@ describe('AIMock loop scenario: very long tool chains capped by maxSteps', () =>
         llm.on(
           { endpoint: 'chat' },
           {
-            toolCalls: [
-              { id: 'call_cnt', name: 'counter', arguments: {} },
-            ],
+            toolCalls: [{ id: 'call_cnt', name: 'counter', arguments: {} }],
           },
         );
       },
@@ -112,16 +106,11 @@ describe('AIMock loop scenario: very long tool chains capped by maxSteps', () =>
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_simple', name: 'simple', arguments: {} },
-            ],
+            toolCalls: [{ id: 'call_simple', name: 'simple', arguments: {} }],
           },
         );
         // After tool result, return final text (no more tool calls)
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Done after one tool call' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done after one tool call' });
       },
     });
 

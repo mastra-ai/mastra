@@ -27,9 +27,12 @@ describe('AIMock loop scenario: structured output error strategies', () => {
       },
       fixtures: llm => {
         // Model returns invalid JSON (missing required field)
-        llm.on({ endpoint: 'chat' }, {
-          content: '{"name": "Alice"}', // Missing 'age' field
-        });
+        llm.on(
+          { endpoint: 'chat' },
+          {
+            content: '{"name": "Alice"}', // Missing 'age' field
+          },
+        );
       },
     });
 
@@ -59,9 +62,12 @@ describe('AIMock loop scenario: structured output error strategies', () => {
       },
       fixtures: llm => {
         // Model returns invalid JSON
-        llm.on({ endpoint: 'chat' }, {
-          content: '{"name": "Alice"}', // Missing 'age' field
-        });
+        llm.on(
+          { endpoint: 'chat' },
+          {
+            content: '{"name": "Alice"}', // Missing 'age' field
+          },
+        );
       },
     });
 
@@ -89,9 +95,12 @@ describe('AIMock loop scenario: structured output error strategies', () => {
       },
       fixtures: llm => {
         // Model returns partially valid JSON
-        llm.on({ endpoint: 'chat' }, {
-          content: '{"name": "Alice", "age": "not-a-number"}',
-        });
+        llm.on(
+          { endpoint: 'chat' },
+          {
+            content: '{"name": "Alice", "age": "not-a-number"}',
+          },
+        );
       },
     });
 
@@ -117,9 +126,12 @@ describe('AIMock loop scenario: structured output error strategies', () => {
       },
       fixtures: llm => {
         // Model returns valid JSON
-        llm.on({ endpoint: 'chat' }, {
-          content: '{"name": "Alice", "age": 30}',
-        });
+        llm.on(
+          { endpoint: 'chat' },
+          {
+            content: '{"name": "Alice", "age": 30}',
+          },
+        );
       },
     });
 

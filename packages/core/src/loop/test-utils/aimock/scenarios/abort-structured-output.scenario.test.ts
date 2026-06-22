@@ -55,10 +55,7 @@ describe('AIMock loop scenario: abort during structured output', () => {
           { toolCalls: [{ id: 'call_gather', name: 'gather', arguments: {} }] },
         );
         // Turn 2 (the structured-output turn): must NOT be reached after abort.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: JSON.stringify({ items: ['a', 'b'], count: 2 }) },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: JSON.stringify({ items: ['a', 'b'], count: 2 }) });
       },
     });
 

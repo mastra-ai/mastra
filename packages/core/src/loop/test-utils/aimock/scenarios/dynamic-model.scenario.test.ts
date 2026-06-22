@@ -30,15 +30,9 @@ describe('AIMock scenario: dynamic model resolution', () => {
     };
 
     // Mock responses for both models
-    mock.on(
-      { endpoint: 'chat', model: 'gpt-4o-mini', hasToolResult: false },
-      { content: '4' },
-    );
+    mock.on({ endpoint: 'chat', model: 'gpt-4o-mini', hasToolResult: false }, { content: '4' });
 
-    mock.on(
-      { endpoint: 'chat', model: 'gpt-4o', hasToolResult: false },
-      { content: 'The answer is 4.' },
-    );
+    mock.on({ endpoint: 'chat', model: 'gpt-4o', hasToolResult: false }, { content: 'The answer is 4.' });
 
     // Test with fast model (default)
     const fastResult = await runLoopScenario({

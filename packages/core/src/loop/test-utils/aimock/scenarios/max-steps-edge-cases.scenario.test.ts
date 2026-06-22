@@ -32,10 +32,7 @@ describe('AIMock loop scenario: maxSteps edge cases', () => {
       stopWhen: stepCountIs(maxSteps),
       fixtures: llm => {
         // Model always calls tool, never finishes on its own
-        llm.on(
-          { endpoint: 'chat' },
-          { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] },
-        );
+        llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] });
       },
     });
 
@@ -63,10 +60,7 @@ describe('AIMock loop scenario: maxSteps edge cases', () => {
         return stepCount >= 2;
       },
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] },
-        );
+        llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] });
       },
     });
 
@@ -94,10 +88,7 @@ describe('AIMock loop scenario: maxSteps edge cases', () => {
           { endpoint: 'chat', hasToolResult: false },
           { toolCalls: [{ id: 'call_tick_1', name: 'tick', arguments: {} }] },
         );
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Done after one tick.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done after one tick.' });
       },
     });
 
@@ -115,10 +106,7 @@ describe('AIMock loop scenario: maxSteps edge cases', () => {
       prompt: 'Answer quickly.',
       stopWhen: stepCountIs(1),
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: 'Quick answer.' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: 'Quick answer.' });
       },
     });
 
@@ -153,10 +141,7 @@ describe('AIMock loop scenario: maxSteps edge cases', () => {
         },
       ],
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] },
-        );
+        llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call_tick', name: 'tick', arguments: {} }] });
       },
     });
 

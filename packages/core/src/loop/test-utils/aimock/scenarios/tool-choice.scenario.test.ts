@@ -33,10 +33,7 @@ describe('AIMock scenario: tool choice', () => {
       collectChunks: true,
       fixtures: llm => {
         // With toolChoice: 'none', model should only return text
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          { content: 'Hello! How can I help you?' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: false }, { content: 'Hello! How can I help you?' });
       },
     });
 
@@ -81,10 +78,7 @@ describe('AIMock scenario: tool choice', () => {
           },
         );
 
-        llm.on(
-          { endpoint: 'chat', toolCallId: 'call-1', hasToolResult: true },
-          { content: 'Processing complete' },
-        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call-1', hasToolResult: true }, { content: 'Processing complete' });
       },
     });
 
@@ -138,10 +132,7 @@ describe('AIMock scenario: tool choice', () => {
           },
         );
 
-        llm.on(
-          { endpoint: 'chat', toolCallId: 'call-1', hasToolResult: true },
-          { content: 'Used tool-2' },
-        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call-1', hasToolResult: true }, { content: 'Used tool-2' });
       },
     });
 
@@ -179,10 +170,7 @@ describe('AIMock scenario: tool choice', () => {
       collectChunks: true,
       fixtures: llm => {
         // With auto mode, model can choose whether to call tools
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          { content: 'Hello!' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: false }, { content: 'Hello!' });
       },
     });
 

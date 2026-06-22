@@ -65,7 +65,22 @@ let scenarioAgentCounter = 0;
  */
 export async function createSharedAgent(
   llm: LLMock,
-  opts: Pick<RunLoopScenarioOptions, 'tools' | 'instructions' | 'memory' | 'workspace' | 'agents' | 'workflows' | 'agentBackgroundTasks' | 'goal' | 'backgroundTasks' | 'model' | 'errorProcessors' | 'defaultOptions' | 'pubsub'> = {},
+  opts: Pick<
+    RunLoopScenarioOptions,
+    | 'tools'
+    | 'instructions'
+    | 'memory'
+    | 'workspace'
+    | 'agents'
+    | 'workflows'
+    | 'agentBackgroundTasks'
+    | 'goal'
+    | 'backgroundTasks'
+    | 'model'
+    | 'errorProcessors'
+    | 'defaultOptions'
+    | 'pubsub'
+  > = {},
 ): Promise<{ agent: Agent; mastra: any }> {
   return buildScenarioAgent({ llm, ...opts });
 }
@@ -92,7 +107,20 @@ async function buildScenarioAgent({
   pubsub,
 }: Pick<
   RunLoopScenarioOptions,
-  'llm' | 'tools' | 'instructions' | 'memory' | 'workspace' | 'agents' | 'workflows' | 'agentBackgroundTasks' | 'goal' | 'backgroundTasks' | 'model' | 'errorProcessors' | 'defaultOptions' | 'pubsub'
+  | 'llm'
+  | 'tools'
+  | 'instructions'
+  | 'memory'
+  | 'workspace'
+  | 'agents'
+  | 'workflows'
+  | 'agentBackgroundTasks'
+  | 'goal'
+  | 'backgroundTasks'
+  | 'model'
+  | 'errorProcessors'
+  | 'defaultOptions'
+  | 'pubsub'
 >): Promise<{ agent: Agent; mastra: any }> {
   const openai = createOpenAI({
     apiKey: 'aimock-test-key',

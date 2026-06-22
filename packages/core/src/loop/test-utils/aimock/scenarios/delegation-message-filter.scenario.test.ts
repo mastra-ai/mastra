@@ -55,9 +55,7 @@ describe('AIMock loop scenario: delegation messageFilter', () => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } },
-            ],
+            toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } }],
           },
         );
         // Subagent turn: receives the filtered context.
@@ -66,10 +64,7 @@ describe('AIMock loop scenario: delegation messageFilter', () => {
           { content: 'Here is what you requested.' },
         );
         // Supervisor turn 2: wraps up.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Writer completed the task.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Writer completed the task.' });
       },
     });
 
@@ -123,9 +118,7 @@ describe('AIMock loop scenario: delegation messageFilter', () => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } },
-            ],
+            toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } }],
           },
         );
         // Subagent turn: receives the modified prompt.
@@ -134,10 +127,7 @@ describe('AIMock loop scenario: delegation messageFilter', () => {
           { content: 'Here is the formal letter you requested.' },
         );
         // Supervisor turn 2: wraps up.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Letter drafted successfully.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Letter drafted successfully.' });
       },
     });
 
@@ -148,8 +138,8 @@ describe('AIMock loop scenario: delegation messageFilter', () => {
     expect(filterContext.prompt).not.toBe('Write something.');
 
     // Verify the subagent actually received the modified prompt by checking its request.
-    const subagentRequest = requests.find(
-      (r: any) => JSON.stringify(r.body?.messages).includes('MODIFIED: Write a formal letter'),
+    const subagentRequest = requests.find((r: any) =>
+      JSON.stringify(r.body?.messages).includes('MODIFIED: Write a formal letter'),
     );
     expect(subagentRequest).toBeDefined();
   });

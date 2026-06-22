@@ -46,7 +46,10 @@ describe('background-task-tool-level scenario', () => {
       backgroundTasks: { enabled: true },
       collectChunks: true,
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { toolCalls: [{ id: 'call_bg', name: 'background-work', arguments: { duration: 100 } }] });
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 0 },
+          { toolCalls: [{ id: 'call_bg', name: 'background-work', arguments: { duration: 100 } }] },
+        );
         llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Background task dispatched.' });
       },
     });

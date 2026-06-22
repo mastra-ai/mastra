@@ -45,16 +45,16 @@ describe('AIMock scenario: skills same-name disambiguation', () => {
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aimock-skills-same-name-'));
-    
+
     // Create two skills with the same name in different directories
     const localSkillDir = path.join(tempDir, 'skills', 'brand-guidelines');
     await fs.mkdir(localSkillDir, { recursive: true });
     await fs.writeFile(path.join(localSkillDir, 'SKILL.md'), LOCAL_SKILL_MD);
-    
+
     const externalSkillDir = path.join(tempDir, 'node_modules', '@myorg', 'skills', 'brand-guidelines');
     await fs.mkdir(externalSkillDir, { recursive: true });
     await fs.writeFile(path.join(externalSkillDir, 'SKILL.md'), EXTERNAL_SKILL_MD);
-    
+
     // Create a real workspace with both skill directories
     workspace = new Workspace({
       filesystem: new LocalFilesystem({ basePath: tempDir }),
@@ -73,14 +73,17 @@ describe('AIMock scenario: skills same-name disambiguation', () => {
       workspace,
       stopWhen: stepCountIs(2),
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          content: 'There are two brand-guidelines skills available.',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            content: 'There are two brand-guidelines skills available.',
+          },
+        );
       },
     });
 
     expect(requests.length).toBeGreaterThanOrEqual(1);
-    
+
     // The system prompt should list both skills with their paths. Normalize
     // path separators so the assertions hold on Windows (backslashes) too.
     const messages = requests[0]?.body?.messages ?? [];
@@ -106,34 +109,42 @@ describe('AIMock scenario: skills same-name disambiguation', () => {
       stopWhen: stepCountIs(4),
       fixtures: llm => {
         // Turn 1: Model calls the skill tool by name
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          toolCalls: [{
-            id: 'call_skill_1',
-            name: 'skill',
-            arguments: { name: 'brand-guidelines' },
-          }],
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              {
+                id: 'call_skill_1',
+                name: 'skill',
+                arguments: { name: 'brand-guidelines' },
+              },
+            ],
+          },
+        );
 
         // Turn 2: Model receives the local skill (precedence) and responds
-        llm.on({ endpoint: 'chat', hasToolResult: true }, {
-          content: 'Loaded the local brand guidelines with company blue #0066CC.',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: true },
+          {
+            content: 'Loaded the local brand guidelines with company blue #0066CC.',
+          },
+        );
       },
     });
 
     expect(requests.length).toBe(2);
-    
+
     // The skill tool was executed
     const toolResults = await output.toolResults;
     expect(toolResults.length).toBeGreaterThanOrEqual(1);
     expect(toolResults[0]!.payload.toolName).toBe('skill');
-    
+
     // The tool result should contain the LOCAL skill (precedence)
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const serializedTurn2 = JSON.stringify(turn2Messages);
     expect(serializedTurn2).toContain('#0066CC'); // Local blue
     expect(serializedTurn2).not.toContain('#0000FF'); // Not external blue
-    
+
     // Final output references local guidelines
     const text = await output.text;
     expect(text).toContain('#0066CC');
@@ -147,33 +158,41 @@ describe('AIMock scenario: skills same-name disambiguation', () => {
       stopWhen: stepCountIs(4),
       fixtures: llm => {
         // Turn 1: Model calls the skill tool with full path
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          toolCalls: [{
-            id: 'call_skill_2',
-            name: 'skill',
-            arguments: { name: 'node_modules/@myorg/skills/brand-guidelines' },
-          }],
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              {
+                id: 'call_skill_2',
+                name: 'skill',
+                arguments: { name: 'node_modules/@myorg/skills/brand-guidelines' },
+              },
+            ],
+          },
+        );
 
         // Turn 2: Model receives the external skill and responds
-        llm.on({ endpoint: 'chat', hasToolResult: true }, {
-          content: 'Loaded the external brand guidelines with generic blue #0000FF.',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: true },
+          {
+            content: 'Loaded the external brand guidelines with generic blue #0000FF.',
+          },
+        );
       },
     });
 
     expect(requests.length).toBe(2);
-    
+
     // The skill tool was executed
     const toolResults = await output.toolResults;
     expect(toolResults.length).toBeGreaterThanOrEqual(1);
-    
+
     // The tool result should contain the EXTERNAL skill (path escape)
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const serializedTurn2 = JSON.stringify(turn2Messages);
     expect(serializedTurn2).toContain('#0000FF'); // External blue
     expect(serializedTurn2).not.toContain('#0066CC'); // Not local blue
-    
+
     // Final output references external guidelines
     const text = await output.text;
     expect(text).toContain('#0000FF');

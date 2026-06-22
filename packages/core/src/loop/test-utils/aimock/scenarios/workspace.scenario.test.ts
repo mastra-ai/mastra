@@ -55,9 +55,12 @@ describe('AIMock loop scenario: workspace in tool execution', () => {
       workspace,
       stopWhen: stepCountIs(3),
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          toolCalls: [{ id: 'call_read', name: 'read_note', arguments: {} }],
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'call_read', name: 'read_note', arguments: {} }],
+          },
+        );
         llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The note says WORKSPACE_FILE_CONTENT.' });
       },
     });

@@ -56,9 +56,7 @@ describe('AIMock loop scenario: delegation onDelegationStart modifies prompt', (
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a tagline.' } },
-            ],
+            toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a tagline.' } }],
           },
         );
         // Subagent's own loop turn: matched by the modified prompt content.
@@ -83,9 +81,7 @@ describe('AIMock loop scenario: delegation onDelegationStart modifies prompt', (
     expect(text).toContain('Sip the extraordinary.');
 
     // The subagent's AIMock request contains the modified prompt.
-    const subagentRequest = requests.find(
-      r => JSON.stringify(r.body?.messages).includes('PREMIUM coffee shop'),
-    );
+    const subagentRequest = requests.find(r => JSON.stringify(r.body?.messages).includes('PREMIUM coffee shop'));
     expect(subagentRequest).toBeDefined();
 
     // The original (unmodified) prompt was NOT forwarded to the subagent.
@@ -125,9 +121,7 @@ describe('AIMock loop scenario: delegation onDelegationStart modifies prompt', (
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a tagline.' } },
-            ],
+            toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a tagline.' } }],
           },
         );
         // Supervisor turn 2: receives the rejection and wraps up.

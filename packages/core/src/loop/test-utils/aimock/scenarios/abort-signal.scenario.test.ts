@@ -53,10 +53,7 @@ describe('AIMock loop scenario: abort signal mid-stream', () => {
           },
         );
         // Turn 2: should not be reached due to abort
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'This should not appear because we aborted.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'This should not appear because we aborted.' });
       },
     });
 

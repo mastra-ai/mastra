@@ -30,26 +30,22 @@ describe('AIMock loop scenario: request body override', () => {
         topP: 0.9,
       },
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: 'Response with custom settings.' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: 'Response with custom settings.' });
       },
     });
 
     // Verify the request was made
     expect(requests).toHaveLength(1);
     const requestBody = requests[0]?.body ?? {};
-    
+
     // Model settings should be present in the request
     // Note: Some settings like temperature are reliably passed, others may be filtered
     // by the AI SDK or provider implementation
     expect((requestBody as any).temperature).toBe(0.7);
-    
+
     // Verify that at least some model settings made it through
-    const hasModelSettings = Object.keys(requestBody).some(key => 
-      key === 'temperature' || key === 'max_tokens' || key === 'maxTokens' || 
-      key === 'top_p' || key === 'topP'
+    const hasModelSettings = Object.keys(requestBody).some(
+      key => key === 'temperature' || key === 'max_tokens' || key === 'maxTokens' || key === 'top_p' || key === 'topP',
     );
     expect(hasModelSettings).toBe(true);
   });
@@ -65,20 +61,17 @@ describe('AIMock loop scenario: request body override', () => {
         maxTokens: 100,
       },
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: 'Conservative response.' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: 'Conservative response.' });
       },
     });
 
     expect(result1.requests).toHaveLength(1);
     const body1 = result1.requests[0]?.body ?? {};
     expect((body1 as any).temperature).toBe(0.2);
-    
+
     // Verify that model settings are present (be flexible about which ones make it through)
-    const hasModelSettings1 = Object.keys(body1).some(key => 
-      key === 'temperature' || key === 'max_tokens' || key === 'maxTokens'
+    const hasModelSettings1 = Object.keys(body1).some(
+      key => key === 'temperature' || key === 'max_tokens' || key === 'maxTokens',
     );
     expect(hasModelSettings1).toBe(true);
 
@@ -92,20 +85,17 @@ describe('AIMock loop scenario: request body override', () => {
         maxTokens: 2000,
       },
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: 'Creative response.' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: 'Creative response.' });
       },
     });
 
     expect(result2.requests).toHaveLength(2); // 1 from first scenario + 1 from second
     const body2 = result2.requests[result2.requests.length - 1]?.body ?? {};
     expect((body2 as any).temperature).toBe(0.9);
-    
+
     // Verify that model settings are present (be flexible about which ones make it through)
-    const hasModelSettings2 = Object.keys(body2).some(key => 
-      key === 'temperature' || key === 'max_tokens' || key === 'maxTokens'
+    const hasModelSettings2 = Object.keys(body2).some(
+      key => key === 'temperature' || key === 'max_tokens' || key === 'maxTokens',
     );
     expect(hasModelSettings2).toBe(true);
   });

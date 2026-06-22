@@ -122,18 +122,14 @@ describe('AIMock loop scenario: structured output with tool calls', () => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_cats', name: 'search', arguments: { query: 'cats' } },
-            ],
+            toolCalls: [{ id: 'call_cats', name: 'search', arguments: { query: 'cats' } }],
           },
         );
         // Turn 2: search for dogs.
         llm.on(
           { endpoint: 'chat', hasToolResult: true, toolCallId: 'call_cats' },
           {
-            toolCalls: [
-              { id: 'call_dogs', name: 'search', arguments: { query: 'dogs' } },
-            ],
+            toolCalls: [{ id: 'call_dogs', name: 'search', arguments: { query: 'dogs' } }],
           },
         );
         // Turn 3: produce structured output combining both.
@@ -201,9 +197,7 @@ describe('AIMock loop scenario: structured output with tool calls', () => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_metrics', name: 'get_metrics', arguments: {} },
-            ],
+            toolCalls: [{ id: 'call_metrics', name: 'get_metrics', arguments: {} }],
           },
         );
         llm.on(

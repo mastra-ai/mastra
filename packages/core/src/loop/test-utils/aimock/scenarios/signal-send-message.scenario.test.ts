@@ -101,9 +101,12 @@ describe('AIMock scenario: signal sendMessage integration', () => {
       stopWhen: stepCountIs(1),
       pubsub,
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          content: 'Initial response',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            content: 'Initial response',
+          },
+        );
       },
     });
 
@@ -170,9 +173,12 @@ describe('AIMock scenario: signal sendMessage integration', () => {
       threadId: 'state-test-thread',
       resourceId: 'state-test-resource',
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          content: 'Initial response',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            content: 'Initial response',
+          },
+        );
       },
     });
 

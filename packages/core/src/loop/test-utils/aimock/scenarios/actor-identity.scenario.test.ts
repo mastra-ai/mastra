@@ -45,10 +45,7 @@ describe('AIMock loop scenario: actor identity', () => {
           { endpoint: 'chat', hasToolResult: false },
           { toolCalls: [{ id: 'call_check', name: 'check_permission', arguments: {} }] },
         );
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Permission granted.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Permission granted.' });
       },
     });
 

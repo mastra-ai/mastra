@@ -66,9 +66,7 @@ describe('AIMock loop scenario: includeSubAgentToolResultsInModelContext', () =>
         llm.on(
           { endpoint: 'chat', hasToolResult: false, userMessage: /Ask the researcher/ },
           {
-            toolCalls: [
-              { id: 'call_researcher', name: 'agent-researcher', arguments: { prompt: 'Find AI trends' } },
-            ],
+            toolCalls: [{ id: 'call_researcher', name: 'agent-researcher', arguments: { prompt: 'Find AI trends' } }],
           },
         );
 
@@ -76,9 +74,7 @@ describe('AIMock loop scenario: includeSubAgentToolResultsInModelContext', () =>
         llm.on(
           { endpoint: 'chat', hasToolResult: false, userMessage: /Find AI trends/ },
           {
-            toolCalls: [
-              { id: 'call_search', name: 'search', arguments: { query: 'AI trends' } },
-            ],
+            toolCalls: [{ id: 'call_search', name: 'search', arguments: { query: 'AI trends' } }],
           },
         );
 
@@ -103,12 +99,12 @@ describe('AIMock loop scenario: includeSubAgentToolResultsInModelContext', () =>
     // Find the supervisor's final turn request (should be last).
     const supervisorFinalRequest = requests.at(-1);
     expect(supervisorFinalRequest).toBeDefined();
-    
+
     const finalMessages = JSON.stringify(supervisorFinalRequest!.body?.messages);
-    
+
     // The supervisor should see the researcher's text summary.
     expect(finalMessages).toContain('AI trends show rapid growth');
-    
+
     // The supervisor should NOT see the raw tool result identifier (context pollution prevented).
     expect(finalMessages).not.toContain('SEARCH_RESULTS_789012');
   });
@@ -155,9 +151,7 @@ describe('AIMock loop scenario: includeSubAgentToolResultsInModelContext', () =>
         llm.on(
           { endpoint: 'chat', hasToolResult: false, userMessage: /Ask the researcher/ },
           {
-            toolCalls: [
-              { id: 'call_researcher', name: 'agent-researcher', arguments: { prompt: 'Find AI trends' } },
-            ],
+            toolCalls: [{ id: 'call_researcher', name: 'agent-researcher', arguments: { prompt: 'Find AI trends' } }],
           },
         );
 
@@ -165,9 +159,7 @@ describe('AIMock loop scenario: includeSubAgentToolResultsInModelContext', () =>
         llm.on(
           { endpoint: 'chat', hasToolResult: false, userMessage: /Find AI trends/ },
           {
-            toolCalls: [
-              { id: 'call_search', name: 'search', arguments: { query: 'AI trends' } },
-            ],
+            toolCalls: [{ id: 'call_search', name: 'search', arguments: { query: 'AI trends' } }],
           },
         );
 
@@ -192,12 +184,12 @@ describe('AIMock loop scenario: includeSubAgentToolResultsInModelContext', () =>
     // Find the supervisor's final turn request (should be last).
     const supervisorFinalRequest = requests.at(-1);
     expect(supervisorFinalRequest).toBeDefined();
-    
+
     const finalMessages = JSON.stringify(supervisorFinalRequest!.body?.messages);
-    
+
     // The supervisor should see the researcher's text summary.
     expect(finalMessages).toContain('AI trends show rapid growth');
-    
+
     // The supervisor SHOULD see the raw tool result identifier (context pollution enabled).
     expect(finalMessages).toContain('SEARCH_RESULTS_789012');
   });

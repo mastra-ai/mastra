@@ -201,10 +201,7 @@ describe('AIMock loop scenario: resume after decline', () => {
     const toolCallId = (approvalChunks[0] as any).payload.toolCallId;
 
     // Decline via resumeStream
-    const declineResult = await shared.agent.resumeStream(
-      { approved: false },
-      { runId: output.runId, toolCallId },
-    );
+    const declineResult = await shared.agent.resumeStream({ approved: false }, { runId: output.runId, toolCallId });
 
     // Drain
     for await (const _chunk of declineResult.fullStream) {

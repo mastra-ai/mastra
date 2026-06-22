@@ -68,7 +68,10 @@ describe('AIMock loop scenario: concurrent approval requests', () => {
           },
         );
         // Turn 2: after both approved + executed, model produces final text.
-        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'I deleted old.txt and renamed new.txt to final.txt.' });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: true },
+          { content: 'I deleted old.txt and renamed new.txt to final.txt.' },
+        );
       },
     });
 

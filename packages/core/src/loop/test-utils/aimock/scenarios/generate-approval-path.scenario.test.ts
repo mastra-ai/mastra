@@ -17,7 +17,7 @@ describe('Generate() approval path scenario', () => {
   it('should approve a tool call using approveToolCallGenerate()', async () => {
     const llm = getMock();
     let toolExecuted = false;
-    
+
     const sensitiveTool = createTool({
       id: 'sensitive-op',
       description: 'Performs a sensitive operation requiring approval',
@@ -80,7 +80,7 @@ describe('Generate() approval path scenario', () => {
   it('should decline a tool call using declineToolCallGenerate()', async () => {
     const llm = getMock();
     let toolExecuted = false;
-    
+
     const dangerousTool = createTool({
       id: 'dangerous-op',
       description: 'Performs a dangerous operation requiring approval',
@@ -130,7 +130,7 @@ describe('Generate() approval path scenario', () => {
 
     // Verify the tool was NOT executed
     expect(toolExecuted).toBe(false);
-    
+
     // When declined, the result should indicate the tool was not run
     // (the exact behavior may vary - just verify tool wasn't executed)
     expect(result2).toBeDefined();
@@ -139,7 +139,7 @@ describe('Generate() approval path scenario', () => {
   it('should handle multiple sequential approval decisions', async () => {
     const llm = getMock();
     const executionLog: number[] = [];
-    
+
     const counterTool = createTool({
       id: 'counter-tool',
       description: 'Increments a counter (requires approval)',

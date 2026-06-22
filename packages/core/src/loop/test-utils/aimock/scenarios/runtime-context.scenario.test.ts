@@ -74,9 +74,7 @@ describe('AIMock loop scenario: runtime context passthrough', () => {
     // Tool result was passed back to the model
     expect(requests).toHaveLength(2);
     const turn2Messages = requests[1]?.body?.messages ?? [];
-    const toolMessage = turn2Messages.find(
-      (msg: any) => msg.role === 'tool',
-    ) as { content?: string };
+    const toolMessage = turn2Messages.find((msg: any) => msg.role === 'tool') as { content?: string };
     expect(toolMessage?.content).toContain('user-123');
     expect(toolMessage?.content).toContain('admin');
 
@@ -139,10 +137,7 @@ describe('AIMock loop scenario: runtime context passthrough', () => {
           },
         );
         // Turn 2: summarize
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Both tools completed.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Both tools completed.' });
       },
     });
 

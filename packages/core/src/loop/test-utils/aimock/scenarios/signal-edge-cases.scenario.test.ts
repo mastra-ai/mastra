@@ -119,9 +119,12 @@ describe('AIMock scenario: signal edge cases', () => {
       threadId,
       resourceId,
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          content: 'Shared response for both subscribers',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            content: 'Shared response for both subscribers',
+          },
+        );
       },
     });
 
@@ -178,9 +181,12 @@ describe('AIMock scenario: signal edge cases', () => {
       threadId,
       resourceId,
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          content: 'Response text',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            content: 'Response text',
+          },
+        );
       },
     });
 
@@ -234,9 +240,12 @@ describe('AIMock scenario: signal edge cases', () => {
       threadId,
       resourceId,
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          content: 'Initial response',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            content: 'Initial response',
+          },
+        );
       },
     });
 

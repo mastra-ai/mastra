@@ -37,10 +37,7 @@ describe('AIMock scenario: client tools', () => {
       clientTools: { 'client-tool': clientTool },
       stopWhen: stepCountIs(1),
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          { content: 'Hello!' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: false }, { content: 'Hello!' });
       },
     });
 
@@ -51,10 +48,10 @@ describe('AIMock scenario: client tools', () => {
     const toolDefinitions = firstRequest?.body?.tools || [];
     const agentToolDef = toolDefinitions.find((t: any) => t.function.name === 'agent-tool');
     const clientToolDef = toolDefinitions.find((t: any) => t.function.name === 'client-tool');
-    
+
     expect(agentToolDef).toBeDefined();
     expect(agentToolDef?.function.description).toBe('A tool defined at agent level');
-    
+
     expect(clientToolDef).toBeDefined();
     expect(clientToolDef?.function.description).toBe('A tool defined at client level');
   });
@@ -86,10 +83,7 @@ describe('AIMock scenario: client tools', () => {
           },
         );
 
-        llm.on(
-          { endpoint: 'chat', toolCallId: 'call-client', hasToolResult: true },
-          { content: 'Done' },
-        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call-client', hasToolResult: true }, { content: 'Done' });
       },
     });
 

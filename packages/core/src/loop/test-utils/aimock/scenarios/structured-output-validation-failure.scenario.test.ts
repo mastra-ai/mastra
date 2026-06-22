@@ -29,10 +29,7 @@ describe('AIMock loop scenario: structured output validation failure', () => {
       collectChunks: true,
       fixtures: llm => {
         // Model returns invalid JSON that violates schema constraints
-        llm.on(
-          { endpoint: 'chat' },
-          { content: '{"name":"Jo","age":-5,"email":"invalid"}' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: '{"name":"Jo","age":-5,"email":"invalid"}' });
       },
     });
 
@@ -42,7 +39,7 @@ describe('AIMock loop scenario: structured output validation failure', () => {
 
     const errorMessage = (errorChunk?.payload?.error as Error)?.message || '';
     expect(errorMessage).toContain('Structured output validation failed');
-    
+
     // Should include field-specific validation errors
     expect(errorMessage).toContain('name');
     expect(errorMessage).toContain('age');
@@ -62,10 +59,7 @@ describe('AIMock loop scenario: structured output validation failure', () => {
       structuredOutput: { schema },
       fixtures: llm => {
         // Model returns valid JSON
-        llm.on(
-          { endpoint: 'chat' },
-          { content: '{"title":"Product","description":"Great product"}' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: '{"title":"Product","description":"Great product"}' });
       },
     });
 
@@ -93,10 +87,7 @@ describe('AIMock loop scenario: structured output validation failure', () => {
       structuredOutput: { schema },
       collectChunks: true,
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: '{"user":{"profile":{"age":15}}}' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: '{"user":{"profile":{"age":15}}}' });
       },
     });
 

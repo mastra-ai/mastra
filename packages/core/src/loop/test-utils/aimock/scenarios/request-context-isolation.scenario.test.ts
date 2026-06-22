@@ -175,10 +175,7 @@ describe('AIMock loop scenario: requestContext isolation between steps', () => {
           { toolCalls: [{ id: 'call_check', name: 'check_tool', arguments: {} }] },
         );
         // Final response
-        llm.on(
-          { endpoint: 'chat', toolCallId: 'call_check', hasToolResult: true },
-          { content: 'Check complete' },
-        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call_check', hasToolResult: true }, { content: 'Check complete' });
       },
     });
 

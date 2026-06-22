@@ -33,10 +33,7 @@ describe('AIMock loop scenario: structured output validation surfacing', () => {
       collectChunks: true,
       fixtures: llm => {
         // Return invalid JSON (name too short)
-        llm.on(
-          { endpoint: 'chat' },
-          { content: '{"name":"Jo","age":25}' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: '{"name":"Jo","age":25}' });
       },
     });
 
@@ -64,10 +61,7 @@ describe('AIMock loop scenario: structured output validation surfacing', () => {
       collectChunks: true,
       fixtures: llm => {
         // Always return invalid (negative count)
-        llm.on(
-          { endpoint: 'chat' },
-          { content: '{"count":-1}' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: '{"count":-1}' });
       },
     });
 
@@ -92,10 +86,7 @@ describe('AIMock loop scenario: structured output validation surfacing', () => {
       stopWhen: stepCountIs(1),
       structuredOutput: { schema },
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: '{"items":["apple","banana","cherry"]}' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: '{"items":["apple","banana","cherry"]}' });
       },
     });
 

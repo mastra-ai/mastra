@@ -40,17 +40,35 @@ describe('AIMock loop scenario: my regression', () => {
     const { output, requests } = await runLoopScenario({
       llm: getMock(),
       prompt: 'Do the thing.',
-      tools: { my_tool: createTool({ /* ... */ }) },
+      tools: {
+        my_tool: createTool({
+          /* ... */
+        }),
+      },
       stopWhen: stepCountIs(5),
       fixtures: llm => {
         // Script per-turn responses. Match on whether a tool result is present
         // (and which tool call it answers) to drive a multi-step loop.
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          toolCalls: [{ id: 'call_1', name: 'my_tool', arguments: { /* ... */ } }],
-        });
-        llm.on({ endpoint: 'chat', toolCallId: 'call_1', hasToolResult: true }, {
-          content: 'Final answer.',
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              {
+                id: 'call_1',
+                name: 'my_tool',
+                arguments: {
+                  /* ... */
+                },
+              },
+            ],
+          },
+        );
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call_1', hasToolResult: true },
+          {
+            content: 'Final answer.',
+          },
+        );
       },
     });
 
@@ -101,7 +119,7 @@ for any model ids in fixtures/comments.
   tool can read `ctx.workspace.filesystem` / `ctx.workspace.sandbox` mid-loop.
 - `agents: { writer }` — register subagents (supervisor / agents-as-tools). Each becomes a tool
   named `agent-<key>`. Build the subagent with the same AIMock-backed provider (`createOpenAI({
-  baseURL })`) so its own loop turns also hit the mock; match the delegated prompt to script them.
+baseURL })`) so its own loop turns also hit the mock; match the delegated prompt to script them.
 - `toolsets: { namespace: { toolName: createTool(...) } }` — request-level tools merged with agent-level
   tools. Toolset tools with the same name as agent tools take precedence. Assert on
   `requests[0].body.tools` to confirm both sets are present; assert on tool execution to verify precedence.
@@ -129,7 +147,7 @@ for any model ids in fixtures/comments.
 The loop surfaces failures through specific chunks; script and assert them directly:
 
 - **Provider / API error** — return an `ErrorResponse` from a fixture (`llm.onMessage(/.*/, {
-  error: { message }, status: 500 })`). The loop emits an `error` chunk on `fullStream`. Read the
+error: { message }, status: 500 })`). The loop emits an `error` chunk on `fullStream`. Read the
   `fullStream` to assert the error chunk; `consumeStream` swallows the failure rather than throwing.
 - **Guardrail tripwire** — an input processor that calls `abort(reason)` short-circuits the loop: a
   `tripwire` chunk is emitted and **no model request is sent** (`requests` is empty). Assert on the
@@ -161,98 +179,98 @@ Tools support lifecycle hooks and streaming output:
 
 ## Scenario catalog
 
-| File | Regression class |
-| --- | --- |
-| `multi-step-tool-loop.scenario.test.ts` | tool-result plumbed into the next request in the right position |
-| `cross-turn-message-ordering.scenario.test.ts` | multiple tool results round-trip with correct ids |
-| `stop-condition-long-loop.scenario.test.ts` | `stepCountIs`, model-stops-early, and custom `stopWhen` predicate bounds |
-| `structured-output.scenario.test.ts` | structured object after a tool turn; tool result plumbed into the structured turn |
-| `tool-execution-errors.scenario.test.ts` | thrown tool error + unknown/hallucinated tool reported back and recovered |
-| `tool-approval.scenario.test.ts` / `tool-approval-rejection.scenario.test.ts` | approval gate emit + resume on approve/decline |
-| `approval-tool-level.scenario.test.ts` | tool-level `requireApproval: true` suspends only that tool |
-| `approval-conditional.scenario.test.ts` | pattern-based `requireToolApproval` function gates matching tools only |
-| `approval-decline-retry.scenario.test.ts` | declined tool can be retried in a subsequent turn; second approval succeeds |
-| `concurrent-approval.scenario.test.ts` | multiple tool calls requiring approval in one turn all suspend; mixed approve/decline works |
-| `auto-resume-suspended-tools.scenario.test.ts` | `autoResumeSuspendedTools: true` detects suspended tool on next call and auto-resumes with injected resumeData |
-| `resume-stream.scenario.test.ts` | `resumeStream()` manually resumes a suspended tool with custom resumeData; tool receives data via `context.agent.resumeData` |
-| `generate-approval-path.scenario.test.ts` | non-streaming `approveToolCallGenerate()` / `declineToolCallGenerate()` methods; `finishReason: 'suspended'` + `suspendPayload` |
-| `mastra-distinctive.scenario.test.ts` | `activeTools` filtering + output-processor redaction |
-| `memory-history.scenario.test.ts` | prior thread messages recalled into the next request |
-| `memory-multi-turn-persistence.scenario.test.ts` | multi-turn conversations persist with correct ordering; resource isolation prevents cross-contamination; tool results recalled across turns |
-| `working-memory.scenario.test.ts` | working memory persisted in turn 1 and re-injected on a later turn |
-| `input-processor.scenario.test.ts` | input processor redacts the user message before the request |
-| `prepare-step.scenario.test.ts` | per-step `prepareStep` activeTools override lands in each request |
-| `workspace.scenario.test.ts` | workspace threaded into tool execution; tool reads a file mid-loop |
-| `skills-integration.scenario.test.ts` | SkillsProcessor discovers real SKILL.md files on disk via Workspace + LocalFilesystem; injects `<available_skills>` XML into system prompt; auto-injects `skill`/`skill_search`/`skill_read` tools; model calls `skill` tool to load instructions mid-loop; missing skills return graceful "not found" error |
-| `skills-same-name-disambiguation.scenario.test.ts` | same-named skills in different directories both listed in system prompt; local precedence over external when activated by name; path-based activation bypasses tie-breaking entirely |
+| File                                                                          | Regression class                                                                                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `multi-step-tool-loop.scenario.test.ts`                                       | tool-result plumbed into the next request in the right position                                                                                                                                                                                                                                              |
+| `cross-turn-message-ordering.scenario.test.ts`                                | multiple tool results round-trip with correct ids                                                                                                                                                                                                                                                            |
+| `stop-condition-long-loop.scenario.test.ts`                                   | `stepCountIs`, model-stops-early, and custom `stopWhen` predicate bounds                                                                                                                                                                                                                                     |
+| `structured-output.scenario.test.ts`                                          | structured object after a tool turn; tool result plumbed into the structured turn                                                                                                                                                                                                                            |
+| `tool-execution-errors.scenario.test.ts`                                      | thrown tool error + unknown/hallucinated tool reported back and recovered                                                                                                                                                                                                                                    |
+| `tool-approval.scenario.test.ts` / `tool-approval-rejection.scenario.test.ts` | approval gate emit + resume on approve/decline                                                                                                                                                                                                                                                               |
+| `approval-tool-level.scenario.test.ts`                                        | tool-level `requireApproval: true` suspends only that tool                                                                                                                                                                                                                                                   |
+| `approval-conditional.scenario.test.ts`                                       | pattern-based `requireToolApproval` function gates matching tools only                                                                                                                                                                                                                                       |
+| `approval-decline-retry.scenario.test.ts`                                     | declined tool can be retried in a subsequent turn; second approval succeeds                                                                                                                                                                                                                                  |
+| `concurrent-approval.scenario.test.ts`                                        | multiple tool calls requiring approval in one turn all suspend; mixed approve/decline works                                                                                                                                                                                                                  |
+| `auto-resume-suspended-tools.scenario.test.ts`                                | `autoResumeSuspendedTools: true` detects suspended tool on next call and auto-resumes with injected resumeData                                                                                                                                                                                               |
+| `resume-stream.scenario.test.ts`                                              | `resumeStream()` manually resumes a suspended tool with custom resumeData; tool receives data via `context.agent.resumeData`                                                                                                                                                                                 |
+| `generate-approval-path.scenario.test.ts`                                     | non-streaming `approveToolCallGenerate()` / `declineToolCallGenerate()` methods; `finishReason: 'suspended'` + `suspendPayload`                                                                                                                                                                              |
+| `mastra-distinctive.scenario.test.ts`                                         | `activeTools` filtering + output-processor redaction                                                                                                                                                                                                                                                         |
+| `memory-history.scenario.test.ts`                                             | prior thread messages recalled into the next request                                                                                                                                                                                                                                                         |
+| `memory-multi-turn-persistence.scenario.test.ts`                              | multi-turn conversations persist with correct ordering; resource isolation prevents cross-contamination; tool results recalled across turns                                                                                                                                                                  |
+| `working-memory.scenario.test.ts`                                             | working memory persisted in turn 1 and re-injected on a later turn                                                                                                                                                                                                                                           |
+| `input-processor.scenario.test.ts`                                            | input processor redacts the user message before the request                                                                                                                                                                                                                                                  |
+| `prepare-step.scenario.test.ts`                                               | per-step `prepareStep` activeTools override lands in each request                                                                                                                                                                                                                                            |
+| `workspace.scenario.test.ts`                                                  | workspace threaded into tool execution; tool reads a file mid-loop                                                                                                                                                                                                                                           |
+| `skills-integration.scenario.test.ts`                                         | SkillsProcessor discovers real SKILL.md files on disk via Workspace + LocalFilesystem; injects `<available_skills>` XML into system prompt; auto-injects `skill`/`skill_search`/`skill_read` tools; model calls `skill` tool to load instructions mid-loop; missing skills return graceful "not found" error |
+| `skills-same-name-disambiguation.scenario.test.ts`                            | same-named skills in different directories both listed in system prompt; local precedence over external when activated by name; path-based activation bypasses tie-breaking entirely                                                                                                                         |
 
 ### Signals (thread messaging)
 
-| Scenario | Behavior Covered |
-|---|---|
-| `signal-send-message.scenario.test.ts` | `subscribeToThread()` + `sendMessage()` flow: signal accepted with `action: 'wake'`, subscription receives the agent's response text; `sendStateSignal()` with `ifIdle: { behavior: 'persist' }` persists state without waking the agent; signal metadata includes correct `type`, `tagName`, `contents`, and `state` fields |
-| `signal-edge-cases.scenario.test.ts` | multiple subscribers on one thread both receive the same run; unsubscribed subscriber stops receiving messages; `sendStateSignal()` with unchanged `cacheKey` + `contents` is skipped (cache dedup) |
-| `signal-no-subscriber.scenario.test.ts` | `sendMessage()` to an idle, non-subscribed thread still wakes and completes a run (`action: 'wake'`, no subscriber required); `sendStateSignal()` with `ifIdle: { behavior: 'persist' }` persists (`action: 'persist'`, no `runId`) without waking a run |
-| `agents-as-tools.scenario.test.ts` | supervisor delegates to a subagent (`agent-<key>`); result plumbed back |
-| `dynamic-instructions.scenario.test.ts` | instructions resolved from request context land in the system prompt |
-| `provider-error.scenario.test.ts` | provider 500 surfaces an `error` chunk + `finishReason: 'error'` |
-| `guardrail-tripwire.scenario.test.ts` | input-processor `abort()` emits a tripwire and sends no request |
-| `is-task-complete-gating.scenario.test.ts` | failing scorer re-invokes the model with completion feedback; passing scorer halts |
-| `is-task-complete-early.scenario.test.ts` | immediate-pass scorer halts after exactly one model request (no re-invocation) |
-| `text-streaming.scenario.test.ts` | multi-delta text reassembles in order and matches `output.text` exactly |
-| `background-task-tool-level.scenario.test.ts` | tool-level `background: { enabled: true }` emits lifecycle chunks |
-| `background-task-agent-level.scenario.test.ts` | agent-level `agentBackgroundTasks` config overrides tool-level |
-| `background-task-stream-until-idle.scenario.test.ts` | `streamUntilIdle` re-invokes the model after a background task completes |
-| `goal-satisfied.scenario.test.ts` | judge marks objective satisfied; `goal` chunk with `passed: true`; objective marked done |
-| `goal-budget-exhausted.scenario.test.ts` | `maxRuns` reached; `goal` chunk with `maxRunsReached: true`; objective stays paused |
-| `approval-tool-level.scenario.test.ts` | tool-level `requireApproval: true` suspends only that tool |
-| `approval-conditional.scenario.test.ts` | pattern-based `requireToolApproval` function gates matching tools only |
-| `delegation-modify-prompt.scenario.test.ts` | supervisor `onDelegationStart` modifies/rejects subagent prompt; rejection prevents subagent invocation |
-| `delegation-message-filter.scenario.test.ts` | `messageFilter` strips sensitive messages before sharing with subagent; filter receives correct delegation context |
-| `iteration-complete.scenario.test.ts` | `onIterationComplete` receives iteration context with tool calls; early stop via `continue: false`; feedback injection verification |
-| `multi-tool-parallel.scenario.test.ts` | multiple tool calls in one turn execute concurrently; all results collected with correct `tool_call_id` mapping; mixed success/failure handling |
-| `text-streaming.scenario.test.ts` | multi-delta text reassembles in order and matches `output.text`; `text-start`/`text-end` bracket deltas; `step-start`/`step-finish` and `start`/`finish` lifecycle ordering |
-| `abort-signal.scenario.test.ts` | `abortSignal` halts the loop mid-stream; pre-aborted signal prevents the loop from starting |
-| `runtime-context.scenario.test.ts` | `requestContext` passthrough to tool `execute` function; same context shared across multiple tools in one run |
-| `output-step-processor.scenario.test.ts` | `processOutputStep` runs for each step including intermediate tool-call steps; sees `toolCalls` and `stepNumber` |
-| `input-step-processor.scenario.test.ts` | `processInputStep` runs for each step; sees accumulated messages (user + assistant); message count grows across steps |
-| `provider-metadata.scenario.test.ts` | `providerOptions` passthrough to `agent.stream()` without errors; provider-specific metadata flows through the stream pipeline |
-| `request-body-override.scenario.test.ts` | `modelSettings` forwarded to the model request body; `temperature` and other settings land in the request |
-| `toolsets-override.scenario.test.ts` | request-level `toolsets` merge with agent-level tools; toolset tool with same name takes precedence |
-| `tool-lifecycle-hooks.scenario.test.ts` | `onInputAvailable` fires before `execute`; `onOutput` fires after; hook errors don't crash the loop |
-| `tool-streaming.scenario.test.ts` | `context.writer.write()` emits `tool-output` chunks; `context.writer.custom()` emits custom-typed chunks |
-| `observability-context.scenario.test.ts` | tool context includes `tracingContext`; safe access to observability fields without crashing |
-| `dynamic-model.scenario.test.ts` | model resolution from function based on `requestContext`; different models selected per-request |
-| `client-tools.scenario.test.ts` | client tools merge with agent tools; both appear in request; client tools execute successfully |
-| `tool-choice.scenario.test.ts` | `toolChoice` passthrough to model request; `'none'`, `'required'`, and specific tool selection all respected |
-| `structured-output-validation-failure.scenario.test.ts` | schema validation failures emit error chunks with ZodError details; nested field paths in validation errors; valid output parses correctly |
-| `is-task-complete-multiple-scorers.scenario.test.ts` | multiple scorers with `strategy: 'all'` and `strategy: 'any'`; strategy semantics preserved |
-| `processor-retry.scenario.test.ts` | input processors observe/transform messages; output processors observe/transform stream chunks; multiple processors run in sequence |
-| `max-steps-edge-cases.scenario.test.ts` | loop stops exactly at maxSteps boundary; stopWhen can stop before maxSteps; model can finish before maxSteps; maxSteps=1 allows one call; multiple stopWhen conditions use OR logic |
-| `error-processor.scenario.test.ts` | `processAPIError` intercepts 400 errors; receives error context and retry count; can return `{ retry: false }` to propagate error |
-| `on-step-finish.scenario.test.ts` | `onStepFinish` callback fires for each step including intermediate tool-call steps; receives step context |
-| `save-per-step.scenario.test.ts` | `savePerStep: true` persists messages incrementally after each step; messages saved to memory mid-loop |
-| `actor-identity.scenario.test.ts` | `actor` signal forwarded to agent stream; available in tool execution context; can be undefined |
-| `on-finish.scenario.test.ts` | `onFinish` callback fires when execution completes; receives final result with text, steps, toolResults |
-| `workflow-as-tool.scenario.test.ts` | workflows exposed as tools via `workflows` option; workflow executes and result flows back to model; tool name and schema correctly wired |
-| `abort-during-tool-execution.scenario.test.ts` | abort signal propagates to tool execution context; tool can detect abort and bail early; loop does not make additional requests after abort during tool |
-| `error-processor-retry-exhaustion.scenario.test.ts` | `retryCount` increments across multiple retry attempts; processor can exhaust retries based on custom logic; error propagates after exhaustion; processor state persists across attempts |
-| `structured-output-repair.scenario.test.ts` | structured output validation failures emit error chunks; partial JSON repair through streaming; valid output parses correctly after retry |
-| `concurrent-approval.scenario.test.ts` | multiple tool calls requiring approval in single turn; all surface individually and can be approved/declined independently |
-| `memory-thread-switch.scenario.test.ts` | thread switching mid-conversation; conversation histories stay isolated across threads; new thread has no prior history |
-| `nested-tool-calls.scenario.test.ts` | 2-level nested agent delegation (parent → child → grandchild); sequential tool chaining with result flow-through |
-| `tool-runtime-suspension.scenario.test.ts` | tools call `suspend()` mid-execution to request additional data; `tool-call-suspended` chunk emitted; agent continues with resume data after `resumeStream()` |
-| `delegation-complete-bail.scenario.test.ts` | `onDelegationComplete` hook receives context; `bail()` stops loop immediately; no additional delegations after bail (request count stays at 3 vs 4) |
-| `include-subagent-tool-results.scenario.test.ts` | `includeSubAgentToolResultsInModelContext: false` (default) excludes nested tool results from supervisor; `true` includes them (context pollution enabled) |
-| `structured-output-with-tools.scenario.test.ts` | multiple tool results aggregated into structured output; nested schema fields from different tools; schema validation with tool-fed data |
-| `memory-recall-window.scenario.test.ts` | `memoryOptions.lastMessages` limits conversation history recall; `lastMessages: 2` only includes last 2 messages; `lastMessages: false` disables history entirely |
-| `empty-turn.scenario.test.ts` | model returns text immediately without tool calls; loop completes in single request; handles empty string responses gracefully |
-| `abort-structured-output.scenario.test.ts` | abort signal during structured output streaming; handles partial JSON gracefully; completes successfully when abort not triggered |
-| `request-context-isolation.scenario.test.ts` | requestContext preserved across multiple tool execution steps; not mutated between steps; same context in parallel tool execution |
-| `request-context-mutation.scenario.test.ts` | tool mutations to requestContext do NOT persist to subsequent tool calls; each tool execution sees the original requestContext values; documents that requestContext is not a shared mutable state between tools |
-| `on-error-callback.scenario.test.ts` | `onError` callback fires for API errors but not tool execution errors (tool errors are sent back to model for self-correction); interaction with `errorProcessors` |
-| `maxsteps-long-chains.scenario.test.ts` | `maxSteps` caps long tool chains; `stopWhen` and `maxSteps` can both bound execution; model can finish naturally before either limit |
-| `structured-output-error-strategy.scenario.test.ts` | `errorStrategy: 'strict'` emits error chunk on validation failure; `errorStrategy: 'fallback'` returns fallbackValue; `errorStrategy: 'warn'` logs warning without emitting error chunk; valid output succeeds with strict strategy |
+| Scenario                                                | Behavior Covered                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `signal-send-message.scenario.test.ts`                  | `subscribeToThread()` + `sendMessage()` flow: signal accepted with `action: 'wake'`, subscription receives the agent's response text; `sendStateSignal()` with `ifIdle: { behavior: 'persist' }` persists state without waking the agent; signal metadata includes correct `type`, `tagName`, `contents`, and `state` fields |
+| `signal-edge-cases.scenario.test.ts`                    | multiple subscribers on one thread both receive the same run; unsubscribed subscriber stops receiving messages; `sendStateSignal()` with unchanged `cacheKey` + `contents` is skipped (cache dedup)                                                                                                                          |
+| `signal-no-subscriber.scenario.test.ts`                 | `sendMessage()` to an idle, non-subscribed thread still wakes and completes a run (`action: 'wake'`, no subscriber required); `sendStateSignal()` with `ifIdle: { behavior: 'persist' }` persists (`action: 'persist'`, no `runId`) without waking a run                                                                     |
+| `agents-as-tools.scenario.test.ts`                      | supervisor delegates to a subagent (`agent-<key>`); result plumbed back                                                                                                                                                                                                                                                      |
+| `dynamic-instructions.scenario.test.ts`                 | instructions resolved from request context land in the system prompt                                                                                                                                                                                                                                                         |
+| `provider-error.scenario.test.ts`                       | provider 500 surfaces an `error` chunk + `finishReason: 'error'`                                                                                                                                                                                                                                                             |
+| `guardrail-tripwire.scenario.test.ts`                   | input-processor `abort()` emits a tripwire and sends no request                                                                                                                                                                                                                                                              |
+| `is-task-complete-gating.scenario.test.ts`              | failing scorer re-invokes the model with completion feedback; passing scorer halts                                                                                                                                                                                                                                           |
+| `is-task-complete-early.scenario.test.ts`               | immediate-pass scorer halts after exactly one model request (no re-invocation)                                                                                                                                                                                                                                               |
+| `text-streaming.scenario.test.ts`                       | multi-delta text reassembles in order and matches `output.text` exactly                                                                                                                                                                                                                                                      |
+| `background-task-tool-level.scenario.test.ts`           | tool-level `background: { enabled: true }` emits lifecycle chunks                                                                                                                                                                                                                                                            |
+| `background-task-agent-level.scenario.test.ts`          | agent-level `agentBackgroundTasks` config overrides tool-level                                                                                                                                                                                                                                                               |
+| `background-task-stream-until-idle.scenario.test.ts`    | `streamUntilIdle` re-invokes the model after a background task completes                                                                                                                                                                                                                                                     |
+| `goal-satisfied.scenario.test.ts`                       | judge marks objective satisfied; `goal` chunk with `passed: true`; objective marked done                                                                                                                                                                                                                                     |
+| `goal-budget-exhausted.scenario.test.ts`                | `maxRuns` reached; `goal` chunk with `maxRunsReached: true`; objective stays paused                                                                                                                                                                                                                                          |
+| `approval-tool-level.scenario.test.ts`                  | tool-level `requireApproval: true` suspends only that tool                                                                                                                                                                                                                                                                   |
+| `approval-conditional.scenario.test.ts`                 | pattern-based `requireToolApproval` function gates matching tools only                                                                                                                                                                                                                                                       |
+| `delegation-modify-prompt.scenario.test.ts`             | supervisor `onDelegationStart` modifies/rejects subagent prompt; rejection prevents subagent invocation                                                                                                                                                                                                                      |
+| `delegation-message-filter.scenario.test.ts`            | `messageFilter` strips sensitive messages before sharing with subagent; filter receives correct delegation context                                                                                                                                                                                                           |
+| `iteration-complete.scenario.test.ts`                   | `onIterationComplete` receives iteration context with tool calls; early stop via `continue: false`; feedback injection verification                                                                                                                                                                                          |
+| `multi-tool-parallel.scenario.test.ts`                  | multiple tool calls in one turn execute concurrently; all results collected with correct `tool_call_id` mapping; mixed success/failure handling                                                                                                                                                                              |
+| `text-streaming.scenario.test.ts`                       | multi-delta text reassembles in order and matches `output.text`; `text-start`/`text-end` bracket deltas; `step-start`/`step-finish` and `start`/`finish` lifecycle ordering                                                                                                                                                  |
+| `abort-signal.scenario.test.ts`                         | `abortSignal` halts the loop mid-stream; pre-aborted signal prevents the loop from starting                                                                                                                                                                                                                                  |
+| `runtime-context.scenario.test.ts`                      | `requestContext` passthrough to tool `execute` function; same context shared across multiple tools in one run                                                                                                                                                                                                                |
+| `output-step-processor.scenario.test.ts`                | `processOutputStep` runs for each step including intermediate tool-call steps; sees `toolCalls` and `stepNumber`                                                                                                                                                                                                             |
+| `input-step-processor.scenario.test.ts`                 | `processInputStep` runs for each step; sees accumulated messages (user + assistant); message count grows across steps                                                                                                                                                                                                        |
+| `provider-metadata.scenario.test.ts`                    | `providerOptions` passthrough to `agent.stream()` without errors; provider-specific metadata flows through the stream pipeline                                                                                                                                                                                               |
+| `request-body-override.scenario.test.ts`                | `modelSettings` forwarded to the model request body; `temperature` and other settings land in the request                                                                                                                                                                                                                    |
+| `toolsets-override.scenario.test.ts`                    | request-level `toolsets` merge with agent-level tools; toolset tool with same name takes precedence                                                                                                                                                                                                                          |
+| `tool-lifecycle-hooks.scenario.test.ts`                 | `onInputAvailable` fires before `execute`; `onOutput` fires after; hook errors don't crash the loop                                                                                                                                                                                                                          |
+| `tool-streaming.scenario.test.ts`                       | `context.writer.write()` emits `tool-output` chunks; `context.writer.custom()` emits custom-typed chunks                                                                                                                                                                                                                     |
+| `observability-context.scenario.test.ts`                | tool context includes `tracingContext`; safe access to observability fields without crashing                                                                                                                                                                                                                                 |
+| `dynamic-model.scenario.test.ts`                        | model resolution from function based on `requestContext`; different models selected per-request                                                                                                                                                                                                                              |
+| `client-tools.scenario.test.ts`                         | client tools merge with agent tools; both appear in request; client tools execute successfully                                                                                                                                                                                                                               |
+| `tool-choice.scenario.test.ts`                          | `toolChoice` passthrough to model request; `'none'`, `'required'`, and specific tool selection all respected                                                                                                                                                                                                                 |
+| `structured-output-validation-failure.scenario.test.ts` | schema validation failures emit error chunks with ZodError details; nested field paths in validation errors; valid output parses correctly                                                                                                                                                                                   |
+| `is-task-complete-multiple-scorers.scenario.test.ts`    | multiple scorers with `strategy: 'all'` and `strategy: 'any'`; strategy semantics preserved                                                                                                                                                                                                                                  |
+| `processor-retry.scenario.test.ts`                      | input processors observe/transform messages; output processors observe/transform stream chunks; multiple processors run in sequence                                                                                                                                                                                          |
+| `max-steps-edge-cases.scenario.test.ts`                 | loop stops exactly at maxSteps boundary; stopWhen can stop before maxSteps; model can finish before maxSteps; maxSteps=1 allows one call; multiple stopWhen conditions use OR logic                                                                                                                                          |
+| `error-processor.scenario.test.ts`                      | `processAPIError` intercepts 400 errors; receives error context and retry count; can return `{ retry: false }` to propagate error                                                                                                                                                                                            |
+| `on-step-finish.scenario.test.ts`                       | `onStepFinish` callback fires for each step including intermediate tool-call steps; receives step context                                                                                                                                                                                                                    |
+| `save-per-step.scenario.test.ts`                        | `savePerStep: true` persists messages incrementally after each step; messages saved to memory mid-loop                                                                                                                                                                                                                       |
+| `actor-identity.scenario.test.ts`                       | `actor` signal forwarded to agent stream; available in tool execution context; can be undefined                                                                                                                                                                                                                              |
+| `on-finish.scenario.test.ts`                            | `onFinish` callback fires when execution completes; receives final result with text, steps, toolResults                                                                                                                                                                                                                      |
+| `workflow-as-tool.scenario.test.ts`                     | workflows exposed as tools via `workflows` option; workflow executes and result flows back to model; tool name and schema correctly wired                                                                                                                                                                                    |
+| `abort-during-tool-execution.scenario.test.ts`          | abort signal propagates to tool execution context; tool can detect abort and bail early; loop does not make additional requests after abort during tool                                                                                                                                                                      |
+| `error-processor-retry-exhaustion.scenario.test.ts`     | `retryCount` increments across multiple retry attempts; processor can exhaust retries based on custom logic; error propagates after exhaustion; processor state persists across attempts                                                                                                                                     |
+| `structured-output-repair.scenario.test.ts`             | structured output validation failures emit error chunks; partial JSON repair through streaming; valid output parses correctly after retry                                                                                                                                                                                    |
+| `concurrent-approval.scenario.test.ts`                  | multiple tool calls requiring approval in single turn; all surface individually and can be approved/declined independently                                                                                                                                                                                                   |
+| `memory-thread-switch.scenario.test.ts`                 | thread switching mid-conversation; conversation histories stay isolated across threads; new thread has no prior history                                                                                                                                                                                                      |
+| `nested-tool-calls.scenario.test.ts`                    | 2-level nested agent delegation (parent → child → grandchild); sequential tool chaining with result flow-through                                                                                                                                                                                                             |
+| `tool-runtime-suspension.scenario.test.ts`              | tools call `suspend()` mid-execution to request additional data; `tool-call-suspended` chunk emitted; agent continues with resume data after `resumeStream()`                                                                                                                                                                |
+| `delegation-complete-bail.scenario.test.ts`             | `onDelegationComplete` hook receives context; `bail()` stops loop immediately; no additional delegations after bail (request count stays at 3 vs 4)                                                                                                                                                                          |
+| `include-subagent-tool-results.scenario.test.ts`        | `includeSubAgentToolResultsInModelContext: false` (default) excludes nested tool results from supervisor; `true` includes them (context pollution enabled)                                                                                                                                                                   |
+| `structured-output-with-tools.scenario.test.ts`         | multiple tool results aggregated into structured output; nested schema fields from different tools; schema validation with tool-fed data                                                                                                                                                                                     |
+| `memory-recall-window.scenario.test.ts`                 | `memoryOptions.lastMessages` limits conversation history recall; `lastMessages: 2` only includes last 2 messages; `lastMessages: false` disables history entirely                                                                                                                                                            |
+| `empty-turn.scenario.test.ts`                           | model returns text immediately without tool calls; loop completes in single request; handles empty string responses gracefully                                                                                                                                                                                               |
+| `abort-structured-output.scenario.test.ts`              | abort signal during structured output streaming; handles partial JSON gracefully; completes successfully when abort not triggered                                                                                                                                                                                            |
+| `request-context-isolation.scenario.test.ts`            | requestContext preserved across multiple tool execution steps; not mutated between steps; same context in parallel tool execution                                                                                                                                                                                            |
+| `request-context-mutation.scenario.test.ts`             | tool mutations to requestContext do NOT persist to subsequent tool calls; each tool execution sees the original requestContext values; documents that requestContext is not a shared mutable state between tools                                                                                                             |
+| `on-error-callback.scenario.test.ts`                    | `onError` callback fires for API errors but not tool execution errors (tool errors are sent back to model for self-correction); interaction with `errorProcessors`                                                                                                                                                           |
+| `maxsteps-long-chains.scenario.test.ts`                 | `maxSteps` caps long tool chains; `stopWhen` and `maxSteps` can both bound execution; model can finish naturally before either limit                                                                                                                                                                                         |
+| `structured-output-error-strategy.scenario.test.ts`     | `errorStrategy: 'strict'` emits error chunk on validation failure; `errorStrategy: 'fallback'` returns fallbackValue; `errorStrategy: 'warn'` logs warning without emitting error chunk; valid output succeeds with strict strategy                                                                                          |
 
 ## Workflows-as-tools
 
@@ -480,20 +498,20 @@ these anti-patterns (all of which were found and removed during a test-quality a
 The following documented features are either infeasible in AIMock's HTTP-scenario model or
 already have robust, comprehensive unit tests at the appropriate layer:
 
-| Feature | Justification |
-| --- | --- |
-| **Skills integration (on-demand discovery)** | On-demand skill discovery via SkillSearchProcessor is already well-tested in `skills-with-custom-processors.test.ts` (595 lines), `skills-activation-persistence.test.ts` (320 lines), `skills.test.ts`, `skill-search.test.ts`. Eager discovery is now covered by `skills-integration.scenario.test.ts`. |
-| **Provider retry with maxRetries** | Retry logic tested at processor level: `stream-error-retry-processor.test.ts` (171 lines). AIMock HTTP scenarios don't model p-retry behavior well. |
-| **Multi-model fallback** | Already has comprehensive unit tests: `credential-error-fallback.test.ts` (433 lines, 8+ tests), `per-model-fallback-settings.test.ts`. |
-| **TokenLimiterProcessor** | Already has comprehensive unit tests: `token-limiter.test.ts` (1229 lines, 96+ tests). |
-| **Channels (Slack/Discord/Telegram)** | External platform adapters (`@chat-adapter/*`), not part of core loop. Requires webhook infrastructure. |
-| **Agent networks** | Deprecated in favor of supervisor agents (already covered by delegation scenarios). |
-| **Voice (adding-voice)** | Audio I/O layer (`speak/listen/getSpeakers`), not part of HTTP-based agentic loop. |
-| **SDK agents (Claude/Cursor/OpenAI)** | External SDK runtimes (`@mastra/claude`, `@mastra/cursor`, `@mastra/openai`), not part of core loop. |
-| **Code mode** | Requires sandbox infrastructure (`LocalSandbox`, workspace sandbox). Alpha/experimental feature. |
-| **A2A / ACP protocols** | Attempted concrete scenario (Round 18): A2AAgent requires mocking `global.fetch` for agent card discovery + JSON-RPC message/send, but AIMock intercepts the same `fetch` for LLM provider calls, causing fixture conflicts. The A2A protocol's task/message model and streaming semantics differ fundamentally from OpenAI chat completions. Already has comprehensive unit tests: `a2a-agent.test.ts` (824 lines, 8+ tests covering agent card fetch, task lifecycle, streaming, error handling). |
-| **Semantic recall** | Requires vector database infrastructure (embedder + vectorDb). `MockMemory` does not support semantic recall. |
-| **Signal providers (webhooks/polling)** | External event sources (`SignalProvider.poll()` / `handleWebhook()`) require HTTP webhook infrastructure. The signal *API* itself (subscribeToThread/sendMessage/sendStateSignal) is now covered by `signal-send-message.scenario.test.ts`. |
+| Feature                                      | Justification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Skills integration (on-demand discovery)** | On-demand skill discovery via SkillSearchProcessor is already well-tested in `skills-with-custom-processors.test.ts` (595 lines), `skills-activation-persistence.test.ts` (320 lines), `skills.test.ts`, `skill-search.test.ts`. Eager discovery is now covered by `skills-integration.scenario.test.ts`.                                                                                                                                                                                           |
+| **Provider retry with maxRetries**           | Retry logic tested at processor level: `stream-error-retry-processor.test.ts` (171 lines). AIMock HTTP scenarios don't model p-retry behavior well.                                                                                                                                                                                                                                                                                                                                                 |
+| **Multi-model fallback**                     | Already has comprehensive unit tests: `credential-error-fallback.test.ts` (433 lines, 8+ tests), `per-model-fallback-settings.test.ts`.                                                                                                                                                                                                                                                                                                                                                             |
+| **TokenLimiterProcessor**                    | Already has comprehensive unit tests: `token-limiter.test.ts` (1229 lines, 96+ tests).                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **Channels (Slack/Discord/Telegram)**        | External platform adapters (`@chat-adapter/*`), not part of core loop. Requires webhook infrastructure.                                                                                                                                                                                                                                                                                                                                                                                             |
+| **Agent networks**                           | Deprecated in favor of supervisor agents (already covered by delegation scenarios).                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Voice (adding-voice)**                     | Audio I/O layer (`speak/listen/getSpeakers`), not part of HTTP-based agentic loop.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **SDK agents (Claude/Cursor/OpenAI)**        | External SDK runtimes (`@mastra/claude`, `@mastra/cursor`, `@mastra/openai`), not part of core loop.                                                                                                                                                                                                                                                                                                                                                                                                |
+| **Code mode**                                | Requires sandbox infrastructure (`LocalSandbox`, workspace sandbox). Alpha/experimental feature.                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **A2A / ACP protocols**                      | Attempted concrete scenario (Round 18): A2AAgent requires mocking `global.fetch` for agent card discovery + JSON-RPC message/send, but AIMock intercepts the same `fetch` for LLM provider calls, causing fixture conflicts. The A2A protocol's task/message model and streaming semantics differ fundamentally from OpenAI chat completions. Already has comprehensive unit tests: `a2a-agent.test.ts` (824 lines, 8+ tests covering agent card fetch, task lifecycle, streaming, error handling). |
+| **Semantic recall**                          | Requires vector database infrastructure (embedder + vectorDb). `MockMemory` does not support semantic recall.                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Signal providers (webhooks/polling)**      | External event sources (`SignalProvider.poll()` / `handleWebhook()`) require HTTP webhook infrastructure. The signal _API_ itself (subscribeToThread/sendMessage/sendStateSignal) is now covered by `signal-send-message.scenario.test.ts`.                                                                                                                                                                                                                                                         |
 
 ### Regression-injection proof
 
@@ -529,6 +547,7 @@ UI check.
 multi-step composition regressions that unit tests miss.
 
 **Final Deliverables:**
+
 - **83 scenario files** containing **179 passing tests**
 - Coverage of **20 feature categories** documented in `docs/src/content/en/docs/agents/` and `docs/src/content/en/docs/workspace/`
 - **AIMock harness** (`aimock-scenario.ts`, `types.ts`) supporting complex multi-turn loops,
@@ -539,6 +558,7 @@ multi-step composition regressions that unit tests miss.
 - **CHANGELOG entry** documenting the initiative
 
 **Regression Classes Covered:**
+
 1. Tool-result plumbing and cross-turn message ordering
 2. Stop conditions (`stepCountIs`, `maxSteps`, custom predicates)
 3. Tool execution errors and edge cases
@@ -574,6 +594,7 @@ or already have robust unit tests at the appropriate layer. Justifications docum
 "Features Intentionally Not Covered" section above.
 
 **Test Suite Health:**
+
 - All 174 scenarios pass
 - Typecheck clean (`tsc --noEmit`)
 - Zero changes to core loop source code (harness + scenarios only)
@@ -581,6 +602,7 @@ or already have robust unit tests at the appropriate layer. Justifications docum
 
 **Comprehensive Audit (Round 17):**
 Final audit of all 18 agent feature docs confirmed:
+
 - Every core loop feature has AIMock scenario coverage
 - All remaining documented features are external integrations (channels, A2A/ACP, SDK agents),
   infrastructure-heavy (semantic recall, code mode), or already have robust unit tests
@@ -592,4 +614,3 @@ The core agentic loop now has battle-tested coverage of every major agent featur
 in the official docs. Regressions in multi-step composition (tool-result plumbing, cross-turn
 ordering, stop conditions) that historically surfaced only in Mastra Code are now caught at
 the unit level by these AIMock scenarios.
-

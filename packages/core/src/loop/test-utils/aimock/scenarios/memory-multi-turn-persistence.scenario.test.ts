@@ -76,19 +76,19 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
 
     expect(requests).toHaveLength(1);
     const serialized = JSON.stringify(requests[0]?.body?.messages ?? []);
-    
+
     // User messages should be present in the conversation history
     expect(serialized).toContain('My name is Alice');
     expect(serialized).toContain('I am 28 years old');
     expect(serialized).toContain('Tell me what you know about me');
-    
+
     // Messages should be in correct order (earlier turns before later turns)
     const alicePos = serialized.indexOf('My name is Alice');
     const agePos = serialized.indexOf('I am 28 years old');
     const questionPos = serialized.indexOf('Tell me what you know');
     expect(alicePos).toBeLessThan(agePos);
     expect(agePos).toBeLessThan(questionPos);
-    
+
     // Should have system message + 3 user messages + 2 assistant messages (even if empty)
     const messages = requests[0]?.body?.messages ?? [];
     expect(messages.length).toBeGreaterThanOrEqual(5);
@@ -96,11 +96,11 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
 
   it('isolates conversations by resourceId', async () => {
     const memory = new MockMemory();
-    
+
     // User 1's conversation
     const thread1 = 'user1-thread';
     const resource1 = 'user-1';
-    
+
     await memory.saveThread({
       thread: {
         id: thread1,
@@ -126,7 +126,7 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
     // User 2's conversation
     const thread2 = 'user2-thread';
     const resource2 = 'user-2';
-    
+
     await memory.saveThread({
       thread: {
         id: thread2,
@@ -170,10 +170,10 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
     });
 
     const serialized = JSON.stringify(requests[0]?.body?.messages ?? []);
-    
+
     // User 1's data should be present
     expect(serialized).toContain('PIZZA_USER1');
-    
+
     // User 2's data should NOT be present (resource isolation)
     expect(serialized).not.toContain('SUSHI_USER2');
   });
@@ -216,18 +216,24 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
         },
       },
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', userMessage: /What is the weather/ }, {
-          toolCalls: [
-            {
-              id: 'call_weather_1',
-              name: 'get_weather',
-              arguments: { city: 'Tokyo' },
-            },
-          ],
-        });
-        llm.on({ endpoint: 'chat', hasToolResult: true }, {
-          content: 'The weather in Tokyo is sunny and 22 degrees.',
-        });
+        llm.on(
+          { endpoint: 'chat', userMessage: /What is the weather/ },
+          {
+            toolCalls: [
+              {
+                id: 'call_weather_1',
+                name: 'get_weather',
+                arguments: { city: 'Tokyo' },
+              },
+            ],
+          },
+        );
+        llm.on(
+          { endpoint: 'chat', hasToolResult: true },
+          {
+            content: 'The weather in Tokyo is sunny and 22 degrees.',
+          },
+        );
       },
     });
 
@@ -248,13 +254,13 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
     });
 
     const serialized = JSON.stringify(requests[0]?.body?.messages ?? []);
-    
+
     // Tool result should be in history with full details
     expect(serialized).toContain('temperature');
     expect(serialized).toContain('22');
     expect(serialized).toContain('sunny');
     expect(serialized).toContain('Tokyo');
-    
+
     // Tool call structure should be present (even if name/args are empty due to memory serialization)
     expect(serialized).toContain('tool_calls');
     expect(serialized).toContain('call_weather_1');

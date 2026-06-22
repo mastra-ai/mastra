@@ -20,7 +20,12 @@ describe('AIMock loop scenario: streamUntilIdle re-invokes on background task co
   it('re-invokes the model after a background task completes', async () => {
     const memory = new MockMemory();
 
-    const { output, mastra, agent, llm: mockInstance } = await runLoopScenario({
+    const {
+      output,
+      mastra,
+      agent,
+      llm: mockInstance,
+    } = await runLoopScenario({
       llm: getMock(),
       prompt: 'Do background research',
       memory,

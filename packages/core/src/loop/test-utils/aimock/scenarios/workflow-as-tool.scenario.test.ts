@@ -70,18 +70,14 @@ describe('AIMock loop scenario: workflow as tool', () => {
     expect(toolNames).toContain('workflow-researchWorkflow');
 
     // Find the workflow tool definition
-    const workflowTool = turn1Request?.body?.tools?.find(
-      (t: any) => t.function?.name === 'workflow-researchWorkflow',
-    );
+    const workflowTool = turn1Request?.body?.tools?.find((t: any) => t.function?.name === 'workflow-researchWorkflow');
     expect(workflowTool).toBeDefined();
     expect(workflowTool?.function?.description).toContain('research');
 
     // Turn 2 request should contain the workflow result
     const turn2Request = requests[1];
     const messages = turn2Request?.body?.messages || [];
-    const toolResultMessage = messages.find(
-      (m: any) => m.role === 'tool' && m.tool_call_id === 'call_workflow',
-    );
+    const toolResultMessage = messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_workflow');
     expect(toolResultMessage).toBeDefined();
     expect(toolResultMessage?.content).toContain('quantum computing');
     expect(toolResultMessage?.content).toContain('detailed findings');
@@ -126,16 +122,15 @@ describe('AIMock loop scenario: workflow as tool', () => {
 
     // Workflow tool should have correct input schema
     const request = requests[0];
-    const workflowTool = request?.body?.tools?.find(
-      (t: any) => t.function?.name === 'workflow-analysisWorkflow',
-    );
+    const workflowTool = request?.body?.tools?.find((t: any) => t.function?.name === 'workflow-analysisWorkflow');
     expect(workflowTool).toBeDefined();
 
     // Parameters may already be an object
-    const inputSchema = typeof workflowTool?.function?.parameters === 'string'
-      ? JSON.parse(workflowTool.function.parameters)
-      : workflowTool?.function?.parameters;
-    
+    const inputSchema =
+      typeof workflowTool?.function?.parameters === 'string'
+        ? JSON.parse(workflowTool.function.parameters)
+        : workflowTool?.function?.parameters;
+
     // Workflow tools wrap the input schema in an inputData property
     expect(inputSchema.properties).toHaveProperty('inputData');
     const inputDataSchema = inputSchema.properties.inputData;

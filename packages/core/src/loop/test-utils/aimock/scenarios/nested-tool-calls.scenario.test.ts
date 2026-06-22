@@ -79,7 +79,8 @@ describe('AIMock loop scenario: nested/recursive tool calls', () => {
 
         // Researcher's turn: produce actual research content.
         llm.onMessage(/quantum computing fundamentals/i, {
-          content: 'Quantum computing uses qubits instead of classical bits. Key areas include: superposition, entanglement, and quantum error correction.',
+          content:
+            'Quantum computing uses qubits instead of classical bits. Key areas include: superposition, entanglement, and quantum error correction.',
         });
 
         // Planner turn 2: receives researcher result, produces summary.
@@ -91,7 +92,10 @@ describe('AIMock loop scenario: nested/recursive tool calls', () => {
         // Parent turn 2: receives planner result, produces final output.
         llm.on(
           { endpoint: 'chat', toolCallId: 'call_planner', hasToolResult: true },
-          { content: 'The planner reports: Research complete. Key findings include qubits, superposition, entanglement, and error correction.' },
+          {
+            content:
+              'The planner reports: Research complete. Key findings include qubits, superposition, entanglement, and error correction.',
+          },
         );
       },
     });
@@ -110,8 +114,7 @@ describe('AIMock loop scenario: nested/recursive tool calls', () => {
     // carry the planner's delegated prompt as a user message.
     const plannerInvocation = requests.find(req =>
       (req.body?.messages ?? []).some(
-        (m: any) =>
-          m.role === 'user' && JSON.stringify(m.content).includes('Plan research on quantum computing'),
+        (m: any) => m.role === 'user' && JSON.stringify(m.content).includes('Plan research on quantum computing'),
       ),
     );
     expect(plannerInvocation).toBeDefined();
@@ -121,8 +124,7 @@ describe('AIMock loop scenario: nested/recursive tool calls', () => {
     // full parent → planner → researcher chain was traversed, not short-circuited.
     const researcherInvocation = requests.find(req =>
       (req.body?.messages ?? []).some(
-        (m: any) =>
-          m.role === 'user' && JSON.stringify(m.content).includes('Research quantum computing fundamentals'),
+        (m: any) => m.role === 'user' && JSON.stringify(m.content).includes('Research quantum computing fundamentals'),
       ),
     );
     expect(researcherInvocation).toBeDefined();
@@ -201,18 +203,14 @@ describe('AIMock loop scenario: nested/recursive tool calls', () => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_fetch', name: 'fetch_data', arguments: { source: 'API' } },
-            ],
+            toolCalls: [{ id: 'call_fetch', name: 'fetch_data', arguments: { source: 'API' } }],
           },
         );
         // Turn 2: transform the fetched data.
         llm.on(
           { endpoint: 'chat', hasToolResult: true, toolCallId: 'call_fetch' },
           {
-            toolCalls: [
-              { id: 'call_transform', name: 'transform_data', arguments: { data: 'RAW_DATA_FROM_API' } },
-            ],
+            toolCalls: [{ id: 'call_transform', name: 'transform_data', arguments: { data: 'RAW_DATA_FROM_API' } }],
           },
         );
         // Turn 3: format the transformed data.

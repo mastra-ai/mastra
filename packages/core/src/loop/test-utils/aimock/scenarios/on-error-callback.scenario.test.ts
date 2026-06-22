@@ -16,10 +16,13 @@ describe('AIMock loop scenario: onError callback', () => {
         errorMessage = typeof error === 'string' ? error : error.message;
       },
       fixtures: llm => {
-        llm.on({ endpoint: 'chat' }, {
-          error: { message: 'Rate limit exceeded', type: 'rate_limit_error', code: 'rate_limit_exceeded' },
-          status: 429,
-        });
+        llm.on(
+          { endpoint: 'chat' },
+          {
+            error: { message: 'Rate limit exceeded', type: 'rate_limit_error', code: 'rate_limit_exceeded' },
+            status: 429,
+          },
+        );
       },
     });
 
@@ -46,10 +49,13 @@ describe('AIMock loop scenario: onError callback', () => {
         onErrorFired = true;
       },
       fixtures: llm => {
-        llm.on({ endpoint: 'chat' }, {
-          error: { message: 'Bad request', type: 'invalid_request_error', code: 'bad_request' },
-          status: 400,
-        });
+        llm.on(
+          { endpoint: 'chat' },
+          {
+            error: { message: 'Bad request', type: 'invalid_request_error', code: 'bad_request' },
+            status: 400,
+          },
+        );
       },
     });
 
@@ -82,15 +88,10 @@ describe('AIMock loop scenario: onError callback', () => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_fail', name: 'failing-tool', arguments: {} },
-            ],
+            toolCalls: [{ id: 'call_fail', name: 'failing-tool', arguments: {} }],
           },
         );
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Handled tool error' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Handled tool error' });
       },
     });
 

@@ -56,7 +56,11 @@ describe('AIMock loop scenario: conditional requireToolApproval function', () =>
     // Turn 1: model calls read_file (no approval), list_files (no approval),
     // delete_file (approval), delete_all (approval).
     // Turn 2: after all execute, model produces final text.
-    const { output, approvals, requests: _requests } = await runApprovalScenario({
+    const {
+      output,
+      approvals,
+      requests: _requests,
+    } = await runApprovalScenario({
       llm: getMock(),
       prompt: 'Read files, list them, then delete file.txt and all others.',
       tools: {

@@ -54,9 +54,7 @@ describe('AIMock loop scenario: onDelegationComplete bail()', () => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } },
-            ],
+            toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Write something.' } }],
           },
         );
         // Subagent turn: receives the delegation and responds.
@@ -65,10 +63,7 @@ describe('AIMock loop scenario: onDelegationComplete bail()', () => {
           { content: 'Here is what you requested.' },
         );
         // Supervisor turn 2: wraps up.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Writer completed the task.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Writer completed the task.' });
       },
     });
 
@@ -135,16 +130,11 @@ describe('AIMock loop scenario: onDelegationComplete bail()', () => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_agent1', name: 'agent-agent1', arguments: { prompt: 'Task 1' } },
-            ],
+            toolCalls: [{ id: 'call_agent1', name: 'agent-agent1', arguments: { prompt: 'Task 1' } }],
           },
         );
         // Agent1 turn: completes successfully.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false, sequenceIndex: 1 },
-          { content: 'Agent1 completed task 1.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: false, sequenceIndex: 1 }, { content: 'Agent1 completed task 1.' });
         // Supervisor would normally delegate to agent2 next, but bail() should prevent it.
         // We don't script agent2 because bail() should stop the loop.
       },
@@ -157,11 +147,9 @@ describe('AIMock loop scenario: onDelegationComplete bail()', () => {
     expect(additionalDelegations).toBe(0);
 
     // Verify no request was made to agent2
-    const agent2Requests = requests.filter((r: any) =>
-      JSON.stringify(r.body?.messages).includes('agent-agent2')
-    );
+    const agent2Requests = requests.filter((r: any) => JSON.stringify(r.body?.messages).includes('agent-agent2'));
     expect(agent2Requests.length).toBe(0);
-    
+
     // Bail should stop the loop immediately — supervisor turn 1 (delegates to agent1),
     // agent1 turn (completes), supervisor turn 2 (sees agent1 result, bail stops loop)
     // Without bail, the loop would continue to a 4th iteration

@@ -56,9 +56,10 @@ describe('AIMock loop scenario: cross-turn message ordering', () => {
     expect(requests).toHaveLength(2);
 
     const turn2Messages = requests[1]?.body?.messages ?? [];
-    const toolMessages = turn2Messages.filter(
-      message => (message as { role?: string }).role === 'tool',
-    ) as Array<{ tool_call_id?: string; content?: unknown }>;
+    const toolMessages = turn2Messages.filter(message => (message as { role?: string }).role === 'tool') as Array<{
+      tool_call_id?: string;
+      content?: unknown;
+    }>;
 
     // Both tool results must round-trip into the next request, each keyed to
     // its originating tool call id.

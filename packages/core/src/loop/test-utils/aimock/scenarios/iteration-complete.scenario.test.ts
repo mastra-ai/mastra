@@ -43,9 +43,7 @@ describe('AIMock loop scenario: onIterationComplete hook', () => {
         llm.on(
           { endpoint: 'chat', sequenceIndex: 0 },
           {
-            toolCalls: [
-              { id: 'call_add_1', name: 'add', arguments: { a: 2, b: 3 } },
-            ],
+            toolCalls: [{ id: 'call_add_1', name: 'add', arguments: { a: 2, b: 3 } }],
           },
         );
         // Second iteration: summarize the result (match on toolCallId)
@@ -105,21 +103,13 @@ describe('AIMock loop scenario: onIterationComplete hook', () => {
         llm.on(
           { endpoint: 'chat', sequenceIndex: 0 },
           {
-            toolCalls: [
-              { id: 'call_search_0', name: 'search', arguments: { query: 'query 0' } },
-            ],
+            toolCalls: [{ id: 'call_search_0', name: 'search', arguments: { query: 'query 0' } }],
           },
         );
         // Second iteration: return text (should stop here)
-        llm.on(
-          { endpoint: 'chat', toolCallId: 'call_search_0', hasToolResult: true },
-          { content: 'Response 1' },
-        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call_search_0', hasToolResult: true }, { content: 'Response 1' });
         // Third+ iterations: should not be reached
-        llm.on(
-          { endpoint: 'chat', sequenceIndex: 2, hasToolResult: true },
-          { content: 'Response 2' },
-        );
+        llm.on({ endpoint: 'chat', sequenceIndex: 2, hasToolResult: true }, { content: 'Response 2' });
       },
     });
 
@@ -167,9 +157,7 @@ describe('AIMock loop scenario: onIterationComplete hook', () => {
         llm.on(
           { endpoint: 'chat', sequenceIndex: 0 },
           {
-            toolCalls: [
-              { id: 'call_search_1', name: 'search', arguments: { query: 'test query' } },
-            ],
+            toolCalls: [{ id: 'call_search_1', name: 'search', arguments: { query: 'test query' } }],
           },
         );
         // Second iteration: return final text

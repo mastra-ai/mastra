@@ -88,10 +88,7 @@ describe('AIMock loop scenario: resumeStream() with resumeData', () => {
     expect(resumeDataReceived).toBeUndefined();
 
     // Resume: call agent.resumeStream with the runId and resume data
-    const resumeOutput = await shared.agent.resumeStream(
-      { name: 'Dero Israel' },
-      { runId: output.runId },
-    );
+    const resumeOutput = await shared.agent.resumeStream({ name: 'Dero Israel' }, { runId: output.runId });
 
     // Consume the resume stream
     for await (const _chunk of resumeOutput.fullStream) {

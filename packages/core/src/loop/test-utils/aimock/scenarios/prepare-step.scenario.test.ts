@@ -43,9 +43,12 @@ describe('AIMock loop scenario: prepareStep per-step overrides', () => {
       }),
       fixtures: llm => {
         // Step 0: call tool_a. Step 1: receive the result and finish.
-        llm.on({ endpoint: 'chat', hasToolResult: false }, {
-          toolCalls: [{ id: 'call_a', name: 'tool_a', arguments: {} }],
-        });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'call_a', name: 'tool_a', arguments: {} }],
+          },
+        );
         llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
       },
     });

@@ -77,10 +77,7 @@ describe('AIMock scenario: signal delivery without subscriber', () => {
       threadId,
       resourceId,
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          { content: 'Woken without a subscriber' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: false }, { content: 'Woken without a subscriber' });
       },
     });
 

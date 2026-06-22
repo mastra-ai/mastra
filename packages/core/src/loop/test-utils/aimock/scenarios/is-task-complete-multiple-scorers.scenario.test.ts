@@ -60,10 +60,7 @@ describe('AIMock loop scenario: isTaskComplete with multiple scorers', () => {
           { endpoint: 'chat', hasToolResult: false },
           { toolCalls: [{ id: 'call_tick_1', name: 'tick', arguments: {} }] },
         );
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Task complete.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Task complete.' });
       },
     });
 
@@ -78,7 +75,7 @@ describe('AIMock loop scenario: isTaskComplete with multiple scorers', () => {
     // Final chunk should show passed=true (both scorers passed)
     const finalChunk = taskCompleteChunks[taskCompleteChunks.length - 1] as any;
     expect(finalChunk.payload.passed).toBe(true);
-    
+
     // Should include results from both scorers
     expect(finalChunk.payload.results).toHaveLength(2);
   });
@@ -118,10 +115,7 @@ describe('AIMock loop scenario: isTaskComplete with multiple scorers', () => {
           { endpoint: 'chat', hasToolResult: false },
           { toolCalls: [{ id: 'call_tick_1', name: 'tick', arguments: {} }] },
         );
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'Task complete.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Task complete.' });
       },
     });
 
@@ -132,7 +126,7 @@ describe('AIMock loop scenario: isTaskComplete with multiple scorers', () => {
     // Final chunk should show passed=true (lenient scorer passed)
     const finalChunk = taskCompleteChunks[taskCompleteChunks.length - 1] as any;
     expect(finalChunk.payload.passed).toBe(true);
-    
+
     // Should include results from both scorers
     expect(finalChunk.payload.results).toHaveLength(2);
   });
@@ -168,10 +162,7 @@ describe('AIMock loop scenario: isTaskComplete with multiple scorers', () => {
         ],
       },
       fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat' },
-          { content: 'Task attempt.' },
-        );
+        llm.on({ endpoint: 'chat' }, { content: 'Task attempt.' });
       },
     });
 
@@ -182,7 +173,7 @@ describe('AIMock loop scenario: isTaskComplete with multiple scorers', () => {
     // Final chunk should show passed=false (one scorer failed)
     const finalChunk = taskCompleteChunks[taskCompleteChunks.length - 1] as any;
     expect(finalChunk.payload.passed).toBe(false);
-    
+
     // Should include results from both scorers
     expect(finalChunk.payload.results).toHaveLength(2);
   });

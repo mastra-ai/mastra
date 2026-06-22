@@ -73,9 +73,7 @@ describe('AIMock loop scenario: requestContext mutation behavior', () => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
           {
-            toolCalls: [
-              { id: 'call_mutate', name: 'mutate', arguments: { value: 'step1-value' } },
-            ],
+            toolCalls: [{ id: 'call_mutate', name: 'mutate', arguments: { value: 'step1-value' } }],
           },
         );
         // Turn 2: call read tool (has tool result from mutate)
@@ -158,11 +156,7 @@ describe('AIMock loop scenario: requestContext mutation behavior', () => {
 
     // Each call saw the original value (0) and tried to increment to 1
     // Mutations did NOT accumulate across calls
-    expect(mutations).toEqual([
-      'saw:0,set:1',
-      'saw:0,set:1',
-      'saw:0,set:1',
-    ]);
+    expect(mutations).toEqual(['saw:0,set:1', 'saw:0,set:1', 'saw:0,set:1']);
 
     // The original requestContext remains unchanged
     expect(requestContext.get('count')).toBe('0');

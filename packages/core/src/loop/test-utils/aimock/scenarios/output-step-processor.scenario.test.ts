@@ -57,10 +57,7 @@ describe('AIMock loop scenario: output step processor (per-step)', () => {
           },
         );
         // Turn 2: final text
-        llm.on(
-          { endpoint: 'chat', hasToolResult: true },
-          { content: 'The value for alpha is VALUE_FOR_alpha.' },
-        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The value for alpha is VALUE_FOR_alpha.' });
       },
     });
 
