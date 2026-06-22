@@ -1,6 +1,5 @@
 import {
   Button,
-  ErrorBoundary,
   LogoWithoutText,
   MainSidebar,
   MainSidebarProvider,
@@ -10,6 +9,7 @@ import {
   TooltipProvider,
   useMainSidebar,
 } from '@mastra/playground-ui';
+import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { Search } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';

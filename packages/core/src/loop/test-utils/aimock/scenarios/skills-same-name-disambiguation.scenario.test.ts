@@ -2,10 +2,10 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import { LocalFilesystem } from '../../../../workspace/filesystem';
 import { Workspace } from '../../../../workspace/workspace';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: same-named skills tie-breaking and path-based disambiguation.
@@ -38,7 +38,7 @@ description: External package brand guidelines
 Use generic blue: #0000FF
 `;
 
-describe('AIMock scenario: skills same-name disambiguation', () => {
+describeForAllEngines('AIMock scenario: skills same-name disambiguation', engine => {
   const getMock = useLoopScenarioAimock();
   let tempDir: string;
   let workspace: Workspace;
@@ -68,6 +68,7 @@ describe('AIMock scenario: skills same-name disambiguation', () => {
 
   it('lists all same-named skills in system prompt with paths', async () => {
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'What brand guidelines are available?',
       workspace,
@@ -103,6 +104,7 @@ describe('AIMock scenario: skills same-name disambiguation', () => {
 
   it('local skill takes precedence when activated by name', async () => {
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Load the brand-guidelines skill.',
       workspace,
@@ -152,6 +154,7 @@ describe('AIMock scenario: skills same-name disambiguation', () => {
 
   it('path-based activation bypasses tie-breaking', async () => {
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Load the external brand guidelines.',
       workspace,

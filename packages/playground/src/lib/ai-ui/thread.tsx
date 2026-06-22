@@ -1,5 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { Avatar, Button, ButtonsGroup, cn, PendingIndicator, ScrollArea, useAutoscroll } from '@mastra/playground-ui';
+import { Avatar, Button, ButtonsGroup, cn, ScrollArea } from '@mastra/playground-ui';
+import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
+import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
 import type { MessageFactoryPart } from '@mastra/react';
 import { CLIENT_MESSAGE_ID_KEY, useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
