@@ -511,6 +511,11 @@ export class Memory extends MastraMemory {
         );
       }
 
+      const semanticConfig = typeof config.semanticRecall === 'object' ? config.semanticRecall : undefined;
+      const threshold = semanticConfig?.threshold;
+      const filteredVectorResults =
+        threshold !== undefined ? vectorResults.filter(r => r.score >= threshold) : vectorResults;
+
       // Get raw messages from storage
       const memoryStore = await this.getMemoryStore();
 
@@ -525,9 +530,9 @@ export class Memory extends MastraMemory {
         page,
         orderBy: effectiveOrderBy,
         filter,
-        ...(vectorResults?.length
+        ...(filteredVectorResults?.length
           ? {
-              include: vectorResults.map(r => ({
+              include: filteredVectorResults.map(r => ({
                 id: r.metadata?.message_id,
                 threadId: r.metadata?.thread_id,
                 withNextMessages:

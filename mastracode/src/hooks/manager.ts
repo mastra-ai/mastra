@@ -20,16 +20,18 @@ export class HookManager {
   private projectDir: string;
   private sessionId: string;
   private configDirName: string;
+  private homeDir?: string;
 
-  constructor(projectDir: string, sessionId: string, configDirName = DEFAULT_CONFIG_DIR) {
+  constructor(projectDir: string, sessionId: string, configDirName = DEFAULT_CONFIG_DIR, homeDir?: string) {
     this.projectDir = projectDir;
     this.sessionId = sessionId;
     this.configDirName = configDirName;
-    this.config = loadHooksConfig(projectDir, configDirName);
+    this.homeDir = homeDir;
+    this.config = loadHooksConfig(projectDir, configDirName, homeDir);
   }
 
   reload(): void {
-    this.config = loadHooksConfig(this.projectDir, this.configDirName);
+    this.config = loadHooksConfig(this.projectDir, this.configDirName, this.homeDir);
   }
 
   setSessionId(sessionId: string): void {
@@ -47,7 +49,7 @@ export class HookManager {
   getConfigPaths(): { project: string; global: string } {
     return {
       project: getProjectHooksPath(this.projectDir, this.configDirName),
-      global: getGlobalHooksPath(this.configDirName),
+      global: getGlobalHooksPath(this.configDirName, this.homeDir),
     };
   }
 

@@ -24,13 +24,25 @@ const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
 PopoverTrigger.displayName = 'PopoverTrigger';
 
 type PopoverContentProps = PopoverPrimitive.Popup.Props &
-  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
+  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset' | 'collisionAvoidance'> & {
     /** Optional portal container, forwarded to `Popover.Portal`. */
     container?: HTMLElement | null;
   };
 
 const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
-  ({ className, container, align = 'center', alignOffset = 0, side = 'bottom', sideOffset = 4, ...props }, ref) => {
+  (
+    {
+      className,
+      container,
+      align = 'center',
+      alignOffset = 0,
+      side = 'bottom',
+      sideOffset = 4,
+      collisionAvoidance,
+      ...props
+    },
+    ref,
+  ) => {
     const classNameString = typeof className === 'string' ? className : undefined;
     // Default to the nearest SideDialog/Drawer popup so the content stays
     // interactive inside a modal drawer; an explicit `container` still wins.
@@ -43,6 +55,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
           alignOffset={alignOffset}
           side={side}
           sideOffset={sideOffset}
+          collisionAvoidance={collisionAvoidance}
           className="z-50 outline-none"
         >
           <PopoverPrimitive.Popup

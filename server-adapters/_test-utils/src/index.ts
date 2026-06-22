@@ -11,4 +11,10 @@ export { createMCPTransportTestSuite, type MCPTransportTestConfig } from './mcp-
 export { createMultipartTestSuite, type MultipartTestSuiteConfig } from './multipart-test-suite';
 export { createHttpLoggingTestSuite, type HttpLoggingTestSuiteConfig } from './http-logging-test-suite';
 
-export { createDefaultTestContext, createStreamWithSensitiveData, consumeSSEStream } from './test-helpers';
+export {
+  createDefaultTestContext,
+  createStreamWithSensitiveData,
+  createStreamWithUnserializableChunk,
+  expectSerializedStreamChunks,
+  consumeSSEStream,
+} from './test-helpers';
