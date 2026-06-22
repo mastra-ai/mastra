@@ -9,18 +9,21 @@ import { Harness } from './harness';
 import { assignTaskIds, taskWriteTool } from './tools';
 import type { HarnessEvent } from './types';
 
-function createHarness() {
+async function createSession() {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-  return new Harness<Record<string, unknown>>({
+  const harness = new Harness<Record<string, unknown>>({
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
+  await harness.init();
+  const session = await harness.createSession();
+  return { harness, session };
 }
 
 describe('assignTaskIds', () => {
@@ -158,21 +161,21 @@ describe('assignTaskIds', () => {
 // tests exercise `session.state.update`/`session.state.set` ordering with neutral state keys.
 describe('harness state transactions', () => {
   it('serializes state updates against the latest committed state', async () => {
-    const harness = createHarness();
-    await harness.session.state.set({ counter: 0 });
+    const { harness, session } = await createSession();
+    await session.state.set({ counter: 0 });
 
     let releaseFirst!: () => void;
     const firstUpdateGate = new Promise<void>(resolve => {
       releaseFirst = resolve;
     });
 
-    const firstUpdate = harness.session.state.update(async (state: Record<string, unknown>) => {
+    const firstUpdate = session.state.update(async (state: Record<string, unknown>) => {
       await firstUpdateGate;
       const next = (state.counter as number) + 1;
       return { updates: { counter: next }, result: next };
     });
 
-    const secondUpdate = harness.session.state.update((state: Record<string, unknown>) => {
+    const secondUpdate = session.state.update((state: Record<string, unknown>) => {
       expect(state.counter).toBe(1);
       const next = (state.counter as number) + 1;
       return { updates: { counter: next }, result: next };
@@ -181,7 +184,7 @@ describe('harness state transactions', () => {
     releaseFirst();
     await Promise.all([firstUpdate, secondUpdate]);
 
-    expect(harness.session.state.get().counter).toBe(2);
+    expect(session.state.get().counter).toBe(2);
   });
 
   it('serializes direct setState calls with queued state transactions', async () => {
@@ -218,9 +221,11 @@ describe('harness state transactions', () => {
         },
       ],
     });
+    await harness.init();
+    const session = await harness.createSession();
 
-    const setStatePromise = harness.session.state.set({ seed: 'initial' });
-    const transactionPromise = harness.session.state.update((state: Record<string, unknown>) => {
+    const setStatePromise = session.state.set({ seed: 'initial' });
+    const transactionPromise = session.state.update((state: Record<string, unknown>) => {
       expect(state.seed).toBe('initial');
       return { updates: { marker: 'after-set-state' }, result: undefined };
     });
@@ -228,7 +233,7 @@ describe('harness state transactions', () => {
     releaseValidation();
     await Promise.all([setStatePromise, transactionPromise]);
 
-    expect(harness.session.state.get()).toMatchObject({
+    expect(session.state.get()).toMatchObject({
       seed: 'initial',
       marker: 'after-set-state',
     });
@@ -270,28 +275,30 @@ describe('task tool permissions', () => {
         },
       ],
     });
+    await harness.init();
+    const session = await harness.createSession();
 
-    const toolsets = await (harness as any).buildToolsets(new RequestContext());
+    const toolsets = await (harness as any).buildToolsets(session, new RequestContext());
 
     expect(toolsets.harnessBuiltIn.task_write).toBeUndefined();
     expect(toolsets.harnessBuiltIn.task_update).toBeUndefined();
     expect(toolsets.harnessBuiltIn.task_complete).toBeDefined();
     expect(toolsets.harness.custom_tool).toBeUndefined();
-    expect(harness.session.resolveToolApproval('task_update')).toBe('deny');
-    expect(harness.session.resolveToolApproval('task_complete')).toBe('allow');
+    expect(session.resolveToolApproval('task_update')).toBe('deny');
+    expect(session.resolveToolApproval('task_complete')).toBe('allow');
   });
 });
 
 describe('task tool display bridge', () => {
   it('emits task_updated and updates the display snapshot when a task tool runs with a harness context', async () => {
-    const harness = createHarness();
+    const { harness, session } = await createSession();
 
     const events: HarnessEvent[] = [];
-    harness.session.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
     // Real harness request context — wires emitEvent -> harness.emit, the
     // display-only bridge the agnostic task tools call when present.
-    const requestContext: RequestContext = await (harness as any).buildRequestContext();
+    const requestContext: RequestContext = await (harness as any).buildRequestContext(session);
 
     // Storage with the always-wired threadState domain so the tool can persist.
     const storage = new InMemoryStore();
@@ -316,11 +323,11 @@ describe('task tool display bridge', () => {
 
     // The harness display snapshot tracks the emitted task list (display-only;
     // the task list itself lives on the agent state-signal lane, not in state).
-    expect(harness.session.displayState.get().tasks).toEqual([
+    expect(session.displayState.get().tasks).toEqual([
       { id: 'task_write_tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
     ]);
 
     // Tasks are no longer mirrored into harness session state.
-    expect(harness.session.state.get().tasks).toBeUndefined();
+    expect(session.state.get().tasks).toBeUndefined();
   });
 });

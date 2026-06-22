@@ -328,7 +328,7 @@ async function startGoal(
   const goalManager = state.goalManager;
 
   if (state.pendingNewThread) {
-    await state.harness.session.thread.create();
+    await state.session.thread.create();
     state.pendingNewThread = false;
   }
 

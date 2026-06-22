@@ -31,15 +31,17 @@ describe('Harness notification signals', () => {
       resourceId: 'resource-1',
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
+    await harness.init();
+    const session = await harness.createSession();
 
-    const result = await harness.session.sendNotificationSignal({
+    const result = await session.sendNotificationSignal({
       source: 'mastracode',
       kind: 'manual',
       priority: 'high',
       summary: 'Check this notification',
     });
 
-    const threadId = harness.session.thread.getId();
+    const threadId = session.thread.getId();
     expect(threadId).toBeTruthy();
     expect(result).toMatchObject({ accepted: true, record: { id: 'notification-1', threadId } });
     expect(agent.subscribeToThread).toHaveBeenCalledTimes(1);

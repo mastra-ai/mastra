@@ -472,7 +472,7 @@ export async function loadSkillCommands(state: TUIState): Promise<void> {
   try {
     let workspace = state.harness.getWorkspace() ?? state.workspace;
     if (!workspace && state.harness.hasWorkspace()) {
-      workspace = await state.harness.resolveWorkspace();
+      workspace = await state.harness.resolveWorkspace({ session: state.session });
     }
     if (!workspace?.skills) {
       state.skillCommands = [];
@@ -555,7 +555,7 @@ export function subscribeToHarness(state: TUIState, handleEvent: (event: any) =>
       if (stack) process.stderr.write(stack + '\n');
     }
   };
-  state.unsubscribe = state.harness.session.subscribe(listener);
+  state.unsubscribe = state.session.subscribe(listener);
 }
 
 // =============================================================================
@@ -604,7 +604,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   if (sortedThreads.length === 1) {
     const thread = sortedThreads[0]!;
     try {
-      await state.harness.session.thread.switch({ threadId: thread.id });
+      await state.session.thread.switch({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
         await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }
@@ -624,7 +624,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   // Multiple threads — try each in order until one is unlocked
   for (const thread of sortedThreads) {
     try {
-      await state.harness.session.thread.switch({ threadId: thread.id });
+      await state.session.thread.switch({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
         await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }
@@ -647,7 +647,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
-    const tasks = state.harness.session.displayState.get().tasks;
+    const tasks = state.session.displayState.get().tasks;
 
     if (tasks.length > 0 && state.taskProgress) {
       state.taskProgress.updateTasks(tasks);

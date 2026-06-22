@@ -338,6 +338,7 @@ describe('dispatchSlashCommand models routing', () => {
     };
     const workspace = { skills: { get: vi.fn().mockResolvedValue(skill) } };
     const ctx = {
+      state,
       getResolvedWorkspace: vi.fn(() => undefined),
       harness: {
         hasWorkspace: vi.fn(() => true),

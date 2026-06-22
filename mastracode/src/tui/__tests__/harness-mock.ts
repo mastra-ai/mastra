@@ -159,6 +159,11 @@ export function createMockHarness(opts: MockHarnessOptions = {}) {
     getResolvedWorkspace: vi.fn(async () => undefined),
     getKnownResourceIds: vi.fn(async () => []),
     setResourceId: vi.fn(),
+    // Host-level reads that now take the session as an explicit argument.
+    getCurrentAgent: vi.fn(),
+    getCurrentModelAuthStatus: vi.fn(async () => ({ hasAuth: true, apiKeyEnvVar: undefined })),
+    loadOMProgress: vi.fn(async () => {}),
+    getObservationalMemoryRecord: vi.fn(async () => null),
   };
 
   return deepMerge(base, opts.harness) as unknown as Harness<Record<string, unknown>> & {
