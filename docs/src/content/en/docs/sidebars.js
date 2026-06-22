@@ -949,23 +949,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Build with AI',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'build-with-ai/skills',
-          label: 'Skills',
-        },
-        {
-          type: 'doc',
-          id: 'build-with-ai/mcp-docs-server',
-          label: 'MCP Docs Server',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Community',
       items: [
         {

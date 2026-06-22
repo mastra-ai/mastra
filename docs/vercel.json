@@ -754,6 +754,16 @@
       "source": "/docs/agents/response-caching",
       "destination": "/docs/agents/processors#response-caching",
       "permanent": true
+    },
+    {
+      "source": "/docs/build-with-ai/skills",
+      "destination": "/docs/getting-started/build-with-ai#mastra-skills",
+      "permanent": true
+    },
+    {
+      "source": "/docs/build-with-ai/mcp-docs-server",
+      "destination": "/docs/getting-started/build-with-ai#mcp-docs-server",
+      "permanent": true
     }
   ]
 }
