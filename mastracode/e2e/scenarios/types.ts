@@ -11,6 +11,7 @@ export type ScenarioName =
   | 'api-key-delete-env'
   | 'api-key-multi-provider-delete'
   | 'api-key-prompt'
+  | 'api-key-reopen-stored'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
   | 'browser-active-pending-status'

@@ -2,6 +2,7 @@ import { activeSignalFollowupScenario } from './active-signal-followup.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
+import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatScenario } from './automated-chat.js';
@@ -130,6 +131,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-delete-env': apiKeyDeleteEnvScenario,
   'api-key-multi-provider-delete': apiKeyMultiProviderDeleteScenario,
   'api-key-prompt': apiKeyPromptScenario,
+  'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
