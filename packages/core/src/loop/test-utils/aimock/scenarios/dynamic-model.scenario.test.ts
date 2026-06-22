@@ -1,7 +1,7 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { describe, expect, it } from 'vitest';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { expect, it } from 'vitest';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Dynamic model resolution scenario.
@@ -11,7 +11,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  *
  * This is similar to dynamic instructions but for the model itself.
  */
-describe('AIMock scenario: dynamic model resolution', () => {
+describeForAllEngines('AIMock scenario: dynamic model resolution', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('should resolve model from function based on requestContext', async () => {
@@ -36,6 +36,7 @@ describe('AIMock scenario: dynamic model resolution', () => {
 
     // Test with fast model (default)
     const fastResult = await runLoopScenario({
+      engine,
       llm: mock,
       prompt: 'What is 2+2?',
       model: dynamicModel,
@@ -61,6 +62,7 @@ describe('AIMock scenario: dynamic model resolution', () => {
     requestContext.set('useSmartModel', true);
 
     const smartResult = await runLoopScenario({
+      engine,
       llm: mock,
       prompt: 'What is 2+2?',
       model: dynamicModel,

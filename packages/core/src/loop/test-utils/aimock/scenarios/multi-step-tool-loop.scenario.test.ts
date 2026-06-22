@@ -1,8 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: multi-step tool loop composition (the mastracode
@@ -14,7 +14,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * and the turn-2 request AIMock captured (proving the tool result round-tripped
  * into the next provider request).
  */
-describe('AIMock loop scenario: multi-step tool loop', () => {
+describeForAllEngines('AIMock loop scenario: multi-step tool loop', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('feeds the turn-1 tool result into the turn-2 model request', async () => {
@@ -31,6 +31,7 @@ describe('AIMock loop scenario: multi-step tool loop', () => {
       prompt: 'Look up the status for query alpha.',
       tools: { lookup_status: lookupTool },
       stopWhen: stepCountIs(5),
+      engine,
       fixtures: llm => {
         // Turn 1: no tool result yet -> emit a tool call.
         llm.on(
