@@ -15,7 +15,7 @@ export default function App() {
   // resourceId is scoped to the active project so threads belong to it.
   const resourceId = activeProject ? projectResourceId(activeProject) : DEFAULT_RESOURCE_ID;
 
-  const session = useHarnessSession({ harnessId: 'code', resourceId });
+  const session = useHarnessSession({ harnessId: 'code', resourceId, enabled: !!activeProject });
   const { transcript, status, modes, threads, send, steer, abort } = session;
   const [draft, setDraft] = useState('');
   const threadRef = useRef<HTMLDivElement>(null);
@@ -172,7 +172,7 @@ export default function App() {
             {activeProject ? activeProject.name : 'MastraCode'}
           </span>
           <div className="header-actions">
-            {modes.map(m => (
+            {activeProject && modes.map(m => (
               <button
                 key={m.id}
                 className={`mode-btn ${transcript.modeId === m.id ? 'active' : ''}`}
@@ -187,6 +187,14 @@ export default function App() {
           </div>
         </header>
 
+        {!activeProject ? (
+          <div className="no-project">
+            <div className="no-project-icon">📁</div>
+            <h2>No project selected</h2>
+            <p>Add a project in the sidebar to start a coding session. Threads live inside a project.</p>
+          </div>
+        ) : (
+        <>
         {transcript.goal && (
           <GoalPanel
             goal={transcript.goal}
@@ -200,9 +208,7 @@ export default function App() {
         <div className="transcript" ref={threadRef}>
           {transcript.entries.length === 0 && (
             <div className="transcript-empty">
-              {activeProject
-                ? `Working in ${activeProject.name}. Ask the agent to read, write, or run code.`
-                : 'Select a project from the sidebar, or ask the agent to work in the default workspace.'}
+              Working in {activeProject.name}. Ask the agent to read, write, or run code.
             </div>
           )}
           <Transcript
@@ -238,6 +244,8 @@ export default function App() {
           workspaceReady={transcript.workspaceReady}
           projectName={activeProject?.name}
         />
+        </>
+        )}
       </div>
     </div>
   );

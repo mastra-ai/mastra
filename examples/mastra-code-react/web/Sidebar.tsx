@@ -139,11 +139,10 @@ export function Sidebar({
       </div>
 
       {/* ── Threads (scoped to active project) ────────────────────────── */}
+      {activeProject && (
       <div className="sidebar-section sidebar-section-grow">
         <div className="sidebar-section-header">
-          <span className="sidebar-section-title">
-            {activeProject ? `${activeProject.name} threads` : 'Threads'}
-          </span>
+          <span className="sidebar-section-title">{activeProject.name} threads</span>
           <button
             className="sidebar-icon-btn"
             title="New thread"
@@ -181,6 +180,7 @@ export function Sidebar({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

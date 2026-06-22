@@ -814,6 +814,37 @@ html, body, #root {
   min-width: 0;
 }
 
+/* ── No project empty state ────────────────────────────────────────────── */
+
+.no-project {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  color: var(--fg-muted);
+  padding: 32px;
+}
+
+.no-project-icon {
+  font-size: 40px;
+  opacity: 0.6;
+}
+
+.no-project h2 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--fg);
+}
+
+.no-project p {
+  margin: 0;
+  font-size: 13px;
+  max-width: 360px;
+}
+
 /* ── Scrollbar ──────────────────────────────────────────────────────────── */
 
 .transcript::-webkit-scrollbar { width: 6px; }

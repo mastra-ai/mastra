@@ -14,6 +14,11 @@ interface UseHarnessSessionArgs {
   resourceId: string;
   /** Defaults to same-origin (Vite proxies /api → mastra dev). */
   baseUrl?: string;
+  /**
+   * When false, no session is created and no thread is opened. Used to keep the
+   * app dormant until a project is selected (threads only exist within a project).
+   */
+  enabled?: boolean;
 }
 
 export interface HarnessSessionApi {
@@ -53,7 +58,7 @@ export interface HarnessSessionApi {
  * stream, folds events through the transcript reducer, and exposes the full
  * run-control + mode/model/thread surface the UI needs.
  */
-export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHarnessSessionArgs): HarnessSessionApi {
+export function useHarnessSession({ harnessId, resourceId, baseUrl = '', enabled = true }: UseHarnessSessionArgs): HarnessSessionApi {
   const [transcript, dispatch] = useReducer(transcriptReducer, initialTranscript);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [modes, setModes] = useState<HarnessModeInfo[]>([]);
@@ -72,6 +77,14 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      // No active project — stay dormant, don't create a session or thread.
+      setStatus('connecting');
+      setThreads([]);
+      dispatch({ type: 'reset' });
+      return;
+    }
+
     let unsubscribe: (() => void) | undefined;
     let disposed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -152,7 +165,7 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
       unsubscribe?.();
       sessionRef.current = null;
     };
-  }, [harnessId, resourceId, baseUrl, refreshThreads]);
+  }, [harnessId, resourceId, baseUrl, refreshThreads, enabled]);
 
   const send = useCallback(async (text: string) => {
     const session = sessionRef.current;
