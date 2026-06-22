@@ -89,7 +89,7 @@ describeForAllEngines(
 
       // The original (unmodified) prompt was NOT forwarded to the subagent.
       const subagentMessages = JSON.stringify(subagentRequest?.body?.messages ?? []);
-      expect(subagentMessages).not.toContain('Draft a tagline for a coffee shop.');
+      expect(subagentMessages).not.toContain('Draft a tagline.');
     });
 
     it('onDelegationStart rejects the delegation and reports the denial back to the model', async () => {
