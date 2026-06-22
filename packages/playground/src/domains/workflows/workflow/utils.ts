@@ -325,7 +325,11 @@ const getStepNodeAndEdge = ({
               {
                 id: `e${condition.id}-${nodeId}`,
                 source: condition.id,
-                data: { previousStepId: prevStepIds[prevStepIds.length - 1], nextStepId: stepFlow.id, conditionNode: true },
+                data: {
+                  previousStepId: prevStepIds[prevStepIds.length - 1],
+                  nextStepId: stepFlow.id,
+                  conditionNode: true,
+                },
                 target: nodeId,
                 ...defaultEdgeOptions,
               },

@@ -45,10 +45,7 @@ export async function expectEdgesIdle(page: Page, fromStepIds: string[]) {
  * Assert the graph represents the data path: every meaningful (taken) source step
  * has active outgoing edges, and every un-taken source step stays neutral.
  */
-export async function expectWorkflowDataPath(
-  page: Page,
-  { active, idle }: { active: string[]; idle: string[] },
-) {
+export async function expectWorkflowDataPath(page: Page, { active, idle }: { active: string[]; idle: string[] }) {
   await expectEdgesActive(page, active);
   await expectEdgesIdle(page, idle);
 }
@@ -96,10 +93,11 @@ export async function expectExactEdgeStatuses(page: Page, expectations: EdgeExpe
     const count = await pairEdges.count();
     expect(count, `expected at least one edge "${from}" -> "${to}"`).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {
-      await expect(
-        pairEdges.nth(i),
-        `edge "${from}" -> "${to}" (#${i}) should be "${status}"`,
-      ).toHaveAttribute('data-edge-status', status, { timeout: 20000 });
+      await expect(pairEdges.nth(i), `edge "${from}" -> "${to}" (#${i}) should be "${status}"`).toHaveAttribute(
+        'data-edge-status',
+        status,
+        { timeout: 20000 },
+      );
     }
   }
 

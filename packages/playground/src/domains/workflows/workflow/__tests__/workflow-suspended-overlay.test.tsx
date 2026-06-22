@@ -105,10 +105,7 @@ describe('WorkflowSuspendedOverlay', () => {
     // snapshot refetches. The stale snapshot still says 'paused', but the live result is
     // 'suspended', so the overlay must surface off the live result — otherwise the
     // human-in-the-loop resume dialog never appears on the :runId page.
-    renderOverlay(
-      buildContext({ runSnapshot: snapshot('paused') }),
-      '/workflows/two-step-workflow/graph/run-1',
-    );
+    renderOverlay(buildContext({ runSnapshot: snapshot('paused') }), '/workflows/two-step-workflow/graph/run-1');
     expect(screen.getByTestId('workflow-suspended-overlay')).not.toBeNull();
   });
 
@@ -124,10 +121,7 @@ describe('WorkflowSuspendedOverlay', () => {
   });
 
   it('hides the dialog while the run is actively streaming', () => {
-    renderOverlay(
-      buildContext({ isStreamingWorkflow: true }),
-      '/workflows/two-step-workflow/graph',
-    );
+    renderOverlay(buildContext({ isStreamingWorkflow: true }), '/workflows/two-step-workflow/graph');
     expect(screen.queryByTestId('workflow-suspended-overlay')).toBeNull();
   });
 });

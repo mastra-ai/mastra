@@ -60,8 +60,7 @@ export function useNextPerStep() {
 
   const stepGraph = workflow?.stepGraph;
 
-  const { stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds, nestedWorkflowStepIds } =
-    useMemo(() => {
+  const { stepNodesInOrder, stepsFlow, stepSuccessors, conditionalStepIds, nestedWorkflowStepIds } = useMemo(() => {
     const { nodes, edges } = constructNodesAndEdges({ stepGraph });
     const orderedStepIds = nodes
       .filter(node => node.type === WORKFLOW_STEP_NODE_TYPE && node.data?.nodeRole !== 'condition' && node.data?.stepId)
@@ -139,7 +138,9 @@ export function useNextPerStep() {
     const isBypassed = (stepId: string) => {
       if (!conditionalStepIds.has(stepId)) return false;
       const successors = stepSuccessors[stepId] ?? [];
-      return successors.some(successorId => (stepsFlow[successorId] ?? []).some(sib => sib !== stepId && isSuccess(sib)));
+      return successors.some(successorId =>
+        (stepsFlow[successorId] ?? []).some(sib => sib !== stepId && isSuccess(sib)),
+      );
     };
 
     return stepNodesInOrder.find(stepId => !isSuccess(stepId) && !isBypassed(stepId));
@@ -185,12 +186,12 @@ export function useNextPerStep() {
     const isBypassed = (stepId: string) => {
       if (!conditionalStepIds.has(stepId)) return false;
       const successors = stepSuccessors[stepId] ?? [];
-      return successors.some(successorId => (stepsFlow[successorId] ?? []).some(sib => sib !== stepId && isSuccess(sib)));
+      return successors.some(successorId =>
+        (stepsFlow[successorId] ?? []).some(sib => sib !== stepId && isSuccess(sib)),
+      );
     };
     const nextIndex = stepNodesInOrder.indexOf(nextStepKey);
-    return stepNodesInOrder
-      .slice(nextIndex + 1)
-      .every(stepId => isSuccess(stepId) || isBypassed(stepId));
+    return stepNodesInOrder.slice(nextIndex + 1).every(stepId => isSuccess(stepId) || isBypassed(stepId));
   }, [nextStepKey, stepNodesInOrder, result?.steps, conditionalStepIds, stepSuccessors, stepsFlow]);
 
   const canRunNextStep = Boolean(nextStepKey && stepPayload);

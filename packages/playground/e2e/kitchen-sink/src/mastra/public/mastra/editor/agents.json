@@ -1,0 +1,92 @@
+{
+  "eZaXvv_RVNzuied75uN1N": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "HRjvlueC89_K_3B_e2t5A": {
+    "instructions": "",
+    "model": {
+      "name": "codestral-latest",
+      "provider": "mistral"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "b8ib-wpUTXH0YSmmPK08H": {
+    "instructions": "",
+    "model": {
+      "name": "codestral-latest",
+      "provider": "mistral"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "CN_NeZSjWvqDQtmtKs4gQ": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "dG1lg3ypwZ916ewC1BIGP": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build a B2B SaaS sec…",
+    "tools": {}
+  },
+  "-B_tK9wc4TlI9lsv9m01B": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "BInnmS-KYOnpS4wyNrzpn": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "kqpX6ezde54JzEdxMdOfb": {
+    "instructions": "",
+    "model": {
+      "name": "codestral-latest",
+      "provider": "mistral"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "VUBcghIFZW82-jA-kZPEL": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "uzYI6IPvWA64RoB6vbMN0": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build a B2B SaaS sec…",
+    "tools": {}
+  }
+}
