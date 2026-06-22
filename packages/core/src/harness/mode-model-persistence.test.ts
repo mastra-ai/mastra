@@ -106,13 +106,12 @@ describe('Harness mode-model persistence across restarts', () => {
     const planThread = await session1.thread.create();
     await session1.mode.switch({ modeId: 'plan' });
 
-    // Create a second thread (in default 'build' mode) so that when session2
-    // resumes from storage it lands on the most-recent thread — the build one
-    // — and starts in default mode. We then explicitly switch to the plan
-    // thread and observe the mode restoration event.
-    await session1.thread.create();
-
     const { session: session2 } = await buildHarness(storage);
+    // Simulate the UI currently being in build mode before the user switches
+    // to a plan-mode thread. `set` is intentional here: this test cares about
+    // the restore event emitted by thread metadata hydration, not about
+    // persisting another mode switch onto the original thread.
+    session2.mode.set({ modeId: 'build' });
     expect(session2.mode.get()).toBe('build');
 
     const events: Array<{ type: 'mode_changed'; modeId: string; previousModeId: string }> = [];

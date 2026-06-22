@@ -1,12 +1,12 @@
 /**
  * Regression test for the trailing-data guard in processSubscribedThreadStream.
  *
- * When a run aborts, `lastFinishedRunId` is set. If a *new* run then starts
+ * When a run finishes, `lastFinishedRunId` is set. If a *new* run then starts
  * with a different runId, null-runId chunks from the new run (like
  * `data-user-message`) must NOT be skipped by the trailing guard.
  *
  * Root cause:
- *   - Abort for runId A → lastFinishedRunId = A
+ *   - Finish for runId A → lastFinishedRunId = A
  *   - Start for runId B → creates new run, but lastFinishedRunId stays A
  *   - data-user-message (runId=null) → SKIPPED because null matches trailing guard
  *
@@ -61,33 +61,31 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
     // Track which chunk types reach processStreamChunk.
     const processedChunkTypes: string[] = [];
     const origProcessStreamChunk = session.runEngine.processStreamChunk.bind(session.runEngine);
-    session.runEngine.processStreamChunk = async (...args: any[]) => {
-      const chunk = args[1];
+    session.runEngine.processStreamChunk = async (state: any, chunk: any, requestContext: any) => {
       processedChunkTypes.push(chunk?.type ?? 'unknown');
-      return origProcessStreamChunk(...args);
+      return origProcessStreamChunk(state, chunk, requestContext);
     };
 
     await processSubscribedChunks(session, [
-      // --- Run A: starts, then aborts (no step state needed for abort) ---
+      // --- Run A: starts, then finishes ---
       { type: 'start', runId: 'run-a' },
-      { type: 'abort', runId: 'run-a' },
+      { type: 'finish', runId: 'run-a', payload: { stepResult: { reason: 'stop' } } },
 
       // --- Run B: starts with a different runId ---
       { type: 'start', runId: 'run-b' },
       // Null-runId chunks from the new run — these must NOT be skipped:
       { type: 'data-user-message', data: { content: 'User message for run B' } },
       { type: 'data-om-status', data: { status: 'ready' } },
-      // Run B aborts too (simplest terminal that doesn't need step state)
-      { type: 'abort', runId: 'run-b' },
+      { type: 'finish', runId: 'run-b', payload: { stepResult: { reason: 'stop' } } },
     ]);
 
     // Both runs should produce agent_start events.
     const agentStarts = events.filter(e => e.type === 'agent_start');
     expect(agentStarts.length).toBe(2);
 
-    // Both runs should end as aborted.
-    const abortedEnds = events.filter(e => e.type === 'agent_end' && e.reason === 'aborted');
-    expect(abortedEnds.length).toBe(2);
+    // Both runs should end cleanly.
+    const completedEnds = events.filter(e => e.type === 'agent_end' && e.reason === 'complete');
+    expect(completedEnds.length).toBe(2);
 
     // The null-runId chunks from run B must have been processed, not skipped.
     expect(processedChunkTypes).toContain('data-user-message');
