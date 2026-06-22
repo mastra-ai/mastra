@@ -6,15 +6,15 @@ import { TracingSettingsProvider } from '@/domains/observability/context/tracing
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { WorkflowInformation } from '@/domains/workflows/components/workflow-information';
 import { WorkflowLayout as WorkflowLayoutUI } from '@/domains/workflows/components/workflow-layout';
-import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-context';
-import { WorkflowRunList } from '@/domains/workflows/runs/workflow-run-list';
+import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-provider';
+import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow-step-detail-provider';
 import { useWorkflowRun } from '@/hooks/use-workflow-runs';
 import { useWorkflow } from '@/hooks/use-workflows';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
-  const { data: runExecutionResult } = useWorkflowRun(workflowId ?? '', runId ?? '');
+  const { data: runExecutionResult, isLoading: isRunLoading } = useWorkflowRun(workflowId ?? '', runId ?? '');
 
   if (!workflowId) {
     return (
@@ -26,7 +26,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (isWorkflowLoading) {
+  if (isWorkflowLoading || (Boolean(runId) && isRunLoading)) {
     return (
       <div className="h-full p-4">
         <Skeleton className="h-full" />
@@ -53,16 +53,17 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
       <SchemaRequestContextProvider>
         <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
-          <div className="h-full min-h-0">
-            <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
-            <WorkflowLayoutUI
-              workflowId={workflowId!}
-              leftSlot={<WorkflowRunList workflowId={workflowId} runId={runId} />}
-              rightSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
-            >
-              {children}
-            </WorkflowLayoutUI>
-          </div>
+          <WorkflowStepDetailProvider>
+            <div className="h-full min-h-0">
+              <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} />
+              <WorkflowLayoutUI
+                workflowId={workflowId!}
+                leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
+              >
+                {children}
+              </WorkflowLayoutUI>
+            </div>
+          </WorkflowStepDetailProvider>
         </WorkflowRunProvider>
       </SchemaRequestContextProvider>
     </TracingSettingsProvider>

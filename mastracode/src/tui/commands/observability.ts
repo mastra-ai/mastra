@@ -6,7 +6,7 @@ import type { SlashCommandContext } from './types.js';
 const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
 
 function showStatus(ctx: SlashCommandContext): void {
-  const resourceId = ctx.harness.getResourceId();
+  const resourceId = ctx.state.session.identity.getResourceId();
   const settings = loadSettings();
   const resourceConfig = settings.observability.resources[resourceId];
   const hasToken = ctx.authStorage?.hasStoredApiKey(`${OBSERVABILITY_AUTH_PREFIX}${resourceId}`) ?? false;
@@ -65,7 +65,7 @@ async function handleConnect(ctx: SlashCommandContext): Promise<void> {
     return;
   }
 
-  const resourceId = ctx.harness.getResourceId();
+  const resourceId = ctx.state.session.identity.getResourceId();
   const projectId = await askModalQuestion(ctx.state.ui, { question: 'Enter your cloud project ID:' });
   if (!projectId) return;
 
@@ -133,7 +133,7 @@ function handleLocal(ctx: SlashCommandContext, args: string[]): void {
 }
 
 function handleDisconnect(ctx: SlashCommandContext): void {
-  const resourceId = ctx.harness.getResourceId();
+  const resourceId = ctx.state.session.identity.getResourceId();
   const settings = loadSettings();
 
   const hadConfig = resourceId in settings.observability.resources;

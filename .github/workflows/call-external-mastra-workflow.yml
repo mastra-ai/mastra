@@ -22,7 +22,7 @@ on:
 jobs:
   execute-workflow:
     permissions: {}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     steps:
       - name: Create and execute workflow run
         run: |

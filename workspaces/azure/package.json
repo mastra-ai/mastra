@@ -1,6 +1,6 @@
 {
   "name": "@mastra/azure",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Azure provider for Mastra - includes Blob Storage workspace filesystem",
   "type": "module",
   "main": "dist/index.js",

@@ -107,6 +107,14 @@ export interface GeminiLiveVoiceConfig {
 }
 
 /**
+ * A single conversation turn for context seeding via {@link GeminiLiveVoice.sendContext}.
+ */
+export interface IncrementalTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/**
  * Runtime options that can be passed to methods
  */
 export interface GeminiLiveVoiceOptions {
@@ -149,7 +157,9 @@ export interface GeminiLiveEventMap {
   /** Session state changes */
   session: {
     state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'error' | 'updated';
-    config?: Record<string, unknown>; // Configuration data when state is 'updated' or 'connected'
+    config?: Record<string, unknown>;
+    code?: number;
+    reason?: string;
   };
   /** Tool calls from the model */
   toolCall: { name: string; args: Record<string, any>; id: string };
