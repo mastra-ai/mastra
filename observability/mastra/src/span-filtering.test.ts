@@ -586,7 +586,9 @@ describe('Span Filtering', () => {
         const durationMetric = collector.metricEvents.find(e => e.metric.name === 'mastra_model_duration_ms');
         expect(durationMetric).toBeDefined();
 
-        const inputTokenMetrics = collector.metricEvents.filter(e => e.metric.name === 'mastra_model_total_input_tokens');
+        const inputTokenMetrics = collector.metricEvents.filter(
+          e => e.metric.name === 'mastra_model_total_input_tokens',
+        );
         expect(inputTokenMetrics).toHaveLength(1);
         const inputTokenMetric = inputTokenMetrics[0];
         expect(inputTokenMetric?.metric.value).toBe(30);
