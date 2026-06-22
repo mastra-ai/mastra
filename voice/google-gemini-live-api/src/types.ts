@@ -107,6 +107,14 @@ export interface GeminiLiveVoiceConfig {
 }
 
 /**
+ * A single conversation turn for context seeding via {@link GeminiLiveVoice.sendContext}.
+ */
+export interface IncrementalTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/**
  * Runtime options that can be passed to methods
  */
 export interface GeminiLiveVoiceOptions {
