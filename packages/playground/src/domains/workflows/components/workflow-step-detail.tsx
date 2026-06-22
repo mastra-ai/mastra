@@ -3,9 +3,9 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { List, X } from 'lucide-react';
 
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
+import { BADGE_COLORS } from '../workflow/components/workflow-card-badge-utils';
 import { CodeDialogContent } from '../workflow/workflow-code-dialog-content';
 import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
-import { BADGE_COLORS } from '../workflow/workflow-node-badges';
 
 /**
  * Content for the step detail tab panel (Map Config or Nested Workflow)

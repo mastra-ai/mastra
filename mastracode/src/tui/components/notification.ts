@@ -1,4 +1,4 @@
-import { Container, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
+import { Container, Text, visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, getTermWidth, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -117,7 +117,6 @@ export class NotificationComponent extends Container {
     }
 
     this.addChild(new Text(borderColor(bottom), BOX_INDENT, 0));
-    this.addChild(new Spacer(1));
   }
 
   getChatSpacingKind(): ChatSpacingKind {

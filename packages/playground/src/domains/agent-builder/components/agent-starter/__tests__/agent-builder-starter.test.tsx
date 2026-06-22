@@ -64,6 +64,7 @@ describe('AgentBuilderStarter', () => {
         HttpResponse.json({ enabled: true, modelPolicy: { active: false } }),
       ),
       http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, login: null })),
     );
   });
 
@@ -118,9 +119,6 @@ describe('AgentBuilderStarter', () => {
     expect(capturedBody.instructions).toBe('');
     expect(capturedBody.model).toEqual({ provider: 'google', name: 'gemini-2.5-flash' });
     expect(capturedBody.visibility).toBe('private');
-    // Every builder agent is born with a `user` request-context variable matching
-    // the authenticated user shape. The constant is asserted by reference so any
-    // shape drift in the source-of-truth constant is caught by its own test, not here.
     expect(capturedBody.requestContextSchema).toEqual(DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA);
 
     await waitFor(() => expect(navigateMock).toHaveBeenCalledTimes(1));
@@ -130,6 +128,32 @@ describe('AgentBuilderStarter', () => {
       state: { userMessage: 'build a tutor agent' },
       viewTransition: true,
     });
+  });
+
+  it('omits the request-context schema when auth is disabled', async () => {
+    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })));
+
+    let capturedBody: any = null;
+    server.use(
+      http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ id: capturedBody.id });
+      }),
+    );
+
+    const { getByTestId } = renderStarter();
+    const input = getByTestId('agent-builder-starter-input') as HTMLTextAreaElement;
+    const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
+
+    fireEvent.change(input, { target: { value: 'build a tutor agent' } });
+    await waitFor(() => expect(submit.disabled).toBe(false));
+
+    await act(async () => {
+      fireEvent.click(submit);
+    });
+
+    await waitFor(() => expect(capturedBody).not.toBeNull());
+    expect(capturedBody.requestContextSchema).toBeUndefined();
   });
 
   it('truncates long prompts to 20 chars + ellipsis when generating the temp name', async () => {

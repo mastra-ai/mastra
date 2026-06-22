@@ -28,6 +28,7 @@ vi.mock('@/domains/auth/hooks/use-permissions', () => ({
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
+  isUnauthenticatedError: () => false,
 }));
 
 // The chat composer mounts an SSE-driven builder agent which we don't want to

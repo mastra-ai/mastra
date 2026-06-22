@@ -1,8 +1,8 @@
 /**
  * Event handlers for interactive prompt events:
- * ask_question, sandbox_access_request, plan_approval_required.
+ * tool_suspended (ask_user / request_access / submit_plan).
  */
-import type { HarnessQuestionSelectionMode } from '@mastra/core/harness';
+import type { AskUserSelectionMode } from '@mastra/core/tools';
 import { savePlanToDisk } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
@@ -33,18 +33,21 @@ function processNextInlineQuestion(state: TUIState): void {
  */
 export async function handleAskQuestion(
   ctx: EventHandlerContext,
-  questionId: string,
+  toolCallId: string,
   question: string,
   options?: Array<{ label: string; description?: string }>,
-  selectionMode?: HarnessQuestionSelectionMode,
+  selectionMode?: AskUserSelectionMode,
 ): Promise<void> {
   const { state } = ctx;
 
   return new Promise(resolve => {
     if (state.options.inlineQuestions) {
-      // Capture the current ask_user component reference now, before it can be
-      // overwritten by a subsequent parallel tool call.
-      const askUserComponent = state.lastAskUserComponent;
+      // Look up the streaming component created for THIS tool call. Using the
+      // per-toolCallId map (instead of the single lastAskUserComponent field)
+      // keeps parallel ask_user suspensions bound to their own components so
+      // each question renders distinctly (#13642).
+      const askUserComponent = state.pendingAskUserComponents?.get(toolCallId) ?? state.lastAskUserComponent;
+      state.pendingAskUserComponents?.delete(toolCallId);
 
       const activate = () => {
         try {
@@ -62,19 +65,19 @@ export async function handleAskQuestion(
               tui: state.ui,
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
-                state.harness.respondToQuestion({ questionId, answer });
+                state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
                 resolve();
                 processNextInlineQuestion(state);
               },
               onSubmitMulti: answers => {
                 state.activeInlineQuestion = undefined;
-                state.harness.respondToQuestion({ questionId, answer: answers });
+                state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
                 resolve();
                 processNextInlineQuestion(state);
               },
               onCancel: () => {
                 state.activeInlineQuestion = undefined;
-                state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+                state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
                 resolve();
                 processNextInlineQuestion(state);
               },
@@ -91,19 +94,19 @@ export async function handleAskQuestion(
                 multiline: true,
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
-                  state.harness.respondToQuestion({ questionId, answer });
+                  state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
                   resolve();
                   processNextInlineQuestion(state);
                 },
                 onSubmitMulti: answers => {
                   state.activeInlineQuestion = undefined;
-                  state.harness.respondToQuestion({ questionId, answer: answers });
+                  state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
                   resolve();
                   processNextInlineQuestion(state);
                 },
                 onCancel: () => {
                   state.activeInlineQuestion = undefined;
-                  state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+                  state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
                   resolve();
                   processNextInlineQuestion(state);
                 },
@@ -126,7 +129,7 @@ export async function handleAskQuestion(
         } catch {
           // Don't let ask_user errors crash the process — skip the question
           state.activeInlineQuestion = undefined;
-          state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+          state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
           resolve();
           processNextInlineQuestion(state);
         }
@@ -148,17 +151,17 @@ export async function handleAskQuestion(
         tui: state.ui,
         onSubmit: answer => {
           state.ui.hideOverlay();
-          state.harness.respondToQuestion({ questionId, answer });
+          state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
           resolve();
         },
         onSubmitMulti: answers => {
           state.ui.hideOverlay();
-          state.harness.respondToQuestion({ questionId, answer: answers });
+          state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
           resolve();
         },
         onCancel: () => {
           state.ui.hideOverlay();
-          state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+          state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
           resolve();
         },
       });
@@ -179,7 +182,7 @@ export async function handleAskQuestion(
  */
 export async function handleSandboxAccessRequest(
   ctx: EventHandlerContext,
-  questionId: string,
+  toolCallId: string,
   requestedPath: string,
   reason: string,
 ): Promise<void> {
@@ -195,13 +198,13 @@ export async function handleSandboxAccessRequest(
           ],
           onSubmit: answer => {
             state.activeInlineQuestion = undefined;
-            state.harness.respondToQuestion({ questionId, answer });
+            state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
             resolve();
             processNextInlineQuestion(state);
           },
           onCancel: () => {
             state.activeInlineQuestion = undefined;
-            state.harness.respondToQuestion({ questionId, answer: 'No' });
+            state.session.respondToToolSuspension({ toolCallId, resumeData: 'No' });
             resolve();
             processNextInlineQuestion(state);
           },
@@ -236,12 +239,12 @@ export async function handleSandboxAccessRequest(
 }
 
 /**
- * Handle a plan_approval_required event from the submit_plan tool.
+ * Handle a suspended submit_plan tool call.
  * Shows the plan inline with Approve/Reject/Request Changes options.
  */
-async function approvePlan(ctx: EventHandlerContext, planId: string, title: string, plan: string): Promise<void> {
+async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: string, plan: string): Promise<void> {
   const { state } = ctx;
-  await state.harness.setState({
+  await state.session.state.set({
     activePlan: {
       title,
       plan,
@@ -251,11 +254,11 @@ async function approvePlan(ctx: EventHandlerContext, planId: string, title: stri
   savePlanToDisk({
     title,
     plan,
-    resourceId: state.harness.getResourceId(),
+    resourceId: state.session.identity.getResourceId(),
   }).catch(() => {});
-  await state.harness.respondToPlanApproval({
-    planId,
-    response: { action: 'approved' },
+  await state.session.respondToToolSuspension({
+    toolCallId,
+    resumeData: { action: 'approved' },
   });
 }
 
@@ -265,20 +268,20 @@ function formatPlanGoalObjective(title: string, plan: string): string {
 
 export async function handlePlanApproval(
   ctx: EventHandlerContext,
-  planId: string,
+  toolCallId: string,
   title: string,
   plan: string,
 ): Promise<void> {
   const { state } = ctx;
   return new Promise(resolve => {
     const approvalOptions = {
-      planId,
+      toolCallId,
       title,
       plan,
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, planId, title, plan);
+        await approvePlan(ctx, toolCallId, title, plan);
 
         // Fire a structured system-reminder signal to wake the freshly
         // switched-to default-mode agent. The signal echoes back as a
@@ -286,12 +289,12 @@ export async function handlePlanApproval(
         // path as any other reminder — no legacy XML regex, no companion
         // `addUserMessage` call, so the reminder shows up exactly once.
         //
-        // `approvePlan` (via `respondToPlanApproval` → `switchMode`) waits
+        // `approvePlan` (via `respondToToolSuspension` → `switchMode`) waits
         // for the aborted plan-mode run to fully idle before returning, so
         // this signal always starts a fresh build-mode run instead of
         // queuing onto the dying one.
         try {
-          await state.harness.sendSignal({
+          await state.session.sendSignal({
             type: 'system-reminder',
             contents: 'The user has approved the plan, begin executing.',
           }).accepted;
@@ -304,7 +307,7 @@ export async function handlePlanApproval(
       onGoal: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, planId, title, plan);
+        await approvePlan(ctx, toolCallId, title, plan);
 
         // `approvePlan` waits for plan mode to idle before `startGoal` sends
         // the canonical goal reminder, so this starts a fresh build-mode run.
@@ -321,9 +324,9 @@ export async function handlePlanApproval(
       onReject: async (feedback?: string) => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await state.harness.respondToPlanApproval({
-          planId,
-          response: { action: 'rejected', feedback },
+        await state.session.respondToToolSuspension({
+          toolCallId,
+          resumeData: { action: 'rejected', feedback },
         });
         resolve();
       },

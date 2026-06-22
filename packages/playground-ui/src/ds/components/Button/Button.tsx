@@ -39,8 +39,7 @@ export const buttonVariants = cva(
         xs: cn(controlSizeClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
         sm: cn(controlSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
         md: cn(controlSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        default: cn(controlSizeClasses.default, 'px-[1em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.lg, 'px-[1.15em]', TEXT_MODE_ADORNMENTS),
+        lg: cn(controlSizeClasses.default, 'px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // (e.g. `active:bg-surface5`) — same press feedback as text-mode for consistency.
         'icon-xs': cn(controlHeight.xs, 'w-form-xs rounded-full'),
@@ -51,7 +50,7 @@ export const buttonVariants = cva(
     },
     defaultVariants: {
       variant: 'default',
-      size: 'default',
+      size: 'md',
     },
   },
 );
@@ -62,6 +61,7 @@ type ButtonVariantsProps = VariantProps<typeof buttonVariants>;
 export type ButtonVariant = NonNullable<ButtonVariantsProps['variant']>;
 export type ButtonSize = NonNullable<ButtonVariantsProps['size']>;
 export type IconButtonSize = Extract<ButtonSize, `icon-${string}`>;
+export type TextButtonSize = Exclude<ButtonSize, IconButtonSize>;
 
 export interface ButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'>, ButtonVariantsProps {
@@ -119,7 +119,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const Component = as || 'button';
     const iconMode = isIconButtonSize(size);
-    const resolvedSize: ButtonSize = size ?? 'default';
+    const resolvedSize: ButtonSize = size ?? 'md';
     const isLabelless = !iconMode && isIconOnly(children);
 
     // Icon-only buttons need an a11y label. If a string tooltip is provided, reuse it.

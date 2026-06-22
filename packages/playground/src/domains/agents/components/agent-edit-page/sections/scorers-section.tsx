@@ -2,7 +2,6 @@ import {
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
-  MultiCombobox,
   Button,
   Input,
   Label,
@@ -12,6 +11,7 @@ import {
   JudgeIcon,
   Icon,
 } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Trash2, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
@@ -102,7 +102,8 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                 <CollapsibleContent>
                   <div className="p-3 border-t border-border1">
                     <div className="flex flex-col gap-2">
-                      <MultiCombobox
+                      <Combobox
+                        multiple
                         options={options}
                         value={selectedIds}
                         onValueChange={handleValueChange}

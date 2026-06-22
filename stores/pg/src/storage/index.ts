@@ -13,7 +13,7 @@ import {
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
-import { PoolAdapter } from './client';
+import { PinnedClientAdapter, PoolAdapter, RoutingDbClient } from './client';
 import type { DbClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
@@ -186,7 +186,9 @@ export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomain
  */
 export class PostgresStore extends MastraCompositeStore {
   #pool: Pool;
-  #db: DbClient;
+  // Narrowed to RoutingDbClient so init()'s pin/unpin path is type-checked.
+  // The public `db` getter still exposes it as DbClient.
+  #db: RoutingDbClient;
   #ownsPool: boolean;
   #poolClosed: boolean = false;
   private schema: string;
@@ -209,7 +211,9 @@ export class PostgresStore extends MastraCompositeStore {
         this.#ownsPool = true;
       }
 
-      this.#db = new PoolAdapter(this.#pool);
+      // Wrap the pool adapter in a routing client so init() can temporarily
+      // pin all DDL traffic to a single PoolClient. See PostgresStore.init().
+      this.#db = new RoutingDbClient(new PoolAdapter(this.#pool));
 
       const domainConfig: PgDomainClientConfig = {
         client: this.#db,
@@ -273,11 +277,23 @@ export class PostgresStore extends MastraCompositeStore {
       return;
     }
 
+    // Acquire a single backend connection and pin every domain's DDL to it
+    // for the duration of init(). This avoids:
+    //   - per-statement pool.connect() RTT on remote/managed Postgres
+    //   - transaction-pooler budget exhaustion under concurrent DDL fan-out
+    //   - inter-statement lock contention across domains (issue #17679)
+    // Runtime queries continue to use the pool normally once init completes.
+    const pinnedClient = await this.#pool.connect();
+    const pinned = new PinnedClientAdapter(this.#pool, pinnedClient);
+
     try {
-      this.isInitialized = true;
+      this.#db.pin(pinned);
       await super.init();
+      // Only mark initialized after schema creation actually finishes so a
+      // racing second init() caller can't return early and issue runtime
+      // queries against tables that aren't yet created.
+      this.isInitialized = true;
     } catch (error) {
-      this.isInitialized = false;
       // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
       if (error instanceof MastraError) {
         throw error;
@@ -290,6 +306,9 @@ export class PostgresStore extends MastraCompositeStore {
         },
         error,
       );
+    } finally {
+      this.#db.unpin();
+      pinnedClient.release();
     }
   }
 

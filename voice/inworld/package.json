@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-inworld",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Mastra Inworld AI voice integration — streaming TTS, batch STT, and realtime full-duplex voice",
   "type": "module",
   "files": [
@@ -38,7 +38,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

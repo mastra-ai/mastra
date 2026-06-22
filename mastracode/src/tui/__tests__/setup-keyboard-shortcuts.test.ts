@@ -20,7 +20,7 @@ const autocompleteProviders: Array<{
   fdPath: string | null | undefined;
 }> = [];
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   CombinedAutocompleteProvider: class {
     constructor(
       commands: Array<{
@@ -59,6 +59,7 @@ vi.mock('../status-line.js', () => ({
 import { showError, showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
+import { createMockState } from './harness-mock.js';
 
 const originalPlatform = process.platform;
 
@@ -87,40 +88,39 @@ function createState(isRunning: boolean) {
     setAutocompleteProvider: vi.fn(),
   };
 
-  const state = {
-    editor,
-    harness: {
-      isRunning: vi.fn(() => isRunning),
-      getState: vi.fn(() => ({})),
-      listModes: vi.fn(() => []),
-      getCurrentModeId: vi.fn(),
-      switchMode: vi.fn(),
-      setState: vi.fn(),
-      abort: vi.fn(),
+  const state = createMockState({
+    session: {
+      run: { isRunning: vi.fn(() => isRunning) },
+      suspensions: { hasPending: vi.fn(() => false) },
+      mode: { get: vi.fn() },
+      state: { get: vi.fn(() => ({})), set: vi.fn() },
     },
-    pendingApprovalDismiss: undefined,
-    activeInlinePlanApproval: undefined,
-    activeInlineQuestion: undefined,
-    pendingInlineQuestions: [],
-    userInitiatedAbort: false,
-    lastCtrlCTime: 0,
-    lastClearedText: '',
-    customSlashCommands: [],
-    skillCommands: [],
-    goalSkillCommands: [],
-    hideThinkingBlock: false,
-    toolOutputExpanded: false,
-    allToolComponents: [],
-    allSlashCommandComponents: [],
-    allSystemReminderComponents: [],
-    allShellComponents: [],
-    ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
-    goalManager: {
-      isActive: vi.fn(() => false),
-      pause: vi.fn(),
-      saveToThread: vi.fn(),
+    extra: {
+      editor,
+      pendingApprovalDismiss: undefined,
+      activeInlinePlanApproval: undefined,
+      activeInlineQuestion: undefined,
+      pendingInlineQuestions: [],
+      userInitiatedAbort: false,
+      lastCtrlCTime: 0,
+      lastClearedText: '',
+      customSlashCommands: [],
+      skillCommands: [],
+      goalSkillCommands: [],
+      hideThinkingBlock: false,
+      toolOutputExpanded: false,
+      allToolComponents: [],
+      allSlashCommandComponents: [],
+      allSystemReminderComponents: [],
+      allShellComponents: [],
+      ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
+      goalManager: {
+        isActive: vi.fn(() => false),
+        pause: vi.fn(),
+        saveToThread: vi.fn(),
+      },
     },
-  } as any;
+  }) as any;
 
   return { state, editor, actions };
 }
@@ -147,7 +147,7 @@ describe('setupKeyboardShortcuts', () => {
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
-    expect(commandNames).toContain('judge');
+    expect(commandNames).not.toContain('judge');
     expect(commandNames).not.toContain('notify');
     const goalCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'goal') as
       | { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> }
@@ -157,6 +157,7 @@ describe('setupKeyboardShortcuts', () => {
       'pause',
       'resume',
       'clear',
+      'judge',
     ]);
     expect(goalCommand?.getArgumentCompletions?.('pa').map(command => command.value)).toEqual(['pause']);
     const githubCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'github') as
@@ -170,7 +171,6 @@ describe('setupKeyboardShortcuts', () => {
     ]);
     expect(githubCommand?.getArgumentCompletions?.('un').map(command => command.value)).toEqual(['unsubscribe']);
     expect(commandNames.indexOf('thread')).toBeLessThan(commandNames.indexOf('threads'));
-    expect(commandNames.indexOf('goal')).toBeLessThan(commandNames.indexOf('judge'));
     expect(commandNames).toContain('skill/');
     expect(commandNames).not.toContain('memory-gateway');
     expect(commandNames.indexOf('/deploy')).toBeGreaterThan(commandNames.indexOf('help'));
@@ -392,7 +392,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(abortController.signal.aborted).toBe(true);
     expect(component.setInterrupted).toHaveBeenCalledTimes(1);
     expect(state.userInitiatedAbort).toBe(true);
-    expect(state.harness.abort).not.toHaveBeenCalled();
+    expect(state.session.abort).toHaveBeenCalledTimes(1);
     expect(editor.setText).not.toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
   });
@@ -414,6 +414,71 @@ describe('setupKeyboardShortcuts', () => {
     expect(state.goalManager.saveToThread).not.toHaveBeenCalled();
     expect(showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
     expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('aborts when parked in a tool suspension even though isRunning() is false', () => {
+    const { state, editor, actions } = createState(false);
+    editor.getText.mockReturnValue('');
+    state.session.suspensions.hasPending.mockReturnValue(true);
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(state.session.abort).toHaveBeenCalledTimes(1);
+    expect(state.userInitiatedAbort).toBe(true);
+    expect(editor.setText).not.toHaveBeenCalled();
+  });
+
+  it('aborts the harness and persists a paused goal when clearing during goal judge evaluation', () => {
+    const { state, actions } = createState(true);
+    const abortController = { abort: vi.fn() };
+    const component = { setInterrupted: vi.fn() };
+    state.activeGoalJudge = { modelId: 'openai/gpt-5.5', abortController, component };
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(abortController.abort).toHaveBeenCalledTimes(1);
+    expect(component.setInterrupted).toHaveBeenCalledTimes(1);
+    expect(state.session.abort).toHaveBeenCalledTimes(1);
+    expect(state.goalManager.pause).toHaveBeenCalledWith('Judge evaluation was interrupted.');
+    expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(state.activeGoalJudge).toBeUndefined();
+    expect(state.userInitiatedAbort).toBe(true);
+  });
+
+  it('aborts and clears an active plan approval parked in a tool suspension', () => {
+    // Regression: Ctrl+C while a submit_plan approval box is up must abort the
+    // parked suspension (not hang). The editor-level handleInput override lets
+    // \x03 fall through to this 'clear' action; here we assert the action
+    // aborts and clears the inline plan-approval component.
+    const { state, editor, actions } = createState(false);
+    editor.getText.mockReturnValue('');
+    state.session.suspensions.hasPending.mockReturnValue(true);
+    state.activeInlinePlanApproval = { handleInput: vi.fn() } as any;
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(state.session.abort).toHaveBeenCalledTimes(1);
+    expect(state.activeInlinePlanApproval).toBeUndefined();
+    expect(state.userInitiatedAbort).toBe(true);
+    expect(editor.setText).not.toHaveBeenCalled();
   });
 
   it('suspends the process with Ctrl+Z and restarts rendering on SIGCONT', () => {

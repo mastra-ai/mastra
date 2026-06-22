@@ -81,9 +81,9 @@ export interface ISSOProvider<TUser = unknown> {
    *
    * @param redirectUri - Callback URL after authentication
    * @param state - CSRF protection state parameter
-   * @returns Full URL to redirect user to
+   * @returns Full URL to redirect user to (sync or async)
    */
-  getLoginUrl(redirectUri: string, state: string): string;
+  getLoginUrl(redirectUri: string, state: string): string | Promise<string>;
 
   /**
    * Handle OAuth callback, exchange code for tokens and user.
