@@ -33,8 +33,17 @@ function createCtx(options?: {
 }
 
 describe('handleFeedbackCommand', () => {
-  it('requires trace, run, or thread context before recording feedback', async () => {
+  it('requires trace or run context before recording feedback', async () => {
     const ctx = createCtx({ traceId: null, runId: null, threadId: null });
+
+    await handleFeedbackCommand(ctx, ['up']);
+
+    expect(ctx.addFeedback).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalledWith('No active session to attach feedback to.');
+  });
+
+  it('rejects feedback when only a thread is bound but no run has happened', async () => {
+    const ctx = createCtx({ traceId: null, runId: null, threadId: 'thread-only' });
 
     await handleFeedbackCommand(ctx, ['up']);
 

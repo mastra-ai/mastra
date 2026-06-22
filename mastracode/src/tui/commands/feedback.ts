@@ -37,7 +37,9 @@ export async function handleFeedbackCommand(ctx: SlashCommandContext, args: stri
   const runId = ctx.state.session.getCurrentRunId() ?? undefined;
   const threadId = ctx.state.session.thread.getId() ?? undefined;
 
-  if (!traceId && !runId && !threadId) {
+  // Feedback correlates to an actual run/trace. A bound thread alone is not
+  // enough — every session has a thread, but there may be no run to rate yet.
+  if (!traceId && !runId) {
     ctx.showError('No active session to attach feedback to.');
     return;
   }

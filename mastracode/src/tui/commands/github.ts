@@ -44,26 +44,24 @@ async function getCurrentGithubThread(ctx: SlashCommandContext): Promise<{
   resourceId?: string;
   metadata?: Record<string, unknown>;
 }> {
-  const harness = ctx.harness as unknown as {
-    session?: {
-      identity?: {
-        getResourceId?: () => string | undefined;
-      };
-      thread?: {
-        getId?: () => string | undefined;
-        list?: (input?: {
-          allResources?: boolean;
-        }) => Promise<Array<{ id: string; resourceId?: string; metadata?: Record<string, unknown> }>>;
-      };
+  const session = ctx.state.session as unknown as {
+    identity?: {
+      getResourceId?: () => string | undefined;
+    };
+    thread?: {
+      getId?: () => string | undefined;
+      list?: (input?: {
+        allResources?: boolean;
+      }) => Promise<Array<{ id: string; resourceId?: string; metadata?: Record<string, unknown> }>>;
     };
   };
-  const threadId = harness.session?.thread?.getId?.();
+  const threadId = session?.thread?.getId?.();
   if (!threadId) return {};
 
-  const thread = (await harness.session?.thread?.list?.({ allResources: true }))?.find(item => item.id === threadId);
+  const thread = (await session?.thread?.list?.({ allResources: true }))?.find(item => item.id === threadId);
   return {
     threadId,
-    resourceId: thread?.resourceId ?? harness.session?.identity?.getResourceId?.(),
+    resourceId: thread?.resourceId ?? session?.identity?.getResourceId?.(),
     metadata: thread?.metadata,
   };
 }
