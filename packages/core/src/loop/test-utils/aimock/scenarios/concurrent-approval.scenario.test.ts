@@ -87,7 +87,7 @@ describe('AIMock loop scenario: concurrent approval requests', () => {
     if (isEvented) {
       // Evented engine surfaces one approval per suspend/resume cycle.
       expect(approvals.length).toBeGreaterThanOrEqual(1);
-      expect(approvals[0]).toMatch(/approve:call_(delete_1|rename_1)/);
+      expect(approvals.every(a => /^approve:call_(delete_1|rename_1)$/.test(a))).toBe(true);
     } else {
       // Default engine surfaces all approvals in the batch.
       expect(approvals).toHaveLength(2);
@@ -148,6 +148,8 @@ describe('AIMock loop scenario: concurrent approval requests', () => {
       expect(approvals.length).toBeGreaterThanOrEqual(1);
       // read_file never needs approval regardless of engine.
       expect(approvals.every(a => !a.includes('call_read'))).toBe(true);
+      // Every approval must be for an expected approval-gated tool.
+      expect(approvals.every(a => /^(approve:call_rename_1|decline:call_delete_1)$/.test(a))).toBe(true);
     } else {
       // Default engine surfaces all approval-gated calls.
       expect(approvals).toHaveLength(2);
@@ -208,7 +210,7 @@ describe('AIMock loop scenario: concurrent approval requests', () => {
     if (isEvented) {
       // Evented engine surfaces one approval per suspend/resume cycle.
       expect(approvals.length).toBeGreaterThanOrEqual(1);
-      expect(approvals[0]).toMatch(/approve:call_(delete|rename|archive)/);
+      expect(approvals.every(a => /^approve:call_(delete|rename|archive)$/.test(a))).toBe(true);
     } else {
       expect(approvals).toHaveLength(3);
       expect(approvals).toContain('approve:call_delete');

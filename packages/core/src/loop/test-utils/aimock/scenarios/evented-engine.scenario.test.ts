@@ -1219,11 +1219,15 @@ describe('AIMock loop scenarios (evented engine)', () => {
       });
 
       expect(requests).toHaveLength(2);
-      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
-      expect(turn2).toContain('2026-06-22T12:00:00.000Z');
-      expect(turn2).toContain('2020-01-15T08:30:00.000Z');
-      expect(turn2).toContain('registered');
-      expect(turn2).toContain('last_login');
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMsg = turn2Messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_date');
+      expect(toolMsg).toBeDefined();
+      const raw = (toolMsg as any)?.content;
+      const toolPayload = typeof raw === 'string' ? raw : JSON.stringify(raw ?? toolMsg);
+      expect(toolPayload).toContain('2026-06-22T12:00:00.000Z');
+      expect(toolPayload).toContain('2020-01-15T08:30:00.000Z');
+      expect(toolPayload).toContain('registered');
+      expect(toolPayload).toContain('last_login');
     });
   });
 
@@ -1273,14 +1277,18 @@ describe('AIMock loop scenarios (evented engine)', () => {
       });
 
       expect(requests).toHaveLength(2);
-      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
-      expect(turn2).toContain('ValidationError');
-      expect(turn2).toContain('email');
-      expect(turn2).toContain('is required');
-      expect(turn2).toContain('E_VALIDATION');
-      expect(turn2).toContain('NetworkError');
-      expect(turn2).toContain('connection refused');
-      expect(turn2).toContain('DNS lookup failed');
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMsg = turn2Messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_err');
+      expect(toolMsg).toBeDefined();
+      const raw = (toolMsg as any)?.content;
+      const toolPayload = typeof raw === 'string' ? raw : JSON.stringify(raw ?? toolMsg);
+      expect(toolPayload).toContain('ValidationError');
+      expect(toolPayload).toContain('email');
+      expect(toolPayload).toContain('is required');
+      expect(toolPayload).toContain('E_VALIDATION');
+      expect(toolPayload).toContain('NetworkError');
+      expect(toolPayload).toContain('connection refused');
+      expect(toolPayload).toContain('DNS lookup failed');
     });
   });
 
@@ -1324,15 +1332,19 @@ describe('AIMock loop scenarios (evented engine)', () => {
       });
 
       expect(requests).toHaveLength(2);
-      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
-      expect(turn2).toContain('alpha');
-      expect(turn2).toContain('100');
-      expect(turn2).toContain('beta');
-      expect(turn2).toContain('200');
-      expect(turn2).toContain('gamma');
-      expect(turn2).toContain('300');
-      expect(turn2).toContain('user-1');
-      expect(turn2).toContain('admin');
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMsg = turn2Messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_map');
+      expect(toolMsg).toBeDefined();
+      const raw = (toolMsg as any)?.content;
+      const toolPayload = typeof raw === 'string' ? raw : JSON.stringify(raw ?? toolMsg);
+      expect(toolPayload).toContain('alpha');
+      expect(toolPayload).toContain('100');
+      expect(toolPayload).toContain('beta');
+      expect(toolPayload).toContain('200');
+      expect(toolPayload).toContain('gamma');
+      expect(toolPayload).toContain('300');
+      expect(toolPayload).toContain('user-1');
+      expect(toolPayload).toContain('admin');
     });
   });
 
@@ -1369,13 +1381,17 @@ describe('AIMock loop scenarios (evented engine)', () => {
       });
 
       expect(requests).toHaveLength(2);
-      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
-      expect(turn2).toContain('typescript');
-      expect(turn2).toContain('mastra');
-      expect(turn2).toContain('evented-engine');
-      expect(turn2).toContain('codec');
-      expect(turn2).toContain('1001');
-      expect(turn2).toContain('5005');
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMsg = turn2Messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_set');
+      expect(toolMsg).toBeDefined();
+      const raw = (toolMsg as any)?.content;
+      const toolPayload = typeof raw === 'string' ? raw : JSON.stringify(raw ?? toolMsg);
+      expect(toolPayload).toContain('typescript');
+      expect(toolPayload).toContain('mastra');
+      expect(toolPayload).toContain('evented-engine');
+      expect(toolPayload).toContain('codec');
+      expect(toolPayload).toContain('1001');
+      expect(toolPayload).toContain('5005');
     });
   });
 
@@ -1414,11 +1430,15 @@ describe('AIMock loop scenarios (evented engine)', () => {
       });
 
       expect(requests).toHaveLength(2);
-      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
-      expect(turn2).toContain('email');
-      expect(turn2).toContain('iso-date');
-      expect(turn2).toContain('script-tag');
-      expect(turn2).toContain('a-zA-Z0-9');
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMsg = turn2Messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_regex');
+      expect(toolMsg).toBeDefined();
+      const raw = (toolMsg as any)?.content;
+      const toolPayload = typeof raw === 'string' ? raw : JSON.stringify(raw ?? toolMsg);
+      expect(toolPayload).toContain('email');
+      expect(toolPayload).toContain('iso-date');
+      expect(toolPayload).toContain('script-tag');
+      expect(toolPayload).toContain('a-zA-Z0-9');
     });
   });
 
@@ -1458,11 +1478,15 @@ describe('AIMock loop scenarios (evented engine)', () => {
       });
 
       expect(requests).toHaveLength(2);
-      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
-      expect(turn2).toContain('https://example.com/path?query=value&foo=bar#section');
-      expect(turn2).toContain('file:///home/user/docs/readme.md');
-      expect(turn2).toContain('data:text/plain;base64,SGVsbG8=');
-      expect(turn2).toContain('wss://ws.example.com:8080/socket');
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMsg = turn2Messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_url');
+      expect(toolMsg).toBeDefined();
+      const raw = (toolMsg as any)?.content;
+      const toolPayload = typeof raw === 'string' ? raw : JSON.stringify(raw ?? toolMsg);
+      expect(toolPayload).toContain('https://example.com/path?query=value&foo=bar#section');
+      expect(toolPayload).toContain('file:///home/user/docs/readme.md');
+      expect(toolPayload).toContain('data:text/plain;base64,SGVsbG8=');
+      expect(toolPayload).toContain('wss://ws.example.com:8080/socket');
     });
   });
 
@@ -1502,11 +1526,15 @@ describe('AIMock loop scenarios (evented engine)', () => {
       });
 
       expect(requests).toHaveLength(2);
-      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
-      expect(turn2).toContain('9007199254740993');
-      expect(turn2).toContain('18446744073709551615');
-      expect(turn2).toContain('-99999999999999999999');
-      expect(turn2).toContain('0xFFFFFFFFFFFFFFFF');
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMsg = turn2Messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_big');
+      expect(toolMsg).toBeDefined();
+      const raw = (toolMsg as any)?.content;
+      const toolPayload = typeof raw === 'string' ? raw : JSON.stringify(raw ?? toolMsg);
+      expect(toolPayload).toContain('9007199254740993');
+      expect(toolPayload).toContain('18446744073709551615');
+      expect(toolPayload).toContain('-99999999999999999999');
+      expect(toolPayload).toContain('0xFFFFFFFFFFFFFFFF');
     });
   });
 
@@ -1551,11 +1579,56 @@ describe('AIMock loop scenarios (evented engine)', () => {
       });
 
       expect(requests).toHaveLength(2);
-      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
-      expect(turn2).toContain('has-value');
-      expect(turn2).toContain('null');
-      expect(turn2).toContain('first');
-      expect(turn2).toContain('third');
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMsg = turn2Messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_null');
+      expect(toolMsg).toBeDefined();
+      const raw = (toolMsg as any)?.content;
+      const toolPayload = typeof raw === 'string' ? raw : JSON.stringify(raw ?? toolMsg);
+      expect(toolPayload).toContain('has-value');
+      expect(toolPayload).toContain('first');
+      expect(toolPayload).toContain('third');
+      // Verify explicit null values are present (not stripped)
+      expect(toolPayload).toContain('"missing":null');
+    });
+
+    it('undefined fields are handled gracefully through the evented loop', async () => {
+      const undefTool = createTool({
+        id: 'undef_tool',
+        description: 'Returns data with undefined-like gaps.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          defined: z.string(),
+          items: z.array(z.string().nullable()),
+        }),
+        execute: async () => ({
+          defined: 'present',
+          items: ['a', null, 'c'],
+        }),
+      });
+
+      const { requests } = await runLoopScenario({
+        llm: getMock(),
+        prompt: 'Get data with gaps.',
+        tools: { undef_tool: undefTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_undef', name: 'undef_tool', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Data received.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMsg = turn2Messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_undef');
+      expect(toolMsg).toBeDefined();
+      const raw = (toolMsg as any)?.content;
+      const toolPayload = typeof raw === 'string' ? raw : JSON.stringify(raw ?? toolMsg);
+      expect(toolPayload).toContain('present');
+      // Null gap preserved in array
+      expect(toolPayload).toContain('["a",null,"c"]');
     });
   });
 
@@ -1607,27 +1680,31 @@ describe('AIMock loop scenarios (evented engine)', () => {
       });
 
       expect(requests).toHaveLength(2);
-      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
+      const turn2Messages = requests[1]?.body?.messages ?? [];
+      const toolMsg = turn2Messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_mixed');
+      expect(toolMsg).toBeDefined();
+      const raw = (toolMsg as any)?.content;
+      const toolPayload = typeof raw === 'string' ? raw : JSON.stringify(raw ?? toolMsg);
       // Date shape
-      expect(turn2).toContain('2026-06-22T12:00:00');
+      expect(toolPayload).toContain('2026-06-22T12:00:00');
       // Error shape
-      expect(turn2).toContain('CodecTestError');
-      expect(turn2).toContain('rich-type round-trip');
-      expect(turn2).toContain('inner cause');
+      expect(toolPayload).toContain('CodecTestError');
+      expect(toolPayload).toContain('rich-type round-trip');
+      expect(toolPayload).toContain('inner cause');
       // Map shape
-      expect(turn2).toContain('key-a');
-      expect(turn2).toContain('key-b');
+      expect(toolPayload).toContain('key-a');
+      expect(toolPayload).toContain('key-b');
       // Set shape
-      expect(turn2).toContain('unique-1');
-      expect(turn2).toContain('unique-3');
+      expect(toolPayload).toContain('unique-1');
+      expect(toolPayload).toContain('unique-3');
       // RegExp shape
-      expect(turn2).toContain('\\d+');
+      expect(toolPayload).toContain('\\d+');
       // URL shape
-      expect(turn2).toContain('https://mastra.ai/docs/codec');
+      expect(toolPayload).toContain('https://mastra.ai/docs/codec');
       // BigInt shape
-      expect(turn2).toContain('9007199254740993');
+      expect(toolPayload).toContain('9007199254740993');
       // null
-      expect(turn2).toContain('null');
+      expect(toolPayload).toContain('"nullableField":null');
     });
   });
 
