@@ -8,13 +8,13 @@ import {
   CommandItem,
   CommandList,
   CommandShortcut,
-  Kbd,
   McpServerIcon,
   ScrollArea,
   ToolsIcon,
   WorkflowIcon,
-  useKeyboardShortcutLabel,
 } from '@mastra/playground-ui';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
+import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import {
   Cpu,
   EyeIcon,
