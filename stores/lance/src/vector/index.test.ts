@@ -75,7 +75,7 @@ describe('Lance vector store tests', () => {
 
         const stats = await vectorDB.describeIndex({ indexName: indexOnColumn + '_idx' });
 
-        expect(stats?.metric).toBe('l2');
+        expect(stats?.metric).toBe('euclidean');
       });
 
       it('should default tableName to indexName when tableName is not provided', async () => {
@@ -192,7 +192,7 @@ describe('Lance vector store tests', () => {
         expect(stats).toBeDefined();
         expect(stats?.dimension).toBe(3);
         expect(stats?.count).toBe(300);
-        expect(stats?.metric).toBe('l2');
+        expect(stats?.metric).toBe('euclidean');
       });
 
       it('should throw error for non-existent index', async () => {
@@ -2290,8 +2290,10 @@ describe('Lance vector store tests', () => {
       const far = results.find(r => r.id === 'far')!;
       expect(results[0].id).toBe('exact');
       expect(exact.score).toBeGreaterThan(far.score);
-      // 1 / (1 + distance): identical (distance 0) -> 1
+      // Lance l2 returns squared L2; score uses sqrt(distance) to match Mastra euclidean semantics.
       expect(exact.score).toBeCloseTo(1, 5);
+      expect(far.score).toBeGreaterThan(0.4);
+      expect(far.score).toBeLessThan(0.5);
       expect(exact.score).toBeLessThanOrEqual(1);
       expect(far.score).toBeGreaterThan(0);
       expect(far.score).toBeLessThan(1);
@@ -2327,6 +2329,91 @@ describe('Lance vector store tests', () => {
       // metric was inferred from the index rather than the cosine default.
       expect(exact.score).toBeGreaterThan(0.9);
       expect(far.score).toBeGreaterThan(0.3);
+      expect(far.score).toBeLessThan(0.5);
+
+      await vectorDB.deleteTable(tableName);
+    });
+
+    it('uses the Lance index metric when an explicit query metric conflicts', async () => {
+      const tableName = 'score_semantics_index_metric_conflict_' + Date.now();
+      const rows = Array.from({ length: 300 }, (_, i) => ({
+        id: String(i + 1),
+        vector: i === 0 ? [1, 0, 0] : i === 1 ? [0, 1, 0] : [Math.random(), Math.random(), Math.random()],
+      }));
+      await vectorDB.createTable(tableName, rows);
+      await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 3, metric: 'euclidean' });
+
+      const results = await vectorDB.query({
+        indexName: 'vector',
+        tableName,
+        queryVector: [1, 0, 0],
+        topK: 300,
+        metric: 'cosine',
+      });
+
+      const exact = results.find(r => r.id === '1')!;
+      const far = results.find(r => r.id === '2')!;
+      expect(exact.score).toBeGreaterThan(far.score);
+      expect(exact.score).toBeGreaterThan(0.9);
+      expect(far.score).toBeGreaterThan(0.3);
+      expect(far.score).toBeLessThan(0.5);
+
+      await vectorDB.deleteTable(tableName);
+    });
+
+    it('uses an explicit query metric for small tables without a Lance index', async () => {
+      const tableName = 'score_semantics_explicit_metric_' + Date.now();
+      await vectorDB.createIndex({ indexName: tableName, dimension: 3, metric: 'euclidean' });
+      await vectorDB.upsert({
+        indexName: tableName,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        ids: ['exact', 'far'],
+      });
+
+      const results = await vectorDB.query({
+        indexName: tableName,
+        queryVector: [1, 0, 0],
+        topK: 2,
+        metric: 'euclidean',
+      });
+
+      const exact = results.find(r => r.id === 'exact')!;
+      const far = results.find(r => r.id === 'far')!;
+      expect(results[0].id).toBe('exact');
+      expect(exact.score).toBeCloseTo(1, 5);
+      expect(far.score).toBeCloseTo(1 / (1 + Math.sqrt(2)), 5);
+
+      await vectorDB.deleteTable(tableName);
+    });
+
+    it('keeps _distance available when selecting columns', async () => {
+      const tableName = 'score_semantics_columns_' + Date.now();
+      await vectorDB.createIndex({ indexName: tableName, dimension: 3, metric: 'cosine' });
+      await vectorDB.upsert({
+        indexName: tableName,
+        vectors: [
+          [1, 0, 0],
+          [0, 1, 0],
+        ],
+        ids: ['exact', 'far'],
+        metadata: [{ text: 'exact' }, { text: 'far' }],
+      });
+
+      const results = await vectorDB.query({
+        indexName: tableName,
+        queryVector: [1, 0, 0],
+        topK: 2,
+        columns: ['metadata_text'],
+      });
+
+      const exact = results.find(r => r.id === 'exact')!;
+      const far = results.find(r => r.id === 'far')!;
+      expect(exact.score).toBeCloseTo(1, 5);
+      expect(far.score).toBeCloseTo(0, 5);
+      expect(exact.metadata?.text).toBe('exact');
 
       await vectorDB.deleteTable(tableName);
     });
