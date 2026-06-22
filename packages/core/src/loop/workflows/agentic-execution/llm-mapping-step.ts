@@ -163,7 +163,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
    * tripwire (caller should emit a tripwire chunk and stop).
    */
   async function runToolResultProcessors(args: {
-    chunk: ChunkType<OUTPUT> & { payload: { toolCallId: string; toolName: string; args?: unknown; result?: unknown; providerExecuted?: boolean } };
+    chunk: ChunkType<OUTPUT> & {
+      payload: { toolCallId: string; toolName: string; args?: unknown; result?: unknown; providerExecuted?: boolean };
+    };
     stepNumber: number;
     steps: Array<StepResult<ToolSet>>;
   }): Promise<{ ok: true } | { ok: false; tripwire: TripWire }> {
