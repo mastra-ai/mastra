@@ -2,8 +2,8 @@ import type { HarnessMode } from '@mastra/core/harness';
 
 import { createMastraCode } from '../index.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
-import { runAcpServer } from './server.js';
 import { setAutoApprove } from './event-mapper.js';
+import { runAcpServer } from './server.js';
 
 /**
  * Entry point for ACP server mode.
