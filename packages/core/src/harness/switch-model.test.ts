@@ -30,3 +30,28 @@ describe('session.model.switch', () => {
     expect(trackModelUse).toHaveBeenCalledWith('openai/gpt-5.3-codex');
   });
 });
+
+describe('session.model.displayName', () => {
+  it("returns 'unknown' when no model is selected", () => {
+    const harness = createHarness();
+
+    expect(harness.session.model.hasSelection()).toBe(false);
+    expect(harness.session.model.displayName()).toBe('unknown');
+  });
+
+  it('returns the last segment of a provider-prefixed model id', async () => {
+    const harness = createHarness();
+
+    await harness.session.model.switch({ modelId: 'anthropic/claude-sonnet-4' });
+
+    expect(harness.session.model.displayName()).toBe('claude-sonnet-4');
+  });
+
+  it('returns the whole id when there is no provider prefix', async () => {
+    const harness = createHarness();
+
+    await harness.session.model.switch({ modelId: 'gpt-4o' });
+
+    expect(harness.session.model.displayName()).toBe('gpt-4o');
+  });
+});

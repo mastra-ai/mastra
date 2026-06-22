@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import type { AgentSignalInput, Agent } from '@mastra/core/agent';
+import type { AgentSignalInput, Agent, AgentSignalIfIdleOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
@@ -269,6 +269,7 @@ type GithubPollingThread = {
   threadId: string;
   resourceId: string;
   agentId?: string;
+  ifIdle?: AgentSignalIfIdleOptions<unknown>;
 };
 
 type GithubPollingState = GithubPollingThread & {

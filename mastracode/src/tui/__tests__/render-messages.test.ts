@@ -637,8 +637,8 @@ describe('renderExistingMessages subagents', () => {
     state.harness = {
       session: {
         displayState: { get: () => ({ isRunning: false }) },
+        model: { get: () => 'openai/gpt-5.5' },
       },
-      getFullModelId: () => 'openai/gpt-5.5',
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);

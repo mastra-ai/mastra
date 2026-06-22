@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import type { AgentThreadSubscription } from '../agent/types';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
@@ -11,10 +12,13 @@ import type {
   HarnessEvent,
   HarnessMessage,
   HarnessMode,
+  HarnessOMConfig,
   HarnessRequestState,
   HarnessRequestStateUpdater,
   HarnessThread,
   ModelUseCountTracker,
+  PermissionPolicy,
+  PermissionRules,
   TokenUsage,
   ToolCategory,
 } from './types';
@@ -696,6 +700,18 @@ export class SessionModel {
     return this.#id !== '';
   }
 
+  /**
+   * A short display name for the selected model: the last segment of the model
+   * id (e.g. `anthropic/claude-sonnet-4` -> `claude-sonnet-4`). Returns
+   * `'unknown'` when no model is selected.
+   */
+  displayName(): string {
+    const modelId = this.#id;
+    if (!modelId || modelId === 'unknown') return modelId || 'unknown';
+    const parts = modelId.split('/');
+    return parts[parts.length - 1] || modelId;
+  }
+
   /** Set the in-memory selected model id (no persistence). */
   set({ modelId }: { modelId: string }): void {
     this.#id = modelId;
@@ -879,6 +895,247 @@ export class SessionMode {
   }
 }
 
+/** Per-role wiring + state/config keys a {@link SessionOMRole} reads and writes. */
+interface SessionOMRoleConfig {
+  /** The event `role` and `om_model_changed` discriminator for this role. */
+  role: 'observer' | 'reflector';
+  /** Session-state / thread-settings key holding this role's model id. */
+  modelIdKey: 'observerModelId' | 'reflectorModelId';
+  /** Session-state key holding this role's threshold. */
+  thresholdKey: 'observationThreshold' | 'reflectionThreshold';
+  /** Resolve this role's default model id from `omConfig`. */
+  defaultModelId: (omConfig: HarnessOMConfig | undefined) => string | undefined;
+  /** Resolve this role's default threshold from `omConfig`. */
+  defaultThreshold: (omConfig: HarnessOMConfig | undefined) => number | undefined;
+}
+
+/**
+ * One observational-memory role (observer or reflector): its model id, resolved
+ * model instance, threshold, and model switch. Reads return the session-state
+ * value when set, falling back to the Harness's `omConfig` defaults. The shared
+ * wiring is injected by {@link SessionOM.setResolver}.
+ */
+class SessionOMRole {
+  readonly #config: SessionOMRoleConfig;
+  #getState: (() => Record<string, unknown>) | undefined;
+  #setState: ((updates: Record<string, unknown>) => void) | undefined;
+  #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
+  #emit: ((event: HarnessEvent) => void) | undefined;
+  #omConfig: HarnessOMConfig | undefined;
+  #resolveModel: ((modelId: string) => MastraModelConfig) | undefined;
+
+  constructor(config: SessionOMRoleConfig) {
+    this.#config = config;
+  }
+
+  /** @internal Injected by {@link SessionOM.setResolver}. */
+  setWiring(wiring: {
+    getState: () => Record<string, unknown>;
+    setState: (updates: Record<string, unknown>) => void;
+    setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    emit: (event: HarnessEvent) => void;
+    omConfig?: HarnessOMConfig;
+    resolveModel?: (modelId: string) => MastraModelConfig;
+  }): void {
+    this.#getState = wiring.getState;
+    this.#setState = wiring.setState;
+    this.#setSetting = wiring.setSetting;
+    this.#emit = wiring.emit;
+    this.#omConfig = wiring.omConfig;
+    this.#resolveModel = wiring.resolveModel;
+  }
+
+  /** This role's model id from session state, falling back to `omConfig`. */
+  modelId(): string | undefined {
+    const fromState = this.#getState?.()[this.#config.modelIdKey];
+    return (typeof fromState === 'string' ? fromState : undefined) ?? this.#config.defaultModelId(this.#omConfig);
+  }
+
+  /** This role's threshold from session state, falling back to `omConfig`. */
+  threshold(): number | undefined {
+    const fromState = this.#getState?.()[this.#config.thresholdKey];
+    return (typeof fromState === 'number' ? fromState : undefined) ?? this.#config.defaultThreshold(this.#omConfig);
+  }
+
+  /** Resolve this role's model id to a model instance, or undefined when unset. */
+  resolvedModel(): MastraModelConfig | undefined {
+    const modelId = this.modelId();
+    if (!modelId || !this.#resolveModel) return undefined;
+    return this.#resolveModel(modelId);
+  }
+
+  /** Switch this role's model: update session state, persist, and emit. */
+  async switchModel({ modelId }: { modelId: string }): Promise<void> {
+    this.#setState?.({ [this.#config.modelIdKey]: modelId });
+    await this.#setSetting?.({ key: this.#config.modelIdKey, value: modelId });
+    this.#emit?.({ type: 'om_model_changed', role: this.#config.role, modelId });
+  }
+}
+
+/**
+ * Owns the session's observational-memory model selection, grouped by role:
+ * {@link SessionOM.observer} and {@link SessionOM.reflector}. The Harness owns
+ * `omConfig` and the model resolver, so it injects them — plus the session-state
+ * read/write and thread-settings persistence — once via {@link setResolver},
+ * which fans the wiring out to both roles.
+ */
+class SessionOM {
+  readonly observer = new SessionOMRole({
+    role: 'observer',
+    modelIdKey: 'observerModelId',
+    thresholdKey: 'observationThreshold',
+    defaultModelId: omConfig => omConfig?.defaultObserverModelId,
+    defaultThreshold: omConfig => omConfig?.defaultObservationThreshold,
+  });
+  readonly reflector = new SessionOMRole({
+    role: 'reflector',
+    modelIdKey: 'reflectorModelId',
+    thresholdKey: 'reflectionThreshold',
+    defaultModelId: omConfig => omConfig?.defaultReflectorModelId,
+    defaultThreshold: omConfig => omConfig?.defaultReflectionThreshold,
+  });
+
+  /**
+   * Attach the session-state read/write, thread-settings persistence, event
+   * emitter, and the Harness-owned `omConfig` defaults plus model resolver. The
+   * Harness injects these once; the wiring is shared by both roles.
+   */
+  setResolver(options: {
+    getState: () => Record<string, unknown>;
+    setState: (updates: Record<string, unknown>) => void;
+    setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    emit: (event: HarnessEvent) => void;
+    omConfig?: HarnessOMConfig;
+    resolveModel?: (modelId: string) => MastraModelConfig;
+  }): void {
+    this.observer.setWiring(options);
+    this.reflector.setWiring(options);
+  }
+}
+
+/**
+ * Owns the session's tool-permission rules: the per-category and per-tool
+ * approval policies persisted in session state under `permissionRules`. The
+ * Harness injects the session-state read/write once via {@link setResolver}.
+ *
+ * These are the persisted rules consulted during tool-approval resolution; they
+ * are distinct from the in-memory "allow for this session" grants on the
+ * Session.
+ */
+class SessionPermissions {
+  #getState: (() => Record<string, unknown>) | undefined;
+  #setState: ((updates: Record<string, unknown>) => Promise<void>) | undefined;
+
+  /** Attach the session-state read/write. The Harness injects these once. */
+  setResolver(options: {
+    getState: () => Record<string, unknown>;
+    setState: (updates: Record<string, unknown>) => Promise<void>;
+  }): void {
+    this.#getState = options.getState;
+    this.#setState = options.setState;
+  }
+
+  /** The current permission rules, or empty rules when none are set. */
+  getRules(): PermissionRules {
+    const rules = this.#getState?.().permissionRules as PermissionRules | undefined;
+    return rules ?? { categories: {}, tools: {} };
+  }
+
+  /** Set the approval policy for a tool category. Resolves once persisted. */
+  setForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): Promise<void> {
+    const rules = this.getRules();
+    rules.categories[category] = policy;
+    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+  }
+
+  /** Set the approval policy for an individual tool. Resolves once persisted. */
+  setForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): Promise<void> {
+    const rules = this.getRules();
+    rules.tools[toolName] = policy;
+    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+  }
+}
+
+/** The session-state / thread-settings key holding a subagent model id. */
+function subagentModelKey(agentType?: string): string {
+  return agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
+}
+
+/**
+ * The subagent model selection. Reads prefer the per-`agentType` value and fall
+ * back to the global subagent model; writes persist to thread settings and emit
+ * a `subagent_model_changed` event. Wiring is injected by
+ * {@link SessionSubagents.setResolver}.
+ */
+class SessionSubagentModel {
+  #getState: (() => Record<string, unknown>) | undefined;
+  #setState: ((updates: Record<string, unknown>) => void) | undefined;
+  #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
+  #emit: ((event: HarnessEvent) => void) | undefined;
+
+  /** @internal Injected by {@link SessionSubagents.setResolver}. */
+  setWiring(wiring: {
+    getState: () => Record<string, unknown>;
+    setState: (updates: Record<string, unknown>) => void;
+    setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    emit: (event: HarnessEvent) => void;
+  }): void {
+    this.#getState = wiring.getState;
+    this.#setState = wiring.setState;
+    this.#setSetting = wiring.setSetting;
+    this.#emit = wiring.emit;
+  }
+
+  /**
+   * The subagent model id, preferring the `agentType`-specific value when one is
+   * given, then the global subagent model, or `null` when neither is set.
+   */
+  get({ agentType }: { agentType?: string } = {}): string | null {
+    const state = this.#getState?.() ?? {};
+    if (agentType) {
+      const perType = state[subagentModelKey(agentType)];
+      if (typeof perType === 'string') return perType;
+    }
+    const global = state.subagentModelId;
+    return typeof global === 'string' ? global : null;
+  }
+
+  /**
+   * Set the subagent model id (per-`agentType` when given, otherwise global).
+   * Persists to thread settings and emits `subagent_model_changed`.
+   */
+  async set({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
+    const key = subagentModelKey(agentType);
+    this.#setState?.({ [key]: modelId });
+    await this.#setSetting?.({ key, value: modelId });
+    this.#emit?.({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType });
+  }
+}
+
+/**
+ * The session's subagent configuration. Currently exposes the subagent model
+ * selection under {@link SessionSubagents.model}; grouped under `subagents` to
+ * leave room for additional subagent settings. The Harness injects the
+ * session-state read/write, thread-settings persistence, and event emitter once
+ * via {@link setResolver}.
+ */
+class SessionSubagents {
+  readonly model = new SessionSubagentModel();
+
+  /**
+   * Attach the session-state read/write, thread-settings persistence, and event
+   * emitter. The Harness injects these once.
+   */
+  setResolver(options: {
+    getState: () => Record<string, unknown>;
+    setState: (updates: Record<string, unknown>) => void;
+    setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    emit: (event: HarnessEvent) => void;
+  }): void {
+    this.model.setWiring(options);
+  }
+}
+
 type SessionStateUpdater<TState, TResult> = HarnessRequestStateUpdater<TState, TResult>;
 
 interface SessionStateOptions<TState> {
@@ -993,8 +1250,7 @@ class SessionState<TState = unknown> {
  *
  * Currently owns:
  * - the live Harness state (`session.state`): schema-validated snapshots and
- *   serialized updates that emit `state_changed`. `Harness.getState()` /
- *   `Harness.setState()` are compatibility wrappers over this domain.
+ *   serialized updates that emit `state_changed`.
  * - session-scoped permission grants — the "allow for this session" approvals a
  *   user makes when a tool or tool category is gated behind the permission check.
  * - the live token-usage counter for the active thread. The Session holds the
@@ -1525,6 +1781,12 @@ export class Session<TState = unknown> {
   readonly model = new SessionModel(() => this.#store);
   /** The session's currently-selected mode and switch sequence. */
   readonly mode = new SessionMode(() => this.#store, this.model);
+  /** The session's observational-memory model selection (observer/reflector). */
+  readonly om = new SessionOM();
+  /** The session's persisted tool-permission rules (per-category / per-tool). */
+  readonly permissions = new SessionPermissions();
+  /** The session's subagent configuration (currently the subagent model). */
+  readonly subagents = new SessionSubagents();
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
   /** Live subscription to the active thread's agent event stream. */
