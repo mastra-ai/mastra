@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { GoalPanel, StatusLine, Transcript } from './components';
+import { ThreadSidebar } from './ThreadSidebar';
 import { useHarnessSession } from './useHarnessSession';
 
 // A fixed conversation id for this demo. In a real app this is the signed-in
@@ -68,7 +69,88 @@ export default function App() {
         case 'goal-resume':
           await session.resumeGoal();
           return;
+        case 'permissions': {
+          const rules = await session.getPermissions();
+          const cats = Object.entries(rules.categories ?? {}).map(([k, v]) => `  ${k}: ${v}`).join('\n') || '  (none)';
+          const tools = Object.entries(rules.tools ?? {}).map(([k, v]) => `  ${k}: ${v}`).join('\n') || '  (none)';
+          session.pushNotice(`Categories:\n${cats}\nTools:\n${tools}`);
+          return;
+        }
+        case 'yolo': {
+          const categories = ['read', 'edit', 'execute', 'mcp', 'other'] as const;
+          for (const cat of categories) {
+            await session.setPermissionForCategory(cat, 'allow');
+          }
+          session.pushNotice('YOLO mode: all tool categories set to auto-allow');
+          return;
+        }
+        case 'cost': {
+          const u = transcript.usage;
+          if (!u?.totalTokens) {
+            session.pushNotice('No token usage recorded yet.');
+          } else {
+            session.pushNotice(
+              `Tokens — prompt: ${u.promptTokens ?? 0}, completion: ${u.completionTokens ?? 0}, total: ${u.totalTokens}`,
+            );
+          }
+          return;
+        }
+        case 'think':
+          session.pushNotice('Extended thinking: steer the agent with "think step by step" or switch to a thinking-capable model.');
+          return;
+        case 'om':
+          session.pushNotice(`Observational memory phase: ${transcript.omPhase ?? 'idle'}`);
+          return;
+        case 'settings': {
+          const lines = [
+            `Mode: ${transcript.modeId ?? '—'}`,
+            `Model: ${transcript.modelId ?? '—'}`,
+            `Thread: ${transcript.threadId ?? '—'}`,
+            `Running: ${transcript.running}`,
+            `Tasks: ${transcript.tasks.length}`,
+            `Follow-ups queued: ${transcript.followUpCount}`,
+            `OM phase: ${transcript.omPhase}`,
+            `Workspace: ${transcript.workspaceReady ? 'ready' : 'not ready'}`,
+          ];
+          session.pushNotice(lines.join('\n'));
+          return;
+        }
+        case 'follow-up':
+        case 'followup':
+          if (arg) await session.followUp(arg);
+          return;
+        case 'abort':
+          await session.abort();
+          return;
+        case 'help':
+          session.pushNotice(
+            [
+              'Available commands:',
+              '  /mode <id>        — Switch mode (e.g. /mode plan)',
+              '  /model <id>       — Switch model',
+              '  /threads           — Show thread list',
+              '  /new [title]       — Create new thread',
+              '  /rename <title>    — Rename current thread',
+              '  /delete <id>       — Delete a thread',
+              '  /clone             — Clone current thread',
+              '  /goal <objective>  — Set a goal',
+              '  /goal-clear        — Clear active goal',
+              '  /goal-pause        — Pause active goal',
+              '  /goal-resume       — Resume paused goal',
+              '  /permissions       — Show permission rules',
+              '  /yolo              — Auto-allow all tools',
+              '  /cost              — Show token usage',
+              '  /settings          — Show session state',
+              '  /om                — Show OM phase',
+              '  /think             — Extended thinking hint',
+              '  /follow-up <msg>   — Queue a follow-up message',
+              '  /abort             — Abort the current run',
+              '  /help              — Show this list',
+            ].join('\n'),
+          );
+          return;
         default:
+          session.pushNotice(`Unknown command: /${cmd}. Type /help for available commands.`, 'error');
           return;
       }
     }
@@ -77,102 +159,97 @@ export default function App() {
     else await send(text);
   }
 
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-theme', next);
+  };
+
   return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <strong>MastraCode</strong>
-        <div style={styles.modes}>
-          {modes.map(m => (
-            <button
-              key={m.id}
-              style={{ ...styles.modeBtn, ...(transcript.modeId === m.id ? styles.modeActive : {}) }}
-              onClick={() => void session.switchMode(m.id)}
-            >
-              {m.name ?? m.id}
-            </button>
-          ))}
-          <button style={styles.modeBtn} onClick={() => { void session.refreshThreads(); setShowThreads(s => !s); }}>
-            threads
-          </button>
-        </div>
-      </header>
-
-      <GoalPanel
-        goal={transcript.goal}
-        onSetGoal={session.setGoal}
-        onPauseGoal={session.pauseGoal}
-        onResumeGoal={session.resumeGoal}
-        onClearGoal={session.clearGoal}
-      />
-
+    <div className={showThreads ? 'page-with-sidebar' : ''}>
       {showThreads && (
-        <div style={styles.threadBar}>
-          {threads.length === 0 && <span style={styles.dim}>No other threads</span>}
-          {threads.map(t => (
-            <button
-              key={t.id}
-              style={{ ...styles.threadBtn, ...(transcript.threadId === t.id ? styles.modeActive : {}) }}
-              onClick={() => { void session.switchThread(t.id); setShowThreads(false); }}
-            >
-              {t.title ?? t.id.slice(0, 8)}
-            </button>
-          ))}
-        </div>
+        <ThreadSidebar
+          threads={threads}
+          activeThreadId={transcript.threadId}
+          onSwitch={id => { void session.switchThread(id); }}
+          onCreate={title => { void session.createThread(title); }}
+          onRename={(id, title) => { void session.renameThread(id, title); }}
+          onDelete={id => { void session.deleteThread(id); }}
+          onClose={() => setShowThreads(false)}
+        />
       )}
 
-      <main ref={threadRef} style={styles.thread}>
-        {transcript.entries.length === 0 && (
-          <p style={styles.empty}>Ask the coding agent to read, write, or run something in the workspace.</p>
-        )}
-        <Transcript entries={transcript.entries} onApprove={session.approveTool} onRespond={session.respondSuspension} />
-      </main>
+      <div className={showThreads ? 'page-main' : 'page'}>
+        <header className="header">
+          <span className="header-title">MastraCode</span>
+          <div className="header-actions">
+            {modes.map(m => (
+              <button
+                key={m.id}
+                className={`mode-btn ${transcript.modeId === m.id ? 'active' : ''}`}
+                onClick={() => void session.switchMode(m.id)}
+              >
+                {m.name ?? m.id}
+              </button>
+            ))}
+            <button
+              className={`mode-btn ${showThreads ? 'active' : ''}`}
+              onClick={() => { void session.refreshThreads(); setShowThreads(s => !s); }}
+            >
+              threads
+            </button>
+            <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+          </div>
+        </header>
 
-      <form onSubmit={onSubmit} style={styles.composer}>
-        <input
-          style={styles.input}
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          placeholder={transcript.running ? 'Steer the run, or /command…' : 'Message the agent, or /mode plan…'}
-          disabled={status !== 'ready'}
+        <GoalPanel
+          goal={transcript.goal}
+          onSetGoal={session.setGoal}
+          onPauseGoal={session.pauseGoal}
+          onResumeGoal={session.resumeGoal}
+          onClearGoal={session.clearGoal}
         />
-        {transcript.running ? (
-          <button type="button" style={styles.stop} onClick={() => void abort()}>
-            Stop
-          </button>
-        ) : (
-          <button type="submit" style={styles.sendBtn} disabled={status !== 'ready' || !draft.trim()}>
-            Send
-          </button>
-        )}
-      </form>
 
-      <StatusLine
-        status={status}
-        modeId={transcript.modeId}
-        modelId={transcript.modelId}
-        running={transcript.running}
-        followUpCount={transcript.followUpCount}
-        omPhase={transcript.omPhase}
-        usage={transcript.usage}
-        workspaceReady={transcript.workspaceReady}
-      />
+        <main ref={threadRef} className="transcript">
+          {transcript.entries.length === 0 && (
+            <p className="empty">Ask the coding agent to read, write, or run something in the workspace.</p>
+          )}
+          <Transcript entries={transcript.entries} onApprove={session.approveTool} onRespond={session.respondSuspension} />
+        </main>
+
+        <form onSubmit={onSubmit} className="composer">
+          <input
+            className="input"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder={transcript.running ? 'Steer the run, or /command…' : 'Message the agent, or /mode plan…'}
+            disabled={status !== 'ready'}
+          />
+          {transcript.running ? (
+            <button type="button" className="btn btn-danger" onClick={() => void abort()}>
+              Stop
+            </button>
+          ) : (
+            <button type="submit" className="btn btn-primary" disabled={status !== 'ready' || !draft.trim()}>
+              Send
+            </button>
+          )}
+        </form>
+
+        <StatusLine
+          status={status}
+          modeId={transcript.modeId}
+          modelId={transcript.modelId}
+          running={transcript.running}
+          followUpCount={transcript.followUpCount}
+          omPhase={transcript.omPhase}
+          usage={transcript.usage}
+          workspaceReady={transcript.workspaceReady}
+        />
+      </div>
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: { maxWidth: 820, margin: '0 auto', height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' },
-  header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #e5e7eb' },
-  modes: { display: 'flex', gap: 6 },
-  modeBtn: { padding: '4px 10px', borderRadius: 999, border: '1px solid #d1d5db', background: 'white', fontSize: 12, cursor: 'pointer' },
-  modeActive: { background: '#111827', color: 'white', borderColor: '#111827' },
-  threadBar: { display: 'flex', gap: 6, flexWrap: 'wrap', padding: '8px 16px', borderBottom: '1px solid #e5e7eb', background: '#fafafa' },
-  threadBtn: { padding: '4px 10px', borderRadius: 8, border: '1px solid #d1d5db', background: 'white', fontSize: 12, cursor: 'pointer' },
-  thread: { flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 },
-  empty: { color: '#9ca3af', textAlign: 'center', marginTop: 40 },
-  dim: { color: '#9ca3af', fontSize: 12 },
-  composer: { display: 'flex', gap: 8, padding: 16, borderTop: '1px solid #e5e7eb' },
-  input: { flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 14 },
-  sendBtn: { padding: '10px 18px', borderRadius: 8, border: 'none', background: '#111827', color: 'white', fontSize: 14, cursor: 'pointer' },
-  stop: { padding: '10px 18px', borderRadius: 8, border: 'none', background: '#dc2626', color: 'white', fontSize: 14, cursor: 'pointer' },
-};

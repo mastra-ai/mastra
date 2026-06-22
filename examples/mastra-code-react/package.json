@@ -9,6 +9,8 @@
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/core": "link:../../packages/core",
     "@mastra/libsql": "link:../../stores/libsql",
+    "@mastra/memory": "link:../../packages/memory",
+    "@mastra/react": "link:../../client-sdks/react",
     "ai": "^4.3.19",
     "mastra": "link:../../packages/cli",
     "zod": "^4.3.6"
@@ -29,11 +31,13 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "highlight.js": "^11.11.0",
+    "marked": "^15.0.0",
     "concurrently": "^9.1.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.9.3",
-    "vite": "^5.4.11",
+    "vite": "^6.0.0",
     "vitest": "^4.1.8"
   },
   "keywords": [],

@@ -148,6 +148,20 @@ const workspaceStatusResponseSchema = z.object({
 const omRecordResponseSchema = z.object({
   record: z.any().optional(),
 });
+const permissionPolicyEnum = z.enum(['allow', 'ask', 'deny']);
+const toolCategoryEnum = z.enum(['read', 'edit', 'execute', 'mcp', 'other']);
+const permissionRulesResponseSchema = z.object({
+  categories: z.record(z.string(), permissionPolicyEnum).optional(),
+  tools: z.record(z.string(), permissionPolicyEnum).optional(),
+});
+const setCategoryPermissionBodySchema = z.object({
+  category: toolCategoryEnum,
+  policy: permissionPolicyEnum,
+});
+const setToolPermissionBodySchema = z.object({
+  toolName: z.string(),
+  policy: permissionPolicyEnum,
+});
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -1064,6 +1078,84 @@ export const CLEAR_HARNESS_GOAL_ROUTE = createRoute({
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error clearing harness goal');
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Permissions
+// ---------------------------------------------------------------------------
+
+export const GET_HARNESS_PERMISSIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:harnessId/sessions/:resourceId/permissions',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  responseSchema: permissionRulesResponseSchema,
+  summary: 'Get permission rules',
+  description: 'Returns the current permission rules (per-category and per-tool policies) for the session.',
+  tags: ['Harness', 'Permissions'],
+  requiresAuth: true,
+  requiresPermission: 'harness:read',
+  handler: async ({ mastra, harnessId, resourceId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const rules = session.permissions.getRules();
+      return {
+        categories: rules.categories as Record<string, 'allow' | 'ask' | 'deny'> | undefined,
+        tools: rules.tools as Record<string, 'allow' | 'ask' | 'deny'> | undefined,
+      };
+    } catch (error) {
+      return handleError(error, 'error getting harness permissions');
+    }
+  },
+});
+
+export const SET_HARNESS_CATEGORY_PERMISSION_ROUTE = createRoute({
+  method: 'PUT',
+  path: '/harness/:harnessId/sessions/:resourceId/permissions/category',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: setCategoryPermissionBodySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Set permission for a tool category',
+  description: 'Sets the approval policy (allow/ask/deny) for all tools in a category.',
+  tags: ['Harness', 'Permissions'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, category, policy }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      await session.permissions.setForCategory({ category, policy });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error setting harness category permission');
+    }
+  },
+});
+
+export const SET_HARNESS_TOOL_PERMISSION_ROUTE = createRoute({
+  method: 'PUT',
+  path: '/harness/:harnessId/sessions/:resourceId/permissions/tool',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: setToolPermissionBodySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Set permission for a specific tool',
+  description: 'Sets the approval policy (allow/ask/deny) for a specific tool by name. Per-tool overrides take precedence over category policies.',
+  tags: ['Harness', 'Permissions'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, toolName, policy }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      await session.permissions.setForTool({ toolName, policy });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error setting harness tool permission');
     }
   },
 });

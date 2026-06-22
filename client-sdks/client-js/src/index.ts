@@ -36,6 +36,9 @@ export type {
   SendNotificationInput,
   SendNotificationResult,
   PlanResume,
+  PermissionPolicy,
+  PermissionRules,
+  ToolCategory,
 } from './resources/harness';
 export { RequestContext } from '@mastra/core/request-context';
 // ObservabilityCollector type is available for power users but most

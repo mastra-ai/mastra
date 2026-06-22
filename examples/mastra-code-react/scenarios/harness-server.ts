@@ -20,6 +20,8 @@ import { SERVER_ROUTES } from '@mastra/server/server-adapter';
 interface HonoApp {
   get(path: string, handler: (c: any) => Promise<Response> | Response): void;
   post(path: string, handler: (c: any) => Promise<Response> | Response): void;
+  put(path: string, handler: (c: any) => Promise<Response> | Response): void;
+  delete(path: string, handler: (c: any) => Promise<Response> | Response): void;
   fetch(request: Request): Promise<Response>;
 }
 type HonoCtor = new () => HonoApp;

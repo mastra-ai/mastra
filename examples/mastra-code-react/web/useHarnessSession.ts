@@ -1,11 +1,11 @@
 import { MastraClient } from '@mastra/client-js';
-import type { HarnessModeInfo, HarnessThreadInfo, PlanResume } from '@mastra/client-js';
+import type { HarnessModeInfo, HarnessThreadInfo, PlanResume, PermissionRules, PermissionPolicy, ToolCategory } from '@mastra/client-js';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import { initialTranscript, transcriptReducer } from './transcript';
 import type { TranscriptState } from './transcript';
 
-export type ConnectionStatus = 'connecting' | 'ready' | 'error';
+export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 
 type Session = ReturnType<ReturnType<MastraClient['getHarness']>['session']>;
 
@@ -39,6 +39,11 @@ export interface HarnessSessionApi {
   pauseGoal: () => Promise<void>;
   resumeGoal: () => Promise<void>;
   clearGoal: () => Promise<void>;
+  getPermissions: () => Promise<PermissionRules>;
+  setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
+  setPermissionForTool: (toolName: string, policy: PermissionPolicy) => Promise<void>;
+  /** Push a local notice into the transcript (for slash-command output). */
+  pushNotice: (text: string, level?: 'info' | 'error') => void;
 }
 
 /**
@@ -67,6 +72,56 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const MAX_RETRIES = 10;
+    const MAX_DELAY_MS = 30_000;
+
+    async function subscribe(session: Session, isReconnect: boolean, attempt = 0): Promise<void> {
+      if (disposed) return;
+
+      if (isReconnect) {
+        setStatus('reconnecting');
+        // Re-sync authoritative state (events missed during disconnect are lost).
+        try {
+          const state = await session.state();
+          if (disposed) return;
+          dispatch({ type: 'reset', modeId: state.modeId, modelId: state.modelId, threadId: state.threadId });
+        } catch {
+          // State re-sync failed — still try to subscribe.
+        }
+      }
+
+      try {
+        const sub = await session.subscribe({
+          onEvent: event => dispatch({ type: 'event', event }),
+          onError: () => {
+            unsubscribe?.();
+            unsubscribe = undefined;
+            if (disposed) return;
+
+            const nextAttempt = attempt + 1;
+            if (nextAttempt > MAX_RETRIES) {
+              setStatus('error');
+              return;
+            }
+            const delay = Math.min(1000 * Math.pow(2, attempt), MAX_DELAY_MS);
+            reconnectTimer = setTimeout(() => void subscribe(session, true, nextAttempt), delay);
+          },
+        });
+        unsubscribe = sub.unsubscribe;
+        if (!disposed) setStatus('ready');
+      } catch {
+        if (disposed) return;
+        const nextAttempt = attempt + 1;
+        if (nextAttempt > MAX_RETRIES) {
+          setStatus('error');
+          return;
+        }
+        const delay = Math.min(1000 * Math.pow(2, attempt), MAX_DELAY_MS);
+        reconnectTimer = setTimeout(() => void subscribe(session, true, nextAttempt), delay);
+      }
+    }
 
     (async () => {
       const client = new MastraClient({ baseUrl });
@@ -82,15 +137,8 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
         const state = await session.state();
         dispatch({ type: 'reset', modeId: state.modeId, modelId: state.modelId, threadId: created.threadId });
 
-        const sub = await session.subscribe({
-          onEvent: event => dispatch({ type: 'event', event }),
-          onError: () => setStatus('error'),
-        });
-        unsubscribe = sub.unsubscribe;
-        if (!disposed) {
-          setStatus('ready');
-          void refreshThreads();
-        }
+        await subscribe(session, false);
+        if (!disposed) void refreshThreads();
       } catch {
         if (!disposed) setStatus('error');
       }
@@ -98,6 +146,7 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
 
     return () => {
       disposed = true;
+      clearTimeout(reconnectTimer);
       unsubscribe?.();
       sessionRef.current = null;
     };
@@ -196,6 +245,22 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
     await sessionRef.current?.clearGoal();
   }, []);
 
+  const pushNotice = useCallback((text: string, level: 'info' | 'error' = 'info') => {
+    dispatch({ type: 'localNotice', text, level });
+  }, []);
+
+  const getPermissions = useCallback(async (): Promise<PermissionRules> => {
+    return (await sessionRef.current?.getPermissions()) ?? { categories: {}, tools: {} };
+  }, []);
+
+  const setPermissionForCategory = useCallback(async (category: ToolCategory, policy: PermissionPolicy) => {
+    await sessionRef.current?.setPermissionForCategory(category, policy);
+  }, []);
+
+  const setPermissionForTool = useCallback(async (toolName: string, policy: PermissionPolicy) => {
+    await sessionRef.current?.setPermissionForTool(toolName, policy);
+  }, []);
+
   return {
     transcript,
     status,
@@ -219,5 +284,9 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
     pauseGoal,
     resumeGoal,
     clearGoal,
+    getPermissions,
+    setPermissionForCategory,
+    setPermissionForTool,
+    pushNotice,
   };
 }

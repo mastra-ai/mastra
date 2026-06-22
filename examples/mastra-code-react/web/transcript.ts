@@ -26,6 +26,8 @@ export interface AssistantEntry {
   id: string;
   text: string;
   tools: ToolCall[];
+  /** True while the model is still generating tokens for this message. */
+  streaming: boolean;
 }
 
 export interface UserEntry {
@@ -160,6 +162,7 @@ let noticeSeq = 0;
 type Action =
   | { type: 'event'; event: HarnessEvent }
   | { type: 'localUser'; text: string; steer?: boolean }
+  | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
   | { type: 'reset'; modeId?: string; modelId?: string; threadId?: string };
 
@@ -172,6 +175,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         ...state,
         entries: [...state.entries, { kind: 'user', id: `local-${Date.now()}-${noticeSeq++}`, text: action.text, steer: action.steer }],
       };
+    case 'localNotice':
+      return pushNotice(state, action.level, action.text);
     case 'resolvePrompt':
       return { ...state, entries: state.entries.filter(e => !('id' in e) || e.id !== action.id) };
     case 'event':
@@ -191,8 +196,9 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
 
     case 'message_start':
     case 'message_update':
+      return upsertAssistant(state, event.message, true);
     case 'message_end':
-      return upsertAssistant(state, event.message);
+      return upsertAssistant(state, event.message, false);
 
     case 'tool_input_start':
       return withTool(state, event.toolCallId, t => ({ ...t, toolName: event.toolName }), {
@@ -366,15 +372,15 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
   }
 }
 
-function upsertAssistant(state: TranscriptState, message: HarnessMessage): TranscriptState {
+function upsertAssistant(state: TranscriptState, message: HarnessMessage, streaming: boolean): TranscriptState {
   if (message.role !== 'assistant') return state;
   const text = harnessMessageText(message);
   const entries = [...state.entries];
   const idx = entries.findIndex(e => e.kind === 'assistant' && e.id === message.id);
   if (idx === -1) {
-    entries.push({ kind: 'assistant', id: message.id, text, tools: [] });
+    entries.push({ kind: 'assistant', id: message.id, text, tools: [], streaming });
   } else {
-    entries[idx] = { ...(entries[idx] as AssistantEntry), text };
+    entries[idx] = { ...(entries[idx] as AssistantEntry), text, streaming };
   }
   return { ...state, entries };
 }
@@ -396,7 +402,7 @@ function withTool(
   const entries = [...state.entries];
   let idx = latestAssistantIndex(entries);
   if (idx === -1) {
-    entries.push({ kind: 'assistant', id: `assistant-tools-${Date.now()}`, text: '', tools: [] });
+    entries.push({ kind: 'assistant', id: `assistant-tools-${Date.now()}`, text: '', tools: [], streaming: false });
     idx = entries.length - 1;
   }
   const assistant = entries[idx] as AssistantEntry;

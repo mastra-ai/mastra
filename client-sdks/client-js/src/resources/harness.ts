@@ -195,6 +195,18 @@ export interface HarnessGoalRecord {
   pausedReason?: string;
 }
 
+/** Permission policy for a tool or category. */
+export type PermissionPolicy = 'allow' | 'ask' | 'deny';
+
+/** Tool category for permission grouping. */
+export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
+
+/** Permission rules for controlling tool approval behavior. */
+export interface PermissionRules {
+  categories?: Partial<Record<ToolCategory, PermissionPolicy>>;
+  tools?: Partial<Record<string, PermissionPolicy>>;
+}
+
 /** Snapshot of a single task item from the task tools. */
 export interface HarnessTaskSnapshot {
   id: string;
@@ -488,6 +500,31 @@ export class HarnessSession extends BaseResource {
   /** Clear the current goal. */
   async clearGoal(): Promise<void> {
     await this.request(`${this.base()}/goal`, { method: 'DELETE' });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Permissions
+  // ---------------------------------------------------------------------------
+
+  /** Get the current permission rules (per-category and per-tool policies). */
+  async getPermissions(): Promise<PermissionRules> {
+    return this.request(`${this.base()}/permissions`);
+  }
+
+  /** Set the approval policy for a tool category. */
+  async setPermissionForCategory(category: ToolCategory, policy: PermissionPolicy): Promise<void> {
+    await this.request(`${this.base()}/permissions/category`, {
+      method: 'PUT',
+      body: { category, policy },
+    });
+  }
+
+  /** Set the approval policy for a specific tool. */
+  async setPermissionForTool(toolName: string, policy: PermissionPolicy): Promise<void> {
+    await this.request(`${this.base()}/permissions/tool`, {
+      method: 'PUT',
+      body: { toolName, policy },
+    });
   }
 
   /**

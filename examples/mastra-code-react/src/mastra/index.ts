@@ -6,6 +6,7 @@ import { Harness } from '@mastra/core/harness';
 import { Mastra } from '@mastra/core/mastra';
 import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 
 /**
  * Example: MastraCode as a web app.
@@ -17,6 +18,17 @@ import { LibSQLStore } from '@mastra/libsql';
  */
 
 const storage = new LibSQLStore({ id: 'mastra-code-example', url: 'file:./database.sqlite' });
+
+const memory = new Memory({
+  storage,
+  options: {
+    lastMessages: 40,
+    semanticRecall: false,
+    observationalMemory: {
+      enabled: true,
+    },
+  },
+});
 
 // One sandboxed workspace over ./workspace. This gives the agent the real
 // Mastra file/shell/search tools (read, write, edit, list, run, …) with proper
@@ -48,6 +60,13 @@ export const codeHarness = new Harness({
   id: 'code',
   storage,
   workspace,
+  memory,
+  omConfig: {
+    defaultObserverModelId: 'openai/gpt-4o-mini',
+    defaultReflectorModelId: 'openai/gpt-4o-mini',
+    defaultObservationThreshold: 4000,
+    defaultReflectionThreshold: 8000,
+  },
   modes: [
     {
       id: 'build',
