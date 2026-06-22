@@ -4,7 +4,6 @@ import { z } from 'zod';
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
-import type { AgentThreadSubscription } from '../agent/types';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -19,8 +18,7 @@ import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
-import { runStaticDriver } from './chat-driver-static';
-import { runStreamingDriver } from './chat-driver-streaming';
+
 import { chatModule, getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 
@@ -98,7 +96,6 @@ export class AgentChannels {
    * @example
    * ```ts
    * const existing = agent.getChannels();
-   * existing?.close();
    * const next = new AgentChannels({
    *   ...existing?.channelConfig,
    *   adapters: { ...existing?.channelConfig.adapters, slack: slackAdapter },
@@ -112,26 +109,10 @@ export class AgentChannels {
   /** Platforms whose routes are managed externally (e.g., by SlackProvider). */
   private externallyManagedPlatforms: Set<string> = new Set();
   /**
-   * Per-Mastra-thread subscriptions. We lazily open one `agent.subscribeToThread()` per channel
-   * thread on the first message we route through it, so any signals we send (and any signals
-   * other callers send to the same thread) are rendered exactly once to the platform. The
-   * subscription stays open until `close()` is called or the consumer errors out — we don't
-   * eagerly subscribe at startup because the per-thread chunk consumer needs the `chatThread`
-   * handle, which only exists after a platform event arrives.
-   */
-  private threadSubscriptions = new Map<
-    string,
-    {
-      subscription: AgentThreadSubscription<any>;
-      consumer: Promise<void>;
-    }
-  >();
-  /**
-   * Tool-approval cards that have been clicked and are about to be resumed via `approveToolCall` /
-   * `declineToolCall`. The resumed run's `tool-result` chunks arrive through the thread
-   * subscription consumer rather than the click handler, so we stash the approval card's
-   * platform `messageId` (plus the tool's display metadata) here for the consumer to pick up
-   * when it renders the result. Entries are removed as soon as the consumer consumes them.
+   * Tool-approval cards that have been posted and are awaiting user action. When the user
+   * clicks approve/decline, the `onAction` handler looks up the card's `messageId` and
+   * tool metadata here so it can edit the card in place and resume the run with the right
+   * context. Entries are removed after the resume completes.
    */
   private pendingApprovalCards = new Map<string, PendingApprovalRecord>();
 
@@ -423,9 +404,10 @@ export class AgentChannels {
               this.log('debug', 'Failed to edit denied card', err);
             }
 
-            // Resume the suspended run with a denial so the agent can produce a follow-up
-            // message (e.g. acknowledging the rejection). Without this, the run stays
-            // suspended forever and the user gets no feedback from the model.
+            // Resume the suspended run with a denial so the agent can produce a
+            // follow-up message (e.g. acknowledging the rejection). Stash the
+            // render context so `ChatChannelOutputProcessor` renders the output
+            // inline — same path as processChatMessage and the approve branch.
             const { channelContext } = this.buildEventContext({
               chatThread,
               platform,
@@ -436,12 +418,8 @@ export class AgentChannels {
             const requestContext = new RequestContext();
             requestContext.set('channel', channelContext);
 
-            this.ensureThreadSubscription({
-              mastraThreadId: mastraThread.id,
-              resourceId: mastraThread.resourceId,
-              chatThread,
-              platform,
-            });
+            const renderContext = this._buildRenderContext(chatThread, platform);
+            requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
             try {
               const resumed = await this.agent.declineToolCall({
@@ -453,6 +431,7 @@ export class AgentChannels {
                   resource: mastraThread.resourceId,
                 },
               });
+              // Drive the run to completion so serverless runtimes don't kill it.
               void resumed.consumeStream().catch(err => {
                 this.log('error', 'Error consuming resumed decline stream', err);
               });
@@ -478,7 +457,9 @@ export class AgentChannels {
             this.log('debug', 'Failed to edit approved card', err);
           }
 
-          // Build request context for the resumed stream.
+          // Build request context for the resumed stream. Stash the render
+          // context so `ChatChannelOutputProcessor` renders the tool-result
+          // and any follow-up output inline — same path as processChatMessage.
           const { channelContext } = this.buildEventContext({
             chatThread,
             platform,
@@ -489,31 +470,9 @@ export class AgentChannels {
           const requestContext = new RequestContext();
           requestContext.set('channel', channelContext);
 
-          // The resumed run fans into the thread subscription, so the consumer running there
-          // will render the tool-result and any follow-up output. Ensure the subscription
-          // is live (e.g. if the bot restarted between the approval card being posted and
-          // the user clicking it) and stash the approval card's message id so the consumer
-          // can edit it in place when the tool-result chunk arrives.
-          this.ensureThreadSubscription({
-            mastraThreadId: mastraThread.id,
-            resourceId: mastraThread.resourceId,
-            chatThread,
-            platform,
-          });
-          if (toolCallId) {
-            this.pendingApprovalCards.set(toolCallId, {
-              messageId,
-              displayName,
-              argsSummary,
-              startedAt: Date.now(),
-            });
-          }
+          const renderContext = this._buildRenderContext(chatThread, platform, { toolCallId, messageId });
+          requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
-          // approveToolCall returns a MastraModelOutput whose stream must be drained for
-          // the resumed run to actually execute. The chunks fan into the thread
-          // subscription via the pubsub keyed by resourceId+threadId, so the existing
-          // consumer renders the tool result and follow-up output; we just need to pump
-          // the stream forward here.
           const resumed = await this.agent.approveToolCall({
             runId,
             toolCallId,
@@ -523,6 +482,7 @@ export class AgentChannels {
               resource: mastraThread.resourceId,
             },
           });
+          // Drive the run to completion so serverless runtimes don't kill it.
           void resumed.consumeStream().catch(err => {
             this.log('error', 'Error consuming resumed approval stream', err);
           });
@@ -702,6 +662,14 @@ export class AgentChannels {
    *
    * Skipped if the user already added a processor with the same id.
    */
+  /**
+   * @deprecated No longer needed — `AgentChannels` no longer holds stateful resources that require cleanup.
+   * Kept as a no-op for backwards compatibility with existing `ChannelProvider` implementations.
+   */
+  close(): void {
+    // no-op
+  }
+
   getOutputProcessors(configuredProcessors: OutputProcessorOrWorkflow[] = []): OutputProcessor[] {
     const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-render');
     if (hasProcessor) return [];
@@ -715,24 +683,6 @@ export class AgentChannels {
   getTools(): Record<string, unknown> {
     if (!this.toolsEnabled) return {};
     return this.makeChannelTools();
-  }
-
-  /**
-   * Tear down all live thread subscriptions opened by this AgentChannels. Safe to call
-   * multiple times. Useful for tests and for graceful shutdown of long-lived processes —
-   * each cached subscription holds a handler in the agent's thread-stream runtime that
-   * would otherwise stay registered for the lifetime of the process.
-   */
-  close(): void {
-    for (const entry of this.threadSubscriptions.values()) {
-      try {
-        entry.subscription.unsubscribe();
-      } catch (err) {
-        this.log('debug', 'Failed to unsubscribe thread subscription', err);
-      }
-    }
-    this.threadSubscriptions.clear();
-    this.pendingApprovalCards.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -1046,6 +996,14 @@ export class AgentChannels {
       toolDisplay === 'grouped' ||
       toolDisplay === 'hidden';
 
+    this.log('info', '[processChatMessage] tool approval config', {
+      platform,
+      toolDisplay,
+      toolDisplayFn: !!toolDisplayFn,
+      canRenderApprovalButtons,
+      autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
+    });
+
     const { channelContext, attributes, providerOptions } = this.buildEventContext({
       chatThread,
       platform,
@@ -1157,81 +1115,14 @@ export class AgentChannels {
   }
 
   /**
-   * Lazily open (and cache) an `agent.subscribeToThread()` for a Mastra thread, attaching a
-   * background chunk consumer that renders run output to the originating chat platform. We
-   * cache by `mastraThreadId` so multiple incoming messages on the same thread share one
-   * subscription and run output is never rendered twice.
-   *
-   * If the underlying consumer throws (e.g. the platform `chatThread` becomes unusable), we
-   * tear down the cache entry so the next message can reopen a fresh subscription.
-   */
-  private ensureThreadSubscription(params: {
-    mastraThreadId: string;
-    resourceId: string;
-    chatThread: Thread;
-    platform: string;
-  }): AgentThreadSubscription<any> {
-    const { mastraThreadId, resourceId, chatThread, platform } = params;
-    const existing = this.threadSubscriptions.get(mastraThreadId);
-    if (existing) return existing.subscription;
-
-    // subscribeToThread() is synchronous-ish (returns a Promise that resolves on the next
-    // microtask); kicking it off here keeps the cache slot reserved so concurrent callers
-    // for the same thread don't race to create duplicate subscriptions.
-    const subscriptionPromise = this.agent.subscribeToThread({ resourceId, threadId: mastraThreadId });
-
-    // Wrap the eventual async iterator in a passthrough so we can hand callers a synchronous
-    // subscription record while the underlying handle is still resolving.
-    const stream: AsyncIterable<AgentChunkType<any>> = {
-      [Symbol.asyncIterator]: async function* () {
-        const sub = await subscriptionPromise;
-        for await (const chunk of sub.stream) {
-          yield chunk;
-        }
-      },
-    };
-
-    const placeholder: AgentThreadSubscription<any> = {
-      stream,
-      activeRunId: () => null,
-      abort: () => false,
-      unsubscribe: () => {
-        void subscriptionPromise.then(sub => sub.unsubscribe()).catch(() => {});
-      },
-    };
-
-    const consumer = this.consumeAgentStream(stream, chatThread, platform).catch(err => {
-      this.log('error', `[${platform}] Thread subscription consumer failed`, { error: err });
-      // Drop the cache entry so subsequent messages reopen a fresh subscription.
-      const entry = this.threadSubscriptions.get(mastraThreadId);
-      if (entry?.subscription === placeholder) {
-        this.threadSubscriptions.delete(mastraThreadId);
-      }
-      void subscriptionPromise.then(sub => sub.unsubscribe()).catch(() => {});
-    });
-
-    this.threadSubscriptions.set(mastraThreadId, { subscription: placeholder, consumer });
-    // Update the placeholder with the real activeRunId/abort once the handle resolves so
-    // callers that need them after the first tick get accurate values.
-    void subscriptionPromise
-      .then(sub => {
-        placeholder.activeRunId = sub.activeRunId;
-        placeholder.abort = sub.abort;
-      })
-      .catch(() => {});
-    return placeholder;
-  }
-
-  /**
-   * Build the per-event render dependencies handed to the output processor (or
-   * the legacy `consumeAgentStream` path). Captures the adapter, driver mode,
+   * Build the per-event render dependencies stashed on `requestContext` for
+   * `ChatChannelOutputProcessor`. Captures the adapter, driver mode,
    * tool-display config, approval-card stash callbacks, and the typing-status
    * wrapper as a callable so the processor can apply it after the queue is
    * created. The returned object is plain data — no streams, no promises —
    * so it's safe to stash on `requestContext` for the processor to read later.
    *
-   * @internal Used by `processChatMessage` (via `requestContext`) and by
-   * `consumeAgentStream` for the slash-command / approval-resume paths.
+   * @internal Used by `processChatMessage` and the approve/decline paths.
    */
   _buildRenderContext(
     chatThread: Thread,
@@ -1278,61 +1169,6 @@ export class AgentChannels {
       formatError: adapterConfig?.formatError,
       approvalContext,
     };
-  }
-
-  private async consumeAgentStream(
-    stream: AsyncIterable<AgentChunkType<any>>,
-    chatThread: Thread,
-    platform: string,
-    approvalContext?: { toolCallId: string; messageId: string },
-  ): Promise<void> {
-    const render = this._buildRenderContext(chatThread, platform, approvalContext);
-
-    // Seed the approval-card stash on resumed runs so the driver can resolve
-    // `messageId` for the incoming `tool-result` even though it never saw the
-    // pre-suspension `tool-call`.
-    if (render.approvalContext) {
-      this.pendingApprovalCards.set(render.approvalContext.toolCallId, {
-        messageId: render.approvalContext.messageId,
-        displayName: '',
-        argsSummary: '',
-        startedAt: Date.now(),
-      });
-    }
-
-    const wrapped = render.wrapStream(stream);
-
-    if (render.streaming.enabled) {
-      await runStreamingDriver({
-        stream: wrapped,
-        chatThread: render.chatThread,
-        adapter: render.adapter,
-        toolDisplay: render.toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
-        toolDisplayFn: render.toolDisplayFn,
-        streamingOptions: render.streaming.options,
-        channelToolNames: render.channelToolNames,
-        logger: render.logger,
-        onApprovalPosted: render.onApprovalPosted,
-        getPendingApproval: render.getPendingApproval,
-        takePendingApproval: render.takePendingApproval,
-        typingGate: render.typingGate,
-        formatError: render.formatError,
-      });
-    } else {
-      await runStaticDriver({
-        stream: wrapped,
-        chatThread: render.chatThread,
-        adapter: render.adapter,
-        toolDisplay: render.toolDisplay as 'cards' | 'text' | 'hidden',
-        toolDisplayFn: render.toolDisplayFn,
-        channelToolNames: render.channelToolNames,
-        logger: render.logger,
-        onApprovalPosted: render.onApprovalPosted,
-        getPendingApproval: render.getPendingApproval,
-        takePendingApproval: render.takePendingApproval,
-        formatError: render.formatError,
-      });
-    }
   }
 
   /**

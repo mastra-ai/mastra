@@ -680,54 +680,7 @@ describe('AgentChannels', () => {
     });
   });
 
-  describe('close', () => {
-    it('unsubscribes all cached thread subscriptions', () => {
-      const unsubscribeA = vi.fn();
-      const unsubscribeB = vi.fn();
-      // Seed the internal cache with two fake subscriptions to verify close() drains them.
-      (agentChannels as any).threadSubscriptions.set('thread-a', {
-        subscription: { unsubscribe: unsubscribeA },
-        consumer: Promise.resolve(),
-      });
-      (agentChannels as any).threadSubscriptions.set('thread-b', {
-        subscription: { unsubscribe: unsubscribeB },
-        consumer: Promise.resolve(),
-      });
 
-      (agentChannels as any).pendingApprovalCards.set('run-1', { channel: 'C', ts: '123' });
-
-      agentChannels.close();
-
-      expect(unsubscribeA).toHaveBeenCalledTimes(1);
-      expect(unsubscribeB).toHaveBeenCalledTimes(1);
-      expect((agentChannels as any).threadSubscriptions.size).toBe(0);
-      expect((agentChannels as any).pendingApprovalCards.size).toBe(0);
-    });
-
-    it('is safe to call without any subscriptions', () => {
-      expect(() => agentChannels.close()).not.toThrow();
-    });
-
-    it('swallows errors from individual unsubscribe calls', () => {
-      const failing = vi.fn(() => {
-        throw new Error('boom');
-      });
-      const succeeding = vi.fn();
-      (agentChannels as any).threadSubscriptions.set('thread-a', {
-        subscription: { unsubscribe: failing },
-        consumer: Promise.resolve(),
-      });
-      (agentChannels as any).threadSubscriptions.set('thread-b', {
-        subscription: { unsubscribe: succeeding },
-        consumer: Promise.resolve(),
-      });
-
-      expect(() => agentChannels.close()).not.toThrow();
-      expect(failing).toHaveBeenCalledTimes(1);
-      expect(succeeding).toHaveBeenCalledTimes(1);
-      expect((agentChannels as any).threadSubscriptions.size).toBe(0);
-    });
-  });
 });
 
 describe('matchesDomain', () => {
