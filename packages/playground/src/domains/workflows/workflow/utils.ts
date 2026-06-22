@@ -8,8 +8,31 @@ import {
   WORKFLOW_STEP_NODE_TYPE,
 } from './workflow-step-node-utils';
 
-const WORKFLOW_START_NODE_ID = '__workflow-start__';
-const WORKFLOW_END_NODE_ID = '__workflow-end__';
+const getWorkflowBoundaryNodeId = (role: 'start' | 'end') => `boundary-${role}`;
+const WORKFLOW_START_NODE_ID = getWorkflowBoundaryNodeId('start');
+const WORKFLOW_END_NODE_ID = getWorkflowBoundaryNodeId('end');
+
+const getWorkflowNodeId = (stepId: string) => `node-${stepId}`;
+const getWorkflowConditionNodeId = (conditionId: string) => `condition-node-${conditionId}`;
+const getWorkflowEdgeId = (source: string, target: string, domain = 'step') => `edge-${domain}-${source}-${target}`;
+
+const normalizeDuplicateEdgeIds = (edges: Edge[]): Edge[] => {
+  const seenEdgeIds = new Map<string, number>();
+
+  return edges.map(edge => {
+    const seenCount = seenEdgeIds.get(edge.id) ?? 0;
+    seenEdgeIds.set(edge.id, seenCount + 1);
+
+    if (seenCount === 0) {
+      return edge;
+    }
+
+    return {
+      ...edge,
+      id: `${edge.id}-${seenCount}`,
+    };
+  });
+};
 
 const getNodeSize = (node: Node): { width: number; height: number } => {
   if (node.type === WORKFLOW_BOUNDARY_NODE_TYPE) {
@@ -166,39 +189,44 @@ const getStepNodeAndEdge = ({
   let nextNodeIds: string[] = [];
   let nextStepIds: string[] = [];
   if (nextStepFlow?.type === 'step' || nextStepFlow?.type === 'foreach' || nextStepFlow?.type === 'loop') {
-    const nextStepId = allPrevNodeIds?.includes(nextStepFlow.step.id)
+    const nextStepId = allPrevNodeIds?.includes(getWorkflowNodeId(nextStepFlow.step.id))
       ? `${nextStepFlow.step.id}-${yIndex + 1}`
       : nextStepFlow.step.id;
-    nextNodeIds = [nextStepId];
+    nextNodeIds = [getWorkflowNodeId(nextStepId)];
     nextStepIds = [nextStepFlow.step.id];
   }
   if (nextStepFlow?.type === 'sleep' || nextStepFlow?.type === 'sleepUntil') {
-    const nextStepId = allPrevNodeIds?.includes(nextStepFlow.id) ? `${nextStepFlow.id}-${yIndex + 1}` : nextStepFlow.id;
-    nextNodeIds = [nextStepId];
+    const nextStepId = allPrevNodeIds?.includes(getWorkflowNodeId(nextStepFlow.id))
+      ? `${nextStepFlow.id}-${yIndex + 1}`
+      : nextStepFlow.id;
+    nextNodeIds = [getWorkflowNodeId(nextStepId)];
     nextStepIds = [nextStepFlow.id];
   }
   if (nextStepFlow?.type === 'parallel') {
     nextNodeIds =
       nextStepFlow?.steps.map(step => {
         const stepId = step.step.id;
-        const nextStepId = allPrevNodeIds?.includes(stepId) ? `${stepId}-${yIndex + 1}` : stepId;
-        return nextStepId;
+        const nextStepId = allPrevNodeIds?.includes(getWorkflowNodeId(stepId)) ? `${stepId}-${yIndex + 1}` : stepId;
+        return getWorkflowNodeId(nextStepId);
       }) || [];
     nextStepIds = nextStepFlow?.steps.map(step => step.step.id) || [];
   }
   if (nextStepFlow?.type === 'conditional') {
-    nextNodeIds = nextStepFlow?.serializedConditions.map(cond => cond.id) || [];
+    nextNodeIds = nextStepFlow?.serializedConditions.map(cond => getWorkflowConditionNodeId(cond.id)) || [];
     nextStepIds = nextStepFlow?.steps?.map(step => step.step.id) || [];
   }
 
   if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
     const hasGraph = stepFlow.step.component === 'WORKFLOW';
-    const nodeId = allPrevNodeIds?.includes(stepFlow.step.id) ? `${stepFlow.step.id}-${yIndex}` : stepFlow.step.id;
+    const rawNodeId = allPrevNodeIds?.includes(getWorkflowNodeId(stepFlow.step.id))
+      ? `${stepFlow.step.id}-${yIndex}`
+      : stepFlow.step.id;
+    const nodeId = getWorkflowNodeId(rawNodeId);
     const nodes = [
       ...(condition
         ? [
             {
-              id: condition.id,
+              id: getWorkflowConditionNodeId(condition.id),
               position: { x: xIndex * 300, y: yIndex * 100 },
               type: WORKFLOW_STEP_NODE_TYPE,
               data: {
@@ -238,15 +266,15 @@ const getStepNodeAndEdge = ({
       ...(condition
         ? [
             ...(prevNodeIds || []).map((prevNodeId, i) => ({
-              id: `e${prevNodeId}-${condition.id}`,
+              id: getWorkflowEdgeId(prevNodeId, getWorkflowConditionNodeId(condition.id), 'condition'),
               source: prevNodeId,
               data: { previousStepId: prevStepIds[i], nextStepId: stepFlow.step.id, conditionNode: true },
-              target: condition.id,
+              target: getWorkflowConditionNodeId(condition.id),
               ...defaultEdgeOptions,
             })),
             {
-              id: `e${condition.id}-${nodeId}`,
-              source: condition.id,
+              id: getWorkflowEdgeId(getWorkflowConditionNodeId(condition.id), nodeId, 'condition'),
+              source: getWorkflowConditionNodeId(condition.id),
               data: {
                 previousStepId: prevStepIds[prevStepIds.length - 1],
                 nextStepId: stepFlow.step.id,
@@ -257,14 +285,14 @@ const getStepNodeAndEdge = ({
             },
           ]
         : (prevNodeIds || []).map((prevNodeId, i) => ({
-            id: `e${prevNodeId}-${nodeId}`,
+            id: getWorkflowEdgeId(prevNodeId, nodeId),
             source: prevNodeId,
             data: { previousStepId: prevStepIds[i], nextStepId: stepFlow.step.id },
             target: nodeId,
             ...defaultEdgeOptions,
           }))),
       ...(nextNodeIds || []).map((nextNodeId, i) => ({
-        id: `e${nodeId}-${nextNodeId}`,
+        id: getWorkflowEdgeId(nodeId, nextNodeId),
         source: nodeId,
         data: { previousStepId: stepFlow.step.id, nextStepId: nextStepIds[i] },
         target: nextNodeId,
@@ -275,12 +303,15 @@ const getStepNodeAndEdge = ({
   }
 
   if (stepFlow.type === 'sleep' || stepFlow.type === 'sleepUntil') {
-    const nodeId = allPrevNodeIds?.includes(stepFlow.id) ? `${stepFlow.id}-${yIndex}` : stepFlow.id;
+    const rawNodeId = allPrevNodeIds?.includes(getWorkflowNodeId(stepFlow.id))
+      ? `${stepFlow.id}-${yIndex}`
+      : stepFlow.id;
+    const nodeId = getWorkflowNodeId(rawNodeId);
     const nodes = [
       ...(condition
         ? [
             {
-              id: condition.id,
+              id: getWorkflowConditionNodeId(condition.id),
               position: { x: xIndex * 300, y: yIndex * 100 },
               type: WORKFLOW_STEP_NODE_TYPE,
               data: {
@@ -304,6 +335,7 @@ const getStepNodeAndEdge = ({
         data: {
           label: stepFlow.id,
           workflowStep: resolveWorkflowGraphStep(stepFlow),
+          stepId: stepFlow.id,
           withoutTopHandle: condition ? false : !prevNodeIds.length,
           withoutBottomHandle: !nextNodeIds.length,
           ...(stepFlow.type === 'sleepUntil' ? { date: stepFlow.date } : { duration: stepFlow.duration }),
@@ -316,15 +348,15 @@ const getStepNodeAndEdge = ({
         : condition
           ? [
               ...prevNodeIds.map((prevNodeId, i) => ({
-                id: `e${prevNodeId}-${condition.id}`,
+                id: getWorkflowEdgeId(prevNodeId, getWorkflowConditionNodeId(condition.id), 'condition'),
                 source: prevNodeId,
                 data: { previousStepId: prevStepIds[i], nextStepId: stepFlow.id, conditionNode: true },
-                target: condition.id,
+                target: getWorkflowConditionNodeId(condition.id),
                 ...defaultEdgeOptions,
               })),
               {
-                id: `e${condition.id}-${nodeId}`,
-                source: condition.id,
+                id: getWorkflowEdgeId(getWorkflowConditionNodeId(condition.id), nodeId, 'condition'),
+                source: getWorkflowConditionNodeId(condition.id),
                 data: {
                   previousStepId: prevStepIds[prevStepIds.length - 1],
                   nextStepId: stepFlow.id,
@@ -335,7 +367,7 @@ const getStepNodeAndEdge = ({
               },
             ]
           : prevNodeIds.map((prevNodeId, i) => ({
-              id: `e${prevNodeId}-${nodeId}`,
+              id: getWorkflowEdgeId(prevNodeId, nodeId),
               source: prevNodeId,
               data: { previousStepId: prevStepIds[i], nextStepId: stepFlow.id },
               target: nodeId,
@@ -344,7 +376,7 @@ const getStepNodeAndEdge = ({
       ...(!nextNodeIds.length
         ? []
         : nextNodeIds.map((nextNodeId, i) => ({
-            id: `e${nodeId}-${nextNodeId}`,
+            id: getWorkflowEdgeId(nodeId, nextNodeId),
             source: nodeId,
             data: { previousStepId: stepFlow.id, nextStepId: nextStepIds[i] },
             target: nextNodeId,
@@ -356,14 +388,17 @@ const getStepNodeAndEdge = ({
 
   if (stepFlow.type === 'loop') {
     const { step: _step, serializedCondition, loopType } = stepFlow;
+    const nodeId = getWorkflowNodeId(_step.id);
+    const conditionNodeId = getWorkflowConditionNodeId(serializedCondition.id);
     const nodes = [
       {
-        id: _step.id,
+        id: nodeId,
         position: { x: xIndex * 300, y: yIndex * 100 },
         type: WORKFLOW_STEP_NODE_TYPE,
         data: {
           label: _step.id,
           workflowStep: resolveWorkflowGraphStep(stepFlow),
+          stepId: _step.id,
           description: _step.description,
           withoutTopHandle: !prevNodeIds.length,
           withoutBottomHandle: false,
@@ -373,7 +408,7 @@ const getStepNodeAndEdge = ({
         },
       },
       {
-        id: serializedCondition.id,
+        id: conditionNodeId,
         position: { x: xIndex * 300, y: (yIndex + 1) * 100 },
         type: WORKFLOW_STEP_NODE_TYPE,
         data: {
@@ -395,31 +430,31 @@ const getStepNodeAndEdge = ({
       ...(!prevNodeIds.length
         ? []
         : prevNodeIds.map((prevNodeId, i) => ({
-            id: `e${prevNodeId}-${_step.id}`,
+            id: getWorkflowEdgeId(prevNodeId, nodeId),
             source: prevNodeId,
             data: { previousStepId: prevStepIds[i], nextStepId: _step.id },
-            target: _step.id,
+            target: nodeId,
             ...defaultEdgeOptions,
           }))),
       {
-        id: `e${_step.id}-${serializedCondition.id}`,
-        source: _step.id,
+        id: getWorkflowEdgeId(nodeId, conditionNodeId, 'condition'),
+        source: nodeId,
         data: { previousStepId: _step.id, nextStepId: nextStepIds[0] },
-        target: serializedCondition.id,
+        target: conditionNodeId,
         ...defaultEdgeOptions,
       },
       ...(!nextNodeIds.length
         ? []
         : nextNodeIds.map((nextNodeId, i) => ({
-            id: `e${serializedCondition.id}-${nextNodeId}`,
-            source: serializedCondition.id,
+            id: getWorkflowEdgeId(conditionNodeId, nextNodeId, 'condition'),
+            source: conditionNodeId,
             data: { previousStepId: _step.id, nextStepId: nextStepIds[i] },
             target: nextNodeId,
             ...defaultEdgeOptions,
           }))),
     ];
 
-    return { nodes, edges, nextPrevNodeIds: [serializedCondition.id], nextPrevStepIds: [_step.id] };
+    return { nodes, edges, nextPrevNodeIds: [conditionNodeId], nextPrevStepIds: [_step.id] };
   }
 
   if (stepFlow.type === 'parallel') {
@@ -567,21 +602,26 @@ export const constructNodesAndEdges = ({
 
   edges = [
     ...sourceNodeIds.map(nodeId => ({
-      id: `e${WORKFLOW_START_NODE_ID}-${nodeId}`,
+      id: getWorkflowEdgeId(WORKFLOW_START_NODE_ID, nodeId, 'boundary'),
       source: WORKFLOW_START_NODE_ID,
       target: nodeId,
-      data: { boundaryPayload: 'workflow-input', nextStepId: nodeId },
+      data: {
+        boundaryPayload: 'workflow-input',
+        nextStepId: nodes.find(node => node.id === nodeId)?.data.stepId ?? nodeId,
+      },
       ...defaultEdgeOptions,
     })),
     ...edges,
     ...terminalNodeIds.map(nodeId => ({
-      id: `e${nodeId}-${WORKFLOW_END_NODE_ID}`,
+      id: getWorkflowEdgeId(nodeId, WORKFLOW_END_NODE_ID, 'boundary'),
       source: nodeId,
       target: WORKFLOW_END_NODE_ID,
       data: { boundaryPayload: 'workflow-output' },
       ...defaultEdgeOptions,
     })),
   ];
+
+  edges = normalizeDuplicateEdgeIds(edges);
 
   const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
 
