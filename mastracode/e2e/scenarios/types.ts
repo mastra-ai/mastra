@@ -47,7 +47,6 @@ export type ScenarioName =
   | 'github-signals-notification-reload'
   | 'github-signals-polling-inbox'
   | 'github-signals-unsubscribe-reload'
-  | 'goal-custom-slash-autocomplete'
   | 'harness-api-config'
   | 'headless-mcp-tool-availability'
   | 'openai-strict-schema'
