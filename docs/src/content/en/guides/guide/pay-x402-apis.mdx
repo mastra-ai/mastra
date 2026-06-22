@@ -1,0 +1,120 @@
+---
+title: "Guide: Building an agent that can pay for APIs (x402)"
+description: "A step-by-step guide to giving a Mastra agent a budget-bound wallet so it can pay for x402 (HTTP 402) APIs autonomously."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Building an agent that can pay for APIs (x402)
+
+Some APIs and resources are paywalled with [x402](https://x402.org) — the "HTTP 402 Payment Required"
+standard that lets a server quote a price and a client pay it inline, no account or API key needed.
+To let a Mastra agent pay for those resources autonomously, you give it a wallet — bounded by a spend
+policy it cannot exceed.
+
+This guide uses [PipRail](https://piprail.com), a self-custodial x402 SDK, through its MCP server
+(`@piprail/mcp`). It runs as a separate process, so its dependencies never enter your project's tree,
+and payments settle straight from your own wallet — no facilitator, no fee, verified against your own
+RPC. The agent gets PipRail's payment tools, capped by limits you set.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
+- A wallet key with a small balance to pay from (or omit it to run read-only: discover, quote and plan still work)
+
+## Giving an agent a payment wallet
+
+<Steps>
+  <StepItem title="Install dependencies">
+    Install the Mastra MCP client. The PipRail server itself is run on demand via `npx`, so there is
+    nothing else to add to your dependencies.
+
+    ```bash npm2yarn
+    npm install @mastra/mcp
+    ```
+  </StepItem>
+
+  <StepItem title="Configure the MCP client">
+    Create `src/mastra/mcp.ts` and point an `MCPClient` at the PipRail server. The `env` block sets the
+    chain and the spend policy the agent cannot exceed:
+
+    ```ts title="src/mastra/mcp.ts"
+    import { MCPClient } from '@mastra/mcp'
+
+    export const piprailMcp = new MCPClient({
+      id: 'piprail',
+      servers: {
+        piprail: {
+          command: 'npx',
+          args: ['-y', '@piprail/mcp'],
+          env: {
+            PIPRAIL_PRIVATE_KEY: process.env.PIPRAIL_PRIVATE_KEY ?? '', // omit for read-only
+            PIPRAIL_CHAIN: 'base',
+            PIPRAIL_MAX_AMOUNT: '0.10', // max per payment (token units)
+            PIPRAIL_MAX_TOTAL: '5.00', // lifetime budget per token
+            PIPRAIL_TOKENS: 'USDC',
+          },
+        },
+      },
+    })
+    ```
+  </StepItem>
+
+  <StepItem title="Define the agent">
+    Create `src/mastra/agents/payment-agent.ts` and hand the agent the PipRail tools. Mastra namespaces
+    MCP tools by the server key, so they surface as `piprail_piprail_*` — the agent reads exact names
+    from its tool schema, so the instructions describe each tool by role rather than hard-coding names:
+
+    ```ts title="src/mastra/agents/payment-agent.ts"
+    import { Agent } from '@mastra/core/agent'
+    import { piprailMcp } from '../mcp'
+
+    export const paymentAgent = new Agent({
+      id: 'payment-agent',
+      name: 'Payment Agent',
+      instructions: `You can pay for x402-gated APIs and resources, within a hard spend policy you
+    cannot exceed. Always quote the price and plan the payment first; only call the pay tool when the
+    user wants the resource and it is within budget. The pay tool is the only one that moves money;
+    the rest are read-only.`,
+      model: 'openai/gpt-5.5',
+      tools: await piprailMcp.listTools(),
+    })
+    ```
+  </StepItem>
+
+  <StepItem title="Register the agent with Mastra">
+    In your `src/mastra/index.ts` file, register the agent:
+
+    ```ts title="src/mastra/index.ts" {2, 5}
+    import { Mastra } from '@mastra/core'
+    import { paymentAgent } from './agents/payment-agent'
+
+    export const mastra = new Mastra({
+      agents: { paymentAgent },
+    })
+    ```
+  </StepItem>
+
+  <StepItem title="Test your agent">
+    Set `PIPRAIL_PRIVATE_KEY` (and your model provider key) in `.env`, then start [Studio](/docs/studio/overview)
+    with `mastra dev`:
+
+    ```bash
+    mastra dev
+    ```
+
+    Inside Studio, open the **"Payment Agent"** and try: "What does `https://piprail.com/x402/demo` cost,
+    and can I afford it?" The agent quotes the price (0.01 USDC on Base) and plans the payment. Ask it to
+    pay and it settles on-chain and returns the unlocked response — and if you set a cap below the price,
+    it refuses, so the agent can never overspend.
+  </StepItem>
+</Steps>
+
+## Next steps
+
+The same agent works across every chain PipRail supports (EVM, Solana, and more) by changing
+`PIPRAIL_CHAIN`. For the full tool reference, multi-chain setup, and the spend-policy options, see the
+[PipRail × Mastra guide](https://docs.piprail.com/integrations/mastra/).
