@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { MockMemory } from '../../../../memory';
-import { createSharedAgent, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Scenario: Multi-call thread persistence with shared storage
@@ -18,7 +18,7 @@ import { createSharedAgent, runLoopScenario, useLoopScenarioAimock } from '../ai
  * - Message accumulation: second call sees first call's messages
  * - Resource isolation: different resources maintain separate threads
  */
-describe('AIMock loop scenario: multi-call thread persistence', () => {
+describeForAllEngines('AIMock loop scenario: multi-call thread persistence', engine => {
   const getMock = useLoopScenarioAimock();
 
   // Helper to extract text content from message
@@ -43,6 +43,7 @@ describe('AIMock loop scenario: multi-call thread persistence', () => {
 
     // First call: user asks about weather
     await runLoopScenario({
+      engine,
       llm: getMock(),
       sharedAgent: shared,
       prompt: 'What is the weather in San Francisco?',
@@ -64,6 +65,7 @@ describe('AIMock loop scenario: multi-call thread persistence', () => {
 
     // Second call: user asks follow-up question
     const { requests: secondRequests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       sharedAgent: shared,
       prompt: 'What about tomorrow?',
@@ -112,6 +114,7 @@ describe('AIMock loop scenario: multi-call thread persistence', () => {
 
     // Thread A: ask about cats
     await runLoopScenario({
+      engine,
       llm: getMock(),
       sharedAgent: shared,
       prompt: 'Tell me about cats',
@@ -133,6 +136,7 @@ describe('AIMock loop scenario: multi-call thread persistence', () => {
 
     // Thread B: ask about dogs
     const { requests: threadBRequests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       sharedAgent: shared,
       prompt: 'Tell me about dogs',
@@ -177,6 +181,7 @@ describe('AIMock loop scenario: multi-call thread persistence', () => {
 
     // Resource A: ask about Python
     await runLoopScenario({
+      engine,
       llm: getMock(),
       sharedAgent: shared,
       prompt: 'Explain Python programming',
@@ -198,6 +203,7 @@ describe('AIMock loop scenario: multi-call thread persistence', () => {
 
     // Resource B: ask about JavaScript (same thread ID, different resource)
     const { requests: resourceBRequests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       sharedAgent: shared,
       prompt: 'Explain JavaScript programming',

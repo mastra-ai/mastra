@@ -1,9 +1,9 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
 import { PubSub } from '../../../../events/pubsub';
 import { EventCallback } from '../../../../events/types';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Signal integration (sendMessage + subscribeToThread)
@@ -88,132 +88,138 @@ async function readNextRun(iterator: AsyncIterator<any>) {
   }
 }
 
-describe('AIMock scenario: signal sendMessage integration', () => {
-  const getMock = useLoopScenarioAimock();
+describeForAllEngines(
+  'AIMock scenario: signal sendMessage integration',
+  engine => {
+    const getMock = useLoopScenarioAimock();
 
-  it('subscribes to thread and receives sendMessage response', async () => {
-    const pubsub = new InMemoryPubSub();
-    const mock = getMock();
+    it('subscribes to thread and receives sendMessage response', async () => {
+      const pubsub = new InMemoryPubSub();
+      const mock = getMock();
 
-    const { agent } = await runLoopScenario({
-      llm: mock,
-      prompt: 'Initial prompt',
-      stopWhen: stepCountIs(1),
-      pubsub,
-      fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          {
-            content: 'Initial response',
-          },
-        );
-      },
-    });
+      const { agent } = await runLoopScenario({
+        engine,
+        llm: mock,
+        prompt: 'Initial prompt',
+        stopWhen: stepCountIs(1),
+        pubsub,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              content: 'Initial response',
+            },
+          );
+        },
+      });
 
-    // Now test the signal API
-    const threadId = 'signal-test-thread';
-    const resourceId = 'signal-test-resource';
+      // Now test the signal API
+      const threadId = 'signal-test-thread';
+      const resourceId = 'signal-test-resource';
 
-    // Subscribe to the thread
-    const subscription = await agent.subscribeToThread({
-      threadId,
-      resourceId,
-    });
-
-    // Set up to read the next run from the subscription
-    const nextRunPromise = readNextRun(subscription.stream[Symbol.asyncIterator]());
-
-    // Send a message via the signal API
-    const result = await agent.sendMessage(
-      { contents: 'Hello from signal', attributes: { sentFrom: 'test' } },
-      {
-        resourceId,
+      // Subscribe to the thread
+      const subscription = await agent.subscribeToThread({
         threadId,
-        ifIdle: {
-          streamOptions: {
-            memory: { resource: resourceId, thread: threadId },
+        resourceId,
+      });
+
+      // Set up to read the next run from the subscription
+      const nextRunPromise = readNextRun(subscription.stream[Symbol.asyncIterator]());
+
+      // Send a message via the signal API
+      const result = await agent.sendMessage(
+        { contents: 'Hello from signal', attributes: { sentFrom: 'test' } },
+        {
+          resourceId,
+          threadId,
+          ifIdle: {
+            streamOptions: {
+              memory: { resource: resourceId, thread: threadId },
+            },
           },
         },
-      },
-    );
+      );
 
-    // Wait for the response
-    const subscribedRun = await nextRunPromise;
+      // Wait for the response
+      const subscribedRun = await nextRunPromise;
 
-    // Verify the signal was accepted and processed
-    await expect(result.accepted).resolves.toMatchObject({
-      action: 'wake',
-      runId: subscribedRun.runId,
+      // Verify the signal was accepted and processed
+      await expect(result.accepted).resolves.toMatchObject({
+        action: 'wake',
+        runId: subscribedRun.runId,
+      });
+
+      expect(result.signal).toMatchObject({
+        type: 'user',
+        tagName: 'user',
+        contents: 'Hello from signal',
+      });
+
+      // Verify the subscription received the run
+      expect(subscribedRun.done).toBe(false);
+      expect(subscribedRun.text).toBe('Initial response');
+
+      await subscription.unsubscribe();
     });
 
-    expect(result.signal).toMatchObject({
-      type: 'user',
-      tagName: 'user',
-      contents: 'Hello from signal',
-    });
+    it('sendStateSignal persists state without waking agent', async () => {
+      const pubsub = new InMemoryPubSub();
+      const mock = getMock();
+      const memory = new MockMemory();
 
-    // Verify the subscription received the run
-    expect(subscribedRun.done).toBe(false);
-    expect(subscribedRun.text).toBe('Initial response');
+      const { agent } = await runLoopScenario({
+        engine,
+        llm: mock,
+        prompt: 'Initial prompt',
+        stopWhen: stepCountIs(1),
+        pubsub,
+        memory,
+        threadId: 'state-test-thread',
+        resourceId: 'state-test-resource',
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              content: 'Initial response',
+            },
+          );
+        },
+      });
 
-    await subscription.unsubscribe();
-  });
+      const threadId = 'state-test-thread';
+      const resourceId = 'state-test-resource';
 
-  it('sendStateSignal persists state without waking agent', async () => {
-    const pubsub = new InMemoryPubSub();
-    const mock = getMock();
-    const memory = new MockMemory();
-
-    const { agent } = await runLoopScenario({
-      llm: mock,
-      prompt: 'Initial prompt',
-      stopWhen: stepCountIs(1),
-      pubsub,
-      memory,
-      threadId: 'state-test-thread',
-      resourceId: 'state-test-resource',
-      fixtures: llm => {
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          {
-            content: 'Initial response',
-          },
-        );
-      },
-    });
-
-    const threadId = 'state-test-thread';
-    const resourceId = 'state-test-resource';
-
-    // Send a state signal with persist-only behavior
-    const result = await agent.sendStateSignal(
-      {
-        id: 'browser',
-        cacheKey: 'browser:v1',
-        mode: 'snapshot',
-        contents: 'Browser is open on https://example.com',
-        value: { activeUrl: 'https://example.com' },
-      },
-      {
-        resourceId,
-        threadId,
-        ifIdle: { behavior: 'persist' },
-      },
-    );
-
-    // Verify the state signal was persisted
-    expect(result.skipped).toBeFalsy();
-    await expect(result.accepted).resolves.toMatchObject({ action: 'persist' });
-    expect(result.signal).toMatchObject({
-      type: 'state',
-      tagName: 'state',
-      metadata: expect.objectContaining({
-        state: expect.objectContaining({
+      // Send a state signal with persist-only behavior
+      const result = await agent.sendStateSignal(
+        {
           id: 'browser',
           cacheKey: 'browser:v1',
           mode: 'snapshot',
+          contents: 'Browser is open on https://example.com',
+          value: { activeUrl: 'https://example.com' },
+        },
+        {
+          resourceId,
+          threadId,
+          ifIdle: { behavior: 'persist' },
+        },
+      );
+
+      // Verify the state signal was persisted
+      expect(result.skipped).toBeFalsy();
+      await expect(result.accepted).resolves.toMatchObject({ action: 'persist' });
+      expect(result.signal).toMatchObject({
+        type: 'state',
+        tagName: 'state',
+        metadata: expect.objectContaining({
+          state: expect.objectContaining({
+            id: 'browser',
+            cacheKey: 'browser:v1',
+            mode: 'snapshot',
+          }),
         }),
-      }),
+      });
     });
-  });
-});
+  },
+  { skip: ['durable'] },
+);
