@@ -146,7 +146,12 @@ export class MastraCodeAcpAgent implements Agent {
       );
 
       // Send the message to the harness
-      await this.harness.sendMessage({ content: text });
+      try {
+        await this.harness.sendMessage({ content: text });
+      } catch (error) {
+        this.currentPromptState = null;
+        throw error;
+      }
 
       // Wait for agent_end to resolve
       const { reason, usage } = await result;
