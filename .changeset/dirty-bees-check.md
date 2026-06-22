@@ -12,6 +12,8 @@ The `DatasetItemSource['type']` union now includes `'candidate-screener'` so ext
 
 `DATASETS_SCHEMA` and `DATASET_ITEMS_SCHEMA` gain matching nullable columns, and `DatasetsInMemory` persists and filters on them.
 
+`DatasetsManager.create()` accepts the new optional fields, and `DatasetsManager.list()` accepts an optional `filters` arg that forwards to the storage layer.
+
 **Before**
 
 ```ts
