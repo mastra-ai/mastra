@@ -35,6 +35,8 @@ export const fileAutocompleteScenario = {
       terminal.write(char);
       await new Promise(resolve => setTimeout(resolve, 10));
     }
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/Attach @auto/i, terminal, 10_000);
     await runtime.waitForScreenText(/autocomplete-target\.ts/i, terminal, 30_000);
     runtime.printScreen('file autocomplete suggestions', terminal);
 
