@@ -74,9 +74,11 @@ export const mcpLongRunningToolScenario = {
       `!node -e 'const fs=require("fs"); const url=process.env.MC_E2E_MCP_LONG_URL; if(!url) throw new Error("missing MC_E2E_MCP_LONG_URL"); fs.mkdirSync(".mastracode",{recursive:true}); fs.writeFileSync(".mastracode/mcp.json", JSON.stringify({mcpServers:{e2e_long_mcp:{url,headers:{"x-mc-e2e":"long-running-tool"}}}}, null, 2)); console.log("MCP_LONG_CONFIG_WRITTEN="+url);'`,
     );
     await runtime.waitForScreenText(/MCP_LONG_CONFIG_WRITTEN=http:\/\/127\.0\.0\.1:/i, terminal, 10_000);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
 
     terminal.submit('/mcp reload');
-    await runtime.waitForScreenText(/MCP: Reloaded\. 1 server\(s\) connected, 1 tool\(s\)\./i, terminal, 15_000);
+    await runtime.waitForScreenText(/MCP: Reloaded\. 1 server\(s\) connected, 1 tool\(s\)\./i, terminal, 30_000);
     terminal.submit('/mcp status');
     await runtime.waitForScreenText(/e2e_long_mcp \[http\] \(connected\)/i, terminal, 15_000);
     await runtime.waitForScreenText(/e2e_long_mcp_slow_lookup/i, terminal, 15_000);
