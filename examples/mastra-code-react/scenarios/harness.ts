@@ -16,6 +16,8 @@ export interface ScenarioContext {
   aimockRequests: () => unknown[];
   /** Raw fetch into the harness server (for endpoints the driver doesn't wrap). */
   fetch: (url: string, init?: RequestInit) => Promise<Response>;
+  /** Base URL for the harness server (e.g. `http://scenario.local`). */
+  baseUrl: string;
   /** The workspace root dir, when the scenario requested `server.workspace`. */
   workspaceRoot?: string;
 }
@@ -45,6 +47,7 @@ export async function runScenario(scenario: WebScenario): Promise<void> {
       driver,
       aimockRequests: aimock.requests,
       fetch: server.fetch,
+      baseUrl: server.baseUrl,
       workspaceRoot: server.workspaceRoot,
     });
     if (aimock.requestCount() === 0) {

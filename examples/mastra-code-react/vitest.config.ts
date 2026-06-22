@@ -8,5 +8,9 @@ export default defineConfig({
     include: ['scenarios/**/*.scenario.test.ts'],
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    // Run test files sequentially — each scenario starts its own AIMock +
+    // Harness + Hono server, and concurrent runs can cause port/state
+    // collisions in the shared process.
+    fileParallelism: false,
   },
 });

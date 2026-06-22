@@ -66,6 +66,7 @@ export type KnownHarnessEvent =
   | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: { id: string; title?: string } }
+  | { type: 'thread_deleted'; threadId: string }
   // Subagents.
   | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string }
   | { type: 'subagent_end'; toolCallId: string }
@@ -91,10 +92,43 @@ export type KnownHarnessEvent =
       byPriority: Record<string, number>;
       notificationIds: string[];
     }
+  // Usage tracking.
+  | { type: 'usage_update'; usage: unknown }
+  // Goals.
+  | {
+      type: 'goal_evaluation';
+      payload: {
+        objective: string;
+        iteration: number;
+        maxRuns: number;
+        passed: boolean;
+        status: 'active' | 'paused' | 'done';
+        reason?: string;
+      };
+    }
+  // Follow-up queue.
+  | { type: 'follow_up_queued'; count: number }
+  // Observational memory lifecycle.
+  | { type: 'om_observation_start' }
+  | { type: 'om_observation_end' }
+  | { type: 'om_observation_failed'; error?: string }
+  | { type: 'om_reflection_start' }
+  | { type: 'om_reflection_end' }
+  | { type: 'om_reflection_failed'; error?: string }
+  | { type: 'om_buffering_start' }
+  | { type: 'om_buffering_end' }
+  | { type: 'om_buffering_failed'; error?: string }
+  | { type: 'om_model_changed'; role: string; modelId: string }
+  | { type: 'om_activation'; enabled: boolean }
+  | { type: 'om_status'; status: string }
+  | { type: 'om_thread_title_updated'; title: string }
+  // Workspace lifecycle.
+  | { type: 'workspace_ready' }
+  | { type: 'workspace_error'; error?: string }
+  | { type: 'workspace_status_changed'; status: string }
   // Notices.
   | { type: 'info'; message: string }
-  | { type: 'error'; error: { message?: string } | string; errorType?: string }
-  | { type: 'usage_update'; usage: unknown };
+  | { type: 'error'; error: { message?: string } | string; errorType?: string };
 
 /** Any other harness event the SDK doesn't model explicitly. */
 export interface OtherHarnessEvent {
@@ -130,7 +164,35 @@ export interface HarnessModeInfo {
 export interface HarnessThreadInfo {
   id: string;
   title?: string;
+  resourceId?: string;
+  createdAt?: string;
   updatedAt?: string;
+}
+
+export interface HarnessAvailableModel {
+  id: string;
+  provider: string;
+  modelName: string;
+  hasApiKey: boolean;
+  apiKeyEnvVar?: string;
+  useCount: number;
+}
+
+export interface HarnessWorkspaceStatus {
+  hasWorkspace: boolean;
+  isReady: boolean;
+}
+
+export interface HarnessGoalRecord {
+  id?: string;
+  objective: string;
+  status: 'active' | 'paused' | 'done';
+  runsUsed: number;
+  maxRuns?: number;
+  judgeModelId?: string;
+  startedAt: number;
+  updatedAt: number;
+  pausedReason?: string;
 }
 
 /** Snapshot of a single task item from the task tools. */
@@ -326,6 +388,108 @@ export class HarnessSession extends BaseResource {
     await this.request(`${this.base()}/thread`, { method: 'POST', body: { threadId } });
   }
 
+  /** Create a new thread (unbinds previous, binds the new one). */
+  async createThread(title?: string): Promise<HarnessThreadInfo> {
+    return this.request(`${this.base()}/threads`, {
+      method: 'POST',
+      body: { title },
+    });
+  }
+
+  /** Delete a thread. If it's the active thread the session unbinds. */
+  async deleteThread(threadId: string): Promise<void> {
+    await this.request(`${this.base()}/threads/${encodeURIComponent(threadId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /** Rename a thread. */
+  async renameThread(threadId: string, title: string): Promise<void> {
+    await this.request(`${this.base()}/threads/${encodeURIComponent(threadId)}`, {
+      method: 'PUT',
+      body: { title },
+    });
+  }
+
+  /** Clone a thread (and its messages). The session binds to the clone. */
+  async cloneThread(options?: { sourceThreadId?: string; title?: string }): Promise<HarnessThreadInfo> {
+    return this.request(`${this.base()}/threads/clone`, {
+      method: 'POST',
+      body: options ?? {},
+    });
+  }
+
+  /** List messages for a specific thread. */
+  async listMessages(threadId: string, limit?: number): Promise<HarnessMessage[]> {
+    const params = limit != null ? `?limit=${limit}` : '';
+    const body = await this.request<{ messages: HarnessMessage[] }>(
+      `${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`,
+    );
+    return body.messages;
+  }
+
+  /**
+   * Queue a follow-up message. If the session is idle it sends immediately;
+   * if a run is active it queues for after completion.
+   */
+  async followUp(message: string): Promise<void> {
+    await this.request(`${this.base()}/follow-up`, { method: 'POST', body: { message } });
+  }
+
+  /** Get the observational memory record for this session's thread. */
+  async getOMRecord(): Promise<unknown> {
+    const body = await this.request<{ record: unknown }>(`${this.base()}/om`);
+    return body.record;
+  }
+
+  /** Change the session's resource identity. */
+  async setResourceId(newResourceId: string): Promise<void> {
+    await this.request(`${this.base()}/resource`, {
+      method: 'POST',
+      body: { newResourceId },
+    });
+  }
+
+  /** Get known resource IDs for this session. */
+  async getResourceIds(): Promise<string[]> {
+    const body = await this.request<{ resourceIds: string[] }>(`${this.base()}/resources`);
+    return body.resourceIds;
+  }
+
+  /** Get the current goal for this session's thread. */
+  async getGoal(): Promise<HarnessGoalRecord | undefined> {
+    const body = await this.request<{ goal?: HarnessGoalRecord }>(`${this.base()}/goal`);
+    return body.goal;
+  }
+
+  /** Set a new goal objective. The agent's in-loop judge evaluates progress after each turn. */
+  async setGoal(
+    objective: string,
+    options?: { judgeModelId?: string; maxRuns?: number },
+  ): Promise<HarnessGoalRecord | undefined> {
+    const body = await this.request<{ goal?: HarnessGoalRecord }>(`${this.base()}/goal`, {
+      method: 'POST',
+      body: { objective, ...options },
+    });
+    return body.goal;
+  }
+
+  /** Update goal options (judge model, max runs, status). */
+  async updateGoal(
+    options: { judgeModelId?: string; maxRuns?: number; status?: 'active' | 'paused' | 'done' },
+  ): Promise<HarnessGoalRecord | undefined> {
+    const body = await this.request<{ goal?: HarnessGoalRecord }>(`${this.base()}/goal`, {
+      method: 'PUT',
+      body: options,
+    });
+    return body.goal;
+  }
+
+  /** Clear the current goal. */
+  async clearGoal(): Promise<void> {
+    await this.request(`${this.base()}/goal`, { method: 'DELETE' });
+  }
+
   /**
    * Send a notification signal to this session. The agent's delivery policy
    * determines whether the notification wakes an idle thread, is summarised,
@@ -348,12 +512,25 @@ export class Harness extends BaseResource {
     super(options);
   }
 
+  private basePath() {
+    return `/harness/${encodeURIComponent(this.harnessId)}`;
+  }
+
   /** List the modes configured on this harness (e.g. build, plan). */
   async listModes(): Promise<HarnessModeInfo[]> {
-    const body = await this.request<{ modes: HarnessModeInfo[] }>(
-      `/harness/${encodeURIComponent(this.harnessId)}/modes`,
-    );
+    const body = await this.request<{ modes: HarnessModeInfo[] }>(`${this.basePath()}/modes`);
     return body.modes;
+  }
+
+  /** List available models on this harness (with auth status and use counts). */
+  async listModels(): Promise<HarnessAvailableModel[]> {
+    const body = await this.request<{ models: HarnessAvailableModel[] }>(`${this.basePath()}/models`);
+    return body.models;
+  }
+
+  /** Get workspace status for this harness. */
+  async workspaceStatus(): Promise<HarnessWorkspaceStatus> {
+    return this.request(`${this.basePath()}/workspace`);
   }
 
   /** Scope to a session bound to `resourceId` (e.g. a user or conversation id). */

@@ -4,13 +4,17 @@ import { useState } from 'react';
 import type {
   ApprovalPrompt,
   AssistantEntry,
+  GoalSnapshot,
   NoticeEntry,
   NotificationEntry,
   NotificationSummaryEntry,
+  SubagentEntry,
   SuspensionPrompt,
   TimelineEntry,
   ToolCall,
   UserEntry,
+  OMPhase,
+  UsageSnapshot,
 } from './transcript';
 
 // ---------------------------------------------------------------------------
@@ -166,6 +170,23 @@ function AskUserCard({
 }
 
 // ---------------------------------------------------------------------------
+// Subagent card
+// ---------------------------------------------------------------------------
+
+function SubagentCard({ entry }: { entry: SubagentEntry }) {
+  return (
+    <div style={{ ...S.tool, borderColor: '#8b5cf6' }}>
+      <div style={S.toolHead}>
+        <span style={S.toolIcon}>{entry.done ? '✓' : '⟳'}</span>
+        <span style={S.toolName}>subagent: {entry.agentType}</span>
+        <span style={S.dim}>{lastSegment(entry.modelId)}</span>
+      </div>
+      <div style={S.text}>{entry.task}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Notification cards
 // ---------------------------------------------------------------------------
 
@@ -226,6 +247,8 @@ export function Transcript({
             return <NotificationSummaryCard key={entry.id} entry={entry} />;
           case 'suspension':
             return <SuspensionCard key={entry.id} prompt={entry} onRespond={onRespond} />;
+          case 'subagent':
+            return <SubagentCard key={entry.id} entry={entry} />;
           default:
             return null;
         }
@@ -269,18 +292,110 @@ export function StatusLine({
   modeId,
   modelId,
   running,
+  followUpCount,
+  omPhase,
+  usage,
+  workspaceReady,
 }: {
   status: string;
   modeId?: string;
   modelId?: string;
   running: boolean;
+  followUpCount?: number;
+  omPhase?: OMPhase;
+  usage?: UsageSnapshot;
+  workspaceReady?: boolean;
 }) {
   return (
     <div style={S.status}>
       <span style={S.badge}>{modeId ?? '—'}</span>
       <span style={S.dim}>{modelId ? lastSegment(modelId) : 'no model'}</span>
+      {workspaceReady !== undefined && (
+        <span style={S.dim}>{workspaceReady ? '📁' : '⚠️ no workspace'}</span>
+      )}
+      {omPhase && omPhase !== 'idle' && (
+        <span style={S.dim}>🧠 {omPhase}</span>
+      )}
+      {(followUpCount ?? 0) > 0 && (
+        <span style={S.dim}>📋 {followUpCount} queued</span>
+      )}
+      {usage?.totalTokens != null && (
+        <span style={S.dim}>{(usage.totalTokens / 1000).toFixed(1)}k tokens</span>
+      )}
       <span style={{ flex: 1 }} />
       <span style={S.dim}>{running ? 'working…' : status}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Goal panel
+// ---------------------------------------------------------------------------
+
+export function GoalPanel({
+  goal,
+  onSetGoal,
+  onPauseGoal,
+  onResumeGoal,
+  onClearGoal,
+}: {
+  goal?: GoalSnapshot;
+  onSetGoal: (objective: string) => void;
+  onPauseGoal: () => void;
+  onResumeGoal: () => void;
+  onClearGoal: () => void;
+}) {
+  const [draft, setDraft] = useState('');
+
+  if (!goal) {
+    return (
+      <form
+        style={{ ...S.goalBar, gap: 8 }}
+        onSubmit={e => {
+          e.preventDefault();
+          if (draft.trim()) {
+            onSetGoal(draft.trim());
+            setDraft('');
+          }
+        }}
+      >
+        <input
+          style={{ ...S.input, flex: 1, fontSize: 12 }}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          placeholder="Set a goal objective…"
+        />
+        <button style={{ ...S.approve, fontSize: 11, padding: '4px 10px' }} type="submit">
+          Set Goal
+        </button>
+      </form>
+    );
+  }
+
+  const statusIcon = goal.status === 'active' ? '🎯' : goal.status === 'paused' ? '⏸️' : '✅';
+  const progress = `${goal.iteration}/${goal.maxRuns}`;
+
+  return (
+    <div style={S.goalBar}>
+      <span>{statusIcon}</span>
+      <span style={{ flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {goal.objective}
+      </span>
+      <span style={S.dim}>{progress}</span>
+      {goal.reason && <span style={{ ...S.dim, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{goal.reason}</span>}
+      {goal.status === 'active' && (
+        <button style={{ ...S.decline, fontSize: 11, padding: '2px 8px' }} onClick={onPauseGoal}>
+          Pause
+        </button>
+      )}
+      {goal.status === 'paused' && (
+        <button style={{ ...S.approve, fontSize: 11, padding: '2px 8px' }} onClick={onResumeGoal}>
+          Resume
+        </button>
+      )}
+      <button style={{ fontSize: 11, padding: '2px 8px', border: '1px solid #d1d5db', borderRadius: 6, background: 'white', cursor: 'pointer' }} onClick={onClearGoal}>
+        Clear
+      </button>
     </div>
   );
 }
@@ -331,4 +446,5 @@ const S: Record<string, React.CSSProperties> = {
   noticeError: { color: '#dc2626' },
   status: { display: 'flex', gap: 8, alignItems: 'center', padding: '8px 16px', borderTop: '1px solid #e5e7eb', fontSize: 12 },
   badge: { padding: '2px 8px', borderRadius: 6, background: '#111827', color: 'white', fontWeight: 600 },
+  goalBar: { display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderBottom: '1px solid #e5e7eb', background: '#fffbeb', fontSize: 12 },
 };

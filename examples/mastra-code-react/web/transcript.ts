@@ -84,8 +84,47 @@ export interface NotificationSummaryEntry {
   notificationIds: string[];
 }
 
+/** A subagent delegation (subagent_start / subagent_end). */
+export interface SubagentEntry {
+  kind: 'subagent';
+  id: string;
+  toolCallId: string;
+  agentType: string;
+  task: string;
+  modelId: string;
+  done: boolean;
+}
+
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
-export type TimelineEntry = UserEntry | AssistantEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry;
+export type TimelineEntry =
+  | UserEntry
+  | AssistantEntry
+  | NoticeEntry
+  | PromptEntry
+  | NotificationEntry
+  | NotificationSummaryEntry
+  | SubagentEntry;
+
+/** Token usage snapshot from usage_update events. */
+export interface UsageSnapshot {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  [key: string]: unknown;
+}
+
+/** OM (observational memory) status. */
+export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
+
+/** Goal evaluation snapshot from goal_evaluation events. */
+export interface GoalSnapshot {
+  objective: string;
+  status: 'active' | 'paused' | 'done';
+  iteration: number;
+  maxRuns: number;
+  passed: boolean;
+  reason?: string;
+}
 
 export interface TranscriptState {
   entries: TimelineEntry[];
@@ -96,9 +135,25 @@ export interface TranscriptState {
   threadId?: string;
   /** Current task list from task_updated events. */
   tasks: HarnessTaskSnapshot[];
+  /** Accumulated token usage. */
+  usage?: UsageSnapshot;
+  /** Number of queued follow-up messages. */
+  followUpCount: number;
+  /** Observational memory phase. */
+  omPhase: OMPhase;
+  /** Whether the workspace is ready. */
+  workspaceReady?: boolean;
+  /** Latest goal evaluation. */
+  goal?: GoalSnapshot;
 }
 
-export const initialTranscript: TranscriptState = { entries: [], running: false, tasks: [] };
+export const initialTranscript: TranscriptState = {
+  entries: [],
+  running: false,
+  tasks: [],
+  followUpCount: 0,
+  omPhase: 'idle',
+};
 
 let noticeSeq = 0;
 
@@ -111,7 +166,7 @@ type Action =
 export function transcriptReducer(state: TranscriptState, action: Action): TranscriptState {
   switch (action.type) {
     case 'reset':
-      return { entries: [], running: false, tasks: [], modeId: action.modeId, modelId: action.modelId, threadId: action.threadId };
+      return { ...initialTranscript, modeId: action.modeId, modelId: action.modelId, threadId: action.threadId };
     case 'localUser':
       return {
         ...state,
@@ -222,6 +277,85 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
         ],
       };
 
+    // Goals.
+    case 'goal_evaluation':
+      return {
+        ...state,
+        goal: {
+          objective: event.payload.objective,
+          status: event.payload.status,
+          iteration: event.payload.iteration,
+          maxRuns: event.payload.maxRuns,
+          passed: event.payload.passed,
+          reason: event.payload.reason,
+        },
+      };
+
+    // Subagents.
+    case 'subagent_start':
+      return {
+        ...state,
+        entries: [
+          ...state.entries,
+          {
+            kind: 'subagent' as const,
+            id: `subagent-${event.toolCallId}`,
+            toolCallId: event.toolCallId,
+            agentType: event.agentType,
+            task: event.task,
+            modelId: event.modelId,
+            done: false,
+          },
+        ],
+      };
+    case 'subagent_end': {
+      const entries = state.entries.map(e =>
+        e.kind === 'subagent' && e.toolCallId === event.toolCallId ? { ...e, done: true } : e,
+      );
+      return { ...state, entries };
+    }
+
+    // Thread lifecycle.
+    case 'thread_created':
+      return pushNotice(state, 'info', `Created thread: ${event.thread.title || event.thread.id}`);
+    case 'thread_deleted':
+      return pushNotice(state, 'info', `Deleted thread ${event.threadId}`);
+
+    // Usage tracking.
+    case 'usage_update':
+      return { ...state, usage: event.usage as UsageSnapshot };
+
+    // Follow-up queue.
+    case 'follow_up_queued':
+      return { ...state, followUpCount: event.count };
+
+    // Observational memory lifecycle.
+    case 'om_observation_start':
+      return { ...state, omPhase: 'observing' };
+    case 'om_observation_end':
+    case 'om_observation_failed':
+      return { ...state, omPhase: 'idle' };
+    case 'om_reflection_start':
+      return { ...state, omPhase: 'reflecting' };
+    case 'om_reflection_end':
+    case 'om_reflection_failed':
+      return { ...state, omPhase: 'idle' };
+    case 'om_buffering_start':
+      return { ...state, omPhase: 'buffering' };
+    case 'om_buffering_end':
+    case 'om_buffering_failed':
+      return { ...state, omPhase: 'idle' };
+    case 'om_activation':
+      if (!event.enabled) return { ...state, omPhase: 'idle' };
+      return state;
+
+    // Workspace lifecycle.
+    case 'workspace_ready':
+      return { ...state, workspaceReady: true };
+    case 'workspace_error':
+      return { ...state, workspaceReady: false };
+
+    // Notices.
     case 'info':
       return pushNotice(state, 'info', event.message);
     case 'error':

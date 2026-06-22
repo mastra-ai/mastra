@@ -1,4 +1,5 @@
 import type { Harness, Session } from '@mastra/core/harness';
+import type { Agent } from '@mastra/core/agent';
 import { z } from 'zod/v4';
 
 import { HTTPException } from '../http-exception';
@@ -57,6 +58,15 @@ const switchModelBodySchema = z.object({
   modeId: z.string().optional(),
 });
 const switchThreadBodySchema = z.object({ threadId: z.string() });
+const createThreadBodySchema = z.object({ title: z.string().optional() });
+const renameThreadBodySchema = z.object({ title: z.string() });
+const threadPathParams = z.object({ harnessId: z.string(), resourceId: z.string(), threadId: z.string() });
+const cloneThreadBodySchema = z.object({
+  sourceThreadId: z.string().optional(),
+  title: z.string().optional(),
+});
+const listMessagesQuerySchema = z.object({ limit: z.coerce.number().optional() });
+const followUpBodySchema = z.object({ message: z.string() });
 
 const sendNotificationBodySchema = z.object({
   source: z.string(),
@@ -98,6 +108,45 @@ const listThreadsResponseSchema = z.object({
       updatedAt: z.string().optional(),
     }),
   ),
+});
+const threadResponseSchema = z.object({
+  id: z.string(),
+  title: z.string().optional(),
+  resourceId: z.string().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+const messageContentSchema = z.object({
+  type: z.string(),
+}).passthrough();
+const listMessagesResponseSchema = z.object({
+  messages: z.array(
+    z.object({
+      id: z.string(),
+      role: z.enum(['user', 'assistant', 'system']),
+      content: z.array(messageContentSchema),
+      createdAt: z.string().optional(),
+    }),
+  ),
+});
+const listModelsResponseSchema = z.object({
+  models: z.array(
+    z.object({
+      id: z.string(),
+      provider: z.string(),
+      modelName: z.string(),
+      hasApiKey: z.boolean(),
+      apiKeyEnvVar: z.string().optional(),
+      useCount: z.number(),
+    }),
+  ),
+});
+const workspaceStatusResponseSchema = z.object({
+  hasWorkspace: z.boolean(),
+  isReady: z.boolean(),
+});
+const omRecordResponseSchema = z.object({
+  record: z.any().optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -551,6 +600,470 @@ export const SEND_HARNESS_NOTIFICATION_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'error sending harness notification');
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Thread lifecycle
+// ---------------------------------------------------------------------------
+
+export const CREATE_HARNESS_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/threads',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: createThreadBodySchema,
+  responseSchema: threadResponseSchema,
+  summary: 'Create a new thread',
+  description: 'Creates a new thread in the session (unbinds the previous thread, binds the new one).',
+  tags: ['Harness', 'Threads'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, title }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const thread = await session.thread.create({ title });
+      return {
+        id: thread.id,
+        title: thread.title,
+        resourceId: thread.resourceId,
+        createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : undefined,
+        updatedAt: thread.updatedAt instanceof Date ? thread.updatedAt.toISOString() : undefined,
+      };
+    } catch (error) {
+      return handleError(error, 'error creating harness thread');
+    }
+  },
+});
+
+export const DELETE_HARNESS_THREAD_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/harness/:harnessId/sessions/:resourceId/threads/:threadId',
+  responseType: 'json' as const,
+  pathParamSchema: threadPathParams,
+  responseSchema: ackResponseSchema,
+  summary: 'Delete a thread',
+  description: 'Deletes a thread. If the deleted thread is the active one, the session is unbound.',
+  tags: ['Harness', 'Threads'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, threadId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      await session.thread.delete({ threadId });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error deleting harness thread');
+    }
+  },
+});
+
+export const RENAME_HARNESS_THREAD_ROUTE = createRoute({
+  method: 'PUT',
+  path: '/harness/:harnessId/sessions/:resourceId/threads/:threadId',
+  responseType: 'json' as const,
+  pathParamSchema: threadPathParams,
+  bodySchema: renameThreadBodySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Rename a thread',
+  description: 'Renames the specified thread.',
+  tags: ['Harness', 'Threads'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, threadId, title }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      // Ensure the thread is the active one (switch if not)
+      if (session.thread.getId() !== threadId) {
+        await session.thread.switch({ threadId });
+      }
+      await session.thread.rename({ title });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error renaming harness thread');
+    }
+  },
+});
+
+export const CLONE_HARNESS_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/threads/clone',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: cloneThreadBodySchema,
+  responseSchema: threadResponseSchema,
+  summary: 'Clone a thread',
+  description: 'Clones a thread (and its messages). The session binds to the new clone.',
+  tags: ['Harness', 'Threads'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, sourceThreadId, title }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const thread = await session.thread.clone({ sourceThreadId, title });
+      return {
+        id: thread.id,
+        title: thread.title,
+        resourceId: thread.resourceId,
+        createdAt: thread.createdAt instanceof Date ? thread.createdAt.toISOString() : undefined,
+        updatedAt: thread.updatedAt instanceof Date ? thread.updatedAt.toISOString() : undefined,
+      };
+    } catch (error) {
+      return handleError(error, 'error cloning harness thread');
+    }
+  },
+});
+
+export const LIST_HARNESS_THREAD_MESSAGES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:harnessId/sessions/:resourceId/threads/:threadId/messages',
+  responseType: 'json' as const,
+  pathParamSchema: threadPathParams,
+  queryParamSchema: listMessagesQuerySchema,
+  responseSchema: listMessagesResponseSchema,
+  summary: 'List thread messages',
+  description: 'Lists messages for a specific thread. Returns most recent messages first.',
+  tags: ['Harness', 'Threads'],
+  requiresAuth: true,
+  requiresPermission: 'harness:read',
+  handler: async ({ mastra, harnessId, resourceId, threadId, limit }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const messages = await session.thread.listMessages({ threadId, limit });
+      return {
+        messages: messages.map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content as Array<{ type: string; [key: string]: unknown }>,
+          createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : undefined,
+        })),
+      };
+    } catch (error) {
+      return handleError(error, 'error listing harness thread messages');
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Follow-up
+// ---------------------------------------------------------------------------
+
+export const FOLLOW_UP_HARNESS_SESSION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/follow-up',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: followUpBodySchema,
+  responseSchema: ackResponseSchema,
+  summary: 'Queue a follow-up message',
+  description: 'Queues a follow-up message. If the session is idle it sends immediately; if a run is active it queues for after completion.',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, message }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      void session.followUp({ content: message });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error queuing harness follow-up');
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+export const LIST_HARNESS_MODELS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:harnessId/models',
+  responseType: 'json' as const,
+  pathParamSchema: harnessIdPathParams,
+  responseSchema: listModelsResponseSchema,
+  summary: 'List available models',
+  description: 'Lists all models available on this harness (with auth status and use counts).',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:read',
+  handler: async ({ mastra, harnessId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      await harness.init();
+      const models = await harness.listAvailableModels();
+      return {
+        models: models.map(m => ({
+          id: m.id,
+          provider: m.provider,
+          modelName: m.modelName,
+          hasApiKey: m.hasApiKey,
+          apiKeyEnvVar: m.apiKeyEnvVar,
+          useCount: m.useCount,
+        })),
+      };
+    } catch (error) {
+      return handleError(error, 'error listing harness models');
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Workspace status
+// ---------------------------------------------------------------------------
+
+export const GET_HARNESS_WORKSPACE_STATUS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:harnessId/workspace',
+  responseType: 'json' as const,
+  pathParamSchema: harnessIdPathParams,
+  responseSchema: workspaceStatusResponseSchema,
+  summary: 'Get workspace status',
+  description: 'Returns whether the harness has a workspace configured and whether it is ready.',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:read',
+  handler: async ({ mastra, harnessId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      await harness.init();
+      return {
+        hasWorkspace: harness.hasWorkspace(),
+        isReady: harness.isWorkspaceReady(),
+      };
+    } catch (error) {
+      return handleError(error, 'error reading harness workspace status');
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Observational Memory
+// ---------------------------------------------------------------------------
+
+export const GET_HARNESS_OM_RECORD_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:harnessId/sessions/:resourceId/om',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  responseSchema: omRecordResponseSchema,
+  summary: 'Get observational memory record',
+  description: 'Returns the current observational memory record for the session\u2019s thread/resource.',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:read',
+  handler: async ({ mastra, harnessId, resourceId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const record = await harness.getObservationalMemoryRecord(session);
+      return { record: record ?? undefined };
+    } catch (error) {
+      return handleError(error, 'error reading harness OM record');
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Resource identity
+// ---------------------------------------------------------------------------
+
+export const SET_HARNESS_RESOURCE_ID_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/resource',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: z.object({ newResourceId: z.string() }),
+  responseSchema: ackResponseSchema,
+  summary: 'Change the session resource ID',
+  description: 'Updates the session\u2019s resource identity (e.g. when a user logs in).',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, newResourceId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      await harness.setResourceId(session, { resourceId: newResourceId });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error setting harness resource ID');
+    }
+  },
+});
+
+export const GET_HARNESS_RESOURCE_IDS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:harnessId/sessions/:resourceId/resources',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  responseSchema: z.object({ resourceIds: z.array(z.string()) }),
+  summary: 'Get known resource IDs',
+  description: 'Lists the resource IDs known to this session (from threads).',
+  tags: ['Harness'],
+  requiresAuth: true,
+  requiresPermission: 'harness:read',
+  handler: async ({ mastra, harnessId, resourceId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const resourceIds = await harness.getKnownResourceIds(session);
+      return { resourceIds };
+    } catch (error) {
+      return handleError(error, 'error listing harness resource IDs');
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Goals
+// ---------------------------------------------------------------------------
+
+const setGoalBodySchema = z.object({
+  objective: z.string(),
+  judgeModelId: z.string().optional(),
+  maxRuns: z.number().optional(),
+});
+const updateGoalBodySchema = z.object({
+  judgeModelId: z.string().optional(),
+  maxRuns: z.number().optional(),
+  status: z.enum(['active', 'paused', 'done']).optional(),
+});
+const goalRecordSchema = z.object({
+  id: z.string().optional(),
+  objective: z.string(),
+  status: z.enum(['active', 'paused', 'done']),
+  runsUsed: z.number(),
+  maxRuns: z.number().optional(),
+  judgeModelId: z.string().optional(),
+  startedAt: z.number(),
+  updatedAt: z.number(),
+  pausedReason: z.string().optional(),
+});
+const goalResponseSchema = z.object({ goal: goalRecordSchema.optional() });
+
+function getAgentForSession(harness: Harness<any>, session: Session<any>): Agent {
+  return harness.getCurrentAgent(session);
+}
+
+export const GET_HARNESS_GOAL_ROUTE = createRoute({
+  method: 'GET',
+  path: '/harness/:harnessId/sessions/:resourceId/goal',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  responseSchema: goalResponseSchema,
+  summary: 'Get the current goal',
+  description: 'Returns the active/paused/done goal objective for the session\u2019s thread, if any.',
+  tags: ['Harness', 'Goals'],
+  requiresAuth: true,
+  requiresPermission: 'harness:read',
+  handler: async ({ mastra, harnessId, resourceId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const threadId = session.thread.getId();
+      if (!threadId) return { goal: undefined };
+      const agent = getAgentForSession(harness, session);
+      const record = await agent.getObjective({ threadId });
+      return { goal: record ?? undefined };
+    } catch (error) {
+      return handleError(error, 'error reading harness goal');
+    }
+  },
+});
+
+export const SET_HARNESS_GOAL_ROUTE = createRoute({
+  method: 'POST',
+  path: '/harness/:harnessId/sessions/:resourceId/goal',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: setGoalBodySchema,
+  responseSchema: goalResponseSchema,
+  summary: 'Set a goal',
+  description: 'Sets a new objective for the session\u2019s thread. The agent\u2019s in-loop goal judge evaluates progress after each turn.',
+  tags: ['Harness', 'Goals'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, objective, judgeModelId, maxRuns }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const threadId = session.thread.getId();
+      if (!threadId) throw new HTTPException(400, { message: 'session has no active thread' });
+      const agent = getAgentForSession(harness, session);
+      const record = await agent.setObjective(objective, {
+        threadId,
+        resourceId: session.identity.getResourceId(),
+        ...(judgeModelId ? { judgeModelId } : {}),
+        ...(maxRuns != null ? { maxRuns } : {}),
+      });
+      return { goal: record ?? undefined };
+    } catch (error) {
+      return handleError(error, 'error setting harness goal');
+    }
+  },
+});
+
+export const UPDATE_HARNESS_GOAL_ROUTE = createRoute({
+  method: 'PUT',
+  path: '/harness/:harnessId/sessions/:resourceId/goal',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  bodySchema: updateGoalBodySchema,
+  responseSchema: goalResponseSchema,
+  summary: 'Update goal options',
+  description: 'Updates the judge model, max runs, or status of the active goal. No-op when no goal is set.',
+  tags: ['Harness', 'Goals'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId, judgeModelId, maxRuns, status }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const threadId = session.thread.getId();
+      if (!threadId) throw new HTTPException(400, { message: 'session has no active thread' });
+      const agent = getAgentForSession(harness, session);
+      const record = await agent.updateObjectiveOptions({
+        threadId,
+        ...(judgeModelId !== undefined ? { judgeModelId } : {}),
+        ...(maxRuns !== undefined ? { maxRuns } : {}),
+        ...(status !== undefined ? { status } : {}),
+      });
+      return { goal: record ?? undefined };
+    } catch (error) {
+      return handleError(error, 'error updating harness goal');
+    }
+  },
+});
+
+export const CLEAR_HARNESS_GOAL_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/harness/:harnessId/sessions/:resourceId/goal',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  responseSchema: ackResponseSchema,
+  summary: 'Clear the goal',
+  description: 'Removes the active goal from the session\u2019s thread.',
+  tags: ['Harness', 'Goals'],
+  requiresAuth: true,
+  requiresPermission: 'harness:execute',
+  handler: async ({ mastra, harnessId, resourceId }) => {
+    try {
+      const harness = getHarnessOrThrow(mastra, harnessId);
+      const session = await getSession(harness, resourceId);
+      const threadId = session.thread.getId();
+      if (!threadId) throw new HTTPException(400, { message: 'session has no active thread' });
+      const agent = getAgentForSession(harness, session);
+      await agent.clearObjective({ threadId });
+      return { ok: true };
+    } catch (error) {
+      return handleError(error, 'error clearing harness goal');
     }
   },
 });

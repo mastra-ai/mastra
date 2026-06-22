@@ -2,7 +2,7 @@ import { MastraClient } from '@mastra/client-js';
 import type { PlanResume, SendNotificationInput } from '@mastra/client-js';
 
 import { initialTranscript, transcriptReducer } from '../web/transcript';
-import type { ApprovalPrompt, NotificationEntry, SuspensionPrompt, TimelineEntry, TranscriptState } from '../web/transcript';
+import type { ApprovalPrompt, NotificationEntry, SubagentEntry, SuspensionPrompt, TimelineEntry, TranscriptState } from '../web/transcript';
 
 /**
  * Scenario driver — the web equivalent of MastraCode's `McE2eTerminal`.
@@ -36,6 +36,26 @@ export interface ScenarioDriver {
   /** Wait for a suspended interactive tool (ask_user/plan/access). */
   waitForSuspension: (timeoutMs?: number) => Promise<SuspensionPrompt>;
   respond: (resumeData: string | string[] | PlanResume) => Promise<void>;
+  /** Queue a follow-up message (queued if running, sent if idle). */
+  followUp: (text: string) => Promise<void>;
+  /** Create a new thread (session binds to it). Returns the new thread. */
+  createThread: (title?: string) => Promise<{ id: string; title?: string }>;
+  /** Switch to an existing thread. */
+  switchThread: (threadId: string) => Promise<void>;
+  /** List threads for the session. */
+  listThreads: () => Promise<{ id: string; title?: string }[]>;
+  /** List messages for a thread. */
+  listMessages: (threadId: string) => Promise<unknown[]>;
+  /** Set a goal objective. */
+  setGoal: (objective: string) => Promise<void>;
+  /** Get the current goal. */
+  getGoal: () => Promise<unknown>;
+  /** Clear the current goal. */
+  clearGoal: () => Promise<void>;
+  /** Wait for a subagent entry in the transcript. */
+  waitForSubagent: (timeoutMs?: number) => Promise<SubagentEntry>;
+  /** Wait for the run to become idle (running → false). */
+  waitForIdle: (timeoutMs?: number) => Promise<void>;
   /** Send a notification signal to the session. */
   sendNotification: (input: SendNotificationInput) => Promise<void>;
   /** Wait for a notification entry to appear in the transcript. */
@@ -115,6 +135,34 @@ export async function createDriver(opts: {
       apply(transcriptReducer(state, { type: 'resolvePrompt', id: prompt.id }));
       await session.respondToToolSuspension(prompt.toolCallId, resumeData);
     },
+    followUp: async t => {
+      apply(transcriptReducer(state, { type: 'localUser', text: t }));
+      await session.followUp(t);
+    },
+    createThread: async title => {
+      const thread = await session.createThread(title);
+      apply(transcriptReducer(state, { type: 'reset', threadId: thread.id }));
+      return { id: thread.id, title: thread.title };
+    },
+    switchThread: async threadId => {
+      await session.switchThread(threadId);
+      apply(transcriptReducer(state, { type: 'reset', threadId }));
+    },
+    listThreads: async () => session.listThreads(),
+    listMessages: async threadId => session.listMessages(threadId),
+    setGoal: async objective => {
+      await session.setGoal(objective);
+    },
+    getGoal: async () => {
+      return session.getGoal();
+    },
+    clearGoal: async () => {
+      await session.clearGoal();
+    },
+    waitForSubagent: timeoutMs =>
+      waitFor(() => state.entries.find(e => e.kind === 'subagent') as SubagentEntry | undefined, 'subagent entry', timeoutMs),
+    waitForIdle: (timeoutMs = 15_000) =>
+      waitFor(() => (!state.running ? true : undefined), 'idle', timeoutMs).then(() => undefined),
     sendNotification: async input => {
       await session.sendNotification(input);
     },
@@ -144,6 +192,8 @@ function entryText(entry: TimelineEntry): string {
       return `notification ${(entry as NotificationEntry).message}`;
     case 'notification_summary':
       return `notification_summary ${(entry as { message: string }).message}`;
+    case 'subagent':
+      return `subagent ${(entry as SubagentEntry).agentType} ${(entry as SubagentEntry).task}`;
     default:
       return '';
   }

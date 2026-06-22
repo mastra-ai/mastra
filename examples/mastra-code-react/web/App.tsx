@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { StatusLine, Transcript } from './components';
+import { GoalPanel, StatusLine, Transcript } from './components';
 import { useHarnessSession } from './useHarnessSession';
 
 // A fixed conversation id for this demo. In a real app this is the signed-in
@@ -44,6 +44,30 @@ export default function App() {
           await session.refreshThreads();
           setShowThreads(true);
           return;
+        case 'new':
+          await session.createThread(arg || undefined);
+          return;
+        case 'rename':
+          if (arg && transcript.threadId) await session.renameThread(transcript.threadId, arg);
+          return;
+        case 'delete':
+          if (arg) await session.deleteThread(arg);
+          return;
+        case 'clone':
+          await session.cloneThread();
+          return;
+        case 'goal':
+          if (arg) await session.setGoal(arg);
+          return;
+        case 'goal-clear':
+          await session.clearGoal();
+          return;
+        case 'goal-pause':
+          await session.pauseGoal();
+          return;
+        case 'goal-resume':
+          await session.resumeGoal();
+          return;
         default:
           return;
       }
@@ -72,6 +96,14 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      <GoalPanel
+        goal={transcript.goal}
+        onSetGoal={session.setGoal}
+        onPauseGoal={session.pauseGoal}
+        onResumeGoal={session.resumeGoal}
+        onClearGoal={session.clearGoal}
+      />
 
       {showThreads && (
         <div style={styles.threadBar}>
@@ -114,7 +146,16 @@ export default function App() {
         )}
       </form>
 
-      <StatusLine status={status} modeId={transcript.modeId} modelId={transcript.modelId} running={transcript.running} />
+      <StatusLine
+        status={status}
+        modeId={transcript.modeId}
+        modelId={transcript.modelId}
+        running={transcript.running}
+        followUpCount={transcript.followUpCount}
+        omPhase={transcript.omPhase}
+        usage={transcript.usage}
+        workspaceReady={transcript.workspaceReady}
+      />
     </div>
   );
 }

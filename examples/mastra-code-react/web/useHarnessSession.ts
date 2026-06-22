@@ -24,12 +24,21 @@ export interface HarnessSessionApi {
   send: (text: string) => Promise<void>;
   steer: (text: string) => Promise<void>;
   abort: () => Promise<void>;
+  followUp: (text: string) => Promise<void>;
   approveTool: (toolCallId: string, approved: boolean, promptId: string) => Promise<void>;
   respondSuspension: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => Promise<void>;
   switchMode: (modeId: string) => Promise<void>;
   switchModel: (modelId: string) => Promise<void>;
   switchThread: (threadId: string) => Promise<void>;
+  createThread: (title?: string) => Promise<void>;
+  deleteThread: (threadId: string) => Promise<void>;
+  renameThread: (threadId: string, title: string) => Promise<void>;
+  cloneThread: () => Promise<void>;
   refreshThreads: () => Promise<void>;
+  setGoal: (objective: string) => Promise<void>;
+  pauseGoal: () => Promise<void>;
+  resumeGoal: () => Promise<void>;
+  clearGoal: () => Promise<void>;
 }
 
 /**
@@ -138,6 +147,55 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
     dispatch({ type: 'reset', threadId });
   }, []);
 
+  const followUp = useCallback(async (text: string) => {
+    const session = sessionRef.current;
+    if (!session || !text.trim()) return;
+    dispatch({ type: 'localUser', text });
+    await session.followUp(text);
+  }, []);
+
+  const createThread = useCallback(async (title?: string) => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const thread = await session.createThread(title);
+    dispatch({ type: 'reset', threadId: thread.id });
+    void refreshThreads();
+  }, [refreshThreads]);
+
+  const deleteThread = useCallback(async (threadId: string) => {
+    await sessionRef.current?.deleteThread(threadId);
+    void refreshThreads();
+  }, [refreshThreads]);
+
+  const renameThread = useCallback(async (threadId: string, title: string) => {
+    await sessionRef.current?.renameThread(threadId, title);
+    void refreshThreads();
+  }, [refreshThreads]);
+
+  const cloneThread = useCallback(async () => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const thread = await session.cloneThread();
+    dispatch({ type: 'reset', threadId: thread.id });
+    void refreshThreads();
+  }, [refreshThreads]);
+
+  const setGoal = useCallback(async (objective: string) => {
+    await sessionRef.current?.setGoal(objective);
+  }, []);
+
+  const pauseGoal = useCallback(async () => {
+    await sessionRef.current?.updateGoal({ status: 'paused' });
+  }, []);
+
+  const resumeGoal = useCallback(async () => {
+    await sessionRef.current?.updateGoal({ status: 'active' });
+  }, []);
+
+  const clearGoal = useCallback(async () => {
+    await sessionRef.current?.clearGoal();
+  }, []);
+
   return {
     transcript,
     status,
@@ -146,11 +204,20 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '' }: UseHa
     send,
     steer,
     abort,
+    followUp,
     approveTool,
     respondSuspension,
     switchMode,
     switchModel,
     switchThread,
+    createThread,
+    deleteThread,
+    renameThread,
+    cloneThread,
     refreshThreads,
+    setGoal,
+    pauseGoal,
+    resumeGoal,
+    clearGoal,
   };
 }

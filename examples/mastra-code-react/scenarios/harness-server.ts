@@ -160,13 +160,17 @@ export async function startHarnessServer(
   for (const route of SERVER_ROUTES as ServerRouteLike[]) {
     if (typeof route.path !== 'string' || !route.path.includes('harness')) continue;
     const honoPath = `/api${route.path}`; // MastraClient prefixes /api
-    const method = route.method.toLowerCase() as 'get' | 'post';
-    app[method](honoPath, c => invokeRoute(route, c, mastra));
+    const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete';
+    (app as any)[method](honoPath, (c: any) => invokeRoute(route, c, mastra));
   }
 
+  const BASE = 'http://scenario.local';
   return {
-    fetch: (url, init) => app.fetch(new Request(url, init)),
-    baseUrl: 'http://scenario.local',
+    fetch: (url, init) => {
+      const fullUrl = url.startsWith('http') ? url : `${BASE}${url}`;
+      return app.fetch(new Request(fullUrl, init));
+    },
+    baseUrl: BASE,
     workspaceRoot,
     stop: async () => {},
   };
@@ -180,7 +184,13 @@ export async function startHarnessServer(
 async function invokeRoute(route: ServerRouteLike, c: any, mastra: Mastra): Promise<Response> {
   /* c is a Hono Context */
   const params: Record<string, unknown> = { mastra, ...c.req.param() };
-  if (route.method.toUpperCase() === 'POST') {
+  // Merge query params for GET requests (e.g. ?limit=10 on listMessages).
+  const url = new URL(c.req.url);
+  for (const [key, value] of url.searchParams.entries()) {
+    params[key] = value;
+  }
+  const method = route.method.toUpperCase();
+  if (method === 'POST' || method === 'PUT') {
     try {
       Object.assign(params, await c.req.json());
     } catch {
