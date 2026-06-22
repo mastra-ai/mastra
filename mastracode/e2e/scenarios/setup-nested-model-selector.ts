@@ -1,5 +1,5 @@
-import { typeTextSlowly } from './typing-utils.js';
 import type { McE2eScenario } from './types.js';
+import { typeTextSlowly } from './typing-utils.js';
 
 export const setupNestedModelSelectorScenario: McE2eScenario = {
   name: 'setup-nested-model-selector',
