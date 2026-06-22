@@ -679,8 +679,6 @@ describe('AgentChannels', () => {
       );
     });
   });
-
-
 });
 
 describe('matchesDomain', () => {
