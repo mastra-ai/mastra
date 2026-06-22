@@ -37,8 +37,20 @@ describe('buildStepSuccessors', () => {
 describe('collectGraphStepFlags', () => {
   it('collects conditional arm ids but not parallel arm ids', () => {
     const stepGraph = [
-      { type: 'parallel', steps: [{ type: 'step', step: { id: 'p1' } }, { type: 'step', step: { id: 'p2' } }] },
-      { type: 'conditional', steps: [{ type: 'step', step: { id: 'short' } }, { type: 'step', step: { id: 'long' } }] },
+      {
+        type: 'parallel',
+        steps: [
+          { type: 'step', step: { id: 'p1' } },
+          { type: 'step', step: { id: 'p2' } },
+        ],
+      },
+      {
+        type: 'conditional',
+        steps: [
+          { type: 'step', step: { id: 'short' } },
+          { type: 'step', step: { id: 'long' } },
+        ],
+      },
     ] as unknown as SerializedStepFlowEntry[];
 
     const { conditionalStepIds, nestedWorkflowStepIds } = collectGraphStepFlags(stepGraph);
@@ -75,17 +87,17 @@ describe('isBranchArmBypassed', () => {
   it('bypasses an un-taken conditional arm once a sibling on the join has succeeded', () => {
     const isStepSuccess = (id: string) => id === 'short';
 
-    expect(
-      isBranchArmBypassed({ stepId: 'long', conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess }),
-    ).toBe(true);
+    expect(isBranchArmBypassed({ stepId: 'long', conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess })).toBe(
+      true,
+    );
   });
 
   it('does not bypass an arm while no sibling has succeeded yet', () => {
     const isStepSuccess = () => false;
 
-    expect(
-      isBranchArmBypassed({ stepId: 'long', conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess }),
-    ).toBe(false);
+    expect(isBranchArmBypassed({ stepId: 'long', conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess })).toBe(
+      false,
+    );
   });
 
   it('never bypasses a parallel arm even when a sibling on the shared join has succeeded', () => {
@@ -114,9 +126,7 @@ describe('selectNextStepKey', () => {
   it('selects the first step that has not yet succeeded', () => {
     const isStepSuccess = (id: string) => id === 'a';
 
-    expect(
-      selectNextStepKey({ stepNodesInOrder, isStepSuccess, isStepBypassed: noneBypassed }),
-    ).toBe('b');
+    expect(selectNextStepKey({ stepNodesInOrder, isStepSuccess, isStepBypassed: noneBypassed })).toBe('b');
   });
 
   it('skips a bypassed branch arm and selects the next runnable step', () => {
@@ -139,9 +149,9 @@ describe('isLastRunnableStep', () => {
   it('is true when no later step still needs to run', () => {
     const isStepSuccess = (id: string) => id === 'c';
 
-    expect(
-      isLastRunnableStep({ nextStepKey: 'b', stepNodesInOrder, isStepSuccess, isStepBypassed: () => false }),
-    ).toBe(true);
+    expect(isLastRunnableStep({ nextStepKey: 'b', stepNodesInOrder, isStepSuccess, isStepBypassed: () => false })).toBe(
+      true,
+    );
   });
 
   it('treats bypassed later steps as not needing to run', () => {
