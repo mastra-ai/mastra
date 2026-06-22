@@ -18,6 +18,7 @@ export const activeSignalFollowupScenario: McE2eScenario = {
     terminal.write('Start a slow active signal run.');
     await runtime.waitForScreenText(/Start a slow active signal run\./i, terminal);
     terminal.write('\r');
+    await runtime.waitForScreenText(/Initial signal/i, terminal, 15_000);
 
     terminal.submit('Steer while active.');
     await runtime.waitForScreenText(/Steer while active\./i, terminal);
