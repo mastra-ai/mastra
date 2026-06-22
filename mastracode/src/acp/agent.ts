@@ -27,6 +27,14 @@ export class MastraCodeAcpAgent implements Agent {
   private currentPromptState: PromptState | null = null;
   private promptMutex: Promise<void> = Promise.resolve();
 
+  private getThreadIdOrThrow(sessionId: string): string {
+    const threadId = this.sessionMap.get(sessionId);
+    if (!threadId) {
+      throw new Error(`Unknown ACP sessionId: ${sessionId}`);
+    }
+    return threadId;
+  }
+
   constructor(connection: AgentSideConnection, harness: Harness, modes: HarnessMode[]) {
     this.connection = connection;
     this.harness = harness;
@@ -105,10 +113,8 @@ export class MastraCodeAcpAgent implements Agent {
     const text = extractTextFromContentBlocks(contentBlocks);
 
     // Ensure we're on the right thread
-    const threadId = this.sessionMap.get(sessionId);
-    if (threadId) {
-      await this.harness.switchThread({ threadId });
-    }
+    const threadId = this.getThreadIdOrThrow(sessionId);
+    await this.harness.switchThread({ threadId });
 
     // Serialize prompts via mutex
     const prevMutex = this.promptMutex;
@@ -166,18 +172,14 @@ export class MastraCodeAcpAgent implements Agent {
   }
 
   async setSessionMode(params: { sessionId: string; modeId: string }): Promise<void> {
-    const threadId = this.sessionMap.get(params.sessionId);
-    if (threadId) {
-      await this.harness.switchThread({ threadId });
-    }
+    const threadId = this.getThreadIdOrThrow(params.sessionId);
+    await this.harness.switchThread({ threadId });
     this.harness.session.mode.set({ modeId: params.modeId });
   }
 
   async unstable_setSessionModel(params: { sessionId: string; modelId: string }): Promise<void> {
-    const threadId = this.sessionMap.get(params.sessionId);
-    if (threadId) {
-      await this.harness.switchThread({ threadId });
-    }
+    const threadId = this.getThreadIdOrThrow(params.sessionId);
+    await this.harness.switchThread({ threadId });
     this.harness.session.model.set({ modelId: params.modelId });
   }
 }
