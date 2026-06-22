@@ -95,6 +95,8 @@ import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/githu
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 
+import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
+import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
@@ -143,8 +145,7 @@ function getInjectorSessionState(
   requestContext: { get: (key: string) => unknown } | undefined,
 ): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
   const agentControllerContext = requestContext?.get('controller') as
-    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
-    | undefined;
+    AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }> | undefined;
   return agentControllerContext?.getState();
 }
 
@@ -319,6 +320,8 @@ export interface MastraCodeConfig {
   unixSocketPubSub?: boolean;
   /** Marks the configured PubSub as cross-process-safe, allowing Mastra Code to skip file thread locks. */
   crossProcessPubSub?: boolean;
+  /** Agent connection state and discovery options. */
+  agentConnections?: AgentConnectionsSignalProviderOptions;
 }
 
 export function createAuthStorage() {
@@ -783,9 +786,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     new ProviderHistoryCompat(),
   ];
 
-  // TaskSignalProvider bundles the task tools + TaskStateProcessor (see the
-  // `signals` array below); named here so the plugin lane can reserve its id.
+  // Built-in providers are named so the plugin lane can reserve their ids.
   const taskSignalProvider = new TaskSignalProvider();
+  const agentConnectionsSignalProvider = new AgentConnectionsSignalProvider(config?.agentConnections);
 
   const NO_PLUGIN_PROCESSORS: PluginProcessorEntries = { input: [], output: [] };
   let pluginProcessorReadWarned = false;
@@ -798,7 +801,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // through the constructor and are therefore invisible to the lane.
   const pluginSignalLane = pluginManager
     ? new PluginSignalLane({
-        reservedProviderIds: [taskSignalProvider.id, ...(githubSignals ? [githubSignals.id] : [])],
+        reservedProviderIds: [
+          taskSignalProvider.id,
+          agentConnectionsSignalProvider.id,
+          ...(githubSignals ? [githubSignals.id] : []),
+        ],
       })
     : undefined;
   let unsubscribePluginReload: (() => void) | undefined;
@@ -873,7 +880,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.
-    signals: [taskSignalProvider, ...(githubSignals ? [githubSignals] : [])],
+    signals: [taskSignalProvider, agentConnectionsSignalProvider, ...(githubSignals ? [githubSignals] : [])],
     // Native goal mechanism: the in-loop goal step judges the thread's active
     // objective each qualifying iteration. The judge model is required for any
     // gating to occur; when unset the goal step is a complete no-op. A6 auto-wires
@@ -1149,6 +1156,46 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           acquire: acquireThreadLock,
           release: releaseThreadLock,
         },
+  });
+
+  const sessionPeerCleanup = new WeakMap<Session<MastraCodeState>, () => void>();
+  controller.onSessionCreated(
+    async session => {
+      let claimedOwnership: { unsubscribe: () => void } | undefined;
+      const claimCurrentThread = async (threadId?: string | null) => {
+        if (!threadId) return;
+        claimedOwnership?.unsubscribe();
+        claimedOwnership = await controller.getCurrentAgent(session).claimThreadOwnership({
+          threadId,
+          resourceId: session.identity.getResourceId(),
+          streamOptions: () => session.machinery.buildStreamOptions({}),
+          peer: {
+            label: `${project.name} (${threadId})`,
+            title: project.name,
+            metadata: {
+              projectName: project.name,
+              projectPath: project.rootPath,
+              gitBranch: project.gitBranch,
+            },
+          },
+        });
+      };
+
+      const unsubscribeSession = session.subscribe(event => {
+        if (event.type === 'thread_changed') void claimCurrentThread(event.threadId);
+        else if (event.type === 'thread_created') void claimCurrentThread(event.thread.id);
+      });
+      sessionPeerCleanup.set(session, () => {
+        unsubscribeSession();
+        claimedOwnership?.unsubscribe();
+      });
+      await claimCurrentThread(session.thread.getId());
+    },
+    { blocking: true },
+  );
+  controller.onSessionDeleted(session => {
+    sessionPeerCleanup.get(session)?.();
+    sessionPeerCleanup.delete(session);
   });
 
   // Publish the controller to the plugin runtime accessors now that it exists.

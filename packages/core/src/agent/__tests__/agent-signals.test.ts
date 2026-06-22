@@ -1440,6 +1440,217 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('wakes locally when the current runtime owns the thread claim', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const agent = new Agent({
+      id: 'local-owner-agent',
+      name: 'Local Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('local owner response'),
+      pubsub,
+    });
+
+    const subscription = await agent.subscribeToThread({
+      resourceId: 'local-owner-user',
+      threadId: 'local-owner-thread',
+    });
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await agent.claimThreadOwnership({
+      resourceId: 'local-owner-user',
+      threadId: 'local-owner-thread',
+      streamOptions: { memory: { resource: 'local-owner-user', thread: 'local-owner-thread' } },
+    });
+    expect(claim.claimed).toBe(true);
+
+    const signalResult = await agent.sendSignal(
+      { type: 'user-message', contents: 'wake local owner' },
+      {
+        resourceId: 'local-owner-user',
+        threadId: 'local-owner-thread',
+        ifIdle: { behavior: 'wake', streamOptions: { memory: { resource: 'local-owner-user', thread: 'local-owner-thread' } } },
+      },
+    );
+
+    const subscribedRun = await withTimeout(nextRun, 'Timed out waiting for local owner run');
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
+    expect(subscribedRun.value.text).toBe('local owner response');
+
+    claim.unsubscribe();
+    subscription.unsubscribe();
+  });
+
+  it('routes idle signals to the claimed thread owner runtime', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const ownerAgent = new Agent({
+      id: 'owner-agent',
+      name: 'Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'owner-sender',
+      name: 'Owner Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, {
+      resourceId: 'owner-user',
+      threadId: 'owner-thread',
+    }, pubsub);
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, {
+      resourceId: 'owner-user',
+      threadId: 'owner-thread',
+      streamOptions: { memory: { resource: 'owner-user', thread: 'owner-thread' } },
+    }, pubsub);
+    expect(claim.claimed).toBe(true);
+
+    const signalResult = senderRuntime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake the owner' },
+      {
+        resourceId: 'owner-user',
+        threadId: 'owner-thread',
+        ifIdle: { behavior: 'wake' },
+      },
+      pubsub,
+    );
+
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver' });
+    const subscribedRun = await nextRun;
+    expect(subscribedRun.value.text).toBe('owner response');
+
+    claim.unsubscribe();
+    subscription.unsubscribe();
+  });
+
+  it('discovers advertised thread peers through pubsub', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerAgent = new Agent({
+      id: 'discoverable-agent',
+      name: 'Discoverable Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('discoverable response'),
+      pubsub,
+    });
+    const discoveryAgent = new Agent({
+      id: 'discovery-agent',
+      name: 'Discovery Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('discovery response'),
+      pubsub,
+    });
+
+    const claim = await ownerAgent.claimThreadOwnership({
+      resourceId: 'discoverable-resource',
+      threadId: 'discoverable-thread',
+      peer: {
+        label: 'Discoverable peer',
+        metadata: { mode: 'build' },
+      },
+    });
+
+    const peers = await discoveryAgent.discoverThreadPeers();
+
+    expect(peers).toEqual([
+      expect.objectContaining({
+        id: 'discoverable-agent:discoverable-resource:discoverable-thread',
+        agentId: 'discoverable-agent',
+        resourceId: 'discoverable-resource',
+        threadId: 'discoverable-thread',
+        label: 'Discoverable peer',
+        metadata: { mode: 'build' },
+      }),
+    ]);
+    expect(peers[0]?.discoveredAt).toBeInstanceOf(Date);
+
+    claim.unsubscribe();
+  });
+
+  it('does not claim thread ownership when another runtime already owns the thread', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const firstRuntime = new AgentThreadStreamRuntime();
+    const secondRuntime = new AgentThreadStreamRuntime();
+    const firstAgent = new Agent({
+      id: 'first-owner-agent',
+      name: 'First Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('first owner response'),
+      pubsub,
+    });
+    const secondAgent = new Agent({
+      id: 'second-owner-agent',
+      name: 'Second Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('second owner response'),
+      pubsub,
+    });
+
+    const firstClaim = await firstRuntime.claimThreadOwnership(firstAgent, {
+      resourceId: 'claimed-user',
+      threadId: 'claimed-thread',
+    }, pubsub);
+    const secondClaim = await secondRuntime.claimThreadOwnership(secondAgent, {
+      resourceId: 'claimed-user',
+      threadId: 'claimed-thread',
+    }, pubsub);
+
+    expect(firstClaim.claimed).toBe(true);
+    expect(secondClaim.claimed).toBe(false);
+
+    firstClaim.unsubscribe();
+  });
+
+  it('discovers advertised thread peers over pubsub', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerAgent = new Agent({
+      id: 'peer-owner-agent',
+      name: 'Peer Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const discovererAgent = new Agent({
+      id: 'peer-discoverer-agent',
+      name: 'Peer Discoverer Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('discoverer response'),
+      pubsub,
+    });
+
+    const claim = await ownerAgent.claimThreadOwnership({
+      resourceId: 'peer-resource',
+      threadId: 'peer-thread',
+      peer: {
+        label: 'Peer Owner',
+        title: 'Owner Thread',
+        metadata: { mode: 'build' },
+      },
+    });
+
+    const peers = await discovererAgent.discoverThreadPeers({ timeoutMs: 10 });
+
+    expect(peers).toHaveLength(1);
+    expect(peers[0]).toMatchObject({
+      id: 'peer-owner-agent:peer-resource:peer-thread',
+      agentId: 'peer-owner-agent',
+      resourceId: 'peer-resource',
+      threadId: 'peer-thread',
+      label: 'Peer Owner',
+      title: 'Owner Thread',
+      metadata: { mode: 'build' },
+    });
+    expect(peers[0].sourceId).toBeDefined();
+    expect(peers[0].discoveredAt).toBeInstanceOf(Date);
+
+    claim.unsubscribe();
+  });
+
   it('starts an idle thread run when sendMessage is called', async () => {
     const agent = new Agent({
       id: 'idle-message-agent',
