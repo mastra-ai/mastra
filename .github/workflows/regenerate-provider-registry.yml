@@ -73,11 +73,13 @@ jobs:
         run: |
           pnpm prettier --write packages/core/src/llm/model/provider-registry.json
           pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
+          pnpm prettier --write packages/core/src/llm/model/capabilities/
           pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts,js}
       - name: Check for changes
         id: git-check
         run: |
-          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts docs/src/content/en/models/ || echo "changed=true" >> $GITHUB_OUTPUT
+          git add --intent-to-add packages/core/src/llm/model/capabilities/
+          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts packages/core/src/llm/model/capabilities/ docs/src/content/en/models/ || echo "changed=true" >> $GITHUB_OUTPUT
 
       - name: Create changeset
         if: steps.git-check.outputs.changed == 'true'
@@ -116,15 +118,18 @@ jobs:
         run: |
           git add packages/core/src/llm/model/provider-registry.json
           git add packages/core/src/llm/model/provider-types.generated.d.ts
+          # The generator rewrites and adds per-provider capability files. These
+          # must be staged too; otherwise they linger as unstaged/untracked
+          # changes that abort the rebase below and never make it onto main.
+          git add packages/core/src/llm/model/capabilities/
           git add docs/src/content/en/models/
           if [ -n "${CHANGESET_FILE}" ]; then
             git add "${CHANGESET_FILE}"
           fi
           git commit -m "chore: regenerate providers and docs [skip ci]"
-          # Use --autostash so any leftover unstaged changes from the generation
-          # and formatting steps (e.g. files touched by Prettier but not staged)
-          # don't abort the rebase with "cannot pull with rebase: You have
-          # unstaged changes." Autostash safely stashes and restores them.
+          # Use --autostash as a safeguard so any unexpected leftover unstaged
+          # changes don't abort the rebase with "cannot pull with rebase: You
+          # have unstaged changes." Autostash safely stashes and restores them.
           git pull --rebase --autostash
           git push
 
