@@ -9,6 +9,7 @@ import type {
   AgentThreadSubscription,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
+  SendAgentSignalAccepted,
   ToolsInput,
   ToolsetsInput,
 } from '../agent/types';
@@ -54,7 +55,6 @@ import type {
   HarnessThread,
   ModelAuthStatus,
   PermissionPolicy,
-  PermissionRules,
   TokenUsage,
   ToolCategory,
 } from './types';
@@ -506,6 +506,24 @@ export class Harness<TState = {}> {
       emit: event => this.emit(event),
       trackModelUse: this.config.modelUseCountTracker,
     });
+    this.#session.om.setResolver({
+      getState: () => this.#session.state.get() as Record<string, unknown>,
+      setState: updates => this.#session.state.set(updates as Partial<TState>),
+      setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
+      emit: event => this.emit(event),
+      omConfig: this.config.omConfig,
+      resolveModel: this.config.resolveModel,
+    });
+    this.#session.permissions.setResolver({
+      getState: () => this.#session.state.get() as Record<string, unknown>,
+      setState: updates => this.#session.state.set(updates as Partial<TState>),
+    });
+    this.#session.subagents.setResolver({
+      getState: () => this.#session.state.get() as Record<string, unknown>,
+      setState: updates => this.#session.state.set(updates as Partial<TState>),
+      setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
+      emit: event => this.emit(event),
+    });
     this.#session.thread.connect(this.createThreadDataStore());
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
@@ -857,37 +875,6 @@ export class Harness<TState = {}> {
   }
 
   // ===========================================================================
-  // State Management
-  // ===========================================================================
-
-  /**
-   * Get current harness state (read-only snapshot).
-   * @deprecated Prefer `harness.session.state.get()`.
-   */
-  getState(): Readonly<TState> {
-    return this.#session.state.get();
-  }
-
-  /**
-   * Update harness state. Validates against schema if provided.
-   * Emits state_changed event.
-   * @deprecated Prefer `harness.session.state.set(...)`.
-   */
-  async setState(updates: Partial<TState>): Promise<void> {
-    return this.#session.state.set(updates);
-  }
-
-  private async updateState<TResult>(
-    updater: (
-      state: Readonly<TState>,
-    ) =>
-      | { updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }
-      | Promise<{ updates?: Partial<TState>; events?: HarnessEvent[]; result: TResult }>,
-  ): Promise<TResult> {
-    return this.#session.state.update(updater);
-  }
-
-  // ===========================================================================
   // Mode Management
   // ===========================================================================
 
@@ -1002,23 +989,6 @@ export class Harness<TState = {}> {
     const mode = this.#session.mode.resolve();
 
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
-  }
-
-  /**
-   * Get a short display name from the current model ID.
-   */
-  getModelName(): string {
-    const modelId = this.#session.model.get();
-    if (!modelId || modelId === 'unknown') return modelId || 'unknown';
-    const parts = modelId.split('/');
-    return parts[parts.length - 1] || modelId;
-  }
-
-  /**
-   * Get the full model ID (e.g., "anthropic/claude-sonnet-4").
-   */
-  getFullModelId(): string {
-    return this.#session.model.get();
   }
 
   /**
@@ -1462,17 +1432,17 @@ export class Harness<TState = {}> {
       }
 
       if (Object.keys(updates).length > 0) {
-        await this.setState(updates as unknown as Partial<TState>);
+        await this.#session.state.set(updates as unknown as Partial<TState>);
       }
 
       if (!hasObservationThreshold) {
-        const observationThreshold = this.getObservationThreshold();
+        const observationThreshold = this.#session.om.observer.threshold();
         if (observationThreshold !== undefined) {
           await this.#session.thread.setSetting({ key: 'observationThreshold', value: observationThreshold });
         }
       }
       if (!hasReflectionThreshold) {
-        const reflectionThreshold = this.getReflectionThreshold();
+        const reflectionThreshold = this.#session.om.reflector.threshold();
         if (reflectionThreshold !== undefined) {
           await this.#session.thread.setSetting({ key: 'reflectionThreshold', value: reflectionThreshold });
         }
@@ -1617,115 +1587,12 @@ export class Harness<TState = {}> {
     }
   }
 
-  /**
-   * Returns the observer model ID from state, falling back to omConfig defaults.
-   */
-  getObserverModelId(): string | undefined {
-    return (this.#session.state.get() as any).observerModelId ?? this.config.omConfig?.defaultObserverModelId;
-  }
-
-  /**
-   * Returns the reflector model ID from state, falling back to omConfig defaults.
-   */
-  getReflectorModelId(): string | undefined {
-    return (this.#session.state.get() as any).reflectorModelId ?? this.config.omConfig?.defaultReflectorModelId;
-  }
-
-  /**
-   * Returns the observation threshold from state, falling back to omConfig defaults.
-   */
-  getObservationThreshold(): number | undefined {
-    return (this.#session.state.get() as any).observationThreshold ?? this.config.omConfig?.defaultObservationThreshold;
-  }
-
-  /**
-   * Returns the reflection threshold from state, falling back to omConfig defaults.
-   */
-  getReflectionThreshold(): number | undefined {
-    return (this.#session.state.get() as any).reflectionThreshold ?? this.config.omConfig?.defaultReflectionThreshold;
-  }
-
-  /**
-   * Resolves the observer model ID to a language model instance via the configured resolver.
-   */
-  getResolvedObserverModel() {
-    const modelId = this.getObserverModelId();
-    if (!modelId || !this.config.resolveModel) return undefined;
-    return this.config.resolveModel(modelId);
-  }
-
-  /**
-   * Resolves the reflector model ID to a language model instance via the configured resolver.
-   */
-  getResolvedReflectorModel() {
-    const modelId = this.getReflectorModelId();
-    if (!modelId || !this.config.resolveModel) return undefined;
-    return this.config.resolveModel(modelId);
-  }
-
-  /**
-   * Switch the Observer model.
-   */
-  async switchObserverModel({ modelId }: { modelId: string }): Promise<void> {
-    void this.setState({ observerModelId: modelId } as unknown as Partial<TState>);
-    await this.#session.thread.setSetting({ key: 'observerModelId', value: modelId });
-    this.emit({ type: 'om_model_changed', role: 'observer', modelId } as HarnessEvent);
-  }
-
-  /**
-   * Switch the Reflector model.
-   */
-  async switchReflectorModel({ modelId }: { modelId: string }): Promise<void> {
-    void this.setState({ reflectorModelId: modelId } as unknown as Partial<TState>);
-    await this.#session.thread.setSetting({ key: 'reflectorModelId', value: modelId });
-    this.emit({ type: 'om_model_changed', role: 'reflector', modelId } as HarnessEvent);
-  }
-
-  // ===========================================================================
-  // Subagent Model Management
-  // ===========================================================================
-
-  getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
-    const state = this.#session.state.get() as Record<string, unknown>;
-    if (agentType) {
-      const perType = state[`subagentModelId_${agentType}`];
-      if (typeof perType === 'string') return perType;
-    }
-    const global = state.subagentModelId;
-    return typeof global === 'string' ? global : null;
-  }
-
-  async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
-    const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
-    void this.setState({ [key]: modelId } as unknown as Partial<TState>);
-    await this.#session.thread.setSetting({ key, value: modelId });
-    this.emit({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType } as HarnessEvent);
-  }
-
   // ===========================================================================
   // Permissions
   // ===========================================================================
 
   getToolCategory({ toolName }: { toolName: string }): ToolCategory | null {
     return this.config.toolCategoryResolver?.(toolName) ?? null;
-  }
-
-  setPermissionForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): void {
-    const rules = this.getPermissionRules();
-    rules.categories[category] = policy;
-    void this.setState({ permissionRules: rules } as unknown as Partial<TState>);
-  }
-
-  setPermissionForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): void {
-    const rules = this.getPermissionRules();
-    rules.tools[toolName] = policy;
-    void this.setState({ permissionRules: rules } as unknown as Partial<TState>);
-  }
-
-  getPermissionRules(): PermissionRules {
-    const state = this.#session.state.get() as Record<string, unknown>;
-    const rules = state.permissionRules as PermissionRules | undefined;
-    return rules ?? { categories: {}, tools: {} };
   }
 
   /**
@@ -1735,7 +1602,7 @@ export class Harness<TState = {}> {
    */
   private resolveToolApproval(toolName: string): PermissionPolicy {
     const state = this.#session.state.get() as Record<string, unknown>;
-    const rules = this.getPermissionRules();
+    const rules = this.#session.permissions.getRules();
 
     const toolPolicy = rules.tools[toolName];
     if (toolPolicy === 'deny') return 'deny';
@@ -1914,7 +1781,13 @@ export class Harness<TState = {}> {
           threadId,
           ifIdle: { streamOptions: streamOptions as any },
         });
-        this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count(), runId: result.runId });
+        // Let a rejected `accepted` propagate: `next` is already dequeued, so a
+        // setup/misconfig failure must reach the outer catch to requeue it
+        // rather than being swallowed into a false success (the follow-up would
+        // otherwise be lost).
+        const accepted = await result.accepted;
+        const runId = 'runId' in accepted ? accepted.runId : undefined;
+        this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count(), runId });
       } else {
         this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
         await this.sendMessage({
@@ -2058,7 +1931,16 @@ export class Harness<TState = {}> {
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
         },
-  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
+  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId?: string }> } {
+    const settleRunId = async <T>(result: {
+      accepted: Promise<SendAgentSignalAccepted<T>>;
+    }): Promise<string | undefined> => {
+      // Best-effort run id for telemetry. A wake whose stream setup fails rejects
+      // `accepted`; that error surfaces to the harness through the thread subscription
+      // as an error event, so we must not let it reject the harness send here.
+      const settled = await result.accepted.catch(() => undefined);
+      return settled && 'runId' in settled ? settled.runId : undefined;
+    };
     const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
@@ -2082,7 +1964,7 @@ export class Harness<TState = {}> {
           ifActive,
           ifIdle,
         });
-        return { accepted: result.accepted, runId: result.runId };
+        return { accepted: true as const, runId: await settleRunId(result) };
       }
 
       const streamOptions = await this.buildAgentMessageStreamOptions({
@@ -2097,7 +1979,7 @@ export class Harness<TState = {}> {
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
-      return { accepted: result.accepted, runId: result.runId };
+      return { accepted: true as const, runId: await settleRunId(result) };
     });
 
     return { id: signal.id, type: signal.type, accepted };
@@ -3667,7 +3549,7 @@ export class Harness<TState = {}> {
       }
     }
 
-    const permissionRules = this.getPermissionRules();
+    const permissionRules = this.#session.permissions.getRules();
     for (const [toolId, policy] of Object.entries(permissionRules.tools)) {
       if (policy === 'deny') {
         delete builtInTools[toolId];
@@ -3726,7 +3608,7 @@ export class Harness<TState = {}> {
       abortSignal: this.#session.run.getAbortSignal(),
       workspace: this.workspace,
       emitEvent: event => this.emit(event),
-      getSubagentModelId: params => this.getSubagentModelId(params),
+      getSubagentModelId: params => this.#session.subagents.model.get(params ?? {}),
     };
 
     requestContext.set('harness', harnessContext);
