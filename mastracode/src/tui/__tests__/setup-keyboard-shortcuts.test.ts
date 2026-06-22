@@ -290,6 +290,15 @@ describe('setupKeyboardShortcuts', () => {
     );
     expect(partialResult.lines[0]).toBe('Attach @src/autocomplete-target.ts ');
 
+    const retainedPrefixResult = state.autocompleteProvider.applyCompletion(
+      ['Attach @auto'],
+      0,
+      'Attach @auto'.length,
+      { value: '@src/autocomplete-target.ts', label: 'autocomplete-target.ts' },
+      'to',
+    );
+    expect(retainedPrefixResult.lines[0]).toBe('Attach @src/autocomplete-target.ts ');
+
     const scopedPackageResult = state.autocompleteProvider.applyCompletion(
       ['Install @scope/pkg and run /he'],
       0,
