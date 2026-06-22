@@ -9,13 +9,20 @@ import {
   normalizePerPage,
   TABLE_SCORERS,
 } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+import type { StoragePagination, ScoreTenancyFilters } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
 import { getTtlProps } from '../../ttl';
 import { deleteTableData } from '../utils';
+
+/** Returns true when a score matches the multi-tenant scope filters (or none provided). */
+function matchesTenancy(score: ScoreRowData, filters?: ScoreTenancyFilters): boolean {
+  if (filters?.organizationId !== undefined && score.organizationId !== filters.organizationId) return false;
+  if (filters?.projectId !== undefined && score.projectId !== filters.projectId) return false;
+  return true;
+}
 
 export class ScoresStorageDynamoDB extends ScoresStorage {
   private service: Service<Record<string, any>>;
@@ -197,12 +204,14 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       // Query scores by scorer ID using the GSI
@@ -222,6 +231,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
       if (source) {
         allScores = allScores.filter((score: ScoreRowData) => score.source === source);
       }
+      allScores = allScores.filter((score: ScoreRowData) => matchesTenancy(score, filters));
 
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -267,9 +277,11 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     this.logger.debug('Getting scores by run ID', { runId, pagination });
 
@@ -279,7 +291,9 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
 
       // Get all scores for this run ID
       const results = await query.go();
-      const allScores = results.data.map((data: any) => this.parseScoreData(data));
+      const allScores = results.data
+        .map((data: any) => this.parseScoreData(data))
+        .filter((score: ScoreRowData) => matchesTenancy(score, filters));
 
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -319,10 +333,12 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     entityId: string;
     entityType: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     this.logger.debug('Getting scores by entity ID', { entityId, entityType, pagination });
 
@@ -336,6 +352,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
 
       // Filter by entityType since the index only uses entityId
       allScores = allScores.filter((score: ScoreRowData) => score.entityType === entityType);
+      allScores = allScores.filter((score: ScoreRowData) => matchesTenancy(score, filters));
 
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -375,10 +392,12 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     this.logger.debug('Getting scores by span', { traceId, spanId, pagination });
 
@@ -388,7 +407,9 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
 
       // Get all scores for this trace and span ID
       const results = await query.go();
-      const allScores = results.data.map((data: any) => this.parseScoreData(data));
+      const allScores = results.data
+        .map((data: any) => this.parseScoreData(data))
+        .filter((score: ScoreRowData) => matchesTenancy(score, filters));
 
       // Sort by createdAt DESC (newest first)
       allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());

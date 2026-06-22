@@ -355,5 +355,56 @@ export function createScoresTest({
         }
       });
     }
+
+    describe('multi-tenant filters', () => {
+      it('persists organizationId and projectId on saved scores', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const score = createSampleScore({ scorerId, organizationId: 'org-a', projectId: 'proj-1' });
+
+        const { score: saved } = await scoresStorage.saveScore(score);
+
+        expect(saved.organizationId).toBe('org-a');
+        expect(saved.projectId).toBe('proj-1');
+      });
+
+      it('filters listScoresByScorerId by organizationId and projectId', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        await scoresStorage.saveScore(createSampleScore({ scorerId, organizationId: 'org-a', projectId: 'proj-1' }));
+        await scoresStorage.saveScore(createSampleScore({ scorerId, organizationId: 'org-a', projectId: 'proj-2' }));
+        await scoresStorage.saveScore(createSampleScore({ scorerId, organizationId: 'org-b', projectId: 'proj-1' }));
+
+        const byOrg = await scoresStorage.listScoresByScorerId({
+          scorerId,
+          pagination: { page: 0, perPage: 10 },
+          filters: { organizationId: 'org-a' },
+        });
+        expect(byOrg.scores).toHaveLength(2);
+
+        const byProject = await scoresStorage.listScoresByScorerId({
+          scorerId,
+          pagination: { page: 0, perPage: 10 },
+          filters: { organizationId: 'org-a', projectId: 'proj-1' },
+        });
+        expect(byProject.scores).toHaveLength(1);
+        expect(byProject.scores[0]?.organizationId).toBe('org-a');
+        expect(byProject.scores[0]?.projectId).toBe('proj-1');
+      });
+
+      it('filters listScoresByEntityId by tenancy', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const entityId = `agent-${randomUUID()}`;
+        await scoresStorage.saveScore(createSampleScore({ scorerId, entityId, organizationId: 'org-a' }));
+        await scoresStorage.saveScore(createSampleScore({ scorerId, entityId, organizationId: 'org-b' }));
+
+        const result = await scoresStorage.listScoresByEntityId({
+          entityId,
+          entityType: 'AGENT',
+          pagination: { page: 0, perPage: 10 },
+          filters: { organizationId: 'org-b' },
+        });
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]?.organizationId).toBe('org-b');
+      });
+    });
   });
 }

@@ -88,6 +88,8 @@ export const scoringHookInputSchema = z.object({
   spanId: z.string().optional(),
   resourceId: z.string().optional(),
   threadId: z.string().optional(),
+  // Tenancy: organizationId arrives via ObservabilityContext; projectId is scores-specific.
+  projectId: z.string().optional(),
   // Note: observabilityContext is not serializable, so we don't include it in the schema
 });
 
@@ -192,6 +194,10 @@ export const scoreRowDataSchema = z.object({
   spanId: z.string().optional(),
   resourceId: z.string().optional(),
   threadId: z.string().optional(),
+  // Multi-tenant scope. `resourceId` is overloaded (memory end-user), so tenancy
+  // uses dedicated fields: organizationId (account) + projectId (project scope).
+  organizationId: z.string().nullish(),
+  projectId: z.string().nullish(),
 
   // Additional ScoreRowData fields
   preprocessStepResult: optionalRecordSchema,

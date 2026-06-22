@@ -3,6 +3,12 @@ import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource 
 import type { StoragePagination } from '../../types';
 import { StorageDomain } from '../base';
 
+/** Multi-tenant scope filters for score queries. */
+export interface ScoreTenancyFilters {
+  organizationId?: string;
+  projectId?: string;
+}
+
 export abstract class ScoresStorage extends StorageDomain {
   constructor() {
     super({
@@ -31,6 +37,7 @@ export abstract class ScoresStorage extends StorageDomain {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse>;
 
   abstract listScoresByRunId({
@@ -39,6 +46,7 @@ export abstract class ScoresStorage extends StorageDomain {
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse>;
 
   abstract listScoresByEntityId({
@@ -49,6 +57,7 @@ export abstract class ScoresStorage extends StorageDomain {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse>;
 
   async listScoresBySpan({
@@ -59,6 +68,7 @@ export abstract class ScoresStorage extends StorageDomain {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     throw new MastraError({
       id: 'SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED',

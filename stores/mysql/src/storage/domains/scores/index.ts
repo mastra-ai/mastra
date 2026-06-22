@@ -8,7 +8,7 @@ import {
   calculatePagination,
   normalizePerPage,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import type { PaginationInfo, StoragePagination, CreateIndexOptions, ScoreTenancyFilters } from '@mastra/core/storage';
 import type { Pool } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL, generateIndexSQL } from '../operations';
@@ -355,14 +355,26 @@ export class ScoresMySQL extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(this.buildWhereClause({ scorerId, entityId, entityType, source }), pagination);
+    return this.fetchScores(
+      this.buildWhereClause({
+        scorerId,
+        entityId,
+        entityType,
+        source,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      }),
+      pagination,
+    );
   }
 
   async listScoresByRunId({
@@ -371,26 +383,48 @@ export class ScoresMySQL extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(this.buildWhereClause({ runId, entityId, entityType, source }), pagination);
+    return this.fetchScores(
+      this.buildWhereClause({
+        runId,
+        entityId,
+        entityType,
+        source,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      }),
+      pagination,
+    );
   }
 
   async listScoresBySpan({
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(this.buildWhereClause({ traceId, spanId }), pagination);
+    return this.fetchScores(
+      this.buildWhereClause({
+        traceId,
+        spanId,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      }),
+      pagination,
+    );
   }
 
   async listScoresByEntityId({
@@ -398,12 +432,23 @@ export class ScoresMySQL extends ScoresStorage {
     pagination,
     entityType,
     source,
+    filters,
   }: {
     entityId: string;
     pagination: StoragePagination;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
-    return this.fetchScores(this.buildWhereClause({ entityId, entityType, source }), pagination);
+    return this.fetchScores(
+      this.buildWhereClause({
+        entityId,
+        entityType,
+        source,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      }),
+      pagination,
+    );
   }
 }

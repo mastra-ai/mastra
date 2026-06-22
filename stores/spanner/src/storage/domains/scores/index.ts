@@ -3,7 +3,7 @@ import type { Database } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import type { StoragePagination, CreateIndexOptions, ScoreTenancyFilters } from '@mastra/core/storage';
 import {
   createStorageErrorId,
   ScoresStorage,
@@ -23,6 +23,22 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
   // delegating to the shared core transform.
   const normalized = transformFromSpannerRow<Record<string, any>>({ tableName: TABLE_SCORERS, row });
   return coreTransformScoreRow(normalized, { convertTimestamps: true });
+}
+
+/** Appends multi-tenant scope conditions and their named params. */
+function applyTenancyFilters(
+  conditions: string[],
+  params: Record<string, any>,
+  filters: ScoreTenancyFilters | undefined,
+): void {
+  if (filters?.organizationId !== undefined) {
+    conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+    params.organizationId = filters.organizationId;
+  }
+  if (filters?.projectId !== undefined) {
+    conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+    params.projectId = filters.projectId;
+  }
 }
 
 export class ScoresSpanner extends ScoresStorage {
@@ -223,12 +239,14 @@ export class ScoresSpanner extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const conditions = [`${quoteIdent('scorerId', 'column name')} = @scorerId`];
@@ -245,6 +263,7 @@ export class ScoresSpanner extends ScoresStorage {
         conditions.push(`${quoteIdent('source', 'column name')} = @source`);
         params.source = source;
       }
+      applyTenancyFilters(conditions, params, filters);
       return await this.listScoresByConditions(conditions, params, pagination);
     } catch (error) {
       throw new MastraError(
@@ -262,16 +281,17 @@ export class ScoresSpanner extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
-      return await this.listScoresByConditions(
-        [`${quoteIdent('runId', 'column name')} = @runId`],
-        { runId },
-        pagination,
-      );
+      const conditions = [`${quoteIdent('runId', 'column name')} = @runId`];
+      const params: Record<string, any> = { runId };
+      applyTenancyFilters(conditions, params, filters);
+      return await this.listScoresByConditions(conditions, params, pagination);
     } catch (error) {
       throw new MastraError(
         {
@@ -289,20 +309,21 @@ export class ScoresSpanner extends ScoresStorage {
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
-      return await this.listScoresByConditions(
-        [
-          `${quoteIdent('entityId', 'column name')} = @entityId`,
-          `${quoteIdent('entityType', 'column name')} = @entityType`,
-        ],
-        { entityId, entityType },
-        pagination,
-      );
+      const conditions = [
+        `${quoteIdent('entityId', 'column name')} = @entityId`,
+        `${quoteIdent('entityType', 'column name')} = @entityType`,
+      ];
+      const params: Record<string, any> = { entityId, entityType };
+      applyTenancyFilters(conditions, params, filters);
+      return await this.listScoresByConditions(conditions, params, pagination);
     } catch (error) {
       throw new MastraError(
         {
@@ -320,17 +341,21 @@ export class ScoresSpanner extends ScoresStorage {
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
-      return await this.listScoresByConditions(
-        [`${quoteIdent('traceId', 'column name')} = @traceId`, `${quoteIdent('spanId', 'column name')} = @spanId`],
-        { traceId, spanId },
-        pagination,
-      );
+      const conditions = [
+        `${quoteIdent('traceId', 'column name')} = @traceId`,
+        `${quoteIdent('spanId', 'column name')} = @spanId`,
+      ];
+      const params: Record<string, any> = { traceId, spanId };
+      applyTenancyFilters(conditions, params, filters);
+      return await this.listScoresByConditions(conditions, params, pagination);
     } catch (error) {
       throw new MastraError(
         {

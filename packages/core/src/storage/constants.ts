@@ -131,6 +131,8 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   source: { type: 'text' },
   resourceId: { type: 'text', nullable: true },
   threadId: { type: 'text', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp' },
   updatedAt: { type: 'timestamp' },
 };

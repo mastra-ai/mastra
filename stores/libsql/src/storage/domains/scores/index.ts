@@ -11,10 +11,22 @@ import {
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+import type { ScoreTenancyFilters, StoragePagination } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+
+/** Appends multi-tenant scope conditions (`?` placeholders). Mutates inputs. */
+function appendTenancyConditions(conditions: string[], args: InValue[], filters?: ScoreTenancyFilters): void {
+  if (filters?.organizationId !== undefined) {
+    conditions.push(`organizationId = ?`);
+    args.push(filters.organizationId);
+  }
+  if (filters?.projectId !== undefined) {
+    conditions.push(`projectId = ?`);
+    args.push(filters.projectId);
+  }
+}
 
 export class ScoresLibSQL extends ScoresStorage {
   #db: LibSQLDB;
@@ -33,7 +45,7 @@ export class ScoresLibSQL extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: SCORERS_SCHEMA,
-      ifNotExists: ['spanId', 'requestContext'],
+      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId'],
     });
   }
 
@@ -44,17 +56,24 @@ export class ScoresLibSQL extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
 
+      const conditions: string[] = [`runId = ?`];
+      const queryParams: InValue[] = [runId];
+      appendTenancyConditions(conditions, queryParams, filters);
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
       // Get total count first
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE runId = ?`,
-        args: [runId],
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} ${whereClause}`,
+        args: queryParams,
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
@@ -76,8 +95,8 @@ export class ScoresLibSQL extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} WHERE runId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [runId, limitValue, start],
+        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, limitValue, start],
       });
 
       const scores = result.rows?.map(row => this.transformScoreRow(row)) ?? [];
@@ -109,12 +128,14 @@ export class ScoresLibSQL extends ScoresStorage {
     entityType,
     source,
     pagination,
+    filters,
   }: {
     scorerId: string;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
@@ -141,6 +162,8 @@ export class ScoresLibSQL extends ScoresStorage {
         conditions.push(`source = ?`);
         queryParams.push(source);
       }
+
+      appendTenancyConditions(conditions, queryParams, filters);
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -264,18 +287,25 @@ export class ScoresLibSQL extends ScoresStorage {
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
 
+      const conditions: string[] = [`entityId = ?`, `entityType = ?`];
+      const queryParams: InValue[] = [entityId, entityType];
+      appendTenancyConditions(conditions, queryParams, filters);
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
       // Get total count first
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ?`,
-        args: [entityId, entityType],
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} ${whereClause}`,
+        args: queryParams,
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
@@ -297,8 +327,8 @@ export class ScoresLibSQL extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [entityId, entityType, limitValue, start],
+        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, limitValue, start],
       });
 
       const scores = result.rows?.map(row => this.transformScoreRow(row)) ?? [];
@@ -328,19 +358,26 @@ export class ScoresLibSQL extends ScoresStorage {
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
+      const conditions: string[] = [`traceId = ?`, `spanId = ?`];
+      const queryParams: InValue[] = [traceId, spanId];
+      appendTenancyConditions(conditions, queryParams, filters);
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
       const countSQLResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ?`,
-        args: [traceId, spanId],
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} ${whereClause}`,
+        args: queryParams,
       });
 
       const total = Number(countSQLResult.rows?.[0]?.count ?? 0);
@@ -349,8 +386,8 @@ export class ScoresLibSQL extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-        args: [traceId, spanId, limitValue, start],
+        sql: `SELECT ${buildSelectColumns(TABLE_SCORERS)} FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, limitValue, start],
       });
 
       const scores = result.rows?.map(row => this.transformScoreRow(row)) ?? [];

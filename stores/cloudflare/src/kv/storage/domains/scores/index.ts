@@ -9,7 +9,7 @@ import {
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+import type { StoragePagination, ScoreTenancyFilters } from '@mastra/core/storage';
 import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
 import type { CloudflareDomainConfig } from '../../types';
 
@@ -19,6 +19,13 @@ import type { CloudflareDomainConfig } from '../../types';
  */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
   return coreTransformScoreRow(row);
+}
+
+/** Returns true when a raw score record matches the multi-tenant scope filters (or none provided). */
+function matchesTenancy(score: Record<string, any>, filters?: ScoreTenancyFilters): boolean {
+  if (filters?.organizationId !== undefined && score.organizationId !== filters.organizationId) return false;
+  if (filters?.projectId !== undefined && score.projectId !== filters.projectId) return false;
+  return true;
 }
 
 export class ScoresStorageCloudflare extends ScoresStorage {
@@ -133,12 +140,14 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     entityType,
     source,
     pagination,
+    filters,
   }: {
     scorerId: string;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const keys = await this.#db.listKV(TABLE_SCORERS);
@@ -154,6 +163,9 @@ export class ScoresStorageCloudflare extends ScoresStorage {
           continue;
         }
         if (source && score.source !== source) {
+          continue;
+        }
+        if (!matchesTenancy(score, filters)) {
           continue;
         }
 
@@ -205,9 +217,11 @@ export class ScoresStorageCloudflare extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const keys = await this.#db.listKV(TABLE_SCORERS);
@@ -215,7 +229,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
 
       for (const { name: key } of keys) {
         const score = await this.#db.getKV(TABLE_SCORERS, key);
-        if (score && score.runId === runId) {
+        if (score && score.runId === runId && matchesTenancy(score, filters)) {
           scores.push(transformScoreRow(score));
         }
       }
@@ -264,10 +278,12 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const keys = await this.#db.listKV(TABLE_SCORERS);
@@ -275,7 +291,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
 
       for (const { name: key } of keys) {
         const score = await this.#db.getKV(TABLE_SCORERS, key);
-        if (score && score.entityId === entityId && score.entityType === entityType) {
+        if (score && score.entityId === entityId && score.entityType === entityType && matchesTenancy(score, filters)) {
           scores.push(transformScoreRow(score));
         }
       }
@@ -324,10 +340,12 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const keys = await this.#db.listKV(TABLE_SCORERS);
@@ -335,7 +353,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
 
       for (const { name: key } of keys) {
         const score = await this.#db.getKV(TABLE_SCORERS, key);
-        if (score && score.traceId === traceId && score.spanId === spanId) {
+        if (score && score.traceId === traceId && score.spanId === spanId && matchesTenancy(score, filters)) {
           scores.push(transformScoreRow(score));
         }
       }

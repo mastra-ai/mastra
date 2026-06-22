@@ -8,6 +8,8 @@ export function createSampleScore({
   source,
   traceId,
   spanId,
+  organizationId,
+  projectId,
 }: {
   scorerId: string;
   entityId?: string;
@@ -15,6 +17,8 @@ export function createSampleScore({
   source?: ScoringSource;
   traceId?: string;
   spanId?: string;
+  organizationId?: string;
+  projectId?: string;
 }): ScoreRowData {
   return {
     id: randomUUID(),
@@ -23,6 +27,8 @@ export function createSampleScore({
     scorerId,
     traceId,
     spanId,
+    organizationId,
+    projectId,
     createdAt: new Date(),
     updatedAt: new Date(),
     runId: randomUUID(),
