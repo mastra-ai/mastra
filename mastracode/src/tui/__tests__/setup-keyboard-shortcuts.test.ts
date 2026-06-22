@@ -180,6 +180,65 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames.slice(-5)).toEqual(['/deploy', 'goal/deploy', '/ship', 'skill/lint-fix', 'goal/review']);
   });
 
+  it('preserves the leading slash when completing nested slash commands', () => {
+    autocompleteProviders.length = 0;
+    const { state } = createState(false);
+    state.customSlashCommands = [
+      { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '', goal: true },
+    ];
+
+    setupAutocomplete(state);
+
+    const result = state.autocompleteProvider.applyCompletion(
+      ['/goal/depl'],
+      0,
+      '/goal/depl'.length,
+      { value: 'goal/deploy', label: 'goal/deploy' },
+      '/goal/depl',
+    );
+    expect(result.lines[0]).toBe('/goal/deploy ');
+  });
+
+  it('narrows double-slash autocomplete to custom slash commands', async () => {
+    autocompleteProviders.length = 0;
+    const { state } = createState(false);
+    state.customSlashCommands = [
+      { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '', goal: true },
+      { name: 'ship', description: 'Ship release', template: '', sourcePath: '' },
+    ];
+
+    setupAutocomplete(state);
+
+    const suggestions = await state.autocompleteProvider.getSuggestions(['//'], 0, 2, { force: false });
+    expect(suggestions?.prefix).toBe('//');
+    expect(suggestions?.items.map((item: { value: string }) => item.value)).toEqual(['/deploy', '/ship']);
+
+    const result = state.autocompleteProvider.applyCompletion(
+      ['//'],
+      0,
+      2,
+      { value: '/deploy', label: '/deploy' },
+      '//',
+    );
+    expect(result.lines[0]).toBe('//deploy ');
+  });
+
+  it('does not duplicate @ when accepting file completions with a narrowed prefix', () => {
+    autocompleteProviders.length = 0;
+    const { state } = createState(false);
+
+    setupAutocomplete(state);
+
+    const result = state.autocompleteProvider.applyCompletion(
+      ['Attach @auto'],
+      0,
+      'Attach @auto'.length,
+      { value: '@src/autocomplete-target.ts', label: 'autocomplete-target.ts' },
+      'auto',
+    );
+    expect(result.lines[0]).toBe('Attach @src/autocomplete-target.ts');
+  });
+
   it('passes detected fd path and cwd into the autocomplete provider', () => {
     autocompleteProviders.length = 0;
     vi.mocked(execFileSync).mockReturnValue('/opt/homebrew/bin/fd\n' as any);
