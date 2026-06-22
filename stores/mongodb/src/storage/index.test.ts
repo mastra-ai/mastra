@@ -1031,5 +1031,39 @@ describe('Hardening: NODE-7556', () => {
     const after = await memoryStore!.getObservationalMemory(null, resourceId);
     expect(after).toBeNull();
   });
+
+  test('F14: updateWorkflowState must throw when the persisted snapshot has no context field', async () => {
+    const workflowsStore = await store.getStore('workflows');
+    expect(workflowsStore).toBeDefined();
+
+    const workflowName = `f14-workflow-${Date.now()}`;
+    const runId = `f14-run-${Date.now()}`;
+
+    // Persist a snapshot intentionally missing the 'context' field — valid in some
+    // workflow states but causes the $exists filter to silently drop updates.
+    await workflowsStore!.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: {
+        status: 'suspended',
+        value: {},
+        activePaths: [],
+        suspendedPaths: {},
+        runId,
+        timestamp: Date.now(),
+        // context intentionally omitted
+      } as any,
+    });
+
+    // Currently: $exists filter misses the doc, returns undefined with no error
+    // After fix: throws because the snapshot exists but has no context (mirrors pg/libsql)
+    await expect(
+      workflowsStore!.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'failed' } as any,
+      }),
+    ).rejects.toThrow();
+  });
 });
 // ─────────────────────────────────────────────────────────────────────────────
