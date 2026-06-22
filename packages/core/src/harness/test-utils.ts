@@ -13,7 +13,9 @@ import type { HarnessConfig, HarnessMode } from './types';
  * care about (storage, subagents, omConfig, initialState, a custom agent, ...).
  */
 
-export function createTestAgent(overrides?: Partial<ConstructorParameters<typeof Agent>[0]>): Agent<any, any, any, any> {
+export function createTestAgent(
+  overrides?: Partial<ConstructorParameters<typeof Agent>[0]>,
+): Agent<any, any, any, any> {
   return new Agent({
     id: 'test-agent',
     name: 'test-agent',

@@ -1122,10 +1122,7 @@ export class Harness<TState = {}> {
 
     try {
       const memoryStorage = await this.getMemoryStorage();
-      return await memoryStorage.getObservationalMemory(
-        session.thread.getId(),
-        session.identity.getResourceId(),
-      );
+      return await memoryStorage.getObservationalMemory(session.thread.getId(), session.identity.getResourceId());
     } catch {
       return null;
     }

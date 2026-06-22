@@ -107,7 +107,6 @@ describe('Harness session state', () => {
     expect(session.state.get()).toEqual({ count: 2 });
   });
 
-
   it('exposes session.state and deprecated flattened state accessors in request context', async () => {
     const { harness, session } = await createSession<{ count: number }>({ initialState: { count: 0 } });
 

@@ -6,7 +6,9 @@ describe('Session event bus', () => {
   it('delivers emitted events to its own subscribers', () => {
     const session = new Session({ resourceId: 'r1' });
     const received: HarnessEvent[] = [];
-    session.subscribe(event => { received.push(event); });
+    session.subscribe(event => {
+      received.push(event);
+    });
 
     session.emit({ type: 'mode_changed', modeId: 'build', previousModeId: 'plan' });
 
@@ -14,13 +16,17 @@ describe('Session event bus', () => {
     expect(received.map(e => e.type)).toEqual(['mode_changed', 'display_state_changed']);
   });
 
-  it('does not deliver one session\'s events to another session\'s subscribers', () => {
+  it("does not deliver one session's events to another session's subscribers", () => {
     const a = new Session({ resourceId: 'a' });
     const b = new Session({ resourceId: 'b' });
     const aReceived: HarnessEvent[] = [];
     const bReceived: HarnessEvent[] = [];
-    a.subscribe(event => { aReceived.push(event); });
-    b.subscribe(event => { bReceived.push(event); });
+    a.subscribe(event => {
+      aReceived.push(event);
+    });
+    b.subscribe(event => {
+      bReceived.push(event);
+    });
 
     a.emit({ type: 'mode_changed', modeId: 'build', previousModeId: 'plan' });
 
@@ -51,7 +57,9 @@ describe('Session event bus', () => {
   it('routes subsystem events (state_changed) through the session bus', async () => {
     const session = new Session<{ count: number }>({ resourceId: 'r1', state: { initialState: { count: 0 } } });
     const received: HarnessEvent[] = [];
-    session.subscribe(event => { received.push(event); });
+    session.subscribe(event => {
+      received.push(event);
+    });
 
     await session.state.set({ count: 1 });
 

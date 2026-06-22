@@ -750,16 +750,18 @@ describe('subagent lifecycle', () => {
   });
 
   it('includes displayName from configured subagent name on subagent_start', async () => {
-    session = (await createSession(undefined, {
-      subagents: [
-        {
-          id: 'explore',
-          name: 'Explore',
-          description: 'Find relevant context',
-          instructions: 'Find relevant context.',
-        },
-      ],
-    })).session;
+    session = (
+      await createSession(undefined, {
+        subagents: [
+          {
+            id: 'explore',
+            name: 'Explore',
+            description: 'Find relevant context',
+            instructions: 'Find relevant context.',
+          },
+        ],
+      })
+    ).session;
 
     emit(session, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
 
@@ -769,16 +771,18 @@ describe('subagent lifecycle', () => {
   });
 
   it('leaves displayName unset when agentType has no configured subagent match', async () => {
-    session = (await createSession(undefined, {
-      subagents: [
-        {
-          id: 'explore',
-          name: 'Explore',
-          description: 'Find relevant context',
-          instructions: 'Find relevant context.',
-        },
-      ],
-    })).session;
+    session = (
+      await createSession(undefined, {
+        subagents: [
+          {
+            id: 'explore',
+            name: 'Explore',
+            description: 'Find relevant context',
+            instructions: 'Find relevant context.',
+          },
+        ],
+      })
+    ).session;
 
     emit(session, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
 
@@ -846,16 +850,18 @@ describe('subagent lifecycle', () => {
   });
 
   it('preserves displayName on terminal subagent history entries', async () => {
-    session = (await createSession(undefined, {
-      subagents: [
-        {
-          id: 'execute',
-          name: 'Execute',
-          description: 'Perform the delegated task',
-          instructions: 'Perform the delegated task.',
-        },
-      ],
-    })).session;
+    session = (
+      await createSession(undefined, {
+        subagents: [
+          {
+            id: 'execute',
+            name: 'Execute',
+            description: 'Perform the delegated task',
+            instructions: 'Perform the delegated task.',
+          },
+        ],
+      })
+    ).session;
 
     emit(session, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
     emit(session, {

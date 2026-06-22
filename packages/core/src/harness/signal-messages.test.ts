@@ -58,12 +58,14 @@ async function createHarness(
 describe('Harness signal messages', () => {
   it('converts sendMessage files into fenced text and preserved binary file parts', async () => {
     const { harness, session } = await createHarness(new InMemoryStore());
-    const createMessageInput = (session as unknown as {
+    const createMessageInput = (
+      session as unknown as {
         createMessageInput(input: {
           content: string;
           files?: Array<{ data: string; mediaType: string; filename?: string }>;
         }): unknown;
-      }).createMessageInput.bind(session);
+      }
+    ).createMessageInput.bind(session);
 
     const input = createMessageInput({
       content: 'Review these attachments.',
@@ -95,12 +97,14 @@ describe('Harness signal messages', () => {
 
   it('uses a longer fence than any backtick run in text attachments', async () => {
     const { harness, session } = await createHarness(new InMemoryStore());
-    const createMessageInput = (session as unknown as {
+    const createMessageInput = (
+      session as unknown as {
         createMessageInput(input: {
           content: string;
           files?: Array<{ data: string; mediaType: string; filename?: string }>;
         }): unknown;
-      }).createMessageInput.bind(session);
+      }
+    ).createMessageInput.bind(session);
 
     const input = createMessageInput({
       content: 'Review this markdown.',
@@ -999,7 +1003,11 @@ describe('Harness signal messages', () => {
     const state = session.runEngine.createStreamState();
     const requestContext = new RequestContext();
 
-    await session.runEngine.processStreamChunk(state, { type: 'text-start', payload: { id: 'text-1' } }, requestContext);
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-start', payload: { id: 'text-1' } },
+      requestContext,
+    );
     await session.runEngine.processStreamChunk(
       state,
       { type: 'text-delta', payload: { id: 'text-1', text: 'Fact 1' } },
@@ -1025,7 +1033,11 @@ describe('Harness signal messages', () => {
       },
       requestContext,
     );
-    await session.runEngine.processStreamChunk(state, { type: 'text-start', payload: { id: 'text-2' } }, requestContext);
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-start', payload: { id: 'text-2' } },
+      requestContext,
+    );
     await session.runEngine.processStreamChunk(
       state,
       { type: 'text-delta', payload: { id: 'text-2', text: 'Fact 2' } },

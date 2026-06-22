@@ -135,7 +135,9 @@ describe('Harness: non-success finish reasons', () => {
   });
 
   it('surfaces a content-filter refusal even without provider stop details', async () => {
-    const { session } = await buildHarness('content-filter-no-details', () => createFinishReasonStream('content-filter'));
+    const { session } = await buildHarness('content-filter-no-details', () =>
+      createFinishReasonStream('content-filter'),
+    );
 
     const events: any[] = [];
     session.subscribe(event => {

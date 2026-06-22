@@ -141,9 +141,9 @@ describe('Harness fork clone metadata wiring', () => {
     await harness.init();
     const session = await harness.createSession();
 
-    const toolsets = (await (
-      harness as any
-    ).buildToolsets(session, new RequestContext())) as { harnessBuiltIn?: Record<string, unknown> };
+    const toolsets = (await (harness as any).buildToolsets(session, new RequestContext())) as {
+      harnessBuiltIn?: Record<string, unknown>;
+    };
 
     expect(capturedOpts).toHaveLength(0);
     expect(toolsets.harnessBuiltIn?.subagent).toBeUndefined();
@@ -330,8 +330,7 @@ describe('Harness fork clone metadata wiring', () => {
     await harness.init();
     const session = await harness.createSession();
 
-    const resolve = (harness as any)
-      .resolveCurrentModeInstructions;
+    const resolve = (harness as any).resolveCurrentModeInstructions;
 
     // Default mode is 'build'
     expect(resolve.call(harness, session)).toBe('Harness global.\nBuild mode.');
@@ -377,9 +376,7 @@ describe('Harness fork clone metadata wiring', () => {
     await harness.init();
     const session = await harness.createSession();
 
-    const buildToolsets = (
-      harness as any
-    ).buildToolsets;
+    const buildToolsets = (harness as any).buildToolsets;
 
     // In 'build' mode, mode tools should appear in toolsets
     const buildResult = (await buildToolsets.call(harness, session, new RequestContext())) as {
