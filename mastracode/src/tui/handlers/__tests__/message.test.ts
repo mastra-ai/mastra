@@ -51,9 +51,8 @@ describe('handleMessageUpdate system reminders', () => {
       hideThinkingBlock: false,
       toolOutputExpanded: false,
       pendingSignalMessageComponentsById: new Map(),
-      harness: {
-        session: { displayState: { get: () => ({ isRunning: true }) } },
-      },
+      session: { displayState: { get: () => ({ isRunning: true }) } },
+      harness: { session: { displayState: { get: () => ({ isRunning: true }) } } },
     } as unknown as TUIState;
 
     ctx = {
