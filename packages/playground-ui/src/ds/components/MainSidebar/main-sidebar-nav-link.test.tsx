@@ -79,6 +79,25 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     ).toThrow(/asChild.*SlottedNavChildProps.*itemClassName/);
   });
 
+  it('hides nested subitems in collapsed icon-only mode', () => {
+    render(
+      <ul>
+        <MainSidebarNavLink
+          state="collapsed"
+          link={{ name: 'Agents', url: '/agents' }}
+          subItems={
+            <ul>
+              <MainSidebarNavLink state="collapsed" link={{ name: 'Templates', url: '/agents/templates' }} />
+            </ul>
+          }
+        />
+      </ul>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Agents' })).toBeDefined();
+    expect(screen.queryByRole('link', { name: 'Templates' })).toBeNull();
+  });
+
   it('does not apply CSS margin utilities on TooltipContent that would dislocate the arrow', async () => {
     render(
       <TooltipProvider delay={0}>
