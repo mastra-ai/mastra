@@ -358,7 +358,7 @@ async function startMastraCodeApp(
     const browser = await createBrowserFromSettings(settings.browser);
     if (browser) {
       result.harness.setBrowser(browser);
-      await result.harness.setState({ activeBrowserSettings: settings.browser });
+      await result.harness.session.state.set({ activeBrowserSettings: settings.browser });
     }
   }
 

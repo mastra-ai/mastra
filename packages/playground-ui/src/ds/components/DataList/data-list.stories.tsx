@@ -12,7 +12,7 @@ type DataListStoryArgs = {
   variant: DataListVariant;
 };
 
-const VARIANT_OPTIONS: DataListVariant[] = ['default', 'striped', 'lined'];
+const VARIANT_OPTIONS: DataListVariant[] = ['lined', 'striped'];
 
 const meta: Meta<DataListStoryArgs> = {
   title: 'DataDisplay/DataList',
@@ -20,7 +20,7 @@ const meta: Meta<DataListStoryArgs> = {
     layout: 'padded',
   },
   args: {
-    variant: 'default',
+    variant: 'lined',
   },
   argTypes: {
     variant: {

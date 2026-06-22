@@ -274,8 +274,8 @@ describe('renderExistingMessages subagents', () => {
       session: {
         thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
+        model: { get: () => 'openai/gpt-5.5' },
       },
-      getFullModelId: () => 'openai/gpt-5.5',
       setState: vi.fn().mockResolvedValue(undefined),
     } as unknown as TUIState['harness'];
 

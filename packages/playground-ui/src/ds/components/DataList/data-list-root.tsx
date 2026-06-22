@@ -6,13 +6,12 @@ import { cn } from '@/lib/utils';
 /**
  * Visual treatment for the whole list.
  *
- * - `default`: bordered card, `surface2` body, hairline row separators.
  * - `striped`: borderless and full-bleed, zebra-striped rows (every other row
  *   tinted), contrasting sticky header band, no row separators.
  * - `lined`: borderless and full-bleed like `striped`, but rows stay transparent
  *   and use subtle separators instead of zebra tints.
  */
-export type DataListVariant = 'default' | 'striped' | 'lined';
+export type DataListVariant = 'striped' | 'lined';
 
 export type DataListRootProps = {
   children: ReactNode;
@@ -21,8 +20,8 @@ export type DataListRootProps = {
   variant?: DataListVariant;
   /**
    * Ref to the scroll container — pass this to TanStack Virtual's
-   * `getScrollElement` when virtualizing. Without it, the list behaves as a
-   * normal scrollable grid.
+   * `getScrollElement` when virtualizing. Without it, the ScrollArea viewport
+   * scrolls normally.
    */
   scrollRef?: RefObject<HTMLDivElement | null>;
 };
@@ -66,7 +65,6 @@ const borderlessTableStyles = [
 const dataListRootVariants = cva('grid min-w-0 max-w-full content-start', {
   variants: {
     variant: {
-      default: 'bg-surface2 border border-border1 rounded-xl',
       striped: cn(
         ...borderlessTableStyles,
         '[&_.data-list-row]:after:hidden',
@@ -80,38 +78,26 @@ const dataListRootVariants = cva('grid min-w-0 max-w-full content-start', {
     },
   },
   defaultVariants: {
-    variant: 'default',
+    variant: 'lined',
   },
 });
 
-export function DataListRoot({ children, columns, className, variant = 'default', scrollRef }: DataListRootProps) {
-  const usesOverlayScrollArea = variant === 'striped' || variant === 'lined';
-
+export function DataListRoot({ children, columns, className, variant = 'lined', scrollRef }: DataListRootProps) {
   const grid = (
     <div
-      // Borderless table variants scroll inside the ScrollArea viewport (below);
-      // default scrolls the grid natively, so it owns `scrollRef`.
-      ref={usesOverlayScrollArea ? undefined : scrollRef}
-      className={cn(
-        dataListRootVariants({ variant }),
-        // Default is its own scroll container; borderless table variants delegate
-        // scrolling to the ScrollArea viewport, so the grid just lays out.
-        !usesOverlayScrollArea && 'max-h-full overflow-auto',
-        !usesOverlayScrollArea && className,
-      )}
+      // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
+      className={dataListRootVariants({ variant })}
       style={{ gridTemplateColumns: columns }}
     >
       {children}
     </div>
   );
 
-  if (!usesOverlayScrollArea) return grid;
-
-  // Borderless table variants always use the DS ScrollArea: an overlay scrollbar
-  // (no reserved gutter, so the sticky header spans the full width and both top
-  // corners clip cleanly) plus the default edge fades. When the list virtualizes
-  // it passes a `scrollRef`; forwarding it as `viewportRef` makes the virtualizer
-  // scroll this viewport, so virtualization works without a native scrollbar.
+  // DataList uses the DS ScrollArea: an overlay scrollbar (no reserved gutter,
+  // so the sticky header spans the full width and both top corners clip cleanly)
+  // plus the default edge fades. When the list virtualizes it passes a
+  // `scrollRef`; forwarding it as `viewportRef` makes the virtualizer scroll
+  // this viewport.
   //
   // `rounded-t-xl` clips the viewport top. Masks default to every overflowing
   // edge except the top — a top fade would fade the opaque sticky header.

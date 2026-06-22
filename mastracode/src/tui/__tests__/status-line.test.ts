@@ -83,9 +83,6 @@ function createState() {
     },
     harness: {
       listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
-      getObserverModelId: vi.fn(() => 'openai/gpt-4o'),
-      getReflectorModelId: vi.fn(() => 'openai/gpt-4o-mini'),
-      getFullModelId: vi.fn(() => 'anthropic/claude-sonnet-4-20250514'),
       session: {
         displayState: {
           get: vi.fn(() => ({
@@ -100,6 +97,13 @@ function createState() {
         mode: {
           get: vi.fn(() => 'build'),
           resolve: vi.fn(() => ({ id: 'build', name: 'build', metadata: { color: '#00ff00' } })),
+        },
+        model: {
+          get: vi.fn(() => 'anthropic/claude-sonnet-4-20250514'),
+        },
+        om: {
+          observer: { modelId: vi.fn(() => 'openai/gpt-4o') },
+          reflector: { modelId: vi.fn(() => 'openai/gpt-4o-mini') },
         },
       },
     },
@@ -224,7 +228,7 @@ describe('updateStatusLine', () => {
 
   it('preserves the gateway prefix when compacting gateway-backed model ids', () => {
     const state = createState();
-    state.harness.getFullModelId.mockReturnValue('mastra/anthropic/claude-opus-4.6');
+    state.harness.session.model.get.mockReturnValue('mastra/anthropic/claude-opus-4.6');
     process.stdout.columns = 25;
 
     updateStatusLine(state);
@@ -236,7 +240,7 @@ describe('updateStatusLine', () => {
 
   it('rewrites fireworks-ai long paths and kimi version separator at full width', () => {
     const state = createState();
-    state.harness.getFullModelId.mockReturnValue('fireworks-ai/accounts/fireworks/models/kimi-k2p6');
+    state.harness.session.model.get.mockReturnValue('fireworks-ai/accounts/fireworks/models/kimi-k2p6');
     process.stdout.columns = 200;
 
     updateStatusLine(state);
@@ -249,7 +253,7 @@ describe('updateStatusLine', () => {
 
   it('rewrites fireworks-ai long paths and kimi version separator when compacted', () => {
     const state = createState();
-    state.harness.getFullModelId.mockReturnValue('fireworks-ai/accounts/fireworks/models/kimi-k2p6');
+    state.harness.session.model.get.mockReturnValue('fireworks-ai/accounts/fireworks/models/kimi-k2p6');
     process.stdout.columns = 25;
 
     updateStatusLine(state);
@@ -262,7 +266,7 @@ describe('updateStatusLine', () => {
 
   it('rewrites kimi version separator for non-fireworks models', () => {
     const state = createState();
-    state.harness.getFullModelId.mockReturnValue('moonshot/kimi-k1p5');
+    state.harness.session.model.get.mockReturnValue('moonshot/kimi-k1p5');
     process.stdout.columns = 200;
 
     updateStatusLine(state);
@@ -274,7 +278,7 @@ describe('updateStatusLine', () => {
 
   it('rewrites minimax-m2p7 version separator', () => {
     const state = createState();
-    state.harness.getFullModelId.mockReturnValue('fireworks-ai/accounts/fireworks/models/minimax-m2p7');
+    state.harness.session.model.get.mockReturnValue('fireworks-ai/accounts/fireworks/models/minimax-m2p7');
     process.stdout.columns = 200;
 
     updateStatusLine(state);

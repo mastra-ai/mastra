@@ -432,7 +432,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
               },
             },
             workspace: harness.getWorkspace(),
-            getSubagentModelId: params => harness.getSubagentModelId(params),
+            getSubagentModelId: params => harness.session.subagents.model.get(params ?? {}),
           };
           requestContext.set('harness', harnessContext);
 

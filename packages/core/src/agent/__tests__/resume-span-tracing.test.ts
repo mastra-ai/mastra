@@ -303,7 +303,8 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
         readRunText(iterator),
         'Timed out waiting for subscribed approval continuation',
       );
-      expect(result.runId).toBeTruthy();
+      const accepted = await result.accepted;
+      expect('runId' in accepted && accepted.runId).toBeTruthy();
       await agent.sendToolApproval({ resourceId, threadId, toolCallId: toolCallId!, approved: true });
 
       await expect(resumedSubscriptionRun).resolves.toBe('User found');
