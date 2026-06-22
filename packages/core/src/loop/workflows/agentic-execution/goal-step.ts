@@ -170,20 +170,17 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
       // Determine the judge model config. A non-string agent `goal.judge` (a
       // resolved model or a model-resolver function) is the consumer's own
       // resolver and takes precedence: it knows how to inject provider
-      // credentials. When the ThreadState record carries a judge model override,
-      // pass it into the resolver so consumers can resolve that explicit model
-      // through their credential-aware gateway. If the resolver declines it,
-      // fall back to the effective string id.
+      // credentials. Otherwise use the effective `judgeModelId` string (record
+      // override → agent config). A judge model is the activation switch: if none
+      // is configured, the goal step does nothing.
       const nonStringAgentJudge = goal.judge && typeof goal.judge !== 'string' ? goal.judge : undefined;
 
+      // A model-resolver function is the consumer's own resolver: run it first so
+      // it can inject provider credentials. It may return `undefined` (e.g. no
+      // judge configured) → no-op.
       let judgeModelConfig: unknown = nonStringAgentJudge ?? effective.judgeModelId;
       if (typeof judgeModelConfig === 'function') {
-        judgeModelConfig =
-          (await (judgeModelConfig as (args: any) => unknown)({
-            requestContext,
-            mastra,
-            judgeModelId: effective.judgeModelId,
-          })) ?? effective.judgeModelId;
+        judgeModelConfig = await (judgeModelConfig as (args: any) => unknown)({ requestContext, mastra });
       }
       if (!judgeModelConfig) {
         return inputData;
