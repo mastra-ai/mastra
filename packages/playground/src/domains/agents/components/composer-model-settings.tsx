@@ -6,7 +6,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  Entry,
   Label,
   Popover,
   PopoverContent,
@@ -21,6 +20,7 @@ import {
   Txt,
   cn,
 } from '@mastra/playground-ui';
+import { Entry } from '@mastra/playground-ui/components/Entry';
 import { Info, Sliders } from 'lucide-react';
 import { useState } from 'react';
 
