@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { McE2eScenario } from './types.js';
+import { typeTextSlowly } from './typing-utils.js';
 
 const DOWN = '\x1b[B';
 const ENTER = '\r';
@@ -31,17 +32,23 @@ export const autocompleteWrappingNavigationScenario = {
     runtime.startLiveOutput(terminal);
 
     await runtime.waitForScreenText(/Project: project/i, terminal);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
 
-    terminal.write('/wrap-');
-    await runtime.waitForScreenText(/Alpha wrapped autocomplete description begins/i, terminal, 20_000);
+    await typeTextSlowly(terminal, '/wrap-');
+    await runtime.waitForScreenText(/Alpha wrapped autocomplete description begins/i, terminal, 30_000);
     await runtime.waitForScreenText(/navigation-sentinel-wrap-tail/i, terminal, 20_000);
     await runtime.waitForScreenText(/Bravo command selected after exactly one Down arrow/i, terminal, 20_000);
     runtime.printScreen('wrapped custom slash autocomplete list', terminal);
+    await terminal.flushInput?.();
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     terminal.write(DOWN);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/→ \/wrap-bravo/i, terminal, 30_000);
     terminal.write(ENTER);
 
-    await runtime.waitForScreenText(/Bravo wrapped autocomplete navigation template\./i, terminal, 8_000);
+    await runtime.waitForScreenText(/Bravo wrapped autocomplete navigation template\./i, terminal, 15_000);
     await runtime.waitForScreenText(/Bravo wrapped autocomplete response\./i, terminal, 12_000);
     runtime.printScreen('after selecting wrapped autocomplete second item', terminal);
 
