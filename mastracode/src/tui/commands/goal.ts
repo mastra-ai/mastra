@@ -13,17 +13,17 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
-import { loadSettings, saveSettings } from '../../onboarding/settings';
-import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog';
-import { ModelSelectorComponent } from '../components/model-selector';
-import type { ModelItem } from '../components/model-selector';
-import { DEFAULT_MAX_TURNS } from '../goal-manager';
-import type { GoalState } from '../goal-manager';
-import { showModalOverlay } from '../overlay';
-import { promptForApiKeyIfNeeded } from '../prompt-api-key';
-import { getSelectListTheme, theme } from '../theme';
+import { loadSettings, saveSettings } from '../../onboarding/settings.js';
+import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
+import { ModelSelectorComponent } from '../components/model-selector.js';
+import type { ModelItem } from '../components/model-selector.js';
+import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
+import type { GoalState } from '../goal-manager.js';
+import { showModalOverlay } from '../overlay.js';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import { getSelectListTheme, theme } from '../theme.js';
 
-import type { SlashCommandContext } from './types';
+import type { SlashCommandContext } from './types.js';
 
 export interface StartGoalOptions {
   trigger?: 'send' | 'none';

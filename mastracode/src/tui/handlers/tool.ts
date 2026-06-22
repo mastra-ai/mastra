@@ -10,19 +10,19 @@ import type { TaskItemInput } from '@mastra/core/harness';
 import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
-import { getToolCategory, TOOL_CATEGORIES } from '../../permissions';
-import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline';
-import { AssistantMessageComponent } from '../components/assistant-message';
-import { PlanApprovalInlineComponent } from '../components/plan-approval-inline';
-import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog';
-import type { ApprovalAction } from '../components/tool-approval-dialog';
-import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced';
-import type { ToolResult } from '../components/tool-execution-enhanced';
-import { showModalOverlay } from '../overlay';
-import { getMarkdownTheme } from '../theme';
+import { getToolCategory, TOOL_CATEGORIES } from '../../permissions.js';
+import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
+import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { AssistantMessageComponent } from '../components/assistant-message.js';
+import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
+import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.js';
+import type { ApprovalAction } from '../components/tool-approval-dialog.js';
+import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
+import type { ToolResult } from '../components/tool-execution-enhanced.js';
+import { showModalOverlay } from '../overlay.js';
+import { getMarkdownTheme } from '../theme.js';
 
-import type { EventHandlerContext } from './types';
+import type { EventHandlerContext } from './types.js';
 
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
   const color = ctx.state.session?.mode?.resolve?.()?.metadata?.color;

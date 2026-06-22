@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { DEFAULT_CONFIG_DIR } from '../constants';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 
 /**
  * Metadata for a slash command

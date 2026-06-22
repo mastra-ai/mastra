@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_CONFIG_DIR } from '../../constants';
-import { buildSkillPaths } from '../workspace';
+import { DEFAULT_CONFIG_DIR } from '../../constants.js';
+import { buildSkillPaths } from '../workspace.js';
 
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof fs>('node:fs');

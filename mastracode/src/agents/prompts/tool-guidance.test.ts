@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildToolGuidance } from './tool-guidance';
+import { buildToolGuidance } from './tool-guidance.js';
 
 describe('buildToolGuidance task tools', () => {
   it('does not reference denied task patch tools from task_write guidance', () => {

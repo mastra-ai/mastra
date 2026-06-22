@@ -2,24 +2,24 @@ import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 
-import { setClipboardText } from '../../clipboard/index';
-import type { ModePack, ProviderAccess, ProviderAccessLevel } from '../../onboarding/packs';
-import { getAvailableModePacks } from '../../onboarding/packs';
+import { setClipboardText } from '../../clipboard/index.js';
+import type { ModePack, ProviderAccess, ProviderAccessLevel } from '../../onboarding/packs.js';
+import { getAvailableModePacks } from '../../onboarding/packs.js';
 import {
   loadSettings,
   resolveThreadActiveModelPackId,
   saveSettings,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-} from '../../onboarding/settings';
-import type { GlobalSettings } from '../../onboarding/settings';
-import { AskQuestionDialogComponent } from '../components/ask-question-dialog';
-import { ModelSelectorComponent } from '../components/model-selector';
-import type { ModelItem } from '../components/model-selector';
-import { showModalOverlay } from '../overlay';
-import { promptForApiKeyIfNeeded } from '../prompt-api-key';
-import { updateStatusLine } from '../status-line';
-import { getSelectListTheme, mastra, theme } from '../theme';
-import type { SlashCommandContext } from './types';
+} from '../../onboarding/settings.js';
+import type { GlobalSettings } from '../../onboarding/settings.js';
+import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
+import { ModelSelectorComponent } from '../components/model-selector.js';
+import type { ModelItem } from '../components/model-selector.js';
+import { showModalOverlay } from '../overlay.js';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import { updateStatusLine } from '../status-line.js';
+import { getSelectListTheme, mastra, theme } from '../theme.js';
+import type { SlashCommandContext } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Pack sharing — serialize/deserialize

@@ -90,8 +90,8 @@ vi.mock('@earendil-works/pi-tui', () => {
   };
 });
 
-import type { SettingsCallbacks, SettingsConfig } from '../settings';
-import { SettingsComponent } from '../settings';
+import type { SettingsCallbacks, SettingsConfig } from '../settings.js';
+import { SettingsComponent } from '../settings.js';
 
 function createConfig(overrides: Partial<SettingsConfig> = {}): SettingsConfig {
   return {

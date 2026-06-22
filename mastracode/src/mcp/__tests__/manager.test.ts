@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadMcpConfig } from '../config';
-import { createMcpManager } from '../manager';
-import type { McpConfig, McpHttpServerConfig, McpStdioServerConfig } from '../types';
+import { loadMcpConfig } from '../config.js';
+import { createMcpManager } from '../manager.js';
+import type { McpConfig, McpHttpServerConfig, McpStdioServerConfig } from '../types.js';
 
 const mcpMocks = vi.hoisted(() => {
   const MCPClient = vi.fn(function (this: any) {

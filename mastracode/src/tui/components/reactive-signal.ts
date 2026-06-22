@@ -1,7 +1,7 @@
 import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT, mastra, theme } from '../theme';
-import type { ChatSpacingKind } from './chat-spacing';
+import { BOX_INDENT, mastra, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 export interface ReactiveSignalOptions {
   tagName: string;

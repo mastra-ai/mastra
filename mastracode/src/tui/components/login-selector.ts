@@ -3,8 +3,8 @@
  */
 
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
-import type { OAuthProviderInterface } from '../../auth/types';
-import { theme } from '../theme';
+import type { OAuthProviderInterface } from '../../auth/types.js';
+import { theme } from '../theme.js';
 
 /**
  * Interface for auth provider that the selector needs.

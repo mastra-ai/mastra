@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { restoreOMThreadStateForCurrentThread } from './thread-caveman-state';
+import { restoreOMThreadStateForCurrentThread } from './thread-caveman-state.js';
 
 function createHarness({
   currentThreadId = 'thread-1',

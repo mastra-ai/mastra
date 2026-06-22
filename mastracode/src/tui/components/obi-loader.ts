@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { getThemeMode } from '../theme';
+import { getThemeMode } from '../theme.js';
 
 const GRADIENT_WIDTH = 30; // Width of the bright spot as percentage of total text
 const BASE_COLOR = [22, 200, 88]; // Brand green #16c858

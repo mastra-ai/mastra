@@ -1,7 +1,7 @@
 import { visibleWidth } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
 
-import { PlanApprovalInlineComponent, PlanResultComponent } from '../plan-approval-inline';
+import { PlanApprovalInlineComponent, PlanResultComponent } from '../plan-approval-inline.js';
 
 describe('PlanApprovalInlineComponent', () => {
   it('includes a goal option and calls onGoal when selected', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getLanguageId } from '../language';
+import { getLanguageId } from '../language.js';
 
 describe('getLanguageId', () => {
   it.each([

@@ -8,11 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { Editor, matchesKey } from '@earendil-works/pi-tui';
 import type { EditorTheme, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { getClipboardImage, getClipboardText } from '../../clipboard/index';
-import type { ClipboardImage } from '../../clipboard/index';
-import { mastra, theme } from '../theme';
-import type { GradientAnimator } from './obi-loader';
-import { WrappingAutocompleteList } from './wrapping-autocomplete-list';
+import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
+import type { ClipboardImage } from '../../clipboard/index.js';
+import { mastra, theme } from '../theme.js';
+import type { GradientAnimator } from './obi-loader.js';
+import { WrappingAutocompleteList } from './wrapping-autocomplete-list.js';
 
 // Mirrors pi-tui's SLASH_COMMAND_SELECT_LIST_LAYOUT so slash-command rows keep
 // the same primary-column sizing as the upstream SelectList.

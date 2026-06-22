@@ -10,8 +10,8 @@ import type { MastraVector } from '@mastra/core/vector';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { PostgresStore } from '@mastra/pg';
 
-import type { StorageConfig, PgStorageConfig } from './project';
-import { getDatabasePath, getVectorDatabasePath } from './project';
+import type { StorageConfig, PgStorageConfig } from './project.js';
+import { getDatabasePath, getVectorDatabasePath } from './project.js';
 
 const MASTRA_CODE_LOCAL_PRAGMAS = {
   cacheSize: -128000,

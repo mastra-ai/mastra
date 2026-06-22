@@ -6,10 +6,10 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import { ApiKeyDialogComponent } from '../components/api-key-dialog';
-import { showModalOverlay } from '../overlay';
-import { getSelectListTheme, theme } from '../theme';
-import type { SlashCommandContext } from './types';
+import { ApiKeyDialogComponent } from '../components/api-key-dialog.js';
+import { showModalOverlay } from '../overlay.js';
+import { getSelectListTheme, theme } from '../theme.js';
+import type { SlashCommandContext } from './types.js';
 
 interface ProviderInfo {
   provider: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { decodePrintableShortcut } from '../key-input';
+import { decodePrintableShortcut } from '../key-input.js';
 
 describe('decodePrintableShortcut', () => {
   describe('literal single-character input', () => {

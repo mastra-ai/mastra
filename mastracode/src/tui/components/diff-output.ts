@@ -4,8 +4,8 @@
 
 import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT, theme, mastra } from '../theme';
-import type { ChatSpacingKind } from './chat-spacing';
+import { BOX_INDENT, theme, mastra } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 function colorizeDiffLine(line: string): string {
   const t = theme.getTheme();

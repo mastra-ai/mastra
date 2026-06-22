@@ -4,9 +4,9 @@
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
-import { getTermWidth, theme } from '../theme';
-import { truncateAnsi } from './ansi';
-import type { ChatSpacingKind } from './chat-spacing';
+import { getTermWidth, theme } from '../theme.js';
+import { truncateAnsi } from './ansi.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 const MAX_LINES = 200;
 const COLLAPSED_LINES = 20;

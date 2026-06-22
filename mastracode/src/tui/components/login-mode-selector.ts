@@ -7,9 +7,9 @@
 
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import type { AuthMode } from '../../auth/types';
-import { showModalOverlay } from '../overlay';
-import { theme } from '../theme';
+import type { AuthMode } from '../../auth/types.js';
+import { showModalOverlay } from '../overlay.js';
+import { theme } from '../theme.js';
 
 export class LoginModeSelectorComponent extends Box {
   private listContainer: Container;

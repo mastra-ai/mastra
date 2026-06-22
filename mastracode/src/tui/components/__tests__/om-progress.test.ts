@@ -26,7 +26,7 @@ vi.mock('../../theme.js', () => ({
   },
 }));
 
-import { formatObservationStatus, formatReflectionStatus } from '../om-progress';
+import { formatObservationStatus, formatReflectionStatus } from '../om-progress.js';
 
 const baseState = {
   status: 'idle',

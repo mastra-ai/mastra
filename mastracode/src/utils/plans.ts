@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getAppDataDir } from './project';
+import { getAppDataDir } from './project.js';
 
 function slugify(str: string): string {
   const slug = str

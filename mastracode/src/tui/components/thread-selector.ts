@@ -6,8 +6,8 @@
 import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import type { HarnessThread } from '@mastra/core/harness';
-import { decodePrintableShortcut } from '../key-input';
-import { theme } from '../theme';
+import { decodePrintableShortcut } from '../key-input.js';
+import { theme } from '../theme.js';
 
 // =============================================================================
 // Types

@@ -22,7 +22,7 @@ vi.mock('../../theme.js', () => ({
   getThemeMode: mocks.getThemeMode,
 }));
 
-import { handleThemeCommand } from '../theme';
+import { handleThemeCommand } from '../theme.js';
 
 function createCtx() {
   return {

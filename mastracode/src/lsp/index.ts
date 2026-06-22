@@ -1,3 +1,3 @@
-export { LSPClient } from './client';
-export { getServersForFile } from './server';
-export { lspManager } from './manager';
+export { LSPClient } from './client.js';
+export { getServersForFile } from './server.js';
+export { lspManager } from './manager.js';

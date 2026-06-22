@@ -4,7 +4,7 @@
 import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
-import { getCurrentGitBranchAsync } from '../utils/project';
+import { getCurrentGitBranchAsync } from '../utils/project.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -39,10 +39,10 @@ import {
   handleToolInputDelta,
   handleToolInputEnd,
   handleToolEnd,
-} from './handlers/index';
-import type { EventHandlerContext } from './handlers/types';
-import type { TUIState } from './state';
-import { getGithubPrSubscriptionsFromMetadata } from './state';
+} from './handlers/index.js';
+import type { EventHandlerContext } from './handlers/types.js';
+import type { TUIState } from './state.js';
+import { getGithubPrSubscriptionsFromMetadata } from './state.js';
 
 /**
  * Dispatch a HarnessEvent to the appropriate handler.

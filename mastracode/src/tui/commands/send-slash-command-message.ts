@@ -1,5 +1,5 @@
-import { addPendingUserMessage, removePendingUserMessage } from '../render-messages';
-import type { SlashCommandContext } from './types';
+import { addPendingUserMessage, removePendingUserMessage } from '../render-messages.js';
+import type { SlashCommandContext } from './types.js';
 
 export function isCurrentThreadActive(ctx: SlashCommandContext): boolean {
   return ctx.harness.session?.stream?.isActive?.() ?? ctx.harness.session?.displayState?.get?.().isRunning ?? false;

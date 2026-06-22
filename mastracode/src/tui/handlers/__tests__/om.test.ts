@@ -2,10 +2,10 @@ import { Container } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
-import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer';
-import type { TUIState } from '../../state';
-import { handleOMActivation, handleOMBufferingStart } from '../om';
-import type { EventHandlerContext } from '../types';
+import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import type { TUIState } from '../../state.js';
+import { handleOMActivation, handleOMBufferingStart } from '../om.js';
+import type { EventHandlerContext } from '../types.js';
 
 function createCtx() {
   const state = {

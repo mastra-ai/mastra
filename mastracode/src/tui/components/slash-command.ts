@@ -6,8 +6,8 @@
 
 import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT, getTermWidth, mastra } from '../theme';
-import type { ChatSpacingKind } from './chat-spacing';
+import { BOX_INDENT, getTermWidth, mastra } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 const MAX_COLLAPSED_LINES = 3;
 const getBorderColor = () => mastra.green;

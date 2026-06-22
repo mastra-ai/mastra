@@ -2,20 +2,20 @@
  * Prompt system — exports the prompt builder and mode-specific prompts.
  */
 
-export { buildBasePrompt } from './base';
-export { buildModePrompt, buildModePromptFn } from './build';
-export { planModePrompt } from './plan';
-export { fastModePrompt } from './fast';
+export { buildBasePrompt } from './base.js';
+export { buildModePrompt, buildModePromptFn } from './build.js';
+export { planModePrompt } from './plan.js';
+export { fastModePrompt } from './fast.js';
 
-import { hasTavilyKey } from '../../tools/index';
-import { loadAgentInstructions, formatAgentInstructions } from './agent-instructions';
-import { buildBasePrompt } from './base';
-import type { PromptContext as BasePromptContext } from './base';
-import { buildModePromptFn } from './build';
-import { fastModePrompt } from './fast';
-import { modelSpecificPrompts } from './model';
-import { planModePrompt } from './plan';
-import { buildToolGuidance } from './tool-guidance';
+import { hasTavilyKey } from '../../tools/index.js';
+import { loadAgentInstructions, formatAgentInstructions } from './agent-instructions.js';
+import { buildBasePrompt } from './base.js';
+import type { PromptContext as BasePromptContext } from './base.js';
+import { buildModePromptFn } from './build.js';
+import { fastModePrompt } from './fast.js';
+import { modelSpecificPrompts } from './model.js';
+import { planModePrompt } from './plan.js';
+import { buildToolGuidance } from './tool-guidance.js';
 
 // Extended prompt context that includes runtime information
 export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {

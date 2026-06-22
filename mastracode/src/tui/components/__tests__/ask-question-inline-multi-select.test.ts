@@ -47,7 +47,7 @@ vi.mock('@earendil-works/pi-tui', async importOriginal => {
   };
 });
 
-import { AskQuestionInlineComponent } from '../ask-question-inline';
+import { AskQuestionInlineComponent } from '../ask-question-inline.js';
 
 describe('AskQuestionInlineComponent multi-select', () => {
   beforeEach(() => {

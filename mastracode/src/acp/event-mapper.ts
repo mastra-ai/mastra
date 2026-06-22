@@ -1,28 +1,21 @@
-import type { SessionNotification, RequestPermissionRequest, AgentSideConnection } from '@agentclientprotocol/sdk';
+import type {
+  SessionNotification,
+  RequestPermissionRequest,
+  AgentSideConnection,
+} from '@agentclientprotocol/sdk';
 import type { Harness, HarnessEvent, TokenUsage } from '@mastra/core/harness';
 
 /**
  * Map a mastracode tool name to an ACP ToolKind.
  */
-function mapToolKind(
-  toolName: string,
-): 'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'other' {
+function mapToolKind(toolName: string): 'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'other' {
   const name = toolName.toLowerCase();
-  if (name.includes('edit') || name.includes('write') || name.includes('replace') || name.includes('patch'))
-    return 'edit';
+  if (name.includes('edit') || name.includes('write') || name.includes('replace') || name.includes('patch')) return 'edit';
   if (name.includes('read') || name.includes('view') || name.includes('list') || name.includes('find')) return 'read';
   if (name.includes('delete') || name.includes('remove')) return 'delete';
   if (name.includes('search') || name.includes('grep') || name.includes('query')) return 'search';
-  if (name.includes('execute') || name.includes('run') || name.includes('command') || name.includes('shell'))
-    return 'execute';
-  if (
-    name.includes('fetch') ||
-    name.includes('curl') ||
-    name.includes('http') ||
-    name.includes('browse') ||
-    name.includes('navigate')
-  )
-    return 'fetch';
+  if (name.includes('execute') || name.includes('run') || name.includes('command') || name.includes('shell')) return 'execute';
+  if (name.includes('fetch') || name.includes('curl') || name.includes('http') || name.includes('browse') || name.includes('navigate')) return 'fetch';
   if (name.includes('think') || name.includes('reason')) return 'think';
   return 'other';
 }
@@ -122,7 +115,11 @@ export function handleHarnessEvent(
   }
 }
 
-function sendUpdate(connection: AgentSideConnection, sessionId: string, update: SessionNotification['update']): void {
+function sendUpdate(
+  connection: AgentSideConnection,
+  sessionId: string,
+  update: SessionNotification['update'],
+): void {
   connection.sessionUpdate({ sessionId, update }).catch(err => {
     process.stderr.write(`[acp] sessionUpdate error: ${err}\n`);
   });
@@ -198,8 +195,9 @@ async function handleToolSuspended(
 
     try {
       const resp = await connection.requestPermission(req);
-      const action =
-        resp.outcome.outcome === 'selected' && resp.outcome.optionId === 'approve' ? 'approved' : 'rejected';
+      const action = resp.outcome.outcome === 'selected' && resp.outcome.optionId === 'approve'
+        ? 'approved'
+        : 'rejected';
       harness.respondToToolSuspension({ toolCallId, resumeData: { action } });
     } catch {
       harness.respondToToolSuspension({ toolCallId, resumeData: { action: 'rejected' } });

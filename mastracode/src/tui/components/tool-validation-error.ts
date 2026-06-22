@@ -6,8 +6,8 @@
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
-import { MC_TOOLS } from '../../tool-names';
-import { theme } from '../theme';
+import { MC_TOOLS } from '../../tool-names.js';
+import { theme } from '../theme.js';
 
 export interface ValidationError {
   field: string;

@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { LocalFilesystem } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
-import { requestSandboxAccessTool } from '../request-sandbox-access';
+import { requestSandboxAccessTool } from '../request-sandbox-access.js';
 
 function createMockLocalFilesystem() {
   const tmpDir = os.tmpdir();

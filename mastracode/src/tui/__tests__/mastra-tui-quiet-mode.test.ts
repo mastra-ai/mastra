@@ -19,8 +19,8 @@ vi.mock('../../onboarding/index.js', () => ({
   saveSettings: mocks.saveSettings,
 }));
 
-import type { GlobalSettings } from '../../onboarding/settings';
-import { MastraTUI } from '../mastra-tui';
+import type { GlobalSettings } from '../../onboarding/settings.js';
+import { MastraTUI } from '../mastra-tui.js';
 
 function createSettings(overrides: Partial<GlobalSettings> = {}): GlobalSettings {
   return {

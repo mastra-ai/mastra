@@ -9,8 +9,8 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
 import { LocalFilesystem } from '@mastra/core/workspace';
 import { z } from 'zod';
-import type { MastraCodeState } from '../schema';
-import { isPathAllowed, getAllowedPathsFromContext } from './utils';
+import type { MastraCodeState } from '../schema.js';
+import { isPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
 function expandTilde(p: string): string {
   if (p === '~') return os.homedir();

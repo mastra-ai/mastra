@@ -1,7 +1,7 @@
 import type { OverlayOptions, TUI } from '@earendil-works/pi-tui';
 
-import { AskQuestionDialogComponent } from './components/ask-question-dialog';
-import { showModalOverlay } from './overlay';
+import { AskQuestionDialogComponent } from './components/ask-question-dialog.js';
+import { showModalOverlay } from './overlay.js';
 
 export type ModalQuestionOption = { label: string; description?: string };
 

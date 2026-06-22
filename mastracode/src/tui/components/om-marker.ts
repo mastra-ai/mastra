@@ -4,8 +4,8 @@
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
-import { BOX_INDENT, theme } from '../theme';
-import type { ChatSpacingKind } from './chat-spacing';
+import { BOX_INDENT, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 /**
  * Format token count for display (e.g., 7234 -> "7.2k", 234 -> "0.2k", 0 -> "0")

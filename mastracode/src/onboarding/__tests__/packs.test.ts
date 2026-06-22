@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { PROVIDER_DEFAULT_MODELS } from '../../auth/storage';
-import { getAvailableModePacks } from '../packs';
+import { PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
+import { getAvailableModePacks } from '../packs.js';
 
 describe('getAvailableModePacks', () => {
   it('uses GPT-5.5 for OpenAI plan and build modes while keeping fast on GPT-5.4 mini', () => {

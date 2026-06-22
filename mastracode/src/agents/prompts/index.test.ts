@@ -5,7 +5,7 @@ vi.mock('../../tools/index.js', () => ({
   hasTavilyKey: () => false,
 }));
 
-import { buildFullPrompt } from './index';
+import { buildFullPrompt } from './index.js';
 
 describe('buildFullPrompt task state', () => {
   // The task list is carried on the agent state-signal lane (TaskStateProcessor),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ModelItem } from '../model-selector';
-import { makeCustomModelItem } from '../model-selector';
+import type { ModelItem } from '../model-selector.js';
+import { makeCustomModelItem } from '../model-selector.js';
 
 const models: ModelItem[] = [
   {

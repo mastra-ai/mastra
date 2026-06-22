@@ -6,7 +6,7 @@
 import { Box, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable } from '@earendil-works/pi-tui';
 
-import { theme } from '../theme';
+import { theme } from '../theme.js';
 
 export interface GoalCyclesDialogOptions {
   defaultValue: number;

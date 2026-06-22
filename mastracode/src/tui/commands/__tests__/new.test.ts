@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { handleNewCommand } from '../new';
-import type { SlashCommandContext } from '../types';
+import { handleNewCommand } from '../new.js';
+import type { SlashCommandContext } from '../types.js';
 
 function createMockState() {
   return {

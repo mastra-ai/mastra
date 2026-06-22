@@ -6,9 +6,9 @@ import { parseArgs } from 'node:util';
 
 import type { Harness, HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 
-import { setupDebugLogging } from './utils/debug-log';
-import { releaseAllThreadLocks } from './utils/thread-lock';
-import { createMastraCode } from './index';
+import { setupDebugLogging } from './utils/debug-log.js';
+import { releaseAllThreadLocks } from './utils/thread-lock.js';
+import { createMastraCode } from './index.js';
 
 const VALID_MODES = ['build', 'plan', 'fast'] as const;
 const VALID_THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'xhigh'] as const;

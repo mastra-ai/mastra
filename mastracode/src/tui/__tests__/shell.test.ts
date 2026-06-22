@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createShellPassthroughSubprocess } from '../shell-runner';
+import { createShellPassthroughSubprocess } from '../shell-runner.js';
 
 const { execaMock } = vi.hoisted(() => ({
   execaMock: vi.fn(),

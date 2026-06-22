@@ -3,10 +3,10 @@
  */
 
 import type { TUI } from '@earendil-works/pi-tui';
-import type { AuthStorage } from '../auth/storage';
-import { ApiKeyDialogComponent } from './components/api-key-dialog';
-import type { ModelItem } from './components/model-selector';
-import { showModalOverlay } from './overlay';
+import type { AuthStorage } from '../auth/storage.js';
+import { ApiKeyDialogComponent } from './components/api-key-dialog.js';
+import type { ModelItem } from './components/model-selector.js';
+import { showModalOverlay } from './overlay.js';
 
 /**
  * If the selected model doesn't have an API key, show a dialog to enter one.

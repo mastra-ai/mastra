@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fetchChangelog, parseChangelog } from '../update-check';
+import { fetchChangelog, parseChangelog } from '../update-check.js';
 
 describe('parseChangelog', () => {
   const SAMPLE_CHANGELOG = [

@@ -1,7 +1,7 @@
-export { HookManager } from './manager';
-export { loadHooksConfig, getProjectHooksPath, getGlobalHooksPath } from './config';
-export { executeHook, runHooksForEvent, matchesHook } from './executor';
-export { isBlockingEvent } from './types';
+export { HookManager } from './manager.js';
+export { loadHooksConfig, getProjectHooksPath, getGlobalHooksPath } from './config.js';
+export { executeHook, runHooksForEvent, matchesHook } from './executor.js';
+export { isBlockingEvent } from './types.js';
 export type {
   HookEventName,
   HookDefinition,
@@ -18,4 +18,4 @@ export type {
   HookResult,
   HookEventResult,
   BlockingHookEvent,
-} from './types';
+} from './types.js';

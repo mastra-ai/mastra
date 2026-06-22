@@ -7,7 +7,7 @@ import {
   buildPowerShellScript,
   inferShellFamily,
   resolveShellPassthroughInvocation,
-} from '../shell-config';
+} from '../shell-config.js';
 
 function decodePowerShellArg(encodedCommand: string): string {
   return Buffer.from(encodedCommand, 'base64').toString('utf16le');

@@ -1,7 +1,7 @@
-import { getCustomProviderId, loadSettings, saveSettings, toCustomProviderModelId } from '../../onboarding/settings';
-import type { CustomProviderSetting, GlobalSettings } from '../../onboarding/settings';
-import { askModalQuestion } from '../modal-question';
-import type { SlashCommandContext } from './types';
+import { getCustomProviderId, loadSettings, saveSettings, toCustomProviderModelId } from '../../onboarding/settings.js';
+import type { CustomProviderSetting, GlobalSettings } from '../../onboarding/settings.js';
+import { askModalQuestion } from '../modal-question.js';
+import type { SlashCommandContext } from './types.js';
 
 function isValidUrl(value: string): boolean {
   try {

@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { DEFAULT_CONFIG_DIR } from '../constants';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 export interface ProjectInfo {
   /** Unique resource ID for this project (used for thread grouping) */
   resourceId: string;
@@ -242,7 +242,7 @@ export function getObservabilityDatabasePath(): string {
   return path.join(getAppDataDir(), 'observability.duckdb');
 }
 
-import type { StorageBackend, StorageSettings } from '../onboarding/settings';
+import type { StorageBackend, StorageSettings } from '../onboarding/settings.js';
 
 /**
  * LibSQL storage configuration.

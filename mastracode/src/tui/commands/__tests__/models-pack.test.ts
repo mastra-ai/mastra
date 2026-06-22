@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ModePack } from '../../../onboarding/packs';
-import type { GlobalSettings, StorageSettings } from '../../../onboarding/settings';
+import type { ModePack } from '../../../onboarding/packs.js';
+import type { GlobalSettings, StorageSettings } from '../../../onboarding/settings.js';
 import {
   deserializePack,
   removeCustomPackFromSettings,
   serializePack,
   upsertCustomPackInSettings,
-} from '../models-pack';
+} from '../models-pack.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };

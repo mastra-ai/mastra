@@ -15,7 +15,7 @@ vi.mock('@earendil-works/pi-tui', async importOriginal => {
   };
 });
 
-import { WrappingAutocompleteList } from '../wrapping-autocomplete-list';
+import { WrappingAutocompleteList } from '../wrapping-autocomplete-list.js';
 
 const theme: SelectListTheme = {
   selectedPrefix: (s: string) => `[S]${s}`,

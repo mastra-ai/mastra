@@ -7,20 +7,23 @@
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 
-import { insertChatComponentWithBoundarySpacing, reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation';
-import { AssistantMessageComponent } from '../components/assistant-message';
-import { NotificationComponent } from '../components/notification';
-import { NotificationSummaryComponent } from '../components/notification-summary';
-import { ReactiveSignalComponent } from '../components/reactive-signal';
-import { StateSignalComponent } from '../components/state-signal';
-import { SystemReminderComponent } from '../components/system-reminder';
-import { TemporalGapComponent } from '../components/temporal-gap';
-import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced';
-import { UserMessageComponent } from '../components/user-message';
-import { addChildBeforeMessageOrFollowUps } from '../render-messages';
-import { getMarkdownTheme } from '../theme';
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from '../chat-boundary-reconciliation.js';
+import { AssistantMessageComponent } from '../components/assistant-message.js';
+import { NotificationSummaryComponent } from '../components/notification-summary.js';
+import { NotificationComponent } from '../components/notification.js';
+import { ReactiveSignalComponent } from '../components/reactive-signal.js';
+import { StateSignalComponent } from '../components/state-signal.js';
+import { SystemReminderComponent } from '../components/system-reminder.js';
+import { TemporalGapComponent } from '../components/temporal-gap.js';
+import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
+import { UserMessageComponent } from '../components/user-message.js';
+import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
+import { getMarkdownTheme } from '../theme.js';
 
-import type { EventHandlerContext } from './types';
+import type { EventHandlerContext } from './types.js';
 
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
   const color = ctx.state.session?.mode?.resolve?.()?.metadata?.color;

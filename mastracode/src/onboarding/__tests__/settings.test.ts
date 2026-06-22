@@ -13,8 +13,8 @@ import {
   resolveOmRoleModel,
   resolveThreadActiveModelPackId,
   saveSettings,
-} from '../settings';
-import type { BrowserSettings, GlobalSettings, StorageSettings } from '../settings';
+} from '../settings.js';
+import type { BrowserSettings, GlobalSettings, StorageSettings } from '../settings.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };

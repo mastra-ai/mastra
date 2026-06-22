@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyServerEntry, validateConfig } from '../config';
+import { classifyServerEntry, validateConfig } from '../config.js';
 
 describe('classifyServerEntry', () => {
   it('classifies stdio entry', () => {

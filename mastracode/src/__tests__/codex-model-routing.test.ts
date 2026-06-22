@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { remapOpenAIModelForCodexOAuth } from '../agents/model';
-import { getEffectiveThinkingLevel } from '../providers/openai-codex';
+import { remapOpenAIModelForCodexOAuth } from '../agents/model.js';
+import { getEffectiveThinkingLevel } from '../providers/openai-codex.js';
 
 describe('remapOpenAIModelForCodexOAuth', () => {
   it('maps only explicit GPT-5 models to codex variants for OAuth', () => {

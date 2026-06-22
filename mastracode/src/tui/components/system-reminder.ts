@@ -7,8 +7,8 @@ import process from 'node:process';
 import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
-import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme';
-import type { ChatSpacingKind } from './chat-spacing';
+import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 const MAX_COLLAPSED_LINES = 10;
 const LOADED_INSTRUCTION_INDENT = BOX_INDENT + 2;

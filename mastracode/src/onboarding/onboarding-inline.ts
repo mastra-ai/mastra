@@ -15,9 +15,9 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { AskQuestionInlineComponent } from '../tui/components/ask-question-inline';
-import { BOX_INDENT, theme, getSelectListTheme, mastra } from '../tui/theme';
-import type { ModePack, OMPack } from './packs';
+import { AskQuestionInlineComponent } from '../tui/components/ask-question-inline.js';
+import { BOX_INDENT, theme, getSelectListTheme, mastra } from '../tui/theme.js';
+import type { ModePack, OMPack } from './packs.js';
 
 // ---------------------------------------------------------------------------
 // Types

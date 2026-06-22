@@ -10,10 +10,10 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AskQuestionInlineComponent } from '../components/ask-question-inline';
-import { handleAskQuestion, handleSandboxAccessRequest } from '../handlers/prompts';
-import type { EventHandlerContext } from '../handlers/types';
-import type { TUIState } from '../state';
+import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { handleAskQuestion, handleSandboxAccessRequest } from '../handlers/prompts.js';
+import type { EventHandlerContext } from '../handlers/types.js';
+import type { TUIState } from '../state.js';
 
 /**
  * Create a minimal mock state for testing interactive prompts.

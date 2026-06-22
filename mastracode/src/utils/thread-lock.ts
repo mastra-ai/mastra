@@ -7,7 +7,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getAppDataDir } from './project';
+import { getAppDataDir } from './project.js';
 
 export class ThreadLockError extends Error {
   constructor(

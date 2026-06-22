@@ -1,10 +1,10 @@
 import { Container, Text } from '@earendil-works/pi-tui';
 import { describe, expect, it } from 'vitest';
 
-import { SlashCommandComponent } from '../components/slash-command';
-import { SystemReminderComponent } from '../components/system-reminder';
-import { pruneChatContainer } from '../prune-chat';
-import type { TUIState } from '../state';
+import { SlashCommandComponent } from '../components/slash-command.js';
+import { SystemReminderComponent } from '../components/system-reminder.js';
+import { pruneChatContainer } from '../prune-chat.js';
+import type { TUIState } from '../state.js';
 
 function createState(childrenCount: number): TUIState {
   const chatContainer = new Container();

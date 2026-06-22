@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildHelpText } from '../help-overlay';
+import { buildHelpText } from '../help-overlay.js';
 
 describe('buildHelpText', () => {
   const baseOpts = { modes: 1, customSlashCommands: [] };

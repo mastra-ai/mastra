@@ -5,17 +5,17 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { getAppDataDir } from '../utils/project';
-import { anthropicOAuthProvider } from './providers/anthropic';
-import { githubCopilotOAuthProvider } from './providers/github-copilot';
-import { openaiCodexOAuthProvider } from './providers/openai-codex';
+import { getAppDataDir } from '../utils/project.js';
+import { anthropicOAuthProvider } from './providers/anthropic.js';
+import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
+import { openaiCodexOAuthProvider } from './providers/openai-codex.js';
 import type {
   AuthCredential,
   AuthStorageData,
   OAuthLoginCallbacks,
   OAuthProviderId,
   OAuthProviderInterface,
-} from './types';
+} from './types.js';
 
 /**
  * Best/default models for each OAuth provider.

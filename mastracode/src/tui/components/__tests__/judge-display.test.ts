@@ -1,7 +1,7 @@
 import process from 'node:process';
 import stripAnsi from 'strip-ansi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { evaluationToJudgeResult, JudgeDisplayComponent } from '../judge-display';
+import { evaluationToJudgeResult, JudgeDisplayComponent } from '../judge-display.js';
 
 const WIDTH = 80;
 

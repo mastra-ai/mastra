@@ -17,23 +17,23 @@ import type {
   ProviderConfig,
 } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
-import { AuthStorage } from '../auth/storage';
-import { getCustomProviderId, loadSettings, MEMORY_GATEWAY_PROVIDER } from '../onboarding/settings';
+import { AuthStorage } from '../auth/storage.js';
+import { getCustomProviderId, loadSettings, MEMORY_GATEWAY_PROVIDER } from '../onboarding/settings.js';
 import {
   buildAnthropicOAuthFetch,
   claudeCodeMiddleware,
   opencodeClaudeMaxProvider,
   promptCacheMiddleware,
-} from '../providers/claude-max';
-import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot';
+} from '../providers/claude-max.js';
+import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
   getEffectiveThinkingLevel,
   openaiCodexProvider,
   THINKING_LEVEL_TO_REASONING_EFFORT,
-} from '../providers/openai-codex';
-import type { ThinkingLevel } from '../providers/openai-codex';
+} from '../providers/openai-codex.js';
+import type { ThinkingLevel } from '../providers/openai-codex.js';
 
 export const OPENAI_PREFIX = 'openai/';
 export const MASTRA_GATEWAY_PREFIX = 'mastra/';

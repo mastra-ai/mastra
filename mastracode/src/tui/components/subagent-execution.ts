@@ -11,9 +11,9 @@
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
-import { BOX_INDENT, getTermWidth, theme } from '../theme';
-import type { ChatSpacingKind } from './chat-spacing';
-import type { IToolExecutionComponent } from './tool-execution-interface';
+import { BOX_INDENT, getTermWidth, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
+import type { IToolExecutionComponent } from './tool-execution-interface.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types

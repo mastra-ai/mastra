@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline';
-import type { TUIState } from '../../state';
-import { handleAskQuestion, handlePlanApproval } from '../prompts';
-import type { EventHandlerContext } from '../types';
+import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
+import type { TUIState } from '../../state.js';
+import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
+import type { EventHandlerContext } from '../types.js';
 
 function createCtx() {
   const answerQuestion = vi.fn().mockResolvedValue('Verified');

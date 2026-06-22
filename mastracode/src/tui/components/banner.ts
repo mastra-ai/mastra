@@ -4,7 +4,7 @@
  */
 import chalk from 'chalk';
 
-import { theme } from '../theme';
+import { theme } from '../theme.js';
 
 // Mastra brand green gradient stops (left → right)
 const GRADIENT_STOPS = ['#085314', '#0d8020', '#16c858', '#62f69d', '#a1fac7'];

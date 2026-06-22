@@ -4,10 +4,10 @@
  */
 import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { applyGradientSweep } from './components/obi-loader';
-import { formatObservationStatus, formatReflectionStatus } from './components/om-progress';
-import type { GithubPrSubscriptionBadge, TUIState } from './state';
-import { theme, mastra, tintHex, getTermWidth, extendedColors } from './theme';
+import { applyGradientSweep } from './components/obi-loader.js';
+import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
+import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
+import { theme, mastra, tintHex, getTermWidth, extendedColors } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;

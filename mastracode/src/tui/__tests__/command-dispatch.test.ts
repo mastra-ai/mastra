@@ -72,10 +72,10 @@ vi.mock('../commands/goal.js', () => ({
   startGoalWithDefaults: mocks.startGoalWithDefaults,
 }));
 
-import { dispatchSlashCommand } from '../command-dispatch';
-import { isChatBoundarySpacer } from '../components/chat-boundary-spacer';
-import { SlashCommandComponent } from '../components/slash-command';
-import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock';
+import { dispatchSlashCommand } from '../command-dispatch.js';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { SlashCommandComponent } from '../components/slash-command.js';
+import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 
 describe('dispatchSlashCommand models routing', () => {
   beforeEach(() => {

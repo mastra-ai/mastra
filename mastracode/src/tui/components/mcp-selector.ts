@@ -6,9 +6,9 @@
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import type { McpServerStatus, McpSkippedServer } from '../../mcp/types';
-import { decodePrintableShortcut } from '../key-input';
-import { theme } from '../theme';
+import type { McpServerStatus, McpSkippedServer } from '../../mcp/types.js';
+import { decodePrintableShortcut } from '../key-input.js';
+import { theme } from '../theme.js';
 
 // =============================================================================
 // Types

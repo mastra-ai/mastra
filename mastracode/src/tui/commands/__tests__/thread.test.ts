@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { handleThreadCommand } from '../thread';
-import type { SlashCommandContext } from '../types';
+import { handleThreadCommand } from '../thread.js';
+import type { SlashCommandContext } from '../types.js';
 
 function createMockHarness() {
   let currentThreadId: string | null = null;

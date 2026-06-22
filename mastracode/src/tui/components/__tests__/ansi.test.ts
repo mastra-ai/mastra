@@ -1,7 +1,7 @@
 import { visibleWidth } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, it, expect } from 'vitest';
-import { truncateAnsi } from '../ansi';
+import { truncateAnsi } from '../ansi.js';
 
 describe('truncateAnsi', () => {
   it('returns the string unchanged when within maxWidth', () => {

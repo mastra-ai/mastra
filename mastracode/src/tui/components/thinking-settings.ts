@@ -7,7 +7,7 @@
 
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem, Focusable } from '@earendil-works/pi-tui';
-import { theme, getSelectListTheme } from '../theme';
+import { theme, getSelectListTheme } from '../theme.js';
 
 // =============================================================================
 // Types

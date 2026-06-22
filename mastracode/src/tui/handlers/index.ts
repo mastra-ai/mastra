@@ -1,12 +1,12 @@
-export type { EventHandlerContext } from './types';
+export type { EventHandlerContext } from './types.js';
 export {
   handleAgentStart,
   handleAgentEnd,
   handleAgentAborted,
   handleAgentError,
   handleGoalEvaluation,
-} from './agent-lifecycle';
-export { handleMessageStart, handleMessageUpdate, handleMessageEnd } from './message';
+} from './agent-lifecycle.js';
+export { handleMessageStart, handleMessageUpdate, handleMessageEnd } from './message.js';
 export {
   handleOMObservationStart,
   handleOMObservationEnd,
@@ -18,9 +18,9 @@ export {
   handleOMBufferingFailed,
   handleOMActivation,
   handleOMThreadTitleUpdated,
-} from './om';
-export { handleAskQuestion, handleSandboxAccessRequest, handlePlanApproval } from './prompts';
-export { handleSubagentStart, handleSubagentToolStart, handleSubagentToolEnd, handleSubagentEnd } from './subagent';
+} from './om.js';
+export { handleAskQuestion, handleSandboxAccessRequest, handlePlanApproval } from './prompts.js';
+export { handleSubagentStart, handleSubagentToolStart, handleSubagentToolEnd, handleSubagentEnd } from './subagent.js';
 export {
   formatToolResult,
   handleToolApprovalRequired,
@@ -31,4 +31,4 @@ export {
   handleToolInputDelta,
   handleToolInputEnd,
   handleToolEnd,
-} from './tool';
+} from './tool.js';

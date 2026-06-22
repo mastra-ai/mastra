@@ -39,7 +39,7 @@ vi.mock('../../utils/project.js', async importOriginal => {
   };
 });
 
-import { createTUIState } from '../state';
+import { createTUIState } from '../state.js';
 
 function createHarness() {
   return {

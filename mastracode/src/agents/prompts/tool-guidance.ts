@@ -4,7 +4,7 @@
  * and are scoped to what's available in the current mode.
  */
 
-import { MC_TOOLS } from '../../tool-names';
+import { MC_TOOLS } from '../../tool-names.js';
 
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;

@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
-} from '../../chat-boundary-reconciliation';
-import { AssistantMessageComponent } from '../assistant-message';
-import { PlanApprovalInlineComponent } from '../plan-approval-inline';
-import { ToolExecutionComponentEnhanced } from '../tool-execution-enhanced';
-import { UserMessageComponent } from '../user-message';
+} from '../../chat-boundary-reconciliation.js';
+import { AssistantMessageComponent } from '../assistant-message.js';
+import { PlanApprovalInlineComponent } from '../plan-approval-inline.js';
+import { ToolExecutionComponentEnhanced } from '../tool-execution-enhanced.js';
+import { UserMessageComponent } from '../user-message.js';
 
 const ui = { requestRender() {} } as any;
 

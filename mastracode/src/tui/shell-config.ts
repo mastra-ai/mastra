@@ -1,4 +1,4 @@
-import type { ShellPassthroughSettings } from '../onboarding/settings';
+import type { ShellPassthroughSettings } from '../onboarding/settings.js';
 
 export const MASTRACODE_SHELL_ENV = 'MASTRACODE_SHELL';
 export const MASTRACODE_SHELL_MODE_ENV = 'MASTRACODE_SHELL_MODE';

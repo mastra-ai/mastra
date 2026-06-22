@@ -8,9 +8,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
-import { AuthStorage } from '../auth/storage';
-import { buildOpenAICodexOAuthFetch } from '../providers/openai-codex';
-import { getAppDataDir } from '../utils/project';
+import { AuthStorage } from '../auth/storage.js';
+import { buildOpenAICodexOAuthFetch } from '../providers/openai-codex.js';
+import { getAppDataDir } from '../utils/project.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
 export interface CustomPack {

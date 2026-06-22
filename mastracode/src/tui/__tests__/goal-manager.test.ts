@@ -8,8 +8,8 @@ vi.mock('../../onboarding/settings.js', () => ({
   loadSettings: mocks.loadSettings,
 }));
 
-import { GoalManager, DEFAULT_MAX_TURNS } from '../goal-manager';
-import type { TUIState } from '../state';
+import { GoalManager, DEFAULT_MAX_TURNS } from '../goal-manager.js';
+import type { TUIState } from '../state.js';
 
 interface FakeAgent {
   setObjective: ReturnType<typeof vi.fn>;

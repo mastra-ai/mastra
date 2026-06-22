@@ -12,7 +12,7 @@
  *   - `enterpriseUrl` is the GitHub Enterprise hostname, or undefined for github.com.
  */
 
-import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types';
+import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types.js';
 
 export type GitHubCopilotCredentials = OAuthCredentials & {
   enterpriseUrl?: string;

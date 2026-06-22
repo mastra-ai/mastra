@@ -79,7 +79,7 @@ vi.mock('../multiline-input.js', () => {
   return { MultilineInput: StubMultilineInput };
 });
 
-import { AskQuestionInlineComponent } from '../ask-question-inline';
+import { AskQuestionInlineComponent } from '../ask-question-inline.js';
 
 const TERMINAL_WIDTH = 80;
 const LONG_LABEL =

@@ -26,7 +26,7 @@ vi.mock('../display.js', () => ({
   notify: mocks.notify,
 }));
 
-import { MastraTUI } from '../mastra-tui';
+import { MastraTUI } from '../mastra-tui.js';
 
 function createHookResult(overrides: Record<string, unknown> = {}) {
   return {

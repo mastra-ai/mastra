@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { hasHeadlessFlag, parseHeadlessArgs, truncate } from './headless';
+import { hasHeadlessFlag, parseHeadlessArgs, truncate } from './headless.js';
 
 describe('hasHeadlessFlag', () => {
   it('returns true when --prompt is present', () => {

@@ -4,18 +4,18 @@
  */
 import fs from 'node:fs';
 
-import { createMastraCodeAnalytics } from './analytics';
-import { isStreamDestroyedError } from './error-classification';
-import { hasHeadlessFlag, headlessMain } from './headless';
-import { createBrowserFromSettings, loadSettings } from './onboarding/settings';
-import { detectTerminalTheme } from './tui/detect-theme';
-import { MastraTUI } from './tui/index';
-import { applyThemeMode, restoreTerminalForeground } from './tui/theme';
-import { setupDebugLogging } from './utils/debug-log';
-import { drainPipedStdin, reopenStdinFromTTY } from './utils/stdin-pipe';
-import { releaseAllThreadLocks } from './utils/thread-lock';
-import { getCurrentVersion } from './utils/update-check';
-import { createMastraCode } from './index';
+import { createMastraCodeAnalytics } from './analytics.js';
+import { isStreamDestroyedError } from './error-classification.js';
+import { hasHeadlessFlag, headlessMain } from './headless.js';
+import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
+import { detectTerminalTheme } from './tui/detect-theme.js';
+import { MastraTUI } from './tui/index.js';
+import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
+import { setupDebugLogging } from './utils/debug-log.js';
+import { drainPipedStdin, reopenStdinFromTTY } from './utils/stdin-pipe.js';
+import { releaseAllThreadLocks } from './utils/thread-lock.js';
+import { getCurrentVersion } from './utils/update-check.js';
+import { createMastraCode } from './index.js';
 
 let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];

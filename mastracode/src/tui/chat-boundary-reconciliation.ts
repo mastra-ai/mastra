@@ -1,7 +1,7 @@
 import type { Component, Container } from '@earendil-works/pi-tui';
-import { ChatBoundarySpacer, isChatBoundarySpacer } from './components/chat-boundary-spacer';
-import { getChatSpacingKind, getSpacingBetweenComponents } from './components/chat-spacing';
-import type { CompactToolLabelColor } from './components/tool-execution-interface';
+import { ChatBoundarySpacer, isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
+import { getChatSpacingKind, getSpacingBetweenComponents } from './components/chat-spacing.js';
+import type { CompactToolLabelColor } from './components/tool-execution-interface.js';
 
 interface CompactToolGroupingParticipant {
   getCompactToolGroupKey?(): string | undefined;

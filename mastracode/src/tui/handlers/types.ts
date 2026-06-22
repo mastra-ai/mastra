@@ -5,10 +5,10 @@
 import type { Component } from '@earendil-works/pi-tui';
 import type { HarnessMessage, TaskItemSnapshot } from '@mastra/core/harness';
 
-import type { MastraCodeAnalytics } from '../../analytics';
-import type { StartGoalOptions } from '../commands/goal';
-import type { NotificationReason } from '../notify';
-import type { TUIState } from '../state';
+import type { MastraCodeAnalytics } from '../../analytics.js';
+import type { StartGoalOptions } from '../commands/goal.js';
+import type { NotificationReason } from '../notify.js';
+import type { TUIState } from '../state.js';
 
 export interface EventHandlerContext {
   state: TUIState;

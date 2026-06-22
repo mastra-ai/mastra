@@ -9,7 +9,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
-import { AuthStorage } from '../auth/storage';
+import { AuthStorage } from '../auth/storage.js';
 
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
 const claudeCodeIdentity = "You are Claude Code, Anthropic's official CLI for Claude.";

@@ -2,12 +2,12 @@ import { Container } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { describe, expect, it, vi } from 'vitest';
 
-import { isChatBoundarySpacer } from './components/chat-boundary-spacer';
-import { SubagentExecutionComponent } from './components/subagent-execution';
-import { TemporalGapComponent } from './components/temporal-gap';
-import { UserMessageComponent } from './components/user-message';
-import { addUserMessage, renderExistingMessages } from './render-messages';
-import type { TUIState } from './state';
+import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
+import { SubagentExecutionComponent } from './components/subagent-execution.js';
+import { TemporalGapComponent } from './components/temporal-gap.js';
+import { UserMessageComponent } from './components/user-message.js';
+import { addUserMessage, renderExistingMessages } from './render-messages.js';
+import type { TUIState } from './state.js';
 
 function visibleChildren(state: TUIState) {
   return state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));

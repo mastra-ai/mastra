@@ -1,5 +1,5 @@
-import { getUserName } from '../../utils/project';
-import type { SlashCommandContext } from './types';
+import { getUserName } from '../../utils/project.js';
+import type { SlashCommandContext } from './types.js';
 
 /**
  * /feedback command — annotate the most recent trace with user feedback.

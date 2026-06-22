@@ -1,15 +1,15 @@
 import type { MastraBrowser } from '@mastra/core/browser';
 
-import type { BrowserProvider, BrowserSettings, StagehandEnv } from '../../onboarding/settings';
+import type { BrowserProvider, BrowserSettings, StagehandEnv } from '../../onboarding/settings.js';
 import {
   checkProfileProviderMismatch,
   createBrowserFromSettings,
   loadSettings,
   saveSettings,
   setProfileProvider,
-} from '../../onboarding/settings';
-import { askModalQuestion } from '../modal-question';
-import type { SlashCommandContext } from './types';
+} from '../../onboarding/settings.js';
+import { askModalQuestion } from '../modal-question.js';
+import type { SlashCommandContext } from './types.js';
 
 /**
  * Key used to store the active browser settings in harness state.

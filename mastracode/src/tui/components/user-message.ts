@@ -5,8 +5,8 @@
 import { Container, Markdown, Text, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
 import type { MarkdownTheme } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme';
-import type { ChatSpacingKind } from './chat-spacing';
+import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 /**
  * Strip ANSI escape sequences from a string.

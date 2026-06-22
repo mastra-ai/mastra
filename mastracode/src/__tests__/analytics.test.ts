@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createMastraCodeAnalytics, getMastraAnalyticsDistinctId, isTelemetryDisabled } from '../analytics';
+import { createMastraCodeAnalytics, getMastraAnalyticsDistinctId, isTelemetryDisabled } from '../analytics.js';
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -1,16 +1,16 @@
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import { loadSettings } from '../onboarding/settings';
-import type { ThinkingLevel } from '../providers/openai-codex';
+import { loadSettings } from '../onboarding/settings.js';
+import type { ThinkingLevel } from '../providers/openai-codex.js';
 import {
   MASTRA_GATEWAY_PREFIX,
   MASTRACODE_GATEWAY_ID,
   MastraCodeGateway,
   reloadAuthStorage,
   stripMastraGatewayPrefix,
-} from './mastracode-gateway';
-import type { MastraCodeGatewayOptions } from './mastracode-gateway';
+} from './mastracode-gateway.js';
+import type { MastraCodeGatewayOptions } from './mastracode-gateway.js';
 
 export {
   getAnthropicApiKey,
@@ -19,8 +19,8 @@ export {
   MastraCodeGateway,
   remapOpenAIModelForCodexOAuth,
   resolveAuth,
-} from './mastracode-gateway';
-export type { MastraCodeCustomProvider, MastraCodeGatewayOptions } from './mastracode-gateway';
+} from './mastracode-gateway.js';
+export type { MastraCodeCustomProvider, MastraCodeGatewayOptions } from './mastracode-gateway.js';
 
 type ResolvedModel = GatewayLanguageModel;
 type ModelRequestHeaders = Record<string, string>;

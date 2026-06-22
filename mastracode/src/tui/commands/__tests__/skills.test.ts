@@ -1,7 +1,7 @@
 import { Container } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
-import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer';
-import { handleSkillCommand, handleSkillsCommand } from '../skills';
+import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { handleSkillCommand, handleSkillsCommand } from '../skills.js';
 
 function createCtx(options?: {
   pendingNewThread?: boolean;

@@ -3,15 +3,15 @@
  * tool_suspended (ask_user / request_access / submit_plan).
  */
 import type { AskUserSelectionMode } from '@mastra/core/tools';
-import { savePlanToDisk } from '../../utils/plans';
-import { AskQuestionDialogComponent } from '../components/ask-question-dialog';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline';
-import { PlanApprovalInlineComponent } from '../components/plan-approval-inline';
-import { showModalOverlay } from '../overlay';
-import type { TUIState } from '../state';
-import { theme } from '../theme';
+import { savePlanToDisk } from '../../utils/plans.js';
+import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
+import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
+import { showModalOverlay } from '../overlay.js';
+import type { TUIState } from '../state.js';
+import { theme } from '../theme.js';
 
-import type { EventHandlerContext } from './types';
+import type { EventHandlerContext } from './types.js';
 
 /**
  * Process the next pending inline question from the queue.

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleResourceCommand } from '../resource';
-import type { SlashCommandContext } from '../types';
+import { handleResourceCommand } from '../resource.js';
+import type { SlashCommandContext } from '../types.js';
 
 /**
  * Minimal mock harness that satisfies what handleResourceCommand calls.

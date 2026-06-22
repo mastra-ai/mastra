@@ -1,9 +1,9 @@
-import type { GlobalSettings } from '../../onboarding/settings';
-import { loadSettings, saveSettings } from '../../onboarding/settings';
-import { OMSettingsComponent } from '../components/om-settings';
-import { showModalOverlay } from '../overlay';
-import { promptForApiKeyIfNeeded } from '../prompt-api-key';
-import type { SlashCommandContext } from './types';
+import type { GlobalSettings } from '../../onboarding/settings.js';
+import { loadSettings, saveSettings } from '../../onboarding/settings.js';
+import { OMSettingsComponent } from '../components/om-settings.js';
+import { showModalOverlay } from '../overlay.js';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import type { SlashCommandContext } from './types.js';
 
 /**
  * Apply a role-specific OM model override to an in-memory `GlobalSettings`.

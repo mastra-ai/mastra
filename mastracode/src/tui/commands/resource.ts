@@ -1,4 +1,4 @@
-import type { SlashCommandContext } from './types';
+import type { SlashCommandContext } from './types.js';
 
 export async function handleResourceCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const { state, harness } = ctx;

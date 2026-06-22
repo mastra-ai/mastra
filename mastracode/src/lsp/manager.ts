@@ -1,5 +1,5 @@
-import { LSPClient } from './client';
-import { getServersForFile } from './server';
+import { LSPClient } from './client.js';
+import { getServersForFile } from './server.js';
 
 /**
  * Singleton LSP client manager that keeps clients alive and reuses them

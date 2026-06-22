@@ -1,4 +1,4 @@
-import type { SlashCommandContext } from './types';
+import type { SlashCommandContext } from './types.js';
 
 export async function handleNameCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const title = args.join(' ').trim();

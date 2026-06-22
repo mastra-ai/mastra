@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 
-import { isStreamDestroyedError } from '../error-classification';
+import { isStreamDestroyedError } from '../error-classification.js';
 
 type ErrorWithCode = Error & { code?: string; cause?: unknown; errors?: unknown[] };
 

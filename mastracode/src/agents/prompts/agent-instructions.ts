@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, normalize } from 'node:path';
-import { DEFAULT_CONFIG_DIR } from '../../constants';
+import { DEFAULT_CONFIG_DIR } from '../../constants.js';
 
 // Filenames to check, in order of preference
 const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md'];

@@ -8,13 +8,16 @@
  */
 import type { Component } from '@earendil-works/pi-tui';
 
-import { insertChatComponentWithBoundarySpacing, reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation';
-import { isChatBoundarySpacer } from '../components/chat-boundary-spacer';
-import { OMMarkerComponent } from '../components/om-marker';
-import type { OMMarkerData } from '../components/om-marker';
-import { OMOutputComponent } from '../components/om-output';
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from '../chat-boundary-reconciliation.js';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { OMMarkerComponent } from '../components/om-marker.js';
+import type { OMMarkerData } from '../components/om-marker.js';
+import { OMOutputComponent } from '../components/om-output.js';
 
-import type { EventHandlerContext } from './types';
+import type { EventHandlerContext } from './types.js';
 
 /**
  * Insert a child component *before* the current streaming component so it

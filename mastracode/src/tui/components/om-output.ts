@@ -7,8 +7,8 @@
 
 import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT, getTermWidth, mastra } from '../theme';
-import type { ChatSpacingKind } from './chat-spacing';
+import { BOX_INDENT, getTermWidth, mastra } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 // Read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;

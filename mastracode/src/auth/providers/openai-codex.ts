@@ -33,8 +33,8 @@ if (typeof process !== 'undefined' && (process.versions?.node || process.version
   });
 }
 
-import { generatePKCE } from '../pkce';
-import type { AuthMode, OAuthCredentials, OAuthLoginCallbacks, OAuthPrompt, OAuthProviderInterface } from '../types';
+import { generatePKCE } from '../pkce.js';
+import type { AuthMode, OAuthCredentials, OAuthLoginCallbacks, OAuthPrompt, OAuthProviderInterface } from '../types.js';
 
 export const OPENAI_CODEX_AUTH_MODES: ReadonlyArray<AuthMode> = [
   {

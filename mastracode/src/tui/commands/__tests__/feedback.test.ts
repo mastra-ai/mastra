@@ -4,7 +4,7 @@ vi.mock('../../../utils/project.js', () => ({
   getUserName: vi.fn(() => 'test-user'),
 }));
 
-import { handleFeedbackCommand } from '../feedback';
+import { handleFeedbackCommand } from '../feedback.js';
 
 function createCtx(options?: {
   traceId?: string | null;

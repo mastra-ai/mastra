@@ -1,7 +1,7 @@
 import type { Component } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
 
-import { showModalOverlay } from '../overlay';
+import { showModalOverlay } from '../overlay.js';
 
 function createTui(rows = 40, columns = 120) {
   return {

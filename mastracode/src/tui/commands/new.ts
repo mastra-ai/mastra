@@ -1,4 +1,4 @@
-import type { SlashCommandContext } from './types';
+import type { SlashCommandContext } from './types.js';
 
 export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;

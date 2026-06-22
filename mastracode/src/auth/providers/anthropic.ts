@@ -5,8 +5,8 @@
  * https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/oauth/anthropic.ts
  */
 
-import { generatePKCE } from '../pkce';
-import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types';
+import { generatePKCE } from '../pkce.js';
+import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types.js';
 
 const decode = (s: string) => atob(s);
 const CLIENT_ID = decode('OWQxYzI1MGEtZTYxYi00NGQ5LTg4ZWQtNTk0NGQxOTYyZjVl');

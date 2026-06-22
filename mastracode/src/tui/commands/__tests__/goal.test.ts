@@ -132,8 +132,8 @@ vi.mock('../../prompt-api-key.js', () => ({
   promptForApiKeyIfNeeded: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { DEFAULT_MAX_TURNS, GoalManager } from '../../goal-manager';
-import { createGoalReminderMessage, handleGoalCommand, handleJudgeCommand, startGoalWithDefaults } from '../goal';
+import { DEFAULT_MAX_TURNS, GoalManager } from '../../goal-manager.js';
+import { createGoalReminderMessage, handleGoalCommand, handleJudgeCommand, startGoalWithDefaults } from '../goal.js';
 
 describe('createGoalReminderMessage', () => {
   it('creates a canonical goal system reminder for chat history', () => {

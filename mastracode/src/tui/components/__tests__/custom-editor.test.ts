@@ -65,7 +65,7 @@ vi.mock('chalk', () => ({
   },
 }));
 
-import { CustomEditor } from '../custom-editor';
+import { CustomEditor } from '../custom-editor.js';
 
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';

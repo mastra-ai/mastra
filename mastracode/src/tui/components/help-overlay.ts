@@ -2,7 +2,7 @@
  * Help text builder — generates the inline help content shown by /help.
  */
 
-import type { SlashCommandMetadata } from '../../utils/slash-command-loader';
+import type { SlashCommandMetadata } from '../../utils/slash-command-loader.js';
 
 export interface HelpTextOptions {
   /** Number of available harness modes (mode commands shown when > 1) */

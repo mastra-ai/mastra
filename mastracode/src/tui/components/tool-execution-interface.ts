@@ -2,7 +2,7 @@
  * Common interface and shared types for tool execution components
  */
 
-import type { ChatSpacingKind } from './chat-spacing';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 export type QuietToolDisplayMode = 'normal' | 'quiet';
 export type CompactToolLabelColor = 'toolTitle' | 'error';

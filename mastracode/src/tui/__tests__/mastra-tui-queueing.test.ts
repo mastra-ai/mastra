@@ -23,11 +23,11 @@ vi.mock('../display.js', () => ({
   notify: vi.fn(),
 }));
 
-import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock';
-import { handleAgentAborted, handleAgentEnd, handleGoalEvaluation } from '../handlers/agent-lifecycle';
-import type { EventHandlerContext } from '../handlers/types';
-import { MastraTUI, consumePendingImages, syncInitialThreadState } from '../mastra-tui';
-import type { TUIState } from '../state';
+import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
+import { handleAgentAborted, handleAgentEnd, handleGoalEvaluation } from '../handlers/agent-lifecycle.js';
+import type { EventHandlerContext } from '../handlers/types.js';
+import { MastraTUI, consumePendingImages, syncInitialThreadState } from '../mastra-tui.js';
+import type { TUIState } from '../state.js';
 
 const EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS = {
   ifActive: { attributes: { delivery: 'while-active' } },

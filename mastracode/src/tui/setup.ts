@@ -8,18 +8,18 @@ import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-t
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import type { HarnessEventListener } from '@mastra/core/harness';
 
-import { getUserId } from '../utils/project';
-import { loadCustomCommands } from '../utils/slash-command-loader';
-import { ThreadLockError } from '../utils/thread-lock';
-import { isUserInvocable } from './commands/skill-filters';
-import { renderBanner } from './components/banner';
-import { IdleCounterComponent } from './components/idle-counter';
-import { TaskProgressComponent } from './components/task-progress';
-import { showError, showInfo } from './display';
-import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock';
-import type { TUIState } from './state';
-import { updateStatusLine } from './status-line';
-import { theme } from './theme';
+import { getUserId } from '../utils/project.js';
+import { loadCustomCommands } from '../utils/slash-command-loader.js';
+import { ThreadLockError } from '../utils/thread-lock.js';
+import { isUserInvocable } from './commands/skill-filters.js';
+import { renderBanner } from './components/banner.js';
+import { IdleCounterComponent } from './components/idle-counter.js';
+import { TaskProgressComponent } from './components/task-progress.js';
+import { showError, showInfo } from './display.js';
+import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
+import type { TUIState } from './state.js';
+import { updateStatusLine } from './status-line.js';
+import { theme } from './theme.js';
 
 // =============================================================================
 // Keyboard Shortcuts

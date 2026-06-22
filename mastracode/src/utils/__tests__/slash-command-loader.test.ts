@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseCommandFile, scanCommandDirectory } from '../slash-command-loader';
+import { parseCommandFile, scanCommandDirectory } from '../slash-command-loader.js';
 
 describe('slash command loader', () => {
   it('parses goal metadata from frontmatter', async () => {

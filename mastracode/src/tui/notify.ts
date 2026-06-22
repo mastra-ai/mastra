@@ -4,7 +4,7 @@
  */
 
 import { exec } from 'node:child_process';
-import type { HookManager } from '../hooks/manager';
+import type { HookManager } from '../hooks/manager.js';
 
 export type NotificationMode = 'bell' | 'system' | 'both' | 'off';
 

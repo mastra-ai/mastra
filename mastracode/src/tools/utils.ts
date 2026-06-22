@@ -1,6 +1,6 @@
 import * as path from 'node:path';
-import { buildSkillPaths } from '../agents/workspace';
-import { DEFAULT_CONFIG_DIR } from '../constants';
+import { buildSkillPaths } from '../agents/workspace.js';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 
 /**
  * Check whether `targetPath` falls inside `projectRoot` or any of the

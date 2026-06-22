@@ -8,7 +8,7 @@ vi.mock('../../../onboarding/settings.js', () => ({
   loadSettings: loadSettingsMock,
 }));
 
-import { handleHelpCommand } from '../help';
+import { handleHelpCommand } from '../help.js';
 
 function createCtx(modeCount = 2) {
   return {

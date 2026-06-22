@@ -29,7 +29,7 @@ vi.mock('@earendil-works/pi-tui', () => {
   };
 });
 
-import { MultilineInput } from '../multiline-input';
+import { MultilineInput } from '../multiline-input.js';
 
 describe('MultilineInput', () => {
   let input: MultilineInput;

@@ -8,8 +8,8 @@
  * 4. Default: 'dark'
  */
 
-import { luminance } from './theme';
-import type { ThemeMode } from './theme';
+import { luminance } from './theme.js';
+import type { ThemeMode } from './theme.js';
 
 /**
  * Query the terminal's background color via OSC 11 and compute luminance.

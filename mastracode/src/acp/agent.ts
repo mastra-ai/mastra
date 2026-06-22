@@ -12,8 +12,8 @@ import type {
 } from '@agentclientprotocol/sdk';
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
 import type { Harness, HarnessMode } from '@mastra/core/harness';
-import { handleHarnessEvent } from './event-mapper';
-import type { PromptState } from './event-mapper';
+import { handleHarnessEvent } from './event-mapper.js';
+import type { PromptState } from './event-mapper.js';
 
 /**
  * ACP Agent implementation that wraps a mastracode Harness.
@@ -33,7 +33,7 @@ export class MastraCodeAcpAgent implements Agent {
     this.modes = modes;
 
     // Register persistent event listener
-    this.harness.subscribe(event => {
+    this.harness.subscribe((event) => {
       handleHarnessEvent(event, this.currentPromptState, this.connection, this.harness);
     });
   }
@@ -113,34 +113,31 @@ export class MastraCodeAcpAgent implements Agent {
     // Serialize prompts via mutex
     const prevMutex = this.promptMutex;
     let resolveMutex: () => void;
-    this.promptMutex = new Promise<void>(resolve => {
-      resolveMutex = resolve;
-    });
+    this.promptMutex = new Promise<void>(resolve => { resolveMutex = resolve; });
 
     await prevMutex;
 
     try {
       // Create prompt state that will be resolved when agent_end fires
-      const result = new Promise<{
-        reason: 'complete' | 'aborted' | 'error' | 'suspended';
-        usage: PromptState['usage'];
-      }>(resolve => {
-        const usage: PromptState['usage'] = {
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: 0,
-        };
+      const result = new Promise<{ reason: 'complete' | 'aborted' | 'error' | 'suspended'; usage: PromptState['usage'] }>(
+        (resolve) => {
+          const usage: PromptState['usage'] = {
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+          };
 
-        this.currentPromptState = {
-          sessionId,
-          lastTextLength: 0,
-          usage,
-          resolve: reason => {
-            resolve({ reason, usage });
-            this.currentPromptState = null;
-          },
-        };
-      });
+          this.currentPromptState = {
+            sessionId,
+            lastTextLength: 0,
+            usage,
+            resolve: (reason) => {
+              resolve({ reason, usage });
+              this.currentPromptState = null;
+            },
+          };
+        },
+      );
 
       // Send the message to the harness
       await this.harness.sendMessage({ content: text });
@@ -199,9 +196,7 @@ export function extractTextFromContentBlocks(blocks: ContentBlock[]): string {
   return parts.join('\n');
 }
 
-export function mapStopReason(
-  reason: 'complete' | 'aborted' | 'error' | 'suspended',
-): 'end_turn' | 'cancelled' | 'max_tokens' | 'max_turn_requests' | 'refusal' {
+export function mapStopReason(reason: 'complete' | 'aborted' | 'error' | 'suspended'): 'end_turn' | 'cancelled' | 'max_tokens' | 'max_turn_requests' | 'refusal' {
   switch (reason) {
     case 'complete':
       return 'end_turn';

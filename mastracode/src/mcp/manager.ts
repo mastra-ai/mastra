@@ -7,10 +7,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from '
 import { dirname, join } from 'node:path';
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
 import type { MastraMCPServerDefinition, OAuthClientInformation, OAuthStorage } from '@mastra/mcp';
-import { DEFAULT_CONFIG_DIR } from '../constants';
-import { getAppDataDir } from '../utils/project';
-import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config';
-import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
+import { getAppDataDir } from '../utils/project.js';
+import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
+import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
 
 const MASTRACODE_MCP_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
