@@ -587,6 +587,9 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   const threads = allThreads.filter(t => {
     const threadPath = t.metadata?.projectPath as string | undefined;
     if (threadPath) return threadPath === currentPath;
+    // In a worktree, only show threads explicitly tagged for this path.
+    // Untagged threads likely belong to the main repo or another worktree.
+    if (state.projectInfo.isWorktree) return false;
     if (dirCreatedAt) return t.createdAt >= dirCreatedAt;
     return true;
   });
