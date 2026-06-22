@@ -27,6 +27,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import keyboard shortcut hooks from @mastra/playground-ui/hooks/use-keyboard-shortcut-label.',
   },
   {
+    importNames: ['Avatar', 'AvatarProps', 'AvatarSize'],
+    message: 'Import Avatar exports from @mastra/playground-ui/components/Avatar.',
+  },
+  {
     importNames: [
       'Card',
       'CardHeader',
@@ -48,6 +52,18 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Combobox exports from @mastra/playground-ui/components/Combobox.',
   },
   {
+    importNames: ['CodeBlock', 'CodeBlockOption', 'CodeBlockOverflow', 'CodeBlockProps', 'CodeBlockSelector'],
+    message: 'Import CodeBlock exports from @mastra/playground-ui/components/CodeBlock.',
+  },
+  {
+    importNames: ['CodeDiff', 'CodeDiffProps'],
+    message: 'Import CodeDiff exports from @mastra/playground-ui/components/CodeDiff.',
+  },
+  {
+    importNames: ['ContentBlock', 'ContentBlockChildren', 'ContentBlockProps', 'ContentBlocks', 'ContentBlocksProps'],
+    message: 'Import ContentBlocks exports from @mastra/playground-ui/components/ContentBlocks.',
+  },
+  {
     importNames: [
       'CalendarProps',
       'DatePicker',
@@ -59,6 +75,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
       'TimePickerProps',
     ],
     message: 'Import DateTimePicker exports from @mastra/playground-ui/components/DateTimePicker.',
+  },
+  {
+    importNames: ['DateRangePreset', 'DateTimeRangePicker', 'DateTimeRangePickerProps'],
+    message: 'Import DateTimeRangePicker exports from @mastra/playground-ui/components/DateTimeRangePicker.',
   },
   {
     importNames: ['EntityHeader', 'EntityHeaderProps'],
@@ -81,6 +101,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import MetricsDataTable from @mastra/playground-ui/components/MetricsDataTable.',
   },
   {
+    importNames: ['MetricsFlexGrid'],
+    message: 'Import MetricsFlexGrid from @mastra/playground-ui/components/MetricsFlexGrid.',
+  },
+  {
     importNames: ['MetricsLineChart', 'MetricsLineChartSeries', 'MetricsLineChartTooltip'],
     message: 'Import MetricsLineChart exports from @mastra/playground-ui/components/MetricsLineChart.',
   },
@@ -101,6 +125,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import SettingsRow from @mastra/playground-ui/components/SettingsRow.',
   },
   {
+    importNames: ['CardHeading', 'CardHeadingProps', 'SectionCard', 'SectionCardProps', 'SectionCardVariant'],
+    message: 'Import SectionCard exports from @mastra/playground-ui/components/SectionCard.',
+  },
+  {
     importNames: ['Shimmer', 'ShimmerProps'],
     message: 'Import Shimmer exports from @mastra/playground-ui/components/Shimmer.',
   },
@@ -109,8 +137,29 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import SideDialog exports from @mastra/playground-ui/components/SideDialog.',
   },
   {
+    importNames: ['Slider', 'SliderProps'],
+    message: 'Import Slider exports from @mastra/playground-ui/components/Slider.',
+  },
+  {
+    importNames: [
+      'getStatusIcon',
+      'ProcessStep',
+      'ProcessStepList',
+      'ProcessStepListItem',
+      'ProcessStepListItemProps',
+      'ProcessStepListProps',
+      'ProcessStepProgressBar',
+      'ProcessStepProgressBarProps',
+    ],
+    message: 'Import Steps exports from @mastra/playground-ui/components/Steps.',
+  },
+  {
     importNames: ['Tree'],
     message: 'Import Tree exports from @mastra/playground-ui/components/Tree.',
+  },
+  {
+    importNames: ['Truncate', 'TruncateProps'],
+    message: 'Import Truncate exports from @mastra/playground-ui/components/Truncate.',
   },
 ].flatMap(restriction =>
   restriction.importNames.map(importName => ({
