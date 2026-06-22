@@ -832,6 +832,7 @@ export class SessionRunEngine {
               aborted,
             });
             currentRun = undefined;
+            if (aborted) break;
           }
         } catch (error) {
           await this.handleSubscribedStreamError(error);

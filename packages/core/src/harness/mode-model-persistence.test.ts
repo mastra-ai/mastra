@@ -138,17 +138,15 @@ describe('Harness mode-model persistence across restarts', () => {
     await session.thread.create();
     await session.mode.switch({ modeId: 'plan' });
 
-    const controller = session.run.ensureAbortController();
-
     // Simulate a submit_plan tool that suspended during a plan-mode run.
     session.suspensions.register({ toolCallId: 'plan-call-1', runId: 'run-1', toolName: 'submit_plan' });
 
     await session.respondToToolSuspension({ toolCallId: 'plan-call-1', resumeData: { action: 'approved' } });
 
-    // Approval abandons the parked plan suspension and switches to the default
-    // (execution) mode, aborting the plan-mode run.
+    // Approval resumes the parked submit_plan suspension after switching to the
+    // default execution mode. It must not abort the plan run before the approved
+    // tool result is persisted.
     expect(session.suspensions.has({ toolCallId: 'plan-call-1' })).toBe(false);
-    expect(controller.signal.aborted).toBe(true);
     expect(session.mode.get()).toBe('build');
   });
 });
