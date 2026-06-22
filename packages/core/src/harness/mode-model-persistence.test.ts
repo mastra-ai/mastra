@@ -54,64 +54,76 @@ describe('Harness mode-model persistence across restarts', () => {
     // the same thread.
     const harness1 = createHarness(storage);
     await harness1.init();
-    const thread = await harness1.session.thread.create();
-    expect(harness1.session.mode.get()).toBe('build');
+    const session1 = await harness1.createSession();
+    const thread = await session1.thread.create();
+    expect(session1.mode.get()).toBe('build');
 
-    await harness1.session.mode.switch({ modeId: 'fast' });
-    expect(harness1.session.mode.get()).toBe('fast');
-    expect(harness1.session.model.get()).toBe('cerebras/zai-glm-4.7');
+    await session1.mode.switch({ modeId: 'fast' });
+    expect(session1.mode.get()).toBe('fast');
+    expect(session1.model.get()).toBe('cerebras/zai-glm-4.7');
 
     // Harness 2: reopen and resume the same thread.
     const harness2 = createHarness(storage);
     await harness2.init();
-    await harness2.session.thread.switch({ threadId: thread.id });
+    const session2 = await harness2.createSession();
+    await session2.thread.switch({ threadId: thread.id });
 
-    expect(harness2.session.mode.get()).toBe('fast');
-    expect(harness2.session.model.get()).toBe('cerebras/zai-glm-4.7');
+    expect(session2.mode.get()).toBe('fast');
+    expect(session2.model.get()).toBe('cerebras/zai-glm-4.7');
   });
 
   it('restores an explicitly chosen per-mode model on reopen', async () => {
     const harness1 = createHarness(storage);
     await harness1.init();
-    const thread = await harness1.session.thread.create();
+    const session1 = await harness1.createSession();
+    const thread = await session1.thread.create();
 
-    await harness1.session.mode.switch({ modeId: 'fast' });
-    await harness1.session.model.switch({ modelId: 'cerebras/qwen-3-coder-480b' });
-    expect(harness1.session.model.get()).toBe('cerebras/qwen-3-coder-480b');
+    await session1.mode.switch({ modeId: 'fast' });
+    await session1.model.switch({ modelId: 'cerebras/qwen-3-coder-480b' });
+    expect(session1.model.get()).toBe('cerebras/qwen-3-coder-480b');
 
     const harness2 = createHarness(storage);
     await harness2.init();
-    await harness2.session.thread.switch({ threadId: thread.id });
+    const session2 = await harness2.createSession();
+    await session2.thread.switch({ threadId: thread.id });
 
-    expect(harness2.session.mode.get()).toBe('fast');
-    expect(harness2.session.model.get()).toBe('cerebras/qwen-3-coder-480b');
+    expect(session2.mode.get()).toBe('fast');
+    expect(session2.model.get()).toBe('cerebras/qwen-3-coder-480b');
   });
 
   it('keeps the default mode and its persisted model on reopen when the user never switched modes', async () => {
     const harness1 = createHarness(storage);
     await harness1.init();
-    const thread = await harness1.session.thread.create();
-    await harness1.session.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
+    const session1 = await harness1.createSession();
+    const thread = await session1.thread.create();
+    await session1.model.switch({ modelId: 'anthropic/claude-opus-4-6' });
 
     const harness2 = createHarness(storage);
     await harness2.init();
-    await harness2.session.thread.switch({ threadId: thread.id });
+    const session2 = await harness2.createSession();
+    await session2.thread.switch({ threadId: thread.id });
 
-    expect(harness2.session.mode.get()).toBe('build');
-    expect(harness2.session.model.get()).toBe('anthropic/claude-opus-4-6');
+    expect(session2.mode.get()).toBe('build');
+    expect(session2.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
   it('emits mode_changed with the correct previousModeId when restoring a mode from thread metadata', async () => {
     const harness1 = createHarness(storage);
     await harness1.init();
-    const thread = await harness1.session.thread.create();
-    await harness1.session.mode.switch({ modeId: 'plan' });
+    const session1 = await harness1.createSession();
+    const thread = await session1.thread.create();
+    await session1.mode.switch({ modeId: 'plan' });
 
     const harness2 = createHarness(storage);
     await harness2.init();
+    const session2 = await harness2.createSession();
+    // Move session2 onto a fresh build-mode thread so switching to the saved
+    // plan-mode thread below produces an observable mode restoration.
+    await session2.thread.create();
+    expect(session2.mode.get()).toBe('build');
 
     const events: Array<{ type: 'mode_changed'; modeId: string; previousModeId: string }> = [];
-    harness2.session.subscribe(event => {
+    session2.subscribe(event => {
       if (event.type === 'mode_changed') {
         events.push({
           type: event.type,
@@ -121,7 +133,7 @@ describe('Harness mode-model persistence across restarts', () => {
       }
     });
 
-    await harness2.session.thread.switch({ threadId: thread.id });
+    await session2.thread.switch({ threadId: thread.id });
 
     const restoreEvent = events.find(e => e.modeId === 'plan');
     expect(restoreEvent).toBeDefined();
@@ -129,22 +141,23 @@ describe('Harness mode-model persistence across restarts', () => {
   });
 
   it('approving a submit_plan suspension switches to the default mode and clears the suspension', async () => {
-    const session = createHarness(storage);
-    await session.init();
-    await session.session.thread.create();
-    await session.session.mode.switch({ modeId: 'plan' });
+    const harness = createHarness(storage);
+    await harness.init();
+    const session = await harness.createSession();
+    await session.thread.create();
+    await session.mode.switch({ modeId: 'plan' });
 
-    const controller = session.session.run.ensureAbortController();
+    const controller = session.run.ensureAbortController();
 
     // Simulate a submit_plan tool that suspended during a plan-mode run.
-    session.session.suspensions.register({ toolCallId: 'plan-call-1', runId: 'run-1', toolName: 'submit_plan' });
+    session.suspensions.register({ toolCallId: 'plan-call-1', runId: 'run-1', toolName: 'submit_plan' });
 
     await session.respondToToolSuspension({ toolCallId: 'plan-call-1', resumeData: { action: 'approved' } });
 
     // Approval abandons the parked plan suspension and switches to the default
     // (execution) mode, aborting the plan-mode run.
-    expect(session.session.suspensions.has({ toolCallId: 'plan-call-1' })).toBe(false);
+    expect(session.suspensions.has({ toolCallId: 'plan-call-1' })).toBe(false);
     expect(controller.signal.aborted).toBe(true);
-    expect(session.session.mode.get()).toBe('build');
+    expect(session.mode.get()).toBe('build');
   });
 });

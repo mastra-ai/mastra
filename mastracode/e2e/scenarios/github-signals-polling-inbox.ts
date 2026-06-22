@@ -173,9 +173,13 @@ values
         if (!agent || !originalSendNotificationSignal) return;
         type SendNotificationSignal = typeof agent.sendNotificationSignal;
         const sendScopedNotificationSignal = ((notification: unknown, target: unknown) => {
+          // Scope the target to this fixture's resource/thread, but preserve the
+          // delivery options (ifIdle/ifActive) — they carry the stream options
+          // (model/mode/state) the woken run needs to resolve a model.
           const scopedTarget =
             target && typeof target === 'object'
               ? {
+                  ...(target as Record<string, unknown>),
                   resourceId: (target as { resourceId?: string }).resourceId,
                   threadId: (target as { threadId?: string }).threadId,
                 }
@@ -187,10 +191,17 @@ values
         }) as SendNotificationSignal;
         agent.sendNotificationSignal = sendScopedNotificationSignal;
         const pollTimer = setTimeout(() => {
-          void result.githubSignals?.startPollingForThread(
-            { threadId: threadFixture.threadId, resourceId: threadFixture.resourceId },
-            { pollImmediately: true },
-          );
+          void (async () => {
+            // The notification targets a seeded resource that the startup
+            // session is not on. In the multi-session world the woken run uses
+            // the target resource's own session, so materialize one before
+            // polling — mirroring how a server would have a session per thread.
+            await result.harness.createSession({ resourceId: threadFixture.resourceId });
+            await result.githubSignals?.startPollingForThread(
+              { threadId: threadFixture.threadId, resourceId: threadFixture.resourceId },
+              { pollImmediately: true },
+            );
+          })();
         }, 250);
         pollTimer.unref?.();
       },

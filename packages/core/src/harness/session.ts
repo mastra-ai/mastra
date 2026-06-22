@@ -1,6 +1,15 @@
 import type { Agent } from '../agent';
-import type { AgentThreadSubscription, ToolsetsInput } from '../agent/types';
+import { createSignal } from '../agent/signals';
+import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
+import type {
+  AgentThreadSubscription,
+  SendAgentNotificationSignalOptions,
+  SendAgentNotificationSignalResult,
+  ToolsetsInput,
+} from '../agent/types';
+import { getErrorFromUnknown } from '../error';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
@@ -38,6 +47,15 @@ export interface ThreadSettingsStore {
   /** Persist a setting for the active thread (no-op when storage is unavailable). */
   set(key: string, value: unknown): Promise<void>;
 }
+
+/** Options for {@link Session.sendNotificationSignal}. */
+export type SessionSendNotificationSignalOptions = {
+  ifActive?: SendAgentNotificationSignalOptions['ifActive'];
+  ifIdle?: SendAgentNotificationSignalOptions['ifIdle'];
+  tracingContext?: TracingContext;
+  tracingOptions?: TracingOptions;
+  requestContext?: RequestContext;
+};
 
 /** Usage fields that are summed across steps when present on a step's usage. */
 type OptionalUsageField = 'reasoningTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens';
@@ -172,20 +190,25 @@ export interface SessionMachinery {
   /** Generate a new id (thread ids, message ids) using the host's id strategy. */
   generateId(): string;
   /**
-   * Approve a parked tool call: drive the agent to execute it. Run-control
-   * machinery (resolves the agent, request context, toolsets) — still
-   * Harness-owned pending the run-control move.
+   * Resolve the mode the session transitions to when a plan is approved: the
+   * current mode's `transitionsTo`, else the host's default mode. Returns
+   * `undefined` when the host has no default mode. The mode catalog is Harness
+   * config, so this is genuinely host-owned.
    */
-  approveToolCall(input: { toolCallId?: string; requestContext?: RequestContext }): Promise<void>;
-  /** Decline a parked tool call: drive the agent to reject it. Run-control machinery. */
-  declineToolCall(input: { toolCallId?: string; requestContext?: RequestContext }): Promise<void>;
+  resolveTransitionModeId(): string | undefined;
   /**
-   * Resume a suspended tool call with resume data, then process the resulting
-   * stream. Run-control machinery (re-supplies the shared run budget).
+   * Persist a system-reminder message to a thread, returning the saved message
+   * (or `null` when no storage is configured). Pure host-owned persistence
+   * (storage handle + id strategy).
    */
-  resumeToolCall(input: { resumeData: any; toolCallId: string; requestContext?: RequestContext }): Promise<void>;
-  /** Send the next queued follow-up message after a run finishes. Run-control machinery. */
-  drainFollowUpQueue(): Promise<void>;
+  saveSystemReminder(input: {
+    threadId: string;
+    resourceId: string;
+    message: string;
+    reminderType: string;
+    role: 'user' | 'assistant' | 'system';
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessMessage | null>;
 }
 
 /**
@@ -2551,6 +2574,493 @@ export class Session<TState = unknown> {
         if (category) this.grantCategory(category);
       },
     });
+  }
+
+  // ===========================================================================
+  // Run control
+  // ===========================================================================
+
+  /**
+   * Build the agent message input for a user turn, attaching any files as
+   * additional message parts (text files inlined as fenced code, binary files
+   * as `file` parts). Returns the plain string when there are no files.
+   */
+  private createMessageInput({
+    content,
+    files,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+  }): AgentSignalContents {
+    if (!files?.length) return content;
+
+    const fileParts = files.map(f => {
+      const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
+      if (isText) {
+        let textContent = f.data;
+        const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
+        if (base64Match) {
+          try {
+            textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
+          } catch {
+            // Fall through with raw data
+          }
+        }
+        const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
+        const maxBacktickRun = Math.max(0, ...Array.from(textContent.matchAll(/`+/g), match => match[0].length));
+        const fence = '`'.repeat(Math.max(3, maxBacktickRun + 1));
+        return { type: 'text' as const, text: `${label}\n${fence}\n${textContent}\n${fence}` };
+      }
+      return {
+        type: 'file' as const,
+        data: f.data,
+        mediaType: f.mediaType,
+        ...(f.filename ? { filename: f.filename } : {}),
+      };
+    });
+
+    return [{ type: 'text', text: content }, ...fileParts];
+  }
+
+  /**
+   * Resolve once this session's stream is fully idle.
+   *
+   * After `abort()` is called the run's status can still be `'running'` for a
+   * few microtasks while the underlying model stream finalizes. Callers that
+   * need to send a fresh signal after an abort (e.g. plan approval → mode
+   * switch → trigger reminder) should await this before calling `sendSignal`
+   * to avoid the new signal being queued onto the dying run, which would then
+   * be drained with the previous run's already-aborted abortSignal.
+   */
+  private async waitForStreamIdle(): Promise<void> {
+    while (this.stream.isActive() || this.run.getRunId() !== null) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+
+  /**
+   * Send a signal to this session's current agent/thread. Creates a thread when
+   * the session is not yet bound. When a run is already active the signal is
+   * dispatched onto it; otherwise the signal carries fresh stream options that
+   * start a new run.
+   */
+  sendSignal(
+    input:
+      | AgentSignalInput
+      | {
+          content: AgentSignalContents;
+          ifActive?: { attributes?: AgentSignalAttributes };
+          ifIdle?: { attributes?: AgentSignalAttributes };
+          tracingContext?: TracingContext;
+          tracingOptions?: TracingOptions;
+          requestContext?: RequestContext;
+        },
+  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
+    const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
+    const ifActive = 'content' in input ? input.ifActive : undefined;
+    const ifIdle = 'content' in input ? input.ifIdle : undefined;
+    const signal = createSignal(
+      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
+    );
+    const accepted = Promise.resolve().then(async () => {
+      if (!this.thread.getId()) {
+        const thread = await this.thread.create();
+        this.thread.set({ threadId: thread.id });
+      }
+      const threadId = this.thread.getId()!;
+
+      const agent = this.machinery.getAgent();
+      await this.thread.ensureSubscription(threadId);
+
+      if (this.run.getRunId() && this.stream.activeRunId()) {
+        const result = agent.sendSignal(signal, {
+          resourceId: this.identity.getResourceId(),
+          threadId,
+          ifActive,
+          ifIdle,
+        });
+        return { accepted: result.accepted, runId: result.runId };
+      }
+
+      const streamOptions = await this.machinery.buildStreamOptions({
+        requestContext: requestContextInput,
+        tracingContext,
+        tracingOptions,
+      });
+
+      const result = agent.sendSignal(signal, {
+        resourceId: this.identity.getResourceId(),
+        threadId,
+        ifActive,
+        ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+      });
+      return { accepted: result.accepted, runId: result.runId };
+    });
+
+    return { id: signal.id, type: signal.type, accepted };
+  }
+
+  /**
+   * Send a notification signal to this session's current agent/thread.
+   */
+  async sendNotificationSignal(
+    input: SendNotificationSignalInput,
+    options: SessionSendNotificationSignalOptions = {},
+  ): Promise<SendAgentNotificationSignalResult> {
+    const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
+    if (!this.thread.getId()) {
+      const thread = await this.thread.create();
+      this.thread.set({ threadId: thread.id });
+    }
+    const threadId = this.thread.getId()!;
+
+    const agent = this.machinery.getAgent();
+    await this.thread.ensureSubscription(threadId);
+
+    if (this.run.getRunId() && this.stream.activeRunId()) {
+      return agent.sendNotificationSignal(input, {
+        resourceId: this.identity.getResourceId(),
+        threadId,
+        ifActive,
+        ifIdle,
+      });
+    }
+
+    const streamOptions = await this.machinery.buildStreamOptions({
+      requestContext: requestContextInput,
+      tracingContext,
+      tracingOptions,
+    });
+
+    return agent.sendNotificationSignal(input, {
+      resourceId: this.identity.getResourceId(),
+      threadId,
+      ifActive,
+      ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+    });
+  }
+
+  /**
+   * Send a message to this session's current agent and await the run. Streams
+   * the response and emits events.
+   */
+  async sendMessage({
+    content,
+    files,
+    tracingContext,
+    tracingOptions,
+    requestContext: requestContextInput,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const messageInput = this.createMessageInput({ content, files });
+
+    const wasActive = this.stream.isActive();
+    let emittedAgentEnd = false;
+    const unsubscribeAgentEnd = wasActive
+      ? undefined
+      : this.subscribe(event => {
+          if (event.type === 'agent_end') emittedAgentEnd = true;
+        });
+    const signal = this.sendSignal({
+      content: messageInput,
+      tracingContext,
+      tracingOptions,
+      requestContext: requestContextInput,
+    });
+    await signal.accepted;
+    if (!wasActive) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      await this.waitForStreamIdle();
+      unsubscribeAgentEnd?.();
+      if (!emittedAgentEnd && !this.suspensions.hasPending()) {
+        this.emit({ type: 'agent_end', reason: 'complete' });
+      }
+    }
+    return;
+  }
+
+  /**
+   * Steer the agent mid-stream: aborts the current run and sends a new message.
+   */
+  async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+    this.abort();
+    this.followUps.clear();
+    this.emit({ type: 'follow_up_queued', count: 0 });
+    await this.sendMessage({ content, requestContext });
+  }
+
+  /**
+   * Queue a follow-up message to be processed after the current run completes,
+   * or send it immediately when the session is idle.
+   */
+  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+    if (this.run.isRunning()) {
+      this.followUps.enqueue({ content, requestContext });
+      this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
+    } else {
+      await this.sendMessage({ content, requestContext });
+    }
+  }
+
+  /**
+   * Send the next queued follow-up message after a run finishes. Called by the
+   * run engine when a run ends. Re-queues on failure so the message isn't lost.
+   */
+  async drainFollowUpQueue(options?: {
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+  }): Promise<boolean> {
+    if (this.followUps.isEmpty()) return false;
+
+    const next = this.followUps.dequeue()!;
+    const threadId = this.thread.getId();
+    try {
+      if (this.stream.isOpen() && threadId) {
+        const agent = this.machinery.getAgent();
+        const streamOptions = await this.machinery.buildStreamOptions({
+          requestContext: next.requestContext,
+          tracingContext: options?.tracingContext,
+          tracingOptions: options?.tracingOptions,
+        });
+        const result = agent.queueMessage(this.createMessageInput({ content: next.content }), {
+          resourceId: this.identity.getResourceId(),
+          threadId,
+          ifIdle: { streamOptions: streamOptions as any },
+        });
+        this.emit({ type: 'follow_up_queued', count: this.followUps.count(), runId: result.runId });
+      } else {
+        this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
+        await this.sendMessage({
+          content: next.content,
+          requestContext: next.requestContext,
+          tracingContext: options?.tracingContext,
+          tracingOptions: options?.tracingOptions,
+        });
+      }
+      return true;
+    } catch (error) {
+      this.followUps.requeue(next);
+      this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
+      throw error;
+    }
+  }
+
+  /**
+   * Persist a system-reminder message to this session's current thread. Returns
+   * the saved message, or `null` when the session has no thread or no storage.
+   */
+  async saveSystemReminderMessage({
+    message,
+    reminderType,
+    role = 'user',
+    metadata,
+  }: {
+    message: string;
+    reminderType: string;
+    role?: 'user' | 'assistant' | 'system';
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessMessage | null> {
+    const threadId = this.thread.getId();
+    if (!threadId) return null;
+    return this.machinery.saveSystemReminder({
+      threadId,
+      resourceId: this.identity.getResourceId(),
+      message,
+      reminderType,
+      role,
+      metadata,
+    });
+  }
+
+  /**
+   * Respond to a pending tool suspension. Provides resume data so the suspended
+   * tool can continue. `toolCallId` selects which suspended tool to resume —
+   * required when more than one is suspended concurrently; when omitted it
+   * resolves to the sole pending suspension. `submit_plan` resumes are routed
+   * through the plan-approval path (approval switches to the default mode).
+   */
+  async respondToToolSuspension({
+    resumeData,
+    toolCallId,
+    requestContext,
+  }: {
+    resumeData: any;
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const resolvedToolCallId = this.suspensions.resolveToolCallId(toolCallId);
+    if (!resolvedToolCallId) return;
+
+    const suspension = this.suspensions.get({ toolCallId: resolvedToolCallId });
+
+    try {
+      if (suspension?.toolName === 'submit_plan') {
+        await this.handlePlanApprovalResume({
+          toolCallId: resolvedToolCallId,
+          response: resumeData as { action: 'approved' | 'rejected'; feedback?: string },
+          requestContext,
+        });
+        return;
+      }
+
+      await this.resumeToolCall({
+        resumeData,
+        toolCallId: resolvedToolCallId,
+        requestContext,
+      });
+    } catch (error) {
+      const err = getErrorFromUnknown(error);
+      this.emit({ type: 'error', error: err });
+      this.emit({ type: 'agent_end', reason: 'error' });
+    }
+  }
+
+  /**
+   * Respond to a suspended `submit_plan` tool call. On rejection the plan-mode
+   * run resumes with the feedback (an ordinary tool resume). On approval the
+   * parked plan-mode suspension is abandoned and the session switches to the
+   * host's transition (execution) mode; that switch aborts the plan-mode run, so
+   * the next signal drives the fresh default-mode run.
+   */
+  private async handlePlanApprovalResume({
+    toolCallId,
+    response,
+    requestContext,
+  }: {
+    toolCallId: string;
+    response: { action: 'approved' | 'rejected'; feedback?: string };
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    if (response.action === 'rejected') {
+      await this.resumeToolCall({ resumeData: response, toolCallId, requestContext });
+      return;
+    }
+
+    // Approved: drop the parked suspension (its run is about to be aborted by the
+    // mode switch) and move to the host's transition mode.
+    this.suspensions.delete({ toolCallId });
+
+    const transitionModeId = this.machinery.resolveTransitionModeId();
+    if (transitionModeId && transitionModeId !== this.mode.get()) {
+      await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
+      await this.mode.switch({ modeId: transitionModeId });
+      // The mode switch aborts the in-flight run but does not wait for it to
+      // finalize. Waiting for the stream to be fully idle here ensures the next
+      // sendSignal() always starts a fresh run rather than landing in the dying
+      // run's pending queue (which would later drain with the aborted signal).
+      await this.waitForStreamIdle();
+    }
+  }
+
+  /**
+   * Approve a parked tool call: drive the agent to execute it. Throws when there
+   * is no active run.
+   */
+  async approveToolCall({
+    toolCallId,
+    requestContext: requestContextInput,
+  }: {
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const runId = this.run.getRunId();
+    if (!runId) {
+      throw new Error('No active run to approve tool call for');
+    }
+
+    const agent = this.machinery.getAgent();
+    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
+    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+    const threadId = this.thread.getId();
+    await agent.approveToolCall({
+      runId,
+      toolCallId,
+      requireToolApproval: !isYolo,
+      memory: threadId ? { thread: threadId, resource: this.identity.getResourceId() } : undefined,
+      abortSignal: this.run.ensureAbortController().signal,
+      requestContext,
+      toolsets: await this.machinery.buildToolsets(requestContext),
+    });
+  }
+
+  /**
+   * Decline a parked tool call: drive the agent to reject it. Throws when there
+   * is no active run.
+   */
+  async declineToolCall({
+    toolCallId,
+    requestContext: requestContextInput,
+  }: {
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const runId = this.run.getRunId();
+    if (!runId) {
+      throw new Error('No active run to decline tool call for');
+    }
+
+    const agent = this.machinery.getAgent();
+    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
+    const isYolo = (this.state.get() as Record<string, unknown>).yolo === true;
+    const threadId = this.thread.getId();
+    await agent.declineToolCall({
+      runId,
+      toolCallId,
+      requireToolApproval: !isYolo,
+      memory: threadId ? { thread: threadId, resource: this.identity.getResourceId() } : undefined,
+      abortSignal: this.run.ensureAbortController().signal,
+      requestContext,
+      toolsets: await this.machinery.buildToolsets(requestContext),
+    });
+  }
+
+  /**
+   * Resume a suspended tool call with resume data, then process the resulting
+   * stream. Re-supplies the shared run budget so the resumed run doesn't stop
+   * mid-task on the agent's small default maxSteps.
+   */
+  async resumeToolCall({
+    resumeData,
+    toolCallId,
+    requestContext: requestContextInput,
+  }: {
+    resumeData: any;
+    toolCallId: string;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    const suspension = this.suspensions.get({ toolCallId });
+    if (!suspension) {
+      throw new Error('No active suspension to resume');
+    }
+
+    const agent = this.machinery.getAgent();
+
+    // Remove before resuming so a re-suspend during the resumed run can
+    // re-register the same toolCallId without being clobbered by this cleanup.
+    // Drop the matching display-state entry too so the UI stops rendering the
+    // resolved prompt while any other parked suspensions stay visible.
+    this.suspensions.delete({ toolCallId });
+    this.displayState.deletePendingSuspension(toolCallId);
+
+    const requestContext = await this.machinery.buildRequestContext(requestContextInput);
+    const threadId = this.thread.getId();
+
+    const output = await agent.resumeStream(resumeData, {
+      ...this.machinery.buildSharedRunOptions(),
+      runId: suspension.runId,
+      toolCallId,
+      memory: threadId ? { thread: threadId, resource: this.identity.getResourceId() } : undefined,
+      abortSignal: this.run.ensureAbortController().signal,
+      requestContext,
+      toolsets: await this.machinery.buildToolsets(requestContext),
+    });
+
+    await this.processStream(output, requestContext);
   }
 
   /** Grant a tool category "allow" for the remainder of the session. */

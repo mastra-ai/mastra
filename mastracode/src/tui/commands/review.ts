@@ -9,7 +9,7 @@ export async function handleReviewCommand(ctx: SlashCommandContext, args: string
 
   // Ensure thread exists
   if (ctx.state.pendingNewThread) {
-    await ctx.state.harness.session.thread.create();
+    await ctx.state.session.thread.create();
     ctx.state.pendingNewThread = false;
   }
 

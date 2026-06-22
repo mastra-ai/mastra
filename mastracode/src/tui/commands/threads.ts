@@ -33,7 +33,7 @@ export function showThreadLockPrompt(
     } else if (answer === 'Clone thread' && lockedThreadId) {
       try {
         const customTitle = await askCloneName(ctx.state);
-        const clonedThread = await ctx.state.harness.session.thread.clone({
+        const clonedThread = await ctx.state.session.thread.clone({
           sourceThreadId: lockedThreadId,
           ...(customTitle ? { title: customTitle } : {}),
         });
@@ -116,10 +116,10 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         }
 
         if (thread.resourceId !== currentResourceId) {
-          state.harness.setResourceId({ resourceId: thread.resourceId });
+          state.harness.setResourceId(state.session, { resourceId: thread.resourceId });
         }
         try {
-          await state.harness.session.thread.switch({ threadId: thread.id });
+          await state.session.thread.switch({ threadId: thread.id });
         } catch (error) {
           if (error instanceof ThreadLockError) {
             showThreadLockPrompt(ctx, thread.title || thread.id, error.ownerPid, thread.id);
@@ -151,7 +151,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         }
         try {
           const customTitle = await askCloneName(state);
-          const clonedThread = await state.harness.session.thread.clone({
+          const clonedThread = await state.session.thread.clone({
             sourceThreadId: thread.id,
             ...(customTitle ? { title: customTitle } : {}),
           });

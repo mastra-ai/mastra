@@ -30,8 +30,14 @@ function createContext() {
     removed: true,
     remainingSubscriptions: 0,
   }));
+  const session = {
+    sendSignal,
+    identity: { getResourceId: vi.fn(() => 'resource-1') },
+    thread: { getId: vi.fn(() => 'thread-1'), list: vi.fn(async () => []) },
+  };
   const ctx = {
     state: {
+      session,
       ui: { requestRender: vi.fn() },
       projectInfo: { rootPath: '/repo' },
       options: {
@@ -46,10 +52,7 @@ function createContext() {
     },
     harness: {
       sendSignal,
-      session: {
-        identity: { getResourceId: vi.fn(() => 'resource-1') },
-        thread: { getId: vi.fn(() => 'thread-1'), list: vi.fn(async () => []) },
-      },
+      session,
     },
     showInfo: vi.fn(),
     showError: vi.fn(),
