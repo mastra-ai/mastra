@@ -166,9 +166,7 @@ describe('AIMock loop scenarios (evented engine)', () => {
         content?: unknown;
       }>;
 
-      const idsToResults = new Map(
-        toolMessages.map(m => [m.tool_call_id, JSON.stringify(m.content)] as const),
-      );
+      const idsToResults = new Map(toolMessages.map(m => [m.tool_call_id, JSON.stringify(m.content)] as const));
       expect(idsToResults.has('call_city')).toBe(true);
       expect(idsToResults.has('call_temp')).toBe(true);
       expect(idsToResults.get('call_city')).toContain('CITY_PARIS');
@@ -218,10 +216,12 @@ describe('AIMock loop scenarios (evented engine)', () => {
       expect(requests).toHaveLength(2);
 
       const turn2Messages = requests[1]?.body?.messages ?? [];
-      const toolMessage = turn2Messages.find((m: any) => m.role === 'tool') as {
-        tool_call_id?: string;
-        content?: unknown;
-      } | undefined;
+      const toolMessage = turn2Messages.find((m: any) => m.role === 'tool') as
+        | {
+            tool_call_id?: string;
+            content?: unknown;
+          }
+        | undefined;
       expect(toolMessage?.tool_call_id).toBe('call_flaky');
       // Error message survives serialisation through the event bus
       expect(JSON.stringify(toolMessage?.content)).toMatch(/error|fail|boom/i);
@@ -252,9 +252,11 @@ describe('AIMock loop scenarios (evented engine)', () => {
 
       expect(requests).toHaveLength(2);
       const turn2Messages = requests[1]?.body?.messages ?? [];
-      const toolMessage = turn2Messages.find((m: any) => m.role === 'tool') as {
-        tool_call_id?: string;
-      } | undefined;
+      const toolMessage = turn2Messages.find((m: any) => m.role === 'tool') as
+        | {
+            tool_call_id?: string;
+          }
+        | undefined;
       expect(toolMessage?.tool_call_id).toBe('call_ghost');
 
       const text = await output.text;
@@ -622,10 +624,7 @@ describe('AIMock loop scenarios (evented engine)', () => {
         tools: { counter },
         stopWhen: stepCountIs(3),
         fixtures: llm => {
-          llm.on(
-            { endpoint: 'chat' },
-            { toolCalls: [{ id: 'call_cnt', name: 'counter', arguments: {} }] },
-          );
+          llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'call_cnt', name: 'counter', arguments: {} }] });
         },
       });
 
@@ -871,11 +870,13 @@ describe('AIMock loop scenarios (evented engine)', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({
           data: z.object({
-            users: z.array(z.object({
-              id: z.number(),
-              name: z.string(),
-              tags: z.array(z.string()),
-            })),
+            users: z.array(
+              z.object({
+                id: z.number(),
+                name: z.string(),
+                tags: z.array(z.string()),
+              }),
+            ),
             metadata: z.object({
               total: z.number(),
               page: z.number(),
