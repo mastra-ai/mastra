@@ -1,6 +1,6 @@
 {
   "name": "@mastra/archil",
-  "version": "0.1.0",
+  "version": "0.2.0-alpha.0",
   "description": "Archil filesystem provider for Mastra workspaces — elastic, serverless file systems for AI agents",
   "type": "module",
   "main": "dist/index.js",
