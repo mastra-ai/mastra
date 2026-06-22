@@ -98,7 +98,7 @@ async function runAgent({
     id: `active-tools-concurrency-${crypto.randomUUID()}`,
     name: 'Active Tools Concurrency Agent',
     instructions: 'Use both tools.',
-    model: createMockModel(toolNames),
+    model: createMockModel(toolNames ?? activeTools ?? Object.keys(tools)),
     tools,
   });
 
@@ -163,6 +163,7 @@ describe('active tool concurrency', () => {
         tools: stepTools,
         activeTools: undefined,
       }),
+      toolNames: Object.keys(stepTools),
     });
 
     expect(tracker.peak).toBe(2);
