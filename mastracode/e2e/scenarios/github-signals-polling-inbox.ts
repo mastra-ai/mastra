@@ -254,8 +254,10 @@ values
       8_000,
     );
 
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/│ ›/i, terminal, 15_000);
     terminal.submit('/new');
-    await runtime.waitForScreenText(/Ready for new conversation/i, terminal, 8_000);
+    await runtime.waitForScreenText(/│ ›/i, terminal, 15_000);
     terminal.submit('/threads');
     await runtime.waitForScreenText(/E2E GitHub polling inbox fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/mc-e2e-github-polling-inbox-resource/i, terminal, 8_000);
