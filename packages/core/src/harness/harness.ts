@@ -107,6 +107,7 @@ const FABLE_FALLBACK_MODEL = 'claude-opus-4-8';
  * mid-task even though it promised to continue. See {@link buildSharedRunOptions}.
  */
 const HARNESS_MAX_STEPS = 1000;
+const HARNESS_MESSAGE_HISTORY_FETCH_LIMIT = 5_000;
 
 /**
  * Returns Anthropic `providerOptions` that enable a server-side fallback to
@@ -723,7 +724,11 @@ export class Harness<TState = {}> {
 
     const memoryStorage = await this.getMemoryStorage();
 
-    const result = await memoryStorage.listMessages({ threadId, perPage: false });
+    const result = await memoryStorage.listMessages({
+      threadId,
+      perPage: limit ? Math.max(limit, HARNESS_MESSAGE_HISTORY_FETCH_LIMIT) : false,
+      orderBy: limit ? { field: 'createdAt', direction: 'DESC' } : undefined,
+    });
     const messages = result.messages.map(msg => this.convertToHarnessMessage(msg));
 
     if (!limit) return messages;
