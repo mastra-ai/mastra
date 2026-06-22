@@ -2,7 +2,7 @@
 '@mastra/voice-google-gemini-live': minor
 ---
 
-Added `sendContext()` method to `GeminiLiveVoice` for seeding conversation history into a live session without triggering a model response. This maps to Gemini Live's `client_content` frame with `turnComplete: false`, letting apps replay prior turns (e.g. from Mastra Memory) on a cold connect so the model has context before the user speaks.
+Added `sendContext()` method to `GeminiLiveVoice` for seeding conversation history into a fresh voice session without triggering a model response. This lets apps replay prior turns from Mastra Memory (or any external store) on a cold connect so the model has full context before the user speaks — enabling seamless handoff between text chat and voice on a shared thread.
 
 **Usage:**
 
