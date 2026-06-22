@@ -1,4 +1,4 @@
-import { CodeEditor, ToolsIcon } from '@mastra/playground-ui';
+import { CodeBlock, CodeEditor, ToolsIcon } from '@mastra/playground-ui';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
@@ -34,7 +34,11 @@ export const ToolBadge = ({
 
   try {
     const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
-    argSlot = <CodeEditor data={formattedArgs} data-testid="tool-args" />;
+    argSlot = (
+      <div data-testid="tool-args">
+        <CodeBlock code={JSON.stringify(formattedArgs, null, 2)} lang="json" overflow="scroll" />
+      </div>
+    );
   } catch {
     argSlot = <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as string}</pre>;
   }
