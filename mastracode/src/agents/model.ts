@@ -128,10 +128,10 @@ export function getDynamicModel({ requestContext }: { requestContext: RequestCon
  * and silently turn the goal step into a no-op.
  */
 export function getGoalJudgeModel(
-  { requestContext }: { requestContext: RequestContext },
+  { requestContext, judgeModelId }: { requestContext: RequestContext; judgeModelId?: string },
   settingsPath?: string,
 ): ResolvedModel | undefined {
-  const judgeModelId = loadSettings(settingsPath).models.goalJudgeModel;
-  if (!judgeModelId) return undefined;
-  return resolveModel(judgeModelId, { remapForCodexOAuth: true, requestContext });
+  const resolvedJudgeModelId = judgeModelId ?? loadSettings(settingsPath).models.goalJudgeModel;
+  if (!resolvedJudgeModelId) return undefined;
+  return resolveModel(resolvedJudgeModelId, { remapForCodexOAuth: true, requestContext });
 }
