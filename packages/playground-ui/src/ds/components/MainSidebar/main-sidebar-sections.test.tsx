@@ -2,8 +2,9 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { getIsLinkActive } from './main-sidebar-link-active';
 import type { NavSection } from './main-sidebar-nav-section';
-import { getIsLinkActive, MainSidebarSections } from './main-sidebar-sections';
+import { MainSidebarSections } from './main-sidebar-sections';
 
 afterEach(() => cleanup());
 

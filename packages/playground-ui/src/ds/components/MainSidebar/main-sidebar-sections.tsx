@@ -11,8 +11,8 @@ export type MainSidebarSectionsProps = {
   sections: NavSection[];
   /**
    * Called per link to decide the active state. Receives the section's links so
-   * callers can use `getIsLinkActive` (or any section-aware logic) without
-   * re-scanning `sections` from the outside. Default: each link's `isActive`.
+   * callers can use section-aware active logic without re-scanning `sections`
+   * from the outside. Default: each link's `isActive`.
    */
   isActive?: (link: NavLink, activeCandidates: NavLink[]) => boolean;
   className?: string;
@@ -93,22 +93,5 @@ export function MainSidebarSections({ sections, isActive, className }: MainSideb
         );
       })}
     </>
-  );
-}
-
-/**
- * Strict active-path match with sibling-exclusion.
- * - `pathname === link.url` or starts with `link.url + '/'`
- * - Not active if any sibling link has a longer matching url (prevents `/a` lighting while `/a/b` matches).
- */
-export function getIsLinkActive(link: NavLink, pathname: string, siblings: NavLink[] = []): boolean {
-  const matches = (url: string) => pathname === url || pathname.startsWith(url + '/');
-  const flattenLinks = (links: NavLink[]): NavLink[] =>
-    links.flatMap(item => [item, ...flattenLinks(item.children ?? [])]);
-
-  if (!matches(link.url)) return false;
-  const competingLinks = [...flattenLinks(link.children ?? []), ...flattenLinks(siblings)];
-  return !competingLinks.some(
-    other => other.url !== link.url && other.url.length > link.url.length && matches(other.url),
   );
 }
