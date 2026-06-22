@@ -1,8 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Tool choice scenario.
@@ -13,7 +13,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * - 'none': Model cannot call tools
  * - { type: 'tool', toolName: 'specific-tool' }: Model must call specific tool
  */
-describe('AIMock scenario: tool choice', () => {
+describeForAllEngines('AIMock scenario: tool choice', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('should respect toolChoice: none and not call tools', async () => {
@@ -25,6 +25,7 @@ describe('AIMock scenario: tool choice', () => {
     });
 
     const { output, requests, chunks } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Hello',
       tools: { 'test-tool': tool },
@@ -57,6 +58,7 @@ describe('AIMock scenario: tool choice', () => {
     });
 
     const { output, requests, chunks } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Process this',
       tools: { 'required-tool': tool },
@@ -111,6 +113,7 @@ describe('AIMock scenario: tool choice', () => {
     });
 
     const { output, requests, chunks } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Use a tool',
       tools: { 'tool-1': tool1, 'tool-2': tool2 },
@@ -162,6 +165,7 @@ describe('AIMock scenario: tool choice', () => {
     });
 
     const { output, requests, chunks } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Just say hello',
       tools: { 'auto-tool': tool },

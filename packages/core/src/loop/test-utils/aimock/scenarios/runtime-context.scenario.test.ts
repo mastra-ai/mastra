@@ -12,13 +12,13 @@
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
 import { RequestContext } from '../../../../request-context';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
-describe('AIMock loop scenario: runtime context passthrough', () => {
+describeForAllEngines('AIMock loop scenario: runtime context passthrough', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('passes requestContext to tool execute function', async () => {
@@ -46,6 +46,7 @@ describe('AIMock loop scenario: runtime context passthrough', () => {
     requestContext.set('role', 'admin');
 
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Get my user data.',
       tools: { get_user_data: getUserData },
@@ -120,6 +121,7 @@ describe('AIMock loop scenario: runtime context passthrough', () => {
     requestContext.set('sessionId', 'session-789');
 
     const { output } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Call both tools.',
       tools: { tool_a: toolA, tool_b: toolB },

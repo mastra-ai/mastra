@@ -13,14 +13,15 @@
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { it, expect } from 'vitest';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
-describe('AIMock loop scenario: request body override', () => {
+describeForAllEngines('AIMock loop scenario: request body override', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('forwards model settings to the request body', async () => {
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Hello with custom settings.',
       stopWhen: stepCountIs(1),
@@ -53,6 +54,7 @@ describe('AIMock loop scenario: request body override', () => {
   it('allows different settings per request', async () => {
     // First request with conservative settings
     const result1 = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'First request.',
       stopWhen: stepCountIs(1),
@@ -77,6 +79,7 @@ describe('AIMock loop scenario: request body override', () => {
 
     // Second request with creative settings
     const result2 = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Second request.',
       stopWhen: stepCountIs(1),
