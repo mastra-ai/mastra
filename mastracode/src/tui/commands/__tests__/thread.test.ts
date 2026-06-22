@@ -46,6 +46,7 @@ function createMockCtx(harness: ReturnType<typeof createMockHarness>) {
     ctx: {
       state: {
         pendingNewThread: false,
+        session: (harness as any).session,
       },
       harness: harness as any,
       showInfo: vi.fn((msg: string) => infoMessages.push(msg)),
