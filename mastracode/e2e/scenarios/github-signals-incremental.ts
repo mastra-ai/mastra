@@ -180,6 +180,8 @@ values
     await runtime.waitForScreenText(/notification from github/i, terminal, 30_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17638 CI recovered/i, terminal, 30_000);
     await runtime.waitForScreenText(/medium · pull-request-ci-recovered · delivered/i, terminal, 30_000);
+    terminal.flushInput?.();
+    await runtime.waitForScreenText(/│ ›/i, terminal, 15_000);
 
     terminal.submit('/github debug');
     await runtime.waitForScreenText(/mastra-ai\/mastra#17638 sync=success/i, terminal, 30_000);
