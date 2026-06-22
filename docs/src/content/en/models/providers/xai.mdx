@@ -46,7 +46,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 2000000,
+    "contextWindow": 1000000,
     "maxOutput": 30000,
     "inputCost": 1.25,
     "outputCost": 2.5
@@ -58,7 +58,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 2000000,
+    "contextWindow": 1000000,
     "maxOutput": 30000,
     "inputCost": 1.25,
     "outputCost": 2.5
@@ -70,7 +70,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": false,
     "reasoning": true,
-    "contextWindow": 2000000,
+    "contextWindow": 1000000,
     "maxOutput": 30000,
     "inputCost": 1.25,
     "outputCost": 2.5
@@ -127,7 +127,7 @@ for await (const chunk of stream) {
     "model": "xai/grok-imagine-video",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 1024,

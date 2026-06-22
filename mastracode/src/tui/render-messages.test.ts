@@ -27,6 +27,13 @@ function createSessionState(state: Record<string, unknown> = {}, setState = vi.f
 function createState(): TUIState {
   const displayState = { isRunning: false, tasks: [], previousTasks: [] };
   const sessionState = createSessionState();
+  const session = {
+    state: sessionState,
+    mode: { resolve: vi.fn(() => ({ metadata: {} })) },
+    model: { get: vi.fn(() => 'anthropic/claude-sonnet-4') },
+    thread: { listActiveMessages: vi.fn().mockResolvedValue([]) },
+    displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
+  };
   return {
     chatContainer: new Container(),
     ui: { requestRender: vi.fn() },
@@ -41,13 +48,9 @@ function createState(): TUIState {
     pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],
     quietMode: false,
-    session: {
-      state: sessionState,
-      mode: { resolve: vi.fn(() => ({ metadata: {} })) },
-      thread: { listActiveMessages: vi.fn().mockResolvedValue([]) },
-    },
+    session,
     harness: {
-      session: { displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) } },
+      session,
       setState: vi.fn().mockResolvedValue(undefined),
     },
   } as unknown as TUIState;
@@ -269,14 +272,11 @@ describe('renderExistingMessages subagents', () => {
       ...(state.session as any),
       thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
       state: createSessionState(),
+      displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
+      model: { get: () => 'openai/gpt-5.5' },
     } as unknown as TUIState['session'];
     state.harness = {
-      session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
-        displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
-        model: { get: () => 'openai/gpt-5.5' },
-      },
-      setState: vi.fn().mockResolvedValue(undefined),
+      session: state.session,
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -345,14 +345,9 @@ describe('renderExistingMessages task tools', () => {
       ...(state.session as any),
       thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState({}, setState),
+      displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
     } as unknown as TUIState['session'];
-    state.harness = {
-      session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
-        displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
-      },
-      setState,
-    } as unknown as TUIState['harness'];
+    state.harness = { session: state.session, setState } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
 
@@ -415,14 +410,9 @@ describe('renderExistingMessages task tools', () => {
       ...(state.session as any),
       thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState({}, setState),
+      displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
     } as unknown as TUIState['session'];
-    state.harness = {
-      session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
-        displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
-      },
-      setState,
-    } as unknown as TUIState['harness'];
+    state.harness = { session: state.session, setState } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
 
@@ -532,14 +522,9 @@ describe('renderExistingMessages task tools', () => {
       ...(state.session as any),
       thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState({}, setState),
+      displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
     } as unknown as TUIState['session'];
-    state.harness = {
-      session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
-        displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
-      },
-      setState,
-    } as unknown as TUIState['harness'];
+    state.harness = { session: state.session, setState } as unknown as TUIState['harness'];
 
     await expect(renderExistingMessages(state)).resolves.toBeUndefined();
 

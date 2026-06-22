@@ -16,6 +16,7 @@ import type {
   AudioConfig,
   GeminiLiveServerMessage,
   GeminiSessionConfig,
+  IncrementalTurn,
   UpdateMessage,
 } from './types';
 import { GeminiLiveError } from './utils/errors';
@@ -487,14 +488,10 @@ export class GeminiLiveVoice extends MastraVoice<
       // Wait for WebSocket connection to open via ConnectionManager
       await this.connectionManager.waitForOpen();
 
-      // Send initial configuration or resume session
-      if (this.isResuming && this.sessionHandle) {
-        await this.sendSessionResumption();
-      } else {
-        this.sendInitialConfig();
-        this.sessionStartTime = Date.now();
-        this.sessionId = randomUUID();
-      }
+      // Send initial configuration (session_resumption handle is embedded in setup frame)
+      this.sendInitialConfig();
+      this.sessionStartTime = Date.now();
+      this.sessionId = randomUUID();
 
       // Wait for session to be created after sending config
       await this.waitForSessionCreated();
@@ -546,13 +543,8 @@ export class GeminiLiveVoice extends MastraVoice<
       this.sessionDurationTimeout = undefined;
     }
 
-    // Save session handle before disconnecting if resumption is enabled
-    if (this.options.sessionConfig?.enableResumption && this.sessionId) {
-      // In a real implementation, the session handle would come from the server
-      // For now, we'll use the session ID as a placeholder
-      this.sessionHandle = this.sessionId;
-      this.log('Session handle saved for resumption', { handle: this.sessionHandle });
-    }
+    // Session handle is set by the server via sessionResumptionUpdate frames.
+    // Do not overwrite it with the client-side sessionId here.
 
     if (this.ws) {
       this.connectionManager.close();
@@ -651,6 +643,61 @@ export class GeminiLiveVoice extends MastraVoice<
     } catch (error) {
       this.log('Failed to send text message', error);
       throw this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Failed to send text message', error);
+    }
+  }
+
+  /**
+   * Send conversation history into the live session without triggering a model response.
+   *
+   * Maps to a single Gemini Live `client_content` frame with `turnComplete` defaulting
+   * to `false`, which loads the turns into context silently. The model only responds
+   * once a subsequent turn completes (e.g. via {@link speak} or user audio).
+   *
+   * @param turns Prior conversation turns to seed into the session.
+   * @param options.turnComplete Whether to mark the turn as complete (default `false`).
+   *
+   * @example
+   * ```typescript
+   * await voice.connect();
+   *
+   * // Replay prior conversation without triggering a reply.
+   * await voice.sendContext([
+   *   { role: 'user', content: 'What is the weather?' },
+   *   { role: 'assistant', content: 'It is 72°F in San Francisco.' },
+   * ]);
+   *
+   * // Agent stays silent until the user actually speaks.
+   * await voice.send(micStream);
+   * ```
+   */
+  async sendContext(turns: IncrementalTurn[], options?: { turnComplete?: boolean }): Promise<void> {
+    this.validateConnectionState();
+
+    if (!turns || turns.length === 0) {
+      this.log('sendContext called with empty turns, skipping');
+      return;
+    }
+
+    const message = {
+      client_content: {
+        turns: turns.map(t => ({
+          role: t.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: t.content }],
+        })),
+        turnComplete: options?.turnComplete ?? false,
+      },
+    };
+
+    try {
+      this.sendEvent('client_content', message);
+      this.log('Context seeded', { turnCount: turns.length, turnComplete: options?.turnComplete ?? false });
+
+      for (const turn of turns) {
+        this.addToContext(turn.role, turn.content);
+      }
+    } catch (error) {
+      this.log('Failed to send context', error);
+      throw this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Failed to send context', error);
     }
   }
 
@@ -1089,34 +1136,6 @@ export class GeminiLiveVoice extends MastraVoice<
    * Send session resumption message
    * @private
    */
-  private async sendSessionResumption(): Promise<void> {
-    if (!this.sessionHandle) {
-      throw new Error('No session handle available for resumption');
-    }
-
-    const context = this.contextManager.getContextArray();
-    const resumeMessage = {
-      session_resume: {
-        handle: this.sessionHandle,
-        ...(context.length > 0 && {
-          context,
-        }),
-      },
-    };
-
-    try {
-      if (this.ws?.readyState !== WebSocket.OPEN) {
-        throw new Error('WebSocket not ready for session resumption');
-      }
-
-      this.sendEvent('session_resume', resumeMessage);
-      this.log('Session resumption message sent', { handle: this.sessionHandle });
-    } catch (error) {
-      this.log('Failed to send session resumption', error);
-      throw new Error(`Failed to send session resumption: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
   /**
    * Start monitoring session duration
    * @private
@@ -1209,7 +1228,7 @@ export class GeminiLiveVoice extends MastraVoice<
     this.ws.on('close', (code: number, reason: Buffer) => {
       this.log('WebSocket connection closed', { code, reason: reason.toString() });
       this.state = 'disconnected';
-      this.emit('session', { state: 'disconnected' });
+      this.emit('session', { state: 'disconnected', code, reason: reason.toString() });
     });
 
     this.ws.on('error', (error: Error) => {
@@ -1269,6 +1288,19 @@ export class GeminiLiveVoice extends MastraVoice<
     } else if (data.usageMetadata) {
       this.log('Processing usage metadata message');
       this.handleUsageUpdate(data);
+      // sessionResumptionUpdate may arrive in the same frame as usageMetadata
+      // so we handle it here too, not in a separate else-if branch
+    }
+    if (data.sessionResumptionUpdate) {
+      this.log('Processing session resumption update', data.sessionResumptionUpdate);
+      if (data.sessionResumptionUpdate.resumable && data.sessionResumptionUpdate.newHandle) {
+        this.sessionHandle = data.sessionResumptionUpdate.newHandle;
+        this.log('Session handle updated from server', { handle: this.sessionHandle });
+        this.emit('sessionHandle', {
+          handle: this.sessionHandle,
+          expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2h TTL for AI Studio
+        });
+      }
     } else if (data.sessionEnd) {
       this.log('Processing session end message');
       this.handleSessionEnd(data);
@@ -1853,6 +1885,11 @@ export class GeminiLiveVoice extends MastraVoice<
       realtime_input_config?: {
         activity_handling?: 'START_OF_ACTIVITY_INTERRUPTS' | 'NO_INTERRUPTION';
       };
+      /**
+       * Session resumption config. Empty object enables server-issued tokens;
+       * { handle } resumes a previous session.
+       */
+      session_resumption?: { handle?: string };
     }
 
     // Native-audio models require `response_modalities: ["AUDIO"]` at setup time. This is a voice
@@ -1892,6 +1929,11 @@ export class GeminiLiveVoice extends MastraVoice<
         realtime_input_config: {
           activity_handling: 'START_OF_ACTIVITY_INTERRUPTS',
         },
+        // Session resumption: empty object requests server-issued tokens on new sessions;
+        // { handle } resumes a previous session. Only included when enableResumption is set.
+        ...(this.options.sessionConfig?.enableResumption && {
+          session_resumption: this.isResuming && this.sessionHandle ? { handle: this.sessionHandle } : {},
+        }),
       },
     };
 
@@ -2203,3 +2245,5 @@ export class GeminiLiveVoice extends MastraVoice<
     }
   }
 }
+
+export type { IncrementalTurn } from './types';
