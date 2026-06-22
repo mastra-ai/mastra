@@ -37,7 +37,9 @@ const SIDEBAR_FILES = [
 
 const DEFAULT_DAYS = 30
 const DAY_MS = 86_400_000
+const TAGS_START_RE = /tags:\s*\[/
 const NEW_TAG_RE = /tags:\s*\[[^\]]*['"]new['"][^\]]*\]/
+const NEW_TOKEN_RE = /['"]new['"]/
 const LABEL_RE = /label:\s*['"]([^'"]+)['"]/
 const ID_RE = /id:\s*['"]([^'"]+)['"]/
 
@@ -59,7 +61,25 @@ function findNewTagEntries(text: string): NewTagEntry[] {
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index]!
-    if (!NEW_TAG_RE.test(line)) continue
+    if (!TAGS_START_RE.test(line)) continue
+
+    const tagLines: string[] = []
+    let newTagLineNo = index + 1
+
+    for (let tagIndex = index; tagIndex < lines.length; tagIndex++) {
+      const tagLine = lines[tagIndex]!
+      tagLines.push(tagLine)
+
+      if (NEW_TOKEN_RE.test(tagLine)) {
+        newTagLineNo = tagIndex + 1
+      }
+
+      if (tagLine.includes(']')) {
+        break
+      }
+    }
+
+    if (!NEW_TAG_RE.test(tagLines.join('\n'))) continue
 
     let label = 'Unknown sidebar item'
     let id: string | undefined
@@ -86,7 +106,7 @@ function findNewTagEntries(text: string): NewTagEntry[] {
       }
     }
 
-    entries.push({ lineNo: index + 1, label, id })
+    entries.push({ lineNo: newTagLineNo, label, id })
   }
 
   return entries
