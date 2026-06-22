@@ -5,8 +5,8 @@ import { Mastra } from '../../../../mastra';
 import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import { runExperiment } from '../../index';
-import type { ExperimentSummary, ItemWithScores } from '../../types';
 import type { ItemToolMock } from '../../tool-mocks';
+import type { ExperimentSummary, ItemWithScores } from '../../types';
 
 /**
  * A single scripted model turn: the content the model returns when asked.

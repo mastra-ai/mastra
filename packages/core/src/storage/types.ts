@@ -2661,6 +2661,11 @@ export interface AddExperimentResultInput {
   traceId?: string | null;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
+  /**
+   * Tool mock diagnostics for this item run. `null`/`undefined` both mean "no
+   * report" (the item ran without tool mocks). A present report means the item
+   * ran with mocks — see `served`/`unconsumed`/`liveCalls`/`failure`.
+   */
   toolMockReport?: DatasetToolMockReport | null;
 }
 

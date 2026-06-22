@@ -247,6 +247,18 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     throw err; // unreachable, but satisfies TS control flow
   }
 
+  // Tool mocks only apply to agent targets. If a dataset carrying toolMocks is reused
+  // against a task/workflow/scorer target, the mocks are silently ignored — warn once
+  // (not per item) so the misconfiguration is visible without log spam.
+  if (targetType !== 'agent' && items.some(item => item.toolMocks?.length)) {
+    mastra
+      .getLogger()
+      ?.warn(
+        `Experiment target is "${config.task ? 'task' : targetType}" but dataset items declare toolMocks. ` +
+          `Tool mocks only apply to agent targets and will be ignored.`,
+      );
+  }
+
   // Normalize categorized scorer config (AgentScorerConfig | WorkflowScorerConfig) to a flat
   // array so the existing merge/dedup/resolve logic below is unchanged.
   // Trajectory dispatch is handled per-scorer in runScorerSafe based on scorer.type.
