@@ -42,6 +42,9 @@ import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-r
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { firstRunOnboardingScenario } from './first-run-onboarding.js';
 import { githubSignalsCommandScenario } from './github-signals-command.js';
+import { githubSignalsLegacyUpgradeScenario } from './github-signals-legacy-upgrade.js';
+import { githubSignalsMultiSubscribeScenario } from './github-signals-multi-subscribe.js';
+import { githubSignalsToolMultiSubscribeScenario } from './github-signals-tool-multi-subscribe.js';
 import { githubSignalsIncrementalScenario } from './github-signals-incremental.js';
 import { githubSignalsNotificationReloadScenario } from './github-signals-notification-reload.js';
 import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbox.js';
@@ -226,6 +229,9 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'file-autocomplete': fileAutocompleteScenario,
   'first-run-onboarding': firstRunOnboardingScenario,
   'github-signals-command': githubSignalsCommandScenario,
+  'github-signals-multi-subscribe': githubSignalsMultiSubscribeScenario,
+  'github-signals-legacy-upgrade': githubSignalsLegacyUpgradeScenario,
+  'github-signals-tool-multi-subscribe': githubSignalsToolMultiSubscribeScenario,
   'github-signals-incremental': githubSignalsIncrementalScenario,
   'github-signals-notification-reload': githubSignalsNotificationReloadScenario,
   'github-signals-polling-inbox': githubSignalsPollingInboxScenario,

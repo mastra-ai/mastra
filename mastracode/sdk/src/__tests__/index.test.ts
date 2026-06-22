@@ -141,7 +141,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
-    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false, githubPollIntervalMs: 300_000 },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
   };
 }
@@ -1211,7 +1211,7 @@ describe('createMastraCode', () => {
   it('does not configure the polling GitHub provider when the embedding disables it', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
-      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true, githubPollIntervalMs: 300_000 },
     });
     const { createMastraCode } = await import('../index.js');
 
@@ -1227,7 +1227,7 @@ describe('createMastraCode', () => {
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
     loadSettingsMock.mockReturnValue({
       ...createMockSettings(),
-      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true, githubPollIntervalMs: 60_000 },
     });
     controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
     controllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
@@ -1242,6 +1242,9 @@ describe('createMastraCode', () => {
       .map(call => call[0] as { signals?: Array<{ id?: string }> } | undefined)
       .find(config => config?.signals?.some(signal => signal.id === 'github-signals'));
     expect(agentConfig?.signals?.map(signal => signal.id)).toContain('github-signals');
+    expect(agentConfig?.signals?.find(signal => signal.id === 'github-signals')).toMatchObject({
+      options: expect.objectContaining({ pollIntervalMs: 60_000 }),
+    });
     expect(startPollingForThread).toHaveBeenCalledWith(
       { threadId: 'thread-1', resourceId: 'thread-resource' },
       { pollImmediately: true },
