@@ -56,4 +56,41 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
     expect(result.toolMockReport?.unconsumed.map(u => u.mockIndex)).toEqual([1]);
     expect(result.toolMockReport?.failure).toBeUndefined();
   });
+
+  it('keeps per-(tool,args) order when another tool call happens between the repeats', async () => {
+    const liveLog: string[] = [];
+
+    const result = await runToolMockScenario({
+      tools: {
+        appendLine: recordingTool('appendLine', liveLog),
+        lookupOrder: recordingTool('lookupOrder', liveLog),
+      },
+      turns: [
+        // First appendLine repeat...
+        { toolCalls: [{ id: 'c1', toolName: 'appendLine', args: { file: 'log.txt' } }] },
+        // ...an UNRELATED live tool call in between...
+        { toolCalls: [{ id: 'c2', toolName: 'lookupOrder', args: { id: 'A-1' } }] },
+        // ...then the second appendLine repeat.
+        { toolCalls: [{ id: 'c3', toolName: 'appendLine', args: { file: 'log.txt' } }] },
+        { text: 'done' },
+      ],
+      toolMocks: [
+        { toolName: 'appendLine', args: { file: 'log.txt' }, output: { written: 'first' } },
+        { toolName: 'appendLine', args: { file: 'log.txt' }, output: { written: 'second' } },
+      ],
+    });
+
+    expect(result.error).toBeNull();
+
+    // The interleaved tool ran live; the mocked appendLine repeats never ran live.
+    expect(liveLog).toEqual(['lookupOrder']);
+
+    // Both appendLine mocks consumed in declared order despite the call in between;
+    // consumption order is tracked per (toolName, args), not globally across tools.
+    const appendServed = result.toolMockReport?.served.filter(s => s.toolName === 'appendLine');
+    expect(appendServed?.map(s => s.mockIndex)).toEqual([0, 1]);
+    expect(result.toolMockReport?.unconsumed).toEqual([]);
+    expect(result.toolMockReport?.liveCalls).toEqual([{ toolName: 'lookupOrder', args: { id: 'A-1' } }]);
+    expect(result.toolMockReport?.failure).toBeUndefined();
+  });
 });
