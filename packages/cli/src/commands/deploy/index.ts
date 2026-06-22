@@ -35,7 +35,22 @@ import {
   parseEnvFile,
 } from '../studio/deploy.js';
 import { fetchEnvironments, createEnvironment, type Environment } from '../env/platform-api.js';
-import { MASTRA_STUDIO_URL } from '../auth/client.js';
+import { MASTRA_PLATFORM_API_URL, MASTRA_STUDIO_URL } from '../auth/client.js';
+
+/**
+ * Derive the public studio/server URLs from the environment slug.
+ * These are the user-facing URLs, not the internal Railway instanceUrl.
+ */
+function derivePublicUrls(slug: string): { studioUrl: string; serverUrl: string } {
+  // Determine if we're targeting staging or production
+  const isStaging = MASTRA_PLATFORM_API_URL.includes('staging');
+  const baseDomain = isStaging ? 'staging.mastra.cloud' : 'mastra.cloud';
+
+  return {
+    studioUrl: `https://${slug}.studio.${baseDomain}`,
+    serverUrl: `https://${slug}.server.${baseDomain}`,
+  };
+}
 
 function elapsed(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
@@ -685,7 +700,20 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
-  const envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
+  // Auto-select .env.<envName> when deploying to a named environment
+  // (e.g. --env staging auto-selects .env.staging if it exists)
+  let envFile = opts.envFile;
+  if (!envFile) {
+    const envNameFile = `.env.${envName}`;
+    try {
+      await access(join(targetDir, envNameFile));
+      envFile = envNameFile;
+    } catch {
+      // No matching env file for this environment name — fall through to default logic
+    }
+  }
+
+  const envVars = await readEnvVars(targetDir, { autoAccept, envFile });
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
     p.log.step(`Found ${envCount} env var(s)`);
@@ -733,7 +761,11 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
   const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id);
 
   if (finalStatus.status === 'running') {
-    p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}! ${finalStatus.instanceUrl}`);
+    const { studioUrl, serverUrl } = derivePublicUrls(environment.slug);
+    p.log.success(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
+    p.log.info(`  Studio: ${pc.cyan(studioUrl)}`);
+    p.log.info(`  Server: ${pc.cyan(serverUrl)}`);
+    p.outro('');
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
     process.exit(1);
