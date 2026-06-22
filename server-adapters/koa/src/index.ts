@@ -470,7 +470,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // from route path/method unless explicitly set or route is public
     const requestContext = ctx.state.requestContext;
     // Check if any auth is configured (studio or server) for RBAC
-    const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+    const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
     if (hasAuth) {
       const hasPermission = await loadHasPermission();
       if (hasPermission) {
@@ -941,7 +941,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
           const requestContext = ctx.state.requestContext;
           // Check if any auth is configured (studio or server) for RBAC
-          const hasAuth = server.mastra.getStudio()?.auth || server.mastra.getServer()?.auth;
+          const hasAuth = server.mastra.getStudio?.()?.auth || server.mastra.getServer()?.auth;
           if (hasAuth) {
             const hasPermission = await loadHasPermission();
             if (hasPermission) {
