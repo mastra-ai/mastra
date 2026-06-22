@@ -1,13 +1,14 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
-import { afterAll, afterEach, beforeAll } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe } from 'vitest';
 import { Agent } from '../../../agent';
+import { createDurableAgent } from '../../../agent/durable';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
-import type { LoopScenarioResult, RunApprovalScenarioOptions, RunLoopScenarioOptions } from './types';
-import { SCENARIO_MODEL_ID } from './types';
+import type { EngineVariant, LoopScenarioResult, RunApprovalScenarioOptions, RunLoopScenarioOptions } from './types';
+import { ALL_ENGINE_VARIANTS, SCENARIO_MODEL_ID } from './types';
 
 /**
  * Start a shared AIMock server for the lifetime of a test suite and wire its
@@ -89,6 +90,9 @@ export async function createSharedAgent(
  * Build an {@link Agent} backed by a real OpenAI v5 provider pointed at the
  * in-test AIMock server, registered on a {@link Mastra} instance with storage
  * so suspend/resume (tool approval) works.
+ *
+ * When `engine === 'durable'`, wraps the agent with `createDurableAgent` and
+ * moves stream-level inputProcessors onto the agent constructor.
  */
 async function buildScenarioAgent({
   llm,
@@ -105,6 +109,8 @@ async function buildScenarioAgent({
   errorProcessors,
   defaultOptions,
   pubsub,
+  engine,
+  inputProcessors,
 }: Pick<
   RunLoopScenarioOptions,
   | 'llm'
@@ -121,7 +127,9 @@ async function buildScenarioAgent({
   | 'errorProcessors'
   | 'defaultOptions'
   | 'pubsub'
->): Promise<{ agent: Agent; mastra: any }> {
+  | 'engine'
+  | 'inputProcessors'
+>): Promise<{ agent: any; mastra: any }> {
   const openai = createOpenAI({
     apiKey: 'aimock-test-key',
     baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
@@ -148,12 +156,17 @@ async function buildScenarioAgent({
     ...(goal ? { goal } : {}),
     ...(errorProcessors ? { errorProcessors } : {}),
     ...(defaultOptions ? { defaultOptions } : {}),
+    // For durable engine, inputProcessors must be on the agent constructor
+    ...(engine === 'durable' && inputProcessors ? { inputProcessors } : {}),
   });
+
+  // Wrap with DurableAgent for the durable engine variant
+  const registrableAgent = engine === 'durable' ? createDurableAgent({ agent }) : agent;
 
   // Registering the agent on a Mastra instance with storage is required for the
   // suspended snapshot rows that approveToolCall/declineToolCall resume from.
   const mastra = new Mastra({
-    agents: { [agentId]: agent },
+    agents: { [agentId]: registrableAgent as any },
     logger: false,
     storage: new InMemoryStore(),
     ...(backgroundTasks ? { backgroundTasks } : {}),
@@ -180,55 +193,63 @@ async function buildScenarioAgent({
  * through `OPENAI_BASE_URL`, but stays in `packages/core` and asserts on loop
  * output instead of TUI screen text.
  */
-export async function runLoopScenario({
-  llm,
-  fixtures,
-  prompt,
-  tools,
-  instructions,
-  stopWhen,
-  maxSteps,
-  isTaskComplete,
-  structuredOutput,
-  activeTools,
-  outputProcessors,
-  inputProcessors,
-  prepareStep,
-  memory,
-  threadId,
-  resourceId,
-  memoryOptions,
-  workspace,
-  agents,
-  workflows,
-  requestContext,
-  collectChunks,
-  manualStreamConsumption,
-  backgroundTasks,
-  streamUntilIdle,
-  agentBackgroundTasks,
-  goal,
-  objective,
-  onIterationComplete,
-  clientTools,
-  toolChoice,
-  model,
-  delegation,
-  abortSignal,
-  providerOptions,
-  modelSettings,
-  toolsets,
-  errorProcessors,
-  onError,
-  onStepFinish,
-  onFinish,
-  savePerStep,
-  actor,
-  defaultOptions,
-  sharedAgent,
-  pubsub,
-}: RunLoopScenarioOptions): Promise<LoopScenarioResult> {
+export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<LoopScenarioResult> {
+  const {
+    llm,
+    fixtures,
+    prompt,
+    tools,
+    instructions,
+    stopWhen,
+    maxSteps,
+    isTaskComplete,
+    structuredOutput,
+    activeTools,
+    outputProcessors,
+    inputProcessors,
+    prepareStep,
+    memory,
+    threadId,
+    resourceId,
+    memoryOptions,
+    workspace,
+    agents,
+    workflows,
+    requestContext,
+    collectChunks,
+    manualStreamConsumption,
+    backgroundTasks,
+    streamUntilIdle,
+    agentBackgroundTasks,
+    goal,
+    objective,
+    onIterationComplete,
+    clientTools,
+    toolChoice,
+    model,
+    delegation,
+    abortSignal,
+    providerOptions,
+    modelSettings,
+    toolsets,
+    errorProcessors,
+    onError,
+    onStepFinish,
+    onFinish,
+    savePerStep,
+    actor,
+    defaultOptions,
+    sharedAgent,
+    pubsub,
+    engine = 'normal',
+  } = opts;
+
   fixtures(llm);
+
+  // For evented engine, set env var before building the agent
+  if (engine === 'evented') {
+    process.env.MASTRA_EVENTED_EXECUTION = 'true';
+  }
 
   // Use shared agent/mastra if provided (for suspend/resume flows across calls),
   // otherwise build a fresh one.
@@ -253,6 +274,8 @@ export async function runLoopScenario({
       errorProcessors,
       defaultOptions,
       pubsub,
+      engine,
+      inputProcessors,
     });
     agent = built.agent;
     mastra = built.mastra;
@@ -274,25 +297,31 @@ export async function runLoopScenario({
         }
       : {};
 
+  // For durable engine, only pass options that DurableAgentStreamOptions supports.
+  // inputProcessors are on the agent constructor; stopWhen is not supported.
+  const isDurable = engine === 'durable';
+
   const streamOptions = {
-    ...(stopWhen ? { stopWhen } : {}),
+    ...(stopWhen && !isDurable ? { stopWhen } : {}),
     ...(maxSteps ? { maxSteps } : {}),
-    ...(isTaskComplete ? { isTaskComplete } : {}),
+    // Durable needs maxSteps as a fallback when stopWhen was the only bound
+    ...(!maxSteps && stopWhen && isDurable ? { maxSteps: 10 } : {}),
+    ...(isTaskComplete && !isDurable ? { isTaskComplete } : {}),
     ...(structuredOutput ? { structuredOutput } : {}),
     ...(activeTools ? { activeTools } : {}),
-    ...(outputProcessors ? { outputProcessors } : {}),
-    ...(inputProcessors ? { inputProcessors } : {}),
-    ...(prepareStep ? { prepareStep } : {}),
+    ...(outputProcessors && !isDurable ? { outputProcessors } : {}),
+    ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
+    ...(prepareStep && !isDurable ? { prepareStep } : {}),
     ...(requestContext ? { requestContext } : {}),
-    ...(delegation ? { delegation } : {}),
-    ...(onIterationComplete ? { onIterationComplete } : {}),
+    ...(delegation && !isDurable ? { delegation } : {}),
+    ...(onIterationComplete && !isDurable ? { onIterationComplete } : {}),
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
     ...(onError ? { onError } : {}),
-    ...(savePerStep !== undefined ? { savePerStep } : {}),
-    ...(actor ? { actor } : {}),
-    ...(abortSignal ? { abortSignal } : {}),
-    ...(providerOptions ? { providerOptions } : {}),
+    ...(savePerStep !== undefined && !isDurable ? { savePerStep } : {}),
+    ...(actor && !isDurable ? { actor } : {}),
+    ...(abortSignal && !isDurable ? { abortSignal } : {}),
+    ...(providerOptions && !isDurable ? { providerOptions } : {}),
     ...(modelSettings ? { modelSettings } : {}),
     ...(toolsets ? { toolsets } : {}),
     ...(clientTools ? { clientTools } : {}),
@@ -300,9 +329,22 @@ export async function runLoopScenario({
     ...memoryOption,
   };
 
-  const output = (streamUntilIdle
-    ? await agent.streamUntilIdle(prompt, streamOptions)
-    : await agent.stream(prompt, streamOptions)) as unknown as MastraModelOutput<unknown>;
+  let rawResult: any;
+  if (isDurable) {
+    rawResult = await agent.stream(prompt, streamOptions);
+  } else {
+    rawResult = streamUntilIdle
+      ? await agent.streamUntilIdle(prompt, streamOptions)
+      : await agent.stream(prompt, streamOptions);
+  }
+
+  // DurableAgent.stream() returns { output, fullStream, ... }; regular returns MastraModelOutput directly
+  const output: MastraModelOutput<unknown> = isDurable
+    ? (rawResult.output as unknown as MastraModelOutput<unknown>)
+    : (rawResult as unknown as MastraModelOutput<unknown>);
+
+  // For durable, fullStream is on the result object, not on output
+  const fullStream = isDurable ? rawResult.fullStream : output.fullStream;
 
   // Drain the stream so every loop turn (and every AIMock request) completes
   // before we hand back the captured journal.
@@ -311,11 +353,30 @@ export async function runLoopScenario({
     // Skip consumption — test will manually drain the stream after publishing events.
   } else if (collectChunks) {
     chunks = [];
-    for await (const chunk of output.fullStream as AsyncIterable<ChunkType>) {
+    for await (const chunk of fullStream as AsyncIterable<ChunkType>) {
       chunks.push(chunk);
+    }
+  } else if (isDurable) {
+    // Durable: drain via fullStream iteration
+    for await (const _chunk of fullStream as AsyncIterable<ChunkType>) {
+      // just drain
     }
   } else {
     await output.consumeStream();
+  }
+
+  // Clean up durable resources
+  if (isDurable && rawResult.cleanup) {
+    try {
+      rawResult.cleanup();
+    } catch {
+      // cleanup may race
+    }
+  }
+
+  // Clean up evented env var
+  if (engine === 'evented') {
+    delete process.env.MASTRA_EVENTED_EXECUTION;
   }
 
   return {
@@ -326,6 +387,43 @@ export async function runLoopScenario({
     agent,
     mastra,
   };
+}
+
+/**
+ * Options for skipping specific engine variants within `describeForAllEngines`.
+ */
+export interface EngineSkipOptions {
+  /** Engine variants to skip for this test file. */
+  skip?: EngineVariant[];
+}
+
+/**
+ * Parameterised describe that runs a test factory once per engine variant.
+ *
+ * Usage:
+ * ```ts
+ * describeForAllEngines('my scenario', (engine) => {
+ *   const getMock = useLoopScenarioAimock();
+ *   it('does something', async () => {
+ *     await runLoopScenario({ llm: getMock(), engine, ... });
+ *   });
+ * });
+ * ```
+ *
+ * Tests that use features unsupported by durable (stopWhen, delegation, etc.)
+ * can pass `{ skip: ['durable'] }` to exclude specific variants.
+ */
+export function describeForAllEngines(
+  name: string,
+  factory: (engine: EngineVariant) => void,
+  options?: EngineSkipOptions,
+): void {
+  const variants = ALL_ENGINE_VARIANTS.filter(v => !options?.skip?.includes(v));
+  for (const engine of variants) {
+    describe(`${name} [${engine}]`, () => {
+      factory(engine);
+    });
+  }
 }
 
 /**

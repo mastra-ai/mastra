@@ -1,9 +1,9 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
 import { MockMemory } from '../../../../memory';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: savePerStep incremental message persistence.
@@ -12,7 +12,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * stream step completes. This pins the intermediate persistence path, ensuring
  * messages are saved to memory as the loop progresses.
  */
-describe('AIMock loop scenario: savePerStep incremental persistence', () => {
+describeForAllEngines('AIMock loop scenario: savePerStep incremental persistence', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('messages are saved incrementally when savePerStep is enabled', async () => {
@@ -29,6 +29,7 @@ describe('AIMock loop scenario: savePerStep incremental persistence', () => {
     const resourceId = 'test-user-1';
 
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Call tool then finish.',
       tools: { tick: tickTool },
@@ -64,6 +65,7 @@ describe('AIMock loop scenario: savePerStep incremental persistence', () => {
     const resourceId = 'test-user-2';
 
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Simple test.',
       stopWhen: stepCountIs(1),

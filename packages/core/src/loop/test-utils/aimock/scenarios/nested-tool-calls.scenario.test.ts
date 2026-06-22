@@ -1,8 +1,8 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { Agent } from '../../../../agent';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -13,7 +13,7 @@ import { SCENARIO_MODEL_ID } from '../types';
  * grandchild → child → parent. This pins the recursive delegation contract
  * and proves that agent-as-tools can themselves use agent-as-tools.
  */
-describe('AIMock loop scenario: nested/recursive tool calls', () => {
+describeForAllEngines('AIMock loop scenario: nested/recursive tool calls', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('supports 2-level nested agent delegation (parent → child → grandchild)', async () => {
@@ -44,6 +44,7 @@ describe('AIMock loop scenario: nested/recursive tool calls', () => {
     });
 
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: mock,
       prompt: 'Plan a research project about quantum computing.',
       agents: { planner },
@@ -194,6 +195,7 @@ describe('AIMock loop scenario: nested/recursive tool calls', () => {
     };
 
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: mock,
       prompt: 'Fetch data from API, transform it, then format the output.',
       tools: { fetch_data: fetchData, transform_data: transformData, format_output: formatOutput },

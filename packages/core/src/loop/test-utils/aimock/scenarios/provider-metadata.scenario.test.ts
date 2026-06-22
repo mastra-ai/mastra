@@ -21,14 +21,15 @@
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { it, expect } from 'vitest';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
-describe('AIMock loop scenario: provider options passthrough', () => {
+describeForAllEngines('AIMock loop scenario: provider options passthrough', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('forwards providerOptions while observable model settings reach the body', async () => {
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Hello with metadata.',
       stopWhen: stepCountIs(1),
@@ -56,6 +57,7 @@ describe('AIMock loop scenario: provider options passthrough', () => {
 
   it('forwards multiple provider option namespaces without breaking the loop', async () => {
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Request with multiple provider options.',
       stopWhen: stepCountIs(1),

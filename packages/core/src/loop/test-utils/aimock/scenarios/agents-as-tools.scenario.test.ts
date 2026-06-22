@@ -1,8 +1,8 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { Agent } from '../../../../agent';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -13,7 +13,7 @@ import { SCENARIO_MODEL_ID } from '../types';
  * own agentic loop and its text result is plumbed back as the tool result for
  * the supervisor's next turn. This pins the delegation contract end-to-end.
  */
-describe('AIMock loop scenario: agents as tools', () => {
+describeForAllEngines('AIMock loop scenario: agents as tools', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('delegates to a subagent and feeds its result back to the supervisor', async () => {
@@ -34,6 +34,7 @@ describe('AIMock loop scenario: agents as tools', () => {
     });
 
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: mock,
       prompt: 'Ask the writer to draft a tagline.',
       agents: { writer },
