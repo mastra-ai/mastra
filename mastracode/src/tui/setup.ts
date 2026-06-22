@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
-import type { AutocompleteItem, SlashCommand } from '@earendil-works/pi-tui';
+import type { SlashCommand } from '@earendil-works/pi-tui';
 import type { HarnessEventListener } from '@mastra/core/harness';
 
 import { getUserId } from '../utils/project.js';
@@ -313,124 +313,6 @@ function detectFdPath(): string | null {
   return null;
 }
 
-class MastraCodeAutocompleteProvider extends CombinedAutocompleteProvider {
-  private readonly mastraCommands: SlashCommand[];
-
-  constructor(commands: SlashCommand[], basePath: string, fdPath: string | null = null) {
-    super(commands, basePath, fdPath);
-    this.mastraCommands = commands;
-  }
-
-  async getSuggestions(
-    lines: string[],
-    cursorLine: number,
-    cursorCol: number,
-    options: Parameters<CombinedAutocompleteProvider['getSuggestions']>[3],
-  ): ReturnType<CombinedAutocompleteProvider['getSuggestions']> {
-    const currentLine = lines[cursorLine] || '';
-    const textBeforeCursor = currentLine.slice(0, cursorCol);
-
-    if (!options.force && textBeforeCursor.startsWith('//') && !textBeforeCursor.includes(' ')) {
-      const customPrefix = textBeforeCursor.slice(2).toLowerCase();
-      const items = this.mastraCommands
-        .filter(command => command.name.startsWith('/'))
-        .filter(command => command.name.slice(1).toLowerCase().startsWith(customPrefix))
-        .map(command => ({
-          value: command.name,
-          label: command.name,
-          ...(command.description ? { description: command.description } : {}),
-        }));
-      if (items.length === 0) return null;
-      return {
-        items,
-        prefix: textBeforeCursor,
-      };
-    }
-
-    return super.getSuggestions(lines, cursorLine, cursorCol, options);
-  }
-
-  applyCompletion(
-    lines: string[],
-    cursorLine: number,
-    cursorCol: number,
-    item: AutocompleteItem,
-    prefix: string,
-  ): ReturnType<CombinedAutocompleteProvider['applyCompletion']> {
-    const currentLine = lines[cursorLine] || '';
-    const beforePrefix = currentLine.slice(0, cursorCol - prefix.length);
-    const afterCursor = currentLine.slice(cursorCol);
-
-    if (prefix.startsWith('//') && beforePrefix.trim() === '' && item.value.startsWith('/')) {
-      const updatedLines = [...lines];
-      const commandText = item.value.slice(1);
-      updatedLines[cursorLine] = `${beforePrefix}//${commandText} ${afterCursor}`;
-      return {
-        lines: updatedLines,
-        cursorLine,
-        cursorCol: beforePrefix.length + commandText.length + 3,
-      };
-    }
-
-    if (item.value.startsWith('@') && !prefix.startsWith('@')) {
-      const atIndex = beforePrefix.lastIndexOf('@');
-      const delimiterIndex = Math.max(beforePrefix.lastIndexOf(' '), beforePrefix.lastIndexOf('\t'));
-      if (atIndex > delimiterIndex) {
-        const updatedLines = [...lines];
-        const suffix = item.label.endsWith('/') ? '' : ' ';
-        updatedLines[cursorLine] = `${beforePrefix.slice(0, atIndex)}${item.value}${suffix}${afterCursor}`;
-        return {
-          lines: updatedLines,
-          cursorLine,
-          cursorCol: beforePrefix.slice(0, atIndex).length + item.value.length + suffix.length,
-        };
-      }
-    }
-
-    const result = super.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
-    const completedLine = result.lines[cursorLine] || '';
-    const atIndexBeforeCursor = currentLine.slice(0, cursorCol).lastIndexOf('@');
-
-    if (item.value.startsWith('@') && atIndexBeforeCursor >= 0) {
-      const typedToken = currentLine.slice(atIndexBeforeCursor + 1, cursorCol);
-      const completedItemIndex = completedLine.indexOf(item.value, atIndexBeforeCursor + 1);
-      const retainedToken =
-        completedItemIndex >= 0 ? completedLine.slice(atIndexBeforeCursor + 1, completedItemIndex) : '';
-      if (completedItemIndex >= 0 && typedToken.startsWith(retainedToken)) {
-        const updatedLines = [...result.lines];
-        const normalizedLine =
-          completedLine.slice(0, atIndexBeforeCursor) +
-          item.value +
-          completedLine.slice(completedItemIndex + item.value.length);
-        updatedLines[cursorLine] = normalizedLine;
-        return {
-          ...result,
-          lines: updatedLines,
-          cursorCol: Math.max(result.cursorCol - retainedToken.length, 0),
-        };
-      }
-    }
-
-    if (
-      prefix.startsWith('/') &&
-      beforePrefix.trim() === '' &&
-      item.value.includes('/') &&
-      !completedLine.startsWith('/')
-    ) {
-      const updatedLines = [...result.lines];
-      const suffix = currentLine.slice(cursorCol) ? '' : ' ';
-      updatedLines[cursorLine] = `/${completedLine}${suffix}`;
-      return {
-        ...result,
-        lines: updatedLines,
-        cursorCol: result.cursorCol + 1 + suffix.length,
-      };
-    }
-
-    return result;
-  }
-}
-
 export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
@@ -546,7 +428,7 @@ export function setupAutocomplete(state: TUIState): void {
   }
 
   const fdPath = detectFdPath();
-  state.autocompleteProvider = new MastraCodeAutocompleteProvider(slashCommands, process.cwd(), fdPath);
+  state.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd(), fdPath);
   state.editor.setAutocompleteProvider(state.autocompleteProvider);
 }
 
