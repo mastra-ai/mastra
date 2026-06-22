@@ -250,11 +250,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // Tool mocks only apply to agent targets. If a dataset carrying toolMocks is reused
   // against a task/workflow/scorer target, the mocks are silently ignored — warn once
   // (not per item) so the misconfiguration is visible without log spam.
-  if (targetType !== 'agent' && items.some(item => item.toolMocks?.length)) {
+  const itemsWithToolMocks = items.filter(item => item.toolMocks?.length).length;
+  if (targetType !== 'agent' && itemsWithToolMocks > 0) {
     mastra
       .getLogger()
       ?.warn(
-        `Experiment target is "${config.task ? 'task' : targetType}" but dataset items declare toolMocks. ` +
+        `Experiment target is "${config.task ? 'task' : targetType}" but ${itemsWithToolMocks} of ${items.length} dataset items declare toolMocks. ` +
           `Tool mocks only apply to agent targets and will be ignored.`,
       );
   }
