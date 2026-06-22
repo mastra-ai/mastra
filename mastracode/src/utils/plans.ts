@@ -1,10 +1,16 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { getAppDataDir } from './project.js';
 
-/** Root directory for all plan files. */
+/** Global plans directory for approved plans. */
 export function getPlansDir(): string {
   return process.env.MASTRA_PLANS_DIR ?? path.join(getAppDataDir(), 'plans');
+}
+
+/** Local (project-scoped) plans directory for in-progress plan editing. */
+export function getLocalPlansDir(projectPath: string): string {
+  return path.join(projectPath, DEFAULT_CONFIG_DIR, 'plans');
 }
 
 function slugify(str: string): string {
@@ -40,17 +46,18 @@ export async function savePlanToDisk(opts: {
 /**
  * Write a plan snapshot to disk on each submission (not just approval).
  * This lets users view/edit the plan file and enables diffing between revisions.
- * The snapshot always writes to a stable `current-plan.md` path so the user
- * can find and edit it easily.
+ * The snapshot writes to `$cwd/.mastracode/plans/<resourceId>/current-plan.md`
+ * so the agent can read and edit it with regular workspace tools.
  */
 export async function savePlanSnapshot(opts: {
   title: string;
   plan: string;
   resourceId: string;
+  projectPath: string;
   plansDir?: string;
 }): Promise<void> {
-  const { title, plan, resourceId } = opts;
-  const plansDir = opts.plansDir ?? getPlansDir();
+  const { title, plan, resourceId, projectPath } = opts;
+  const plansDir = opts.plansDir ?? getLocalPlansDir(projectPath);
   const dir = path.join(plansDir, resourceId);
 
   await fs.mkdir(dir, { recursive: true });

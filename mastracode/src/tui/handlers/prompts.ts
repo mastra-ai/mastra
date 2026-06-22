@@ -283,13 +283,17 @@ export async function handlePlanApproval(
   // Snapshot current plan for diff display on resubmission
   const previousPlan = state.previousPlanSnapshot?.plan;
 
-  // Save a snapshot of this submission and write to disk
+  // Save a snapshot of this submission and write to local plans dir
   state.previousPlanSnapshot = { title, plan };
-  savePlanSnapshot({
-    title,
-    plan,
-    resourceId: state.session.identity.getResourceId(),
-  }).catch(() => {});
+  const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
+  if (projectPath) {
+    savePlanSnapshot({
+      title,
+      plan,
+      resourceId: state.session.identity.getResourceId(),
+      projectPath,
+    }).catch(() => {});
+  }
 
   return new Promise(resolve => {
     const approvalOptions = {

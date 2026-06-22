@@ -5,16 +5,23 @@ import { savePlanToDisk, savePlanSnapshot } from '../plans.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '../../..');
 const tmpDir = path.join(projectRoot, '.test-tmp-plans');
+const tmpProjectPath = path.join(projectRoot, '.test-tmp-project');
 
 afterEach(() => {
   if (fs.existsSync(tmpDir)) {
     fs.rmSync(tmpDir, { recursive: true });
+  }
+  if (fs.existsSync(tmpProjectPath)) {
+    fs.rmSync(tmpProjectPath, { recursive: true });
   }
 });
 
 afterAll(() => {
   if (fs.existsSync(tmpDir)) {
     fs.rmSync(tmpDir, { recursive: true });
+  }
+  if (fs.existsSync(tmpProjectPath)) {
+    fs.rmSync(tmpProjectPath, { recursive: true });
   }
 });
 
@@ -120,15 +127,15 @@ describe('savePlanToDisk', () => {
 });
 
 describe('savePlanSnapshot', () => {
-  it('writes a current-plan.md file on each submission', async () => {
+  it('writes a current-plan.md file to the local project plans dir', async () => {
     await savePlanSnapshot({
       title: 'My plan',
       plan: 'Step 1\nStep 2',
       resourceId: 'proj-snapshot',
-      plansDir: tmpDir,
+      projectPath: tmpProjectPath,
     });
 
-    const filePath = path.join(tmpDir, 'proj-snapshot', 'current-plan.md');
+    const filePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'proj-snapshot', 'current-plan.md');
     expect(fs.existsSync(filePath)).toBe(true);
 
     const content = fs.readFileSync(filePath, 'utf-8');
@@ -142,20 +149,33 @@ describe('savePlanSnapshot', () => {
       title: 'Plan v1',
       plan: 'Original content',
       resourceId: 'proj-overwrite',
-      plansDir: tmpDir,
+      projectPath: tmpProjectPath,
     });
 
     await savePlanSnapshot({
       title: 'Plan v2',
       plan: 'Updated content',
       resourceId: 'proj-overwrite',
-      plansDir: tmpDir,
+      projectPath: tmpProjectPath,
     });
 
-    const filePath = path.join(tmpDir, 'proj-overwrite', 'current-plan.md');
+    const filePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'proj-overwrite', 'current-plan.md');
     const content = fs.readFileSync(filePath, 'utf-8');
     expect(content).toContain('# Plan v2');
     expect(content).toContain('Updated content');
     expect(content).not.toContain('Original content');
+  });
+
+  it('respects plansDir override', async () => {
+    await savePlanSnapshot({
+      title: 'Custom dir plan',
+      plan: 'Custom location.',
+      resourceId: 'proj-custom',
+      projectPath: tmpProjectPath,
+      plansDir: tmpDir,
+    });
+
+    const filePath = path.join(tmpDir, 'proj-custom', 'current-plan.md');
+    expect(fs.existsSync(filePath)).toBe(true);
   });
 });

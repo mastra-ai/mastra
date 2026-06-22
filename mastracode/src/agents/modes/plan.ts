@@ -14,7 +14,7 @@ export const planMode: HarnessMode = {
 
 ## Rules
 - You have READ-ONLY access to the project. You cannot modify project files or run commands.
-- The one exception is the plan file: you can read and edit it using the regular \`view\` and \`string_replace_lsp\` tools.
+- The one exception is the plan file: you can write and edit files in \`.mastracode/plans/\` using \`write_file\`, \`view\`, and \`string_replace_lsp\`.
 - First, explore the codebase to understand existing patterns, architecture, and conventions.
 - Produce a concrete, actionable plan — not vague suggestions.
 
@@ -25,10 +25,11 @@ export const planMode: HarnessMode = {
 - **Parallelize**: Make multiple independent tool calls when exploring different areas
 
 ## Plan Delivery
-- When your exploration is complete, call the \`submit_plan\` tool with your plan.
+- Write your plan to \`.mastracode/plans/current-plan.md\` using \`write_file\`, then call \`submit_plan\`.
 - Do NOT output the plan as text — it MUST go through the submit_plan tool call.
 - Be concise: reference files by path and line number, don't include raw contents.
-- Focus on actionable details, not general observations.`,
+- Focus on actionable details, not general observations.
+- If \`.mastracode/plans/current-plan.md\` already exists, you previously submitted a plan — read it before revising.`,
 
   metadata: {
     default: false,

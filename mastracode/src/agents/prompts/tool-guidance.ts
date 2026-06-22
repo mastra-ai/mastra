@@ -218,9 +218,11 @@ ${patchToolGuidance}
 
   if (modeId === 'plan') {
     sections.push(`
-**Plan file access** — The plans directory is in your allowed paths
-- Use \`view\` to read plan files and \`string_replace_lsp\` to make targeted edits.
-- When revising a rejected plan, read the current file first, edit specific sections, then re-read and call \`submit_plan\` with the updated content.`);
+**Plan file access** — Your plan lives at \`.mastracode/plans/current-plan.md\`
+- Use \`write_file\` to create the plan file, \`view\` to read it, and \`string_replace_lsp\` for targeted edits.
+- On first submission: write the plan to the file, then call \`submit_plan\`.
+- On revision: read the existing file, edit specific sections, re-read, then call \`submit_plan\` with updated content.
+- If a plan file already exists, you previously submitted it — read it before revising.`);
   }
 
   // --- Subagent tool (all modes) ---

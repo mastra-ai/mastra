@@ -147,9 +147,9 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const isPlanMode = modeId === 'plan';
 
   const planModeTools = {
-    mastra_workspace_write_file: { ...TOOL_NAME_OVERRIDES.mastra_workspace_write_file, enabled: false },
-    // edit_file stays enabled in plan mode — the agent uses it for targeted plan revisions.
-    // write_file is disabled because plans should be edited, not overwritten.
+    // write_file stays enabled — the agent uses it to create the initial plan .md file.
+    // edit_file (string_replace_lsp) stays enabled for targeted plan revisions.
+    // ast_edit is disabled because plans are markdown, not code.
     mastra_workspace_ast_edit: { ...TOOL_NAME_OVERRIDES.mastra_workspace_ast_edit, enabled: false },
   };
 

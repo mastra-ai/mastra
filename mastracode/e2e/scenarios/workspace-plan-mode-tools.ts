@@ -57,7 +57,7 @@ function assertExcludes(names: string[], unexpected: string, label: string) {
 
 export const workspacePlanModeToolsScenario: McE2eScenario = {
   name: 'workspace-plan-mode-tools',
-  description: 'Verify plan mode filters workspace write tools while keeping edit for plan revisions.',
+  description: 'Verify plan mode keeps write/edit tools for plan files but disables ast_edit.',
   testName: 'filters workspace write tools from plan-mode model requests',
   useOpenAIModel: true,
   aimockFixture: 'workspace-plan-mode-tools.json',
@@ -85,14 +85,14 @@ export const workspacePlanModeToolsScenario: McE2eScenario = {
       assertIncludes(planNames, expected, 'plan-mode');
     }
 
-    // write_file and ast_smart_edit are disabled in plan mode
-    for (const writeTool of ['write_file', 'ast_smart_edit']) {
-      assertIncludes(buildNames, writeTool, 'build-mode');
-      assertExcludes(planNames, writeTool, 'plan-mode');
+    // write_file and string_replace_lsp stay enabled in plan mode for plan file operations
+    for (const planTool of ['write_file', 'string_replace_lsp']) {
+      assertIncludes(buildNames, planTool, 'build-mode');
+      assertIncludes(planNames, planTool, 'plan-mode');
     }
 
-    // string_replace_lsp stays enabled in plan mode for targeted plan file edits
-    assertIncludes(buildNames, 'string_replace_lsp', 'build-mode');
-    assertIncludes(planNames, 'string_replace_lsp', 'plan-mode');
+    // ast_smart_edit is disabled in plan mode (plans are markdown, not code)
+    assertIncludes(buildNames, 'ast_smart_edit', 'build-mode');
+    assertExcludes(planNames, 'ast_smart_edit', 'plan-mode');
   },
 };
