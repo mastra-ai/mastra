@@ -1,7 +1,7 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 
@@ -31,11 +31,10 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
   // mode, fall back to centering the step the paused run is waiting to run next.
   const focusStepId = selectedStepId ?? waitingStepKey;
 
-  useEffect(() => {
-    if (!focusStepId) return;
+  const focusOnStep = useEffectEvent((stepId: string) => {
     const focusNode = getNodes().find(node => {
       const nodeStepId = node.data?.stepId ?? node.data?.label;
-      return nodeStepId === focusStepId;
+      return nodeStepId === stepId;
     });
     if (!focusNode) return;
     graphRef.current?.focus({ preventScroll: true });
@@ -45,7 +44,12 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
       duration: 300,
       zoom: 1,
     });
-  }, [getNodes, focusStepId, setCenter]);
+  });
+
+  useEffect(() => {
+    if (!focusStepId) return;
+    focusOnStep(focusStepId);
+  }, [focusStepId]);
 
   return (
     <div

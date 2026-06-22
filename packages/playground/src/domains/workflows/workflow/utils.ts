@@ -184,19 +184,19 @@ const getStepNodeAndEdge = ({
   prevStepIds: string[];
   nextStepFlow?: SerializedStepFlowEntry;
   condition?: { id: string; fn: string };
-  allPrevNodeIds: string[];
+  allPrevNodeIds: Set<string>;
 }): { nodes: Node[]; edges: Edge[]; nextPrevNodeIds: string[]; nextPrevStepIds: string[] } => {
   let nextNodeIds: string[] = [];
   let nextStepIds: string[] = [];
   if (nextStepFlow?.type === 'step' || nextStepFlow?.type === 'foreach' || nextStepFlow?.type === 'loop') {
-    const nextStepId = allPrevNodeIds?.includes(getWorkflowNodeId(nextStepFlow.step.id))
+    const nextStepId = allPrevNodeIds.has(getWorkflowNodeId(nextStepFlow.step.id))
       ? `${nextStepFlow.step.id}-${yIndex + 1}`
       : nextStepFlow.step.id;
     nextNodeIds = [getWorkflowNodeId(nextStepId)];
     nextStepIds = [nextStepFlow.step.id];
   }
   if (nextStepFlow?.type === 'sleep' || nextStepFlow?.type === 'sleepUntil') {
-    const nextStepId = allPrevNodeIds?.includes(getWorkflowNodeId(nextStepFlow.id))
+    const nextStepId = allPrevNodeIds.has(getWorkflowNodeId(nextStepFlow.id))
       ? `${nextStepFlow.id}-${yIndex + 1}`
       : nextStepFlow.id;
     nextNodeIds = [getWorkflowNodeId(nextStepId)];
@@ -206,7 +206,7 @@ const getStepNodeAndEdge = ({
     nextNodeIds =
       nextStepFlow?.steps.map(step => {
         const stepId = step.step.id;
-        const nextStepId = allPrevNodeIds?.includes(getWorkflowNodeId(stepId)) ? `${stepId}-${yIndex + 1}` : stepId;
+        const nextStepId = allPrevNodeIds.has(getWorkflowNodeId(stepId)) ? `${stepId}-${yIndex + 1}` : stepId;
         return getWorkflowNodeId(nextStepId);
       }) || [];
     nextStepIds = nextStepFlow?.steps.map(step => step.step.id) || [];
@@ -218,7 +218,7 @@ const getStepNodeAndEdge = ({
 
   if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
     const hasGraph = stepFlow.step.component === 'WORKFLOW';
-    const rawNodeId = allPrevNodeIds?.includes(getWorkflowNodeId(stepFlow.step.id))
+    const rawNodeId = allPrevNodeIds.has(getWorkflowNodeId(stepFlow.step.id))
       ? `${stepFlow.step.id}-${yIndex}`
       : stepFlow.step.id;
     const nodeId = getWorkflowNodeId(rawNodeId);
@@ -303,9 +303,7 @@ const getStepNodeAndEdge = ({
   }
 
   if (stepFlow.type === 'sleep' || stepFlow.type === 'sleepUntil') {
-    const rawNodeId = allPrevNodeIds?.includes(getWorkflowNodeId(stepFlow.id))
-      ? `${stepFlow.id}-${yIndex}`
-      : stepFlow.id;
+    const rawNodeId = allPrevNodeIds.has(getWorkflowNodeId(stepFlow.id)) ? `${stepFlow.id}-${yIndex}` : stepFlow.id;
     const nodeId = getWorkflowNodeId(rawNodeId);
     const nodes = [
       ...(condition
@@ -544,7 +542,7 @@ export const constructNodesAndEdges = ({
 
   let prevNodeIds: string[] = [];
   let prevStepIds: string[] = [];
-  let allPrevNodeIds: string[] = [];
+  const allPrevNodeIds = new Set<string>();
 
   for (let index = 0; index < stepGraph.length; index++) {
     const {
@@ -565,7 +563,9 @@ export const constructNodesAndEdges = ({
     edges.push(..._edges);
     prevNodeIds = nextPrevNodeIds;
     prevStepIds = nextPrevStepIds;
-    allPrevNodeIds.push(...prevNodeIds);
+    for (const nodeId of prevNodeIds) {
+      allPrevNodeIds.add(nodeId);
+    }
   }
 
   const edgeTargetIds = new Set(edges.map(edge => edge.target));

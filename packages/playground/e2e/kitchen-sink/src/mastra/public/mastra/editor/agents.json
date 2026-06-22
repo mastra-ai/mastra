@@ -88,5 +88,104 @@
     },
     "name": "Build a B2B SaaS sec…",
     "tools": {}
+  },
+  "zkjQ2UMfRaV3yEm_KnXYi": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "oZKaVN-IgEH1kjAmGgioY": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "hWr8J5t7J3mKHU2TG_GnY": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "GXy3MGHrVsZHPzXZOlU8n": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "YQ37RA-yW_2Zq56-lMMXY": {
+    "instructions": "Vuln Triage Sentinel helps users by prioritizing vulnerability reports, asking for missing evidence, and preparing escalation-ready summaries. Follow the user's requested workflow, identify missing details, and produce a concise final answer. Use available tools only when they are directly relevant. If a requested capability is unavailable, explain the limitation and provide the best manual next step. Complete the task when the user has a clear recommendation, draft, or summary they can act on.",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Vuln Triage Sentinel",
+    "tools": {}
+  },
+  "EeR4cBN8yJ-6rgpu_-Aeh": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "QcTwGIt1s_e6PFBBSVNtf": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "baz3WFsO1gqani5WMUy3u": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "_5EC60NbkGg47MYsZ4ABQ": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "-8yJyvLzASTJ0YzrDJD8w": {
+    "instructions": "",
+    "model": {
+      "name": "codestral-latest",
+      "provider": "mistral"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
+  },
+  "22PFUmK53fBHgDF8ZwqNE": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build a B2B SaaS sec…",
+    "tools": {}
   }
 }
