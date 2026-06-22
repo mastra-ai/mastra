@@ -93,4 +93,42 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
     expect(result.toolMockReport?.liveCalls).toEqual([{ toolName: 'lookupOrder', args: { id: 'A-1' } }]);
     expect(result.toolMockReport?.failure).toBeUndefined();
   });
+
+  it('drains each tool queue in its own declared order when two tools are interleaved', async () => {
+    const liveLog: string[] = [];
+
+    const result = await runToolMockScenario({
+      tools: {
+        writeFile: recordingTool('writeFile', liveLog),
+        sendEmail: recordingTool('sendEmail', liveLog),
+      },
+      // Interleaved across separate turns: writeFile, sendEmail, sendEmail, writeFile.
+      turns: [
+        { toolCalls: [{ id: 'c1', toolName: 'writeFile', args: { path: 'a.txt' } }] },
+        { toolCalls: [{ id: 'c2', toolName: 'sendEmail', args: { to: 'x@y.z' } }] },
+        { toolCalls: [{ id: 'c3', toolName: 'sendEmail', args: { to: 'x@y.z' } }] },
+        { toolCalls: [{ id: 'c4', toolName: 'writeFile', args: { path: 'a.txt' } }] },
+        { text: 'done' },
+      ],
+      toolMocks: [
+        // writeFile queue
+        { toolName: 'writeFile', args: { path: 'a.txt' }, output: { written: 'wf-first' } },
+        { toolName: 'writeFile', args: { path: 'a.txt' }, output: { written: 'wf-second' } },
+        // sendEmail queue
+        { toolName: 'sendEmail', args: { to: 'x@y.z' }, output: { sent: 'se-first' } },
+        { toolName: 'sendEmail', args: { to: 'x@y.z' }, output: { sent: 'se-second' } },
+      ],
+    });
+
+    expect(result.error).toBeNull();
+    expect(liveLog).toEqual([]);
+
+    // Each tool drains ITS OWN queue in declared order, independent of the other's
+    // interleaved calls: writeFile -> [0, 1], sendEmail -> [2, 3].
+    const served = result.toolMockReport?.served ?? [];
+    expect(served.filter(s => s.toolName === 'writeFile').map(s => s.mockIndex)).toEqual([0, 1]);
+    expect(served.filter(s => s.toolName === 'sendEmail').map(s => s.mockIndex)).toEqual([2, 3]);
+    expect(result.toolMockReport?.unconsumed).toEqual([]);
+    expect(result.toolMockReport?.failure).toBeUndefined();
+  });
 });
