@@ -16,11 +16,17 @@ function createMockState() {
     allShellComponents: [{}],
     taskProgress: { updateTasks: vi.fn() },
     taskToolInsertIndex: 5,
-    session: { state: { set: vi.fn(async () => {}) } },
+    session: {
+      state: { set: vi.fn(async () => {}) },
+      thread: { detachFromCurrent: vi.fn() },
+      displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) },
+    },
     harness: {
       abort: vi.fn(),
-      detachFromCurrentThread: vi.fn(),
-      session: { displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) } },
+      session: {
+        thread: { detachFromCurrent: vi.fn() },
+        displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) },
+      },
       setState: vi.fn(async () => {}),
     },
     ui: { requestRender: vi.fn() },
@@ -41,7 +47,7 @@ describe('handleNewCommand', () => {
     const ctx = createCtx(state);
     const callOrder: string[] = [];
 
-    state.harness.detachFromCurrentThread.mockImplementation(() => {
+    state.session.thread.detachFromCurrent.mockImplementation(() => {
       callOrder.push('detach');
     });
     const origPendingNewThread = Object.getOwnPropertyDescriptor(state, 'pendingNewThread');
@@ -58,7 +64,7 @@ describe('handleNewCommand', () => {
 
     await handleNewCommand(ctx);
 
-    expect(state.harness.detachFromCurrentThread).toHaveBeenCalledOnce();
+    expect(state.session.thread.detachFromCurrent).toHaveBeenCalledOnce();
     expect(callOrder).toEqual(['detach', 'pendingNewThread']);
   });
 

@@ -9,15 +9,16 @@ vi.mock('../send-slash-command-message.js', () => ({
 }));
 
 import { handleReportIssueCommand } from '../report-issue.js';
+import { createMockState } from '../../__tests__/harness-mock.js';
 
 function createCtx(options?: { hasModelSelected?: boolean; pendingNewThread?: boolean }) {
-  const state = {
-    pendingNewThread: options?.pendingNewThread ?? false,
-    session: { model: { hasSelection: vi.fn(() => options?.hasModelSelected ?? true) } },
-    harness: {
-      createThread: vi.fn().mockResolvedValue(undefined),
+  const state = createMockState({
+    session: {
+      model: { hasSelection: vi.fn(() => options?.hasModelSelected ?? true) },
+      thread: { create: vi.fn().mockResolvedValue(undefined) },
     },
-  };
+    extra: { pendingNewThread: options?.pendingNewThread ?? false },
+  }) as any;
   return {
     ctx: {
       state,
@@ -37,7 +38,7 @@ describe('handleReportIssueCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith(
       'No model selected. Use /models to select a model, or /login to authenticate.',
     );
-    expect(state.harness.createThread).not.toHaveBeenCalled();
+    expect(state.harness.session.thread.create).not.toHaveBeenCalled();
     expect(mocks.sendSlashCommandMessage).not.toHaveBeenCalled();
   });
 
@@ -46,10 +47,10 @@ describe('handleReportIssueCommand', () => {
 
     await handleReportIssueCommand(ctx, ['startup', 'hangs']);
 
-    expect(state.harness.createThread).toHaveBeenCalledTimes(1);
+    expect(state.harness.session.thread.create).toHaveBeenCalledTimes(1);
     expect(state.pendingNewThread).toBe(false);
     expect(mocks.sendSlashCommandMessage).toHaveBeenCalledTimes(1);
-    expect(state.harness.createThread.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(state.harness.session.thread.create.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.sendSlashCommandMessage.mock.invocationCallOrder[0],
     );
 

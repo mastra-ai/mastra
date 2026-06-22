@@ -7,7 +7,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   // don't leak into the new conversation. Unlike bare abort(), this also
   // unsubscribes from the PubSub topic — preventing another mc instance
   // on the same thread from pushing output into this TUI.
-  state.harness.detachFromCurrentThread();
+  state.session.thread.detachFromCurrent();
 
   state.pendingNewThread = true;
   state.chatContainer.clear();
@@ -19,7 +19,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   state.messageComponentsById.clear();
   state.allShellComponents = [];
   // Clear file tracking in display state (thread_created will also reset this)
-  state.harness.session.displayState.get().modifiedFiles.clear();
+  state.session.displayState.get().modifiedFiles.clear();
   // Clear per-thread ephemeral state from the global harness state
   await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
   if (state.taskProgress) {

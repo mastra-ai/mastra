@@ -3,9 +3,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import type { Session } from './session';
 import type { HarnessEvent, HarnessOMConfig } from './types';
 
-function createHarness(options: {
+async function createSession(options: {
   storage: InMemoryStore;
   omConfig?: HarnessOMConfig;
   resolveModel?: (modelId: string) => any;
@@ -25,9 +26,10 @@ function createHarness(options: {
     resolveModel: options.resolveModel,
   });
 
-  if (options.onEvent) harness.session.subscribe(options.onEvent);
-
-  return harness;
+  await harness.init();
+  const session = await harness.createSession();
+  if (options.onEvent) session.subscribe(options.onEvent);
+  return { harness, session };
 }
 
 describe('session.om', () => {
@@ -37,8 +39,8 @@ describe('session.om', () => {
     storage = new InMemoryStore();
   });
 
-  it('falls back to omConfig defaults for model ids and thresholds', () => {
-    const harness = createHarness({
+  it('falls back to omConfig defaults for model ids and thresholds', async () => {
+    const { session } = await createSession({
       storage,
       omConfig: {
         defaultObserverModelId: 'openai/gpt-4o',
@@ -48,41 +50,40 @@ describe('session.om', () => {
       },
     });
 
-    expect(harness.session.om.observer.modelId()).toBe('openai/gpt-4o');
-    expect(harness.session.om.reflector.modelId()).toBe('openai/gpt-4o-mini');
-    expect(harness.session.om.observer.threshold()).toBe(30_000);
-    expect(harness.session.om.reflector.threshold()).toBe(40_000);
+    expect(session.om.observer.modelId()).toBe('openai/gpt-4o');
+    expect(session.om.reflector.modelId()).toBe('openai/gpt-4o-mini');
+    expect(session.om.observer.threshold()).toBe(30_000);
+    expect(session.om.reflector.threshold()).toBe(40_000);
   });
 
-  it('returns undefined when no state value and no omConfig default exist', () => {
-    const harness = createHarness({ storage });
+  it('returns undefined when no state value and no omConfig default exist', async () => {
+    const { session } = await createSession({ storage });
 
-    expect(harness.session.om.observer.modelId()).toBeUndefined();
-    expect(harness.session.om.reflector.modelId()).toBeUndefined();
-    expect(harness.session.om.observer.threshold()).toBeUndefined();
-    expect(harness.session.om.reflector.threshold()).toBeUndefined();
+    expect(session.om.observer.modelId()).toBeUndefined();
+    expect(session.om.reflector.modelId()).toBeUndefined();
+    expect(session.om.observer.threshold()).toBeUndefined();
+    expect(session.om.reflector.threshold()).toBeUndefined();
   });
 
   it('prefers session-state values over omConfig defaults', async () => {
-    const harness = createHarness({
+    const { session } = await createSession({
       storage,
       omConfig: { defaultObserverModelId: 'openai/gpt-4o' },
     });
-    await harness.session.state.set({ observerModelId: 'anthropic/claude-sonnet-4' } as any);
+    await session.state.set({ observerModelId: 'anthropic/claude-sonnet-4' } as any);
 
-    expect(harness.session.om.observer.modelId()).toBe('anthropic/claude-sonnet-4');
+    expect(session.om.observer.modelId()).toBe('anthropic/claude-sonnet-4');
   });
 
   it('observer.switchModel persists to thread settings and emits om_model_changed', async () => {
     const events: HarnessEvent[] = [];
-    const harness = createHarness({ storage, onEvent: event => events.push(event) });
-    await harness.init();
-    await harness.createThread();
+    const { session } = await createSession({ storage, onEvent: event => events.push(event) });
+    await session.thread.create();
 
-    await harness.session.om.observer.switchModel({ modelId: 'anthropic/claude-sonnet-4' });
+    await session.om.observer.switchModel({ modelId: 'anthropic/claude-sonnet-4' });
 
-    expect(harness.session.om.observer.modelId()).toBe('anthropic/claude-sonnet-4');
-    expect(await harness.session.thread.getSetting({ key: 'observerModelId' })).toBe('anthropic/claude-sonnet-4');
+    expect(session.om.observer.modelId()).toBe('anthropic/claude-sonnet-4');
+    expect(await session.thread.getSetting({ key: 'observerModelId' })).toBe('anthropic/claude-sonnet-4');
     expect(events).toContainEqual({
       type: 'om_model_changed',
       role: 'observer',
@@ -92,14 +93,13 @@ describe('session.om', () => {
 
   it('reflector.switchModel persists to thread settings and emits om_model_changed', async () => {
     const events: HarnessEvent[] = [];
-    const harness = createHarness({ storage, onEvent: event => events.push(event) });
-    await harness.init();
-    await harness.createThread();
+    const { session } = await createSession({ storage, onEvent: event => events.push(event) });
+    await session.thread.create();
 
-    await harness.session.om.reflector.switchModel({ modelId: 'openai/gpt-4o-mini' });
+    await session.om.reflector.switchModel({ modelId: 'openai/gpt-4o-mini' });
 
-    expect(harness.session.om.reflector.modelId()).toBe('openai/gpt-4o-mini');
-    expect(await harness.session.thread.getSetting({ key: 'reflectorModelId' })).toBe('openai/gpt-4o-mini');
+    expect(session.om.reflector.modelId()).toBe('openai/gpt-4o-mini');
+    expect(await session.thread.getSetting({ key: 'reflectorModelId' })).toBe('openai/gpt-4o-mini');
     expect(events).toContainEqual({
       type: 'om_model_changed',
       role: 'reflector',
@@ -107,23 +107,23 @@ describe('session.om', () => {
     });
   });
 
-  it('resolves the observer model via the configured resolver', () => {
+  it('resolves the observer model via the configured resolver', async () => {
     const resolveModel = vi.fn((modelId: string) => ({ modelId }));
-    const harness = createHarness({
+    const { session } = await createSession({
       storage,
       omConfig: { defaultObserverModelId: 'openai/gpt-4o' },
       resolveModel,
     });
 
-    expect(harness.session.om.observer.resolvedModel()).toMatchObject({ modelId: 'openai/gpt-4o' });
+    expect(session.om.observer.resolvedModel()).toMatchObject({ modelId: 'openai/gpt-4o' });
     expect(resolveModel).toHaveBeenCalledWith('openai/gpt-4o');
   });
 
-  it('returns undefined resolved model when no model id is set', () => {
+  it('returns undefined resolved model when no model id is set', async () => {
     const resolveModel = vi.fn((modelId: string) => ({ modelId }));
-    const harness = createHarness({ storage, resolveModel });
+    const { session } = await createSession({ storage, resolveModel });
 
-    expect(harness.session.om.observer.resolvedModel()).toBeUndefined();
+    expect(session.om.observer.resolvedModel()).toBeUndefined();
     expect(resolveModel).not.toHaveBeenCalled();
   });
 });
