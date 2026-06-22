@@ -1,19 +1,16 @@
 ---
 '@mastra/core': minor
-'@mastra/mongodb': patch
-'@mastra/spanner': patch
-'@mastra/libsql': patch
-'@mastra/mysql': patch
-'@mastra/pg': patch
 ---
 
-Add multi-tenant filtering and candidate identity to datasets.
+Add multi-tenant filtering and candidate identity to the datasets domain.
 
-The datasets domain now supports the same per-row tenancy contract as the observability domain. Datasets and dataset items expose `organizationId` and `resourceId`; `listDatasets` and `listItems` accept matching filters. Dataset items inherit the tenancy of their parent dataset automatically — they cannot be set per-call.
+`DatasetRecord`, `DatasetItem`, `DatasetItemRow`, `CreateDatasetInput`, and the `filters` on `ListDatasetsInput` / `ListDatasetItemsInput` now expose optional `organizationId` and `resourceId`, matching the per-row tenancy contract already used by the observability domain. Dataset items inherit tenancy from their parent dataset automatically — they cannot be set per-call.
 
-Datasets also expose two new optional identity fields, `candidateKey` and `candidateId`, for use cases (such as auto-materialized candidate datasets) that need a stable per-incident identity at the dataset level.
+`DatasetRecord` and `CreateDatasetInput` also gain two new optional identity fields, `candidateKey` and `candidateId`, for use cases that need a stable per-incident identity at the dataset level (such as auto-materialized candidate datasets).
 
 The `DatasetItemSource['type']` union now includes `'candidate-screener'` so externally-materialized items can be distinguished from user-uploaded ones.
+
+`DATASETS_SCHEMA` and `DATASET_ITEMS_SCHEMA` gain matching nullable columns, and `DatasetsInMemory` persists and filters on them.
 
 **Before**
 
