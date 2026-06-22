@@ -1265,7 +1265,7 @@ export class GeminiLiveVoice extends MastraVoice<
     this.ws.on('close', (code: number, reason: Buffer) => {
       this.log('WebSocket connection closed', { code, reason: reason.toString() });
       this.state = 'disconnected';
-      this.emit('session', { state: 'disconnected' });
+      this.emit('session', { state: 'disconnected', code, reason: reason.toString() });
     });
 
     this.ws.on('error', (error: Error) => {
