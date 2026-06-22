@@ -4,8 +4,6 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { AlertCircleIcon } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { WorkflowSelectedStepProvider } from '../context/workflow-selected-step-context';
-import { WorkflowStepDetailProvider } from '../context/workflow-step-detail-provider';
 import { WorkflowGraphInner } from './workflow-graph-inner';
 import '../../../index.css';
 
@@ -39,13 +37,9 @@ export function WorkflowGraph({ workflowId, workflow, isLoading }: WorkflowGraph
 
   return (
     <ReactFlowProvider>
-      <WorkflowSelectedStepProvider>
-        <WorkflowStepDetailProvider>
-          <WorkflowGraphInner
-            workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
-          />
-        </WorkflowStepDetailProvider>
-      </WorkflowSelectedStepProvider>
+      <WorkflowGraphInner
+        workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
+      />
     </ReactFlowProvider>
   );
 }

@@ -149,8 +149,8 @@ test('takes the condition-selected branch after a HARD reload of the paused :run
 
   // The un-taken arm's incoming edge must stay neutral: short-text was skipped, so the run
   // never flowed through it even though the snapshot carries a status for the step.
-  const skippedArmEdge = page.locator("[id='eshort-text-condition-short-text']");
-  await expect(skippedArmEdge).not.toHaveAttribute('data-edge-status', 'success');
+  const skippedArmEdge = page.locator('[data-edge-to="short-text"]').first();
+  await expect(skippedArmEdge).toHaveAttribute('data-edge-status', 'idle');
 });
 
 test('takes the condition-selected branch when the conditional is reloaded then advanced', async ({ page }) => {
@@ -309,7 +309,9 @@ test('check edges', async ({ page }) => {
   expect(mapBranch).toBeTruthy();
 
   const edgeMap = page.locator(`[data-edge-from="${mapBranch}"][data-edge-to="nested-text-processor"]`).first();
-  const finalEdge = page.locator('[id="efinal-step-__workflow-end__"]').first();
+  // The workflow-output boundary edge carries no step ids, so target it by its
+  // domain-prefixed React Flow id: edge-boundary-<sourceNodeId>-boundary-end.
+  const finalEdge = page.locator('[id="edge-boundary-node-final-step-boundary-end"]').first();
 
   await expect(edgeMap).toHaveAttribute('data-edge-status', 'success', { timeout: 20000 });
   await expect(finalEdge).toHaveAttribute('data-edge-status', 'success', { timeout: 20000 });
