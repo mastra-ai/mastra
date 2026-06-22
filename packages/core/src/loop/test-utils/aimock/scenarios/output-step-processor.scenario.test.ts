@@ -13,59 +13,64 @@
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
-describe('AIMock loop scenario: output step processor (per-step)', () => {
-  const getMock = useLoopScenarioAimock();
+describeForAllEngines(
+  'AIMock loop scenario: output step processor (per-step)',
+  engine => {
+    const getMock = useLoopScenarioAimock();
 
-  it('processOutputStep runs for each step including intermediate tool-call steps', async () => {
-    const stepsSeen: Array<{ iteration: number; hasToolCalls: boolean }> = [];
+    it('processOutputStep runs for each step including intermediate tool-call steps', async () => {
+      const stepsSeen: Array<{ iteration: number; hasToolCalls: boolean }> = [];
 
-    const lookupTool = createTool({
-      id: 'lookup',
-      description: 'Look up a value.',
-      inputSchema: z.object({ key: z.string() }),
-      outputSchema: z.object({ value: z.string() }),
-      execute: async ({ key }) => ({ value: `VALUE_FOR_${key}` }),
+      const lookupTool = createTool({
+        id: 'lookup',
+        description: 'Look up a value.',
+        inputSchema: z.object({ key: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ key }) => ({ value: `VALUE_FOR_${key}` }),
+      });
+
+      const outputStepProcessor = {
+        id: 'step-tracker',
+        async processOutputStep({ toolCalls, stepNumber }: { toolCalls?: unknown[]; stepNumber: number }) {
+          stepsSeen.push({
+            iteration: stepNumber + 1,
+            hasToolCalls: Boolean(toolCalls && toolCalls.length > 0),
+          });
+        },
+      };
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Look up the value for key alpha.',
+        tools: { lookup: lookupTool },
+        stopWhen: stepCountIs(5),
+        outputProcessors: [outputStepProcessor],
+        fixtures: llm => {
+          // Turn 1: emit a tool call
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              toolCalls: [{ id: 'call_lookup', name: 'lookup', arguments: { key: 'alpha' } }],
+            },
+          );
+          // Turn 2: final text
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The value for alpha is VALUE_FOR_alpha.' });
+        },
+      });
+
+      // processOutputStep ran for both steps (tool-call step + final step)
+      expect(stepsSeen).toHaveLength(2);
+      // Step 1 had tool calls
+      expect(stepsSeen[0].hasToolCalls).toBe(true);
+      // Step 2 had no tool calls (final text)
+      expect(stepsSeen[1].hasToolCalls).toBe(false);
     });
-
-    const outputStepProcessor = {
-      id: 'step-tracker',
-      async processOutputStep({ toolCalls, stepNumber }: { toolCalls?: unknown[]; stepNumber: number }) {
-        stepsSeen.push({
-          iteration: stepNumber + 1,
-          hasToolCalls: Boolean(toolCalls && toolCalls.length > 0),
-        });
-      },
-    };
-
-    await runLoopScenario({
-      llm: getMock(),
-      prompt: 'Look up the value for key alpha.',
-      tools: { lookup: lookupTool },
-      stopWhen: stepCountIs(5),
-      outputProcessors: [outputStepProcessor],
-      fixtures: llm => {
-        // Turn 1: emit a tool call
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          {
-            toolCalls: [{ id: 'call_lookup', name: 'lookup', arguments: { key: 'alpha' } }],
-          },
-        );
-        // Turn 2: final text
-        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The value for alpha is VALUE_FOR_alpha.' });
-      },
-    });
-
-    // processOutputStep ran for both steps (tool-call step + final step)
-    expect(stepsSeen).toHaveLength(2);
-    // Step 1 had tool calls
-    expect(stepsSeen[0].hasToolCalls).toBe(true);
-    // Step 2 had no tool calls (final text)
-    expect(stepsSeen[1].hasToolCalls).toBe(false);
-  });
-});
+  },
+  { skip: ['durable'] },
+);
