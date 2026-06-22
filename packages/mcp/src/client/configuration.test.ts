@@ -27,6 +27,120 @@ describe('MCPClient tool discovery retries', () => {
     return client;
   }
 
+  function createMultiServerClient() {
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      servers: {
+        weather: {
+          url: new URL('http://localhost:1234/sse'),
+        },
+        stock: {
+          url: new URL('http://localhost:5678/sse'),
+        },
+      },
+    });
+
+    clients.push(client);
+    return client;
+  }
+
+  it('returns namespaced tools and empty errors from listToolsWithErrors on successful discovery', async () => {
+    const client = createClient();
+    const toolset = { getWeather: {} as any };
+    const internalClient = {
+      tools: vi.fn().mockResolvedValue(toolset),
+    } as any;
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockResolvedValue(internalClient);
+
+    const result = await client.listToolsWithErrors();
+
+    expect(result).toEqual({
+      tools: {
+        weather_getWeather: toolset.getWeather,
+      },
+      errors: {},
+    });
+    expect(internalClient.tools).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns successful tools and server errors from listToolsWithErrors on partial failure', async () => {
+    const client = createMultiServerClient();
+    const weatherTools = { getWeather: {} as any };
+    const weatherClient = {
+      tools: vi.fn().mockResolvedValue(weatherTools),
+    } as any;
+    const stockClient = {
+      tools: vi.fn().mockRejectedValue(new Error('Validation failed')),
+    } as any;
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockImplementation(async (serverName: string) => {
+      return serverName === 'weather' ? weatherClient : stockClient;
+    });
+
+    const result = await client.listToolsWithErrors();
+
+    expect(result).toEqual({
+      tools: {
+        weather_getWeather: weatherTools.getWeather,
+      },
+      errors: {
+        stock: 'Validation failed',
+      },
+    });
+    expect(weatherClient.tools).toHaveBeenCalledTimes(1);
+    expect(stockClient.tools).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries listToolsWithErrors once after a reconnectable discovery failure', async () => {
+    const client = createClient();
+    const toolset = { getWeather: {} as any };
+    const internalClient = {
+      tools: vi.fn().mockRejectedValueOnce(new Error('Connection closed')).mockResolvedValueOnce(toolset),
+    } as any;
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockResolvedValue(internalClient);
+    const reconnectSpy = vi.spyOn(client, 'reconnectServer').mockResolvedValue();
+
+    const result = await client.listToolsWithErrors();
+
+    expect(result).toEqual({
+      tools: {
+        weather_getWeather: toolset.getWeather,
+      },
+      errors: {},
+    });
+    expect(internalClient.tools).toHaveBeenCalledTimes(2);
+    expect(reconnectSpy).toHaveBeenCalledTimes(1);
+    expect(reconnectSpy).toHaveBeenCalledWith('weather');
+  });
+
+  it('keeps duplicate tool names uniquely namespaced in listToolsWithErrors', async () => {
+    const client = createMultiServerClient();
+    const weatherTools = { search: {} as any };
+    const stockTools = { search: {} as any };
+    const weatherClient = {
+      tools: vi.fn().mockResolvedValue(weatherTools),
+    } as any;
+    const stockClient = {
+      tools: vi.fn().mockResolvedValue(stockTools),
+    } as any;
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockImplementation(async (serverName: string) => {
+      return serverName === 'weather' ? weatherClient : stockClient;
+    });
+
+    const result = await client.listToolsWithErrors();
+
+    expect(result).toEqual({
+      tools: {
+        weather_search: weatherTools.search,
+        stock_search: stockTools.search,
+      },
+      errors: {},
+    });
+  });
+
   it('retries listToolsetsWithErrors once after a reconnectable discovery failure', async () => {
     const client = createClient();
     const toolset = { getWeather: {} as any };

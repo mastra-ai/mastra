@@ -157,7 +157,9 @@ export interface GeminiLiveEventMap {
   /** Session state changes */
   session: {
     state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'error' | 'updated';
-    config?: Record<string, unknown>; // Configuration data when state is 'updated' or 'connected'
+    config?: Record<string, unknown>;
+    code?: number;
+    reason?: string;
   };
   /** Tool calls from the model */
   toolCall: { name: string; args: Record<string, any>; id: string };
@@ -247,6 +249,11 @@ export interface GeminiLiveServerMessage {
   // Setup completion message
   setup?: {
     sessionHandle?: string;
+  };
+  // Session resumption update from server (camelCase per wire format)
+  sessionResumptionUpdate?: {
+    newHandle?: string;
+    resumable?: boolean;
   };
 
   // Setup complete message (alternative format)

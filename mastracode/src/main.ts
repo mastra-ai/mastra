@@ -103,10 +103,14 @@ async function tuiMain(pipedInput?: string | null) {
   }
   applyThemeMode(themeMode, detectedBgHex);
 
+  // createMastraCode() brought up shared resources and minted the single
+  // session that all work runs through. The Harness owns no session of its own.
+  const session = result.session;
+
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
   analytics.capture('mastracode_session_started', {
-    mode: harness.session.mode.get(),
-    resourceId: harness.session.identity.getResourceId(),
+    mode: session.mode.get(),
+    resourceId: session.identity.getResourceId(),
     hasAuthStorage: Boolean(authStorage),
     hasMcp: Boolean(mcpManager),
     theme: themeMode,
@@ -114,6 +118,7 @@ async function tuiMain(pipedInput?: string | null) {
 
   const tui = new MastraTUI({
     harness,
+    session,
     hookManager,
     analytics,
     authStorage,
@@ -133,7 +138,7 @@ async function tuiMain(pipedInput?: string | null) {
       .then(browser => {
         if (!browser) return;
         harness.setBrowser(browser);
-        void harness.session.state.set({ activeBrowserSettings: settings.browser } as any).catch(() => {});
+        void session.state.set({ activeBrowserSettings: settings.browser } as any).catch(() => {});
       })
       .catch(() => {});
   }

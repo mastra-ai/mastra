@@ -69,43 +69,37 @@ function createState() {
   const setText = vi.fn();
   const memorySetText = vi.fn();
 
+  const session = {
+    displayState: {
+      get: vi.fn(() => ({
+        omProgress: { status: 'idle' },
+        bufferingMessages: false,
+        bufferingObservations: false,
+      })),
+    },
+    followUps: { count: vi.fn(() => 0) },
+    identity: { getResourceId: vi.fn(() => 'resource-1') },
+    thread: { getId: vi.fn(() => 'thread-1') },
+    mode: {
+      get: vi.fn(() => 'build'),
+      resolve: vi.fn(() => ({ id: 'build', name: 'build', metadata: { color: '#00ff00' } })),
+    },
+    state: { get: vi.fn(() => ({ yolo: false })) },
+    model: {
+      get: vi.fn(() => 'anthropic/claude-sonnet-4-20250514'),
+    },
+    om: {
+      observer: { modelId: vi.fn(() => 'openai/gpt-4o') },
+      reflector: { modelId: vi.fn(() => 'openai/gpt-4o-mini') },
+    },
+  };
+
   return {
     options: {},
-    session: {
-      followUps: { count: vi.fn(() => 0) },
-      identity: { getResourceId: vi.fn(() => 'resource-1') },
-      thread: { getId: vi.fn(() => 'thread-1') },
-      mode: {
-        get: vi.fn(() => 'build'),
-        resolve: vi.fn(() => ({ id: 'build', name: 'build', metadata: { color: '#00ff00' } })),
-      },
-      state: { get: vi.fn(() => ({ yolo: false })) },
-    },
+    session,
     harness: {
       listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
-      session: {
-        displayState: {
-          get: vi.fn(() => ({
-            omProgress: { status: 'idle' },
-            bufferingMessages: false,
-            bufferingObservations: false,
-          })),
-        },
-        followUps: { count: vi.fn(() => 0) },
-        identity: { getResourceId: vi.fn(() => 'resource-1') },
-        thread: { getId: vi.fn(() => 'thread-1') },
-        mode: {
-          get: vi.fn(() => 'build'),
-          resolve: vi.fn(() => ({ id: 'build', name: 'build', metadata: { color: '#00ff00' } })),
-        },
-        model: {
-          get: vi.fn(() => 'anthropic/claude-sonnet-4-20250514'),
-        },
-        om: {
-          observer: { modelId: vi.fn(() => 'openai/gpt-4o') },
-          reflector: { modelId: vi.fn(() => 'openai/gpt-4o-mini') },
-        },
-      },
+      session,
     },
     statusLine: { setText },
     memoryStatusLine: { setText: memorySetText },

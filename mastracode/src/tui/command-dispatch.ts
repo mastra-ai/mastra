@@ -303,7 +303,7 @@ async function handleGoalSourceCommand(
     try {
       let workspace = ctx.getResolvedWorkspace();
       if (!workspace && ctx.harness?.hasWorkspace?.()) {
-        workspace = await ctx.harness.resolveWorkspace();
+        workspace = await ctx.harness.resolveWorkspace({ session: ctx.state.session });
       }
       const skill = await workspace?.skills?.get(goalSkill.path || goalSkill.name);
       if (!skill || skill.metadata?.goal !== true) {
