@@ -1166,6 +1166,471 @@ describe('AIMock loop scenarios (evented engine)', () => {
     });
   });
 
+  // ── Rich-type shape scenarios ─────────────────────────────────────────
+  //
+  // These scenarios verify that tool results containing shapes corresponding
+  // to the rich types supported by the UnixSocketPubSub codec (PR #17836) —
+  // Date, Error, Map, Set, RegExp, URL, BigInt, undefined — flow through the
+  // evented agentic loop and arrive intact in the next model request.
+  //
+  // Today the EventEmitterPubSub in-process path passes objects by reference
+  // (no serialisation), so these pass trivially. Once the codec path is wired
+  // in (cross-process UnixSocketPubSub), these same scenarios guard against
+  // codec regressions that break the agentic loop end-to-end.
+
+  describe('rich-type shapes: Date', () => {
+    const getMock = useLoopScenarioAimock();
+
+    it('Date objects in tool results round-trip through the evented loop', async () => {
+      const now = new Date('2026-06-22T12:00:00.000Z');
+      const past = new Date('2020-01-15T08:30:00.000Z');
+
+      const dateTool = createTool({
+        id: 'date_tool',
+        description: 'Returns dates.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          createdAt: z.string(),
+          updatedAt: z.string(),
+          events: z.array(z.object({ label: z.string(), when: z.string() })),
+        }),
+        execute: async () => ({
+          createdAt: past.toISOString(),
+          updatedAt: now.toISOString(),
+          events: [
+            { label: 'registered', when: past.toISOString() },
+            { label: 'last_login', when: now.toISOString() },
+          ],
+        }),
+      });
+
+      const { requests } = await runLoopScenario({
+        llm: getMock(),
+        prompt: 'Get dates.',
+        tools: { date_tool: dateTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_date', name: 'date_tool', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Dates received.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
+      expect(turn2).toContain('2026-06-22T12:00:00.000Z');
+      expect(turn2).toContain('2020-01-15T08:30:00.000Z');
+      expect(turn2).toContain('registered');
+      expect(turn2).toContain('last_login');
+    });
+  });
+
+  describe('rich-type shapes: Error-like objects', () => {
+    const getMock = useLoopScenarioAimock();
+
+    it('error-like tool results with message, name, and cause chain survive the loop', async () => {
+      const errorTool = createTool({
+        id: 'error_info_tool',
+        description: 'Returns error diagnostics.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          errors: z.array(
+            z.object({
+              name: z.string(),
+              message: z.string(),
+              code: z.string().optional(),
+              cause: z.string().optional(),
+            }),
+          ),
+        }),
+        execute: async () => ({
+          errors: [
+            { name: 'ValidationError', message: 'field "email" is required', code: 'E_VALIDATION' },
+            {
+              name: 'NetworkError',
+              message: 'connection refused',
+              code: 'E_CONN_REFUSED',
+              cause: 'DNS lookup failed for api.example.com',
+            },
+          ],
+        }),
+      });
+
+      const { requests } = await runLoopScenario({
+        llm: getMock(),
+        prompt: 'Get error info.',
+        tools: { error_info_tool: errorTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_err', name: 'error_info_tool', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Errors received.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
+      expect(turn2).toContain('ValidationError');
+      expect(turn2).toContain('email');
+      expect(turn2).toContain('is required');
+      expect(turn2).toContain('E_VALIDATION');
+      expect(turn2).toContain('NetworkError');
+      expect(turn2).toContain('connection refused');
+      expect(turn2).toContain('DNS lookup failed');
+    });
+  });
+
+  describe('rich-type shapes: Map-like key-value pairs', () => {
+    const getMock = useLoopScenarioAimock();
+
+    it('Map-shaped entries (array-of-pairs) survive the evented loop', async () => {
+      const mapTool = createTool({
+        id: 'map_tool',
+        description: 'Returns key-value data.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          entries: z.array(z.tuple([z.string(), z.number()])),
+          nestedEntries: z.array(z.tuple([z.string(), z.object({ score: z.number(), tags: z.array(z.string()) })])),
+        }),
+        execute: async () => ({
+          entries: [
+            ['alpha', 100],
+            ['beta', 200],
+            ['gamma', 300],
+          ] as [string, number][],
+          nestedEntries: [
+            ['user-1', { score: 95, tags: ['admin', 'active'] }],
+            ['user-2', { score: 72, tags: ['viewer'] }],
+          ] as [string, { score: number; tags: string[] }][],
+        }),
+      });
+
+      const { requests } = await runLoopScenario({
+        llm: getMock(),
+        prompt: 'Get map data.',
+        tools: { map_tool: mapTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_map', name: 'map_tool', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Map data received.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
+      expect(turn2).toContain('alpha');
+      expect(turn2).toContain('100');
+      expect(turn2).toContain('beta');
+      expect(turn2).toContain('200');
+      expect(turn2).toContain('gamma');
+      expect(turn2).toContain('300');
+      expect(turn2).toContain('user-1');
+      expect(turn2).toContain('admin');
+    });
+  });
+
+  describe('rich-type shapes: Set-like unique arrays', () => {
+    const getMock = useLoopScenarioAimock();
+
+    it('Set-shaped arrays of unique values survive the evented loop', async () => {
+      const setTool = createTool({
+        id: 'set_tool',
+        description: 'Returns unique collections.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          tags: z.array(z.string()),
+          ids: z.array(z.number()),
+        }),
+        execute: async () => ({
+          tags: ['typescript', 'vitest', 'mastra', 'evented-engine', 'codec'],
+          ids: [1001, 2002, 3003, 4004, 5005],
+        }),
+      });
+
+      const { requests } = await runLoopScenario({
+        llm: getMock(),
+        prompt: 'Get unique collections.',
+        tools: { set_tool: setTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_set', name: 'set_tool', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Sets received.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
+      expect(turn2).toContain('typescript');
+      expect(turn2).toContain('mastra');
+      expect(turn2).toContain('evented-engine');
+      expect(turn2).toContain('codec');
+      expect(turn2).toContain('1001');
+      expect(turn2).toContain('5005');
+    });
+  });
+
+  describe('rich-type shapes: RegExp-like pattern objects', () => {
+    const getMock = useLoopScenarioAimock();
+
+    it('regex pattern objects with source and flags survive the evented loop', async () => {
+      const regexTool = createTool({
+        id: 'regex_tool',
+        description: 'Returns regex patterns.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          patterns: z.array(z.object({ source: z.string(), flags: z.string(), description: z.string() })),
+        }),
+        execute: async () => ({
+          patterns: [
+            { source: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$', flags: 'i', description: 'email' },
+            { source: '\\d{4}-\\d{2}-\\d{2}', flags: '', description: 'iso-date' },
+            { source: '<script[^>]*>.*?</script>', flags: 'gis', description: 'script-tag' },
+          ],
+        }),
+      });
+
+      const { requests } = await runLoopScenario({
+        llm: getMock(),
+        prompt: 'Get regex patterns.',
+        tools: { regex_tool: regexTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_regex', name: 'regex_tool', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Patterns received.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
+      expect(turn2).toContain('email');
+      expect(turn2).toContain('iso-date');
+      expect(turn2).toContain('script-tag');
+      expect(turn2).toContain('a-zA-Z0-9');
+    });
+  });
+
+  describe('rich-type shapes: URL strings', () => {
+    const getMock = useLoopScenarioAimock();
+
+    it('URL strings with various schemes survive the evented loop', async () => {
+      const urlTool = createTool({
+        id: 'url_tool',
+        description: 'Returns URLs.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          urls: z.array(z.object({ href: z.string(), label: z.string() })),
+        }),
+        execute: async () => ({
+          urls: [
+            { href: 'https://example.com/path?query=value&foo=bar#section', label: 'web' },
+            { href: 'file:///home/user/docs/readme.md', label: 'file' },
+            { href: 'data:text/plain;base64,SGVsbG8=', label: 'data' },
+            { href: 'wss://ws.example.com:8080/socket', label: 'websocket' },
+          ],
+        }),
+      });
+
+      const { requests } = await runLoopScenario({
+        llm: getMock(),
+        prompt: 'Get URLs.',
+        tools: { url_tool: urlTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_url', name: 'url_tool', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'URLs received.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
+      expect(turn2).toContain('https://example.com/path?query=value&foo=bar#section');
+      expect(turn2).toContain('file:///home/user/docs/readme.md');
+      expect(turn2).toContain('data:text/plain;base64,SGVsbG8=');
+      expect(turn2).toContain('wss://ws.example.com:8080/socket');
+    });
+  });
+
+  describe('rich-type shapes: BigInt-range numbers', () => {
+    const getMock = useLoopScenarioAimock();
+
+    it('large numeric strings representing BigInt values survive the evented loop', async () => {
+      const bigintTool = createTool({
+        id: 'bigint_tool',
+        description: 'Returns large numeric data.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          values: z.array(z.object({ label: z.string(), value: z.string(), radix: z.string().optional() })),
+        }),
+        execute: async () => ({
+          values: [
+            { label: 'max-safe-plus-one', value: '9007199254740993' },
+            { label: 'large-id', value: '18446744073709551615' },
+            { label: 'negative-big', value: '-99999999999999999999' },
+            { label: 'hex', value: '0xFFFFFFFFFFFFFFFF', radix: '16' },
+          ],
+        }),
+      });
+
+      const { requests } = await runLoopScenario({
+        llm: getMock(),
+        prompt: 'Get large numbers.',
+        tools: { bigint_tool: bigintTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_big', name: 'bigint_tool', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Large numbers received.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
+      expect(turn2).toContain('9007199254740993');
+      expect(turn2).toContain('18446744073709551615');
+      expect(turn2).toContain('-99999999999999999999');
+      expect(turn2).toContain('0xFFFFFFFFFFFFFFFF');
+    });
+  });
+
+  describe('rich-type shapes: null and undefined handling', () => {
+    const getMock = useLoopScenarioAimock();
+
+    it('explicit nulls in tool results survive the evented loop', async () => {
+      const nullTool = createTool({
+        id: 'null_tool',
+        description: 'Returns data with nulls.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          present: z.string(),
+          missing: z.null(),
+          nested: z.object({
+            value: z.string().nullable(),
+            items: z.array(z.string().nullable()),
+          }),
+        }),
+        execute: async () => ({
+          present: 'has-value',
+          missing: null,
+          nested: {
+            value: null,
+            items: ['first', null, 'third'],
+          },
+        }),
+      });
+
+      const { requests } = await runLoopScenario({
+        llm: getMock(),
+        prompt: 'Get nullable data.',
+        tools: { null_tool: nullTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_null', name: 'null_tool', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Nullable data received.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
+      expect(turn2).toContain('has-value');
+      expect(turn2).toContain('null');
+      expect(turn2).toContain('first');
+      expect(turn2).toContain('third');
+    });
+  });
+
+  describe('rich-type shapes: mixed payload', () => {
+    const getMock = useLoopScenarioAimock();
+
+    it('a single tool result combining all rich-type shapes survives the evented loop', async () => {
+      const mixedTool = createTool({
+        id: 'mixed_tool',
+        description: 'Returns a payload with all rich-type shapes.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          timestamp: z.string(),
+          error: z.object({ name: z.string(), message: z.string(), cause: z.string().optional() }),
+          mapEntries: z.array(z.tuple([z.string(), z.number()])),
+          setValues: z.array(z.string()),
+          pattern: z.object({ source: z.string(), flags: z.string() }),
+          url: z.string(),
+          bigValue: z.string(),
+          nullableField: z.string().nullable(),
+        }),
+        execute: async () => ({
+          timestamp: new Date('2026-06-22T12:00:00Z').toISOString(),
+          error: { name: 'CodecTestError', message: 'rich-type round-trip', cause: 'inner cause' },
+          mapEntries: [
+            ['key-a', 1],
+            ['key-b', 2],
+          ] as [string, number][],
+          setValues: ['unique-1', 'unique-2', 'unique-3'],
+          pattern: { source: '\\d+\\.\\d+', flags: 'g' },
+          url: 'https://mastra.ai/docs/codec?rich=true',
+          bigValue: '9007199254740993',
+          nullableField: null,
+        }),
+      });
+
+      const { requests } = await runLoopScenario({
+        llm: getMock(),
+        prompt: 'Get mixed payload.',
+        tools: { mixed_tool: mixedTool },
+        stopWhen: stepCountIs(5),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_mixed', name: 'mixed_tool', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Mixed payload received.' });
+        },
+      });
+
+      expect(requests).toHaveLength(2);
+      const turn2 = JSON.stringify(requests[1]?.body?.messages ?? []);
+      // Date shape
+      expect(turn2).toContain('2026-06-22T12:00:00');
+      // Error shape
+      expect(turn2).toContain('CodecTestError');
+      expect(turn2).toContain('rich-type round-trip');
+      expect(turn2).toContain('inner cause');
+      // Map shape
+      expect(turn2).toContain('key-a');
+      expect(turn2).toContain('key-b');
+      // Set shape
+      expect(turn2).toContain('unique-1');
+      expect(turn2).toContain('unique-3');
+      // RegExp shape
+      expect(turn2).toContain('\\d+');
+      // URL shape
+      expect(turn2).toContain('https://mastra.ai/docs/codec');
+      // BigInt shape
+      expect(turn2).toContain('9007199254740993');
+      // null
+      expect(turn2).toContain('null');
+    });
+  });
+
   // ── Evented-specific: onStepFinish callback ─────────────────────────
 
   describe('evented-specific: onStepFinish', () => {
