@@ -156,10 +156,9 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
-    await (harness as unknown as { buildToolsets(ctx: RequestContext): Promise<unknown> }).buildToolsets(
-      new RequestContext(),
-    );
+    await (harness as any).buildToolsets(session, new RequestContext());
 
     expect(capturedOpts).toHaveLength(1);
     const cloneCb = capturedOpts[0]!.cloneThreadForFork as (a: {
