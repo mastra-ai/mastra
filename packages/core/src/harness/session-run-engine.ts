@@ -1,6 +1,7 @@
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
 import type { RequestContext } from '../request-context';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { Session, SessionMachinery } from './session';
 import {
   addOptionalUsageField,
@@ -15,7 +16,6 @@ import {
   toSystemReminderContent,
   toUserSignalMessage,
 } from './stream-content';
-import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { HarnessMessage, TokenUsage } from './types';
 
 /**

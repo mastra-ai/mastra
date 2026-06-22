@@ -546,7 +546,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    await harness.createSession();
 
     // After init, signal provider's connected agent (the base agent) should have memory
     const connectedAgent = signalProvider.getConnectedAgent()!;
