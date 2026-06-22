@@ -299,7 +299,8 @@ await voice.send(micStream)
   {
     name: 'turns',
     type: 'IncrementalTurn[]',
-    description: 'Prior conversation turns to seed into the session. Each turn has a `role` ("user" or "assistant") and `content` string. Both roles are supported on newer models (e.g. `gemini-2.5-flash-native-audio-preview-12-2025`). Some older models only accept user-role turns.',
+    description:
+      'Prior conversation turns to seed into the session. Each turn has a `role` ("user" or "assistant") and `content` string. Both roles are supported on newer models (e.g. `gemini-2.5-flash-native-audio-preview-12-2025`). Some older models only accept user-role turns.',
     isOptional: false,
   },
   {
