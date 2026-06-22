@@ -1,14 +1,15 @@
 /**
  * Inline plan approval component.
- * Shows a submitted plan as rendered markdown with Approve/Reject/Request Changes options
- * directly in the conversation flow.
+ * Shows a submitted plan as rendered markdown with Approve/Use as Goal/Request Changes options
+ * directly in the conversation flow. When a previous plan exists, shows a diff of changes.
+ *
+ * "Request changes" rejects the plan and stops the agent — the user provides
+ * revision feedback via a regular chat message rather than inline input.
  */
 
 import {
   Box,
   Container,
-  getKeybindings,
-  Input,
   Markdown,
   SelectList,
   Spacer,
@@ -25,9 +26,11 @@ export interface PlanApprovalInlineOptions {
   toolCallId: string;
   title: string;
   plan: string;
+  /** Previous plan content for diff display on resubmission. */
+  previousPlan?: string;
   onApprove: () => void;
   onGoal: () => void;
-  onReject: (feedback?: string) => void;
+  onReject: () => void;
 }
 
 class PlanContentBox implements Component {
@@ -59,17 +62,79 @@ class PlanContentBox implements Component {
   }
 }
 
+/**
+ * Renders a unified diff between two plan texts inside a bordered box.
+ */
+class PlanDiffBox implements Component {
+  private diffLines: string[];
+
+  constructor(oldPlan: string, newPlan: string) {
+    this.diffLines = generatePlanDiff(oldPlan, newPlan);
+  }
+
+  invalidate(): void {}
+
+  render(width: number): string[] {
+    const availableWidth = Math.max(24, width - BOX_INDENT);
+    const innerWidth = Math.max(20, availableWidth - 4);
+    const border = (text: string) => chalk.hex(mastra.purple)(text);
+    const top = `${border('╭')}${border('─'.repeat(innerWidth + 2))}${border('╮')}`;
+    const bottom = `${border('╰')}${border('─'.repeat(innerWidth + 2))}${border('╯')}`;
+    const body = this.diffLines.map(line => {
+      let content = line;
+      let contentVis = visibleWidth(content);
+      if (contentVis > innerWidth) {
+        content = truncateToWidth(content, innerWidth);
+        contentVis = visibleWidth(content);
+      }
+      const padding = ' '.repeat(Math.max(0, innerWidth - contentVis));
+      return `${border('│')} ${content}${padding} ${border('│')}`;
+    });
+    return [top, ...body, bottom];
+  }
+}
+
+/**
+ * Generate colored diff lines between two plan texts.
+ * Context lines are muted, removed lines are red, added lines are green.
+ */
+function generatePlanDiff(oldText: string, newText: string): string[] {
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  const lines: string[] = [];
+
+  const removedColor = chalk.hex(mastra.red);
+  const addedColor = chalk.hex(theme.getTheme().success);
+
+  const maxLines = Math.max(oldLines.length, newLines.length);
+
+  for (let i = 0; i < maxLines; i++) {
+    if (i >= oldLines.length) {
+      lines.push(addedColor(`+ ${newLines[i]}`));
+    } else if (i >= newLines.length) {
+      lines.push(removedColor(`- ${oldLines[i]}`));
+    } else if (oldLines[i] !== newLines[i]) {
+      lines.push(removedColor(`- ${oldLines[i]!}`));
+      lines.push(addedColor(`+ ${newLines[i]!}`));
+    } else {
+      lines.push(theme.fg('muted', `  ${oldLines[i]!}`));
+    }
+  }
+
+  return lines;
+}
+
 export class PlanApprovalInlineComponent extends Container implements Focusable {
   private contentBox: Box;
   private selectList?: SelectList;
-  private feedbackInput?: Input;
   private onApprove?: () => void;
   private onGoal?: () => void;
-  private onReject?: (feedback?: string) => void;
+  private onReject?: () => void;
   private resolved = false;
-  private mode: 'streaming' | 'select' | 'feedback' = 'select';
+  private mode: 'streaming' | 'select' = 'select';
   private planTitle: string;
   private planContent: string;
+  private previousPlan?: string;
 
   private _focused = false;
   get focused(): boolean {
@@ -77,9 +142,6 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   }
   set focused(value: boolean) {
     this._focused = value;
-    if (this.mode === 'feedback' && this.feedbackInput) {
-      this.feedbackInput.focused = value;
-    }
   }
 
   constructor(
@@ -89,6 +151,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     super();
     this.planTitle = options.title;
     this.planContent = options.plan;
+    this.previousPlan = options.previousPlan;
     this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(this.contentBox);
     this.activate(options);
@@ -118,6 +181,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.onReject = options.onReject;
     this.planTitle = options.title;
     this.planContent = options.plan;
+    this.previousPlan = options.previousPlan;
     this.mode = 'select';
     this.resolved = false;
     this.renderSelectable();
@@ -144,9 +208,17 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   private renderSelectable(): void {
     this.contentBox.clear();
     this.selectList = undefined;
-    this.feedbackInput = undefined;
     this.renderPlanHeader();
-    this.renderPlanContent();
+
+    // Show diff when this is a resubmission with a previous plan
+    if (this.previousPlan) {
+      this.contentBox.addChild(new Text(theme.fg('dim', 'Changes from previous plan:'), 0, 0));
+      this.contentBox.addChild(new Spacer(1));
+      this.contentBox.addChild(new PlanDiffBox(this.previousPlan, this.planContent));
+    } else {
+      this.renderPlanContent();
+    }
+    this.contentBox.addChild(new Spacer(1));
 
     const items: SelectItem[] = [
       {
@@ -158,12 +230,8 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
         label: `  ${theme.fg('success', 'Use as /goal')} ${theme.fg('dim', '— switch to Build mode and pursue this plan')}`,
       },
       {
-        value: 'reject',
-        label: `  ${theme.fg('error', 'Reject')} ${theme.fg('dim', '— stay in Plan mode')}`,
-      },
-      {
-        value: 'edit',
-        label: `  ${theme.fg('warning', 'Request changes')} ${theme.fg('dim', '— provide feedback')}`,
+        value: 'changes',
+        label: `  ${theme.fg('warning', 'Request changes')} ${theme.fg('dim', '— reject and provide feedback via chat')}`,
       },
     ];
 
@@ -184,7 +252,6 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   private renderStreaming(): void {
     this.contentBox.clear();
     this.selectList = undefined;
-    this.feedbackInput = undefined;
     this.renderPlanHeader();
     this.renderPlanContent();
     this.contentBox.addChild(new Text(theme.fg('dim', 'Submitting plan…'), 0, 0));
@@ -197,13 +264,6 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
 
   private renderPlanContent(): void {
     this.contentBox.addChild(new PlanContentBox(this.planContent));
-    this.contentBox.addChild(new Spacer(1));
-  }
-
-  private renderFeedback(feedback?: string): void {
-    if (!feedback) return;
-    this.contentBox.addChild(new Text(theme.fg('warning', `Requested changes: ${feedback}`), 0, 0));
-    this.contentBox.addChild(new Spacer(1));
   }
 
   private handleSelection(value: string): void {
@@ -216,11 +276,8 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
       case 'goal':
         this.handleGoal();
         break;
-      case 'reject':
+      case 'changes':
         this.handleReject();
-        break;
-      case 'edit':
-        this.switchToFeedbackMode();
         break;
     }
   }
@@ -239,64 +296,32 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.onGoal?.();
   }
 
-  private handleReject(feedback?: string): void {
+  private handleReject(): void {
     if (this.resolved) return;
     this.resolved = true;
-    this.showResult(feedback ? 'Changes requested' : 'Rejected', false, feedback);
-    this.onReject?.(feedback);
+    this.showResult('Changes requested', false);
+    this.onReject?.();
   }
 
-  private switchToFeedbackMode(): void {
-    this.mode = 'feedback';
-    this.selectList = undefined;
-
-    this.contentBox.clear();
-    this.renderPlanHeader();
-    this.renderPlanContent();
-
-    this.contentBox.addChild(new Text(theme.fg('accent', 'Provide feedback for revision:'), 0, 0));
-    this.contentBox.addChild(new Spacer(1));
-
-    this.feedbackInput = new Input();
-    this.feedbackInput.focused = this._focused;
-    this.feedbackInput.onSubmit = (value: string) => {
-      const trimmed = value.trim();
-      this.handleReject(trimmed || undefined);
-    };
-    this.feedbackInput.onEscape = () => {
-      this.handleReject();
-    };
-
-    this.contentBox.addChild(this.feedbackInput);
-    this.contentBox.addChild(new Spacer(1));
-    this.contentBox.addChild(
-      new Text(theme.fg('dim', 'Enter to submit feedback  Esc to reject without feedback'), 0, 0),
-    );
-    this.ui.requestRender(true);
-  }
-
-  private showResult(status: string, isApproved: boolean, feedback?: string): void {
+  private showResult(status: string, isApproved: boolean): void {
     this.contentBox.clear();
 
     const icon = isApproved ? theme.fg('success', '✓') : theme.fg('error', '✗');
     this.renderPlanHeader();
     this.renderPlanContent();
+    this.contentBox.addChild(new Spacer(1));
     this.contentBox.addChild(new Text(`${icon} ${theme.fg('dim', status)}`, 0, 0));
     this.contentBox.addChild(new Spacer(1));
-    this.renderFeedback(feedback);
+    if (!isApproved) {
+      this.contentBox.addChild(new Text(theme.fg('dim', 'Send a message with your revision feedback'), 0, 0));
+      this.contentBox.addChild(new Spacer(1));
+    }
   }
 
   handleInput(data: string): void {
     if (this.resolved) return;
 
-    if (this.mode === 'feedback' && this.feedbackInput) {
-      const kb = getKeybindings();
-      if (kb.matches(data, 'tui.select.cancel')) {
-        this.handleReject();
-        return;
-      }
-      this.feedbackInput.handleInput(data);
-    } else if (this.selectList) {
+    if (this.selectList) {
       this.selectList.handleInput(data);
     }
   }

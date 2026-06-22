@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, it, expect, afterEach, afterAll } from 'vitest';
-import { savePlanToDisk } from '../plans.js';
+import { savePlanToDisk, savePlanSnapshot } from '../plans.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '../../..');
 const tmpDir = path.join(projectRoot, '.test-tmp-plans');
@@ -116,5 +116,46 @@ describe('savePlanToDisk', () => {
 
     const files = fs.readdirSync(path.join(tmpDir, 'proj-dupes'));
     expect(files).toHaveLength(2);
+  });
+});
+
+describe('savePlanSnapshot', () => {
+  it('writes a current-plan.md file on each submission', async () => {
+    await savePlanSnapshot({
+      title: 'My plan',
+      plan: 'Step 1\nStep 2',
+      resourceId: 'proj-snapshot',
+      plansDir: tmpDir,
+    });
+
+    const filePath = path.join(tmpDir, 'proj-snapshot', 'current-plan.md');
+    expect(fs.existsSync(filePath)).toBe(true);
+
+    const content = fs.readFileSync(filePath, 'utf-8');
+    expect(content).toContain('# My plan');
+    expect(content).toContain('Step 1');
+    expect(content).toContain('Step 2');
+  });
+
+  it('overwrites the snapshot on resubmission', async () => {
+    await savePlanSnapshot({
+      title: 'Plan v1',
+      plan: 'Original content',
+      resourceId: 'proj-overwrite',
+      plansDir: tmpDir,
+    });
+
+    await savePlanSnapshot({
+      title: 'Plan v2',
+      plan: 'Updated content',
+      resourceId: 'proj-overwrite',
+      plansDir: tmpDir,
+    });
+
+    const filePath = path.join(tmpDir, 'proj-overwrite', 'current-plan.md');
+    const content = fs.readFileSync(filePath, 'utf-8');
+    expect(content).toContain('# Plan v2');
+    expect(content).toContain('Updated content');
+    expect(content).not.toContain('Original content');
   });
 });

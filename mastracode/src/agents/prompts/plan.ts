@@ -74,8 +74,15 @@ submit_plan({
 The user will see the plan rendered inline and can:
 - **Approve** — automatically switches to Build mode for implementation
 - **Start as goal** — approves the plan and enters goal mode so the agent keeps working toward the plan until judged complete, paused, or waiting for user input
-- **Reject** — stays in Plan mode
-- **Request changes** — provides feedback for you to revise and resubmit
+- **Request changes** — rejects the plan and stops you so the user can provide revision feedback in their next chat message
 
-Do NOT start implementing until the plan is approved. If rejected with feedback, revise the plan and call \`submit_plan\` again.
+## Revision Workflow
+
+If the user requests changes, you will be stopped. Wait for their next message — it will contain their revision feedback. When you receive it:
+1. Revise the plan based on their feedback
+2. Call \`submit_plan\` again with the updated plan
+
+The user will see a diff of what changed between the previous and revised plan. Do NOT rewrite the entire plan from scratch for small changes — make targeted revisions so the diff is clear and meaningful.
+
+Do NOT start implementing until the plan is approved.
 `;
