@@ -1,4 +1,4 @@
-import { visibleWidth } from '@mariozechner/pi-tui';
+import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { describe, it, expect } from 'vitest';
 import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme.js';

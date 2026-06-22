@@ -255,6 +255,37 @@ describe('extractV6NativeApproval', () => {
     expect(extractV6NativeApproval(messages as any)).toBeNull();
   });
 
+  it('picks the most recent approval-responded part when one assistant message has several (issue #17899)', () => {
+    const messages = [
+      {
+        role: 'assistant' as const,
+        id: 'msg-1',
+        parts: [
+          {
+            type: 'tool-myTool',
+            toolCallId: 'old-call',
+            state: 'approval-responded' as const,
+            input: {},
+            approval: { id: `old-run${APPROVAL_ID_SEPARATOR}old-call`, approved: true },
+          },
+          {
+            type: 'tool-myTool',
+            toolCallId: 'new-call',
+            state: 'approval-responded' as const,
+            input: {},
+            approval: { id: `new-run${APPROVAL_ID_SEPARATOR}new-call`, approved: false, reason: 'changed mind' },
+          },
+        ],
+      },
+    ];
+
+    const result = extractV6NativeApproval(messages as any);
+
+    expect(result?.runId).toBe('new-run');
+    expect(result?.resumeData.approved).toBe(false);
+    expect(result?.resumeData.reason).toBe('changed mind');
+  });
+
   it('scans from the end and picks the most recent approval-responded part', () => {
     const messages = [
       {

@@ -57,13 +57,21 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   const hasStoredOverride = isEdit && !!options.hasStoredOverride;
   const editorConfig = isEdit ? options.editorConfig : undefined;
 
-  // Derive which fields are owned by the user (vs by code).
-  // editor === false → nothing is owned (locked)
-  // editor.instructions === true → user owns instructions
-  // editor.tools === true → user owns tools (membership + descriptions)
-  // editor.tools === { description: true } → user owns tool descriptions only
-  // Variables (requestContextSchema) are always editable for code agents.
-  const ownsInstructions = !isCodeAgentOverride || (editorConfig !== false && editorConfig?.instructions === true);
+  // Derive which fields are owned by the user (vs by code). These flags MUST mirror the server's
+  // getCodeAgentOwnership (packages/server/src/server/handlers/stored-agents.ts): on save the server
+  // strips any field a code agent doesn't own. If the client and server disagree, Studio either sends
+  // data the server silently drops (looks saved, reloads blank) or hides edits the server would keep.
+  // Server semantics for instructions:
+  //   editor === false           → not owned (locked)
+  //   editor unset (undefined)   → owned — legacy default: an editor-unset code agent is fully editable
+  //   editor === true            → not owned (a bare boolean is not an object, so `.instructions` is unset)
+  //   editor.instructions === true → owned
+  // The missing `undefined` case was the bug: the old `=== true`-only check made an editor-unset
+  // code agent send an empty instructions array on save, wiping the prompt.
+  const ownsInstructions =
+    !isCodeAgentOverride ||
+    editorConfig === undefined ||
+    (editorConfig !== false && editorConfig?.instructions === true);
   const ownsTools = !isCodeAgentOverride || (editorConfig !== false && editorConfig?.tools === true);
   const ownsToolDescriptions =
     !isCodeAgentOverride ||

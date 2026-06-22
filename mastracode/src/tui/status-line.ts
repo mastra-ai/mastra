@@ -2,7 +2,7 @@
  * Status line rendering — builds the bottom-of-screen status bar
  * showing model, mode, memory progress, and project path.
  */
-import { visibleWidth } from '@mariozechner/pi-tui';
+import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
@@ -71,7 +71,7 @@ export function updateStatusLine(state: TUIState): void {
   const SEP = '  '; // double-space separator between parts
 
   // --- Determine if we're showing observer/reflector instead of main mode ---
-  const omStatus = state.harness.getDisplayState().omProgress.status;
+  const omStatus = state.session.displayState.get().omProgress.status;
   const isJudging = Boolean(state.activeGoalJudge);
   const isObserving = omStatus === 'observing';
   const isReflecting = omStatus === 'reflecting';
@@ -81,10 +81,11 @@ export function updateStatusLine(state: TUIState): void {
   let modeBadge = '';
   let modeBadgeWidth = 0;
   const modes = state.harness.listModes();
-  const currentMode = modes.length > 1 ? state.harness.getCurrentMode() : undefined;
+  const currentMode = modes.length > 1 ? state.session.mode.resolve() : undefined;
   const judgeModeColor = mastra.blue;
   // Use judge color for goal judge activity, OM color for OM activity, otherwise mode color
-  const mainModeColor = currentMode?.metadata?.color;
+  const currentModeColor = currentMode?.metadata?.color;
+  const mainModeColor = typeof currentModeColor === 'string' ? currentModeColor : undefined;
   const modeColor = isJudging
     ? judgeModeColor
     : showOMMode
@@ -140,9 +141,9 @@ export function updateStatusLine(state: TUIState): void {
       ? state.activeGoalJudge?.modelId
       : showOMMode
         ? isObserving
-          ? state.harness.getObserverModelId()
-          : state.harness.getReflectorModelId()
-        : state.harness.getFullModelId()) ?? '';
+          ? state.session.om.observer.modelId()
+          : state.session.om.reflector.modelId()
+        : state.session.model.get()) ?? '';
   // Rewrite Fireworks AI long paths: fireworks-ai/accounts/fireworks/models/<name> → fireworks/<name>
   let fullModelId = rawModelId.startsWith('fireworks-ai/accounts/fireworks/models/')
     ? 'fireworks/' + rawModelId.slice('fireworks-ai/accounts/fireworks/models/'.length)
@@ -177,7 +178,7 @@ export function updateStatusLine(state: TUIState): void {
     displayPath = '~' + displayPath.slice(homedir.length);
   }
   const branch = state.projectInfo.gitBranch;
-  const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
+  const queuedCount = state.pendingQueuedActions.length + state.session.followUps.count();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
   const goalDuration = !isJudging && goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
@@ -289,7 +290,7 @@ export function updateStatusLine(state: TUIState): void {
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
     // Memory info — animate label text when buffering is active
-    const ds = state.harness.getDisplayState();
+    const ds = state.session.displayState.get();
     const msgLabelStyler =
       ds.bufferingMessages && state.gradientAnimator?.isRunning()
         ? (label: string) =>
@@ -310,7 +311,7 @@ export function updateStatusLine(state: TUIState): void {
               state.gradientAnimator!.getFadeProgress(),
             )
         : undefined;
-    const omProg = state.harness.getDisplayState().omProgress;
+    const omProg = state.session.displayState.get().omProgress;
     const obs = isJudging ? '' : formatObservationStatus(omProg, opts.memCompact, msgLabelStyler);
     const ref = isJudging ? '' : formatReflectionStatus(omProg, opts.memCompact, obsLabelStyler);
     if (obs) {

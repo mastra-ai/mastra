@@ -65,19 +65,19 @@ export async function handleAskQuestion(
               tui: state.ui,
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
-                state.harness.respondToToolSuspension({ toolCallId, resumeData: answer });
+                state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
                 resolve();
                 processNextInlineQuestion(state);
               },
               onSubmitMulti: answers => {
                 state.activeInlineQuestion = undefined;
-                state.harness.respondToToolSuspension({ toolCallId, resumeData: answers });
+                state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
                 resolve();
                 processNextInlineQuestion(state);
               },
               onCancel: () => {
                 state.activeInlineQuestion = undefined;
-                state.harness.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
+                state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
                 resolve();
                 processNextInlineQuestion(state);
               },
@@ -94,19 +94,19 @@ export async function handleAskQuestion(
                 multiline: true,
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
-                  state.harness.respondToToolSuspension({ toolCallId, resumeData: answer });
+                  state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
                   resolve();
                   processNextInlineQuestion(state);
                 },
                 onSubmitMulti: answers => {
                   state.activeInlineQuestion = undefined;
-                  state.harness.respondToToolSuspension({ toolCallId, resumeData: answers });
+                  state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
                   resolve();
                   processNextInlineQuestion(state);
                 },
                 onCancel: () => {
                   state.activeInlineQuestion = undefined;
-                  state.harness.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
+                  state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
                   resolve();
                   processNextInlineQuestion(state);
                 },
@@ -129,7 +129,7 @@ export async function handleAskQuestion(
         } catch {
           // Don't let ask_user errors crash the process — skip the question
           state.activeInlineQuestion = undefined;
-          state.harness.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
+          state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
           resolve();
           processNextInlineQuestion(state);
         }
@@ -151,17 +151,17 @@ export async function handleAskQuestion(
         tui: state.ui,
         onSubmit: answer => {
           state.ui.hideOverlay();
-          state.harness.respondToToolSuspension({ toolCallId, resumeData: answer });
+          state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
           resolve();
         },
         onSubmitMulti: answers => {
           state.ui.hideOverlay();
-          state.harness.respondToToolSuspension({ toolCallId, resumeData: answers });
+          state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
           resolve();
         },
         onCancel: () => {
           state.ui.hideOverlay();
-          state.harness.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
+          state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
           resolve();
         },
       });
@@ -198,13 +198,13 @@ export async function handleSandboxAccessRequest(
           ],
           onSubmit: answer => {
             state.activeInlineQuestion = undefined;
-            state.harness.respondToToolSuspension({ toolCallId, resumeData: answer });
+            state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
             resolve();
             processNextInlineQuestion(state);
           },
           onCancel: () => {
             state.activeInlineQuestion = undefined;
-            state.harness.respondToToolSuspension({ toolCallId, resumeData: 'No' });
+            state.session.respondToToolSuspension({ toolCallId, resumeData: 'No' });
             resolve();
             processNextInlineQuestion(state);
           },
@@ -244,7 +244,7 @@ export async function handleSandboxAccessRequest(
  */
 async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: string, plan: string): Promise<void> {
   const { state } = ctx;
-  await state.harness.setState({
+  await state.session.state.set({
     activePlan: {
       title,
       plan,
@@ -254,9 +254,9 @@ async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: 
   savePlanToDisk({
     title,
     plan,
-    resourceId: state.harness.getResourceId(),
+    resourceId: state.session.identity.getResourceId(),
   }).catch(() => {});
-  await state.harness.respondToToolSuspension({
+  await state.session.respondToToolSuspension({
     toolCallId,
     resumeData: { action: 'approved' },
   });
@@ -294,7 +294,7 @@ export async function handlePlanApproval(
         // this signal always starts a fresh build-mode run instead of
         // queuing onto the dying one.
         try {
-          await state.harness.sendSignal({
+          await state.session.sendSignal({
             type: 'system-reminder',
             contents: 'The user has approved the plan, begin executing.',
           }).accepted;
@@ -324,7 +324,7 @@ export async function handlePlanApproval(
       onReject: async (feedback?: string) => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await state.harness.respondToToolSuspension({
+        await state.session.respondToToolSuspension({
           toolCallId,
           resumeData: { action: 'rejected', feedback },
         });

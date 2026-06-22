@@ -1,7 +1,7 @@
-import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
+import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
 import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
@@ -172,7 +172,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
     [isCollapsed, width, minWidth, maxWidth, setWidth, expand, commit, toggleSidebar],
   );
 
-  // Mobile: render as an off-canvas drawer via Base UI Dialog.
+  // Mobile: render as an off-canvas drawer via Base UI Drawer.
   // Auto-close on link navigation (standard drawer UX). Don't gate on
   // `defaultPrevented` — client-side router links call `preventDefault()` for
   // SPA navigation, and we still want to close the drawer when they do.
@@ -191,38 +191,24 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
 
   if (isMobile) {
     return (
-      <DialogPrimitive.Root open={openMobile} onOpenChange={setOpenMobile}>
-        <DialogPrimitive.Portal>
-          <DialogPrimitive.Backdrop
-            className={cn(
-              'fixed inset-0 z-40 bg-overlay backdrop-blur-sm',
-              'opacity-100 transition-opacity duration-200 ease-out motion-reduce:transition-none',
-              'data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 data-[ending-style]:duration-150 data-[ending-style]:ease-in',
-            )}
-          />
-          <DialogPrimitive.Popup
-            className={cn(
-              'fixed inset-y-0 left-0 z-50 flex h-full flex-col',
-              'w-3/4 max-w-(--sidebar-width-mobile)',
-              'bg-surface2 shadow-xl',
-              'data-[open]:animate-in data-[closed]:animate-out',
-              'data-[open]:slide-in-from-left data-[closed]:slide-out-to-left',
-              'duration-200',
-              className,
-            )}
-          >
-            <VisuallyHidden asChild>
-              <DialogPrimitive.Title>Navigation</DialogPrimitive.Title>
-            </VisuallyHidden>
-            <VisuallyHidden asChild>
-              <DialogPrimitive.Description>Primary site navigation drawer</DialogPrimitive.Description>
-            </VisuallyHidden>
-            <div onClick={closeOnAnchor} className="flex flex-col h-full min-h-0 px-4 py-2 overflow-hidden">
-              {children}
-            </div>
-          </DialogPrimitive.Popup>
-        </DialogPrimitive.Portal>
-      </DialogPrimitive.Root>
+      <Drawer side="left" open={openMobile} onOpenChange={setOpenMobile}>
+        <DrawerContent
+          className={cn(
+            'w-3/4 max-w-(--sidebar-width-mobile) rounded-none border-0 bg-surface2 shadow-xl overflow-hidden',
+            className,
+          )}
+        >
+          <VisuallyHidden asChild>
+            <DrawerTitle>Navigation</DrawerTitle>
+          </VisuallyHidden>
+          <VisuallyHidden asChild>
+            <DrawerDescription>Primary site navigation drawer</DrawerDescription>
+          </VisuallyHidden>
+          <div onClick={closeOnAnchor} className="flex flex-col h-full min-h-0 px-4 py-2 overflow-hidden">
+            {children}
+          </div>
+        </DrawerContent>
+      </Drawer>
     );
   }
 
