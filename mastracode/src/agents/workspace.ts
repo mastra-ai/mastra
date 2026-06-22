@@ -11,8 +11,8 @@ import type { LSPConfig, WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema';
-import { getPlansDir } from '../utils/plans.js';
 import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
+import { getPlansDir } from '../utils/plans.js';
 
 // =============================================================================
 // Sandbox Environment
