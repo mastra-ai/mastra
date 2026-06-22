@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.head_sha }}
           fetch-depth: 2
@@ -80,6 +80,49 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
+  evented-engine-scenarios:
+    name: Evented Engine Scenarios
+    if: inputs.has_code == 'true'
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
+      NODE_OPTIONS: --max-old-space-size=8192
+      MASTRA_EVENTED_EXECUTION: 'true'
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ inputs.head_sha }}
+          fetch-depth: 2
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Build core
+        run: pnpm build:core
+
+      - name: Run AIMock scenarios with evented engine
+        run: |
+          pnpm --filter @mastra/core test \
+            'src/loop/test-utils/aimock/scenarios/' \
+            --reporter=verbose \
+            --reporter=github-actions
+
   e2e-test:
     name: E2E Test (${{ matrix.project }})
     if: inputs.has_code == 'true'
@@ -98,7 +141,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout PR code
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 2
           ref: ${{ inputs.head_sha }}
@@ -161,7 +204,7 @@ jobs:
 
       - name: Checkout repo
         if: inputs.has_code == 'true'
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 1
           ref: ${{ inputs.head_sha }}

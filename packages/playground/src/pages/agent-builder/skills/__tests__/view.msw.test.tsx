@@ -32,6 +32,7 @@ const { currentUserMock } = vi.hoisted(() => ({
 
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
   useCurrentUser: () => ({ data: { id: currentUserMock.id }, isLoading: false }),
+  isUnauthenticatedError: () => false,
 }));
 
 const renderPage = (skillId: string) => {

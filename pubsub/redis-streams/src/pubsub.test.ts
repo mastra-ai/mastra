@@ -478,4 +478,166 @@ describe('RedisStreamsPubSub', () => {
       expect(seen.some(s => s.type === 'b-2')).toBe(true);
     });
   });
+
+  describe('lease', () => {
+    it('grants a lease when the key is free', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      const result = await ps.acquireLease(key, 'owner-a', 5000);
+      expect(result).toEqual({ acquired: true, owner: 'owner-a' });
+      expect(await ps.getLeaseOwner(key)).toBe('owner-a');
+    });
+
+    it('denies a lease while another owner holds it, across instances', async () => {
+      const psA = createPubSub();
+      const psB = createPubSub();
+      const key = `lease-${randomUUID()}`;
+
+      const a = await psA.acquireLease(key, 'owner-a', 5000);
+      const b = await psB.acquireLease(key, 'owner-b', 5000);
+
+      expect(a).toEqual({ acquired: true, owner: 'owner-a' });
+      expect(b).toEqual({ acquired: false, owner: 'owner-a' });
+      expect(await psB.getLeaseOwner(key)).toBe('owner-a');
+    });
+
+    it('lets exactly one of two racing instances win', async () => {
+      const psA = createPubSub();
+      const psB = createPubSub();
+      const key = `lease-${randomUUID()}`;
+
+      const [a, b] = await Promise.all([
+        psA.acquireLease(key, 'owner-a', 5000),
+        psB.acquireLease(key, 'owner-b', 5000),
+      ]);
+
+      const winners = [a, b].filter(r => r.acquired);
+      const losers = [a, b].filter(r => !r.acquired);
+      expect(winners).toHaveLength(1);
+      expect(losers).toHaveLength(1);
+      // Loser sees the winner as the current owner.
+      expect(losers[0]!.owner).toBe(winners[0]!.owner);
+    });
+
+    it('lets the same owner re-acquire (idempotent, refreshes TTL)', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 5000);
+      const again = await ps.acquireLease(key, 'owner-a', 5000);
+      expect(again).toEqual({ acquired: true, owner: 'owner-a' });
+    });
+
+    it('expires the lease after TTL and lets a new owner acquire it', async () => {
+      const psA = createPubSub();
+      const psB = createPubSub();
+      const key = `lease-${randomUUID()}`;
+
+      const a = await psA.acquireLease(key, 'owner-a', 100);
+      expect(a.acquired).toBe(true);
+
+      // Wait past TTL with a small buffer for Redis precision.
+      await new Promise(r => setTimeout(r, 200));
+
+      const b = await psB.acquireLease(key, 'owner-b', 5000);
+      expect(b).toEqual({ acquired: true, owner: 'owner-b' });
+      expect(await psB.getLeaseOwner(key)).toBe('owner-b');
+    });
+
+    it('does not release a lease held by a different owner', async () => {
+      const psA = createPubSub();
+      const psB = createPubSub();
+      const key = `lease-${randomUUID()}`;
+
+      await psA.acquireLease(key, 'owner-a', 5000);
+      await psB.releaseLease(key, 'owner-b'); // non-owner — should no-op
+      expect(await psA.getLeaseOwner(key)).toBe('owner-a');
+    });
+
+    it('releases a lease the caller owns', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 5000);
+      await ps.releaseLease(key, 'owner-a');
+      expect(await ps.getLeaseOwner(key)).toBeUndefined();
+    });
+
+    it('renews a lease the caller owns', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 200);
+      // Renew before expiry.
+      await new Promise(r => setTimeout(r, 100));
+      const renewed = await ps.renewLease(key, 'owner-a', 1000);
+      expect(renewed).toBe(true);
+
+      // Past original expiry but within renewed window.
+      await new Promise(r => setTimeout(r, 200));
+      expect(await ps.getLeaseOwner(key)).toBe('owner-a');
+    });
+
+    it('fails to renew a lease held by a different owner', async () => {
+      const psA = createPubSub();
+      const psB = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await psA.acquireLease(key, 'owner-a', 5000);
+      const renewed = await psB.renewLease(key, 'owner-b', 5000);
+      expect(renewed).toBe(false);
+      expect(await psA.getLeaseOwner(key)).toBe('owner-a');
+    });
+
+    it('fails to renew a lease that has expired', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 100);
+      await new Promise(r => setTimeout(r, 200));
+      const renewed = await ps.renewLease(key, 'owner-a', 1000);
+      expect(renewed).toBe(false);
+    });
+
+    it('transfers a lease from the current owner to a new owner', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 5000);
+      const transferred = await ps.transferLease!(key, 'owner-a', 'owner-b', 5000);
+      expect(transferred).toBe(true);
+      expect(await ps.getLeaseOwner(key)).toBe('owner-b');
+    });
+
+    it('does not transfer a lease the caller does not own', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 5000);
+      const transferred = await ps.transferLease!(key, 'someone-else', 'owner-b', 5000);
+      expect(transferred).toBe(false);
+      expect(await ps.getLeaseOwner(key)).toBe('owner-a');
+    });
+
+    it('does not transfer a lease that has expired', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 100);
+      await new Promise(r => setTimeout(r, 200));
+      const transferred = await ps.transferLease!(key, 'owner-a', 'owner-b', 5000);
+      expect(transferred).toBe(false);
+      expect(await ps.getLeaseOwner(key)).toBeUndefined();
+    });
+
+    it('resets the TTL to the full window on transfer', async () => {
+      const ps = createPubSub();
+      const key = `lease-${randomUUID()}`;
+      await ps.acquireLease(key, 'owner-a', 200);
+      // Transfer just before the original TTL would expire, with a fresh window.
+      await new Promise(r => setTimeout(r, 100));
+      const transferred = await ps.transferLease!(key, 'owner-a', 'owner-b', 1000);
+      expect(transferred).toBe(true);
+      // Past the original 200ms expiry but within the renewed 1000ms window.
+      await new Promise(r => setTimeout(r, 200));
+      expect(await ps.getLeaseOwner(key)).toBe('owner-b');
+    });
+
+    it('returns undefined owner for a non-existent key', async () => {
+      const ps = createPubSub();
+      expect(await ps.getLeaseOwner(`lease-${randomUUID()}`)).toBeUndefined();
+    });
+  });
 });

@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createMockHarness as createBaseMockHarness } from '../../__tests__/harness-mock.js';
 import { handleResourceCommand } from '../resource.js';
 import type { SlashCommandContext } from '../types.js';
 
 /**
- * Minimal mock harness that satisfies what handleResourceCommand calls.
- * Threads are stored in-memory so we can test the "resume latest thread"
- * vs "no threads → pendingNewThread" paths.
+ * Mock harness for handleResourceCommand, built on the shared TUI mock factory.
+ * Threads are stored in-memory so we can test the "resume latest thread" vs
+ * "no threads → pendingNewThread" paths. Resource/thread state is tracked here
+ * and surfaced through the shared session/harness mock surface.
  */
 function createMockHarness(opts?: { id?: string; resourceId?: string }) {
   const id = opts?.id ?? 'test-harness';
@@ -21,33 +23,39 @@ function createMockHarness(opts?: { id?: string; resourceId?: string }) {
     updatedAt: Date;
   }> = [];
 
-  return {
-    getResourceId: vi.fn(() => currentResourceId),
-    getDefaultResourceId: vi.fn(() => defaultResourceId),
-    getKnownResourceIds: vi.fn(async () => [...new Set(threads.map(t => t.resourceId))]),
-    setResourceId: vi.fn(({ resourceId }: { resourceId: string }) => {
-      currentResourceId = resourceId;
-      currentThreadId = null;
-    }),
-    listThreads: vi.fn(async () => threads.filter(t => t.resourceId === currentResourceId)),
-    switchThread: vi.fn(async ({ threadId }: { threadId: string }) => {
-      currentThreadId = threadId;
-    }),
-    getCurrentThreadId: vi.fn(() => currentThreadId),
-
-    // Test helpers
-    _addThread(resourceId: string, title: string, updatedAt: Date) {
-      const id = `thread-${threads.length + 1}`;
-      threads.push({
-        id,
-        resourceId,
-        title,
-        createdAt: updatedAt,
-        updatedAt,
-      });
-      return id;
+  const harness = createBaseMockHarness({
+    id,
+    resourceId: defaultResourceId,
+    session: {
+      identity: {
+        getResourceId: vi.fn(() => currentResourceId),
+        getDefaultResourceId: vi.fn(() => defaultResourceId),
+      },
+      thread: {
+        getId: vi.fn(() => currentThreadId),
+        list: vi.fn(async () => threads.filter(t => t.resourceId === currentResourceId)),
+        switch: vi.fn(async ({ threadId }: { threadId: string }) => {
+          currentThreadId = threadId;
+        }),
+      },
     },
-  };
+    harness: {
+      getKnownResourceIds: vi.fn(async (_session: any) => [...new Set(threads.map(t => t.resourceId))]),
+      setResourceId: vi.fn((_session: any, { resourceId }: { resourceId: string }) => {
+        currentResourceId = resourceId;
+        currentThreadId = null;
+      }),
+    },
+  });
+
+  return Object.assign(harness, {
+    // Test helper
+    _addThread(resourceId: string, title: string, updatedAt: Date) {
+      const threadId = `thread-${threads.length + 1}`;
+      threads.push({ id: threadId, resourceId, title, createdAt: updatedAt, updatedAt });
+      return threadId;
+    },
+  });
 }
 
 function createMockCtx(harness: ReturnType<typeof createMockHarness>) {
@@ -64,6 +72,7 @@ function createMockCtx(harness: ReturnType<typeof createMockHarness>) {
         allSystemReminderComponents: [] as any[],
         allShellComponents: [] as any[],
         messageComponentsById: new Map<string, any>(),
+        session: (harness as any).session,
         ui: { requestRender: vi.fn() },
       },
       harness: harness as any,
@@ -105,7 +114,7 @@ describe('handleResourceCommand', () => {
     });
 
     it('shows auto-detected note when resource has been overridden', async () => {
-      harness.setResourceId({ resourceId: 'custom-id' });
+      harness.setResourceId(undefined as any, { resourceId: 'custom-id' });
       await handleResourceCommand(ctx, []);
 
       expect(infoMessages[0]).toContain('auto-detected: test-harness');
@@ -117,7 +126,7 @@ describe('handleResourceCommand', () => {
       await handleResourceCommand(ctx, ['test-harness']);
 
       expect(infoMessages[0]).toBe('Already on resource: test-harness');
-      expect(harness.switchThread).not.toHaveBeenCalled();
+      expect(harness.session.thread.switch).not.toHaveBeenCalled();
       expect(ctx.state.pendingNewThread).toBe(false);
     });
   });
@@ -131,8 +140,8 @@ describe('handleResourceCommand', () => {
 
       await handleResourceCommand(ctx, ['other-resource']);
 
-      expect(harness.setResourceId).toHaveBeenCalledWith({ resourceId: 'other-resource' });
-      expect(harness.switchThread).toHaveBeenCalledWith({ threadId: latestId });
+      expect(harness.setResourceId).toHaveBeenCalledWith(expect.anything(), { resourceId: 'other-resource' });
+      expect(harness.session.thread.switch).toHaveBeenCalledWith({ threadId: latestId });
       expect(ctx.state.pendingNewThread).toBe(false);
       expect(ctx.renderExistingMessages).toHaveBeenCalled();
       expect(infoMessages[0]).toContain('resumed thread: latest-thread');
@@ -153,8 +162,8 @@ describe('handleResourceCommand', () => {
     it('sets pendingNewThread and does not call switchThread', async () => {
       await handleResourceCommand(ctx, ['brand-new-resource']);
 
-      expect(harness.setResourceId).toHaveBeenCalledWith({ resourceId: 'brand-new-resource' });
-      expect(harness.switchThread).not.toHaveBeenCalled();
+      expect(harness.setResourceId).toHaveBeenCalledWith(expect.anything(), { resourceId: 'brand-new-resource' });
+      expect(harness.session.thread.switch).not.toHaveBeenCalled();
       expect(ctx.state.pendingNewThread).toBe(true);
       expect(infoMessages[0]).toContain('no existing threads');
       expect(infoMessages[0]).toContain('brand-new-resource');
@@ -164,18 +173,18 @@ describe('handleResourceCommand', () => {
   describe('reset', () => {
     it('resets to the default resource ID and resumes latest thread', async () => {
       harness._addThread('test-harness', 'default-thread', new Date());
-      harness.setResourceId({ resourceId: 'some-other' });
+      harness.setResourceId(undefined as any, { resourceId: 'some-other' });
 
       await handleResourceCommand(ctx, ['reset']);
 
-      expect(harness.setResourceId).toHaveBeenLastCalledWith({ resourceId: 'test-harness' });
-      expect(harness.switchThread).toHaveBeenCalled();
+      expect(harness.setResourceId).toHaveBeenLastCalledWith(expect.anything(), { resourceId: 'test-harness' });
+      expect(harness.session.thread.switch).toHaveBeenCalled();
       expect(infoMessages[0]).toContain('Resource ID reset to: test-harness');
       expect(infoMessages[0]).toContain('resumed thread: default-thread');
     });
 
     it('resets to default with no threads available', async () => {
-      harness.setResourceId({ resourceId: 'some-other' });
+      harness.setResourceId(undefined as any, { resourceId: 'some-other' });
 
       await handleResourceCommand(ctx, ['reset']);
 
