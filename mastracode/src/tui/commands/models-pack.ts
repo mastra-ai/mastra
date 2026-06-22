@@ -469,7 +469,6 @@ async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, pre
   saveSettings(settings);
 
   if (previousPackId && previousPackId !== pack.id) {
-    const harness = ctx.state.harness;
     const threadId = ctx.state.session.thread.getId();
     const thread = threadId ? (await ctx.state.session.thread.list()).find(t => t.id === threadId) : undefined;
     const threadPackId = (thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] as string | undefined) ?? null;
@@ -482,7 +481,6 @@ async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, pre
 async function deleteCustomPack(ctx: SlashCommandContext, pack: ModePack): Promise<void> {
   if (!pack.id.startsWith('custom:')) return;
 
-  const harness = ctx.state.harness;
   const threadId = ctx.state.session.thread.getId();
   const thread = threadId ? (await ctx.state.session.thread.list()).find(t => t.id === threadId) : undefined;
   const threadPackId = (thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] as string | undefined) ?? null;

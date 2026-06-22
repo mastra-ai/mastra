@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createMockHarness as createBaseMockHarness } from '../../__tests__/harness-mock.js';
 import { handleResourceCommand } from '../resource.js';
 import type { SlashCommandContext } from '../types.js';
-import { createMockHarness as createBaseMockHarness } from '../../__tests__/harness-mock.js';
 
 /**
  * Mock harness for handleResourceCommand, built on the shared TUI mock factory.

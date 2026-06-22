@@ -59,10 +59,12 @@ async function restoreSettingsForThread(session: Session<Record<string, unknown>
   }
 
   if (Object.keys(updates).length > 0) {
+    if (session.thread.getId() !== threadId) return;
     await session.state.set(updates);
   }
 
   for (const setting of settingsToSeed) {
+    if (session.thread.getId() !== threadId) return;
     await session.thread.setSetting(setting);
   }
 }

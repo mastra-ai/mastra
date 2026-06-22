@@ -5,6 +5,7 @@ import type {
   AgentThreadSubscription,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
+  SendAgentSignalAccepted,
   ToolsetsInput,
 } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
@@ -442,7 +443,11 @@ export class SessionThread {
         throw err;
       }
       if (oldThreadId) {
-        await store.releaseLock(oldThreadId);
+        try {
+          await store.releaseLock(oldThreadId);
+        } catch {
+          // Best-effort release of the old lock; the new lock is already held.
+        }
       }
     }
 
@@ -2298,7 +2303,7 @@ export class SessionBus {
   }
 
   #dispatch(event: HarnessEvent): void {
-    for (const listener of this.#listeners) {
+    for (const listener of [...this.#listeners]) {
       try {
         const result = listener(event);
         if (result && typeof result === 'object' && 'catch' in result) {
@@ -2655,7 +2660,16 @@ export class Session<TState = unknown> {
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
         },
-  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
+  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId?: string }> } {
+    const settleRunId = async <T>(result: {
+      accepted: Promise<SendAgentSignalAccepted<T>>;
+    }): Promise<string | undefined> => {
+      // Best-effort run id for telemetry. A wake whose stream setup fails rejects
+      // `accepted`; that error surfaces to the harness through the thread subscription
+      // as an error event, so we must not let it reject the session send here.
+      const settled = await result.accepted.catch(() => undefined);
+      return settled && 'runId' in settled ? settled.runId : undefined;
+    };
     const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
@@ -2679,7 +2693,7 @@ export class Session<TState = unknown> {
           ifActive,
           ifIdle,
         });
-        return { accepted: result.accepted, runId: result.runId };
+        return { accepted: true as const, runId: await settleRunId(result) };
       }
 
       const streamOptions = await this.machinery.buildStreamOptions({
@@ -2694,7 +2708,7 @@ export class Session<TState = unknown> {
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
-      return { accepted: result.accepted, runId: result.runId };
+      return { accepted: true as const, runId: await settleRunId(result) };
     });
 
     return { id: signal.id, type: signal.type, accepted };
@@ -2832,7 +2846,13 @@ export class Session<TState = unknown> {
           threadId,
           ifIdle: { streamOptions: streamOptions as any },
         });
-        this.emit({ type: 'follow_up_queued', count: this.followUps.count(), runId: result.runId });
+        // Let a rejected `accepted` propagate: `next` is already dequeued, so a
+        // setup/misconfig failure must reach the outer catch to requeue it
+        // rather than being swallowed into a false success (the follow-up would
+        // otherwise be lost).
+        const accepted = await result.accepted;
+        const runId = 'runId' in accepted ? accepted.runId : undefined;
+        this.emit({ type: 'follow_up_queued', count: this.followUps.count(), runId });
       } else {
         this.emit({ type: 'follow_up_queued', count: this.followUps.count() });
         await this.sendMessage({

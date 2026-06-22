@@ -471,7 +471,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
   const streamCtx = { lastTextLength: 0 };
 
   const done = new Promise<number>(resolve => {
-    session.subscribe(event => {
+    const unsubscribe = session.subscribe(event => {
       const result = autoResolve(session, event);
       if (result.resolved) {
         if (emit) emit(result.json);
@@ -495,6 +495,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
         } else if (emit) {
           emit({ ...event });
         }
+        unsubscribe();
         resolve(resolveExitCode(event.reason));
         return;
       }

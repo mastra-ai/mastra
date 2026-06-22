@@ -94,7 +94,7 @@ async function buildHarness(id: string, input: string) {
 
 describe('Harness: ask_user native suspension', () => {
   it('emits tool_suspended carrying the question payload when ask_user suspends', async () => {
-    const { harness, session } = await buildHarness(
+    const { session } = await buildHarness(
       'emit',
       JSON.stringify({
         question: 'Which environment?',
@@ -121,7 +121,7 @@ describe('Harness: ask_user native suspension', () => {
   });
 
   it('resumes the suspended ask_user tool with the answer via respondToToolSuspension', async () => {
-    const { harness, session } = await buildHarness('resume', JSON.stringify({ question: 'Your name?' }));
+    const { session } = await buildHarness('resume', JSON.stringify({ question: 'Your name?' }));
 
     const events: any[] = [];
     session.subscribe(event => events.push(event));
@@ -146,7 +146,7 @@ describe('Harness: ask_user native suspension', () => {
   });
 
   it('emits multi_select in the suspend payload when requested', async () => {
-    const { harness, session } = await buildHarness(
+    const { session } = await buildHarness(
       'multi',
       JSON.stringify({
         question: 'Pick any',
@@ -168,7 +168,7 @@ describe('Harness: ask_user native suspension', () => {
     // The agent only surfaces one suspension per step, but the harness must be able
     // to hold several pending suspensions at once and resume exactly the requested
     // one. Drive the toolCallId-keyed tracking directly to assert that selection.
-    const { harness, session } = await buildHarness('concurrent', JSON.stringify({ question: 'First?' }));
+    const { session } = await buildHarness('concurrent', JSON.stringify({ question: 'First?' }));
 
     const resumed: string[] = [];
     (session as any).resumeToolCall = async ({ toolCallId }: { toolCallId: string }) => {
@@ -193,7 +193,7 @@ describe('Harness: ask_user native suspension', () => {
   });
 
   it('resolves the sole pending suspension when toolCallId is omitted', async () => {
-    const { harness, session } = await buildHarness('sole', JSON.stringify({ question: 'Only?' }));
+    const { session } = await buildHarness('sole', JSON.stringify({ question: 'Only?' }));
 
     const resumed: string[] = [];
     (session as any).resumeToolCall = async ({ toolCallId }: { toolCallId: string }) => {
@@ -220,7 +220,7 @@ describe('Harness: ask_user native suspension', () => {
     // A run parked in a tool suspend() is not actively streaming, so abort() must
     // drop the pending suspensions itself — otherwise the harness reports it is
     // awaiting input forever and the UI can never recover.
-    const { harness, session } = await buildHarness('abort', JSON.stringify({ question: 'Pick?' }));
+    const { session } = await buildHarness('abort', JSON.stringify({ question: 'Pick?' }));
 
     let resumed = false;
     (session as any).resumeToolCall = async () => {
@@ -247,7 +247,7 @@ describe('Harness: ask_user native suspension', () => {
     // resolve the parked gate itself — otherwise the await never settles and the
     // run hangs. Resolving as a decline rejects the gated tool, which is correct
     // for an aborted run.
-    const { harness, session } = await buildHarness('approval-abort', JSON.stringify({ question: 'Pick?' }));
+    const { session } = await buildHarness('approval-abort', JSON.stringify({ question: 'Pick?' }));
 
     const approval = session.approval;
     const parked = approval.arm({ toolName: 'edit_file' });

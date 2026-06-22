@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createMockState } from '../../__tests__/harness-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
-import { createMockState } from '../../__tests__/harness-mock.js';
 import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
 import type { EventHandlerContext } from '../types.js';
 

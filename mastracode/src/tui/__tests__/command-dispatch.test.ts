@@ -73,10 +73,10 @@ vi.mock('../commands/goal.js', () => ({
 }));
 
 import { dispatchSlashCommand } from '../command-dispatch.js';
-import { createMockState } from './harness-mock.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
+import { createMockState } from './harness-mock.js';
 
 describe('dispatchSlashCommand models routing', () => {
   beforeEach(() => {
@@ -379,7 +379,9 @@ describe('dispatchSlashCommand models routing', () => {
     const state = createMockState({
       threadId: 'thread-1',
       extra: {
-        customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
+        customSlashCommands: [
+          { name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' },
+        ],
         pendingNewThread: false,
         allSlashCommandComponents: [],
         messageComponentsById: new Map(),

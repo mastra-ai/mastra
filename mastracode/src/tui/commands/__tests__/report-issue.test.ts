@@ -8,8 +8,8 @@ vi.mock('../send-slash-command-message.js', () => ({
   sendSlashCommandMessage: mocks.sendSlashCommandMessage,
 }));
 
-import { handleReportIssueCommand } from '../report-issue.js';
 import { createMockState } from '../../__tests__/harness-mock.js';
+import { handleReportIssueCommand } from '../report-issue.js';
 
 function createCtx(options?: { hasModelSelected?: boolean; pendingNewThread?: boolean }) {
   const state = createMockState({

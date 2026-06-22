@@ -161,7 +161,7 @@ describe('assignTaskIds', () => {
 // tests exercise `session.state.update`/`session.state.set` ordering with neutral state keys.
 describe('harness state transactions', () => {
   it('serializes state updates against the latest committed state', async () => {
-    const { harness, session } = await createSession();
+    const { session } = await createSession();
     await session.state.set({ counter: 0 });
 
     let releaseFirst!: () => void;

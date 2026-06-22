@@ -5,7 +5,7 @@ function formatDateWithLocal(date: Date): string {
 }
 
 export async function handleThreadCommand(ctx: SlashCommandContext): Promise<void> {
-  const { harness, state } = ctx;
+  const { state } = ctx;
   const currentThreadId = state.session.thread.getId();
   const currentResourceId = state.session.identity.getResourceId();
   const isPendingNewThread = state.pendingNewThread;

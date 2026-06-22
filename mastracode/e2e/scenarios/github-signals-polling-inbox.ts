@@ -180,8 +180,8 @@ values
             target && typeof target === 'object'
               ? {
                   ...(target as Record<string, unknown>),
-                  resourceId: (target as { resourceId?: string }).resourceId,
-                  threadId: (target as { threadId?: string }).threadId,
+                  resourceId: threadFixture.resourceId,
+                  threadId: threadFixture.threadId,
                 }
               : target;
           return (originalSendNotificationSignal as (notification: unknown, target: unknown) => unknown)(
@@ -201,7 +201,9 @@ values
               { threadId: threadFixture.threadId, resourceId: threadFixture.resourceId },
               { pollImmediately: true },
             );
-          })();
+          })().catch(error => {
+            process.stderr.write(String(error instanceof Error ? (error.stack ?? error.message) : error) + '\n');
+          });
         }, 250);
         pollTimer.unref?.();
       },

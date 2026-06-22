@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
-import type { Session } from './session';
 import type { HarnessEvent, HarnessOMConfig } from './types';
 
 async function createSession(options: {

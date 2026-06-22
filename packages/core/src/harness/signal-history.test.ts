@@ -30,7 +30,7 @@ describe('Harness signal history rendering', () => {
   }
 
   it('renders persisted user-message signals as user content', async () => {
-    const { harness, session, memoryStorage, thread } = await createHarnessWithThread();
+    const { session, memoryStorage, thread } = await createHarnessWithThread();
 
     await memoryStorage.saveMessages({
       messages: [
@@ -87,7 +87,7 @@ describe('Harness signal history rendering', () => {
   });
 
   it('renders persisted system-reminder signals as system reminder content', async () => {
-    const { harness, session, memoryStorage, thread } = await createHarnessWithThread();
+    const { session, memoryStorage, thread } = await createHarnessWithThread();
 
     await memoryStorage.saveMessages({
       messages: [

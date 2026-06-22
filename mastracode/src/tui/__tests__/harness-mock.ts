@@ -1,5 +1,5 @@
-import { vi } from 'vitest';
 import type { Harness } from '@mastra/core/harness';
+import { vi } from 'vitest';
 
 /**
  * Shared mock harness/session factory for TUI tests.

@@ -321,9 +321,15 @@ export class SessionRunEngine {
         this.#session.approval.clearToolName();
 
         if (approval.decision === 'approve') {
-          await this.#session.approveToolCall({ toolCallId, requestContext: approval.requestContext ?? requestContext });
+          await this.#session.approveToolCall({
+            toolCallId,
+            requestContext: approval.requestContext ?? requestContext,
+          });
         } else {
-          await this.#session.declineToolCall({ toolCallId, requestContext: approval.requestContext ?? requestContext });
+          await this.#session.declineToolCall({
+            toolCallId,
+            requestContext: approval.requestContext ?? requestContext,
+          });
         }
         break;
       }
@@ -838,6 +844,13 @@ export class SessionRunEngine {
           await this.handleSubscribedStreamError(error);
           currentRun = undefined;
         }
+      }
+
+      // Graceful stream close without explicit terminal chunk.
+      if (currentRun && this.#session.stream.isCurrent({ subscription })) {
+        const streamResult = this.finishStreamState(currentRun);
+        await this.finishSubscribedStreamRun({ suspended: streamResult.suspended });
+        currentRun = undefined;
       }
     } catch (error) {
       if (this.#session.stream.isCurrent({ subscription })) {
