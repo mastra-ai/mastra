@@ -6,8 +6,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
   WorkflowIcon,
-  useCopyToClipboard,
 } from '@mastra/playground-ui';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { CopyIcon, Cpu } from 'lucide-react';
 
 import { useWorkflow } from '@/hooks/use-workflows';
