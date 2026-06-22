@@ -104,6 +104,42 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   },
 };
 
+export function fixSseContent(text: string): string {
+  return text
+    .replace(/"content"\s*:\s*(true|false|null)/g, '"content":""')
+    .replace(/"content"\s*:\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g, '"content":"$1"');
+}
+
+export function sanitizingFetch(inner: typeof fetch): typeof fetch {
+  return async (input, init) => {
+    const r = await inner(input, init);
+    if (!r.body) return r;
+    const ct = r.headers.get('content-type') ?? '';
+    if (!ct.includes('event-stream')) return r;
+    const dec = new TextDecoder();
+    const enc = new TextEncoder();
+    let remainder = '';
+    const fixed = r.body.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, ctrl) {
+          const text = remainder + dec.decode(chunk, { stream: true });
+          const lastNewline = text.lastIndexOf('\n');
+          if (lastNewline === -1) {
+            remainder = text;
+            return;
+          }
+          remainder = text.slice(lastNewline + 1);
+          ctrl.enqueue(enc.encode(fixSseContent(text.slice(0, lastNewline + 1))));
+        },
+        flush(ctrl) {
+          if (remainder) ctrl.enqueue(enc.encode(fixSseContent(remainder)));
+        },
+      }),
+    );
+    return new Response(fixed, r);
+  };
+}
+
 export class ModelsDevGateway extends MastraModelGateway {
   readonly id = 'models.dev';
   readonly name = 'models.dev';
@@ -346,6 +382,8 @@ export class ModelsDevGateway extends MastraModelGateway {
           baseURL,
           headers: mastraHeaders,
           supportsStructuredOutputs: true,
+          fetch:
+            providerId === 'cloudflare-workers-ai' ? sanitizingFetch(globalThis.fetch.bind(globalThis)) : undefined,
         }).chatModel(modelId);
       }
     }
