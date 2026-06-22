@@ -339,6 +339,7 @@ async function startMastraCodeApp(
 
   const tui = new MastraTUI({
     harness: result.harness,
+    session: result.session,
     hookManager: result.hookManager,
     authStorage: result.authStorage,
     mcpManager: result.mcpManager,
@@ -358,7 +359,7 @@ async function startMastraCodeApp(
     const browser = await createBrowserFromSettings(settings.browser);
     if (browser) {
       result.harness.setBrowser(browser);
-      await result.harness.session.state.set({ activeBrowserSettings: settings.browser });
+      await result.session.state.set({ activeBrowserSettings: settings.browser });
     }
   }
 

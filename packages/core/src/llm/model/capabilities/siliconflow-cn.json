@@ -1,6 +1,5 @@
 {
   "attachment": [
-    "PaddlePaddle/PaddleOCR-VL",
     "PaddlePaddle/PaddleOCR-VL-1.5",
     "Qwen/Qwen2.5-VL-32B-Instruct",
     "Qwen/Qwen2.5-VL-72B-Instruct",

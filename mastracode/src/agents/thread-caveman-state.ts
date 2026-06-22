@@ -1,4 +1,4 @@
-import type { Harness, HarnessThread } from '@mastra/core/harness';
+import type { HarnessThread, Session } from '@mastra/core/harness';
 
 interface ThreadStateSetting {
   key: string;
@@ -16,16 +16,16 @@ const THREAD_STATE_SETTINGS: ThreadStateSetting[] = [
   },
 ];
 
-function getStateValue(harness: Harness<Record<string, unknown>>, setting: ThreadStateSetting): unknown {
-  const value = harness.session.state.get()[setting.key];
+function getStateValue(session: Session<Record<string, unknown>>, setting: ThreadStateSetting): unknown {
+  const value = session.state.get()[setting.key];
   return setting.isValid(value) ? value : undefined;
 }
 
 async function findThread(
-  harness: Harness<Record<string, unknown>>,
+  session: Session<Record<string, unknown>>,
   threadId: string,
 ): Promise<HarnessThread | undefined> {
-  const threads = await harness.session.thread.list({ allResources: true });
+  const threads = await session.thread.list({ allResources: true });
   return threads.find(t => t.id === threadId);
 }
 
@@ -35,9 +35,9 @@ async function findThread(
  * - Otherwise, persist the current session.state value to the thread so future
  *   sessions see the user's last-selected setting.
  */
-async function restoreSettingsForThread(harness: Harness<Record<string, unknown>>, threadId: string): Promise<void> {
-  const thread = await findThread(harness, threadId);
-  if (harness.session.thread.getId() !== threadId) return;
+async function restoreSettingsForThread(session: Session<Record<string, unknown>>, threadId: string): Promise<void> {
+  const thread = await findThread(session, threadId);
+  if (session.thread.getId() !== threadId) return;
 
   const updates: Record<string, unknown> = {};
   const settingsToSeed: Array<{ key: string; value: unknown }> = [];
@@ -46,24 +46,26 @@ async function restoreSettingsForThread(harness: Harness<Record<string, unknown>
     const persisted = thread?.metadata?.[setting.key];
 
     if (setting.isValid(persisted)) {
-      if (getStateValue(harness, setting) !== persisted) {
+      if (getStateValue(session, setting) !== persisted) {
         updates[setting.key] = persisted;
       }
       continue;
     }
 
-    const current = getStateValue(harness, setting);
+    const current = getStateValue(session, setting);
     if (current !== undefined) {
       settingsToSeed.push({ key: setting.key, value: current });
     }
   }
 
   if (Object.keys(updates).length > 0) {
-    await harness.session.state.set(updates);
+    if (session.thread.getId() !== threadId) return;
+    await session.state.set(updates);
   }
 
   for (const setting of settingsToSeed) {
-    await harness.session.thread.setSetting(setting);
+    if (session.thread.getId() !== threadId) return;
+    await session.thread.setSetting(setting);
   }
 }
 
@@ -75,11 +77,11 @@ async function restoreSettingsForThread(harness: Harness<Record<string, unknown>
  * settings are mastracode-specific OM concepts, so persistence stays scoped to
  * the host.
  */
-export function attachOMThreadStatePersistence(harness: Harness<Record<string, unknown>>): void {
-  harness.subscribe(event => {
+export function attachOMThreadStatePersistence(session: Session<Record<string, unknown>>): void {
+  session.subscribe(event => {
     if (event.type === 'thread_changed' || event.type === 'thread_created') {
       const threadId = event.type === 'thread_changed' ? event.threadId : event.thread.id;
-      void restoreSettingsForThread(harness, threadId).catch(() => {
+      void restoreSettingsForThread(session, threadId).catch(() => {
         // Persistence is best-effort; don't crash the TUI if storage hiccups.
       });
     }
@@ -91,8 +93,8 @@ export function attachOMThreadStatePersistence(harness: Harness<Record<string, u
  * thread. Called once at TUI startup after the initial thread is selected,
  * since the subscription set up later misses the startup `thread_changed` event.
  */
-export async function restoreOMThreadStateForCurrentThread(harness: Harness<Record<string, unknown>>): Promise<void> {
-  const threadId = harness.session.thread.getId();
+export async function restoreOMThreadStateForCurrentThread(session: Session<Record<string, unknown>>): Promise<void> {
+  const threadId = session.thread.getId();
   if (!threadId) return;
-  await restoreSettingsForThread(harness, threadId);
+  await restoreSettingsForThread(session, threadId);
 }

@@ -475,15 +475,6 @@ export interface HarnessThread {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * Session info for the current harness instance.
- */
-export interface HarnessSession {
-  currentThreadId: string | null;
-  currentModeId: string;
-  threads: HarnessThread[];
-}
-
 // =============================================================================
 // Events
 // =============================================================================

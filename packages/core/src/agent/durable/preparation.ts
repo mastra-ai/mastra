@@ -28,9 +28,7 @@ import { createWorkflowInput } from './utils/serialize-state';
 interface DurablePreparationAgent {
   id: string;
   name?: string;
-  getDefaultOptions(opts: {
-    requestContext: RequestContext;
-  }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
+  getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
   getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;

@@ -43,6 +43,12 @@
         "default": "./dist/utils.cjs.js"
       }
     },
+    "./hooks/*": {
+      "import": {
+        "types": "./dist/hooks/*.d.ts",
+        "default": "./dist/hooks/*.es.js"
+      }
+    },
     "./components/*": {
       "import": {
         "types": "./dist/components/*.d.ts",

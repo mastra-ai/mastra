@@ -122,6 +122,11 @@ export const githubSignalsCommandScenario = {
     await runtime.waitForScreenText(/Subscribed to mastra-ai\/mastra#17637/i, terminal, 30_000);
     await runtime.waitForScreenText(/notification from github/i, terminal, 30_000);
     await runtime.waitForScreenText(/CI: failure/i, terminal);
+    // The notification triggers a second model turn; wait for its rendered
+    // response so the second AIMock request is guaranteed to have landed before
+    // verifyAimockRequests runs. Without this, the assertion races the async
+    // turn under parallel test load.
+    await runtime.waitForScreenText(/GitHub notification context acknowledged/i, terminal, 30_000);
 
     terminal.submit('/github debug');
     await runtime.waitForScreenText(/GitHub Signals debug for/i, terminal);
