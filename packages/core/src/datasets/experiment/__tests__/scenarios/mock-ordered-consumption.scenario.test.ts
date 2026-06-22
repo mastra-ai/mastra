@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TOOL_MOCK_EXHAUSTED } from '../../tool-mocks';
 import { recordingTool, runToolMockScenario } from './scenario-helpers';
 
 /**
@@ -130,5 +131,38 @@ describe('Tool mock scenario: ordered consumption of repeated mocks', () => {
     expect(served.filter(s => s.toolName === 'sendEmail').map(s => s.mockIndex)).toEqual([2, 3]);
     expect(result.toolMockReport?.unconsumed).toEqual([]);
     expect(result.toolMockReport?.failure).toBeUndefined();
+  });
+
+  it('fails with TOOL_MOCK_EXHAUSTED when a tool is called more times than it has mocks', async () => {
+    const liveLog: string[] = [];
+
+    const result = await runToolMockScenario({
+      tools: { appendLine: recordingTool('appendLine', liveLog) },
+      // Two mocks provided, but the tool is called three times with the same args.
+      turns: [
+        { toolCalls: [{ id: 'c1', toolName: 'appendLine', args: { file: 'log.txt' } }] },
+        { toolCalls: [{ id: 'c2', toolName: 'appendLine', args: { file: 'log.txt' } }] },
+        { toolCalls: [{ id: 'c3', toolName: 'appendLine', args: { file: 'log.txt' } }] },
+        { text: 'done' },
+      ],
+      toolMocks: [
+        { toolName: 'appendLine', args: { file: 'log.txt' }, output: { written: 'first' } },
+        { toolName: 'appendLine', args: { file: 'log.txt' }, output: { written: 'second' } },
+      ],
+    });
+
+    // The first two calls serve in order; the third has no remaining mock for
+    // these (args matched but all consumed) so it fails EXHAUSTED — distinct from
+    // a MISMATCH — and the abort prevents the tool from ever running live.
+    expect(result.error?.code).toBe(TOOL_MOCK_EXHAUSTED);
+    expect(result.output).toBeNull();
+    expect(liveLog).toEqual([]);
+
+    expect(result.toolMockReport?.served.map(s => s.mockIndex)).toEqual([0, 1]);
+    expect(result.toolMockReport?.failure).toMatchObject({
+      code: TOOL_MOCK_EXHAUSTED,
+      toolName: 'appendLine',
+      args: { file: 'log.txt' },
+    });
   });
 });
