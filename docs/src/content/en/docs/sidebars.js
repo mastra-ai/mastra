@@ -123,33 +123,21 @@ const sidebars = {
           type: 'doc',
           id: 'agents/background-tasks',
           label: 'Background Tasks',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
           id: 'agents/channels',
           label: 'Channels',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
           id: 'agents/a2a',
           label: 'A2A',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
           id: 'agents/acp',
           label: 'ACP',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -370,9 +358,6 @@ const sidebars = {
           type: 'doc',
           id: 'streaming/background-task-streaming',
           label: 'Background Task Streaming',
-          customProps: {
-            tags: ['new'],
-          },
         },
       ],
     },
@@ -390,9 +375,6 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/mcp-apps',
           label: 'MCP Apps',
-          customProps: {
-            tags: ['new'],
-          },
         },
       ],
     },
@@ -474,9 +456,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Browser',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -870,9 +849,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Mastra platform',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
