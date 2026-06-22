@@ -2,4 +2,6 @@
 '@mastra/voice-google-gemini-live': patch
 ---
 
-Fixed realtime audio streaming — the package was sending the deprecated `realtime_input.media_chunks` wire shape, which caused Google's Gemini Live v1alpha endpoint to immediately close the WebSocket (code 1007). Audio frames now use the current `realtime_input.audio` shape. Additionally, the WebSocket close handler now includes the close `code` and `reason` in the `session` event so consumers can see protocol-level errors through the public API.
+Fixed realtime audio streaming being immediately rejected by the Gemini Live API. Audio frames now use the current API format, replacing a deprecated payload shape that caused the connection to close on the first frame.
+
+The `session` event for disconnections now includes `code` and `reason` fields, so consumers can see why the server closed the connection.

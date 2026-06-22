@@ -253,6 +253,7 @@ describe('GeminiLiveVoice', () => {
       const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
       expect(sentData).toHaveProperty('realtime_input');
       expect(sentData.realtime_input).toHaveProperty('audio');
+      expect(sentData.realtime_input).not.toHaveProperty('media_chunks');
     });
 
     it('should handle audio stream', async () => {
