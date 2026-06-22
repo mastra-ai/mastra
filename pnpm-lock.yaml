@@ -3795,6 +3795,9 @@ importers:
       '@babel/core':
         specifier: ^7.29.7
         version: 7.29.7
+      '@copilotkit/aimock':
+        specifier: ^1.29.0
+        version: 1.29.0(vitest@4.1.8)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
