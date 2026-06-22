@@ -23,10 +23,12 @@ export async function runAcpServer(
     stream,
   );
 
-  // Handle cleanup on disconnect
-  await connection.closed;
-
-  if (cleanup) {
-    await cleanup();
+  // Handle cleanup on disconnect (success or error)
+  try {
+    await connection.closed;
+  } finally {
+    if (cleanup) {
+      await cleanup();
+    }
   }
 }
