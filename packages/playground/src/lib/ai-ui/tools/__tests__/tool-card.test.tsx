@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { useContext } from 'react';
@@ -159,6 +159,86 @@ describe('ToolCard dispatch', () => {
       }),
     );
     expect(screen.getByText('startJob')).toBeTruthy();
+  });
+
+  it('surfaces the agent suspend payload when suspendedTools is keyed by toolCallId', () => {
+    renderToolCard(
+      baseProps({
+        toolName: 'agent-billingAgent',
+        toolCallId: 'call-abc',
+        output: { text: 'pending approval' },
+        metadata: {
+          mode: 'stream',
+          // New core format: suspendedTools keyed by toolCallId.
+          suspendedTools: {
+            'call-abc': { suspendPayload: 'approve refund ord_2001?' },
+          },
+        },
+      }),
+    );
+
+    // Agent badge starts collapsed; expand it to reveal the suspend payload.
+    fireEvent.click(screen.getByText('billingAgent'));
+    expect(screen.getByText('Agent suspend payload')).toBeTruthy();
+    expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
+  });
+
+  it('surfaces the agent suspend payload when suspendedTools is keyed by toolName (back-compat)', () => {
+    renderToolCard(
+      baseProps({
+        toolName: 'agent-billingAgent',
+        toolCallId: 'call-abc',
+        output: { text: 'pending approval' },
+        metadata: {
+          mode: 'stream',
+          // Legacy core format: suspendedTools keyed by toolName.
+          suspendedTools: {
+            'agent-billingAgent': { suspendPayload: 'approve refund ord_2001?' },
+          },
+        },
+      }),
+    );
+
+    fireEvent.click(screen.getByText('billingAgent'));
+    expect(screen.getByText('Agent suspend payload')).toBeTruthy();
+    expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
+  });
+
+  it('resolves distinct suspend payloads for parallel delegations to the same sub-agent', () => {
+    // Two delegations share the same toolName but have distinct toolCallIds.
+    // The toolCallId-keyed lookup must surface each call's own payload.
+    const sharedMetadata = {
+      mode: 'stream' as const,
+      suspendedTools: {
+        'call-A': { suspendPayload: 'approve refund ord_2001?' },
+        'call-B': { suspendPayload: 'approve refund ord_2003?' },
+      },
+    };
+
+    const { unmount } = renderToolCard(
+      baseProps({
+        toolName: 'agent-billingAgent',
+        toolCallId: 'call-A',
+        output: { text: 'pending' },
+        metadata: sharedMetadata,
+      }),
+    );
+    fireEvent.click(screen.getByText('billingAgent'));
+    expect(screen.getByText('approve refund ord_2001?')).toBeTruthy();
+    expect(screen.queryByText('approve refund ord_2003?')).toBeNull();
+    unmount();
+
+    renderToolCard(
+      baseProps({
+        toolName: 'agent-billingAgent',
+        toolCallId: 'call-B',
+        output: { text: 'pending' },
+        metadata: sharedMetadata,
+      }),
+    );
+    fireEvent.click(screen.getByText('billingAgent'));
+    expect(screen.getByText('approve refund ord_2003?')).toBeTruthy();
+    expect(screen.queryByText('approve refund ord_2001?')).toBeNull();
   });
 
   it('pushes a streaming workflow output into WorkflowRunContext for the live graph', async () => {
