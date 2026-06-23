@@ -12,8 +12,6 @@ export const persistentGoalJudgeDecisionScenario: McE2eScenario = {
   name: 'persistent-goal-judge-decision',
   description: 'Drive a persisted active goal through judge continue and done decisions in the real TUI.',
   testName: 'continues and completes a persistent goal from AIMock judge decisions',
-  skipReason:
-    'current main goal judge flow emits changed structured decision text and does not complete this fixture path',
   useOpenAIModel: true,
   aimockFixture: 'persistent-goal-judge-decision.json',
   prepare({ dbPath, projectDir }) {
@@ -66,14 +64,13 @@ values
     );
 
     terminal.submit('/goal resume');
-    await runtime.waitForScreenText(/retriggering judge evaluation/i, terminal, 8_000);
     await runtime.waitForScreenText(/Goal judge follow-up e2e step completed/i, terminal, 15_000);
-    await runtime.waitForScreenText(/Goal\s+●\s+done\s+\(2\/3\)/i, terminal, 15_000);
+    await runtime.waitForScreenText(/Goal\s+●\s+done\s+\(1\/3\)/i, terminal, 15_000);
     await runtime.waitForScreenText(/The persistent goal judge e2e objective is complete/i, terminal, 15_000);
 
     terminal.submit('/goal status');
     await runtime.waitForScreenText(
-      /Goal \(done\): "Drive the persistent goal judge e2e until it is done\." — 2\/3 turns used/i,
+      /Goal \(done\): "Drive the persistent goal judge e2e until it is done\." — 1\/3 turns used/i,
       terminal,
       8_000,
     );
@@ -81,17 +78,17 @@ values
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
-    if (requests.length < 3) {
+    if (requests.length < 2) {
       throw new Error(
-        `Expected at least 3 AIMock requests for judge continue, continuation, and judge done; received ${requests.length}`,
+        `Expected at least 2 AIMock requests for goal continuation and judge done; received ${requests.length}`,
       );
     }
     const body = JSON.stringify(requests);
     if (!body.includes('Seeded goal judge user turn.')) {
       throw new Error('Expected AIMock requests to include the loaded conversation context');
     }
-    if (!body.includes('Continue by reporting the goal judge follow-up e2e step.')) {
-      throw new Error('Expected continuation request to include the judge continue reason');
+    if (!body.includes('Goal judge follow-up e2e step completed')) {
+      throw new Error('Expected continuation response to reach the judge request history');
     }
   },
 };

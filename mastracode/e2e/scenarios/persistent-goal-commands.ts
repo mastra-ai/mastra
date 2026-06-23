@@ -9,7 +9,6 @@ export const persistentGoalCommandsScenario: McE2eScenario = {
   name: 'persistent-goal-commands',
   description: 'Start, inspect, pause, and clear a persistent goal through real TUI slash commands.',
   testName: 'manages persistent goal command lifecycle in the real TUI',
-  skipReason: 'current main goal judge returns invalid structured scorer output in this fixture path',
   useOpenAIModel: true,
   aimockFixture: 'persistent-goal-commands.json',
   prepare({ appDataDir }) {
