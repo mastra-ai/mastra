@@ -264,10 +264,12 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
 Prepares a run for durable execution without starting it. Registers the run in the internal registry and returns the serialized workflow input. Use this when you need to control when and how the workflow is triggered.
 
 ```typescript
-const { runId, messageId, workflowInput, threadId, resourceId } =
-  await durableAgent.prepare('Summarize the document', {
+const { runId, messageId, workflowInput, threadId, resourceId } = await durableAgent.prepare(
+  'Summarize the document',
+  {
     memory: { threadId: 'thread-1', resourceId: 'user-1' },
-  })
+  },
+)
 ```
 
 Returns:
@@ -288,10 +290,9 @@ interface PrepareResult {
 Streams until all background tasks complete and the agent is idle. This is the durable variant of the regular [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle). Accepts the same options as [`stream()`](#streamoptions) plus `maxIdleMs`.
 
 ```typescript
-const { output, runId, cleanup } = await durableAgent.streamUntilIdle(
-  'Run the analysis',
-  { maxIdleMs: 30000 },
-)
+const { output, runId, cleanup } = await durableAgent.streamUntilIdle('Run the analysis', {
+  maxIdleMs: 30000,
+})
 
 const text = await output.text
 cleanup()

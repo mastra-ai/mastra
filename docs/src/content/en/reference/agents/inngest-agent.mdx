@@ -76,13 +76,15 @@ Returns: [`InngestAgent`](#inngestagent-interface)
     name: 'agent',
     type: 'Agent',
     isOptional: false,
-    description: 'The Agent to wrap with Inngest durable execution. Agent methods (e.g., `generate()`, `listTools()`, `getMemory()`) delegate to this agent via a Proxy.',
+    description:
+      'The Agent to wrap with Inngest durable execution. Agent methods (e.g., `generate()`, `listTools()`, `getMemory()`) delegate to this agent via a Proxy.',
   },
   {
     name: 'inngest',
     type: 'Inngest',
     isOptional: false,
-    description: 'The Inngest client instance. Used to send workflow events and, in SDK v4, publish realtime stream events.',
+    description:
+      'The Inngest client instance. Used to send workflow events and, in SDK v4, publish realtime stream events.',
   },
   {
     name: 'id',
@@ -102,7 +104,8 @@ Returns: [`InngestAgent`](#inngestagent-interface)
     name: 'pubsub',
     type: 'PubSub',
     isOptional: true,
-    description: 'PubSub instance for streaming events. The default `InngestPubSub` uses Inngest Realtime, which works across processes.',
+    description:
+      'PubSub instance for streaming events. The default `InngestPubSub` uses Inngest Realtime, which works across processes.',
     defaultValue: 'InngestPubSub',
   },
   {
@@ -187,9 +190,13 @@ Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
 Resumes a suspended Inngest run, for example after a tool approval. Loads the workflow snapshot from storage, finds the suspended step, and sends a resume event to Inngest.
 
 ```typescript
-const { output, cleanup } = await durableAgent.resume(runId, {
-  approved: true,
-}, { threadId: 'thread-1', resourceId: 'user-1' })
+const { output, cleanup } = await durableAgent.resume(
+  runId,
+  {
+    approved: true,
+  },
+  { threadId: 'thread-1', resourceId: 'user-1' },
+)
 
 await output.text
 cleanup()
@@ -274,10 +281,12 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
 Prepares a run for durable execution without triggering it. Returns the serialized workflow input that can be used to manually trigger the Inngest workflow event.
 
 ```typescript
-const { runId, messageId, workflowInput, threadId, resourceId } =
-  await durableAgent.prepare('Summarize the document', {
+const { runId, messageId, workflowInput, threadId, resourceId } = await durableAgent.prepare(
+  'Summarize the document',
+  {
     memory: { threadId: 'thread-1', resourceId: 'user-1' },
-  })
+  },
+)
 ```
 
 Returns:
@@ -324,8 +333,7 @@ Returns: `boolean`
     name: 'instructions',
     type: "AgentExecutionOptions['instructions']",
     isOptional: true,
-    description:
-      "Overrides the agent's default instructions for this run.",
+    description: "Overrides the agent's default instructions for this run.",
   },
   {
     name: 'context',
