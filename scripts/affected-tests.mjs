@@ -84,14 +84,7 @@ function discoverTestFiles() {
   // Use two patterns: '*.test.ts' catches top-level files (e.g. src/foo.test.ts)
   // and '**/*.test.ts' catches nested files. Dedupe via Set.
   // Also include .test.tsx and .spec.ts/.spec.tsx for completeness.
-  const patterns = [
-    '*.test.ts',
-    '**/*.test.ts',
-    '*.test.tsx',
-    '**/*.test.tsx',
-    '*.spec.ts',
-    '**/*.spec.ts',
-  ];
+  const patterns = ['*.test.ts', '**/*.test.ts', '*.test.tsx', '**/*.test.tsx', '*.spec.ts', '**/*.spec.ts'];
 
   const files = new Set();
   for (const pattern of patterns) {
@@ -271,7 +264,10 @@ for (const node of Object.keys(graph)) {
 
 const uniqueLeaks = [...new Set(distLeaks)];
 if (uniqueLeaks.length > 0) {
-  const leakMsg = `Warning: ${uniqueLeaks.length} node(s) resolved to dist/ (resolution leak):\n${uniqueLeaks.slice(0, 10).map(l => `  ${l}`).join('\n')}${uniqueLeaks.length > 10 ? '\n  ...' : ''}`;
+  const leakMsg = `Warning: ${uniqueLeaks.length} node(s) resolved to dist/ (resolution leak):\n${uniqueLeaks
+    .slice(0, 10)
+    .map(l => `  ${l}`)
+    .join('\n')}${uniqueLeaks.length > 10 ? '\n  ...' : ''}`;
   if (flags.json) {
     // Will include in output
   } else {

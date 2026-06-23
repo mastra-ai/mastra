@@ -52,12 +52,7 @@ function findPackageJsonFiles(dir) {
 
     const fullPath = join(dir, entry.name);
     // Exclude fixture/scaffold directories anywhere in the tree
-    if (
-      entry.name === '__fixtures__' ||
-      entry.name === 'fixtures' ||
-      entry.name === 'test-fixtures'
-    )
-      continue;
+    if (entry.name === '__fixtures__' || entry.name === 'fixtures' || entry.name === 'test-fixtures') continue;
 
     results.push(...findPackageJsonFiles(fullPath));
   }
