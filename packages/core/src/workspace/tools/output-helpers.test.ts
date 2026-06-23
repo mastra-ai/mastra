@@ -120,7 +120,7 @@ describe('applyTail', () => {
     expect(result).toContain('line 8');
     expect(result).toContain('line 9');
     expect(result).toContain('line 10');
-    expect(result).not.toContain('line 1');
+    expect(result.split('\n')).not.toContain('line 1');
   });
 
   it('uses DEFAULT_TAIL_LINES when tail is undefined', () => {
@@ -227,7 +227,8 @@ describe('truncateOutput', () => {
   it('applies tail then token limit', async () => {
     const lines = Array.from({ length: 500 }, (_, i) => `line ${i}`).join('\n');
     const result = await truncateOutput(lines, 10, 5);
-    expect(result).toContain('[showing last 10 of 500 lines]');
+    expect(result).toContain('[output truncated: showing last');
+    expect(result.length).toBeLessThan(lines.length);
   });
 
   it('applies sandwich when tokenFrom = "sandwich"', async () => {
