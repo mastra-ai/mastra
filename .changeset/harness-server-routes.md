@@ -15,3 +15,7 @@ Harness through `mastra.getHarness(id)` and operate on the session returned by
 
 A new `harness` permission resource is included (`harness:read`,
 `harness:execute`).
+
+The tool-approval route forwards the request's `toolCallId` so a stale or
+delayed approval can only resolve the gate it targets, and the list-models
+route no longer returns API key environment variable names.

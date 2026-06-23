@@ -126,6 +126,12 @@ describe('Harness session — cross-resource thread ownership', () => {
     await expect(b.thread.switch({ threadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
     // b stays bound to its own thread; it never moved onto a's.
     expect(b.thread.getId()).toBe(bThreadBefore);
+
+    // The failed switch released its lock on b's thread before validating
+    // ownership; b must still own (and be able to re-bind) its own thread,
+    // proving the previous lock was restored on the failure path.
+    await expect(b.thread.switch({ threadId: bThreadBefore! })).resolves.toBeUndefined();
+    expect(b.thread.getId()).toBe(bThreadBefore);
   });
 
   it('cannot delete a thread owned by another resource', async () => {

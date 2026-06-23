@@ -142,7 +142,6 @@ const listModelsResponseSchema = z.object({
       provider: z.string(),
       modelName: z.string(),
       hasApiKey: z.boolean(),
-      apiKeyEnvVar: z.string().optional(),
       useCount: z.number(),
     }),
   ),
@@ -360,7 +359,7 @@ export const HARNESS_TOOL_APPROVAL_ROUTE = createRoute({
   tags: ['Harness'],
   requiresAuth: true,
   requiresPermission: 'harness:execute',
-  handler: async ({ mastra, harnessId, resourceId, approved }) => {
+  handler: async ({ mastra, harnessId, resourceId, toolCallId, approved }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
       const session = await getSession(harness, resourceId);
@@ -368,7 +367,8 @@ export const HARNESS_TOOL_APPROVAL_ROUTE = createRoute({
       // continuation and emits its events to subscribers (the open SSE stream).
       // Calling approveToolCall/declineToolCall directly would bypass the gate,
       // leaving the run loop hung and duplicating the resumed stream.
-      session.respondToToolApproval({ decision: approved ? 'approve' : 'decline' });
+      // Pass toolCallId so a stale request cannot resolve a different pending gate.
+      session.respondToToolApproval({ toolCallId, decision: approved ? 'approve' : 'decline' });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error responding to harness tool approval');
@@ -844,7 +844,6 @@ export const LIST_HARNESS_MODELS_ROUTE = createRoute({
           provider: m.provider,
           modelName: m.modelName,
           hasApiKey: m.hasApiKey,
-          apiKeyEnvVar: m.apiKeyEnvVar,
           useCount: m.useCount,
         })),
       };

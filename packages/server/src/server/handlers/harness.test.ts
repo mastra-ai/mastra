@@ -217,8 +217,12 @@ describe('harness routes', () => {
 
       expect(res.threads.length).toBe(2);
       // Newest first: the returned slice is non-increasing by updatedAt.
-      const times = res.threads.map(t => (t.updatedAt ? Date.parse(t.updatedAt) : 0));
-      expect(times[0]).toBeGreaterThanOrEqual(times[1]);
+      // Require real timestamps so the ordering check can't pass vacuously.
+      expect(res.threads.every(t => typeof t.updatedAt === 'string' && !Number.isNaN(Date.parse(t.updatedAt)))).toBe(
+        true,
+      );
+      const times = res.threads.map(t => Date.parse(t.updatedAt!));
+      expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
     });
   });
 
