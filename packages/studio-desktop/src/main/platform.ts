@@ -40,6 +40,20 @@ export function buildHostedStudioLoginUrl(baseUrl: string, instanceUrl: string) 
   return url.toString();
 }
 
+export function hostedStudioOrigin(instanceUrl: string) {
+  return new URL(normalizeServerUrl(instanceUrl)).origin;
+}
+
+export function shouldAttachPlatformAuthorization(requestUrl: string, allowedOrigins: ReadonlySet<string>) {
+  try {
+    const url = new URL(requestUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+    return allowedOrigins.has(url.origin);
+  } catch {
+    return false;
+  }
+}
+
 export function isLaunchableStudioStatus(status: string | null | undefined) {
   return status === 'running' || status === 'sleeping' || status === 'stopped';
 }

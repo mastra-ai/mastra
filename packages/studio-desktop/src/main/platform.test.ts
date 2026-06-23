@@ -3,8 +3,10 @@ import {
   buildHostedStudioLoginUrl,
   buildPlatformCliLoginUrl,
   fetchPlatformProjects,
+  hostedStudioOrigin,
   isLaunchableStudioStatus,
   refreshPlatformAccessToken,
+  shouldAttachPlatformAuthorization,
 } from './platform';
 import type { PlatformSession } from './platform';
 
@@ -38,6 +40,25 @@ describe('Platform desktop helpers', () => {
     expect(isLaunchableStudioStatus('stopped')).toBe(true);
     expect(isLaunchableStudioStatus('deploying')).toBe(false);
     expect(isLaunchableStudioStatus('failed')).toBe(false);
+  });
+
+  it('normalizes hosted Studio origins for desktop bearer injection', () => {
+    expect(hostedStudioOrigin('https://demo.studio.mastra.cloud/agents?foo=bar')).toBe(
+      'https://demo.studio.mastra.cloud',
+    );
+    expect(hostedStudioOrigin('http://localhost:4111/agents')).toBe('http://localhost:4111');
+  });
+
+  it('only attaches Platform authorization to registered Studio origins', () => {
+    const origins = new Set(['https://demo.studio.mastra.cloud']);
+
+    expect(shouldAttachPlatformAuthorization('https://demo.studio.mastra.cloud/api/agents', origins)).toBe(true);
+    expect(shouldAttachPlatformAuthorization('https://demo.studio.mastra.cloud/assets/main.js', origins)).toBe(true);
+    expect(shouldAttachPlatformAuthorization('https://other.studio.mastra.cloud/api/agents', origins)).toBe(false);
+    expect(shouldAttachPlatformAuthorization('https://demo.studio.mastra.cloud.evil.test/api/agents', origins)).toBe(
+      false,
+    );
+    expect(shouldAttachPlatformAuthorization('mailto:test@example.com', origins)).toBe(false);
   });
 
   it('fetches orgs and projects with bearer auth and org scope', async () => {

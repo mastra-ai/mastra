@@ -12,11 +12,12 @@ import { probeMastraServer } from './local-dev';
 import { LogBuffer } from './log-buffer';
 import { resolveAppIconPath, resolveStarterOutputPath, resolveStudioDistPath } from './paths';
 import {
-  buildHostedStudioLoginUrl,
   buildPlatformCliLoginUrl,
   fetchPlatformProjects,
+  hostedStudioOrigin,
   normalizePlatformBaseUrl,
   refreshPlatformAccessToken,
+  shouldAttachPlatformAuthorization,
 } from './platform';
 import type { PlatformSession } from './platform';
 import { deletePlatformSession, readPlatformSession, writePlatformSession } from './platform-session';
@@ -62,6 +63,8 @@ const logs = new LogBuffer();
 const tabs: DesktopTab[] = [];
 const studioShellServers = new Map<string, StudioShellEntry>();
 const studioContentViews = new Map<string, StudioContentViewEntry>();
+const platformStudioOrigins = new Set<string>();
+let studioAuthInterceptorInstalled = false;
 
 app.setName('Mastra Studio');
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -114,6 +117,7 @@ function createStudioContentView() {
     },
   });
   view.setBackgroundColor('#101113');
+  installStudioAuthInterceptor(view);
 
   view.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -138,6 +142,25 @@ function createStudioContentView() {
     url: '',
     view,
   };
+}
+
+function installStudioAuthInterceptor(view: WebContentsView) {
+  if (studioAuthInterceptorInstalled) return;
+  studioAuthInterceptorInstalled = true;
+
+  view.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+    if (!platformSession?.accessToken || !shouldAttachPlatformAuthorization(details.url, platformStudioOrigins)) {
+      callback({ requestHeaders: details.requestHeaders });
+      return;
+    }
+
+    const requestHeaders = { ...details.requestHeaders };
+    const hasAuthorization = Object.keys(requestHeaders).some(header => header.toLowerCase() === 'authorization');
+    if (!hasAuthorization) {
+      requestHeaders.Authorization = `Bearer ${platformSession.accessToken}`;
+    }
+    callback({ requestHeaders });
+  });
 }
 
 function removeStudioContentView(tabId: string) {
@@ -403,15 +426,20 @@ async function createPlatformTab(projectId: string) {
   if (!project.instanceUrl) {
     throw new Error('This hosted Studio does not have a URL yet');
   }
+  if (!platformSession) {
+    throw new Error('Connect to Platform before opening hosted Studio');
+  }
 
+  const studioUrl = normalizeServerUrl(project.instanceUrl);
+  platformStudioOrigins.add(hostedStudioOrigin(studioUrl));
   upsertTab({
     id: randomUUID(),
     kind: 'platform',
     title: project.name,
-    subtitle: project.instanceUrl,
-    url: buildHostedStudioLoginUrl(platformState.baseUrl, project.instanceUrl),
-    sourceUrl: project.instanceUrl,
-    externalUrl: project.instanceUrl,
+    subtitle: studioUrl,
+    url: studioUrl,
+    sourceUrl: studioUrl,
+    externalUrl: studioUrl,
     status: 'ready',
   });
   return snapshotState();
@@ -555,6 +583,7 @@ async function startPlatformLogin() {
 
 async function logoutPlatform() {
   platformSession = undefined;
+  platformStudioOrigins.clear();
   await deletePlatformSession(platformSessionPath);
   platformState = defaultPlatformState(currentSettings.platformBaseUrl);
   return snapshotState();
