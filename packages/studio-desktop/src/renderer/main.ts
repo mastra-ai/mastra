@@ -103,7 +103,7 @@ function renderStudioHost() {
   if (!current) return;
 
   const active = activeTab();
-  webviews.hidden = !active?.url;
+  webviews.hidden = !active?.url || active.status === 'error';
 }
 
 function renderPlatformRows(current: DesktopState) {
@@ -160,9 +160,31 @@ function renderPlatformRows(current: DesktopState) {
 function renderLauncher() {
   const current = state;
   const active = activeTab();
-  const showLauncher = !active || active.kind === 'launcher' || !active.url;
+  const showLauncher = !active || active.kind === 'launcher' || !active.url || active.status === 'error';
   launcher.hidden = !showLauncher;
   if (!current || !showLauncher) return;
+
+  if (active?.status === 'error') {
+    launcher.innerHTML = `
+      <div class="launcher-panel">
+        <div class="launcher-list">
+          <div class="studio-error">
+            <span class="row-icon error-icon">!</span>
+            <span class="row-main">
+              <span class="row-title">Studio failed to load</span>
+              <span class="row-subtitle">${escapeHtml(active.error ?? 'The Studio tab could not be loaded.')}</span>
+              ${active.url ? `<span class="error-url">${escapeHtml(active.url)}</span>` : ''}
+            </span>
+            <span class="error-actions">
+              <button type="button" data-action="reload-active-tab">Reload</button>
+              <button type="button" data-action="open-active-external">Open in browser</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
 
   const platformStatus =
     current.platform.status === 'error'
@@ -270,6 +292,10 @@ launcher.addEventListener('click', event => {
     void runAction(action, () => api.logoutPlatform());
   } else if (action === 'save-platform-base') {
     void runAction(action, () => api.updateSettings({ platformBaseUrl }).then(result => result.state));
+  } else if (action === 'reload-active-tab' && state?.activeTabId) {
+    void runAction(action, () => api.reloadTab(state.activeTabId!));
+  } else if (action === 'open-active-external' && state?.activeTabId) {
+    void runAction(action, () => api.openTabExternal(state.activeTabId!));
   }
 });
 

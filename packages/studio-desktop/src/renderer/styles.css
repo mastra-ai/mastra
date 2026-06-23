@@ -18,7 +18,7 @@
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
-    "Segoe UI",
+    'Segoe UI',
     sans-serif;
 }
 
@@ -200,9 +200,7 @@ input {
   position: relative;
   width: 100%;
   height: calc(100% - 42px);
-  background:
-    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.035), transparent 34%),
-    var(--bg);
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.035), transparent 34%), var(--bg);
 }
 
 .launcher,
@@ -251,6 +249,21 @@ input {
   text-align: left;
 }
 
+.studio-error {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+  padding: 14px 12px;
+  color: var(--text);
+}
+
+.error-icon {
+  border-color: rgba(255, 128, 109, 0.4);
+  color: var(--danger);
+}
+
 .launcher-row:last-child,
 .manual-row:last-child {
   border-bottom: 0;
@@ -291,13 +304,40 @@ input {
 .status-pill,
 .section-heading button,
 .inline-config button,
-.manual-row button {
+.manual-row button,
+.error-actions button {
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: #252525;
   color: var(--muted);
   padding: 4px 9px;
   font-size: 11px;
+  white-space: nowrap;
+}
+
+.error-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.error-actions button {
+  -webkit-app-region: no-drag;
+}
+
+.studio-error .row-subtitle {
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+}
+
+.error-url {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

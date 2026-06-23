@@ -63,8 +63,9 @@ const logs = new LogBuffer();
 const tabs: DesktopTab[] = [];
 const studioShellServers = new Map<string, StudioShellEntry>();
 const studioContentViews = new Map<string, StudioContentViewEntry>();
+const studioWebContentsTabs = new Map<number, string>();
 const platformStudioOrigins = new Set<string>();
-let studioAuthInterceptorInstalled = false;
+let studioWebRequestHandlersInstalled = false;
 
 app.setName('Mastra Studio');
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -117,7 +118,7 @@ function createStudioContentView() {
     },
   });
   view.setBackgroundColor('#101113');
-  installStudioAuthInterceptor(view);
+  installStudioWebRequestHandlers(view);
 
   view.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
@@ -133,6 +134,12 @@ function createStudioContentView() {
   view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     const frame = isMainFrame ? 'main frame' : 'subframe';
     addAppLog(`Studio view failed to load ${frame} ${validatedURL}: ${errorCode} ${errorDescription}`);
+    if (isMainFrame && errorCode !== -3) {
+      markStudioWebContentsLoadError(
+        view.webContents.id,
+        `Studio failed to load ${validatedURL}: ${errorDescription} (${errorCode})`,
+      );
+    }
   });
   view.webContents.on('render-process-gone', (_event, details) => {
     addAppLog(`Studio view process exited: ${details.reason} (${details.exitCode})`);
@@ -144,9 +151,9 @@ function createStudioContentView() {
   };
 }
 
-function installStudioAuthInterceptor(view: WebContentsView) {
-  if (studioAuthInterceptorInstalled) return;
-  studioAuthInterceptorInstalled = true;
+function installStudioWebRequestHandlers(view: WebContentsView) {
+  if (studioWebRequestHandlersInstalled) return;
+  studioWebRequestHandlersInstalled = true;
 
   view.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
     if (!platformSession?.accessToken || !shouldAttachPlatformAuthorization(details.url, platformStudioOrigins)) {
@@ -161,12 +168,35 @@ function installStudioAuthInterceptor(view: WebContentsView) {
     }
     callback({ requestHeaders });
   });
+
+  view.webContents.session.webRequest.onCompleted({ urls: ['http://*/*', 'https://*/*'] }, details => {
+    if (details.resourceType !== 'mainFrame' || details.statusCode < 400) return;
+    if (typeof details.webContentsId !== 'number') return;
+
+    const message = `Studio returned HTTP ${details.statusCode} for ${details.url}. If this is a hosted Platform Studio, verify that the deployment is available and the instance URL is current.`;
+    markStudioWebContentsLoadError(details.webContentsId, message);
+  });
+}
+
+function markStudioWebContentsLoadError(webContentsId: number, message: string) {
+  const tabId = studioWebContentsTabs.get(webContentsId);
+  if (!tabId) return;
+
+  const tab = tabs.find(candidate => candidate.id === tabId);
+  if (!tab) return;
+  if (tab.status === 'error' && tab.error === message) return;
+
+  tab.status = 'error';
+  tab.error = message;
+  logs.add(message);
+  emitState();
 }
 
 function removeStudioContentView(tabId: string) {
   const entry = studioContentViews.get(tabId);
   if (!entry) return;
   studioContentViews.delete(tabId);
+  studioWebContentsTabs.delete(entry.view.webContents.id);
 
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.contentView.removeChildView(entry.view);
@@ -196,7 +226,7 @@ function syncStudioContentViews() {
   const active = activeTab();
   const bounds = studioViewBounds();
   for (const tab of tabs) {
-    if (!tab.url) {
+    if (!tab.url || tab.status === 'error') {
       const entry = studioContentViews.get(tab.id);
       if (entry) {
         entry.view.setVisible(false);
@@ -208,6 +238,7 @@ function syncStudioContentViews() {
     if (!entry) {
       entry = createStudioContentView();
       studioContentViews.set(tab.id, entry);
+      studioWebContentsTabs.set(entry.view.webContents.id, tab.id);
       mainWindow.contentView.addChildView(entry.view);
     }
 
@@ -215,7 +246,10 @@ function syncStudioContentViews() {
     if (entry.url !== tab.url) {
       entry.url = tab.url;
       void entry.view.webContents.loadURL(tab.url).catch(error => {
-        addAppLog(`Studio view failed to load ${tab.url}: ${error instanceof Error ? error.message : String(error)}`);
+        markStudioWebContentsLoadError(
+          entry.view.webContents.id,
+          `Studio failed to load ${tab.url}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       });
     }
 
