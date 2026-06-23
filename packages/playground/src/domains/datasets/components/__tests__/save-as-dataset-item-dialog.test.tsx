@@ -238,10 +238,8 @@ describe('SaveAsDatasetItemDialog', () => {
     expect(getEditors()[3].value).toBe('[{"toolName":"getWeather","args":{"city":"Seattle"},"output":{"temp":52}}]');
   });
 
-  it('hydrates tool mocks when async trace data arrives after opening', async () => {
-    const { rerender } = renderDialog();
-
-    expect(getEditors()[3].value).toBe('');
+  it('seeds tool mocks from initialToolMocks when the dialog opens', async () => {
+    const { rerender } = renderDialog({ isOpen: false });
 
     rerender(
       wrap(
@@ -261,11 +259,12 @@ describe('SaveAsDatasetItemDialog', () => {
     });
   });
 
-  it('preserves user tool-mock edits when async trace data arrives later', async () => {
-    const { rerender } = renderDialog();
+  it('preserves user tool-mock edits across re-renders while the dialog stays open', async () => {
+    const { rerender } = renderDialog({ initialToolMocks: '[{"toolName":"search","args":{},"output":"ok"}]' });
 
     fireEvent.change(getEditors()[3], { target: { value: 'manual mocks' } });
 
+    // A benign re-render with the same props must not clobber the user's edit.
     rerender(
       wrap(
         <SaveAsDatasetItemDialog

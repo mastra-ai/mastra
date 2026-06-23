@@ -71,7 +71,6 @@ export function SaveAsDatasetItemDialog({
   const trajectorySeededRef = useRef(false);
   const inputSeededRef = useRef(false);
   const groundTruthSeededRef = useRef(false);
-  const toolMocksSeededRef = useRef(false);
   useEffect(() => {
     if (isOpen && !prevOpenRef.current) {
       setInput(initialInput);
@@ -81,14 +80,12 @@ export function SaveAsDatasetItemDialog({
       trajectorySeededRef.current = !!initialTrajectory;
       inputSeededRef.current = initialInput !== '{}';
       groundTruthSeededRef.current = !!initialGroundTruth;
-      toolMocksSeededRef.current = !!initialToolMocks;
     }
     prevOpenRef.current = isOpen;
     if (!isOpen) {
       trajectorySeededRef.current = false;
       inputSeededRef.current = false;
       groundTruthSeededRef.current = false;
-      toolMocksSeededRef.current = false;
     }
   }, [isOpen, initialInput, initialGroundTruth, initialTrajectory, initialToolMocks]);
 
@@ -109,7 +106,6 @@ export function SaveAsDatasetItemDialog({
   };
 
   const handleToolMocksChange = (value: string) => {
-    toolMocksSeededRef.current = true;
     setToolMocks(value);
   };
 
@@ -136,14 +132,6 @@ export function SaveAsDatasetItemDialog({
       trajectorySeededRef.current = true;
     }
   }, [isOpen, initialTrajectory]);
-
-  // Seed tool mocks when they arrive asynchronously after the dialog is already open
-  useEffect(() => {
-    if (isOpen && initialToolMocks && !toolMocksSeededRef.current) {
-      setToolMocks(initialToolMocks);
-      toolMocksSeededRef.current = true;
-    }
-  }, [isOpen, initialToolMocks]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
