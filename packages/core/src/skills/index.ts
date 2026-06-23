@@ -27,7 +27,6 @@
 export { resolveAgentSkills, mergeWorkspaceSkills } from './agent-skills-resolver';
 export { defineSkill, isInlineSkill } from './define-skill';
 export { InlineSkillSource } from './inline-skill-source';
-export { AgentSkillsProcessorAdapter } from './skills-processor-adapter';
 export type {
   InlineSkillInput,
   InlineSkill,

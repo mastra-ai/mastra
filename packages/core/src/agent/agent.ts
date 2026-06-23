@@ -81,7 +81,6 @@ import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
-import { AgentSkillsProcessorAdapter } from '../skills/skills-processor-adapter';
 import type { AgentSkillsInput, SkillInput } from '../skills/types';
 import { InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
@@ -1044,19 +1043,7 @@ export class Agent<
       return [];
     }
 
-    // When agent-level skills are configured (with or without workspace),
-    // use the adapter which works directly with WorkspaceSkills.
-    // When only workspace skills exist (no agent-level skills), use the
-    // existing SkillsProcessor for backward compatibility.
-    if (this.#skills) {
-      return [new AgentSkillsProcessorAdapter(skills, this.#skillsFormat)];
-    }
-
-    if (workspace) {
-      return [new SkillsProcessor({ workspace, format: this.#skillsFormat })];
-    }
-
-    return [];
+    return [new SkillsProcessor({ skills, format: this.#skillsFormat })];
   }
 
   /**

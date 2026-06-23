@@ -19,6 +19,12 @@
  *   workspace,
  *   inputProcessors: [new SkillsProcessor({ workspace })],
  * });
+ *
+ * // Or with WorkspaceSkills directly (agent-level skills):
+ * const agent = new Agent({
+ *   skills: [defineSkill({ ... })],
+ *   inputProcessors: [new SkillsProcessor({ skills: workspaceSkills })],
+ * });
  * ```
  */
 import type { Skill, SkillFormat, WorkspaceSkills } from '../../workspace/skills';
@@ -30,20 +36,12 @@ import type { ProcessInputStepArgs, Processor } from '../index';
 // =============================================================================
 
 /**
- * Configuration options for SkillsProcessor
+ * Configuration options for SkillsProcessor.
+ * Provide either `skills` (WorkspaceSkills directly) or `workspace` (skills resolved via workspace.skills), not both.
  */
-export interface SkillsProcessorOptions {
-  /**
-   * Workspace instance containing skills.
-   * Skills are accessed via workspace.skills.
-   */
-  workspace: Workspace;
-
-  /**
-   * Format for skill injection (default: 'xml')
-   */
-  format?: SkillFormat;
-}
+export type SkillsProcessorOptions =
+  | { skills: WorkspaceSkills; workspace?: never; format?: SkillFormat }
+  | { workspace: Workspace; skills?: never; format?: SkillFormat };
 
 // =============================================================================
 // SkillsProcessor
@@ -58,22 +56,15 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
   readonly id = 'skills-processor' as const;
   readonly name = 'Skills Processor';
 
-  /** Workspace instance */
-  private readonly _workspace: Workspace;
+  /** Resolved skills interface */
+  private readonly _skills: WorkspaceSkills | undefined;
 
   /** Format for skill injection */
   private readonly _format: SkillFormat;
 
   constructor(opts: SkillsProcessorOptions) {
-    this._workspace = opts.workspace;
+    this._skills = 'skills' in opts && opts.skills ? opts.skills : opts.workspace?.skills;
     this._format = opts.format ?? 'xml';
-  }
-
-  /**
-   * Get the workspace skills interface
-   */
-  private get skills(): WorkspaceSkills | undefined {
-    return this._workspace.skills;
   }
 
   /**
@@ -87,7 +78,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
       license?: string;
     }>
   > {
-    const skillsList = await this.skills?.list();
+    const skillsList = await this._skills?.list();
     if (!skillsList) return [];
 
     return skillsList.map(skill => ({
@@ -120,14 +111,14 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    * Skills are sorted by name for deterministic output (prompt cache stability).
    */
   private async formatAvailableSkills(): Promise<string> {
-    const skillsList = await this.skills?.list();
+    const skillsList = await this._skills?.list();
     if (!skillsList || skillsList.length === 0) {
       return '';
     }
 
     // Get full skill objects to include source info (parallel fetch).
     // Use meta.path (not meta.name) so same-named skills each resolve to their specific entry.
-    const skillPromises = skillsList.map(meta => this.skills?.get(meta.path));
+    const skillPromises = skillsList.map(meta => this._skills?.get(meta.path));
     const fullSkills = (await Promise.all(skillPromises)).filter((s): s is Skill => s !== undefined && s !== null);
     const dedupedSkills = Array.from(new Map(fullSkills.map(skill => [skill.path, skill])).values());
 
@@ -209,9 +200,9 @@ ${skillsMd}`;
   async processInputStep({ messageList, stepNumber, requestContext }: ProcessInputStepArgs) {
     // Refresh skills on first step only (not every step in the agentic loop)
     if (stepNumber === 0) {
-      await this.skills?.maybeRefresh({ requestContext });
+      await this._skills?.maybeRefresh({ requestContext });
     }
-    const skillsList = await this.skills?.list();
+    const skillsList = await this._skills?.list();
     const hasSkills = skillsList && skillsList.length > 0;
 
     // Inject available skills metadata (if any skills discovered)
