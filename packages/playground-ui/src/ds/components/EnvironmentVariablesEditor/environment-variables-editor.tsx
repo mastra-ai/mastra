@@ -1,9 +1,9 @@
 import { CheckIcon, Code2Icon, CopyIcon, EyeIcon, EyeOffIcon, PlusIcon, TrashIcon, UploadIcon } from 'lucide-react';
-import { createContext, useContext, useState } from 'react';
+import { createContext, use, useMemo, useState } from 'react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 import { Button } from '@/ds/components/Button';
-import { DataList } from '@/ds/components/DataList';
+import { DataList } from '@/ds/components/DataList/data-list';
 import type { DataListRootProps, DataListVariant } from '@/ds/components/DataList/data-list-root';
 import { FieldBlock } from '@/ds/components/FormFieldBlocks';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
@@ -439,9 +439,10 @@ function EnvironmentVariablesEditorReadOnlyList({
   scrollRef,
 }: EnvironmentVariablesEditorReadOnlyListProps) {
   const resolvedColumns = columns ?? (showIcon ? READ_ONLY_COLUMNS_WITH_ICON : READ_ONLY_COLUMNS);
+  const contextValue = useMemo(() => ({ showIcon }), [showIcon]);
 
   return (
-    <EnvironmentVariablesEditorReadOnlyListContext.Provider value={{ showIcon }}>
+    <EnvironmentVariablesEditorReadOnlyListContext.Provider value={contextValue}>
       <DataList columns={resolvedColumns} variant={variant} scrollRef={scrollRef} className={cn('min-h-0', className)}>
         {showHeader &&
           (header ?? (
@@ -463,7 +464,7 @@ function EnvironmentVariablesEditorReadOnlyHeader({
   valueLabel = 'Value',
   updatedAtLabel = 'Last Updated',
 }: EnvironmentVariablesEditorReadOnlyHeaderProps) {
-  const { showIcon } = useContext(EnvironmentVariablesEditorReadOnlyListContext);
+  const { showIcon } = use(EnvironmentVariablesEditorReadOnlyListContext);
 
   return (
     <DataList.Top className={className}>
@@ -500,7 +501,7 @@ function EnvironmentVariablesEditorReadOnlyItem({
   icon,
   ...props
 }: EnvironmentVariablesEditorReadOnlyItemProps) {
-  const { showIcon } = useContext(EnvironmentVariablesEditorReadOnlyListContext);
+  const { showIcon } = use(EnvironmentVariablesEditorReadOnlyListContext);
   const [uncontrolledRevealed, setUncontrolledRevealed] = useState(defaultRevealed ?? false);
   const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
   const isRevealed = revealed ?? uncontrolledRevealed;
