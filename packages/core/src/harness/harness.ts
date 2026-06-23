@@ -263,9 +263,7 @@ export class Harness<TState = {}> {
     });
     session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
-    session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null, {
-      abort: () => session.abort(),
-    });
+    session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
     session.model.setResolver({
       getCurrentModeId: () => session.mode.get(),
       trackModelUse: this.config.modelUseCountTracker,
@@ -965,18 +963,20 @@ export class Harness<TState = {}> {
    * surrounding teardown — dropping the current thread subscription and clearing
    * the active thread — since those are Harness-owned.
    */
-  setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): void {
+  async setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): Promise<void> {
     const previousResourceId = session.identity.getResourceId();
     session.thread.cleanupSubscription();
     session.identity.setResourceId({ resourceId });
-    session.thread.clear();
+    const releasePreviousThreadLock = session.thread.clearAndReleaseLock();
 
     // Re-key the resource registry so this session is the one resolved for its
     // new resourceId (and is no longer resolved for the old one). This session
     // becomes the authoritative owner of the target resource, replacing any
     // prior session registered there.
-    void this.#dropSessionFromRegistry(previousResourceId, session);
+    const dropPreviousResource = this.#dropSessionFromRegistry(previousResourceId, session);
     this.#sessionsByResource.set(resourceId, Promise.resolve(session));
+    await releasePreviousThreadLock;
+    await dropPreviousResource;
   }
 
   /** Remove `resourceId` from the registry only if it still resolves to `session`. */
@@ -1988,6 +1988,6 @@ export class Harness<TState = {}> {
     if (this.config.idGenerator) {
       return this.config.idGenerator();
     }
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    return randomUUID();
   }
 }

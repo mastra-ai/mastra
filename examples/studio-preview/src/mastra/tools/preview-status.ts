@@ -11,10 +11,16 @@ export const previewStatusTool = createTool({
   }),
   execute: async ({ area }) => {
     const checks = {
-      studio: ['Studio static assets are served from the deployment root.', 'Client-side routes fall back to index.html.'],
+      studio: [
+        'Studio static assets are served from the deployment root.',
+        'Client-side routes fall back to index.html.',
+      ],
       agent: ['The preview agent is registered.', 'Agent chat is available at /agents/studio-preview-agent/chat/new.'],
       api: ['Mastra API routes are served under /api/*.', 'The agents list is available at /api/agents.'],
-      vercel: ['The Vercel deployer emits Build Output API v3 files.', 'Studio assets are copied into .vercel/output/static.'],
+      vercel: [
+        'The Vercel deployer emits Build Output API v3 files.',
+        'Studio assets are copied into .vercel/output/static.',
+      ],
     } satisfies Record<z.infer<typeof previewAreaSchema>, string[]>;
 
     return {

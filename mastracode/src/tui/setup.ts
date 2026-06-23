@@ -48,13 +48,13 @@ export function setupKeyboardShortcuts(
     }
 
     if (state.pendingApprovalDismiss) {
-      // Dismiss active approval dialog and abort
+      // Dismiss active approval dialogs by declining the gated tool. Do not abort
+      // the run: the decline is delivered through the normal approval resume path.
       state.pendingApprovalDismiss();
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
-      state.userInitiatedAbort = true;
-      state.session.abort();
+      return;
     } else if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
       // Clean up active inline components on abort. suspensions.hasPending() covers
       // the case where the run is parked in a tool suspend() (e.g. ask_user) —
@@ -544,16 +544,20 @@ export function setupKeyHandlers(
 // =============================================================================
 
 export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
-  const listener: HarnessEventListener = async event => {
-    try {
-      await handleEvent(event);
-    } catch (err) {
-      // Log but don't crash — individual event errors shouldn't kill the process
-      const msg = err instanceof Error ? err.message : String(err);
-      const stack = err instanceof Error ? err.stack : undefined;
-      process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
-      if (stack) process.stderr.write(stack + '\n');
-    }
+  let eventQueue = Promise.resolve();
+  const listener: HarnessEventListener = event => {
+    eventQueue = eventQueue.then(async () => {
+      try {
+        await handleEvent(event);
+      } catch (err) {
+        // Log but don't crash — individual event errors shouldn't kill the process
+        const msg = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+        if (stack) process.stderr.write(stack + '\n');
+      }
+    });
+    return eventQueue;
   };
   state.unsubscribe = state.session.subscribe(listener);
 }
@@ -587,6 +591,9 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   const threads = allThreads.filter(t => {
     const threadPath = t.metadata?.projectPath as string | undefined;
     if (threadPath) return threadPath === currentPath;
+    // In a worktree, only show threads explicitly tagged for this path.
+    // Untagged threads likely belong to the main repo or another worktree.
+    if (state.projectInfo.isWorktree) return false;
     if (dirCreatedAt) return t.createdAt >= dirCreatedAt;
     return true;
   });

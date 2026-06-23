@@ -647,7 +647,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       // from route path/method unless explicitly set or route is public
       const requestContext = request.requestContext;
       // Check if any auth is configured (studio or server) for RBAC
-      const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+      const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
       if (hasAuth) {
         const hasPermission = await loadHasPermission();
         if (hasPermission) {
@@ -783,7 +783,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         const requestContext = request.requestContext;
         // Check if any auth is configured (studio or server) for RBAC
-        const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
         if (hasAuth) {
           let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
           try {

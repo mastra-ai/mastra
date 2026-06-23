@@ -12,7 +12,6 @@
     "typecheck": "pnpm build:linked-workspace-deps && tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.25",
     "@mastra/core": "latest",
     "@mastra/deployer-vercel": "latest",
