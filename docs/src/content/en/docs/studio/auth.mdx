@@ -150,6 +150,47 @@ const rbac = new StaticRBACProvider({
 })
 ```
 
+## Separate Studio and API authentication
+
+By default, `server.auth` secures both Studio and your API routes with the same provider. If your Studio is for internal team members and your API serves external customers, configure `studio.auth` to use a different provider for each:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SimpleAuth } from '@mastra/core/server'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
+
+export const mastra = new Mastra({
+  server: {
+    // External customers authenticate via Clerk
+    auth: new MastraAuthClerk({
+      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+      secretKey: process.env.CLERK_SECRET_KEY,
+      jwksUri: process.env.CLERK_JWKS_URI,
+    }),
+  },
+  studio: {
+    // Internal team uses a shared API key
+    auth: new SimpleAuth({
+      users: {
+        'my-studio-key': {
+          id: 'team',
+          name: 'Internal Team',
+          role: 'admin',
+        },
+      },
+    }),
+  },
+})
+```
+
+When `studio.auth` is set, Studio uses it instead of `server.auth`. When it is not set, Studio requests fall back to `server.auth`.
+
+:::note
+
+Any provider supported by `server.auth` can also be used for `studio.auth`. See the [Auth overview](/docs/server/auth) for the full list.
+
+:::
+
 ## Login methods
 
 Studio adapts its login screen based on the auth provider:
