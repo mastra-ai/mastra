@@ -739,17 +739,17 @@ describe('DatasetsInMemory', () => {
 
   // ------------- Tenancy + candidate identity -------------
   describe('Tenancy + candidate identity', () => {
-    it('createDataset persists organizationId/resourceId/candidateKey/candidateId', async () => {
+    it('createDataset persists organizationId/projectId/candidateKey/candidateId', async () => {
       const dataset = await storage.createDataset({
         name: 'candidates/missing-tool/abc-123',
         organizationId: 'org-1',
-        resourceId: 'proj-1',
+        projectId: 'proj-1',
         candidateKey: 'missing-tool',
         candidateId: 'abc-123',
       });
 
       expect(dataset.organizationId).toBe('org-1');
-      expect(dataset.resourceId).toBe('proj-1');
+      expect(dataset.projectId).toBe('proj-1');
       expect(dataset.candidateKey).toBe('missing-tool');
       expect(dataset.candidateId).toBe('abc-123');
     });
@@ -757,7 +757,7 @@ describe('DatasetsInMemory', () => {
     it('createDataset defaults new fields to null when omitted', async () => {
       const dataset = await storage.createDataset({ name: 'no-tenancy' });
       expect(dataset.organizationId).toBeNull();
-      expect(dataset.resourceId).toBeNull();
+      expect(dataset.projectId).toBeNull();
       expect(dataset.candidateKey).toBeNull();
       expect(dataset.candidateId).toBeNull();
     });
@@ -766,7 +766,7 @@ describe('DatasetsInMemory', () => {
       const created = await storage.createDataset({
         name: 'd',
         organizationId: 'org-1',
-        resourceId: 'proj-1',
+        projectId: 'proj-1',
         candidateKey: 'k-1',
         candidateId: 'i-1',
       });
@@ -775,7 +775,7 @@ describe('DatasetsInMemory', () => {
         description: 'updated description',
       });
       expect(updated.organizationId).toBe('org-1');
-      expect(updated.resourceId).toBe('proj-1');
+      expect(updated.projectId).toBe('proj-1');
       expect(updated.candidateKey).toBe('k-1');
       expect(updated.candidateId).toBe('i-1');
       expect(updated.description).toBe('updated description');
@@ -785,19 +785,19 @@ describe('DatasetsInMemory', () => {
       const dataset = await storage.createDataset({
         name: 'd',
         organizationId: 'org-1',
-        resourceId: 'proj-1',
+        projectId: 'proj-1',
       });
 
       const item = await storage.addItem({ datasetId: dataset.id, input: { a: 1 } });
       expect(item.organizationId).toBe('org-1');
-      expect(item.resourceId).toBe('proj-1');
+      expect(item.projectId).toBe('proj-1');
     });
 
     it('batchInsertItems inherits tenancy from parent dataset', async () => {
       const dataset = await storage.createDataset({
         name: 'd',
         organizationId: 'org-2',
-        resourceId: 'proj-2',
+        projectId: 'proj-2',
       });
 
       const items = await storage.batchInsertItems({
@@ -808,7 +808,7 @@ describe('DatasetsInMemory', () => {
       expect(items).toHaveLength(2);
       for (const item of items) {
         expect(item.organizationId).toBe('org-2');
-        expect(item.resourceId).toBe('proj-2');
+        expect(item.projectId).toBe('proj-2');
       }
     });
 
@@ -816,7 +816,7 @@ describe('DatasetsInMemory', () => {
       const dataset = await storage.createDataset({
         name: 'd',
         organizationId: 'org-3',
-        resourceId: 'proj-3',
+        projectId: 'proj-3',
       });
       const item = await storage.addItem({ datasetId: dataset.id, input: { a: 1 } });
 
@@ -826,7 +826,7 @@ describe('DatasetsInMemory', () => {
         input: { a: 2 },
       });
       expect(updated.organizationId).toBe('org-3');
-      expect(updated.resourceId).toBe('proj-3');
+      expect(updated.projectId).toBe('proj-3');
     });
 
     it('listDatasets filters by organizationId', async () => {
@@ -843,17 +843,17 @@ describe('DatasetsInMemory', () => {
       expect(result.datasets.every(d => d.organizationId === 'org-1')).toBe(true);
     });
 
-    it('listDatasets filters by resourceId', async () => {
-      await storage.createDataset({ name: 'a', organizationId: 'org-1', resourceId: 'proj-1' });
-      await storage.createDataset({ name: 'b', organizationId: 'org-1', resourceId: 'proj-2' });
+    it('listDatasets filters by projectId', async () => {
+      await storage.createDataset({ name: 'a', organizationId: 'org-1', projectId: 'proj-1' });
+      await storage.createDataset({ name: 'b', organizationId: 'org-1', projectId: 'proj-2' });
 
       const result = await storage.listDatasets({
         pagination: { page: 0, perPage: 100 },
-        filters: { resourceId: 'proj-2' },
+        filters: { projectId: 'proj-2' },
       });
 
       expect(result.datasets).toHaveLength(1);
-      expect(result.datasets[0]!.resourceId).toBe('proj-2');
+      expect(result.datasets[0]!.projectId).toBe('proj-2');
     });
 
     it('listDatasets filters by candidateKey + candidateId', async () => {

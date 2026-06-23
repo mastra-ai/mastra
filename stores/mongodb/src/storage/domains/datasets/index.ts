@@ -66,18 +66,18 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       { collection: TABLE_DATASETS, keys: { createdAt: -1, id: 1 }, options: { name: 'idx_datasets_createdat_id' } },
       {
         collection: TABLE_DATASETS,
-        keys: { organizationId: 1, resourceId: 1, createdAt: -1, id: 1 },
+        keys: { organizationId: 1, projectId: 1, createdAt: -1, id: 1 },
         options: { name: 'idx_datasets_tenancy_createdat_id' },
       },
       {
         collection: TABLE_DATASETS,
-        keys: { organizationId: 1, resourceId: 1, candidateKey: 1, candidateId: 1 },
+        keys: { organizationId: 1, projectId: 1, candidateKey: 1, candidateId: 1 },
         options: { name: 'idx_datasets_tenancy_candidate' },
       },
       { collection: TABLE_DATASET_ITEMS, keys: { datasetId: 1 }, options: { name: 'idx_dataset_items_datasetid' } },
       {
         collection: TABLE_DATASET_ITEMS,
-        keys: { organizationId: 1, resourceId: 1, datasetId: 1, validTo: 1, isDeleted: 1 },
+        keys: { organizationId: 1, projectId: 1, datasetId: 1, validTo: 1, isDeleted: 1 },
         options: { name: 'idx_dataset_items_tenancy_list' },
       },
       {
@@ -167,7 +167,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       scorerIds: typeof row.scorerIds === 'string' ? safelyParseJSON(row.scorerIds) : (row.scorerIds ?? undefined),
       version: row.version ?? 0,
       organizationId: row.organizationId ?? null,
-      resourceId: row.resourceId ?? null,
+      projectId: row.projectId ?? null,
       candidateKey: row.candidateKey ?? null,
       candidateId: row.candidateId ?? null,
       createdAt: ensureDate(row.createdAt)!,
@@ -181,7 +181,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       datasetId: row.datasetId,
       datasetVersion: row.datasetVersion,
       organizationId: row.organizationId ?? null,
-      resourceId: row.resourceId ?? null,
+      projectId: row.projectId ?? null,
       input: typeof row.input === 'string' ? safelyParseJSON(row.input) : row.input,
       groundTruth: typeof row.groundTruth === 'string' ? safelyParseJSON(row.groundTruth) : row.groundTruth,
       expectedTrajectory:
@@ -233,7 +233,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         scorerIds: input.scorerIds ?? null,
         version: 0,
         organizationId: input.organizationId ?? null,
-        resourceId: input.resourceId ?? null,
+        projectId: input.projectId ?? null,
         candidateKey: input.candidateKey ?? null,
         candidateId: input.candidateId ?? null,
         createdAt: now,
@@ -366,7 +366,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       const filter: Record<string, any> = {};
       if (args.filters?.organizationId !== undefined) filter.organizationId = args.filters.organizationId;
-      if (args.filters?.resourceId !== undefined) filter.resourceId = args.filters.resourceId;
+      if (args.filters?.projectId !== undefined) filter.projectId = args.filters.projectId;
       if (args.filters?.candidateKey !== undefined) filter.candidateKey = args.filters.candidateKey;
       if (args.filters?.candidateId !== undefined) filter.candidateId = args.filters.candidateId;
 
@@ -442,7 +442,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       }
       const newVersion = result.version as number;
       const organizationId = (result.organizationId as string | null | undefined) ?? null;
-      const resourceId = (result.resourceId as string | null | undefined) ?? null;
+      const projectId = (result.projectId as string | null | undefined) ?? null;
 
       // Insert item
       await itemsCollection.insertOne({
@@ -450,7 +450,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetId: args.datasetId,
         datasetVersion: newVersion,
         organizationId,
-        resourceId,
+        projectId,
         validTo: null,
         isDeleted: false,
         input: args.input,
@@ -477,7 +477,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetId: args.datasetId,
         datasetVersion: newVersion,
         organizationId,
-        resourceId,
+        projectId,
         input: args.input,
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
@@ -568,7 +568,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const newVersion = result.version as number;
       // Tenancy re-inherited from parent dataset (Option B)
       const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
-      const parentResourceId = (result.resourceId as string | null | undefined) ?? null;
+      const parentProjectId = (result.projectId as string | null | undefined) ?? null;
 
       // Close old row (set validTo = newVersion)
       await itemsCollection.updateOne(
@@ -582,7 +582,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetId: args.datasetId,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        resourceId: parentResourceId,
+        projectId: parentProjectId,
         validTo: null,
         isDeleted: false,
         input: mergedInput,
@@ -608,7 +608,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         ...existing,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        resourceId: parentResourceId,
+        projectId: parentProjectId,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
@@ -668,7 +668,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const newVersion = result.version as number;
       // Tenancy re-inherited from parent dataset (Option B)
       const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
-      const parentResourceId = (result.resourceId as string | null | undefined) ?? null;
+      const parentProjectId = (result.projectId as string | null | undefined) ?? null;
 
       // Close old row
       await itemsCollection.updateOne({ id, validTo: null, isDeleted: false }, { $set: { validTo: newVersion } });
@@ -679,11 +679,13 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetId,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        resourceId: parentResourceId,
+        projectId: parentProjectId,
         validTo: null,
         isDeleted: true,
         input: existing.input,
         groundTruth: existing.groundTruth,
+        expectedTrajectory: existing.expectedTrajectory ?? null,
+        toolMocks: existing.toolMocks ?? null,
         requestContext: existing.requestContext,
         metadata: existing.metadata,
         source: existing.source,
@@ -759,7 +761,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       }
       const newVersion = result.version as number;
       const organizationId = (result.organizationId as string | null | undefined) ?? null;
-      const resourceId = (result.resourceId as string | null | undefined) ?? null;
+      const projectId = (result.projectId as string | null | undefined) ?? null;
 
       // Batch insert items
       if (itemsWithIds.length > 0) {
@@ -768,7 +770,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           datasetId: input.datasetId,
           datasetVersion: newVersion,
           organizationId,
-          resourceId,
+          projectId,
           validTo: null,
           isDeleted: false,
           input: itemInput.input,
@@ -797,7 +799,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetId: input.datasetId,
         datasetVersion: newVersion,
         organizationId,
-        resourceId,
+        projectId,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
         expectedTrajectory: itemInput.expectedTrajectory,
@@ -870,7 +872,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const newVersion = result.version as number;
       // Tenancy re-inherited from parent dataset (Option B)
       const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
-      const parentResourceId = (result.resourceId as string | null | undefined) ?? null;
+      const parentProjectId = (result.projectId as string | null | undefined) ?? null;
 
       // Close old rows in batch
       const currentIds = currentItems.map(i => i.id);
@@ -885,11 +887,13 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetId: input.datasetId,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        resourceId: parentResourceId,
+        projectId: parentProjectId,
         validTo: null,
         isDeleted: true,
         input: item.input,
         groundTruth: item.groundTruth,
+        expectedTrajectory: item.expectedTrajectory ?? null,
+        toolMocks: item.toolMocks ?? null,
         requestContext: item.requestContext,
         metadata: item.metadata,
         source: item.source,
@@ -1008,7 +1012,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       // Build filter
       const filter: Record<string, any> = { datasetId: args.datasetId };
       if (args.filters?.organizationId !== undefined) filter.organizationId = args.filters.organizationId;
-      if (args.filters?.resourceId !== undefined) filter.resourceId = args.filters.resourceId;
+      if (args.filters?.projectId !== undefined) filter.projectId = args.filters.projectId;
 
       if (args.version !== undefined) {
         // SCD-2 time-travel
