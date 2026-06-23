@@ -19,6 +19,7 @@ export type EnvironmentVariablesEditorRowErrors = Record<number, { key?: ReactNo
 export interface EnvironmentVariablesEditorProps<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry> {
   editor: EnvironmentVariablesEditorController<TRow>;
   className?: string;
+  children?: ReactNode;
   disabled?: boolean;
   readOnly?: boolean;
   showUpload?: boolean;
@@ -35,72 +36,93 @@ export interface EnvironmentVariablesEditorProps<TRow extends EnvironmentVariabl
   actions?: ReactNode;
 }
 
-export interface EnvironmentVariablesEditorUploadProps<
-  TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry,
-> {
-  editor: EnvironmentVariablesEditorController<TRow>;
+export interface EnvironmentVariablesEditorUploadProps {
   className?: string;
-  disabled?: boolean;
-  readOnly?: boolean;
-  showUpload?: boolean;
-  uploadLabel?: ReactNode;
-  uploadInputLabel?: string;
+  label?: ReactNode;
+  inputLabel?: string;
+  show?: boolean;
 }
 
-export interface EnvironmentVariablesEditorRowsProps<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry> {
-  editor: EnvironmentVariablesEditorController<TRow>;
+export interface EnvironmentVariablesEditorRowsProps {
   className?: string;
-  disabled?: boolean;
-  readOnly?: boolean;
-  keyLabel?: ReactNode;
-  valueLabel?: ReactNode;
-  keyPlaceholder?: string;
-  valuePlaceholder?: string;
-  duplicateKeyMessage?: ReactNode;
   rowErrors?: EnvironmentVariablesEditorRowErrors;
 }
 
-export interface EnvironmentVariablesEditorRowProps<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry> {
-  editor: EnvironmentVariablesEditorController<TRow>;
-  row: TRow;
+export interface EnvironmentVariablesEditorRowProps {
+  row: EnvironmentVariableEntry;
   index: number;
-  disabled?: boolean;
-  readOnly?: boolean;
-  keyLabel?: ReactNode;
-  valueLabel?: ReactNode;
-  keyPlaceholder?: string;
-  valuePlaceholder?: string;
-  duplicateKeyMessage?: ReactNode;
   rowErrors?: EnvironmentVariablesEditorRowErrors;
 }
 
-export interface EnvironmentVariablesEditorAddButtonProps<
-  TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry,
-> {
-  editor: EnvironmentVariablesEditorController<TRow>;
+export interface EnvironmentVariablesEditorAddButtonProps {
   className?: string;
-  disabled?: boolean;
-  readOnly?: boolean;
-  addLabel?: ReactNode;
+  children?: ReactNode;
 }
 
-export interface EnvironmentVariablesEditorMessagesProps<
-  TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry,
-> {
-  editor: EnvironmentVariablesEditorController<TRow>;
+export interface EnvironmentVariablesEditorMessagesProps {
   duplicateKeyMessage?: ReactNode;
   error?: ReactNode;
   showDuplicateKeys?: boolean;
+  showUploadError?: boolean;
 }
 
 export type EnvironmentVariablesEditorActionsProps = ComponentPropsWithoutRef<'div'>;
 
+type EnvironmentVariablesEditorRenderController = Pick<
+  EnvironmentVariablesEditorController<EnvironmentVariableEntry>,
+  | 'rows'
+  | 'uploadError'
+  | 'fileInputRef'
+  | 'hasDuplicateKeys'
+  | 'updateRow'
+  | 'removeRow'
+  | 'handleFileUpload'
+  | 'handlePaste'
+  | 'getRowId'
+  | 'isValueRevealed'
+  | 'toggleValueVisibility'
+  | 'rowHasDuplicateKey'
+> & {
+  appendRow: () => void;
+};
+
+interface EnvironmentVariablesEditorContextValue {
+  editor: EnvironmentVariablesEditorRenderController;
+  disabled: boolean;
+  readOnly: boolean;
+  showUpload: boolean;
+  labels: {
+    upload: ReactNode;
+    uploadInput: string;
+    add: ReactNode;
+    key: ReactNode;
+    value: ReactNode;
+    duplicateKey: ReactNode;
+  };
+  placeholders: {
+    key: string;
+    value: string;
+  };
+  rowErrors?: EnvironmentVariablesEditorRowErrors;
+}
+
 const READ_ONLY_COLUMNS = 'minmax(12rem,1.4fr) minmax(8rem,0.9fr) minmax(8rem,auto)';
 const READ_ONLY_COLUMNS_WITH_ICON = `auto ${READ_ONLY_COLUMNS}`;
 
+const EnvironmentVariablesEditorContext = createContext<EnvironmentVariablesEditorContextValue | null>(null);
 const EnvironmentVariablesEditorReadOnlyListContext = createContext({
   showIcon: false,
 });
+
+function useEnvironmentVariablesEditorContext(componentName: string) {
+  const context = use(EnvironmentVariablesEditorContext);
+
+  if (!context) {
+    throw new Error(`${componentName} must be used within EnvironmentVariablesEditor.Root`);
+  }
+
+  return context;
+}
 
 export interface EnvironmentVariablesEditorReadOnlyListProps {
   children: ReactNode;
@@ -144,6 +166,7 @@ export interface EnvironmentVariablesEditorReadOnlyItemProps extends ComponentPr
 function EnvironmentVariablesEditorRoot<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry>({
   editor,
   className,
+  children,
   disabled,
   readOnly,
   showUpload = true,
@@ -159,60 +182,86 @@ function EnvironmentVariablesEditorRoot<TRow extends EnvironmentVariableEntry = 
   error,
   actions,
 }: EnvironmentVariablesEditorProps<TRow>) {
+  const contextValue = useMemo<EnvironmentVariablesEditorContextValue>(
+    () => ({
+      editor: {
+        rows: editor.rows,
+        uploadError: editor.uploadError,
+        fileInputRef: editor.fileInputRef,
+        hasDuplicateKeys: editor.hasDuplicateKeys,
+        updateRow: editor.updateRow,
+        removeRow: editor.removeRow,
+        handleFileUpload: editor.handleFileUpload,
+        handlePaste: editor.handlePaste,
+        getRowId: editor.getRowId,
+        isValueRevealed: editor.isValueRevealed,
+        toggleValueVisibility: editor.toggleValueVisibility,
+        rowHasDuplicateKey: editor.rowHasDuplicateKey,
+        appendRow: () => editor.appendRow(),
+      },
+      disabled: Boolean(disabled),
+      readOnly: Boolean(readOnly),
+      showUpload,
+      labels: {
+        upload: uploadLabel,
+        uploadInput: uploadInputLabel,
+        add: addLabel,
+        key: keyLabel,
+        value: valueLabel,
+        duplicateKey: duplicateKeyMessage,
+      },
+      placeholders: {
+        key: keyPlaceholder,
+        value: valuePlaceholder,
+      },
+      rowErrors,
+    }),
+    [
+      editor,
+      disabled,
+      readOnly,
+      showUpload,
+      uploadLabel,
+      uploadInputLabel,
+      addLabel,
+      keyLabel,
+      valueLabel,
+      duplicateKeyMessage,
+      keyPlaceholder,
+      valuePlaceholder,
+      rowErrors,
+    ],
+  );
+
   return (
-    <div className={cn('space-y-3', className)}>
-      <EnvironmentVariablesEditorUpload
-        editor={editor}
-        disabled={disabled}
-        readOnly={readOnly}
-        showUpload={showUpload}
-        uploadLabel={uploadLabel}
-        uploadInputLabel={uploadInputLabel}
-      />
-
-      <EnvironmentVariablesEditorMessages
-        editor={editor}
-        duplicateKeyMessage={duplicateKeyMessage}
-        error={editor.uploadError}
-        showDuplicateKeys={false}
-      />
-
-      <EnvironmentVariablesEditorRows
-        editor={editor}
-        disabled={disabled}
-        readOnly={readOnly}
-        keyLabel={keyLabel}
-        valueLabel={valueLabel}
-        keyPlaceholder={keyPlaceholder}
-        valuePlaceholder={valuePlaceholder}
-        duplicateKeyMessage={duplicateKeyMessage}
-        rowErrors={rowErrors}
-      />
-
-      <EnvironmentVariablesEditorAddButton
-        editor={editor}
-        disabled={disabled}
-        readOnly={readOnly}
-        addLabel={addLabel}
-      />
-
-      <EnvironmentVariablesEditorMessages editor={editor} duplicateKeyMessage={duplicateKeyMessage} error={error} />
-
-      {actions && <EnvironmentVariablesEditorActions>{actions}</EnvironmentVariablesEditorActions>}
-    </div>
+    <EnvironmentVariablesEditorContext.Provider value={contextValue}>
+      <div className={children ? className : cn('space-y-3', className)}>
+        {children ?? (
+          <>
+            <EnvironmentVariablesEditorUpload />
+            <EnvironmentVariablesEditorMessages showDuplicateKeys={false} showUploadError />
+            <EnvironmentVariablesEditorRows />
+            <EnvironmentVariablesEditorAddButton />
+            <EnvironmentVariablesEditorMessages error={error} />
+            {actions && <EnvironmentVariablesEditorActions>{actions}</EnvironmentVariablesEditorActions>}
+          </>
+        )}
+      </div>
+    </EnvironmentVariablesEditorContext.Provider>
   );
 }
 
-function EnvironmentVariablesEditorUpload<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry>({
-  editor,
+function EnvironmentVariablesEditorUpload({
   className,
-  disabled,
-  readOnly,
-  showUpload = true,
-  uploadLabel = 'Upload .env',
-  uploadInputLabel = 'Upload .env file',
-}: EnvironmentVariablesEditorUploadProps<TRow>) {
-  if (!showUpload || readOnly) return null;
+  label,
+  inputLabel,
+  show,
+}: EnvironmentVariablesEditorUploadProps) {
+  const { editor, disabled, readOnly, showUpload, labels } = useEnvironmentVariablesEditorContext(
+    'EnvironmentVariablesEditor.Upload',
+  );
+
+  if (!(show ?? showUpload) || readOnly) return null;
 
   return (
     <div className={cn('flex flex-wrap items-center justify-end gap-2', className)}>
@@ -220,7 +269,7 @@ function EnvironmentVariablesEditorUpload<TRow extends EnvironmentVariableEntry 
         ref={editor.fileInputRef}
         type="file"
         accept=".env,text/plain"
-        aria-label={uploadInputLabel}
+        aria-label={inputLabel ?? labels.uploadInput}
         className="hidden"
         disabled={disabled}
         onChange={editor.handleFileUpload}
@@ -233,62 +282,45 @@ function EnvironmentVariablesEditorUpload<TRow extends EnvironmentVariableEntry 
         onClick={() => editor.fileInputRef.current?.click()}
       >
         <UploadIcon />
-        {uploadLabel}
+        {label ?? labels.upload}
       </Button>
     </div>
   );
 }
 
-function EnvironmentVariablesEditorRows<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry>({
-  editor,
-  className,
-  disabled,
-  readOnly,
-  keyLabel = 'Key',
-  valueLabel = 'Value',
-  keyPlaceholder = 'KEY',
-  valuePlaceholder = 'value',
-  duplicateKeyMessage = DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE,
-  rowErrors,
-}: EnvironmentVariablesEditorRowsProps<TRow>) {
+function EnvironmentVariablesEditorRows({ className, rowErrors }: EnvironmentVariablesEditorRowsProps) {
+  const { editor, rowErrors: contextRowErrors } = useEnvironmentVariablesEditorContext(
+    'EnvironmentVariablesEditor.Rows',
+  );
+  const resolvedRowErrors = rowErrors ?? contextRowErrors;
+
   return (
     <div className={cn('space-y-2', className)}>
       {editor.rows.map((row, index) => (
         <EnvironmentVariablesEditorRow
           key={editor.getRowId(index)}
-          editor={editor}
           row={row}
           index={index}
-          disabled={disabled}
-          readOnly={readOnly}
-          keyLabel={keyLabel}
-          valueLabel={valueLabel}
-          keyPlaceholder={keyPlaceholder}
-          valuePlaceholder={valuePlaceholder}
-          duplicateKeyMessage={duplicateKeyMessage}
-          rowErrors={rowErrors}
+          rowErrors={resolvedRowErrors}
         />
       ))}
     </div>
   );
 }
 
-function EnvironmentVariablesEditorRow<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry>({
-  editor,
-  row,
-  index,
-  disabled,
-  readOnly,
-  keyLabel = 'Key',
-  valueLabel = 'Value',
-  keyPlaceholder = 'KEY',
-  valuePlaceholder = 'value',
-  duplicateKeyMessage = DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE,
-  rowErrors,
-}: EnvironmentVariablesEditorRowProps<TRow>) {
+function EnvironmentVariablesEditorRow({ row, index, rowErrors }: EnvironmentVariablesEditorRowProps) {
+  const {
+    editor,
+    disabled,
+    readOnly,
+    labels,
+    placeholders,
+    rowErrors: contextRowErrors,
+  } = useEnvironmentVariablesEditorContext('EnvironmentVariablesEditor.Row');
   const isDisabled = disabled || readOnly;
-  const keyError = rowErrors?.[index]?.key ?? (editor.rowHasDuplicateKey(index) ? duplicateKeyMessage : null);
-  const valueError = rowErrors?.[index]?.value;
+  const resolvedRowErrors = rowErrors ?? contextRowErrors;
+  const keyError = resolvedRowErrors?.[index]?.key ?? (editor.rowHasDuplicateKey(index) ? labels.duplicateKey : null);
+  const valueError = resolvedRowErrors?.[index]?.value;
 
   function handlePaste(text: string) {
     return editor.handlePaste(index, text);
@@ -299,11 +331,11 @@ function EnvironmentVariablesEditorRow<TRow extends EnvironmentVariableEntry = E
       <div className="flex-1">
         <FieldBlock.Layout>
           <FieldBlock.Column>
-            <FieldBlock.Label name={`env-key-${index}`}>{keyLabel}</FieldBlock.Label>
+            <FieldBlock.Label name={`env-key-${index}`}>{labels.key}</FieldBlock.Label>
             <InputGroup className="w-full">
               <InputGroupInput
                 id={`input-env-key-${index}`}
-                placeholder={keyPlaceholder}
+                placeholder={placeholders.key}
                 className="font-mono"
                 value={row.key}
                 disabled={isDisabled}
@@ -324,11 +356,11 @@ function EnvironmentVariablesEditorRow<TRow extends EnvironmentVariableEntry = E
       <div className="flex-1">
         <FieldBlock.Layout>
           <FieldBlock.Column>
-            <FieldBlock.Label name={`env-value-${index}`}>{valueLabel}</FieldBlock.Label>
+            <FieldBlock.Label name={`env-value-${index}`}>{labels.value}</FieldBlock.Label>
             <InputGroup className="w-full">
               <InputGroupInput
                 id={`input-env-value-${index}`}
-                placeholder={valuePlaceholder}
+                placeholder={placeholders.value}
                 className="font-mono"
                 type={editor.isValueRevealed(index) ? 'text' : 'password'}
                 value={row.value}
@@ -377,13 +409,11 @@ function EnvironmentVariablesEditorRow<TRow extends EnvironmentVariableEntry = E
   );
 }
 
-function EnvironmentVariablesEditorAddButton<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry>({
-  editor,
-  className,
-  disabled,
-  readOnly,
-  addLabel = 'Add Variable',
-}: EnvironmentVariablesEditorAddButtonProps<TRow>) {
+function EnvironmentVariablesEditorAddButton({ className, children }: EnvironmentVariablesEditorAddButtonProps) {
+  const { editor, disabled, readOnly, labels } = useEnvironmentVariablesEditorContext(
+    'EnvironmentVariablesEditor.AddButton',
+  );
+
   if (readOnly) return null;
 
   return (
@@ -391,30 +421,34 @@ function EnvironmentVariablesEditorAddButton<TRow extends EnvironmentVariableEnt
       <span aria-hidden="true" className="h-px flex-1 bg-border1" />
       <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => editor.appendRow()}>
         <PlusIcon />
-        {addLabel}
+        {children ?? labels.add}
       </Button>
       <span aria-hidden="true" className="h-px flex-1 bg-border1" />
     </div>
   );
 }
 
-function EnvironmentVariablesEditorMessages<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry>({
-  editor,
-  duplicateKeyMessage = DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE,
+function EnvironmentVariablesEditorMessages({
+  duplicateKeyMessage,
   error,
   showDuplicateKeys = true,
-}: EnvironmentVariablesEditorMessagesProps<TRow>) {
+  showUploadError = false,
+}: EnvironmentVariablesEditorMessagesProps) {
+  const { editor, labels } = useEnvironmentVariablesEditorContext('EnvironmentVariablesEditor.Messages');
+  const resolvedDuplicateKeyMessage = duplicateKeyMessage ?? labels.duplicateKey;
+  const resolvedError = showUploadError ? editor.uploadError : error;
+
   return (
     <>
       {showDuplicateKeys && editor.hasDuplicateKeys && (
         <Notice variant="destructive">
-          <Notice.Message>{duplicateKeyMessage}</Notice.Message>
+          <Notice.Message>{resolvedDuplicateKeyMessage}</Notice.Message>
         </Notice>
       )}
 
-      {error && (
+      {resolvedError && (
         <Notice variant="destructive">
-          <Notice.Message>{error}</Notice.Message>
+          <Notice.Message>{resolvedError}</Notice.Message>
         </Notice>
       )}
     </>
@@ -602,6 +636,7 @@ function getCopyableReadOnlyValue(value: ReactNode) {
 }
 
 export const EnvironmentVariablesEditor = Object.assign(EnvironmentVariablesEditorRoot, {
+  Root: EnvironmentVariablesEditorRoot,
   Upload: EnvironmentVariablesEditorUpload,
   Rows: EnvironmentVariablesEditorRows,
   Row: EnvironmentVariablesEditorRow,

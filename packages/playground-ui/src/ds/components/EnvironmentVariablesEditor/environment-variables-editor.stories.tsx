@@ -232,32 +232,30 @@ function EnvironmentVariablesDrawerStory() {
           </Button>
         </DrawerTrigger>
         <DrawerContent className="w-[48rem] max-w-[calc(100vw-2rem)]">
-          <DrawerHeader className="flex-row items-center justify-between gap-3 border-b border-border1">
-            <DrawerTitle>Add Environment Variable</DrawerTitle>
-            <EnvironmentVariablesEditor.Upload editor={editor} uploadLabel="Import .env" />
-          </DrawerHeader>
-          <DrawerBody className="overflow-y-auto">
-            <div className="grid gap-6">
-              <EnvironmentVariablesEditor.Messages
-                editor={editor}
-                error={editor.uploadError}
-                showDuplicateKeys={false}
-              />
-              <EnvironmentVariablesEditor.Rows editor={editor} />
-              <EnvironmentVariablesEditor.AddButton editor={editor} addLabel="Add Another" />
-              <EnvironmentVariablesEditor.Messages editor={editor} />
-            </div>
-          </DrawerBody>
-          <DrawerFooter className="items-center border-t border-border1">
-            <Button
-              type="button"
-              variant="primary"
-              disabled={!editor.isDirty || editor.hasDuplicateKeys}
-              onClick={save}
-            >
-              Save
-            </Button>
-          </DrawerFooter>
+          <EnvironmentVariablesEditor.Root editor={editor} className="contents" addLabel="Add Another">
+            <DrawerHeader className="flex-row items-center justify-between gap-3 border-b border-border1">
+              <DrawerTitle>Add Environment Variable</DrawerTitle>
+              <EnvironmentVariablesEditor.Upload label="Import .env" />
+            </DrawerHeader>
+            <DrawerBody className="overflow-y-auto">
+              <div className="grid gap-6">
+                <EnvironmentVariablesEditor.Messages showDuplicateKeys={false} showUploadError />
+                <EnvironmentVariablesEditor.Rows />
+                <EnvironmentVariablesEditor.AddButton />
+                <EnvironmentVariablesEditor.Messages />
+              </div>
+            </DrawerBody>
+            <DrawerFooter className="items-center border-t border-border1">
+              <Button
+                type="button"
+                variant="primary"
+                disabled={!editor.isDirty || editor.hasDuplicateKeys}
+                onClick={save}
+              >
+                Save
+              </Button>
+            </DrawerFooter>
+          </EnvironmentVariablesEditor.Root>
         </DrawerContent>
       </Drawer>
     </EnvironmentVariablesPage>

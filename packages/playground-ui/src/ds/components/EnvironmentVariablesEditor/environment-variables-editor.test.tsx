@@ -59,6 +59,34 @@ function ControlledTestEditor({ initialRows }: { initialRows: { key: string; val
   );
 }
 
+function CompoundTestEditor({
+  initialRows = [{ key: 'PUBLIC_URL', value: 'https://example.com' }],
+  onSave = vi.fn(),
+}: {
+  initialRows?: { key: string; value: string }[];
+  onSave?: (envVars: Record<string, string>) => void;
+}) {
+  const editor = useEnvironmentVariablesEditor({ initialRows });
+
+  return (
+    <EnvironmentVariablesEditor.Root editor={editor} addLabel="Add Another">
+      <EnvironmentVariablesEditor.Messages showDuplicateKeys={false} showUploadError />
+      <EnvironmentVariablesEditor.Rows />
+      <EnvironmentVariablesEditor.AddButton />
+      <EnvironmentVariablesEditor.Messages />
+      <EnvironmentVariablesEditor.Actions>
+        <button
+          type="button"
+          disabled={!editor.isDirty || editor.hasDuplicateKeys}
+          onClick={() => onSave(editor.getEnvironmentVariablesForSubmit())}
+        >
+          Save
+        </button>
+      </EnvironmentVariablesEditor.Actions>
+    </EnvironmentVariablesEditor.Root>
+  );
+}
+
 describe('EnvironmentVariablesEditor', () => {
   it('masks values by default and reveals only the selected row', () => {
     render(
@@ -137,6 +165,27 @@ describe('EnvironmentVariablesEditor', () => {
     });
 
     expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('composes nested editor parts from root context', () => {
+    const onSave = vi.fn();
+    render(<CompoundTestEditor initialRows={[{ key: '', value: '' }]} onSave={onSave} />);
+
+    fireEvent.change(screen.getByPlaceholderText('KEY'), {
+      target: { value: 'API_KEY' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('value'), {
+      target: { value: 'secret' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Another' }));
+
+    expect(screen.getAllByPlaceholderText('KEY')).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      API_KEY: 'secret',
+    });
   });
 
   it('fills rows when bulk env text is pasted into an empty key input', () => {
