@@ -30,7 +30,7 @@ export const Default: Story = {
 export const Experimental: Story = {
   render: () => (
     <Select>
-      <SelectTrigger className="w-[180px]" size="default">
+      <SelectTrigger className="w-[180px]" size="md">
         <SelectValue placeholder="Select option" />
       </SelectTrigger>
       <SelectContent>
@@ -45,7 +45,7 @@ export const Experimental: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col items-start gap-3">
-      {(['xs', 'sm', 'md', 'default', 'lg'] as const).map(size => (
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
         <Select key={size}>
           <SelectTrigger className="w-[180px]" size={size}>
             <SelectValue placeholder={size} />

@@ -4,8 +4,8 @@
  * Used by the ask_user tool to collect structured answers from the user.
  */
 
-import { Box, getKeybindings, Input, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, Component, TUI } from '@mariozechner/pi-tui';
+import { Box, getKeybindings, Input, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, SelectItem, Component, TUI } from '@earendil-works/pi-tui';
 import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import type { AskQuestionSelectionMode } from './ask-question-inline.js';
 import { MultilineInput } from './multiline-input.js';

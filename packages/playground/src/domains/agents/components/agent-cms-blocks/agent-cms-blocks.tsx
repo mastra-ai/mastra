@@ -1,5 +1,7 @@
-import { ContentBlocks, DropdownMenu, Icon, cn } from '@mastra/playground-ui';
+import { Icon, cn } from '@mastra/playground-ui';
 import type { JsonSchema } from '@mastra/playground-ui';
+import { ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { FileText, PenLine, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';

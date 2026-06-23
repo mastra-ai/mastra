@@ -8,6 +8,7 @@ import type { MCPServerBase } from '../mcp';
 import type { ProcessorProvider } from '../processor-provider';
 import type { RequestContext } from '../request-context';
 import type { BlobStore } from '../storage/domains/blobs/base';
+import type { SourceControlProvider } from '../storage/source-control';
 import type {
   AgentInstructionBlock,
   StorageCreateAgentInput,
@@ -195,6 +196,15 @@ export interface MastraEditorConfig {
    * Defaults to `./mastra/editor/`. Ignored when `source` is not `'code'`.
    */
   codePath?: string;
+  /**
+   * Optional provider used by the `'code'` source to persist overrides in a
+   * source-control backed system instead of the local filesystem.
+   *
+   * Local development can omit this and use `codePath`. Hosted deployments
+   * should provide a source provider or expose code-source editing as
+   * unavailable.
+   */
+  sourceControlProvider?: SourceControlProvider;
 }
 
 export interface GetByIdOptions {
@@ -462,4 +472,7 @@ export interface IMastraEditor {
    * backwards compatibility.
    */
   getSource?(): 'code' | 'db' | undefined;
+
+  /** Returns the source control provider configured for code source, if any. */
+  getSourceControlProvider?(): SourceControlProvider | undefined;
 }

@@ -1,0 +1,12 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC provider history compatibility response"
+      }
+    }
+  ]
+}

@@ -7,7 +7,7 @@ import type { BrowserConfigBase } from '@mastra/core/browser';
 /**
  * Supported CLI providers that can be used with BrowserViewer.
  */
-export type CLIProvider = 'agent-browser' | 'browser-use' | 'browse-cli';
+export type CLIProvider = 'agent-browser' | 'browser-use' | 'browse' | 'browse-cli';
 
 /**
  * Configuration for BrowserViewer.

@@ -176,6 +176,8 @@ Extract the full content of one or more web pages. Requires a Tavily API key (`T
 
 ## Task management
 
+The task tools are agent-agnostic built-ins. They store the task list in a thread-scoped task store (the `tasks` storage domain) and project it onto the agent state-signal lane, which keeps it out of the cached system prompt (preserving prompt caching) while surviving observational-memory truncation. They require a memory-backed thread; on an agent without memory the task tools no-op and report that task tracking requires agent memory.
+
 ### `task_write`
 
 Create or replace a structured task list for tracking progress on complex, multi-step work.
@@ -202,7 +204,7 @@ Check the completion status of the current task list. The agent uses this before
 - `tasks`: The structured task list snapshot with task IDs.
 - `summary`: Counts for `total`, `completed`, `inProgress`, `pending`, and `incomplete`, plus `hasTasks` and `allCompleted`.
 - `incompleteTasks`: The `in_progress` and `pending` tasks that still need work.
-- `isError`: `true` when the tool could not read harness task state.
+- `isError`: `true` when the tool could not read the task list (for example, on an agent without memory).
 
 `summary.allCompleted` is `true` only when at least one tracked task exists and every tracked task is completed. If no tasks exist, `summary.hasTasks` is `false` and `summary.allCompleted` is `false`.
 

@@ -6,8 +6,13 @@
  * All omProgress state updates are handled by the Harness display state.
  * These handlers focus on UI component creation/removal.
  */
-import type { Component } from '@mariozechner/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from '../chat-boundary-reconciliation.js';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { OMMarkerComponent } from '../components/om-marker.js';
 import type { OMMarkerData } from '../components/om-marker.js';
 import { OMOutputComponent } from '../components/om-output.js';
@@ -30,17 +35,19 @@ function getInsertIndexBeforeStreaming(ctx: EventHandlerContext): number {
 
 function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): void {
   const insertIndex = getInsertIndexBeforeStreaming(ctx);
-  if (insertIndex < ctx.state.chatContainer.children.length) {
-    ctx.state.chatContainer.children.splice(insertIndex, 0, child);
-    ctx.state.chatContainer.invalidate();
-    return;
-  }
-  ctx.state.chatContainer.addChild(child);
+  insertChatComponentWithBoundarySpacing(ctx.state.chatContainer, child, insertIndex);
 }
 
 function isImmediatelyBeforeStreamingInsert(ctx: EventHandlerContext, child: Component): boolean {
   const insertIndex = getInsertIndexBeforeStreaming(ctx);
-  return insertIndex > 0 && ctx.state.chatContainer.children[insertIndex - 1] === child;
+  // Walk backward from the insert point, skipping boundary spacers,
+  // to find the actual preceding component.
+  for (let i = insertIndex - 1; i >= 0; i--) {
+    if (!isChatBoundarySpacer(ctx.state.chatContainer.children[i]!)) {
+      return ctx.state.chatContainer.children[i] === child;
+    }
+  }
+  return false;
 }
 
 function removeChatChild(ctx: EventHandlerContext, child: Component | undefined): void {
@@ -48,7 +55,7 @@ function removeChatChild(ctx: EventHandlerContext, child: Component | undefined)
   const idx = ctx.state.chatContainer.children.indexOf(child);
   if (idx >= 0) {
     ctx.state.chatContainer.children.splice(idx, 1);
-    ctx.state.chatContainer.invalidate();
+    reconcileChatBoundarySpacers(ctx.state.chatContainer);
   }
 }
 
@@ -122,7 +129,7 @@ export function handleOMReflectionEnd(
   // Note: Harness has already updated observationTokens to compressedTokens,
   // so we use tokensToReflect from the start event via the cycleId context.
   // For display purposes, we read the event parameter directly.
-  const ds = state.harness.getDisplayState();
+  const ds = state.session.displayState.get();
   // Remove in-progress marker — the output box replaces it
   if (state.activeOMMarker) {
     const idx = state.chatContainer.children.indexOf(state.activeOMMarker);

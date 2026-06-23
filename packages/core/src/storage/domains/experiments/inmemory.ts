@@ -149,6 +149,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
+      toolMockReport: input.toolMockReport ?? null,
       createdAt: now,
     };
     this.db.experimentResults.set(result.id, result);

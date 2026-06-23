@@ -2,7 +2,7 @@
  * Shared context passed to extracted event handlers.
  * Keeps handlers decoupled from the MastraTUI class.
  */
-import type { Component } from '@mariozechner/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 import type { HarnessMessage, TaskItemSnapshot } from '@mastra/core/harness';
 
 import type { MastraCodeAnalytics } from '../../analytics.js';
@@ -27,7 +27,6 @@ export interface EventHandlerContext {
   startGoal: (objective: string, cancelMessage?: string, options?: StartGoalOptions) => Promise<void>;
   queueFollowUpMessage: (content: string) => void;
   renderExistingMessages: () => Promise<void>;
-  renderCompletedTasksInline: (tasks: TaskItemSnapshot[], insertIndex?: number, collapsed?: boolean) => void;
   renderClearedTasksInline: (clearedTasks: TaskItemSnapshot[], insertIndex?: number) => void;
   refreshModelAuthStatus: () => Promise<void>;
 }

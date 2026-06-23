@@ -4,7 +4,6 @@ import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import {
   Button,
-  Chip,
   Icon,
   SpanDataPanelView,
   Tabs,
@@ -18,6 +17,7 @@ import {
   useSpanDetail,
   useTraceSpanNavigation,
 } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
 import { ClipboardCheck } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 

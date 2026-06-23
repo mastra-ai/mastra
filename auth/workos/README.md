@@ -127,6 +127,8 @@ const auth = new MastraAuthWorkos({
 
 With `trustJwtClaims: true`, Mastra can authenticate verified bearer tokens from a WorkOS custom JWT template even when `workos.userManagement.getUser()` is not the right lookup path, such as machine-to-machine or service-account tokens.
 
+For in-process cron jobs, scheduled workflows, and other trusted background work that has no JWT or human membership, pass the core FGA `actor` option on the specific agent, workflow, or tool invocation instead of adding a fake membership to the user. The request context must include an `organizationId`; Mastra denies trusted actor FGA checks without tenant scope.
+
 ## API
 
 ### `authenticateToken(token: string, request): Promise<WorkOSUser | null>`

@@ -18,7 +18,9 @@ import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
+import type { Harness } from '../harness';
 import { AvailableHooks, registerHook } from '../hooks';
+import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
@@ -41,7 +43,7 @@ import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../obs
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
 import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
@@ -269,6 +271,15 @@ export interface Config<
   workflows?: TWorkflows;
 
   /**
+   * Harnesses to host on this Mastra instance, keyed by id. Each registered
+   * Harness uses this Mastra (its storage, agents, gateways, and observability)
+   * instead of building its own internal one, and is reachable via
+   * {@link Mastra.getHarness} / {@link Mastra.listHarnesses}. This is how a
+   * server exposes multiple Harnesses' sessions over HTTP.
+   */
+  harnesses?: Record<string, Harness<any>>;
+
+  /**
    * Text-to-speech providers for voice synthesis capabilities.
    */
   tts?: TTTS;
@@ -317,6 +328,38 @@ export interface Config<
    * Server configuration for HTTP endpoints and middleware.
    */
   server?: ServerConfig;
+
+  /**
+   * Studio-specific authentication and authorization configuration.
+   *
+   * When configured, Studio uses separate auth from the server (API) auth,
+   * allowing different providers for internal team members vs external customers.
+   *
+   * - `server.auth` handles API authentication (external customers)
+   * - `studio.auth` handles Studio authentication (internal team)
+   *
+   * **Dual auth is opt-in:** If `studio.auth` is not configured, Studio requests
+   * fall back to `server.auth` for backward compatibility. To enable strict
+   * separation between Studio and API auth, configure both `studio.auth` and
+   * `server.auth`.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   server: {
+   *     auth: new MastraAuthWorkos({ ... }), // External customers
+   *   },
+   *   studio: {
+   *     auth: new MastraAuthOkta({ ... }), // Internal team
+   *     rbac: new StaticRBACProvider({
+   *       roles: DEFAULT_ROLES,
+   *       getUserRoles: (user) => [user.role],
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  studio?: StudioConfig;
 
   /**
    * MCP servers provide tools and resources that agents can use.
@@ -547,6 +590,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
@@ -566,6 +610,7 @@ export class Mastra<
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
+  #studio?: StudioConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
@@ -654,9 +699,43 @@ export class Mastra<
                 const data = event.data as Record<string, unknown> | undefined;
                 const wfId = data?.workflowId as string | undefined;
                 const rId = data?.runId as string | undefined;
-                if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) {
+                // Walk parentWorkflow chain to root — nested internal workflows
+                // (e.g. `executionWorkflow` inside `agentic-loop`) carry an
+                // immediate workflowId that isn't itself in the internal registry,
+                // but their root parent (the registered agentic-loop) is. If any
+                // ancestor matches an internal registration, this instance owns
+                // the run and the event should stay local. Also tag publishes
+                // for workflow ids only known to this instance's public registry
+                // (e.g. background scheduler runs like the notification
+                // dispatcher) — they have no cross-instance consumer.
+                const isOwnedHere = (() => {
+                  if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
+                  let parent = data?.parentWorkflow as
+                    | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
+                    | undefined;
+                  let depth = 0;
+                  while (parent && depth < 16) {
+                    const pwfId = parent.workflowId;
+                    const prId = parent.runId;
+                    if (pwfId && prId && self.__hasInternalWorkflow(pwfId, prId)) return true;
+                    parent = parent.parentWorkflow as typeof parent;
+                    depth++;
+                  }
+                  // Scheduler-spawned background workflows: runId carries the
+                  // workflow id prefix `sched_wf_<workflowId>_<timestamp>`. These
+                  // ticks fire on every instance independently — events are
+                  // only meaningful to the publishing process.
+                  if (rId && rId.startsWith('sched_wf_')) return true;
+                  return false;
+                })();
+                if (isOwnedHere) {
                   return target.publish(topic, event, { localOnly: true });
                 }
+              } else if (topic.startsWith('workflow.events.v2.')) {
+                // Per-run watch stream events. Only the publishing process
+                // consumes these (execution-engine subscribes per-run). No
+                // cross-instance fan-out needed.
+                return target.publish(topic, event, { localOnly: true });
               }
               return target.publish(topic, event);
             };
@@ -894,6 +973,28 @@ export class Mastra<
    */
   public setServer(server: ServerConfig): void {
     this.#server = server;
+  }
+
+  /**
+   * Sets the studio configuration for this Mastra instance.
+   *
+   * The studio configuration controls authentication and authorization for Studio UI,
+   * separate from the server configuration. This enables dual auth patterns where
+   * Studio users (e.g., internal team) use different auth than API consumers.
+   *
+   * @param studio - The studio configuration object
+   *
+   * @example
+   * ```typescript
+   * // Set studio auth separately from server auth
+   * mastra.setStudio({
+   *   auth: new MastraAuthStudio(),
+   *   rbac: new MastraRBACStudio({ roleMapping: { admin: ['*'] } }),
+   * });
+   * ```
+   */
+  public setStudio(studio: StudioConfig): void {
+    this.#studio = studio;
   }
 
   /**
@@ -1150,6 +1251,18 @@ export class Mastra<
       this.#editor.registerWithMastra(this);
     }
 
+    // Kick off background license validation against the license server when
+    // an enterprise license key is configured. Fire-and-forget: LicenseClient
+    // caches the result, schedules revalidation, and fails open on network
+    // errors, so this never blocks or throws during construction.
+    if (process.env.MASTRA_LICENSE_KEY || process.env.MASTRA_EE_LICENSE) {
+      LicenseClient.getInstance(this.#logger)
+        .validate()
+        .catch(() => {
+          // Failures are logged and handled inside LicenseClient.
+        });
+    }
+
     this.#backgroundTaskConfig = config?.backgroundTasks;
     // Auto-create the background-task manager only when this Mastra is
     // running workers. When `workers: false`, the consumer of the
@@ -1287,6 +1400,10 @@ export class Mastra<
       this.#server = config.server;
     }
 
+    if (config?.studio) {
+      this.#studio = config.studio;
+    }
+
     // Register channels and merge their routes into server config
     if (config?.channels) {
       this.#channels = config.channels;
@@ -1323,6 +1440,13 @@ export class Mastra<
           this.addAgent(agent, key);
         }
       });
+    }
+
+    if (config?.harnesses) {
+      for (const [key, harness] of Object.entries(config.harnesses)) {
+        this.#harnesses[key] = harness;
+        harness.__registerMastra(this);
+      }
     }
 
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
@@ -1776,6 +1900,50 @@ export class Mastra<
   }
 
   /**
+   * Get a Harness hosted on this Mastra instance by its registration key (the
+   * key it was registered under in `new Mastra({ harnesses })`). Returns
+   * `undefined` when no harness is registered under that key. Server route
+   * handlers use this to create and drive sessions over HTTP.
+   *
+   * @example
+   * ```typescript
+   * const code = new Harness({ id: 'code-harness', modes });
+   * const mastra = new Mastra({ harnesses: { code } });
+   *
+   * mastra.getHarness('code'); // → the Harness (by key)
+   * ```
+   */
+  public getHarness(key: string): Harness<any> | undefined {
+    return this.#harnesses[key];
+  }
+
+  /**
+   * Get a Harness hosted on this Mastra instance by its unique `id` (the `id`
+   * passed to the `Harness` constructor). Falls back to a registration-key
+   * lookup when no harness matches by id, mirroring {@link getAgentById}.
+   * Returns `undefined` when none is found.
+   *
+   * @example
+   * ```typescript
+   * const code = new Harness({ id: 'code-harness', modes });
+   * const mastra = new Mastra({ harnesses: { code } });
+   *
+   * mastra.getHarnessById('code-harness'); // → the Harness (by id)
+   * ```
+   */
+  public getHarnessById(id: string): Harness<any> | undefined {
+    return Object.values(this.#harnesses).find(harness => harness.id === id) ?? this.#harnesses[id];
+  }
+
+  /**
+   * List all Harnesses hosted on this Mastra instance, keyed by their
+   * registration key.
+   */
+  public listHarnesses(): Record<string, Harness<any>> {
+    return this.#harnesses;
+  }
+
+  /**
    * Adds a new agent to the Mastra instance.
    *
    * This method allows dynamic registration of agents after the Mastra instance
@@ -1941,7 +2109,9 @@ export class Mastra<
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      void agentChannelsInstance.initialize(this);
+      agentChannelsInstance.initialize(this).catch(err => {
+        this.#logger?.error(`Failed to initialize channels for agent ${agentKey}:`, err);
+      });
     }
   }
 
@@ -3772,6 +3942,23 @@ export class Mastra<
   }
 
   /**
+   * Gets the Studio-specific authentication and authorization configuration.
+   *
+   * @returns The studio config, or undefined if not configured
+   *
+   * @example
+   * ```typescript
+   * const studioConfig = mastra.getStudio();
+   * if (studioConfig?.auth) {
+   *   // Studio has separate auth configured
+   * }
+   * ```
+   */
+  public getStudio() {
+    return this.#studio;
+  }
+
+  /**
    * Sets the server adapter for this Mastra instance.
    *
    * The server adapter provides access to the underlying server app (e.g., Hono, Express)
@@ -4205,6 +4392,17 @@ export class Mastra<
       targets = this.#workers;
     }
 
+    // Ensure storage is fully initialized before any worker starts. The
+    // scheduler worker runs an immediate warm-up tick on start(), which can
+    // dispatch an internal scheduled workflow (e.g. the notification
+    // dispatcher) and persist a workflow snapshot. Without awaiting init here,
+    // that write can race the lazy storage.init() that creates
+    // `mastra_workflow_snapshot`, producing "no such table" errors on SQL
+    // stores (see #17905). init() is idempotent and a no-op when disabled.
+    if (this.#storage) {
+      await this.#storage.init();
+    }
+
     for (const worker of targets) {
       await worker.init(deps);
       await worker.start();
@@ -4217,7 +4415,7 @@ export class Mastra<
       const modes = this.#pubsub.supportedModes ?? ['pull'];
       const pushOnly = modes.includes('push') && !modes.includes('pull');
       if (pushOnly && !this.#pushSubscription) {
-        const cb: EventCallback = (event, ack) => {
+        const cb: EventCallback = (event, ack, nack) => {
           // In cross-process push environments (e.g. UnixSocketPubSub),
           // every subscriber receives every event — including events for
           // internal workflows registered on a different process. Skip
@@ -4238,13 +4436,41 @@ export class Mastra<
 
           void this.handleWorkflowEvent(event)
             .then(result => {
-              if (result.ok && ack) {
+              if (result.ok) {
+                if (ack) {
+                  return ack().catch(err =>
+                    this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                  );
+                }
+                return;
+              }
+              // Non-ok result: ask the transport to redeliver (nack) when the
+              // handle layer says retry. The WEP tracks per-event delivery
+              // attempts and eventually returns `retry: false` to break the
+              // loop and surface a terminal workflow.fail. For terminal
+              // failures we ack so the event is dropped from the transport.
+              if (result.retry) {
+                if (nack) {
+                  return nack().catch(err =>
+                    this.#logger?.error?.('Error nacking workflow event in push subscription', err),
+                  );
+                }
+                // Transport does not support nack. Do NOT ack — acking a
+                // retryable failure would drop the event and silently lose
+                // the workflow run. Log and let the transport's own delivery
+                // semantics decide (most non-ack transports redeliver until
+                // explicitly acked).
+                this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
+                  type: event.type,
+                  runId: event.runId,
+                });
+                return;
+              }
+              if (ack) {
                 return ack().catch(err =>
-                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                  this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
                 );
               }
-              // Push transports without nack semantics (EventEmitter) treat
-              // a non-ack as a failure signal; we already logged inside handle().
             })
             .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
         };
@@ -4599,6 +4825,19 @@ export class Mastra<
       if (result.status === 'rejected') {
         this.#logger?.error('Failed to destroy workspace during shutdown', {
           workspaceId: workspaceIds[index],
+          error: result.reason,
+        });
+      }
+    });
+
+    // Tear down hosted Harnesses (heartbeats, workspaces) before closing storage,
+    // since teardown may still flush to the shared store.
+    const harnessKeys = Object.keys(this.#harnesses);
+    const harnessTeardown = await Promise.allSettled(harnessKeys.map(key => this.#harnesses[key]!.destroy()));
+    harnessTeardown.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Failed to destroy harness during shutdown', {
+          harnessKey: harnessKeys[index],
           error: result.reason,
         });
       }

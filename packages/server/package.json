@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.42.0-alpha.3",
+  "version": "1.46.0-alpha.2",
   "description": "",
   "type": "module",
   "files": [
@@ -126,7 +126,7 @@
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "canonicalize": "^1.0.8",
@@ -137,7 +137,7 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:",
-    "zod-to-ts": "^2.0.0"
+    "zod-to-ts": "^2.1.0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

@@ -1,12 +1,9 @@
 import {
   Badge,
   Button,
-  Checkbox,
   DataList,
-  DropdownMenu,
   Label,
   Spinner,
-  Textarea,
   Txt,
   Icon,
   cn,
@@ -17,6 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useMastraClient } from '@mastra/react';
 import {
   CheckCircle,

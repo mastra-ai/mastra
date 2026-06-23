@@ -2,19 +2,14 @@
  * Stagehand Browser Types
  */
 
-import type { BrowserConfig as BaseBrowserConfig } from '@mastra/core/browser';
+import type { ModelConfiguration as StagehandModelConfiguration } from '@browserbasehq/stagehand';
+import type { BrowserConfig as BaseBrowserConfig, BrowserRecordingOptions } from '@mastra/core/browser';
 import type { StagehandToolName } from './tools/constants';
 
 /**
- * Model configuration for Stagehand AI operations
+ * Model configuration for Stagehand AI operations.
  */
-export type ModelConfiguration =
-  | string // Format: "provider/model" (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
-  | {
-      modelName: string;
-      apiKey?: string;
-      baseURL?: string;
-    };
+export type ModelConfiguration = StagehandModelConfiguration;
 
 /**
  * Stagehand-specific configuration fields.
@@ -103,6 +98,14 @@ interface StagehandConfigExtensions {
    * @default false
    */
   preserveUserDataDir?: boolean;
+
+  /**
+   * Alpha: opt into browser recording tools.
+   *
+   * Recording tools are disabled by default. Provide an output directory to add
+   * `browser_record` and `browser_record_caption` to this browser's toolset.
+   */
+  recording?: BrowserRecordingOptions;
 
   /**
    * Tool names to exclude from the browser toolset.

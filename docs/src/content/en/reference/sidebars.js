@@ -25,6 +25,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
         { type: 'doc', id: 'agents/channels', label: 'Channels' },
+        { type: 'doc', id: 'agents/inngest-agent', label: 'createInngestAgent()' },
         { type: 'doc', id: 'agents/durable-agent', label: 'DurableAgent' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
@@ -306,6 +307,12 @@ const sidebars = {
           label: 'Harness Class',
           customProps: { tags: ['alpha'] },
         },
+        {
+          type: 'doc',
+          id: 'harness/session',
+          label: 'Session Class',
+          customProps: { tags: ['alpha'] },
+        },
       ],
     },
     {
@@ -532,6 +539,12 @@ const sidebars = {
         { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['alpha'] } },
         {
           type: 'doc',
+          id: 'signals/task-signal-provider',
+          label: 'TaskSignalProvider',
+          customProps: { tags: ['alpha'] },
+        },
+        {
+          type: 'doc',
           id: 'signals/webhook-signal-provider',
           label: 'WebhookSignalProvider',
           customProps: { tags: ['alpha'] },
@@ -731,6 +744,7 @@ const sidebars = {
           label: 'AgentCoreRuntimeSandbox',
         },
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
+        { type: 'doc', id: 'workspace/archil-filesystem', label: 'ArchilFilesystem' },
         { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
         { type: 'doc', id: 'workspace/daytona-sandbox', label: 'DaytonaSandbox' },
@@ -742,6 +756,7 @@ const sidebars = {
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
+        { type: 'doc', id: 'workspace/railway-sandbox', label: 'RailwaySandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
         { type: 'doc', id: 'workspace/vercel-microvm-sandbox', label: 'VercelMicroVMSandbox' },

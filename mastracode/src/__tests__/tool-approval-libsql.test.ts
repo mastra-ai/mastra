@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
+import { Mastra } from '@mastra/core/mastra';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
@@ -69,6 +70,11 @@ describe('tool approval with LibSQLStore via Harness', () => {
       execute: async input => mockExecute(input),
     });
 
+    const storage = new LibSQLStore({
+      id: 'test-store',
+      url: 'file::memory:?cache=shared',
+    });
+
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
@@ -81,14 +87,16 @@ describe('tool approval with LibSQLStore via Harness', () => {
             return { stream: callCount === 1 ? createToolCallStream() : createTextStream() };
           };
         })(),
-      }),
+      }) as any,
       tools: { readFile: readFileTool },
     });
 
-    const storage = new LibSQLStore({
-      id: 'test-store',
-      url: 'file::memory:?cache=shared',
+    const mastra = new Mastra({
+      agents: { 'test-agent': agent },
+      logger: false,
+      storage,
     });
+    const registeredAgent = mastra.getAgent('test-agent');
 
     const harness = new Harness({
       id: 'test-harness',
@@ -97,37 +105,45 @@ describe('tool approval with LibSQLStore via Harness', () => {
         {
           id: 'default',
           name: 'Default',
-          default: true,
-          agent,
+          description: 'default',
+          defaultModelId: 'test',
+          metadata: {
+            default: true,
+          },
+          instructions: 'You read files.',
         },
       ],
       initialState: { yolo: false },
     });
+    (harness as any).getAgentForMode = () => registeredAgent;
 
     await harness.init();
+    const session = await harness.createSession();
 
     // Collect events
     const events: any[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => {
+      events.push(event);
+    });
 
     // Create a thread
-    await harness.createThread();
+    await session.thread.create();
 
     // Send message — should hit tool-call-approval and auto-approve (policy = 'ask')
     // We need to respond to the approval prompt
     const approvalPromise = new Promise<void>(resolve => {
-      harness.subscribe(event => {
+      session.subscribe(event => {
         if (event.type === 'tool_approval_required') {
-          // Must be async — pendingApprovalResolve is set after emit returns
+          // Must be async — the approval gate is armed after emit returns
           queueMicrotask(() => {
-            harness.respondToToolApproval({ decision: 'approve' });
+            session.respondToToolApproval({ decision: 'approve' });
             resolve();
           });
         }
       });
     });
 
-    await Promise.all([harness.sendMessage({ content: 'Read test.txt' }), approvalPromise]);
+    await Promise.all([session.sendMessage({ content: 'Read test.txt' }), approvalPromise]);
 
     // The tool should have been called
     expect(mockExecute).toHaveBeenCalledTimes(1);
