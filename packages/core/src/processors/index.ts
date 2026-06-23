@@ -831,11 +831,13 @@ export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningCon
 export {
   isRetryableOpenAIResponsesStreamError,
   StreamErrorRetryProcessor,
+  type StreamErrorRetryDelayMs,
   type StreamErrorRetryMatcher,
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';
 export type { CompatRule } from './provider-history-compat';
-export { ProcessorState, ProcessorRunner, createProcessorSendSignal } from './runner';
+export { ProcessorState, ProcessorRunner } from './runner';
+export { createProcessorSendSignal } from './send-signal';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

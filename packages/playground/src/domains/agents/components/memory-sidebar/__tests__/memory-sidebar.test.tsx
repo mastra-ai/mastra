@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -129,62 +128,97 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('MemorySidebar', () => {
-  it('shows the Threads tab content by default with no Memory title/icon', async () => {
+  it('renders the Memory card as an overlay above the thread list by default', async () => {
     const { container } = renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    // Threads tab is active by default: the thread list (with New Chat) is visible.
-    expect(await screen.findByText('New Chat')).not.toBeNull();
+    // Threads view is the default: the thread list (with New Chat) is visible.
+    const newChat = await screen.findByText('New Chat');
+    expect(newChat).not.toBeNull();
     expect(await screen.findByText('My first chat')).not.toBeNull();
 
-    // The "Memory" title/icon header was removed; the tabs are the top of the panel.
-    expect(screen.queryByText('Memory')).toBeNull();
+    // No header row or tabs: a top card is the entry point to the memory view.
+    const card = screen.getByTestId('memory-sidebar-card');
+    expect(card.textContent).toMatch(/memory/i);
+    expect(card.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('memory-sidebar-thread-layer').textContent).toContain('New Chat');
+    expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('absolute');
+    expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('z-10');
+    expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('rounded-xl');
+    expect(card.className).toContain('bg-transparent');
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
     // The sidebar is still a single standalone block (rounded + bordered) with no nested container.
-    const blocks = container.querySelectorAll('.rounded-studio-panel.border-border1\\/50');
+    const blocks = container.querySelectorAll('.rounded-tr-studio-panel.border-border1\\/50');
     expect(blocks.length).toBe(1);
   });
 
-  it('replaces the tabs with an empty state and docs CTA when memory is disabled', async () => {
+  it('replaces the panel with an empty state and docs CTA when memory is disabled', async () => {
     renderSidebar([], false);
 
     // The empty state explains memory is required; the thread list / New Chat is not rendered.
     expect(await screen.findByText('Memory not enabled')).not.toBeNull();
     expect(screen.queryByText('New Chat')).toBeNull();
 
-    // The tabs are hidden entirely when memory is off.
-    expect(screen.queryByRole('tab')).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Threads' })).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Memory Configuration' })).toBeNull();
+    // The memory card is hidden entirely when memory is off.
+    expect(screen.queryByTestId('memory-sidebar-card')).toBeNull();
 
     // An outline CTA links to the Agent Memory docs.
     const cta = screen.getByRole('link', { name: /documentation/i });
     expect(cta.getAttribute('href')).toBe('https://mastra.ai/en/docs/agents/agent-memory');
   });
 
-  it('shows the AgentMemory configuration content when the Configuration tab is selected', async () => {
+  it('shows the live memory content, without the static config, when the Memory card is clicked', async () => {
     renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Memory Configuration' }));
+    fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
 
     // AgentMemory renders a "Clone Thread" section whenever a real thread is present.
     const cloneSection = await screen.findByText('Clone Thread');
 
-    // The whole Configuration panel scrolls on Y: the active tabpanel is the scroll container,
-    // and AgentMemory's root must not trap scrolling with its own h-full/overflow-hidden.
-    const panel = cloneSection.closest('[role="tabpanel"]');
+    // The card reflects the active view.
+    expect(screen.getByTestId('memory-sidebar-card').getAttribute('aria-pressed')).toBe('true');
+
+    // The static memory configuration (AgentMemoryConfig with its "General"
+    // section) moved to the agent settings view and is no longer in the panel.
+    expect(screen.queryByText('General')).toBeNull();
+
+    // The whole Memory view scrolls on Y, and AgentMemory's root must not trap
+    // scrolling with its own h-full/overflow-hidden.
+    const panel = cloneSection.closest('.overflow-y-auto');
     expect(panel).not.toBeNull();
-    expect(panel?.className).toContain('overflow-y-auto');
 
     const agentMemoryRoot = panel?.firstElementChild;
     expect(agentMemoryRoot?.className).not.toContain('overflow-hidden');
     expect(agentMemoryRoot?.className).not.toContain('h-full');
   });
 
-  it('restores the persisted Configuration tab on mount', async () => {
-    sessionStorage.setItem('agent-memory-sidebar-tab', 'configuration');
+  it('returns to the thread list when the card is clicked again', async () => {
+    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
+
+    fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
+    await screen.findByText('Clone Thread');
+
+    fireEvent.click(screen.getByTestId('memory-sidebar-card'));
+
+    expect(await screen.findByText('New Chat')).not.toBeNull();
+    expect(screen.queryByText('Clone Thread')).toBeNull();
+  });
+
+  it('restores the persisted Memory view on mount', async () => {
+    sessionStorage.setItem('agent-memory-sidebar-tab-v2', 'memory');
 
     renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
     expect(await screen.findByText('Clone Thread')).not.toBeNull();
+  });
+
+  it('ignores the stale v1 sessionStorage key pointing at the removed configuration tab', async () => {
+    sessionStorage.setItem('agent-memory-sidebar-tab', 'configuration');
+
+    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
+
+    // Falls back to the thread list instead of an unknown view value.
+    expect(await screen.findByText('New Chat')).not.toBeNull();
   });
 });

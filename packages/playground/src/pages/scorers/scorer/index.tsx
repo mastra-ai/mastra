@@ -1,6 +1,5 @@
 import {
   Button,
-  ErrorState,
   PageLayout,
   PermissionDenied,
   SessionExpired,
@@ -8,6 +7,7 @@ import {
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { PencilIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';

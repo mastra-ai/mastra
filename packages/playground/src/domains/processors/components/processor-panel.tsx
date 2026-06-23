@@ -3,7 +3,6 @@ import {
   Badge,
   Button,
   useCodemirrorTheme,
-  CopyButton,
   MainContentContent,
   Select,
   SelectContent,
@@ -14,6 +13,7 @@ import {
   Txt,
   toast,
 } from '@mastra/playground-ui';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState, useId, useEffect } from 'react';
 import type {

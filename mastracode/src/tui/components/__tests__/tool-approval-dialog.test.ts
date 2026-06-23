@@ -1,8 +1,8 @@
-import type * as PiTui from '@mariozechner/pi-tui';
+import type * as PiTui from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@mariozechner/pi-tui', async () => {
-  const actual = await vi.importActual<typeof PiTui>('@mariozechner/pi-tui');
+vi.mock('@earendil-works/pi-tui', async () => {
+  const actual = await vi.importActual<typeof PiTui>('@earendil-works/pi-tui');
 
   class MockNode {
     children: any[] = [];

@@ -1,7 +1,6 @@
 import {
   Button,
   Input,
-  MarkdownRenderer,
   ScrollArea,
   SkillIcon,
   cn,
@@ -12,6 +11,7 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Search, Download, ExternalLink, Loader2, Package, Github, Check, Folder } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';

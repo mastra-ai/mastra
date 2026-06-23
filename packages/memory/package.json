@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.20.3",
+  "version": "1.21.1-alpha.1",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -51,7 +51,7 @@
     "@mastra/schema-compat": "workspace:*",
     "async-mutex": "^0.5.0",
     "diff": "^8.0.3",
-    "image-size": "^2.0.2",
+    "image-size": "1.2.1",
     "json-schema": "^0.4.0",
     "lru-cache": "^11.2.7",
     "probe-image-size": "^7.2.3",

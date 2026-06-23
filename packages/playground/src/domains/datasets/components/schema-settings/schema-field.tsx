@@ -1,6 +1,7 @@
 'use client';
 
-import { CodeEditor, Switch, cn } from '@mastra/playground-ui';
+import { CodeEditor, cn } from '@mastra/playground-ui';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import type { JSONSchema7 } from 'json-schema';
 import { useState, useEffect, useRef } from 'react';
 

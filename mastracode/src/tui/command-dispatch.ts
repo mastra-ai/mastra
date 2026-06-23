@@ -2,6 +2,7 @@
  * Slash command dispatcher: routes command strings to extracted handlers.
  */
 import { processSlashCommand } from '../utils/slash-command-processor.js';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 import {
   handleHelpCommand,
@@ -69,9 +70,9 @@ export async function dispatchSlashCommand(
     if (!TRACKED_COMMANDS.has(command)) return;
     ctx.analytics?.trackCommand(command, {
       action: 'attempted',
-      threadId: state.harness.getCurrentThreadId(),
-      resourceId: state.harness.getResourceId(),
-      mode: state.harness.getCurrentModeId(),
+      threadId: state.session.thread.getId(),
+      resourceId: state.session.identity.getResourceId(),
+      mode: state.session.mode.get(),
     });
   };
   const trimmedInput = input.trim();
@@ -302,7 +303,7 @@ async function handleGoalSourceCommand(
     try {
       let workspace = ctx.getResolvedWorkspace();
       if (!workspace && ctx.harness?.hasWorkspace?.()) {
-        workspace = await ctx.harness.resolveWorkspace();
+        workspace = await ctx.harness.resolveWorkspace({ session: ctx.state.session });
       }
       const skill = await workspace?.skills?.get(goalSkill.path || goalSkill.name);
       if (!skill || skill.metadata?.goal !== true) {
@@ -342,7 +343,7 @@ async function handleCustomSlashCommand(
       if (!isCurrentThreadActive(commandCtx)) {
         const slashComp = new SlashCommandComponent(command.name, processedContent.trim());
         state.allSlashCommandComponents.push(slashComp);
-        state.chatContainer.addChild(slashComp);
+        insertChatComponentWithBoundarySpacing(state.chatContainer, slashComp);
         state.ui.requestRender();
       }
 

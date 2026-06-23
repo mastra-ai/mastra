@@ -3,8 +3,8 @@
  * The actual value is preserved; only the rendered output is masked.
  */
 
-import { Input } from '@mariozechner/pi-tui';
-import type { Component, Focusable } from '@mariozechner/pi-tui';
+import { Input } from '@earendil-works/pi-tui';
+import type { Component, Focusable } from '@earendil-works/pi-tui';
 
 export class MaskedInput implements Component, Focusable {
   private input: Input;

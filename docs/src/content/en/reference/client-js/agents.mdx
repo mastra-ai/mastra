@@ -610,6 +610,26 @@ response.processDataStream({
 })
 ```
 
+### Shape client tool output for the model
+
+Client tools support `toModelOutput` to control what the model receives, including multimodal content such as images. Because client tools execute locally, the mapping also runs on the client after `execute` completes. The transformed output is sent back to the server alongside the raw result, so the raw result stays available for storage and application logic.
+
+```typescript
+const screenshotTool = createTool({
+  id: 'takeScreenshot',
+  description: 'Takes a screenshot of the current page',
+  inputSchema: z.object({}),
+  execute: async () => {
+    const base64 = await captureScreenshot()
+    return { ok: true, data: base64 }
+  },
+  toModelOutput: output => ({
+    type: 'content',
+    value: [{ type: 'media', data: output.data, mediaType: 'image/jpeg' }],
+  }),
+})
+```
+
 ### Tracing client tools
 
 When `@mastra/observability` is installed and configured on the server, a client-side tool records a `CLIENT_TOOL_CALL` span as a child of the current `AGENT_RUN` span. The server creates that span when the model emits the client tool call, injects a W3C trace carrier into the outgoing tool-call chunk, and ends the span once the tool arguments are available. Without server-side observability configured, client tool tracing is a no-op.

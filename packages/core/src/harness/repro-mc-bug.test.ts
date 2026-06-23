@@ -57,7 +57,7 @@ describe('mc send-message reproduction', () => {
 
     function getDynamicModel({ requestContext }: { requestContext: RequestContext }) {
       const harnessContext = requestContext.get('harness') as any;
-      const modelId = harnessContext?.state?.currentModelId;
+      const modelId = harnessContext?.session?.modelId;
       if (!modelId) {
         throw new Error('No model selected');
       }
@@ -86,17 +86,18 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
     await harness.getMastra()?.startWorkers();
-    await harness.createThread();
+    await session.thread.create();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
 
-    expect((harness.getState() as any).currentModelId).toBe('anthropic/claude-opus-4-7');
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-7');
 
-    await harness.sendMessage({ content: 'Hello!' });
+    await session.sendMessage({ content: 'Hello!' });
 
     const assistantEnd = events.find(
       (e): e is Extract<HarnessEvent, { type: 'message_end' }> =>
@@ -129,15 +130,16 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
     await harness.getMastra()?.startWorkers();
-    await harness.createThread();
+    await session.thread.create();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Hello!' });
+    await session.sendMessage({ content: 'Hello!' });
 
     // With the fix, the error should propagate through the subscription stream
     // and the harness should emit an error event instead of silently completing
@@ -152,7 +154,7 @@ describe('mc send-message reproduction', () => {
 
     function getDynamicModel({ requestContext }: { requestContext: RequestContext }) {
       const harnessContext = requestContext.get('harness') as any;
-      const modelId = harnessContext?.state?.currentModelId;
+      const modelId = harnessContext?.session?.modelId;
       if (!modelId) {
         throw new Error('No model selected');
       }
@@ -182,17 +184,18 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
     await harness.getMastra()?.startWorkers();
-    await harness.createThread();
+    await session.thread.create();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
 
-    expect((harness.getState() as any).currentModelId).toBe('anthropic/claude-opus-4-7');
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-7');
 
-    await harness.sendMessage({ content: 'Hello!' });
+    await session.sendMessage({ content: 'Hello!' });
 
     const assistantEnd = events.find(
       (e): e is Extract<HarnessEvent, { type: 'message_end' }> =>

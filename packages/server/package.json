@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.42.0",
+  "version": "1.46.0-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -137,7 +137,7 @@
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:",
-    "zod-to-ts": "^2.0.0"
+    "zod-to-ts": "^2.1.0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

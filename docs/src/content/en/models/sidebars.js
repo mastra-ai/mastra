@@ -138,6 +138,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/alibaba-token-plan',
+          label: 'Alibaba Token Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/alibaba-token-plan-cn',
+          label: 'Alibaba Token Plan (China)',
+        },
+        {
+          type: 'doc',
           id: 'providers/amazon-bedrock',
           label: 'Amazon Bedrock',
         },
@@ -145,6 +155,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ambient',
           label: 'Ambient',
+        },
+        {
+          type: 'doc',
+          id: 'providers/anyapi',
+          label: 'AnyAPI',
         },
         {
           type: 'doc',
@@ -263,13 +278,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/firepass',
-          label: 'Fireworks (Firepass)',
+          id: 'providers/fireworks-ai',
+          label: 'Fireworks AI',
         },
         {
           type: 'doc',
-          id: 'providers/fireworks-ai',
-          label: 'Fireworks AI',
+          id: 'providers/freemodel',
+          label: 'FreeModel',
         },
         {
           type: 'doc',
@@ -373,13 +388,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/llmtr',
+          label: 'LLMTR',
+        },
+        {
+          type: 'doc',
           id: 'providers/lmstudio',
           label: 'LMStudio',
         },
         {
           type: 'doc',
           id: 'providers/lucidquery',
-          label: 'LucidQuery AI',
+          label: 'LucidQuery',
         },
         {
           type: 'doc',
@@ -453,6 +473,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/neon',
+          label: 'Neon',
+        },
+        {
+          type: 'doc',
           id: 'providers/neuralwatt',
           label: 'Neuralwatt',
         },
@@ -518,6 +543,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/poolside',
+          label: 'Poolside',
+        },
+        {
+          type: 'doc',
           id: 'providers/privatemode-ai',
           label: 'Privatemode AI',
         },
@@ -568,6 +598,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/snowflake-cortex',
+          label: 'Snowflake Cortex',
+        },
+        {
+          type: 'doc',
           id: 'providers/stackit',
           label: 'STACKIT',
         },
@@ -579,7 +614,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/stepfun-ai',
-          label: 'StepFun',
+          label: 'StepFun AI',
         },
         {
           type: 'doc',
@@ -610,6 +645,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/umans-ai',
+          label: 'Umans AI',
         },
         {
           type: 'doc',
@@ -675,6 +715,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/zai-coding-plan',
           label: 'Z.AI Coding Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/zeldoc',
+          label: 'Zeldoc',
         },
         {
           type: 'doc',

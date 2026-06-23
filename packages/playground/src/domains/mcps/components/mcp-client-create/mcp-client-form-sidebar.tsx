@@ -9,9 +9,9 @@ import {
   SelectTrigger,
   SelectValue,
   Spinner,
-  Textarea,
   Icon,
 } from '@mastra/playground-ui';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Check, PlusIcon, XIcon } from 'lucide-react';
 import { Controller, useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';

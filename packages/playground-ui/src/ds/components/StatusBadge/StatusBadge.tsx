@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 const statusBadgeVariants = cva(
   // Base styles
-  'inline-flex items-center gap-1.5 rounded-full text-ui-xs font-medium transition-colors duration-normal',
+  'inline-flex w-fit max-w-full items-center gap-1.5 rounded-full text-ui-xs font-medium transition-colors duration-normal',
   {
     variants: {
       variant: {

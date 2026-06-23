@@ -1,6 +1,6 @@
 {
   "name": "@internal/changeset-cli",
-  "version": "0.0.58",
+  "version": "0.0.61",
   "description": "Custom changeset CLI for Mastra monorepo versioning",
   "type": "module",
   "main": "dist/src/index.js",
@@ -26,7 +26,7 @@
     "@manypkg/get-packages": "^3.1.0",
     "@manypkg/tools": "^2.1.1",
     "@octokit/rest": "^22.0.1",
-    "citty": "^0.1.6",
+    "citty": "^0.2.2",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
     "mri": "^1.2.0",

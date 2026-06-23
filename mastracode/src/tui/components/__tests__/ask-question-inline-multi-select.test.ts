@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Mock pi-tui — the real Input/Box components touch the terminal at construction.
 // We keep the real WrappingSelectList (imported below) so the multi-select path
 // is exercised end-to-end through the component.
-vi.mock('@mariozechner/pi-tui', async importOriginal => {
+vi.mock('@earendil-works/pi-tui', async importOriginal => {
   const actual = await importOriginal<Record<string, unknown>>();
   class StubInput {
     onSubmit?: (value: string) => void;

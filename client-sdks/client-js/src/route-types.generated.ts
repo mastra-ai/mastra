@@ -73,6 +73,7 @@ export type GetAgents_Response = {
           };
         }[]
       | undefined;
+    /** Default options for agent execution */
     defaultOptions?:
       | {
           runId?: string | undefined;
@@ -280,6 +281,7 @@ export type GetAgentsAgentId_Response = {
         };
       }[]
     | undefined;
+  /** Default options for agent execution */
   defaultOptions?:
     | {
         runId?: string | undefined;
@@ -13226,6 +13228,7 @@ export type GetObservabilityTraces_QueryParams = {
         | undefined
       )
     | undefined;
+  /** Filter by trace ID (matches root span) */
   traceId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -13359,10 +13362,13 @@ export type GetObservabilityTraces_QueryParams = {
   name?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'startedAt' | 'endedAt' */
   field?: ('startedAt' | 'endedAt') | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -13379,6 +13385,7 @@ export type GetObservabilityTraces_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -13387,6 +13394,7 @@ export type GetObservabilityTraces_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   spans: {
     /** Unique trace identifier */
@@ -13537,6 +13545,7 @@ export type GetObservabilityTraces_Response = {
       | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
     /** Current status of the trace */
     status: 'success' | 'error' | 'running';
@@ -13637,6 +13646,7 @@ export type GetObservabilityTracesLight_QueryParams = {
         | undefined
       )
     | undefined;
+  /** Filter by trace ID (matches root span) */
   traceId?: (string | undefined) | undefined;
   entityType?: (string | undefined) | undefined;
   entityId?: ((string | null) | undefined) | undefined;
@@ -13728,9 +13738,13 @@ export type GetObservabilityTracesLight_QueryParams = {
   tags?: (((string[] | null) | undefined) | undefined) | any;
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   hasChildError?: (boolean | undefined) | undefined;
+  /** Zero-indexed page number */
   page?: (number | undefined) | undefined;
+  /** Number of items per page */
   perPage?: (number | undefined) | undefined;
+  /** Field to order by */
   field?: ('startedAt' | 'endedAt') | undefined;
+  /** Sort direction */
   direction?: ('ASC' | 'DESC') | undefined;
   dateRange?:
     | (
@@ -13831,6 +13845,7 @@ export type GetObservabilityTracesLight_Response = {
     entityName?: (string | null) | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   }[];
 };
@@ -13929,6 +13944,7 @@ export type GetObservabilityBranches_QueryParams = {
         | undefined
       )
     | undefined;
+  /** Filter by parent trace ID */
   traceId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -14042,10 +14058,13 @@ export type GetObservabilityBranches_QueryParams = {
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'startedAt' | 'endedAt' */
   field?: ('startedAt' | 'endedAt') | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -14062,6 +14081,7 @@ export type GetObservabilityBranches_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -14070,6 +14090,7 @@ export type GetObservabilityBranches_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   branches: {
     /** Unique trace identifier */
@@ -14220,6 +14241,7 @@ export type GetObservabilityBranches_Response = {
       | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
     /** Current status of the trace */
     status: 'success' | 'error' | 'running';
@@ -14412,6 +14434,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   }[];
 };
@@ -14597,6 +14620,7 @@ export type GetObservabilityTracesTraceId_Response = {
       | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   }[];
 };
@@ -14694,6 +14718,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
     entityName?: (string | null) | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   }[];
 };
@@ -14876,6 +14901,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   };
 };
@@ -14937,6 +14963,7 @@ export type PostObservabilityTracesScore_Body = {
   targets: {
     /** Unique trace identifier */
     traceId: string;
+    /** Unique span identifier within a trace */
     spanId?: string | undefined;
   }[];
 };
@@ -14977,7 +15004,9 @@ export type GetObservabilityTracesTraceIdSpanIdScores_PathParams = {
 };
 
 export type GetObservabilityTracesTraceIdSpanIdScores_QueryParams = {
+  /** Zero-indexed page number */
   page?: (number | undefined) | undefined;
+  /** Number of items per page */
   perPage?: (number | undefined) | undefined;
 };
 
@@ -15087,6 +15116,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
     generateReasonPrompt?: string | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   }[];
 };
@@ -15134,7 +15164,9 @@ export type GetObservabilityMetrics_QueryParams = {
         | undefined
       )
     | any;
+  /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
+  /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -15212,6 +15244,7 @@ export type GetObservabilityMetrics_QueryParams = {
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | any;
   name?: ((string[] | undefined) | undefined) | any;
+  /** Filter by execution source */
   source?: (string | undefined) | undefined;
   provider?: (string | undefined) | undefined;
   model?: (string | undefined) | undefined;
@@ -15229,10 +15262,13 @@ export type GetObservabilityMetrics_QueryParams = {
     | any;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'timestamp' */
   field?: 'timestamp' | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -15249,6 +15285,7 @@ export type GetObservabilityMetrics_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -15257,6 +15294,7 @@ export type GetObservabilityMetrics_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   metrics: {
     /** Unique id for this metric event */
@@ -15369,6 +15407,7 @@ export type GetObservabilityMetrics_Response = {
           | null
         )
       | undefined;
+    /** Metric labels for dimensional filtering */
     labels: {
       [key: string]: string;
     };
@@ -15421,7 +15460,9 @@ export type GetObservabilityLogs_QueryParams = {
         | undefined
       )
     | any;
+  /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
+  /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -15498,7 +15539,9 @@ export type GetObservabilityLogs_QueryParams = {
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | any;
+  /** Filter by execution source */
   source?: (string | undefined) | undefined;
+  /** Filter by log level(s) */
   level?:
     | (
         | (('debug' | 'info' | 'warn' | 'error' | 'fatal') | ('debug' | 'info' | 'warn' | 'error' | 'fatal')[])
@@ -15507,10 +15550,13 @@ export type GetObservabilityLogs_QueryParams = {
     | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'timestamp' */
   field?: 'timestamp' | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -15527,6 +15573,7 @@ export type GetObservabilityLogs_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -15535,6 +15582,7 @@ export type GetObservabilityLogs_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   logs: {
     /** Unique id for this log event */
@@ -15686,7 +15734,9 @@ export type GetObservabilityScores_QueryParams = {
         | undefined
       )
     | any;
+  /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
+  /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -15763,15 +15813,21 @@ export type GetObservabilityScores_QueryParams = {
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | any;
+  /** Filter by scorer ID(s) */
   scorerId?: ((string | string[]) | undefined) | undefined;
+  /** Filter by how the score was produced */
   scoreSource?: (string | undefined) | undefined;
+  /** Filter by how the score was produced */
   source?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'timestamp' | 'score' */
   field?: ('timestamp' | 'score') | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -15788,6 +15844,7 @@ export type GetObservabilityScores_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -15796,6 +15853,7 @@ export type GetObservabilityScores_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   scores: {
     /** Unique id for this score event */
@@ -16073,6 +16131,7 @@ export type GetObservabilityScoresScoreId_PathParams = {
 };
 
 export type GetObservabilityScoresScoreId_Response = {
+  /** Score record as stored in the database */
   score: {
     /** Unique id for this score event */
     scoreId?: (string | null) | undefined;
@@ -16206,9 +16265,11 @@ export interface GetObservabilityScoresScoreId_RouteContract {
 export type PostObservabilityScoresAggregate_Body = {
   /** Identifier of the scorer (e.g., relevance, accuracy) */
   scorerId: string;
+  /** How the score was produced (e.g., manual, automated, experiment) */
   scoreSource?: string | undefined;
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying scores */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -16228,6 +16289,7 @@ export type PostObservabilityScoresAggregate_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -16244,15 +16306,25 @@ export type PostObservabilityScoresAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -16269,7 +16341,9 @@ export type PostObservabilityScoresAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -16286,12 +16360,19 @@ export type PostObservabilityScoresAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -16303,6 +16384,7 @@ export type PostObservabilityScoresAggregate_Body = {
         source?: string | undefined;
       }
     | undefined;
+  /** Comparison period for aggregate queries */
   comparePeriod?: ('previous_period' | 'previous_day' | 'previous_week') | undefined;
 };
 
@@ -16340,11 +16422,13 @@ export interface PostObservabilityScoresAggregate_RouteContract {
 export type PostObservabilityScoresBreakdown_Body = {
   /** Identifier of the scorer (e.g., relevance, accuracy) */
   scorerId: string;
+  /** How the score was produced (e.g., manual, automated, experiment) */
   scoreSource?: string | undefined;
   /** Fields to group by */
   groupBy: string[];
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying scores */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -16364,6 +16448,7 @@ export type PostObservabilityScoresBreakdown_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -16380,15 +16465,25 @@ export type PostObservabilityScoresBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -16405,7 +16500,9 @@ export type PostObservabilityScoresBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -16422,12 +16519,19 @@ export type PostObservabilityScoresBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -16477,11 +16581,13 @@ export interface PostObservabilityScoresBreakdown_RouteContract {
 export type PostObservabilityScoresTimeseries_Body = {
   /** Identifier of the scorer (e.g., relevance, accuracy) */
   scorerId: string;
+  /** How the score was produced (e.g., manual, automated, experiment) */
   scoreSource?: string | undefined;
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying scores */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -16501,6 +16607,7 @@ export type PostObservabilityScoresTimeseries_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -16517,15 +16624,25 @@ export type PostObservabilityScoresTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -16542,7 +16659,9 @@ export type PostObservabilityScoresTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -16559,12 +16678,19 @@ export type PostObservabilityScoresTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -16576,6 +16702,7 @@ export type PostObservabilityScoresTimeseries_Body = {
         source?: string | undefined;
       }
     | undefined;
+  /** Fields to group by */
   groupBy?: string[] | undefined;
 };
 
@@ -16617,11 +16744,13 @@ export interface PostObservabilityScoresTimeseries_RouteContract {
 export type PostObservabilityScoresPercentiles_Body = {
   /** Identifier of the scorer (e.g., relevance, accuracy) */
   scorerId: string;
+  /** How the score was produced (e.g., manual, automated, experiment) */
   scoreSource?: string | undefined;
   /** Percentile values (0-1) */
   percentiles: number[];
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
+  /** Filters for querying scores */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -16641,6 +16770,7 @@ export type PostObservabilityScoresPercentiles_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -16657,15 +16787,25 @@ export type PostObservabilityScoresPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -16682,7 +16822,9 @@ export type PostObservabilityScoresPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -16699,12 +16841,19 @@ export type PostObservabilityScoresPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -16772,7 +16921,9 @@ export type GetObservabilityFeedback_QueryParams = {
         | undefined
       )
     | any;
+  /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
+  /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -16849,16 +17000,20 @@ export type GetObservabilityFeedback_QueryParams = {
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | any;
+  /** Filter by feedback type(s) */
   feedbackType?: ((string | string[]) | undefined) | undefined;
   feedbackSource?: (string | undefined) | undefined;
   source?: (string | undefined) | undefined;
   feedbackUserId?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'timestamp' */
   field?: 'timestamp' | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -16875,6 +17030,7 @@ export type GetObservabilityFeedback_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -16883,6 +17039,7 @@ export type GetObservabilityFeedback_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   feedback: {
     /** Unique id for this feedback event */
@@ -17156,9 +17313,11 @@ export interface PostObservabilityFeedback_RouteContract {
 export type PostObservabilityFeedbackAggregate_Body = {
   /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
   feedbackType: string;
+  /** Source of feedback (e.g., 'user', 'system', 'manual') */
   feedbackSource?: string | undefined;
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying feedback */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17178,6 +17337,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17194,15 +17354,25 @@ export type PostObservabilityFeedbackAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17219,7 +17389,9 @@ export type PostObservabilityFeedbackAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17236,22 +17408,33 @@ export type PostObservabilityFeedbackAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
         /** Filter by feedback type(s) */
         feedbackType?: (string | string[]) | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         feedbackSource?: string | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         source?: string | undefined;
+        /** User who provided the feedback */
         feedbackUserId?: string | undefined;
       }
     | undefined;
+  /** Comparison period for aggregate queries */
   comparePeriod?: ('previous_period' | 'previous_day' | 'previous_week') | undefined;
 };
 
@@ -17289,11 +17472,13 @@ export interface PostObservabilityFeedbackAggregate_RouteContract {
 export type PostObservabilityFeedbackBreakdown_Body = {
   /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
   feedbackType: string;
+  /** Source of feedback (e.g., 'user', 'system', 'manual') */
   feedbackSource?: string | undefined;
   /** Fields to group by */
   groupBy: string[];
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying feedback */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17313,6 +17498,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17329,15 +17515,25 @@ export type PostObservabilityFeedbackBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17354,7 +17550,9 @@ export type PostObservabilityFeedbackBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17371,19 +17569,29 @@ export type PostObservabilityFeedbackBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
         /** Filter by feedback type(s) */
         feedbackType?: (string | string[]) | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         feedbackSource?: string | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         source?: string | undefined;
+        /** User who provided the feedback */
         feedbackUserId?: string | undefined;
       }
     | undefined;
@@ -17425,11 +17633,13 @@ export interface PostObservabilityFeedbackBreakdown_RouteContract {
 export type PostObservabilityFeedbackTimeseries_Body = {
   /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
   feedbackType: string;
+  /** Source of feedback (e.g., 'user', 'system', 'manual') */
   feedbackSource?: string | undefined;
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying feedback */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17449,6 +17659,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17465,15 +17676,25 @@ export type PostObservabilityFeedbackTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17490,7 +17711,9 @@ export type PostObservabilityFeedbackTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17507,22 +17730,33 @@ export type PostObservabilityFeedbackTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
         /** Filter by feedback type(s) */
         feedbackType?: (string | string[]) | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         feedbackSource?: string | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         source?: string | undefined;
+        /** User who provided the feedback */
         feedbackUserId?: string | undefined;
       }
     | undefined;
+  /** Fields to group by */
   groupBy?: string[] | undefined;
 };
 
@@ -17564,11 +17798,13 @@ export interface PostObservabilityFeedbackTimeseries_RouteContract {
 export type PostObservabilityFeedbackPercentiles_Body = {
   /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
   feedbackType: string;
+  /** Source of feedback (e.g., 'user', 'system', 'manual') */
   feedbackSource?: string | undefined;
   /** Percentile values (0-1) */
   percentiles: number[];
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
+  /** Filters for querying feedback */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17588,6 +17824,7 @@ export type PostObservabilityFeedbackPercentiles_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17604,15 +17841,25 @@ export type PostObservabilityFeedbackPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17629,7 +17876,9 @@ export type PostObservabilityFeedbackPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17646,19 +17895,29 @@ export type PostObservabilityFeedbackPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
         /** Filter by feedback type(s) */
         feedbackType?: (string | string[]) | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         feedbackSource?: string | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         source?: string | undefined;
+        /** User who provided the feedback */
         feedbackUserId?: string | undefined;
       }
     | undefined;
@@ -17723,6 +17982,7 @@ export type PostObservabilityMetricsAggregate_Body = {
         | 'resourceId'
       )
     | undefined;
+  /** Filters for querying metrics */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17742,6 +18002,7 @@ export type PostObservabilityMetricsAggregate_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17758,15 +18019,25 @@ export type PostObservabilityMetricsAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17783,7 +18054,9 @@ export type PostObservabilityMetricsAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17800,12 +18073,19 @@ export type PostObservabilityMetricsAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -17813,8 +18093,11 @@ export type PostObservabilityMetricsAggregate_Body = {
         name?: string[] | undefined;
         /** Filter by execution source */
         source?: string | undefined;
+        /** Model provider */
         provider?: string | undefined;
+        /** Model */
         model?: string | undefined;
+        /** Unit for the estimated cost (e.g., usd) */
         costUnit?: string | undefined;
         /** Exact match on label key-value pairs */
         labels?:
@@ -17824,6 +18107,7 @@ export type PostObservabilityMetricsAggregate_Body = {
           | undefined;
       }
     | undefined;
+  /** Comparison period for aggregate queries */
   comparePeriod?: ('previous_period' | 'previous_day' | 'previous_week') | undefined;
 };
 
@@ -17892,6 +18176,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
         | 'resourceId'
       )
     | undefined;
+  /** Filters for querying metrics */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17911,6 +18196,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17927,15 +18213,25 @@ export type PostObservabilityMetricsBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17952,7 +18248,9 @@ export type PostObservabilityMetricsBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17969,12 +18267,19 @@ export type PostObservabilityMetricsBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -17982,8 +18287,11 @@ export type PostObservabilityMetricsBreakdown_Body = {
         name?: string[] | undefined;
         /** Filter by execution source */
         source?: string | undefined;
+        /** Model provider */
         provider?: string | undefined;
+        /** Model */
         model?: string | undefined;
+        /** Unit for the estimated cost (e.g., usd) */
         costUnit?: string | undefined;
         /** Exact match on label key-value pairs */
         labels?:
@@ -18062,6 +18370,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
         | 'resourceId'
       )
     | undefined;
+  /** Filters for querying metrics */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -18081,6 +18390,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -18097,15 +18407,25 @@ export type PostObservabilityMetricsTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -18122,7 +18442,9 @@ export type PostObservabilityMetricsTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -18139,12 +18461,19 @@ export type PostObservabilityMetricsTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -18152,8 +18481,11 @@ export type PostObservabilityMetricsTimeseries_Body = {
         name?: string[] | undefined;
         /** Filter by execution source */
         source?: string | undefined;
+        /** Model provider */
         provider?: string | undefined;
+        /** Model */
         model?: string | undefined;
+        /** Unit for the estimated cost (e.g., usd) */
         costUnit?: string | undefined;
         /** Exact match on label key-value pairs */
         labels?:
@@ -18163,6 +18495,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
           | undefined;
       }
     | undefined;
+  /** Fields to group by */
   groupBy?: string[] | undefined;
 };
 
@@ -18212,6 +18545,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
   percentiles: number[];
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
+  /** Filters for querying metrics */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -18231,6 +18565,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -18247,15 +18582,25 @@ export type PostObservabilityMetricsPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -18272,7 +18617,9 @@ export type PostObservabilityMetricsPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -18289,12 +18636,19 @@ export type PostObservabilityMetricsPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -18302,8 +18656,11 @@ export type PostObservabilityMetricsPercentiles_Body = {
         name?: string[] | undefined;
         /** Filter by execution source */
         source?: string | undefined;
+        /** Model provider */
         provider?: string | undefined;
+        /** Model */
         model?: string | undefined;
+        /** Unit for the estimated cost (e.g., usd) */
         costUnit?: string | undefined;
         /** Exact match on label key-value pairs */
         labels?:
@@ -18351,7 +18708,9 @@ export interface PostObservabilityMetricsPercentiles_RouteContract {
 // Route: GET /observability/discovery/metric-names
 // ============================================================================
 export type GetObservabilityDiscoveryMetricNames_QueryParams = {
+  /** Filter metric names by prefix */
   prefix?: (string | undefined) | undefined;
+  /** Maximum number of names to return */
   limit?: (number | undefined) | undefined;
 };
 
@@ -18489,6 +18848,7 @@ export interface GetObservabilityDiscoveryEntityTypes_RouteContract {
 // Route: GET /observability/discovery/entity-names
 // ============================================================================
 export type GetObservabilityDiscoveryEntityNames_QueryParams = {
+  /** Optional entity type filter */
   entityType?:
     | (
         | (
@@ -18584,6 +18944,7 @@ export interface GetObservabilityDiscoveryEnvironments_RouteContract {
 // Route: GET /observability/discovery/tags
 // ============================================================================
 export type GetObservabilityDiscoveryTags_QueryParams = {
+  /** Optional entity type filter */
   entityType?:
     | (
         | (
@@ -25917,8 +26278,11 @@ export type PostStoredAgentsStoredAgentIdExport_PathParams = {
 };
 
 export type PostStoredAgentsStoredAgentIdExport_Body = {
+  /** Name of the agent */
   name?: string | undefined;
+  /** Description of the agent */
   description?: (string | undefined) | undefined;
+  /** System instructions for the agent (string or array of instruction blocks) */
   instructions?:
     | (
         | string
@@ -26004,6 +26368,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
           )[]
       )
     | undefined;
+  /** Model configuration — static value or array of conditional variants */
   model?:
     | (
         | {
@@ -26090,6 +26455,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
           }[]
       )
     | undefined;
+  /** Tool keys mapped to per-tool config — static or conditional */
   tools?:
     | (
         | (
@@ -26307,6 +26673,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Default options for generate/stream calls — static or conditional */
   defaultOptions?:
     | (
         | (
@@ -26481,6 +26848,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Workflow keys with optional per-workflow config — static or conditional */
   workflows?:
     | (
         | (
@@ -26698,6 +27066,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Agent keys with optional per-agent config — static or conditional */
   agents?:
     | (
         | (
@@ -26915,6 +27284,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Map of tool provider IDs to their tool configurations — static or conditional */
   integrationTools?:
     | (
         | (
@@ -27144,6 +27514,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolProviders?:
     | (
         | (
@@ -27257,6 +27628,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
         | (
@@ -27486,6 +27858,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Input processor graph — static or conditional */
   inputProcessors?:
     | (
         | (
@@ -28317,6 +28690,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Output processor graph — static or conditional */
   outputProcessors?:
     | (
         | (
@@ -29148,6 +29522,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Memory configuration — static, conditional, or null to disable memory */
   memory?:
     | (
         | (
@@ -29482,6 +29857,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Scorer keys with optional sampling config — static or conditional */
   scorers?:
     | (
         | (
@@ -29721,6 +30097,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Skill IDs mapped to per-skill config — static or conditional */
   skills?:
     | (
         | (
@@ -29812,6 +30189,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Workspace reference (stored ID or inline config) — static or conditional */
   workspace?:
     | (
         | (
@@ -30116,6 +30494,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Browser configuration — object config, true (apply default), false/null (disable) */
   browser?:
     | (
         | (
@@ -30265,6 +30644,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining valid request context variables for conditional rule evaluation */
   requestContextSchema?:
     | (
         | {
@@ -30314,8 +30694,11 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_PathParams = {
 };
 
 export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
+  /** Name of the agent */
   name?: string | undefined;
+  /** Description of the agent */
   description?: (string | undefined) | undefined;
+  /** System instructions for the agent (string or array of instruction blocks) */
   instructions?:
     | (
         | string
@@ -30401,6 +30784,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
           )[]
       )
     | undefined;
+  /** Model configuration — static value or array of conditional variants */
   model?:
     | (
         | {
@@ -30487,6 +30871,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
           }[]
       )
     | undefined;
+  /** Tool keys mapped to per-tool config — static or conditional */
   tools?:
     | (
         | (
@@ -30704,6 +31089,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Default options for generate/stream calls — static or conditional */
   defaultOptions?:
     | (
         | (
@@ -30878,6 +31264,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Workflow keys with optional per-workflow config — static or conditional */
   workflows?:
     | (
         | (
@@ -31095,6 +31482,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Agent keys with optional per-agent config — static or conditional */
   agents?:
     | (
         | (
@@ -31312,6 +31700,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Map of tool provider IDs to their tool configurations — static or conditional */
   integrationTools?:
     | (
         | (
@@ -31541,6 +31930,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolProviders?:
     | (
         | (
@@ -31654,6 +32044,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
         | (
@@ -31883,6 +32274,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Input processor graph — static or conditional */
   inputProcessors?:
     | (
         | (
@@ -32714,6 +33106,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Output processor graph — static or conditional */
   outputProcessors?:
     | (
         | (
@@ -33545,6 +33938,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Memory configuration — static, conditional, or null to disable memory */
   memory?:
     | (
         | (
@@ -33879,6 +34273,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Scorer keys with optional sampling config — static or conditional */
   scorers?:
     | (
         | (
@@ -34118,6 +34513,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Skill IDs mapped to per-skill config — static or conditional */
   skills?:
     | (
         | (
@@ -34209,6 +34605,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Workspace reference (stored ID or inline config) — static or conditional */
   workspace?:
     | (
         | (
@@ -34513,6 +34910,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** Browser configuration — object config, true (apply default), false/null (disable) */
   browser?:
     | (
         | (
@@ -34662,6 +35060,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining valid request context variables for conditional rule evaluation */
   requestContextSchema?:
     | (
         | {
@@ -47804,7 +48203,9 @@ export type PatchStoredAgentsStoredAgentId_PathParams = {
 };
 
 export type PatchStoredAgentsStoredAgentId_Body = {
+  /** Author identifier for multi-tenant filtering */
   authorId?: (string | undefined) | undefined;
+  /** Additional metadata for the agent */
   metadata?:
     | (
         | {
@@ -47813,9 +48214,13 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Agent visibility: private (owner/admin only) or public (any reader) */
   visibility?: (('private' | 'public') | undefined) | undefined;
+  /** Name of the agent */
   name?: string | undefined;
+  /** Description of the agent */
   description?: (string | undefined) | undefined;
+  /** System instructions for the agent (string or array of instruction blocks) */
   instructions?:
     | (
         | string
@@ -47901,6 +48306,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
           )[]
       )
     | undefined;
+  /** Model configuration — static value or array of conditional variants */
   model?:
     | (
         | {
@@ -47987,6 +48393,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
           }[]
       )
     | undefined;
+  /** Tool keys mapped to per-tool config — static or conditional */
   tools?:
     | (
         | (
@@ -48204,6 +48611,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Default options for generate/stream calls — static or conditional */
   defaultOptions?:
     | (
         | (
@@ -48378,6 +48786,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Workflow keys with optional per-workflow config — static or conditional */
   workflows?:
     | (
         | (
@@ -48595,6 +49004,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Agent keys with optional per-agent config — static or conditional */
   agents?:
     | (
         | (
@@ -48812,6 +49222,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Map of tool provider IDs to their tool configurations — static or conditional */
   integrationTools?:
     | (
         | (
@@ -49041,6 +49452,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolProviders?:
     | (
         | (
@@ -49154,6 +49566,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
         | (
@@ -49383,6 +49796,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Input processor graph — static or conditional */
   inputProcessors?:
     | (
         | (
@@ -50214,6 +50628,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Output processor graph — static or conditional */
   outputProcessors?:
     | (
         | (
@@ -51045,6 +51460,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Memory configuration — static, conditional, or null to disable memory */
   memory?:
     | (
         | (
@@ -51379,6 +51795,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Scorer keys with optional sampling config — static or conditional */
   scorers?:
     | (
         | (
@@ -51618,6 +52035,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Skill IDs mapped to per-skill config — static or conditional */
   skills?:
     | (
         | (
@@ -51709,6 +52127,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Workspace reference (stored ID or inline config) — static or conditional */
   workspace?:
     | (
         | (
@@ -52013,6 +52432,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Browser configuration — object config, true (apply default), false/null (disable) */
   browser?:
     | (
         | (
@@ -52162,6 +52582,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining valid request context variables for conditional rule evaluation */
   requestContextSchema?:
     | (
         | {
@@ -60343,8 +60764,11 @@ export type PostStoredAgentsAgentIdVersions_Response = {
   agentId: string;
   /** Sequential version number (1, 2, 3, ...) */
   versionNumber: number;
+  /** Name of the agent */
   name?: string | undefined;
+  /** Description of the agent */
   description?: (string | undefined) | undefined;
+  /** System instructions for the agent (string or array of instruction blocks) */
   instructions?:
     | (
         | string
@@ -60430,6 +60854,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
           )[]
       )
     | undefined;
+  /** Model configuration — static value or array of conditional variants */
   model?:
     | (
         | {
@@ -60516,6 +60941,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
           }[]
       )
     | undefined;
+  /** Tool keys mapped to per-tool config — static or conditional */
   tools?:
     | (
         | (
@@ -60733,6 +61159,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Default options for generate/stream calls — static or conditional */
   defaultOptions?:
     | (
         | (
@@ -60907,6 +61334,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Workflow keys with optional per-workflow config — static or conditional */
   workflows?:
     | (
         | (
@@ -61124,6 +61552,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Agent keys with optional per-agent config — static or conditional */
   agents?:
     | (
         | (
@@ -61341,6 +61770,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Map of tool provider IDs to their tool configurations — static or conditional */
   integrationTools?:
     | (
         | (
@@ -61570,6 +62000,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
         | (
@@ -61799,6 +62230,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Input processor graph — static or conditional */
   inputProcessors?:
     | (
         | (
@@ -62630,6 +63062,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Output processor graph — static or conditional */
   outputProcessors?:
     | (
         | (
@@ -63461,6 +63894,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Memory configuration — static or conditional */
   memory?:
     | (
         | (
@@ -63792,6 +64226,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Scorer keys with optional sampling config — static or conditional */
   scorers?:
     | (
         | (
@@ -64031,6 +64466,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining valid request context variables */
   requestContextSchema?:
     | (
         | {
@@ -64039,7 +64475,9 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Array of field names that changed from the previous version */
   changedFields?: (string[] | undefined) | undefined;
+  /** Optional message describing the changes */
   changeMessage?: (string | undefined) | undefined;
   /** When this version was created */
   createdAt: Date;
@@ -79326,8 +79764,11 @@ export type PatchStoredMcpClientsStoredMCPClientId_Body = {
         | undefined
       )
     | undefined;
+  /** Name of the MCP client */
   name?: string | undefined;
+  /** Description of the MCP client */
   description?: (string | undefined) | undefined;
+  /** Map of server name to server configuration */
   servers?:
     | {
         [key: string]: {
@@ -79553,7 +79994,9 @@ export type PostStoredMcpClientsMcpClientIdVersions_Response = {
   id: string;
   mcpClientId: string;
   versionNumber: number;
+  /** Name of the MCP client */
   name?: string | undefined;
+  /** Description of the MCP client */
   description?: (string | undefined) | undefined;
   servers?:
     | {
@@ -79571,7 +80014,9 @@ export type PostStoredMcpClientsMcpClientIdVersions_Response = {
         };
       }
     | undefined;
+  /** Array of field names that changed from the previous version */
   changedFields?: (string[] | undefined) | undefined;
+  /** Optional message describing the changes */
   changeMessage?: (string | undefined) | undefined;
   createdAt: Date;
 };
@@ -80396,9 +80841,13 @@ export type PatchStoredPromptBlocksStoredPromptBlockId_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Display name of the prompt block */
   name?: string | undefined;
+  /** Purpose description */
   description?: (string | undefined) | undefined;
+  /** Template content with {{variable}} interpolation */
   content?: string | undefined;
+  /** Rules for conditional inclusion */
   rules?:
     | (
         | {
@@ -80468,6 +80917,7 @@ export type PatchStoredPromptBlocksStoredPromptBlockId_Body = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining available variables for {{variableName}} interpolation and conditions */
   requestContextSchema?:
     | (
         | {
@@ -80796,9 +81246,13 @@ export type PostStoredPromptBlocksPromptBlockIdVersions_Response = {
   id: string;
   blockId: string;
   versionNumber: number;
+  /** Display name of the prompt block */
   name?: string | undefined;
+  /** Purpose description */
   description?: (string | undefined) | undefined;
+  /** Template content with {{variable}} interpolation */
   content?: string | undefined;
+  /** Rules for conditional inclusion */
   rules?:
     | (
         | {
@@ -80868,6 +81322,7 @@ export type PostStoredPromptBlocksPromptBlockIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining available variables for {{variableName}} interpolation and conditions */
   requestContextSchema?:
     | (
         | {
@@ -80876,7 +81331,9 @@ export type PostStoredPromptBlocksPromptBlockIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Array of field names that changed from the previous version */
   changedFields?: (string[] | undefined) | undefined;
+  /** Optional message describing the changes */
   changeMessage?: (string | undefined) | undefined;
   createdAt: Date;
 };
@@ -81836,8 +82293,11 @@ export type PatchStoredScorersStoredScorerId_Body = {
         | undefined
       )
     | undefined;
+  /** Name of the scorer */
   name?: string | undefined;
+  /** Description of the scorer */
   description?: (string | undefined) | undefined;
+  /** Scorer type: llm-judge for custom, or a preset type name */
   type?:
     | (
         | 'llm-judge'
@@ -81854,6 +82314,7 @@ export type PatchStoredScorersStoredScorerId_Body = {
         | 'toxicity'
       )
     | undefined;
+  /** Model configuration for LLM judge */
   model?:
     | (
         | {
@@ -81866,7 +82327,9 @@ export type PatchStoredScorersStoredScorerId_Body = {
         | undefined
       )
     | undefined;
+  /** System instructions for the judge LLM (used when type is llm-judge) */
   instructions?: (string | undefined) | undefined;
+  /** Score range configuration (used when type is llm-judge) */
   scoreRange?:
     | (
         | {
@@ -81878,6 +82341,7 @@ export type PatchStoredScorersStoredScorerId_Body = {
         | undefined
       )
     | undefined;
+  /** Serializable config options for preset scorers */
   presetConfig?:
     | (
         | {
@@ -81886,6 +82350,7 @@ export type PatchStoredScorersStoredScorerId_Body = {
         | undefined
       )
     | undefined;
+  /** Default sampling configuration */
   defaultSampling?:
     | (
         | (
@@ -82160,7 +82625,9 @@ export type PostStoredScorersScorerIdVersions_Response = {
   id: string;
   scorerDefinitionId: string;
   versionNumber: number;
+  /** Name of the scorer */
   name?: string | undefined;
+  /** Description of the scorer */
   description?: (string | undefined) | undefined;
   type?:
     | (
@@ -82222,7 +82689,9 @@ export type PostStoredScorersScorerIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Array of field names that changed from the previous version */
   changedFields?: (string[] | undefined) | undefined;
+  /** Optional message describing the changes */
   changeMessage?: (string | undefined) | undefined;
   createdAt: Date;
 };
@@ -83258,8 +83727,11 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Name of the workspace */
   name?: string | undefined;
+  /** Description of the workspace */
   description?: (string | undefined) | undefined;
+  /** Filesystem configuration */
   filesystem?:
     | (
         | {
@@ -83273,6 +83745,7 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Sandbox configuration */
   sandbox?:
     | (
         | {
@@ -83286,6 +83759,7 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Mounted filesystems keyed by mount path */
   mounts?:
     | (
         | {
@@ -83301,6 +83775,7 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Search configuration */
   search?:
     | (
         | {
@@ -83340,7 +83815,9 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Array of skill IDs */
   skills?: (string[] | undefined) | undefined;
+  /** Workspace tool configuration */
   tools?:
     | (
         | {
@@ -83365,7 +83842,9 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Whether to automatically sync the workspace */
   autoSync?: (boolean | undefined) | undefined;
+  /** Operation timeout in milliseconds */
   operationTimeout?: (number | undefined) | undefined;
 };
 
@@ -83933,12 +84412,19 @@ type PatchStoredSkillsStoredSkillId_Body_Auxiliary_4 = {
 
 export type PatchStoredSkillsStoredSkillId_Body = {
   authorId?: (string | undefined) | undefined;
+  /** Skill visibility: private (owner/admin only) or public (any reader) */
   visibility?: (('private' | 'public') | undefined) | undefined;
+  /** Name of the skill */
   name?: string | undefined;
+  /** Description of what the skill does and when to use it */
   description?: string | undefined;
+  /** Markdown instructions for the skill */
   instructions?: string | undefined;
+  /** License identifier for the skill */
   license?: (string | undefined) | undefined;
+  /** Compatibility requirements */
   compatibility?: (unknown | undefined) | undefined;
+  /** Source location of the skill */
   source?:
     | (
         | (
@@ -83961,10 +84447,15 @@ export type PatchStoredSkillsStoredSkillId_Body = {
         | undefined
       )
     | undefined;
+  /** List of reference file paths */
   references?: (string[] | undefined) | undefined;
+  /** List of script file paths */
   scripts?: (string[] | undefined) | undefined;
+  /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
+  /** Full file tree structure for the skill */
   files?: (PatchStoredSkillsStoredSkillId_Body_Auxiliary_4[] | undefined) | undefined;
+  /** Additional metadata for the skill */
   metadata?:
     | (
         | {
@@ -85385,6 +85876,21 @@ export type GetDatasetsDatasetIdItems_Response = {
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -85399,7 +85905,7 @@ export type GetDatasetsDatasetIdItems_Response = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -85697,6 +86203,21 @@ export type PostDatasetsDatasetIdItems_Body = {
         | undefined
       )
     | null;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -85713,7 +86234,7 @@ export type PostDatasetsDatasetIdItems_Body = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -85727,6 +86248,21 @@ export type PostDatasetsDatasetIdItems_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -85741,7 +86277,7 @@ export type PostDatasetsDatasetIdItems_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86031,6 +86567,21 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
           | undefined
         )
       | null;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -86045,7 +86596,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -86061,6 +86612,21 @@ export type PostDatasetsDatasetIdItemsBatch_Response = {
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -86075,7 +86641,7 @@ export type PostDatasetsDatasetIdItemsBatch_Response = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -86162,6 +86728,21 @@ export type GetDatasetsDatasetIdItemsItemId_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -86176,7 +86757,7 @@ export type GetDatasetsDatasetIdItemsItemId_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86467,6 +87048,21 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
         | undefined
       )
     | null;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -86483,7 +87079,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86497,6 +87093,21 @@ export type PatchDatasetsDatasetIdItemsItemId_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -86511,7 +87122,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86637,6 +87248,21 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -86685,6 +87311,21 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -86699,7 +87340,7 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86944,6 +87585,35 @@ export type PostDatasetsDatasetIdExperiments_Response = {
     startedAt: Date;
     completedAt: Date;
     retryCount: number;
+    /** Diagnostic receipt for item-level tool mocks */
+    toolMockReport?:
+      | (
+          | {
+              served: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              unconsumed: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              liveCalls: {
+                toolName: string;
+                args: unknown;
+              }[];
+              failure?:
+                | {
+                    code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+                    toolName: string;
+                    args: unknown;
+                  }
+                | undefined;
+            }
+          | undefined
+        )
+      | null;
     scores: {
       scorerId: string;
       scorerName: string;
@@ -87063,6 +87733,35 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Response = {
     traceId: string | null;
     status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
     tags?: (string[] | null) | undefined;
+    /** Diagnostic receipt for item-level tool mocks */
+    toolMockReport?:
+      | (
+          | {
+              served: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              unconsumed: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              liveCalls: {
+                toolName: string;
+                args: unknown;
+              }[];
+              failure?:
+                | {
+                    code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+                    toolName: string;
+                    args: unknown;
+                  }
+                | undefined;
+            }
+          | undefined
+        )
+      | null;
     createdAt: Date;
   }[];
   pagination: {
@@ -87131,6 +87830,35 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Respons
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
+  /** Diagnostic receipt for item-level tool mocks */
+  toolMockReport?:
+    | (
+        | {
+            served: {
+              mockIndex: number;
+              toolName: string;
+              args: unknown;
+            }[];
+            unconsumed: {
+              mockIndex: number;
+              toolName: string;
+              args: unknown;
+            }[];
+            liveCalls: {
+              toolName: string;
+              args: unknown;
+            }[];
+            failure?:
+              | {
+                  code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+                  toolName: string;
+                  args: unknown;
+                }
+              | undefined;
+          }
+        | undefined
+      )
+    | null;
   createdAt: Date;
 };
 
@@ -89509,6 +90237,1256 @@ export interface PostChannelsPlatformAgentIdDisconnect_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /harness
+// ============================================================================
+export type GetHarness_Response = {
+  harnesses: {
+    id: string;
+  }[];
+};
+
+export type GetHarness_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarness_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetHarness_Request;
+  response: GetHarness_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/modes
+// ============================================================================
+export type GetHarnessHarnessIdModes_PathParams = {
+  harnessId: string;
+};
+
+export type GetHarnessHarnessIdModes_Response = {
+  modes: {
+    id: string;
+    name?: string | undefined;
+  }[];
+};
+
+export type GetHarnessHarnessIdModes_Request = Simplify<
+  (GetHarnessHarnessIdModes_PathParams extends never ? {} : { params: GetHarnessHarnessIdModes_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdModes_RouteContract {
+  pathParams: GetHarnessHarnessIdModes_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessHarnessIdModes_Request;
+  response: GetHarnessHarnessIdModes_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/models
+// ============================================================================
+export type GetHarnessHarnessIdModels_PathParams = {
+  harnessId: string;
+};
+
+export type GetHarnessHarnessIdModels_Response = {
+  models: {
+    id: string;
+    provider: string;
+    modelName: string;
+    hasApiKey: boolean;
+    useCount: number;
+  }[];
+};
+
+export type GetHarnessHarnessIdModels_Request = Simplify<
+  (GetHarnessHarnessIdModels_PathParams extends never ? {} : { params: GetHarnessHarnessIdModels_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdModels_RouteContract {
+  pathParams: GetHarnessHarnessIdModels_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessHarnessIdModels_Request;
+  response: GetHarnessHarnessIdModels_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions
+// ============================================================================
+export type PostHarnessHarnessIdSessions_PathParams = {
+  harnessId: string;
+};
+
+export type PostHarnessHarnessIdSessions_Body = {
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessions_Response = {
+  harnessId: string;
+  resourceId: string;
+  threadId?: string | undefined;
+};
+
+export type PostHarnessHarnessIdSessions_Request = Simplify<
+  (PostHarnessHarnessIdSessions_PathParams extends never ? {} : { params: PostHarnessHarnessIdSessions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessions_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessions_Body
+        ? { body?: PostHarnessHarnessIdSessions_Body }
+        : { body: PostHarnessHarnessIdSessions_Body })
+>;
+
+export interface PostHarnessHarnessIdSessions_RouteContract {
+  pathParams: PostHarnessHarnessIdSessions_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessions_Body;
+  request: PostHarnessHarnessIdSessions_Request;
+  response: PostHarnessHarnessIdSessions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/sessions/:resourceId
+// ============================================================================
+export type GetHarnessHarnessIdSessionsResourceId_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetHarnessHarnessIdSessionsResourceId_Response = {
+  harnessId: string;
+  resourceId: string;
+  threadId?: string | undefined;
+  modeId: string;
+  modelId: string;
+};
+
+export type GetHarnessHarnessIdSessionsResourceId_Request = Simplify<
+  (GetHarnessHarnessIdSessionsResourceId_PathParams extends never
+    ? {}
+    : { params: GetHarnessHarnessIdSessionsResourceId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdSessionsResourceId_RouteContract {
+  pathParams: GetHarnessHarnessIdSessionsResourceId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessHarnessIdSessionsResourceId_Request;
+  response: GetHarnessHarnessIdSessionsResourceId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/sessions/:resourceId/threads
+// ============================================================================
+export type GetHarnessHarnessIdSessionsResourceIdThreads_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams = {
+  limit?: number | undefined;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdThreads_Response = {
+  threads: {
+    id: string;
+    title?: string | undefined;
+    updatedAt?: string | undefined;
+  }[];
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdThreads_Request = Simplify<
+  (GetHarnessHarnessIdSessionsResourceIdThreads_PathParams extends never
+    ? {}
+    : { params: GetHarnessHarnessIdSessionsResourceIdThreads_PathParams }) &
+    (GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams extends never
+      ? {}
+      : {} extends GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams
+        ? { query?: GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams }
+        : { query: GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdSessionsResourceIdThreads_RouteContract {
+  pathParams: GetHarnessHarnessIdSessionsResourceIdThreads_PathParams;
+  queryParams: GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams;
+  body: never;
+  request: GetHarnessHarnessIdSessionsResourceIdThreads_Request;
+  response: GetHarnessHarnessIdSessionsResourceIdThreads_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/threads
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdThreads_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdThreads_Body = {
+  title?: string | undefined;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdThreads_Response = {
+  id: string;
+  title?: string | undefined;
+  resourceId?: string | undefined;
+  createdAt?: string | undefined;
+  updatedAt?: string | undefined;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdThreads_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdThreads_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdThreads_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdThreads_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdThreads_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdThreads_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdThreads_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdThreads_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdThreads_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdThreads_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdThreads_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdThreads_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /harness/:harnessId/sessions/:resourceId/threads/:threadId
+// ============================================================================
+export type DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams = {
+  harnessId: string;
+  resourceId: string;
+  threadId: string;
+};
+
+export type DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_Response = {
+  ok: boolean;
+};
+
+export type DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_Request = Simplify<
+  (DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams extends never
+    ? {}
+    : { params: DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract {
+  pathParams: DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_Request;
+  response: DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /harness/:harnessId/sessions/:resourceId/threads/:threadId
+// ============================================================================
+export type PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams = {
+  harnessId: string;
+  resourceId: string;
+  threadId: string;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body = {
+  title: string;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Response = {
+  ok: boolean;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Request = Simplify<
+  (PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams extends never
+    ? {}
+    : { params: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body extends never
+      ? {}
+      : {} extends PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body
+        ? { body?: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body }
+        : { body: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body })
+>;
+
+export interface PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract {
+  pathParams: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_PathParams;
+  queryParams: never;
+  body: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Body;
+  request: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Request;
+  response: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/threads/clone
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdThreadsClone_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body = {
+  sourceThreadId?: string | undefined;
+  title?: string | undefined;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdThreadsClone_Response = {
+  id: string;
+  title?: string | undefined;
+  resourceId?: string | undefined;
+  createdAt?: string | undefined;
+  updatedAt?: string | undefined;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdThreadsClone_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdThreadsClone_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdThreadsClone_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdThreadsClone_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdThreadsClone_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdThreadsClone_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdThreadsClone_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdThreadsClone_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/sessions/:resourceId/threads/:threadId/messages
+// ============================================================================
+export type GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams = {
+  harnessId: string;
+  resourceId: string;
+  threadId: string;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams = {
+  limit?: number | undefined;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_Response = {
+  messages: {
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: {
+      type: string;
+      [x: string]: unknown;
+    }[];
+    createdAt?: string | undefined;
+  }[];
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_Request = Simplify<
+  (GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams extends never
+    ? {}
+    : { params: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams }) &
+    (GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams extends never
+      ? {}
+      : {} extends GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams
+        ? { query?: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams }
+        : { query: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_RouteContract {
+  pathParams: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams;
+  queryParams: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams;
+  body: never;
+  request: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_Request;
+  response: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/sessions/:resourceId/stream
+// ============================================================================
+export type GetHarnessHarnessIdSessionsResourceIdStream_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdStream_Request = Simplify<
+  (GetHarnessHarnessIdSessionsResourceIdStream_PathParams extends never
+    ? {}
+    : { params: GetHarnessHarnessIdSessionsResourceIdStream_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdSessionsResourceIdStream_RouteContract {
+  pathParams: GetHarnessHarnessIdSessionsResourceIdStream_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessHarnessIdSessionsResourceIdStream_Request;
+  response: unknown;
+  responseType: 'stream';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/messages
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdMessages_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdMessages_Body = {
+  message: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdMessages_Response = {
+  ok: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdMessages_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdMessages_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdMessages_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdMessages_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdMessages_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdMessages_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdMessages_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdMessages_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdMessages_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdMessages_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdMessages_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdMessages_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/steer
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdSteer_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdSteer_Body = {
+  message: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdSteer_Response = {
+  ok: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdSteer_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdSteer_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdSteer_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdSteer_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdSteer_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdSteer_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdSteer_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdSteer_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdSteer_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdSteer_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdSteer_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdSteer_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/follow-up
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdFollowUp_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdFollowUp_Body = {
+  message: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdFollowUp_Response = {
+  ok: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdFollowUp_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdFollowUp_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdFollowUp_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdFollowUp_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdFollowUp_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdFollowUp_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdFollowUp_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdFollowUp_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdFollowUp_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdFollowUp_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdFollowUp_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdFollowUp_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/abort
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdAbort_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdAbort_Response = {
+  ok: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdAbort_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdAbort_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdAbort_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdAbort_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdAbort_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostHarnessHarnessIdSessionsResourceIdAbort_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdAbort_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/tool-approval
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdToolApproval_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdToolApproval_Body = {
+  toolCallId: string;
+  approved: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdToolApproval_Response = {
+  ok: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdToolApproval_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdToolApproval_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdToolApproval_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdToolApproval_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdToolApproval_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdToolApproval_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdToolApproval_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdToolApproval_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdToolApproval_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdToolApproval_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdToolApproval_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdToolApproval_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/tool-suspension
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdToolSuspension_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body = {
+  toolCallId: string;
+  resumeData: any;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdToolSuspension_Response = {
+  ok: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdToolSuspension_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdToolSuspension_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdToolSuspension_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdToolSuspension_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdToolSuspension_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdToolSuspension_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdToolSuspension_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdToolSuspension_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/mode
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdMode_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdMode_Body = {
+  modeId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdMode_Response = {
+  ok: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdMode_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdMode_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdMode_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdMode_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdMode_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdMode_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdMode_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdMode_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdMode_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdMode_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdMode_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdMode_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/model
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdModel_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdModel_Body = {
+  modelId: string;
+  scope?: ('global' | 'thread') | undefined;
+  modeId?: string | undefined;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdModel_Response = {
+  ok: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdModel_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdModel_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdModel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdModel_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdModel_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdModel_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdModel_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdModel_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdModel_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdModel_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdModel_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdModel_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/thread
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdThread_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdThread_Body = {
+  threadId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdThread_Response = {
+  ok: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdThread_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdThread_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdThread_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdThread_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdThread_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdThread_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdThread_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdThread_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdThread_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdThread_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdThread_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdThread_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/notifications
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdNotifications_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdNotifications_Body = {
+  source: string;
+  kind: string;
+  summary: string;
+  priority?: ('low' | 'medium' | 'high' | 'urgent') | undefined;
+  payload?: any | undefined;
+  sourceId?: string | undefined;
+  dedupeKey?: string | undefined;
+  coalesceKey?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdNotifications_Response = {
+  accepted: boolean;
+  notificationId?: string | undefined;
+  decision?: string | undefined;
+  runId?: string | undefined;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdNotifications_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdNotifications_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdNotifications_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdNotifications_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdNotifications_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdNotifications_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdNotifications_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdNotifications_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdNotifications_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdNotifications_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdNotifications_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdNotifications_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/workspace
+// ============================================================================
+export type GetHarnessHarnessIdWorkspace_PathParams = {
+  harnessId: string;
+};
+
+export type GetHarnessHarnessIdWorkspace_Response = {
+  hasWorkspace: boolean;
+  isReady: boolean;
+};
+
+export type GetHarnessHarnessIdWorkspace_Request = Simplify<
+  (GetHarnessHarnessIdWorkspace_PathParams extends never ? {} : { params: GetHarnessHarnessIdWorkspace_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdWorkspace_RouteContract {
+  pathParams: GetHarnessHarnessIdWorkspace_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessHarnessIdWorkspace_Request;
+  response: GetHarnessHarnessIdWorkspace_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/sessions/:resourceId/om
+// ============================================================================
+export type GetHarnessHarnessIdSessionsResourceIdOm_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdOm_Response = {
+  record?: any | undefined;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdOm_Request = Simplify<
+  (GetHarnessHarnessIdSessionsResourceIdOm_PathParams extends never
+    ? {}
+    : { params: GetHarnessHarnessIdSessionsResourceIdOm_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdSessionsResourceIdOm_RouteContract {
+  pathParams: GetHarnessHarnessIdSessionsResourceIdOm_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessHarnessIdSessionsResourceIdOm_Request;
+  response: GetHarnessHarnessIdSessionsResourceIdOm_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/resource
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdResource_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdResource_Body = {
+  newResourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdResource_Response = {
+  ok: boolean;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdResource_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdResource_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdResource_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdResource_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdResource_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdResource_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdResource_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdResource_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdResource_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdResource_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdResource_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdResource_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/sessions/:resourceId/resources
+// ============================================================================
+export type GetHarnessHarnessIdSessionsResourceIdResources_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdResources_Response = {
+  resourceIds: string[];
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdResources_Request = Simplify<
+  (GetHarnessHarnessIdSessionsResourceIdResources_PathParams extends never
+    ? {}
+    : { params: GetHarnessHarnessIdSessionsResourceIdResources_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdSessionsResourceIdResources_RouteContract {
+  pathParams: GetHarnessHarnessIdSessionsResourceIdResources_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessHarnessIdSessionsResourceIdResources_Request;
+  response: GetHarnessHarnessIdSessionsResourceIdResources_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/sessions/:resourceId/goal
+// ============================================================================
+export type GetHarnessHarnessIdSessionsResourceIdGoal_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdGoal_Response = {
+  goal?:
+    | {
+        id?: string | undefined;
+        objective: string;
+        status: 'active' | 'paused' | 'done';
+        runsUsed: number;
+        maxRuns?: number | undefined;
+        judgeModelId?: string | undefined;
+        startedAt: number;
+        updatedAt: number;
+        pausedReason?: string | undefined;
+      }
+    | undefined;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdGoal_Request = Simplify<
+  (GetHarnessHarnessIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: GetHarnessHarnessIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdSessionsResourceIdGoal_RouteContract {
+  pathParams: GetHarnessHarnessIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessHarnessIdSessionsResourceIdGoal_Request;
+  response: GetHarnessHarnessIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /harness/:harnessId/sessions/:resourceId/goal
+// ============================================================================
+export type PostHarnessHarnessIdSessionsResourceIdGoal_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdGoal_Body = {
+  objective: string;
+  judgeModelId?: string | undefined;
+  maxRuns?: number | undefined;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdGoal_Response = {
+  goal?:
+    | {
+        id?: string | undefined;
+        objective: string;
+        status: 'active' | 'paused' | 'done';
+        runsUsed: number;
+        maxRuns?: number | undefined;
+        judgeModelId?: string | undefined;
+        startedAt: number;
+        updatedAt: number;
+        pausedReason?: string | undefined;
+      }
+    | undefined;
+};
+
+export type PostHarnessHarnessIdSessionsResourceIdGoal_Request = Simplify<
+  (PostHarnessHarnessIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: PostHarnessHarnessIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHarnessHarnessIdSessionsResourceIdGoal_Body extends never
+      ? {}
+      : {} extends PostHarnessHarnessIdSessionsResourceIdGoal_Body
+        ? { body?: PostHarnessHarnessIdSessionsResourceIdGoal_Body }
+        : { body: PostHarnessHarnessIdSessionsResourceIdGoal_Body })
+>;
+
+export interface PostHarnessHarnessIdSessionsResourceIdGoal_RouteContract {
+  pathParams: PostHarnessHarnessIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: PostHarnessHarnessIdSessionsResourceIdGoal_Body;
+  request: PostHarnessHarnessIdSessionsResourceIdGoal_Request;
+  response: PostHarnessHarnessIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /harness/:harnessId/sessions/:resourceId/goal
+// ============================================================================
+export type PutHarnessHarnessIdSessionsResourceIdGoal_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdGoal_Body = {
+  judgeModelId?: string | undefined;
+  maxRuns?: number | undefined;
+  status?: ('active' | 'paused' | 'done') | undefined;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdGoal_Response = {
+  goal?:
+    | {
+        id?: string | undefined;
+        objective: string;
+        status: 'active' | 'paused' | 'done';
+        runsUsed: number;
+        maxRuns?: number | undefined;
+        judgeModelId?: string | undefined;
+        startedAt: number;
+        updatedAt: number;
+        pausedReason?: string | undefined;
+      }
+    | undefined;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdGoal_Request = Simplify<
+  (PutHarnessHarnessIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: PutHarnessHarnessIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutHarnessHarnessIdSessionsResourceIdGoal_Body extends never
+      ? {}
+      : {} extends PutHarnessHarnessIdSessionsResourceIdGoal_Body
+        ? { body?: PutHarnessHarnessIdSessionsResourceIdGoal_Body }
+        : { body: PutHarnessHarnessIdSessionsResourceIdGoal_Body })
+>;
+
+export interface PutHarnessHarnessIdSessionsResourceIdGoal_RouteContract {
+  pathParams: PutHarnessHarnessIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: PutHarnessHarnessIdSessionsResourceIdGoal_Body;
+  request: PutHarnessHarnessIdSessionsResourceIdGoal_Request;
+  response: PutHarnessHarnessIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /harness/:harnessId/sessions/:resourceId/goal
+// ============================================================================
+export type DeleteHarnessHarnessIdSessionsResourceIdGoal_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type DeleteHarnessHarnessIdSessionsResourceIdGoal_Response = {
+  ok: boolean;
+};
+
+export type DeleteHarnessHarnessIdSessionsResourceIdGoal_Request = Simplify<
+  (DeleteHarnessHarnessIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: DeleteHarnessHarnessIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteHarnessHarnessIdSessionsResourceIdGoal_RouteContract {
+  pathParams: DeleteHarnessHarnessIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteHarnessHarnessIdSessionsResourceIdGoal_Request;
+  response: DeleteHarnessHarnessIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /harness/:harnessId/sessions/:resourceId/permissions
+// ============================================================================
+export type GetHarnessHarnessIdSessionsResourceIdPermissions_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdPermissions_Response = {
+  categories?:
+    | {
+        [key: string]: 'allow' | 'ask' | 'deny';
+      }
+    | undefined;
+  tools?:
+    | {
+        [key: string]: 'allow' | 'ask' | 'deny';
+      }
+    | undefined;
+};
+
+export type GetHarnessHarnessIdSessionsResourceIdPermissions_Request = Simplify<
+  (GetHarnessHarnessIdSessionsResourceIdPermissions_PathParams extends never
+    ? {}
+    : { params: GetHarnessHarnessIdSessionsResourceIdPermissions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHarnessHarnessIdSessionsResourceIdPermissions_RouteContract {
+  pathParams: GetHarnessHarnessIdSessionsResourceIdPermissions_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHarnessHarnessIdSessionsResourceIdPermissions_Request;
+  response: GetHarnessHarnessIdSessionsResourceIdPermissions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /harness/:harnessId/sessions/:resourceId/permissions/category
+// ============================================================================
+export type PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body = {
+  category: 'read' | 'edit' | 'execute' | 'mcp' | 'other';
+  policy: 'allow' | 'ask' | 'deny';
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Response = {
+  ok: boolean;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Request = Simplify<
+  (PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_PathParams extends never
+    ? {}
+    : { params: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body extends never
+      ? {}
+      : {} extends PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body
+        ? { body?: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body }
+        : { body: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body })
+>;
+
+export interface PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_RouteContract {
+  pathParams: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_PathParams;
+  queryParams: never;
+  body: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Body;
+  request: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Request;
+  response: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /harness/:harnessId/sessions/:resourceId/permissions/tool
+// ============================================================================
+export type PutHarnessHarnessIdSessionsResourceIdPermissionsTool_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body = {
+  toolName: string;
+  policy: 'allow' | 'ask' | 'deny';
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Response = {
+  ok: boolean;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Request = Simplify<
+  (PutHarnessHarnessIdSessionsResourceIdPermissionsTool_PathParams extends never
+    ? {}
+    : { params: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body extends never
+      ? {}
+      : {} extends PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body
+        ? { body?: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body }
+        : { body: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body })
+>;
+
+export interface PutHarnessHarnessIdSessionsResourceIdPermissionsTool_RouteContract {
+  pathParams: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_PathParams;
+  queryParams: never;
+  body: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Body;
+  request: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Request;
+  response: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /harness/:harnessId/sessions/:resourceId/state
+// ============================================================================
+export type PutHarnessHarnessIdSessionsResourceIdState_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdState_Body = {
+  state: {
+    [key: string]: unknown;
+  };
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdState_Response = {
+  ok: boolean;
+};
+
+export type PutHarnessHarnessIdSessionsResourceIdState_Request = Simplify<
+  (PutHarnessHarnessIdSessionsResourceIdState_PathParams extends never
+    ? {}
+    : { params: PutHarnessHarnessIdSessionsResourceIdState_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutHarnessHarnessIdSessionsResourceIdState_Body extends never
+      ? {}
+      : {} extends PutHarnessHarnessIdSessionsResourceIdState_Body
+        ? { body?: PutHarnessHarnessIdSessionsResourceIdState_Body }
+        : { body: PutHarnessHarnessIdSessionsResourceIdState_Body })
+>;
+
+export interface PutHarnessHarnessIdSessionsResourceIdState_RouteContract {
+  pathParams: PutHarnessHarnessIdSessionsResourceIdState_PathParams;
+  queryParams: never;
+  body: PutHarnessHarnessIdSessionsResourceIdState_Body;
+  request: PutHarnessHarnessIdSessionsResourceIdState_Request;
+  response: PutHarnessHarnessIdSessionsResourceIdState_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Master Route Type Map
 // ============================================================================
 export interface RouteTypes {
@@ -89864,6 +91842,40 @@ export interface RouteTypes {
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
   'POST /channels/:platform/:agentId/disconnect': PostChannelsPlatformAgentIdDisconnect_RouteContract;
+  'GET /harness': GetHarness_RouteContract;
+  'GET /harness/:harnessId/modes': GetHarnessHarnessIdModes_RouteContract;
+  'GET /harness/:harnessId/models': GetHarnessHarnessIdModels_RouteContract;
+  'POST /harness/:harnessId/sessions': PostHarnessHarnessIdSessions_RouteContract;
+  'GET /harness/:harnessId/sessions/:resourceId': GetHarnessHarnessIdSessionsResourceId_RouteContract;
+  'GET /harness/:harnessId/sessions/:resourceId/threads': GetHarnessHarnessIdSessionsResourceIdThreads_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/threads': PostHarnessHarnessIdSessionsResourceIdThreads_RouteContract;
+  'DELETE /harness/:harnessId/sessions/:resourceId/threads/:threadId': DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
+  'PUT /harness/:harnessId/sessions/:resourceId/threads/:threadId': PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/threads/clone': PostHarnessHarnessIdSessionsResourceIdThreadsClone_RouteContract;
+  'GET /harness/:harnessId/sessions/:resourceId/threads/:threadId/messages': GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
+  'GET /harness/:harnessId/sessions/:resourceId/stream': GetHarnessHarnessIdSessionsResourceIdStream_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/messages': PostHarnessHarnessIdSessionsResourceIdMessages_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/steer': PostHarnessHarnessIdSessionsResourceIdSteer_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/follow-up': PostHarnessHarnessIdSessionsResourceIdFollowUp_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/abort': PostHarnessHarnessIdSessionsResourceIdAbort_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/tool-approval': PostHarnessHarnessIdSessionsResourceIdToolApproval_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/tool-suspension': PostHarnessHarnessIdSessionsResourceIdToolSuspension_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/mode': PostHarnessHarnessIdSessionsResourceIdMode_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/model': PostHarnessHarnessIdSessionsResourceIdModel_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/thread': PostHarnessHarnessIdSessionsResourceIdThread_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/notifications': PostHarnessHarnessIdSessionsResourceIdNotifications_RouteContract;
+  'GET /harness/:harnessId/workspace': GetHarnessHarnessIdWorkspace_RouteContract;
+  'GET /harness/:harnessId/sessions/:resourceId/om': GetHarnessHarnessIdSessionsResourceIdOm_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/resource': PostHarnessHarnessIdSessionsResourceIdResource_RouteContract;
+  'GET /harness/:harnessId/sessions/:resourceId/resources': GetHarnessHarnessIdSessionsResourceIdResources_RouteContract;
+  'GET /harness/:harnessId/sessions/:resourceId/goal': GetHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
+  'POST /harness/:harnessId/sessions/:resourceId/goal': PostHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
+  'PUT /harness/:harnessId/sessions/:resourceId/goal': PutHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
+  'DELETE /harness/:harnessId/sessions/:resourceId/goal': DeleteHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
+  'GET /harness/:harnessId/sessions/:resourceId/permissions': GetHarnessHarnessIdSessionsResourceIdPermissions_RouteContract;
+  'PUT /harness/:harnessId/sessions/:resourceId/permissions/category': PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_RouteContract;
+  'PUT /harness/:harnessId/sessions/:resourceId/permissions/tool': PutHarnessHarnessIdSessionsResourceIdPermissionsTool_RouteContract;
+  'PUT /harness/:harnessId/sessions/:resourceId/state': PutHarnessHarnessIdSessionsResourceIdState_RouteContract;
 }
 
 export type RouteKey = keyof RouteTypes;
@@ -90206,6 +92218,98 @@ export interface Client {
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
+  };
+  '/harness': {
+    GET: GetHarness_RouteContract;
+  };
+  '/harness/:harnessId/models': {
+    GET: GetHarnessHarnessIdModels_RouteContract;
+  };
+  '/harness/:harnessId/modes': {
+    GET: GetHarnessHarnessIdModes_RouteContract;
+  };
+  '/harness/:harnessId/sessions': {
+    POST: PostHarnessHarnessIdSessions_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId': {
+    GET: GetHarnessHarnessIdSessionsResourceId_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/abort': {
+    POST: PostHarnessHarnessIdSessionsResourceIdAbort_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/follow-up': {
+    POST: PostHarnessHarnessIdSessionsResourceIdFollowUp_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/goal': {
+    DELETE: DeleteHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
+    GET: GetHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
+    POST: PostHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
+    PUT: PutHarnessHarnessIdSessionsResourceIdGoal_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/messages': {
+    POST: PostHarnessHarnessIdSessionsResourceIdMessages_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/mode': {
+    POST: PostHarnessHarnessIdSessionsResourceIdMode_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/model': {
+    POST: PostHarnessHarnessIdSessionsResourceIdModel_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/notifications': {
+    POST: PostHarnessHarnessIdSessionsResourceIdNotifications_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/om': {
+    GET: GetHarnessHarnessIdSessionsResourceIdOm_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/permissions': {
+    GET: GetHarnessHarnessIdSessionsResourceIdPermissions_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/permissions/category': {
+    PUT: PutHarnessHarnessIdSessionsResourceIdPermissionsCategory_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/permissions/tool': {
+    PUT: PutHarnessHarnessIdSessionsResourceIdPermissionsTool_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/resource': {
+    POST: PostHarnessHarnessIdSessionsResourceIdResource_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/resources': {
+    GET: GetHarnessHarnessIdSessionsResourceIdResources_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/state': {
+    PUT: PutHarnessHarnessIdSessionsResourceIdState_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/steer': {
+    POST: PostHarnessHarnessIdSessionsResourceIdSteer_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/stream': {
+    GET: GetHarnessHarnessIdSessionsResourceIdStream_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/thread': {
+    POST: PostHarnessHarnessIdSessionsResourceIdThread_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/threads': {
+    GET: GetHarnessHarnessIdSessionsResourceIdThreads_RouteContract;
+    POST: PostHarnessHarnessIdSessionsResourceIdThreads_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/threads/:threadId': {
+    DELETE: DeleteHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
+    PUT: PutHarnessHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/threads/:threadId/messages': {
+    GET: GetHarnessHarnessIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/threads/clone': {
+    POST: PostHarnessHarnessIdSessionsResourceIdThreadsClone_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/tool-approval': {
+    POST: PostHarnessHarnessIdSessionsResourceIdToolApproval_RouteContract;
+  };
+  '/harness/:harnessId/sessions/:resourceId/tool-suspension': {
+    POST: PostHarnessHarnessIdSessionsResourceIdToolSuspension_RouteContract;
+  };
+  '/harness/:harnessId/workspace': {
+    GET: GetHarnessHarnessIdWorkspace_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;

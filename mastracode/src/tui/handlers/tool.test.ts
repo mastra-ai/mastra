@@ -1,4 +1,4 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
@@ -17,6 +17,7 @@ function stripAnsi(text: string): string {
 
 function createToolHandlerContext(): EventHandlerContext {
   const chatContainer = new Container();
+  const session = { displayState: { get: vi.fn(() => ({ toolInputBuffers: new Map() })) } };
   const state = {
     chatContainer,
     ui: { requestRender: vi.fn() },
@@ -32,9 +33,8 @@ function createToolHandlerContext(): EventHandlerContext {
     toolOutputExpanded: false,
     hideThinkingBlock: false,
     taskToolInsertIndex: -1,
-    harness: {
-      getDisplayState: vi.fn(() => ({ toolInputBuffers: new Map() })),
-    },
+    session,
+    harness: { session },
   } as unknown as TUIState;
 
   return {
@@ -121,7 +121,7 @@ describe('task tool rendering', () => {
       ['call-1', { toolName: 'view', text: '{"path":"src/example.ts","offset":80,"limit":90}' }],
       ['call-2', { toolName: 'view', text: '{"path":"src/example.ts","offset":1,"limit":25}' }],
     ]);
-    vi.mocked(ctx.state.harness.getDisplayState).mockReturnValue({ toolInputBuffers: buffers } as any);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
     handleToolInputStart(ctx, 'call-1', 'view');
     handleToolInputDelta(ctx, 'call-1', '');
@@ -139,7 +139,7 @@ describe('task tool rendering', () => {
     const buffers = new Map([
       ['call-1', { toolName: 'submit_plan', text: '{"title":"Ship it","plan":"Build the feature"}' }],
     ]);
-    vi.mocked(ctx.state.harness.getDisplayState).mockReturnValue({ toolInputBuffers: buffers } as any);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
     handleToolInputStart(ctx, 'call-1', 'submit_plan');
     handleToolInputDelta(ctx, 'call-1', '{"title":"Ship it","plan":"Build the feature"}');
