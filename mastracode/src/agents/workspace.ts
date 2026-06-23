@@ -42,9 +42,6 @@ function buildSandboxEnv(): NodeJS.ProcessEnv {
 // 5. Global: ~/.claude/skills (user-wide Claude Code skills)
 // 6. Global: ~/.agents/skills (user-wide Agent Skills spec compatible)
 
-const claudeGlobalSkillsPath = path.join(os.homedir(), '.claude', 'skills');
-const agentSkillsGlobalPath = path.join(os.homedir(), '.agents', 'skills');
-
 // Mastra's LocalSkillSource.readdir uses Node's Dirent.isDirectory() which
 // returns false for symlinks. Tools like `npx skills add` install skills as
 // symlinks, so we need to resolve them. For each symlinked skill directory,
@@ -87,11 +84,13 @@ function collectSkillPaths(skillsDirs: string[]): string[] {
 }
 
 // Build skill paths dynamically based on configDir and projectPath
-export function buildSkillPaths(projectPath: string, configDir: string): string[] {
+export function buildSkillPaths(projectPath: string, configDir: string, homeDir = os.homedir()): string[] {
   const mastraCodeLocalSkillsPath = path.join(projectPath, configDir, 'skills');
   const claudeLocalSkillsPath = path.join(projectPath, '.claude', 'skills');
   const agentSkillsLocalPath = path.join(projectPath, '.agents', 'skills');
-  const mastraCodeGlobalSkillsPath = path.join(os.homedir(), configDir, 'skills');
+  const mastraCodeGlobalSkillsPath = path.join(homeDir, configDir, 'skills');
+  const claudeGlobalSkillsPath = path.join(homeDir, '.claude', 'skills');
+  const agentSkillsGlobalPath = path.join(homeDir, '.agents', 'skills');
 
   return collectSkillPaths([
     mastraCodeLocalSkillsPath,
@@ -130,8 +129,8 @@ function detectPackageRunner(projectPath: string): string | undefined {
 
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
-  const state = ctx?.getState();
-  const modeId = ctx?.modeId ?? 'build';
+  const state = ctx?.session.state.get();
+  const modeId = ctx?.session?.modeId ?? 'build';
   const rawProjectPath = state?.projectPath;
 
   if (!rawProjectPath) {
@@ -140,7 +139,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
 
   const projectPath = path.resolve(rawProjectPath);
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
-  const skillPaths = buildSkillPaths(projectPath, configDir);
+  const skillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];

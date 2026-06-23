@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import type { Session } from './session';
 
 function createHarness(threadLock?: { acquire: (id: string) => void; release: (id: string) => void }) {
   const agent = new Agent({
@@ -22,42 +23,48 @@ describe('Harness thread locking', () => {
   let acquire: ReturnType<typeof vi.fn>;
   let release: ReturnType<typeof vi.fn>;
   let harness: ReturnType<typeof createHarness>;
+  let session: Session;
 
   beforeEach(async () => {
     acquire = vi.fn();
     release = vi.fn();
     harness = createHarness({ acquire, release });
     await harness.init();
+    session = await harness.createSession();
+    // createSession() acquires a lock for its auto-created starter thread.
+    // Reset the spies so each test observes only its own lock activity.
+    acquire.mockClear();
+    release.mockClear();
   });
 
   describe('createThread', () => {
     it('acquires lock on the new thread', async () => {
-      const thread = await harness.createThread();
+      const thread = await session.thread.create();
       expect(acquire).toHaveBeenCalledWith(thread.id);
     });
 
     it('releases lock on previous thread when creating a new one', async () => {
-      const first = await harness.createThread();
+      const first = await session.thread.create();
       acquire.mockClear();
       release.mockClear();
 
-      const second = await harness.createThread();
+      const second = await session.thread.create();
       expect(release).toHaveBeenCalledWith(first.id);
       expect(acquire).toHaveBeenCalledWith(second.id);
     });
 
     it('acquire is called before release on createThread', async () => {
-      await harness.createThread();
+      await session.thread.create();
       const callOrder: string[] = [];
       release.mockImplementation(() => callOrder.push('release'));
       acquire.mockImplementation(() => callOrder.push('acquire'));
 
-      await harness.createThread();
+      await session.thread.create();
       expect(callOrder).toEqual(['acquire', 'release']);
     });
 
     it('re-acquires old lock if acquire on new thread fails', async () => {
-      const first = await harness.createThread();
+      const first = await session.thread.create();
       acquire.mockClear();
       release.mockClear();
 
@@ -65,7 +72,7 @@ describe('Harness thread locking', () => {
         throw new Error('Thread is locked');
       });
 
-      await expect(harness.createThread()).rejects.toThrow('Thread is locked');
+      await expect(session.thread.create()).rejects.toThrow('Thread is locked');
       // Should have attempted to re-acquire the old thread's lock
       expect(acquire).toHaveBeenCalledTimes(2); // failed new + re-acquire old
       expect(acquire).toHaveBeenLastCalledWith(first.id);
@@ -74,7 +81,7 @@ describe('Harness thread locking', () => {
     });
 
     it('waits for an async acquire promise before releasing previous thread lock', async () => {
-      await harness.createThread();
+      await session.thread.create();
       acquire.mockClear();
       release.mockClear();
 
@@ -86,7 +93,7 @@ describe('Harness thread locking', () => {
           }),
       );
 
-      const createThreadPromise = harness.createThread();
+      const createThreadPromise = session.thread.create();
       await Promise.resolve();
 
       expect(release).not.toHaveBeenCalled();
@@ -99,53 +106,53 @@ describe('Harness thread locking', () => {
 
   describe('switchThread', () => {
     it('acquires lock on the target thread', async () => {
-      const thread = await harness.createThread({ title: 'thread-a' });
-      await harness.createThread({ title: 'thread-b' });
+      const thread = await session.thread.create({ title: 'thread-a' });
+      await session.thread.create({ title: 'thread-b' });
       acquire.mockClear();
       release.mockClear();
 
-      await harness.switchThread({ threadId: thread.id });
+      await session.thread.switch({ threadId: thread.id });
       expect(acquire).toHaveBeenCalledWith(thread.id);
     });
 
     it('releases lock on previous thread', async () => {
-      const first = await harness.createThread({ title: 'first' });
-      const second = await harness.createThread({ title: 'second' });
+      const first = await session.thread.create({ title: 'first' });
+      const second = await session.thread.create({ title: 'second' });
       acquire.mockClear();
       release.mockClear();
 
-      await harness.switchThread({ threadId: first.id });
+      await session.thread.switch({ threadId: first.id });
       expect(release).toHaveBeenCalledWith(second.id);
       expect(acquire).toHaveBeenCalledWith(first.id);
     });
 
     it('acquire is called before release on switchThread', async () => {
-      const threadA = await harness.createThread({ title: 'first' });
-      await harness.createThread({ title: 'second' });
+      const threadA = await session.thread.create({ title: 'first' });
+      await session.thread.create({ title: 'second' });
       const callOrder: string[] = [];
       release.mockImplementation(() => callOrder.push('release'));
       acquire.mockImplementation(() => callOrder.push('acquire'));
 
-      await harness.switchThread({ threadId: threadA.id });
+      await session.thread.switch({ threadId: threadA.id });
       expect(callOrder).toEqual(['acquire', 'release']);
     });
 
     it('propagates errors from acquire (e.g., lock conflict)', async () => {
-      const threadA = await harness.createThread({ title: 'first' });
-      await harness.createThread({ title: 'second' });
+      const threadA = await session.thread.create({ title: 'first' });
+      await session.thread.create({ title: 'second' });
 
       acquire.mockImplementation(() => {
         throw new Error('Thread is locked by another process');
       });
 
-      await expect(harness.switchThread({ threadId: threadA.id })).rejects.toThrow(
+      await expect(session.thread.switch({ threadId: threadA.id })).rejects.toThrow(
         'Thread is locked by another process',
       );
     });
 
     it('waits for an async release promise before resolving switchThread', async () => {
-      const first = await harness.createThread({ title: 'first' });
-      await harness.createThread({ title: 'second' });
+      const first = await session.thread.create({ title: 'first' });
+      await session.thread.create({ title: 'second' });
       acquire.mockClear();
       release.mockClear();
 
@@ -158,7 +165,7 @@ describe('Harness thread locking', () => {
       );
 
       let settled = false;
-      const switchPromise = harness.switchThread({ threadId: first.id }).then(() => {
+      const switchPromise = session.thread.switch({ threadId: first.id }).then(() => {
         settled = true;
       });
       await Promise.resolve();
@@ -173,118 +180,122 @@ describe('Harness thread locking', () => {
     });
   });
 
-  describe('selectOrCreateThread', () => {
-    it('acquires lock when selecting an existing thread', async () => {
-      // Pre-create a thread so selectOrCreateThread finds it
-      await harness.createThread({ title: 'existing' });
-      acquire.mockClear();
-      release.mockClear();
-
-      // Manually set the same storage so it sees the thread
-      // Instead, create a new harness with same store
-      const store = new InMemoryStore();
+  describe('createSession thread selection', () => {
+    function freshHarness(store: InMemoryStore) {
       const agent = new Agent({
         name: 'test-agent',
         instructions: 'You are a test agent.',
         model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
       });
-      const freshHarness = new Harness({
+      return new Harness({
         id: 'test-harness',
         storage: store,
         modes: [{ id: 'default', name: 'Default', default: true, agent }],
         threadLock: { acquire, release },
       });
-      await freshHarness.init();
+    }
 
-      // Create a thread via this harness so selectOrCreateThread can find it
-      const existing = await freshHarness.createThread({ title: 'existing-thread' });
+    it('resumes and locks the most recent thread for the same resourceId', async () => {
+      const store = new InMemoryStore();
+
+      // First session creates a thread for resource "user-1".
+      const harnessA = freshHarness(store);
+      await harnessA.init();
+      const sessionA = await harnessA.createSession({ resourceId: 'user-1' });
+      const existing = sessionA.thread.getId();
+      expect(existing).toBeDefined();
+
       acquire.mockClear();
       release.mockClear();
 
-      // Create another fresh harness with the same storage
-      const freshHarness2 = new Harness({
-        id: 'test-harness',
-        storage: store,
-        modes: [{ id: 'default', name: 'Default', default: true, agent }],
-        threadLock: { acquire, release },
-      });
-      await freshHarness2.init();
+      // A second session for the same resourceId should resume that thread.
+      const harnessB = freshHarness(store);
+      await harnessB.init();
+      const sessionB = await harnessB.createSession({ resourceId: 'user-1' });
 
-      const selected = await freshHarness2.selectOrCreateThread();
-      expect(selected.id).toBe(existing.id);
-      expect(acquire).toHaveBeenCalledWith(existing.id);
+      expect(sessionB.thread.getId()).toBe(existing);
+      expect(acquire).toHaveBeenCalledWith(existing);
+    });
+
+    it('creates a fresh thread for a different resourceId', async () => {
+      const store = new InMemoryStore();
+
+      const harnessA = freshHarness(store);
+      await harnessA.init();
+      const sessionA = await harnessA.createSession({ resourceId: 'user-1' });
+      const existing = sessionA.thread.getId();
+
+      acquire.mockClear();
+
+      // A session for a different resourceId must not resume user-1's thread.
+      const harnessB = freshHarness(store);
+      await harnessB.init();
+      const sessionB = await harnessB.createSession({ resourceId: 'user-2' });
+
+      expect(sessionB.thread.getId()).not.toBe(existing);
+      expect(acquire).toHaveBeenCalledWith(sessionB.thread.getId());
     });
 
     it('acquires lock when creating a new thread (no existing threads)', async () => {
       const store = new InMemoryStore();
-      const agent = new Agent({
-        name: 'test-agent',
-        instructions: 'You are a test agent.',
-        model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
-      });
-      const freshHarness = new Harness({
-        id: 'test-harness',
-        storage: store,
-        modes: [{ id: 'default', name: 'Default', default: true, agent }],
-        threadLock: { acquire, release },
-      });
-      await freshHarness.init();
+      const harness = freshHarness(store);
+      await harness.init();
 
       acquire.mockClear();
-      const thread = await freshHarness.selectOrCreateThread();
-      expect(acquire).toHaveBeenCalledWith(thread.id);
+      const newSession = await harness.createSession();
+      expect(acquire).toHaveBeenCalledWith(newSession.thread.getId());
     });
   });
 
   describe('deleteThread', () => {
     it('deletes a thread from storage', async () => {
-      const thread = await harness.createThread({ title: 'to-delete' });
-      await harness.memory.deleteThread({ threadId: thread.id });
+      const thread = await session.thread.create({ title: 'to-delete' });
+      await session.thread.delete({ threadId: thread.id });
 
-      const threads = await harness.listThreads();
+      const threads = await session.thread.list();
       expect(threads.find(t => t.id === thread.id)).toBeUndefined();
     });
 
     it('releases lock when deleting the current thread', async () => {
-      const thread = await harness.createThread({ title: 'current' });
+      const thread = await session.thread.create({ title: 'current' });
       acquire.mockClear();
       release.mockClear();
 
-      await harness.memory.deleteThread({ threadId: thread.id });
+      await session.thread.delete({ threadId: thread.id });
       expect(release).toHaveBeenCalledWith(thread.id);
     });
 
     it('clears currentThreadId when deleting the current thread', async () => {
-      const thread = await harness.createThread({ title: 'current' });
-      expect(harness.getCurrentThreadId()).toBe(thread.id);
+      const thread = await session.thread.create({ title: 'current' });
+      expect(session.thread.getId()).toBe(thread.id);
 
-      await harness.memory.deleteThread({ threadId: thread.id });
-      expect(harness.getCurrentThreadId()).toBeNull();
+      await session.thread.delete({ threadId: thread.id });
+      expect(session.thread.getId()).toBeNull();
     });
 
     it('does not release lock when deleting a non-current thread', async () => {
-      const first = await harness.createThread({ title: 'first' });
-      const second = await harness.createThread({ title: 'second' });
+      const first = await session.thread.create({ title: 'first' });
+      const second = await session.thread.create({ title: 'second' });
       release.mockClear();
 
-      await harness.memory.deleteThread({ threadId: first.id });
+      await session.thread.delete({ threadId: first.id });
       // Should not release lock since first is not the current thread (second is)
       expect(release).not.toHaveBeenCalled();
-      expect(harness.getCurrentThreadId()).toBe(second.id);
+      expect(session.thread.getId()).toBe(second.id);
     });
 
     it('throws when thread does not exist', async () => {
-      await expect(harness.memory.deleteThread({ threadId: 'nonexistent' })).rejects.toThrow('Thread not found');
+      await expect(session.thread.delete({ threadId: 'nonexistent' })).rejects.toThrow('Thread not found');
     });
 
     it('emits thread_deleted event', async () => {
       const events: string[] = [];
-      harness.subscribe(event => {
+      session.subscribe(event => {
         if (event.type === 'thread_deleted') events.push(event.threadId);
       });
 
-      const thread = await harness.createThread({ title: 'to-delete' });
-      await harness.memory.deleteThread({ threadId: thread.id });
+      const thread = await session.thread.create({ title: 'to-delete' });
+      await session.thread.delete({ threadId: thread.id });
       expect(events).toEqual([thread.id]);
     });
   });
@@ -293,10 +304,11 @@ describe('Harness thread locking', () => {
     it('works normally without locking', async () => {
       const unlocked = createHarness(); // no threadLock
       await unlocked.init();
+      const unlockedSession = await unlocked.createSession();
 
-      const threadA = await unlocked.createThread({ title: 'test' });
-      await unlocked.createThread({ title: 'test2' });
-      await unlocked.switchThread({ threadId: threadA.id });
+      const threadA = await unlockedSession.thread.create({ title: 'test' });
+      await unlockedSession.thread.create({ title: 'test2' });
+      await unlockedSession.thread.switch({ threadId: threadA.id });
       // No errors thrown — locking is optional
     });
   });

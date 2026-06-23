@@ -1,7 +1,6 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 import {
   CodeEditor,
-  ContentBlock,
   Popover,
   PopoverTrigger,
   PopoverContent,
@@ -14,6 +13,7 @@ import {
   cn,
 } from '@mastra/playground-ui';
 import type { JsonSchema } from '@mastra/playground-ui';
+import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
 import { GripVertical, X, ExternalLink, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';

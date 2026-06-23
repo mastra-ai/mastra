@@ -1,4 +1,5 @@
-import { Avatar, toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';

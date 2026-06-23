@@ -1,4 +1,5 @@
 export { Harness } from './harness';
+export { Session } from './session';
 export {
   askUserTool,
   assignTaskIds,
@@ -26,7 +27,10 @@ export type {
   HarnessMode,
   HarnessOMConfig,
   HarnessRequestContext,
-  HarnessSession,
+  HarnessRequestSession,
+  HarnessRequestState,
+  HarnessRequestStateUpdater,
+  HarnessRequestStateUpdateResult,
   HarnessStateSchema,
   HarnessSubagent,
   HarnessSubagentHistoryEntry,

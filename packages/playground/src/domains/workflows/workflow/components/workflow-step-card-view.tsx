@@ -54,6 +54,10 @@ export const WorkflowStepCardView = ({
   displayStatus,
   hasStep,
   isNestedWorkflowStep,
+  stepKey,
+  isSelected,
+  isHovered,
+  onHoverChange,
   duration,
   date,
   isForEach,
@@ -73,10 +77,20 @@ export const WorkflowStepCardView = ({
   return (
     <div
       data-workflow-node
+      data-workflow-step-key={stepKey}
       data-workflow-step-status={displayStatus ?? 'idle'}
+      data-workflow-step-active={isSelected ? 'true' : undefined}
+      data-workflow-step-hovered={isHovered ? 'true' : undefined}
       data-testid={isNestedWorkflowStep ? 'workflow-nested-node' : 'workflow-default-node'}
+      onMouseEnter={() => onHoverChange?.(true)}
+      onMouseLeave={() => onHoverChange?.(false)}
       style={accentColor ? { borderLeftColor: accentColor } : undefined}
-      className={cn('bg-surface3 rounded-lg w-[274px] border border-border1', accentColor && 'border-l-4')}
+      className={cn(
+        'bg-surface3 rounded-lg w-[274px] border border-border1 transition-colors hover:border-neutral6',
+        accentColor && 'border-l-4',
+        isHovered && !isSelected && 'border-neutral6',
+        isSelected && 'border-accent1',
+      )}
     >
       <div className={cn('flex items-center gap-2 px-3 pt-2', !description && 'pb-2')}>
         <WorkflowCardBadges indicators={indicators} className="shrink-0" />

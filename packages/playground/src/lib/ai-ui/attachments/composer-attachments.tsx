@@ -1,9 +1,9 @@
 import type { CoreUserMessage } from '@mastra/core/llm';
-import { fileToBase64, getFileContentType } from '@mastra/playground-ui';
+import { fileToBase64, getFileContentType, isRemoteUrl } from '@mastra/playground-ui';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-export type ComposerAttachmentKind = 'image' | 'pdf' | 'text';
+export type ComposerAttachmentKind = 'image' | 'pdf' | 'video' | 'text';
 
 export interface ComposerAttachment {
   id: string;
@@ -12,7 +12,7 @@ export interface ComposerAttachment {
   name: string;
   contentType: string;
   kind: ComposerAttachmentKind;
-  /** True when this attachment was added by URL (name is a https:// link). */
+  /** True when this attachment was added by URL (name is a remote link, e.g. https://, gs://, s3://). */
   isUrl: boolean;
 }
 
@@ -30,6 +30,10 @@ const ComposerAttachmentsContext = createContext<ComposerAttachmentsContextValue
 const kindForContentType = (contentType: string): ComposerAttachmentKind => {
   if (contentType.startsWith('image/')) return 'image';
   if (contentType === 'application/pdf') return 'pdf';
+  // The 'video' kind is the file-chip media path: it forwards URLs untouched and
+  // inlines local files as a data URI. Audio shares this path so audio URLs are
+  // sent as file parts instead of falling through to the empty-text branch.
+  if (contentType.startsWith('video/') || contentType.startsWith('audio/')) return 'video';
   return 'text';
 };
 
@@ -45,7 +49,7 @@ const fileToText = (file: File): Promise<string> =>
   });
 
 const toAttachment = (file: File): ComposerAttachment => {
-  const isUrl = file.name.startsWith('https://');
+  const isUrl = isRemoteUrl(file.name);
   const contentType = file.type || 'text/plain';
   return {
     id: nextId(),
@@ -72,7 +76,28 @@ const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<Cor
   }
 
   if (att.kind === 'pdf') {
-    const data = att.isUrl ? att.name : `data:application/pdf;base64,${await fileToBase64(att.file)}`;
+    // `fileToBase64` already returns a full data URL (`data:application/pdf;base64,...`),
+    // so it must be used as-is. Prepending the prefix here produced a malformed,
+    // double-prefixed data URL that broke the PDF preview.
+    const data = att.isUrl ? att.name : await fileToBase64(att.file);
+    return {
+      role: 'user' as const,
+      content: [
+        {
+          type: 'file' as const,
+          data,
+          mimeType: att.contentType,
+          filename: att.name,
+        },
+      ],
+    };
+  }
+
+  if (att.kind === 'video') {
+    // URL attachments forward the raw URI so the model provider fetches it
+    // server-side (e.g. Google Cloud for gs://). Local files are inlined as a
+    // data URI — `fileToBase64` already returns a full `data:*;base64,...` string.
+    const data = att.isUrl ? att.name : await fileToBase64(att.file);
     return {
       role: 'user' as const,
       content: [

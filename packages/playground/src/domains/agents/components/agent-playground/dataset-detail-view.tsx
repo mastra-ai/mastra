@@ -1,8 +1,5 @@
 import {
   Button,
-  Chip,
-  Combobox,
-  CopyButton,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -10,12 +7,15 @@ import {
   DialogBody,
   ScrollArea,
   Spinner,
-  Textarea,
   Txt,
   Icon,
   toast,
   cn,
 } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';

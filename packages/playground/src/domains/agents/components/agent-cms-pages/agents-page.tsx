@@ -1,17 +1,8 @@
-import {
-  EntityName,
-  EntityDescription,
-  EntityContent,
-  Entity,
-  ScrollArea,
-  Searchbar,
-  Section,
-  SubSectionRoot,
-  Switch,
-  AgentIcon,
-  cn,
-} from '@mastra/playground-ui';
+import { EntityName, EntityDescription, EntityContent, Entity, ScrollArea, AgentIcon, cn } from '@mastra/playground-ui';
 import type { RuleGroup } from '@mastra/playground-ui';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 

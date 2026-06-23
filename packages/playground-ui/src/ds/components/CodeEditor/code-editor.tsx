@@ -236,6 +236,8 @@ export type CodeEditorProps = {
   autoFocus?: boolean;
   /** Show line numbers in the gutter (default: true) */
   lineNumbers?: boolean;
+  /** Wrap long lines within the editor viewport (default: true) */
+  lineWrapping?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
@@ -254,6 +256,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       schema,
       autoFocus,
       lineNumbers = true,
+      lineWrapping = true,
       editable,
       ...props
     },
@@ -265,11 +268,14 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const extensions = useMemo(() => {
       const exts: Extension[] = [];
 
+      if (lineWrapping) {
+        exts.push(EditorView.lineWrapping);
+      }
+
       if (language === 'json') {
         exts.push(jsonLanguage);
       } else if (language === 'markdown') {
         exts.push(markdown({ base: markdownLanguage, codeLanguages }));
-        exts.push(EditorView.lineWrapping);
       }
 
       if (highlightVariables && language === 'markdown') {
@@ -285,7 +291,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable]);
+    }, [language, highlightVariables, schema, editable, lineWrapping]);
 
     return (
       <div

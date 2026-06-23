@@ -1,4 +1,4 @@
-import { Avatar } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import type { AuthenticatedUser, CurrentUser } from '../types';
 
 export type UserAvatarProps = {

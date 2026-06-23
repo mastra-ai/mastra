@@ -1,10 +1,13 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { useMemo } from 'react';
+import { useCallback, useContext, useMemo } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import { WorkflowRunContext } from '../context/workflow-run-context';
+import type { ResumeStepParams } from './workflow-suspended-steps';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
 
 export interface SuspendedStep {
@@ -46,4 +49,28 @@ export function useWorkflowSchemas(workflow?: GetWorkflowResponse) {
       hasStateSchema: !!stateSchema,
     };
   }, [workflow?.inputSchema, workflow?.stateSchema]);
+}
+
+export function useResumeWorkflow() {
+  const { workflowId, workflow, createWorkflowRun, resumeWorkflow } = useContext(WorkflowRunContext);
+  const requestContext = useMergedRequestContext();
+
+  return useCallback(
+    async (step: ResumeStepParams) => {
+      if (!workflow) return;
+
+      const { stepId, runId: prevRunId, resumeData } = step;
+
+      const run = await createWorkflowRun({ workflowId, prevRunId });
+
+      await resumeWorkflow({
+        step: stepId,
+        runId: run.runId,
+        resumeData,
+        workflowId,
+        requestContext,
+      });
+    },
+    [workflowId, workflow, createWorkflowRun, resumeWorkflow, requestContext],
+  );
 }

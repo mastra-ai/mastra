@@ -26,6 +26,8 @@ import { VercelMicroVMProcessManager } from './process-manager';
 
 const LOG_PREFIX = '[VercelMicroVMSandbox]';
 
+let deprecatedNameWarned = false;
+
 /** Vercel Sandbox runtimes (default `node24`). */
 export type VercelMicroVMRuntime = 'node24' | 'node22' | 'node26' | 'python3.13';
 
@@ -97,6 +99,8 @@ export interface VercelMicroVMSandboxOptions extends Omit<MastraSandboxOptions, 
  *
  * const result = await workspace.sandbox.executeCommand('node', ['--version']);
  * ```
+ *
+ * @deprecated Will be renamed to `VercelSandbox` in a future release.
  */
 export class VercelMicroVMSandbox extends MastraSandbox {
   readonly id: string;
@@ -127,6 +131,11 @@ export class VercelMicroVMSandbox extends MastraSandbox {
       name: 'VercelMicroVMSandbox',
       processes: new VercelMicroVMProcessManager({ env: options.env ?? {} }),
     });
+
+    if (!deprecatedNameWarned) {
+      deprecatedNameWarned = true;
+      console.warn('VercelMicroVMSandbox will be renamed to VercelSandbox in a future release.');
+    }
 
     this.id = options.id ?? `vercel-microvm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this._sandboxName = options.sandboxName;

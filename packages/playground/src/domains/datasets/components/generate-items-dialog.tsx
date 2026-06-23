@@ -1,6 +1,5 @@
 import {
   Button,
-  Checkbox,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -11,11 +10,12 @@ import {
   Label,
   ScrollArea,
   Spinner,
-  Textarea,
   Txt,
   Icon,
   toast,
 } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Sparkles, Trash2, Plus } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';
 
