@@ -408,5 +408,4 @@ describe('Heartbeats handlers', () => {
       ).rejects.toThrow();
     });
   });
-
 });
