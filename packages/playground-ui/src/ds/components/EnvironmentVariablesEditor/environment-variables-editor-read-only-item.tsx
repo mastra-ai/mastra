@@ -58,11 +58,9 @@ export function EnvironmentVariablesEditorReadOnlyItem({
         </DataList.Cell>
       )}
 
-      <DataList.Cell height="compact" className="min-w-0">
-        <div className="min-w-0">
-          <span className="truncate font-mono text-ui-sm text-neutral6">{name}</span>
-        </div>
-      </DataList.Cell>
+      <DataList.MonoCell height="compact" className="text-ui-sm text-neutral6">
+        {name}
+      </DataList.MonoCell>
 
       <DataList.Cell height="compact" className="min-w-0">
         {value !== undefined && (
@@ -122,4 +120,3 @@ function getCopyableReadOnlyValue(value: ReactNode) {
 
   return undefined;
 }
-

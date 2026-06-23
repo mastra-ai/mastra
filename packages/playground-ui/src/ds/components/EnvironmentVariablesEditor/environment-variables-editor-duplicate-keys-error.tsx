@@ -13,4 +13,3 @@ export function EnvironmentVariablesEditorDuplicateKeysError({
 
   return <EnvironmentVariablesEditorMessages error={message} {...props} />;
 }
-

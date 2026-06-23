@@ -48,4 +48,3 @@ export function EnvironmentVariablesEditorReadOnlyList({
     </EnvironmentVariablesEditorReadOnlyListContext.Provider>
   );
 }
-

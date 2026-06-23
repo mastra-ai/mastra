@@ -7,4 +7,3 @@ export function EnvironmentVariablesEditorReadOnlyEmpty({
 }: EnvironmentVariablesEditorReadOnlyEmptyProps) {
   return <DataList.NoMatch message={message} {...props} />;
 }
-

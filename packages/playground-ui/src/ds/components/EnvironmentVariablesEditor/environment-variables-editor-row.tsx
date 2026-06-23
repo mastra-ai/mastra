@@ -20,12 +20,15 @@ export function EnvironmentVariablesEditorRow({
   className,
   ...props
 }: EnvironmentVariablesEditorRowProps) {
-  const { editor, disabled, readOnly, rowErrors: contextRowErrors } =
-    useEnvironmentVariablesEditorContext('EnvironmentVariablesEditor.Row');
+  const {
+    editor,
+    disabled,
+    readOnly,
+    rowErrors: contextRowErrors,
+  } = useEnvironmentVariablesEditorContext('EnvironmentVariablesEditor.Row');
   const isDisabled = disabled || readOnly;
   const resolvedRowErrors = rowErrors ?? contextRowErrors;
-  const keyError =
-    resolvedRowErrors?.[index]?.key ?? (editor.rowHasDuplicateKey(index) ? duplicateKeyMessage : null);
+  const keyError = resolvedRowErrors?.[index]?.key ?? (editor.rowHasDuplicateKey(index) ? duplicateKeyMessage : null);
   const valueError = resolvedRowErrors?.[index]?.value;
 
   function handlePaste(text: string) {
@@ -114,4 +117,3 @@ export function EnvironmentVariablesEditorRow({
     </div>
   );
 }
-

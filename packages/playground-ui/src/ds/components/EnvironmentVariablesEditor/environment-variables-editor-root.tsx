@@ -46,4 +46,3 @@ export function EnvironmentVariablesEditorRoot<TRow extends EnvironmentVariableE
     </EnvironmentVariablesEditorContext.Provider>
   );
 }
-

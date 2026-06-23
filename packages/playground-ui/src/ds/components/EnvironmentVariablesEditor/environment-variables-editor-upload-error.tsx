@@ -9,4 +9,3 @@ export function EnvironmentVariablesEditorUploadError(props: EnvironmentVariable
 
   return <EnvironmentVariablesEditorMessages error={editor.uploadError} {...props} />;
 }
-

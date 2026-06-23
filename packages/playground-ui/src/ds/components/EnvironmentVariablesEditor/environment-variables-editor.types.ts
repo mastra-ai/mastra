@@ -49,14 +49,12 @@ export interface EnvironmentVariablesEditorRowLabels {
 }
 
 export interface EnvironmentVariablesEditorRowsProps
-  extends ComponentPropsWithoutRef<'div'>,
-    EnvironmentVariablesEditorRowLabels {
+  extends ComponentPropsWithoutRef<'div'>, EnvironmentVariablesEditorRowLabels {
   rowErrors?: EnvironmentVariablesEditorRowErrors;
 }
 
 export interface EnvironmentVariablesEditorRowProps
-  extends Omit<ComponentPropsWithoutRef<'div'>, 'children'>,
-    EnvironmentVariablesEditorRowLabels {
+  extends Omit<ComponentPropsWithoutRef<'div'>, 'children'>, EnvironmentVariablesEditorRowLabels {
   row: EnvironmentVariableEntry;
   index: number;
   rowErrors?: EnvironmentVariablesEditorRowErrors;

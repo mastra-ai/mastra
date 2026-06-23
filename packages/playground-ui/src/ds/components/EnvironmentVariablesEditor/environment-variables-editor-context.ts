@@ -44,4 +44,3 @@ export function useEnvironmentVariablesEditorContext(componentName: string) {
 
   return context;
 }
-

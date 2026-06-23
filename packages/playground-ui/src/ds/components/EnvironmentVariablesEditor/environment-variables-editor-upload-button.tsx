@@ -14,9 +14,11 @@ export function EnvironmentVariablesEditorUploadButton({
   size = 'sm',
   ...props
 }: EnvironmentVariablesEditorUploadButtonProps) {
-  const { editor, disabled: contextDisabled, readOnly } = useEnvironmentVariablesEditorContext(
-    'EnvironmentVariablesEditor.UploadButton',
-  );
+  const {
+    editor,
+    disabled: contextDisabled,
+    readOnly,
+  } = useEnvironmentVariablesEditorContext('EnvironmentVariablesEditor.UploadButton');
   const isDisabled = contextDisabled || disabled;
 
   if (readOnly) return null;
@@ -51,4 +53,3 @@ export function EnvironmentVariablesEditorUploadButton({
     </>
   );
 }
-
