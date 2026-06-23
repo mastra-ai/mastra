@@ -73,9 +73,9 @@ const renderAutosave = ({
 // inside act instead of racing it with a bare sleep.
 const waitForCapabilitiesSettled = (queryClient: QueryClient) =>
   waitFor(() =>
-    expect(
-      queryClient.getQueryCache().findAll({ queryKey: ['auth', 'capabilities'] })[0]?.state.status,
-    ).toBe('success'),
+    expect(queryClient.getQueryCache().findAll({ queryKey: ['auth', 'capabilities'] })[0]?.state.status).toBe(
+      'success',
+    ),
   );
 
 describe('useAutosaveAgent', () => {
