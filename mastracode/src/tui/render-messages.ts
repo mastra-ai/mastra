@@ -202,7 +202,12 @@ export function addPendingUserMessage(
   }
 
   const component = new PendingUserMessageComponent(text, images?.length ?? 0);
-  state.pendingSignalMessageComponentsById.set(messageId, { component, text, isInterjection: options?.isInterjection });
+  state.pendingSignalMessageComponentsById.set(messageId, {
+    component,
+    text,
+    images,
+    isInterjection: options?.isInterjection,
+  });
   state.chatContainer.addChild(component);
   reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
@@ -212,7 +217,7 @@ export function confirmPendingUserMessage(state: TUIState, messageId: string, te
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  if (state.streamingComponent && state.harness.session.displayState.get().isRunning) {
+  if (state.streamingComponent && state.session.displayState.get().isRunning) {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   }
@@ -224,8 +229,10 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
+  const imageCount = pending.images?.length ?? 0;
+  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   const label = getPendingUserMessageLabel(pending.isInterjection);
-  const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+  const confirmed = new UserMessageComponent(prefix + text, getMarkdownTheme(), {
     ...(label ? { label } : {}),
   });
   const idx = state.chatContainer.children.indexOf(pending.component as never);
@@ -245,6 +252,15 @@ export function removePendingUserMessage(state: TUIState, messageId: string): vo
   if (!pending) return;
   state.chatContainer.removeChild(pending.component as never);
   state.pendingSignalMessageComponentsById.delete(messageId);
+  state.ui.requestRender();
+}
+
+export function removeUserMessage(state: TUIState, messageId: string): void {
+  const component = state.messageComponentsById.get(messageId);
+  if (!component) return;
+  state.chatContainer.removeChild(component as never);
+  state.messageComponentsById.delete(messageId);
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 
@@ -553,7 +569,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     state.messageComponentsById.set(message.id, userComponent);
 
-    if (state.streamingComponent && state.harness.session.displayState.get().isRunning) {
+    if (state.streamingComponent && state.session.displayState.get().isRunning) {
       state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
       reconcileChatBoundarySpacers(state.chatContainer);
@@ -723,10 +739,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             // Parse embedded metadata for model ID, duration, tool calls
             const meta = rawResult ? parseSubagentMeta(rawResult) : null;
             const resultText = meta?.text ?? rawResult;
-            const currentModelId =
-              typeof (state.harness as { getFullModelId?: () => string }).getFullModelId === 'function'
-                ? (state.harness as { getFullModelId: () => string }).getFullModelId()
-                : undefined;
+            const currentModelId = state.session.model.get() || undefined;
             const modelId = meta?.modelId ?? subArgs?.modelId ?? (subArgs?.forked ? currentModelId : undefined);
             const durationMs = meta?.durationMs ?? 0;
 
@@ -950,7 +963,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
         // Keep the reconstructed task list local to display state in that case.
       }
     }
-    state.harness.session.displayState.restoreTasks(previousTasksAcc);
+    state.session.displayState.restoreTasks(previousTasksAcc);
   }
 
   reconcileChatBoundarySpacers(state.chatContainer);

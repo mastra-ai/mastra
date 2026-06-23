@@ -101,6 +101,16 @@ afterEach(() => {
   }
 });
 
+async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const start = Date.now();
+  while (!condition()) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('Timed out waiting for condition');
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
 async function captureProcessOutput<T>(fn: () => Promise<T>) {
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
@@ -188,14 +198,14 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Say hello' });
+    await session.sendMessage({ content: 'Say hello' });
 
     const types = events.map(e => e.type);
     expect(types).toContain('agent_start');
@@ -229,19 +239,90 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Read test.txt' });
+    await session.sendMessage({ content: 'Read test.txt' });
 
     const types = events.map(e => e.type);
     expect(types).toContain('tool_start');
     expect(types).toContain('tool_end');
     expect(mockExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it('resumes same-run-id suspended tools through the subscribed thread stream exactly once', async () => {
+    const confirmTool = createTool({
+      id: 'confirmAction',
+      description: 'Confirm an action',
+      inputSchema: z.object({ action: z.string() }),
+      execute: async (input: { action: string }, context?: any) => {
+        const resumeData = context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+        if (resumeData) {
+          return { result: `${input.action} confirmed`, resumeData };
+        }
+
+        const suspend = context?.suspend ?? context?.agent?.suspend;
+        if (!suspend) throw new Error('suspend not available in context');
+        await suspend({ action: input.action });
+        return { result: `${input.action} pending` };
+      },
+    });
+
+    let callCount = 0;
+    const harness = createHarnessWithAgent({
+      doStream: async () => {
+        callCount++;
+        return {
+          stream:
+            callCount === 1
+              ? createToolCallStream('confirmAction', '{"action":"deploy"}')
+              : createTextStream('Deployment confirmed.'),
+        };
+      },
+      tools: { confirmAction: confirmTool },
+    });
+
+    await harness.init();
+    const session = await harness.createSession();
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    await session.sendMessage({ content: 'Deploy to production' });
+
+    expect(events.some(e => e.type === 'tool_suspended')).toBe(true);
+    const suspendedEndCount = events.filter(e => e.type === 'agent_end' && (e as any).reason === 'suspended').length;
+    expect(suspendedEndCount).toBe(1);
+
+    const resumeStartIndex = events.length;
+    // Generic tool resume reuses the suspended runId and resumes from tool-result
+    // chunks, not a fresh start chunk. The subscribed thread stream must own that
+    // output; otherwise this waits forever or produces duplicate resume events.
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await waitFor(() =>
+      events.slice(resumeStartIndex).some(e => e.type === 'agent_end' && (e as any).reason === 'complete'),
+    );
+
+    const resumeEvents = events.slice(resumeStartIndex);
+    expect(callCount).toBe(2);
+    expect(resumeEvents.filter(e => e.type === 'agent_start')).toHaveLength(1);
+    expect(resumeEvents.filter(e => e.type === 'agent_end' && (e as any).reason === 'complete')).toHaveLength(1);
+    expect(
+      resumeEvents.some(e =>
+        e.type === 'message_update'
+          ? (e as any).message?.content?.some(
+              (part: any) => part.type === 'text' && part.text?.includes('Deployment confirmed'),
+            )
+          : false,
+      ),
+    ).toBe(true);
+    expect(resumeEvents.some(e => e.type === 'error')).toBe(false);
   });
 
   it('streams message_update events with text content', async () => {
@@ -250,14 +331,14 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Do something' });
+    await session.sendMessage({ content: 'Do something' });
 
     const messageUpdates = events.filter(e => e.type === 'message_update');
     expect(messageUpdates.length).toBeGreaterThan(0);
@@ -292,15 +373,15 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
     // Fire-and-forget (same pattern as headless mode)
-    const sendPromise = harness.sendMessage({ content: 'Do something slow' });
+    const sendPromise = session.sendMessage({ content: 'Do something slow' });
 
     // Wait for agent_start, then abort
     await new Promise<void>(resolve => {
@@ -314,7 +395,7 @@ describe('headless mode — event-driven auto-resolution', () => {
       check();
     });
 
-    harness.abort();
+    session.abort();
 
     // sendMessage should resolve (possibly with error)
     await sendPromise.catch(() => {});
@@ -362,14 +443,14 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Check the nested instructions' });
+    await session.sendMessage({ content: 'Check the nested instructions' });
 
     expect(mockExecute).toHaveBeenCalledTimes(1);
 
@@ -465,14 +546,14 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const {
       result: exitCode,
       stdout,
       stderr,
     } = await captureProcessOutput(() =>
-      runHeadless(harness, {
+      runHeadless(harness, session, {
         prompt: 'Hello',
         format: 'default',
         outputFormat: 'text',
@@ -492,7 +573,7 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const {
       result: exitCode,
@@ -500,7 +581,7 @@ describe('headless mode — --output-format contracts', () => {
       stderr,
       stdoutChunks,
     } = await captureProcessOutput(() =>
-      runHeadless(harness, {
+      runHeadless(harness, session, {
         prompt: 'Hello',
         format: 'default',
         outputFormat: 'json',
@@ -530,14 +611,14 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const {
       result: exitCode,
       stdout,
       stderr,
     } = await captureProcessOutput(() =>
-      runHeadless(harness, {
+      runHeadless(harness, session, {
         prompt: 'Hello',
         format: 'default',
         outputFormat: 'stream-json',
@@ -577,24 +658,26 @@ describe('headless mode — --output-format contracts', () => {
       message: 'Browser state changed',
     };
     const harness = {
-      subscribe: vi.fn((next: (event: HarnessEvent) => void) => {
-        listener = next;
-        return () => {};
-      }),
-      sendMessage: vi.fn(async () => {
-        listener?.({ type: 'agent_start', runId: 'run-state' } as HarnessEvent);
-        listener?.({
-          type: 'message_end',
-          message: {
-            id: 'assistant-state-message',
-            role: 'assistant',
-            content: [stateSignalPart, { type: 'text', text: 'Observed browser state.' }],
-            createdAt: new Date(0),
-          },
-        } as HarnessEvent);
-        listener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
-      }),
-      session: { thread: { getId: vi.fn(() => 'thread-state') } },
+      session: {
+        sendMessage: vi.fn(async () => {
+          listener?.({ type: 'agent_start', runId: 'run-state' } as HarnessEvent);
+          listener?.({
+            type: 'message_end',
+            message: {
+              id: 'assistant-state-message',
+              role: 'assistant',
+              content: [stateSignalPart, { type: 'text', text: 'Observed browser state.' }],
+              createdAt: new Date(0),
+            },
+          } as HarnessEvent);
+          listener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
+        }),
+        subscribe: vi.fn((next: (event: HarnessEvent) => void) => {
+          listener = next;
+          return () => {};
+        }),
+        thread: { getId: vi.fn(() => 'thread-state') },
+      },
     } as unknown as Harness<Record<string, unknown>>;
 
     const {
@@ -602,7 +685,7 @@ describe('headless mode — --output-format contracts', () => {
       stdout,
       stderr,
     } = await captureProcessOutput(() =>
-      runHeadless(harness, {
+      runHeadless(harness as unknown as Harness<Record<string, unknown>>, (harness as any).session as any, {
         prompt: 'Describe the browser state',
         format: 'default',
         outputFormat: 'stream-json',
@@ -647,12 +730,12 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -666,7 +749,7 @@ describe('headless mode — --model flag', () => {
     expect(modelChanged.modelId).toBe('anthropic/claude-haiku-4-5');
 
     // Verify the harness state was updated
-    expect(harness.session.model.get()).toBe('anthropic/claude-haiku-4-5');
+    expect(session.model.get()).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('returns exit code 1 for an unknown model', async () => {
@@ -678,7 +761,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -688,9 +771,9 @@ describe('headless mode — --model flag', () => {
     });
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -720,7 +803,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -730,9 +813,9 @@ describe('headless mode — --model flag', () => {
     });
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -754,11 +837,11 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'json',
       continue_: false,
@@ -793,11 +876,11 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'json',
       continue_: false,
@@ -826,7 +909,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -835,7 +918,7 @@ describe('headless mode — --model flag', () => {
       return origWrite(...(args as Parameters<typeof origWrite>));
     });
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -847,7 +930,7 @@ describe('headless mode — --model flag', () => {
 
     expect(exitCode).toBe(0);
     expect(stderrCalls.join('')).toContain('--model overrides --mode');
-    expect(harness.session.model.get()).toBe('anthropic/claude-haiku-4-5');
+    expect(session.model.get()).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('emits structured warning in JSON mode when --model and --mode are both provided', async () => {
@@ -859,11 +942,11 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'json',
       continue_: false,
@@ -887,12 +970,12 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -913,13 +996,14 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(
       harness,
+      session,
       {
         prompt: 'Hello',
         format: 'default',
@@ -930,7 +1014,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     );
 
     expect(exitCode).toBe(0);
-    expect(harness.session.model.get()).toBe('cerebras/zai-glm-4.7');
+    expect(session.model.get()).toBe('cerebras/zai-glm-4.7');
   });
 
   it('--model still overrides effectiveDefaults', async () => {
@@ -943,10 +1027,11 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const exitCode = await runHeadless(
       harness,
+      session,
       {
         prompt: 'Hello',
         format: 'default',
@@ -959,7 +1044,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
 
     expect(exitCode).toBe(0);
     // --model should win over effectiveDefaults
-    expect(harness.session.model.get()).toBe('anthropic/claude-haiku-4-5');
+    expect(session.model.get()).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('--mode returns exit code 1 when resolved model is not available', async () => {
@@ -969,7 +1054,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -980,6 +1065,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
 
     const exitCode = await runHeadless(
       harness,
+      session,
       {
         prompt: 'Hello',
         format: 'default',
@@ -1012,7 +1098,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1023,6 +1109,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
 
     const exitCode = await runHeadless(
       harness,
+      session,
       {
         prompt: 'Hello',
         format: 'default',
@@ -1046,7 +1133,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    await harness.selectOrCreateThread();
+    const session = await harness.createSession();
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1056,10 +1143,10 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
     // No effectiveDefaults passed — should warn, not error
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -1082,12 +1169,13 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const thread = await harness.createThread({ title: 'target-thread' });
+    const session = await harness.createSession();
+    const thread = await session.thread.create({ title: 'target-thread' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -1101,7 +1189,7 @@ describe('headless mode — thread control', () => {
     await new Promise(resolve => setTimeout(resolve, 300));
 
     // Verify the targeted thread was actually used (updatedAt advanced)
-    const threads = await harness.session.thread.list();
+    const threads = await session.thread.list();
     const targeted = threads.find(t => t.id === thread.id);
     expect(targeted).toBeDefined();
     expect(targeted!.updatedAt.getTime()).toBeGreaterThan(updatedAtBefore);
@@ -1113,12 +1201,13 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const thread = await harness.createThread({ title: 'my-feature' });
+    const session = await harness.createSession();
+    const thread = await session.thread.create({ title: 'my-feature' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -1132,7 +1221,7 @@ describe('headless mode — thread control', () => {
     await new Promise(resolve => setTimeout(resolve, 300));
 
     // Verify the titled thread was actually used
-    const threads = await harness.session.thread.list();
+    const threads = await session.thread.list();
     const targeted = threads.find(t => t.id === thread.id);
     expect(targeted).toBeDefined();
     expect(targeted!.updatedAt.getTime()).toBeGreaterThan(updatedAtBefore);
@@ -1144,8 +1233,9 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession();
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -1162,9 +1252,10 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    await harness.createThread({ title: 'original-title' });
+    const session = await harness.createSession();
+    await session.thread.create({ title: 'original-title' });
 
-    const exitCode = await runHeadless(harness, {
+    const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: true,
@@ -1174,7 +1265,7 @@ describe('headless mode — thread control', () => {
 
     expect(exitCode).toBe(0);
 
-    const threads = await harness.session.thread.list();
+    const threads = await session.thread.list();
     const titled = threads.find(t => t.title === 'my-new-title');
     expect(titled).toBeDefined();
   });
@@ -1185,15 +1276,16 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    harness.setResourceId({ resourceId: 'resource-a' });
-    const alphaOlderThread = await harness.createThread({ title: 'older-alpha' });
-    harness.setResourceId({ resourceId: 'resource-b' });
-    const betaThread = await harness.createThread({ title: 'shared-title' });
+    const session = await harness.createSession();
+    harness.setResourceId(session, { resourceId: 'resource-a' });
+    const alphaOlderThread = await session.thread.create({ title: 'older-alpha' });
+    harness.setResourceId(session, { resourceId: 'resource-b' });
+    const betaThread = await session.thread.create({ title: 'shared-title' });
     await new Promise(resolve => setTimeout(resolve, 5));
-    harness.setResourceId({ resourceId: 'resource-a' });
-    const alphaThread = await harness.createThread({ title: 'shared-title' });
+    harness.setResourceId(session, { resourceId: 'resource-a' });
+    const alphaThread = await session.thread.create({ title: 'shared-title' });
 
-    let exitCode = await runHeadless(harness, {
+    let exitCode = await runHeadless(harness, session, {
       prompt: 'Hello beta',
       format: 'default',
       continue_: false,
@@ -1203,10 +1295,10 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(harness.session.identity.getResourceId()).toBe('resource-b');
-    expect(harness.session.thread.getId()).toBe(betaThread.id);
+    expect(session.identity.getResourceId()).toBe('resource-b');
+    expect(session.thread.getId()).toBe(betaThread.id);
 
-    exitCode = await runHeadless(harness, {
+    exitCode = await runHeadless(harness, session, {
       prompt: 'Hello alpha',
       format: 'default',
       continue_: true,
@@ -1215,9 +1307,9 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(harness.session.identity.getResourceId()).toBe('resource-a');
-    expect(harness.session.thread.getId()).toBe(alphaThread.id);
-    expect(harness.session.thread.getId()).not.toBe(alphaOlderThread.id);
+    expect(session.identity.getResourceId()).toBe('resource-a');
+    expect(session.thread.getId()).toBe(alphaThread.id);
+    expect(session.thread.getId()).not.toBe(alphaOlderThread.id);
   });
 
   it('emits thread_cloned event with new thread ID when cloning a named thread', async () => {
@@ -1262,7 +1354,8 @@ describe('headless mode — thread control', () => {
     (harness as any).getAgentForMode = () => registeredAgent;
 
     await harness.init();
-    const sourceThread = await harness.createThread({ title: 'source-thread' });
+    const session = await harness.createSession();
+    const sourceThread = await session.thread.create({ title: 'source-thread' });
 
     const events: any[] = [];
     const originalWrite = process.stdout.write;
@@ -1276,7 +1369,7 @@ describe('headless mode — thread control', () => {
     }) as any;
 
     try {
-      const exitCode = await runHeadless(harness, {
+      const exitCode = await runHeadless(harness, session, {
         prompt: 'Hello',
         format: 'json',
         continue_: false,

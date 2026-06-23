@@ -30,9 +30,8 @@ function createState(): TUIState {
     messageComponentsById: new Map(),
     pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],
-    harness: {
-      session: { displayState: { get: () => ({ isRunning: false }) } },
-    },
+    session: { displayState: { get: () => ({ isRunning: false }) } },
+    harness: { session: { displayState: { get: () => ({ isRunning: false }) } } },
   } as unknown as TUIState;
 }
 
@@ -61,6 +60,20 @@ function createReminderMessage(
 }
 
 describe('addUserMessage', () => {
+  it('replaces pending active steering only when the subscription echoes the user message', () => {
+    const state = createState();
+    addPendingUserMessage(state, 'signal-1', 'steer me', undefined, { isInterjection: true });
+    const pendingComponent = state.chatContainer.children[0];
+
+    addUserMessage(state, createUserMessage('steer me', 'signal-1'));
+
+    expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(false);
+    const rendered = state.messageComponentsById.get('signal-1');
+    expect(rendered).toBeInstanceOf(UserMessageComponent);
+    expect(rendered).not.toBe(pendingComponent);
+    expect(rendered?.render(80).join('\n')).toContain('steer');
+  });
+
   it('renders state signals as inline state components', () => {
     const state = createState();
 
@@ -633,12 +646,10 @@ describe('renderExistingMessages subagents', () => {
     state.session = {
       ...state.session,
       thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+      model: { get: () => 'openai/gpt-5.5' },
     } as unknown as TUIState['session'];
     state.harness = {
-      session: {
-        displayState: { get: () => ({ isRunning: false }) },
-      },
-      getFullModelId: () => 'openai/gpt-5.5',
+      session: state.session,
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);

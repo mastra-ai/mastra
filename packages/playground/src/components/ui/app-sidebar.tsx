@@ -1,6 +1,7 @@
 import { LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playground-ui';
 import type { NavLink } from '@mastra/playground-ui';
-import { Wrench } from 'lucide-react';
+import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
+import { Search, Wrench } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
@@ -11,6 +12,7 @@ import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-
 import { isAuthenticated } from '@/domains/auth/types';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { useNavigationCommand } from '@/lib/command';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
@@ -37,7 +39,9 @@ function getIsLinkActive(item: NavItem, pathname: string): boolean {
 
 export function AppSidebar() {
   const { Link } = useLinkComponent();
-  const { state, isMobile } = useMainSidebar();
+  const { state, isMobile, setOpenMobile } = useMainSidebar();
+  const { setOpen: setNavigationCommandOpen } = useNavigationCommand({ enableShortcut: false });
+  const commandShortcutLabel = useKeyboardShortcutLabel('K');
 
   const location = useLocation();
   const pathname = location.pathname;
@@ -51,6 +55,11 @@ export function AppSidebar() {
   const cmsOnlyLinks = new Set(['/prompts']);
   const { isVisible: isAgentBuilderVisible } = useAgentBuilderSidebarVisibility();
   const isAgentBuilderActive = pathname === '/agent-builder' || pathname.startsWith('/agent-builder/');
+
+  const openNavigationCommand = () => {
+    if (isMobile) setOpenMobile(false);
+    setNavigationCommandOpen(true);
+  };
 
   const filterItem = (item: NavItem) => {
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
@@ -78,9 +87,9 @@ export function AppSidebar() {
 
   return (
     <MainSidebar>
-      <div className="pt-3 mb-4">
+      <div className="pt-2 mb-2">
         {state === 'collapsed' ? (
-          <div className="flex flex-col gap-3 items-center">
+          <div className="flex flex-col gap-2 items-center">
             <div className="relative grid place-items-center size-9">
               <LogoWithoutText
                 className={cn(
@@ -118,8 +127,42 @@ export function AppSidebar() {
         )}
       </div>
 
-      {isAgentBuilderVisible && (
+      {!isMobile && (
         <div className="mb-2">
+          <MainSidebar.NavList>
+            <MainSidebar.NavLink
+              asChild
+              state={state}
+              link={{
+                name: 'Search',
+                url: '#',
+                icon: <Search />,
+              }}
+            >
+              <button
+                type="button"
+                onClick={openNavigationCommand}
+                aria-label="Search and navigate"
+                className="border border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5"
+              >
+                <Search />
+                <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
+                {state !== 'collapsed' && (
+                  <kbd
+                    aria-hidden="true"
+                    className="ml-auto rounded border border-border1 bg-surface4 px-1.5 py-0.5 font-mono text-[10px] leading-none text-neutral3"
+                  >
+                    {commandShortcutLabel}
+                  </kbd>
+                )}
+              </button>
+            </MainSidebar.NavLink>
+          </MainSidebar.NavList>
+        </div>
+      )}
+
+      {isAgentBuilderVisible && (
+        <div className="mb-1">
           <MainSidebar.NavList>
             <MainSidebar.NavLink
               LinkComponent={Link}
@@ -182,7 +225,7 @@ export function AppSidebar() {
         )}
         {state !== 'collapsed' && (
           <>
-            <div role="separator" aria-orientation="horizontal" className="mx-6 my-2 h-px bg-border1" />
+            <hr className="mx-6 my-2 h-px border-0 bg-border1" />
             <MastraVersionFooter collapsed={false} />
           </>
         )}

@@ -85,7 +85,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     // a plain user message.
     const resumedGoal = goalManager.getGoal();
     try {
-      await state.harness.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
+      await state.session.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
     } catch (err) {
       goalManager.pause();
       await goalManager.saveToThread(state);
@@ -112,7 +112,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
-      state.harness.abort();
+      state.session.abort();
     }
     ctx.updateStatusLine();
     ctx.showInfo('Goal cleared.');
@@ -328,7 +328,7 @@ async function startGoal(
   const goalManager = state.goalManager;
 
   if (state.pendingNewThread) {
-    await state.harness.createThread();
+    await state.session.thread.create();
     state.pendingNewThread = false;
   }
 
@@ -356,7 +356,7 @@ async function startGoal(
   }
 
   try {
-    await state.harness.sendSignal(createGoalReminderSignal(goal)).accepted;
+    await state.session.sendSignal(createGoalReminderSignal(goal)).accepted;
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);

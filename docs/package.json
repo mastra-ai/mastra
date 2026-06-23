@@ -1,6 +1,6 @@
 {
   "name": "mastra-docs",
-  "version": "0.0.50",
+  "version": "0.0.51",
   "private": true,
   "repository": "https://github.com/mastra-ai/mastra",
   "homepage": "https://mastra.ai",
@@ -18,7 +18,8 @@
     "validate:reference-sidebar": "tsx scripts/validate-reference-sidebar-sort.ts",
     "validate:reference-sidebar:fix": "tsx scripts/validate-reference-sidebar-sort.ts --fix",
     "validate:sidebar-docs": "tsx scripts/validate-sidebar-docs.ts",
-    "validate": "npm-run-all --parallel validate:frontmatter validate:reference-sidebar validate:sidebar-docs",
+    "validate:sidebar-new-tags": "tsx scripts/validate-sidebar-new-tags.ts",
+    "validate": "npm-run-all --parallel validate:frontmatter validate:reference-sidebar validate:sidebar-docs validate:sidebar-new-tags",
     "format": "prettier --write .",
     "vale:download": "node scripts/vale/download.mjs",
     "vale": "scripts/vale/bin/vale",
