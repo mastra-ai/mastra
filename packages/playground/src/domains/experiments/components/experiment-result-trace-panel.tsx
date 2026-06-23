@@ -1,6 +1,8 @@
 'use client';
 
-import { Button, Column, MainHeader, getShortId } from '@mastra/playground-ui';
+import { Button, getShortId } from '@mastra/playground-ui';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { EyeIcon, XIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';

@@ -1977,6 +1977,7 @@ export class AgentThreadStreamRuntime {
       try {
         const output = await agent.stream(signal, {
           ...(target.ifIdle?.streamOptions as any),
+          untilIdle: true,
           runId: reservedRunId,
           memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
         });

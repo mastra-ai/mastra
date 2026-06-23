@@ -189,8 +189,7 @@ describe('DurableAgent observability tracing', () => {
 
       expect(agentSpans.length).toBe(1);
       const inputProcessorSpanCall = agentSpans[0].createChildSpan.mock.calls.find(
-        (call: any[]) =>
-          call[0]?.type === 'processor_run' && call[0]?.name === 'input processor: test-input-processor',
+        (call: any[]) => call[0]?.type === 'processor_run' && call[0]?.name === 'input processor: test-input-processor',
       );
       expect(inputProcessorSpanCall).toBeDefined();
 

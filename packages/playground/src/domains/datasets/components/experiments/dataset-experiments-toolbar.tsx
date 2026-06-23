@@ -1,6 +1,8 @@
 'use client';
 
-import { Button, ButtonsGroup, Chip, SelectFieldBlock } from '@mastra/playground-ui';
+import { Button, ButtonsGroup } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { GitCompare, MoveRightIcon, XIcon } from 'lucide-react';
 import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 

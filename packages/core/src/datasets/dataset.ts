@@ -9,6 +9,7 @@ import type {
   DatasetItem,
   DatasetItemRow,
   DatasetItemSource,
+  DatasetItemToolMock,
   DatasetVersion,
   TargetType,
   UpdateExperimentResultInput,
@@ -158,6 +159,7 @@ export class Dataset {
     input: unknown;
     groundTruth?: unknown;
     expectedTrajectory?: unknown;
+    toolMocks?: DatasetItemToolMock[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -168,6 +170,7 @@ export class Dataset {
       input: input.input,
       groundTruth: input.groundTruth,
       expectedTrajectory: input.expectedTrajectory,
+      toolMocks: input.toolMocks,
       requestContext: input.requestContext,
       metadata: input.metadata,
       source: input.source,
@@ -182,6 +185,7 @@ export class Dataset {
       input: unknown;
       groundTruth?: unknown;
       expectedTrajectory?: unknown;
+      toolMocks?: DatasetItemToolMock[];
       requestContext?: Record<string, unknown>;
       metadata?: Record<string, unknown>;
       source?: DatasetItemSource;
@@ -233,6 +237,7 @@ export class Dataset {
     input?: unknown;
     groundTruth?: unknown;
     expectedTrajectory?: unknown;
+    toolMocks?: DatasetItemToolMock[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
   }): Promise<DatasetItem> {
@@ -243,6 +248,7 @@ export class Dataset {
       input: input.input,
       groundTruth: input.groundTruth,
       expectedTrajectory: input.expectedTrajectory,
+      toolMocks: input.toolMocks,
       requestContext: input.requestContext,
       metadata: input.metadata,
     });

@@ -15,6 +15,7 @@ import type {
 } from '@mastra/core/vector';
 import { ChromaClient, CloudClient } from 'chromadb';
 import type { ChromaClientArgs, RecordSet, Where, WhereDocument, Collection, Metadata, Search } from 'chromadb';
+import { distanceToScore } from './distance-to-score';
 import type { ChromaVectorFilter } from './filter';
 import { ChromaFilterTranslator } from './filter';
 
@@ -222,11 +223,12 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
         include: includeVector ? [...defaultInclude, 'embeddings'] : defaultInclude,
       });
 
+      const space = collection.configuration?.hnsw?.space || collection.configuration?.spann?.space || 'cosine';
+      const metric = spaceMappings[space] as 'cosine' | 'euclidean' | 'dotproduct';
+
       return (results.ids[0] || []).map((id: string, index: number) => {
-        // Chroma returns distances (lower = more similar), convert to similarity scores (higher = more similar)
-        // For cosine: similarity = 1 - distance
-        const distance = results.distances?.[0]?.[index] || 0;
-        const score = 1 - distance;
+        const distance = results.distances?.[0]?.[index];
+        const score = distance == null ? 0 : distanceToScore(distance, metric);
         return {
           id,
           score,

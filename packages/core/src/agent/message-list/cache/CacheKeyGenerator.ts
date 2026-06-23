@@ -62,9 +62,9 @@ export class CacheKeyGenerator {
     }
     if (part.type === 'reasoning') {
       cacheKey += part.reasoning;
-      cacheKey += part.details.reduce((prev, current) => {
+      cacheKey += (part.details ?? []).reduce((prev, current) => {
         if (current.type === 'text') {
-          return prev + current.text.length + (current.signature?.length || 0);
+          return prev + (current.text?.length ?? 0) + (current.signature?.length || 0);
         }
         return prev;
       }, 0);

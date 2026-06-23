@@ -321,9 +321,26 @@ export class SessionThread {
     return this.#store.getById({ threadId });
   }
 
+  /**
+   * Load a thread and verify it belongs to this session's resourceId before
+   * allowing access. Threads owned by another resource are treated as missing
+   * so a session can never read, switch to, rename, or delete a thread it does
+   * not own (the thread id is otherwise an unguessable but unscoped key). Throws
+   * `Thread not found: <id>` when the thread is absent or owned by someone else.
+   */
+  async #requireOwnedThread({ threadId }: { threadId: string }): Promise<HarnessThread> {
+    const thread = await this.#store?.getById({ threadId });
+    if (!thread || thread.resourceId !== this.#getResourceId()) {
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+    return thread;
+  }
+
   /** List messages for a thread (newest-`limit`, returned oldest-first), or all. */
   async listMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
     if (!this.#store) return [];
+    // Only expose messages for threads this session owns.
+    await this.#requireOwnedThread({ threadId });
     return this.#store.listMessages({ threadId, limit });
   }
 
@@ -540,6 +557,10 @@ export class SessionThread {
     if (!sourceId) {
       throw new Error('No source thread to clone');
     }
+    // Only allow cloning from a source thread this session owns.
+    if (store?.hasStorage()) {
+      await this.#requireOwnedThread({ threadId: sourceId });
+    }
     if (!store) {
       throw new Error('Memory is not configured on this Harness');
     }
@@ -594,10 +615,21 @@ export class SessionThread {
       await store?.releaseLock(previousThreadId);
     }
 
+    // Verify the thread exists and belongs to this session's resourceId before
+    // binding to it, so a session can never switch onto a thread owned by
+    // another resource. Release the just-acquired lock if the check fails so we
+    // never leave a foreign thread locked.
     if (store?.hasStorage()) {
-      const thread = await store.getById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread not found: ${threadId}`);
+      try {
+        await this.#requireOwnedThread({ threadId });
+      } catch (err) {
+        // Release the just-acquired foreign lock and restore the previous
+        // thread's lock so the still-bound session is not left unlocked.
+        await store.releaseLock(threadId).catch(() => {});
+        if (previousThreadId) {
+          await store.acquireLock(previousThreadId).catch(() => {});
+        }
+        throw err;
       }
     }
 
@@ -617,10 +649,8 @@ export class SessionThread {
     const store = this.#store;
     if (!store?.hasStorage()) return;
 
-    const thread = await store.getById({ threadId });
-    if (!thread) {
-      throw new Error(`Thread not found: ${threadId}`);
-    }
+    // Only allow deleting threads this session owns.
+    await this.#requireOwnedThread({ threadId });
 
     const isDeletingCurrentThread = this.#threadId === threadId;
 
@@ -989,17 +1019,25 @@ export class SessionApproval {
   #resolve: ((decision: ApprovalDecision) => void) | null = null;
   /** Name of the tool currently awaiting approval, or null when none. */
   #toolName: string | null = null;
+  /** Id of the tool call currently awaiting approval, or null when none. */
+  #toolCallId: string | null = null;
 
   /**
-   * Park a new approval for `toolName` and return a promise that resolves once
-   * {@link resolve} is called with the user's decision. The caller awaits this
-   * while the run is suspended on the gate.
+   * Park a new approval for `toolName`/`toolCallId` and return a promise that
+   * resolves once {@link respond} is called with the user's decision. The caller
+   * awaits this while the run is suspended on the gate.
    */
-  arm({ toolName }: { toolName: string }): Promise<ApprovalDecision> {
+  arm({ toolName, toolCallId }: { toolName: string; toolCallId?: string }): Promise<ApprovalDecision> {
     this.#toolName = toolName;
+    this.#toolCallId = toolCallId ?? null;
     return new Promise<ApprovalDecision>(resolve => {
       this.#resolve = resolve;
     });
+  }
+
+  /** Id of the tool call currently awaiting approval, or null when none. */
+  getToolCallId(): string | null {
+    return this.#toolCallId;
   }
 
   /** Whether an approval is currently parked awaiting a decision. */
@@ -1009,17 +1047,21 @@ export class SessionApproval {
 
   /**
    * Apply a user's {@link ApprovalResponse} to the parked gate. A no-op when
-   * nothing is armed. `always_allow_category` runs `onAlwaysAllow` with the
+   * nothing is armed. When `toolCallId` is supplied it must match the gated
+   * call; a mismatch is ignored so a stale/delayed response cannot resolve a
+   * different pending gate. `always_allow_category` runs `onAlwaysAllow` with the
    * gated tool name (so the caller can grant the tool's category — a lookup that
    * needs Harness config) and then approves; `approve`/`decline` resolve as-is.
    */
   respond({
     decision,
+    toolCallId,
     requestContext,
     declineContext,
     onAlwaysAllow,
-  }: ApprovalResponse & { onAlwaysAllow?: (toolName: string) => void }): void {
+  }: ApprovalResponse & { toolCallId?: string; onAlwaysAllow?: (toolName: string) => void }): void {
     if (!this.isArmed()) return;
+    if (toolCallId !== undefined && this.#toolCallId !== null && toolCallId !== this.#toolCallId) return;
 
     if (decision === 'always_allow_category' && this.#toolName) {
       onAlwaysAllow?.(this.#toolName);
@@ -1033,6 +1075,7 @@ export class SessionApproval {
     this.#resolve?.(resolved);
     this.#resolve = null;
     this.#toolName = null;
+    this.#toolCallId = null;
   }
 
   /**
@@ -1045,11 +1088,13 @@ export class SessionApproval {
     this.#resolve?.({ decision: 'decline' });
     this.#resolve = null;
     this.#toolName = null;
+    this.#toolCallId = null;
   }
 
-  /** Clear the gated tool name once a parked approval has been consumed. */
+  /** Clear the gated tool name/call id once a parked approval has been consumed. */
   clearToolName(): void {
     this.#toolName = null;
+    this.#toolCallId = null;
   }
 }
 
@@ -2571,15 +2616,18 @@ export class Session<TState = unknown> {
    */
   respondToToolApproval({
     decision,
+    toolCallId,
     requestContext,
     declineContext,
   }: {
     decision: 'approve' | 'decline' | 'always_allow_category';
+    toolCallId?: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
   }): void {
     this.approval.respond({
       decision,
+      toolCallId,
       requestContext,
       declineContext,
       onAlwaysAllow: toolName => {
