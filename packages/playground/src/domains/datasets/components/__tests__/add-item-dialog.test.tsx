@@ -138,4 +138,28 @@ describe('AddItemDialog', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Tool Mocks must be a JSON array'));
     expect(capture).not.toHaveBeenCalled();
   });
+
+  it('renders server-side Tool Mocks validation errors inline', async () => {
+    server.use(
+      http.post(`${BASE_URL}/api/datasets/dataset-1/items`, () =>
+        HttpResponse.json(
+          { error: 'Validation failed', field: 'toolMocks', errors: [{ path: '0.output', message: 'Required' }] },
+          { status: 400 },
+        ),
+      ),
+    );
+
+    renderDialog();
+
+    const [input, , , toolMocks] = getEditors();
+    fireEvent.change(input, { target: { value: '{"city":"Seattle"}' } });
+    fireEvent.change(toolMocks, {
+      target: { value: JSON.stringify([{ toolName: 'getWeather', args: {} }]) },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /add item/i }));
+
+    expect(await screen.findByText(/0\.output/)).not.toBeNull();
+    expect(screen.getByText(/Required/)).not.toBeNull();
+  });
 });
