@@ -163,6 +163,7 @@ export function DataListRoot({
       orientation="both"
       mask={getDataListMask(mask)}
       viewportRef={scrollRef}
+      viewPortClassName="max-h-[inherit]"
       className={cn('h-full w-full rounded-t-xl', className)}
     >
       {grid}
