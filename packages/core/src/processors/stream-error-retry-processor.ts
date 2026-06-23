@@ -24,13 +24,6 @@ export type StreamErrorRetryProcessorOptions = {
   maxRetries?: number;
   matchers?: StreamErrorRetryMatcherEntry[];
   /**
-   * Whether to include the built-in default matchers (e.g. OpenAI retryable
-   * stream-error detection). Defaults to `true` so existing consumers keep
-   * current behaviour. Set to `false` when the processor should *only* use
-   * the matchers supplied via `matchers`.
-   */
-  includeDefaultMatchers?: boolean;
-  /**
    * Optional delay (ms) to wait before signaling a retry. Accepts a number or an
    * async function evaluated with the current error args. Negative/non-finite
    * values are clamped to 0. Defaults to 0 (retry immediately), preserving the
@@ -185,10 +178,7 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
 
   constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
-    const includeDefaults = options.includeDefaultMatchers ?? true;
-    const defaultEntries: StreamErrorRetryMatcherConfig[] = includeDefaults
-      ? DEFAULT_MATCHERS.map(m => ({ match: m }))
-      : [];
+    const defaultEntries: StreamErrorRetryMatcherConfig[] = DEFAULT_MATCHERS.map(m => ({ match: m }));
     this.#entries = [...defaultEntries, ...(options.matchers ?? []).map(normalizeEntry)];
     this.#delayMs = options.delayMs;
   }

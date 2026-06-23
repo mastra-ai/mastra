@@ -181,24 +181,6 @@ describe('StreamErrorRetryProcessor', () => {
     expect(isBadRequestError(error)).toBe(false);
   });
 
-  it('excludes default matchers when includeDefaultMatchers is false', async () => {
-    const processor = new StreamErrorRetryProcessor({
-      includeDefaultMatchers: false,
-      matchers: [isBadRequestError],
-    });
-
-    // OpenAI retryable stream error should NOT be retried since defaults are excluded.
-    const openAIError = {
-      type: 'error',
-      error: { type: 'server_error', code: 'internal_error', message: 'An internal error occurred.' },
-    };
-    await expect(processor.processAPIError(makeArgs({ error: openAIError }))).resolves.toBeUndefined();
-
-    // But the explicitly configured matcher (isBadRequestError) should still work.
-    const badRequestError = { statusCode: 400, message: 'Bad Request' };
-    await expect(processor.processAPIError(makeArgs({ error: badRequestError }))).resolves.toEqual({ retry: true });
-  });
-
   it('retries Bad Request errors when configured with isBadRequestError matcher', async () => {
     const processor = new StreamErrorRetryProcessor({
       maxRetries: 1,
@@ -297,7 +279,6 @@ describe('StreamErrorRetryProcessor', () => {
 
     it('first-match-wins: earlier matcher policy takes precedence', async () => {
       const processor = new StreamErrorRetryProcessor({
-        includeDefaultMatchers: false,
         matchers: [
           { match: isBadRequestError, maxRetries: 1 },
           { match: () => true, maxRetries: 5 },
@@ -312,7 +293,6 @@ describe('StreamErrorRetryProcessor', () => {
     it('mixes plain function matchers and config objects', async () => {
       const customMatcher = (e: unknown) => e instanceof Error && e.message === 'custom';
       const processor = new StreamErrorRetryProcessor({
-        includeDefaultMatchers: false,
         matchers: [{ match: isBadRequestError, maxRetries: 1, delayMs: 2000 }, customMatcher],
         maxRetries: 3,
       });
