@@ -24,8 +24,7 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
 
   const lastUserCaption = lastSegmentByRole(voiceCall.captions, 'user');
   const lastAgentCaption = lastSegmentByRole(voiceCall.captions, 'agent');
-  const stateLabel =
-    voiceCall.status === 'connecting' ? 'Connecting…' : AGENT_STATE_LABELS[voiceCall.agentState];
+  const stateLabel = voiceCall.status === 'connecting' ? 'Connecting…' : AGENT_STATE_LABELS[voiceCall.agentState];
 
   return (
     <div
