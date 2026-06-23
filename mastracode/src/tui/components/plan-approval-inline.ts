@@ -380,7 +380,7 @@ export class PlanResultComponent extends Container {
     contentBox.addChild(new Text(`${icon} ${theme.fg('dim', status)}`, 0, 0));
     contentBox.addChild(new Spacer(1));
 
-    if (options.feedback) {
+    if (options.feedback && options.feedback !== 'Revision requested') {
       contentBox.addChild(new Text(theme.fg('warning', `Requested changes: ${options.feedback}`), 0, 0));
       contentBox.addChild(new Spacer(1));
     }
