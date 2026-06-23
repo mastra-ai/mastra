@@ -15,6 +15,7 @@
     "dev": "pnpm prepare:electron && pnpm build:studio && pnpm build:mastra && electron-vite dev",
     "build": "pnpm build:studio && pnpm build:mastra && electron-vite build",
     "build:app": "electron-vite build",
+    "build:icons": "node scripts/build-icons.mjs",
     "build:mastra": "node scripts/build-mastra.mjs",
     "build:studio": "pnpm --filter @mastra/playground-ui build && pnpm --filter @internal/playground build",
     "package": "pnpm prepare:electron && pnpm build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --dir",
