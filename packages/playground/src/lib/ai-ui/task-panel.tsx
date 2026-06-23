@@ -69,12 +69,12 @@ function extractLatestTasks(messages: MastraDBMessage[]): TaskItem[] | undefined
       if (isRecord(signalMeta)) {
         const id = signalMeta.id;
         const tagName = signalMeta.tagName;
-        const isTaskSignal =
-          id === 'tasks' || tagName === 'current-task-list' || tagName === 'task-list-update';
+        const isTaskSignal = id === 'tasks' || tagName === 'current-task-list' || tagName === 'task-list-update';
         if (isTaskSignal) {
-          const value = isRecord(signalMeta.metadata) && isRecord((signalMeta.metadata as Record<string, unknown>).value)
-            ? (signalMeta.metadata as Record<string, unknown>).value
-            : undefined;
+          const value =
+            isRecord(signalMeta.metadata) && isRecord((signalMeta.metadata as Record<string, unknown>).value)
+              ? (signalMeta.metadata as Record<string, unknown>).value
+              : undefined;
           const tasks = value ? (value as Record<string, unknown>).tasks : undefined;
           if (isTaskItemArray(tasks)) latest = tasks;
         }
@@ -89,8 +89,7 @@ function extractLatestTasks(messages: MastraDBMessage[]): TaskItem[] | undefined
           if (isRecord(data) && data.type === 'state') {
             const id = data.id;
             const tagName = data.tagName;
-            const isTaskSignal =
-              id === 'tasks' || tagName === 'current-task-list' || tagName === 'task-list-update';
+            const isTaskSignal = id === 'tasks' || tagName === 'current-task-list' || tagName === 'task-list-update';
             if (isTaskSignal && isRecord(data.metadata)) {
               const value = isRecord((data.metadata as Record<string, unknown>).value)
                 ? (data.metadata as Record<string, unknown>).value

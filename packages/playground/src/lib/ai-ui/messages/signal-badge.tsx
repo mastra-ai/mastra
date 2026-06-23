@@ -98,8 +98,6 @@ function getTaskSignalData(signal: SignalData): { tasks: TaskItem[]; mode: 'snap
   return { tasks, mode };
 }
 
-
-
 export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
   if (!isSignalData(value)) return null;
 
