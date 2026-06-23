@@ -1,5 +1,4 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -78,9 +77,6 @@ export function useCreateSkill() {
       if (variables.workspaceId) {
         void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
       }
-    },
-    onError: error => {
-      toast.error(`Failed to create skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
     },
   });
 }

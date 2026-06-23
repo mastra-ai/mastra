@@ -75,6 +75,11 @@ const sidebars = {
           id: 'concepts/multi-agent-systems',
           label: 'Multi-agent systems',
         },
+        {
+          type: 'doc',
+          id: 'concepts/streaming',
+          label: 'Streaming',
+        },
       ],
     },
     {

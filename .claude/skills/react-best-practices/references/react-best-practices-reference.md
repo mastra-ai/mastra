@@ -4,9 +4,7 @@
 Mastra Engineering
 January 2026
 
-This catalog is an index for React performance guidance used by agents and LLMs. The canonical guidance, examples, and review smells live in `references/rules/*.md`.
-
-Performance optimization guide for React applications, designed for AI agents and LLMs. Contains 15 rules across 7 categories, prioritized by impact from critical (eliminating waterfalls, reducing bundle size) to incremental (JavaScript micro-optimizations). Each rule includes detailed explanations, real-world examples comparing incorrect vs. correct implementations, and specific impact metrics to guide automated refactoring and code generation.
+This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 16 rules across 8 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
 
 ## How to Use This Catalog
 
@@ -25,6 +23,7 @@ Performance optimization guide for React applications, designed for AI agents an
 | 5        | Rendering Performance     | MEDIUM                        | 2          |
 | 6        | JavaScript Performance    | LOW-MEDIUM                    | 3          |
 | 7        | Component Structure       | MEDIUM-HIGH (maintainability) | 2          |
+| 8        | Testing                   | MEDIUM-HIGH (correctness)     | 1          |
 
 ## Category Focus
 
@@ -37,6 +36,7 @@ Performance optimization guide for React applications, designed for AI agents an
 | Rendering Performance     | Optimizing the rendering process reduces the work the browser needs to do.                                                            |
 | JavaScript Performance    | Micro-optimizations for hot paths can add up to meaningful improvements.                                                              |
 | Component Structure       | Bloated components are hard to test, review, and reuse, and unrelated state changes re-render everything.                             |
+| Testing                   | Drive the real client + React Query stack and mock only the network, so a green test proves production behavior, not the mock.        |
 
 ## Rules
 
@@ -89,6 +89,12 @@ Performance optimization guide for React applications, designed for AI agents an
 | --------------------------------- | ----------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------- |
 | `structure-single-responsibility` | One Component or Hook = One Responsibility = One File | MEDIUM-HIGH | Split domain components and hooks so each file owns one responsibility.              | `references/rules/structure-single-responsibility.md` |
 | `structure-component-naming`      | JSX-Returning Helpers Must Be Components              | MEDIUM      | Name reusable JSX-returning helpers as PascalCase components and call them with JSX. | `references/rules/structure-component-naming.md`      |
+
+### 8. Testing
+
+| Rule                  | Title                                | Impact      | Summary                                                                                                            | Canonical file                              |
+| --------------------- | ------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| `testing-bdd-no-mocks` | BDD Tests That Mock Only the Network | MEDIUM-HIGH | Drive the real `@mastra/client-js` + React Query stack and mock only the network; write tests BDD-style. Lint-enforced. | `references/rules/testing-bdd-no-mocks.md` |
 
 ## External References
 

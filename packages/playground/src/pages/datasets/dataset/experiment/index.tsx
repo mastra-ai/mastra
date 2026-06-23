@@ -1,7 +1,6 @@
 import {
   Button,
   EmptyState,
-  ErrorState,
   PageLayout,
   PermissionDenied,
   SessionExpired,
@@ -9,6 +8,7 @@ import {
   is403ForbiddenError,
   is404NotFoundError,
 } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';

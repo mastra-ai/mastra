@@ -1,5 +1,6 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { AlertDialog, Icon, Skeleton } from '@mastra/playground-ui';
+import { Icon, Skeleton } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import {
