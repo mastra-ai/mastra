@@ -731,12 +731,18 @@ describe('createMastraCode', () => {
 
     expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(1);
     const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
-      | { maxRetries?: number; delayMs?: number; matchers?: Array<unknown> }
+      | { maxRetries?: number; delayMs?: (args: { retryCount: number }) => number; matchers?: Array<unknown> }
       | undefined;
     expect(options?.maxRetries).toBeGreaterThanOrEqual(2);
-    expect(options?.delayMs).toBeGreaterThanOrEqual(1);
     // The global policy must opt in the ECONNRESET matcher.
     expect(options?.matchers?.length).toBeGreaterThanOrEqual(1);
+    // delayMs must be an exponential-backoff function capped at a max delay.
+    expect(typeof options?.delayMs).toBe('function');
+    expect(options!.delayMs!({ retryCount: 0 })).toBe(1000);
+    expect(options!.delayMs!({ retryCount: 1 })).toBe(2000);
+    expect(options!.delayMs!({ retryCount: 2 })).toBe(4000);
+    // High retry counts are capped at the max delay (30000ms).
+    expect(options!.delayMs!({ retryCount: 10 })).toBe(30000);
   });
 
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
