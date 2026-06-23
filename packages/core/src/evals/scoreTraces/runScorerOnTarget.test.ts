@@ -9,7 +9,7 @@ vi.mock('./utils', () => ({
   transformTraceToScorerInputAndOutput: vi.fn(() => ({ input: 'test', output: 'test' })),
 }));
 
-import { runScorerOnTarget } from './scoreTracesWorkflow';
+import { runScorerOnTarget, scoreTargets } from './scoreTracesWorkflow';
 
 function createMockSpanRecord(overrides: Partial<SpanRecord> = {}): SpanRecord {
   return {
@@ -384,5 +384,113 @@ describe('runScorerOnTarget Function', () => {
         }),
       );
     });
+  });
+
+  describe('Tenancy threading (runScorerOnTarget)', () => {
+    it('passes span organizationId/resourceId into scorer.run and the saved score', async () => {
+      const target = { traceId: 'trace-1' };
+      await testContext.setupSuccessfulScenario(target);
+
+      // Tag the resolved trace's root span with tenancy.
+      const mockObservabilityStore = await testContext.mockStorage.getStore('observability');
+      const taggedTrace: TraceRecord = {
+        traceId: 'trace-1',
+        spans: [
+          createMockSpanRecord({
+            spanId: 'span-1',
+            traceId: 'trace-1',
+            parentSpanId: null,
+            name: 'root-span',
+            entityId: 'root-span',
+            spanType: SpanType.AGENT_RUN,
+            organizationId: 'org-1',
+            resourceId: 'project-1',
+          }),
+        ],
+      };
+      (mockObservabilityStore?.getTrace as any).mockResolvedValue(taggedTrace);
+
+      await testContext.runTarget(target);
+
+      // scorer.run receives correlation + metadata tenancy
+      expect(testContext.mockScorer.run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetCorrelationContext: expect.objectContaining({
+            organizationId: 'org-1',
+            resourceId: 'project-1',
+          }),
+          targetMetadata: expect.objectContaining({
+            organizationId: 'org-1',
+            projectId: 'project-1',
+          }),
+        }),
+      );
+
+      // legacy save payload carries org + project (resourceId → projectId)
+      const mockScoresStore = await testContext.mockStorage.getStore('scores');
+      expect(mockScoresStore?.saveScore).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: 'org-1',
+          projectId: 'project-1',
+        }),
+      );
+    });
+  });
+});
+
+describe('scoreTargets Function (no-persist)', () => {
+  let testContext: TestContext;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    testContext = new TestContext();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns scorer results without persisting to the scores store', async () => {
+    const target = { traceId: 'trace-1' };
+    await testContext.setupSuccessfulScenario(target);
+
+    const results = await scoreTargets({
+      storage: testContext.mockStorage,
+      scorer: testContext.mockScorer,
+      targets: [target],
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toEqual(expect.objectContaining({ runId: 'run-123', score: 0.85 }));
+
+    // No persistence side effects.
+    const mockScoresStore = await testContext.mockStorage.getStore('scores');
+    const mockObservabilityStore = await testContext.mockStorage.getStore('observability');
+    expect(mockScoresStore?.saveScore).not.toHaveBeenCalled();
+    expect(mockObservabilityStore?.updateSpan).not.toHaveBeenCalled();
+  });
+
+  it('resolves each target and returns one result per target', async () => {
+    await testContext.setupSuccessfulScenario({ traceId: 'trace-1' });
+
+    const results = await scoreTargets({
+      storage: testContext.mockStorage,
+      scorer: testContext.mockScorer,
+      targets: [{ traceId: 'trace-1' }, { traceId: 'trace-1' }],
+    });
+
+    expect(results).toHaveLength(2);
+  });
+
+  it('throws on the first failing target', async () => {
+    await testContext.setupErrorScenario('trace-not-found');
+
+    await expect(
+      scoreTargets({
+        storage: testContext.mockStorage,
+        scorer: testContext.mockScorer,
+        targets: [{ traceId: 'missing' }],
+      }),
+    ).rejects.toThrow();
   });
 });

@@ -91,15 +91,35 @@ const getTraceStep = createStep({
   },
 });
 
-export async function runScorerOnTarget({
+/** Tenancy derived from a span, threaded into emitted scores. */
+type ScoreTenancy = {
+  organizationId?: string;
+  projectId?: string;
+};
+
+/**
+ * Derive score tenancy from a span. On spans, `resourceId` carries the project
+ * scope, so it maps to the score's `projectId` field.
+ */
+function getSpanTenancy(span: SpanRecord): ScoreTenancy {
+  const tenancy: ScoreTenancy = {};
+  if (span.organizationId) {
+    tenancy.organizationId = span.organizationId;
+  }
+  if (span.resourceId) {
+    tenancy.projectId = span.resourceId;
+  }
+  return tenancy;
+}
+
+/** Resolve the target span for a trace/target pair. */
+async function resolveTraceAndSpan({
   storage,
-  scorer,
   target,
 }: {
   storage: MastraStorage;
-  scorer: MastraScorer;
   target: { traceId: string; spanId?: string };
-}) {
+}): Promise<{ trace: TraceRecord; span: SpanRecord }> {
   // TODO: add storage api to get a single span
   const observabilityStore = await storage.getStore('observability');
   if (!observabilityStore) {
@@ -128,19 +148,96 @@ export async function runScorerOnTarget({
     );
   }
 
+  return { trace, span };
+}
+
+/** Full result returned by {@link scoreTarget} / {@link scoreTargets}. */
+export type ScoreTargetResult = Awaited<ReturnType<MastraScorer['run']>>;
+
+/**
+ * Run a scorer against an already-resolved trace + span and return the scorer
+ * result. Does NOT persist to the scores store — callers that want to return
+ * score/reason in an HTTP response (e.g. ad-hoc/per-candidate scorers) use this.
+ *
+ * Span tenancy (`organizationId`, `resourceId` → `projectId`) is threaded into
+ * the scorer run so any score the scorer emits is correctly multi-tenant.
+ */
+export async function scoreTarget({
+  scorer,
+  trace,
+  span,
+}: {
+  scorer: MastraScorer;
+  trace: TraceRecord;
+  span: SpanRecord;
+}): Promise<ScoreTargetResult> {
+  const tenancy = getSpanTenancy(span);
+
   const scorerRun = buildScorerRun({
     scorerType: scorer.type === 'agent' ? 'agent' : undefined,
     trace,
     targetSpan: span,
   });
-  const result = await scorer.run({
+
+  return scorer.run({
     ...scorerRun,
     scoreSource: 'trace',
     targetScope: 'span',
     targetEntityType: getEntityTypeForSpan(span),
-    targetTraceId: target.traceId,
+    targetTraceId: trace.traceId,
     targetSpanId: span.spanId,
+    targetCorrelationContext: {
+      traceId: trace.traceId,
+      spanId: span.spanId,
+      ...(tenancy.organizationId ? { organizationId: tenancy.organizationId } : {}),
+      ...(tenancy.projectId ? { resourceId: tenancy.projectId } : {}),
+    },
+    targetMetadata: {
+      ...(tenancy.organizationId ? { organizationId: tenancy.organizationId } : {}),
+      ...(tenancy.projectId ? { projectId: tenancy.projectId } : {}),
+    },
   });
+}
+
+/**
+ * Resolve each target's trace/span from storage and run the scorer, returning
+ * the scorer results WITHOUT persisting them. Throws on the first failure so
+ * callers can surface errors in their response.
+ */
+export async function scoreTargets({
+  storage,
+  scorer,
+  targets,
+  concurrency = 3,
+}: {
+  storage: MastraStorage;
+  scorer: MastraScorer;
+  targets: { traceId: string; spanId?: string }[];
+  concurrency?: number;
+}): Promise<ScoreTargetResult[]> {
+  return pMap(
+    targets,
+    async target => {
+      const { trace, span } = await resolveTraceAndSpan({ storage, target });
+      return scoreTarget({ scorer, trace, span });
+    },
+    { concurrency },
+  );
+}
+
+export async function runScorerOnTarget({
+  storage,
+  scorer,
+  target,
+}: {
+  storage: MastraStorage;
+  scorer: MastraScorer;
+  target: { traceId: string; spanId?: string };
+}) {
+  const { trace, span } = await resolveTraceAndSpan({ storage, target });
+  const tenancy = getSpanTenancy(span);
+
+  const result = await scoreTarget({ scorer, trace, span });
 
   const scorerResult = {
     ...result,
@@ -157,6 +254,8 @@ export async function runScorerOnTarget({
     entity: { traceId: span.traceId, spanId: span.spanId },
     source: 'TEST',
     scorerId: scorer.id,
+    ...(tenancy.organizationId ? { organizationId: tenancy.organizationId } : {}),
+    ...(tenancy.projectId ? { projectId: tenancy.projectId } : {}),
   };
 
   // Legacy score-store emission. This path is being deprecated.
@@ -182,7 +281,7 @@ async function validateAndSaveScore({ storage, scorerResult }: { storage: Mastra
   return result.score;
 }
 
-function buildScorerRun({
+export function buildScorerRun({
   scorerType,
   trace,
   targetSpan,
