@@ -105,6 +105,7 @@ function createMockSettings() {
 }
 
 vi.mock('@mastra/core/harness', () => ({
+  trace: () => {},
   Harness: class {
     constructor(config: unknown) {
       harnessConstructorMock(config);
