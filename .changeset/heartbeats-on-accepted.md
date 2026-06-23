@@ -6,7 +6,7 @@
 
 **Added** heartbeats: schedule an agent to run on a recurring cron, either inside an existing conversation thread or on its own.
 
-A heartbeat fires a prompt to an agent on a schedule. When it has a thread, the run flows through the normal channel pipeline so subscribers see it like any other message; without a thread, the agent just runs in isolation. Each heartbeat has its own id and an optional `name`, so one agent or thread can have several heartbeats with different schedules and prompts. Heartbeats are persisted, so they keep firing across process restarts with no extra setup.
+A heartbeat fires a prompt to an agent on a schedule. When it has a thread, the run is delivered into that thread as a normal agent signal, so anything watching the thread sees it like any other message; without a thread, the agent just runs in isolation. Each heartbeat has its own id and an optional `name`, so one agent or thread can have several heartbeats with different schedules and prompts. Heartbeats are persisted, so they keep firing across process restarts with no extra setup.
 
 ```ts
 const hb = await mastra.heartbeats.create({
