@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type * as PlaygroundUi from '@mastra/playground-ui';
+import type { CreateStoredSkillParams } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -8,25 +8,11 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCreateSkill } from '../use-create-skill';
+import { writeAllowedCapabilities, writeDeniedCapabilities } from './fixtures/auth';
+import { createdSkill, workspaceWriteOk } from './fixtures/skills';
+import { usePermissions } from '@/domains/auth/hooks';
+import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
-
-vi.mock('@mastra/playground-ui', async importOriginal => {
-  const actual = await importOriginal<typeof PlaygroundUi>();
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-  };
-});
-
-const writeFileMock = vi.fn();
-vi.mock('@/domains/workspace/hooks', () => ({
-  useWriteWorkspaceFile: () => ({ mutateAsync: writeFileMock }),
-}));
-
-const hasPermissionMock = vi.fn();
-vi.mock('@/domains/auth/hooks', () => ({
-  usePermissions: () => ({ hasPermission: hasPermissionMock }),
-}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -39,124 +25,144 @@ const wrapper = () => {
   );
 };
 
+const seedAuth = (capabilities: AuthCapabilities) => {
+  server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(capabilities)));
+};
+
+/** Captures the `POST /stored/skills` body and resolves the created record. */
+const seedSkillCreate = () => {
+  const calls: CreateStoredSkillParams[] = [];
+  server.use(
+    http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
+      calls.push((await request.json()) as CreateStoredSkillParams);
+      return HttpResponse.json(createdSkill);
+    }),
+  );
+  return calls;
+};
+
+/** Captures every `POST /workspaces/:id/fs/write` body. */
+const seedWorkspaceWrite = (status = 200) => {
+  const writes: { path: string; content: string; recursive?: boolean }[] = [];
+  server.use(
+    http.post(`${BASE_URL}/api/workspaces/:workspaceId/fs/write`, async ({ request }) => {
+      const body = (await request.json()) as { path: string; content: string; recursive?: boolean };
+      writes.push(body);
+      if (status >= 400) {
+        return new HttpResponse(null, { status });
+      }
+      return HttpResponse.json(workspaceWriteOk);
+    }),
+  );
+  return writes;
+};
+
 const baseFiles = [
   { id: 'f1', type: 'file' as const, name: 'SKILL.md', content: '# Title\nDo X' },
   { id: 'f2', type: 'file' as const, name: 'LICENSE', content: 'MIT' },
 ];
 
-beforeEach(() => {
-  writeFileMock.mockReset();
-  hasPermissionMock.mockReset();
-});
+/**
+ * Renders the mutation alongside `usePermissions` so a test can wait for auth
+ * capabilities to resolve before mutating — otherwise the `workspaces:write`
+ * gate reads the pre-load default and the write step runs incorrectly.
+ */
+const renderCreateSkill = () => {
+  const view = renderHook(() => ({ create: useCreateSkill(), permissions: usePermissions() }), { wrapper: wrapper() });
+  return view;
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe('useCreateSkill', () => {
-  it('writes skill files to the workspace and creates the DB record', async () => {
-    hasPermissionMock.mockReturnValue(true);
-    writeFileMock.mockResolvedValue(undefined);
-
-    let receivedBody: any = null;
-    server.use(
-      http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
-        receivedBody = await request.json();
-        return HttpResponse.json({
-          id: 'created',
-          name: receivedBody.name,
-          description: receivedBody.description,
-          instructions: receivedBody.instructions,
-          status: 'active',
-          createdAt: '',
-          updatedAt: '',
-        });
-      }),
-    );
-
-    const { result } = renderHook(() => useCreateSkill(), { wrapper: wrapper() });
-
-    const created = await result.current.mutateAsync({
-      name: 'My Skill',
-      description: 'desc',
-      visibility: 'private',
-      workspaceId: 'ws-1',
-      files: baseFiles,
+  describe('when the caller can write to the workspace', () => {
+    beforeEach(() => {
+      seedAuth(writeAllowedCapabilities);
     });
 
-    expect(created.id).toBe('created');
-    expect(writeFileMock).toHaveBeenCalledWith({
-      workspaceId: 'ws-1',
-      path: 'skills/SKILL.md',
-      content: '# Title\nDo X',
-      recursive: true,
+    it('creates the stored skill DB record', async () => {
+      const created = seedSkillCreate();
+      seedWorkspaceWrite();
+
+      const { result } = renderCreateSkill();
+      await waitFor(() => expect(result.current.permissions.isLoading).toBe(false));
+      const skill = await result.current.create.mutateAsync({
+        name: 'My Skill',
+        description: 'desc',
+        visibility: 'private',
+        workspaceId: 'ws-1',
+        files: baseFiles,
+      });
+
+      expect(skill.id).toBe('created');
+      expect(created).toHaveLength(1);
+      expect(created[0]).toMatchObject({
+        name: 'My Skill',
+        description: 'desc',
+        visibility: 'private',
+        files: baseFiles,
+      });
     });
-    expect(writeFileMock).toHaveBeenCalledWith({
-      workspaceId: 'ws-1',
-      path: 'skills/LICENSE',
-      content: 'MIT',
-      recursive: true,
-    });
-    expect(receivedBody).toMatchObject({
-      name: 'My Skill',
-      description: 'desc',
-      visibility: 'private',
-      files: baseFiles,
+
+    it('writes each skill file under the skills/ prefix recursively', async () => {
+      seedSkillCreate();
+      const writes = seedWorkspaceWrite();
+
+      const { result } = renderCreateSkill();
+      await waitFor(() => expect(result.current.permissions.isLoading).toBe(false));
+      await result.current.create.mutateAsync({
+        name: 'My Skill',
+        description: 'desc',
+        visibility: 'private',
+        workspaceId: 'ws-1',
+        files: baseFiles,
+      });
+
+      expect(writes).toEqual(
+        expect.arrayContaining([
+          { path: 'skills/SKILL.md', content: '# Title\nDo X', encoding: undefined, recursive: true },
+          { path: 'skills/LICENSE', content: 'MIT', encoding: undefined, recursive: true },
+        ]),
+      );
     });
   });
 
-  it('skips workspace file writes when the caller lacks workspaces:write', async () => {
-    hasPermissionMock.mockReturnValue(false);
-
-    server.use(
-      http.post(`${BASE_URL}/api/stored/skills`, () =>
-        HttpResponse.json({ id: 's', name: 'n', description: 'd', status: 'active', createdAt: '', updatedAt: '' }),
-      ),
-    );
-
-    const { result } = renderHook(() => useCreateSkill(), { wrapper: wrapper() });
-
-    await result.current.mutateAsync({
-      name: 'n',
-      description: 'd',
-      workspaceId: 'ws-1',
-      files: baseFiles,
+  describe('when the caller lacks workspaces:write', () => {
+    beforeEach(() => {
+      seedAuth(writeDeniedCapabilities);
     });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(writeFileMock).not.toHaveBeenCalled();
+    it('skips workspace file writes', async () => {
+      seedSkillCreate();
+      const writes = seedWorkspaceWrite();
+
+      const { result } = renderCreateSkill();
+      await waitFor(() => expect(result.current.permissions.isLoading).toBe(false));
+      await result.current.create.mutateAsync({ name: 'n', description: 'd', workspaceId: 'ws-1', files: baseFiles });
+
+      await waitFor(() => expect(result.current.create.isSuccess).toBe(true));
+      expect(writes).toHaveLength(0);
+    });
   });
 
-  it('still creates the DB record when workspace file writes fail', async () => {
-    hasPermissionMock.mockReturnValue(true);
-    writeFileMock.mockRejectedValue(new Error('disk full'));
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    let createCalled = false;
-    server.use(
-      http.post(`${BASE_URL}/api/stored/skills`, () => {
-        createCalled = true;
-        return HttpResponse.json({
-          id: 's',
-          name: 'n',
-          description: 'd',
-          status: 'active',
-          createdAt: '',
-          updatedAt: '',
-        });
-      }),
-    );
-
-    const { result } = renderHook(() => useCreateSkill(), { wrapper: wrapper() });
-
-    await result.current.mutateAsync({
-      name: 'n',
-      description: 'd',
-      workspaceId: 'ws-1',
-      files: baseFiles,
+  describe('when workspace file writes fail', () => {
+    beforeEach(() => {
+      seedAuth(writeAllowedCapabilities);
     });
 
-    expect(createCalled).toBe(true);
-    expect(warnSpy).toHaveBeenCalled();
+    it('still creates the DB record and warns', async () => {
+      const created = seedSkillCreate();
+      seedWorkspaceWrite(500);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const { result } = renderCreateSkill();
+      await waitFor(() => expect(result.current.permissions.isLoading).toBe(false));
+      await result.current.create.mutateAsync({ name: 'n', description: 'd', workspaceId: 'ws-1', files: baseFiles });
+
+      expect(created).toHaveLength(1);
+      expect(warnSpy).toHaveBeenCalled();
+    });
   });
 });

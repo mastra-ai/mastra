@@ -11,13 +11,13 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderAgentEdit from '../edit';
+import { authEnabledNoRbacCapabilities } from './fixtures/auth';
 import {
   composioGmailConnections,
   composioGmailTools,
   composioProviderList,
   composioToolkits,
 } from './fixtures/tool-providers';
-import type * as AgentBuilderModule from '@/domains/agent-builder';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
@@ -29,35 +29,6 @@ vi.mock('@mastra/playground-ui', async () => {
     usePlaygroundStore: () => ({ requestContext: undefined }),
   };
 });
-
-vi.mock('@/domains/agent-builder', async () => {
-  const actual = await vi.importActual<typeof AgentBuilderModule>('@/domains/agent-builder');
-  return {
-    ...actual,
-    useBuilderAgentFeatures: () => ({
-      tools: false,
-      memory: false,
-      workflows: false,
-      agents: false,
-      skills: false,
-      avatarUpload: false,
-      model: false,
-      favorites: false,
-      browser: false,
-    }),
-  };
-});
-
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
-  useBuilderAgentAccess: () => ({
-    hasAccess: true,
-    canWrite: true,
-    canExecute: true,
-    canManageSkills: true,
-    canUseFavorites: true,
-    denialReason: null,
-  }),
-}));
 
 // Stub heavy chat panels to keep this focused on header/layout/redirect logic.
 vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () => ({
@@ -172,7 +143,7 @@ const installRadixDomShims = () => {
 };
 
 const commonHandlers = (overrides?: { agent?: Partial<typeof storedAgent>; meDelay?: Promise<void> }) => [
-  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, user: { id: 'user-1' } })),
+  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authEnabledNoRbacCapabilities)),
   http.get(`${BASE_URL}/api/auth/me`, async () => {
     if (overrides?.meDelay) await overrides.meDelay;
     return HttpResponse.json({ id: 'user-1' });
@@ -197,7 +168,7 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
 
   it('redirects to the agents list when no stored agent exists (404)', async () => {
     server.use(
-      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, user: { id: 'user-1' } })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authEnabledNoRbacCapabilities)),
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
       http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => new HttpResponse(null, { status: 404 })),
       http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
@@ -319,7 +290,7 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
   it('requests the latest draft so freshly saved edits appear', async () => {
     const draftRequests: string[] = [];
     server.use(
-      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, user: { id: 'user-1' } })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authEnabledNoRbacCapabilities)),
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
       http.get(`${BASE_URL}/api/stored/agents/agent-123`, ({ request }) => {
         draftRequests.push(new URL(request.url).search);

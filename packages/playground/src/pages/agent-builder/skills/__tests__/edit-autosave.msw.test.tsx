@@ -22,15 +22,6 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-vi.mock('@/domains/auth/hooks/use-permissions', () => ({
-  usePermissions: () => ({ hasPermission: () => true, rbacEnabled: false }),
-}));
-
-vi.mock('@/domains/auth/hooks/use-current-user', () => ({
-  useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
-  isUnauthenticatedError: () => false,
-}));
-
 // The chat composer mounts an SSE-driven builder agent which we don't want to
 // boot in the autosave test. Stub it with a minimal shell — the form is the
 // surface under test.
@@ -61,6 +52,10 @@ const renderEditPage = () => {
 describe('AgentBuilderSkillsEdit autosave', () => {
   beforeEach(() => {
     server.use(
+      // The signed-in user owns the skill (matching authorId), and RBAC is
+      // disabled so every permission check passes.
+      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
       http.get(`${BASE_URL}/api/stored/skills/${SKILL_ID}`, () =>
         HttpResponse.json({
           id: SKILL_ID,
@@ -80,60 +75,64 @@ describe('AgentBuilderSkillsEdit autosave', () => {
     vi.useRealTimers();
   });
 
-  it('debounces edits and PATCHes /api/stored/skills/:id with the latest form values', async () => {
-    const patchCalls: any[] = [];
-    server.use(
-      http.patch(`${BASE_URL}/api/stored/skills/${SKILL_ID}`, async ({ request }) => {
-        patchCalls.push(await request.json());
-        return HttpResponse.json({ id: SKILL_ID });
-      }),
-    );
+  describe('when a single field is edited', () => {
+    it('debounces edits and PATCHes /api/stored/skills/:id with the latest form values', async () => {
+      const patchCalls: any[] = [];
+      server.use(
+        http.patch(`${BASE_URL}/api/stored/skills/${SKILL_ID}`, async ({ request }) => {
+          patchCalls.push(await request.json());
+          return HttpResponse.json({ id: SKILL_ID });
+        }),
+      );
 
-    const { findByDisplayValue, getByDisplayValue } = renderEditPage();
+      const { findByDisplayValue, getByDisplayValue } = renderEditPage();
 
-    // Wait for the form to hydrate from the GET response.
-    const nameInput = (await findByDisplayValue('initial name')) as HTMLInputElement;
-    getByDisplayValue('initial description');
+      // Wait for the form to hydrate from the GET response.
+      const nameInput = (await findByDisplayValue('initial name')) as HTMLInputElement;
+      getByDisplayValue('initial description');
 
-    // Edit the name. Autosave should debounce ~600ms.
-    await act(async () => {
-      fireEvent.change(nameInput, { target: { value: 'renamed skill' } });
+      // Edit the name. Autosave should debounce ~600ms.
+      await act(async () => {
+        fireEvent.change(nameInput, { target: { value: 'renamed skill' } });
+      });
+
+      await waitFor(() => expect(patchCalls.length).toBeGreaterThanOrEqual(1), { timeout: 3000 });
+
+      const last = patchCalls[patchCalls.length - 1];
+      expect(last.name).toBe('renamed skill');
+      expect(last.description).toBe('initial description');
+      expect(last.instructions).toBe('initial instructions');
+      expect(last.visibility).toBe('private');
     });
-
-    await waitFor(() => expect(patchCalls.length).toBeGreaterThanOrEqual(1), { timeout: 3000 });
-
-    const last = patchCalls[patchCalls.length - 1];
-    expect(last.name).toBe('renamed skill');
-    expect(last.description).toBe('initial description');
-    expect(last.instructions).toBe('initial instructions');
-    expect(last.visibility).toBe('private');
   });
 
-  it('coalesces rapid edits into a single save for the final value', async () => {
-    const patchCalls: any[] = [];
-    server.use(
-      http.patch(`${BASE_URL}/api/stored/skills/${SKILL_ID}`, async ({ request }) => {
-        patchCalls.push(await request.json());
-        return HttpResponse.json({ id: SKILL_ID });
-      }),
-    );
+  describe('when several edits land within the debounce window', () => {
+    it('coalesces rapid edits into a single save for the final value', async () => {
+      const patchCalls: any[] = [];
+      server.use(
+        http.patch(`${BASE_URL}/api/stored/skills/${SKILL_ID}`, async ({ request }) => {
+          patchCalls.push(await request.json());
+          return HttpResponse.json({ id: SKILL_ID });
+        }),
+      );
 
-    const { findByDisplayValue } = renderEditPage();
-    const nameInput = (await findByDisplayValue('initial name')) as HTMLInputElement;
+      const { findByDisplayValue } = renderEditPage();
+      const nameInput = (await findByDisplayValue('initial name')) as HTMLInputElement;
 
-    // Three rapid edits within the debounce window.
-    await act(async () => {
-      fireEvent.change(nameInput, { target: { value: 'step 1' } });
-      fireEvent.change(nameInput, { target: { value: 'step 2' } });
-      fireEvent.change(nameInput, { target: { value: 'final' } });
+      // Three rapid edits within the debounce window.
+      await act(async () => {
+        fireEvent.change(nameInput, { target: { value: 'step 1' } });
+        fireEvent.change(nameInput, { target: { value: 'step 2' } });
+        fireEvent.change(nameInput, { target: { value: 'final' } });
+      });
+
+      await waitFor(() => expect(patchCalls.length).toBeGreaterThanOrEqual(1), { timeout: 3000 });
+
+      // Give any stragglers time to arrive, then assert we only saw one save with
+      // the final value.
+      await new Promise(resolve => setTimeout(resolve, 200));
+      expect(patchCalls).toHaveLength(1);
+      expect(patchCalls[0].name).toBe('final');
     });
-
-    await waitFor(() => expect(patchCalls.length).toBeGreaterThanOrEqual(1), { timeout: 3000 });
-
-    // Give any stragglers time to arrive, then assert we only saw one save with
-    // the final value.
-    await new Promise(resolve => setTimeout(resolve, 200));
-    expect(patchCalls).toHaveLength(1);
-    expect(patchCalls[0].name).toBe('final');
   });
 });

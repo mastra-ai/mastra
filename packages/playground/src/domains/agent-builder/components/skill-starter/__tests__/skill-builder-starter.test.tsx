@@ -30,10 +30,6 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-vi.mock('@/domains/auth/hooks/use-default-visibility', () => ({
-  useDefaultVisibility: () => 'private',
-}));
-
 const BASE_URL = 'http://localhost:4111';
 
 const renderStarter = () => {
@@ -63,6 +59,8 @@ describe('SkillBuilderStarter', () => {
         HttpResponse.json({ enabled: true, modelPolicy: { active: false } }),
       ),
       http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
+      // useDefaultVisibility resolves to 'private' when auth is enabled.
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, login: null })),
     );
   });
 
@@ -85,7 +83,12 @@ describe('SkillBuilderStarter', () => {
 
   it('creates the skill with a client-side id and navigates to /agent-builder/skills/:id/edit with the prompt as userMessage', async () => {
     let capturedBody: any = null;
+    let capabilitiesLoaded = false;
     server.use(
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => {
+        capabilitiesLoaded = true;
+        return HttpResponse.json({ enabled: true, login: null });
+      }),
       http.post(`${BASE_URL}/api/stored/skills`, async ({ request }) => {
         capturedBody = await request.json();
         return HttpResponse.json({ id: capturedBody.id });
@@ -97,6 +100,8 @@ describe('SkillBuilderStarter', () => {
     const submit = getByTestId('skill-builder-starter-submit');
 
     fireEvent.change(input, { target: { value: 'code reviewer' } });
+    // Default visibility ('private') depends on auth capabilities resolving.
+    await waitFor(() => expect(capabilitiesLoaded).toBe(true));
 
     await act(async () => {
       fireEvent.click(submit);

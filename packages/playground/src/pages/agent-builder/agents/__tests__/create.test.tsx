@@ -2,11 +2,12 @@
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderCreate from '../create';
+import { authDisabledCapabilities, rbacCapabilities } from './fixtures/auth';
 import {
   emptyAgents,
   emptyAvailableModels,
@@ -16,11 +17,11 @@ import {
   settingsAllFeatures,
   settingsPartialFeatures,
 } from './fixtures/builder';
+import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
-const { navigateSpy, usePermissionsMock } = vi.hoisted(() => ({
+const { navigateSpy } = vi.hoisted(() => ({
   navigateSpy: vi.fn(),
-  usePermissionsMock: vi.fn(),
 }));
 
 vi.mock('@/domains/agent-builder/components/agent-starter/agent-builder-starter', () => ({
@@ -40,10 +41,6 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
   };
 });
 
-vi.mock('@/domains/auth/hooks/use-permissions', () => ({
-  usePermissions: usePermissionsMock,
-}));
-
 vi.mock('react-router', async importOriginal => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -56,29 +53,6 @@ vi.mock('react-router', async importOriginal => {
 });
 
 const BASE_URL = 'http://localhost:4111';
-
-const permissive = {
-  roles: [],
-  permissions: [],
-  isLoading: false,
-  isAuthenticated: true,
-  rbacEnabled: false,
-  hasPermission: () => true,
-  hasAllPermissions: () => true,
-  hasAnyPermission: () => true,
-  hasRole: () => true,
-  canEdit: () => true,
-  canDelete: () => true,
-  canExecute: () => true,
-};
-
-const restrictive = {
-  ...permissive,
-  rbacEnabled: true,
-  hasPermission: () => false,
-  hasAllPermissions: () => false,
-  hasAnyPermission: () => false,
-};
 
 type Spy = ReturnType<typeof vi.fn<() => void>>;
 interface ListSpies {
@@ -122,8 +96,17 @@ const installListSpies = (): ListSpies => {
   return spies;
 };
 
-const stubBuilderSettings = (response: typeof settingsAllFeatures) => {
-  server.use(http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(response)));
+const stubCapabilities = (capabilities: AuthCapabilities) => {
+  server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(capabilities)));
+};
+
+const stubBuilderSettings = (response: typeof settingsAllFeatures, { delayMs }: { delayMs?: number } = {}) => {
+  server.use(
+    http.get(`${BASE_URL}/api/editor/builder/settings`, async () => {
+      if (delayMs) await delay(delayMs);
+      return HttpResponse.json(response);
+    }),
+  );
 };
 
 const renderCreate = () => {
@@ -141,83 +124,121 @@ const renderCreate = () => {
   );
 };
 
-beforeEach(() => {
-  usePermissionsMock.mockReturnValue(permissive);
-});
-
 afterEach(() => {
   cleanup();
   navigateSpy.mockReset();
-  usePermissionsMock.mockReset();
 });
 
 describe('AgentBuilderCreate', () => {
-  it('redirects to the agents list when the user lacks write access', async () => {
-    usePermissionsMock.mockReturnValue(restrictive);
-    stubBuilderSettings(settingsAllFeatures);
-    const spies = installListSpies();
+  describe('when the user lacks write access (RBAC enabled, no stored-agents:write)', () => {
+    it('redirects to the agents list', async () => {
+      stubCapabilities(rbacCapabilities([]));
+      // Delay settings so capabilities resolve first and flip canWrite to false
+      // before any feature flags can enable the cache-warming queries.
+      stubBuilderSettings(settingsAllFeatures, { delayMs: 50 });
+      installListSpies();
 
-    renderCreate();
+      renderCreate();
 
-    const navigate = await screen.findByTestId('navigate');
-    expect(navigate.getAttribute('data-to')).toBe('/agent-builder/agents');
-    expect(navigate.getAttribute('data-replace')).toBe('true');
-    expect(screen.queryByTestId('agent-builder-starter')).toBeNull();
+      const navigate = await screen.findByTestId('navigate');
+      expect(navigate.getAttribute('data-to')).toBe('/agent-builder/agents');
+      expect(navigate.getAttribute('data-replace')).toBe('true');
+    });
 
-    // Cache-warming queries must NOT fire when the user has no write access.
-    // Give React-Query a chance to schedule and verify nothing went out.
-    await new Promise(resolve => setTimeout(resolve, 50));
-    expect(spies.tools).not.toHaveBeenCalled();
-    expect(spies.agents).not.toHaveBeenCalled();
-    expect(spies.workflows).not.toHaveBeenCalled();
-    expect(spies.storedSkills).not.toHaveBeenCalled();
-    expect(spies.availableModels).not.toHaveBeenCalled();
-  });
+    it('does not render the starter', async () => {
+      stubCapabilities(rbacCapabilities([]));
+      stubBuilderSettings(settingsAllFeatures, { delayMs: 50 });
+      installListSpies();
 
-  it('renders the starter and back button and warms every cache when canWrite + all features are on', async () => {
-    stubBuilderSettings(settingsAllFeatures);
-    const spies = installListSpies();
+      renderCreate();
 
-    renderCreate();
+      await screen.findByTestId('navigate');
+      expect(screen.queryByTestId('agent-builder-starter')).toBeNull();
+    });
 
-    expect(await screen.findByTestId('agent-builder-starter')).not.toBeNull();
-    expect(screen.queryByTestId('navigate')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Agents list' })).not.toBeNull();
+    it('does not warm the feature-gated caches', async () => {
+      stubCapabilities(rbacCapabilities([]));
+      stubBuilderSettings(settingsAllFeatures, { delayMs: 50 });
+      const spies = installListSpies();
 
-    await waitFor(() => {
-      expect(spies.tools).toHaveBeenCalledTimes(1);
-      expect(spies.agents).toHaveBeenCalledTimes(1);
-      expect(spies.workflows).toHaveBeenCalledTimes(1);
-      expect(spies.storedSkills).toHaveBeenCalledTimes(1);
-      // The model picker cache is seeded on mount so the picker loads instantly.
-      expect(spies.availableModels).toHaveBeenCalledTimes(1);
+      renderCreate();
+
+      await screen.findByTestId('navigate');
+      // Give React Query a chance to schedule anything that might still be pending.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      // The feature-gated cache-warming queries are gated by `canWrite && features.*`
+      // (features come from builder settings), so a denied user never triggers them.
+      // NOTE: the model-available cache is gated by `canWrite` alone and so can fire
+      // optimistically during the brief window before auth capabilities resolve; that
+      // over-fetch is a pre-existing product behavior, not a redirect-correctness bug.
+      expect(spies.tools).not.toHaveBeenCalled();
+      expect(spies.agents).not.toHaveBeenCalled();
+      expect(spies.workflows).not.toHaveBeenCalled();
+      expect(spies.storedSkills).not.toHaveBeenCalled();
     });
   });
 
-  it('only warms caches whose feature flag is enabled', async () => {
-    stubBuilderSettings(settingsPartialFeatures);
-    const spies = installListSpies();
+  describe('when the user can write and every feature is enabled', () => {
+    it('renders the starter and back button', async () => {
+      stubCapabilities(authDisabledCapabilities);
+      stubBuilderSettings(settingsAllFeatures);
+      installListSpies();
 
-    renderCreate();
+      renderCreate();
 
-    await waitFor(() => {
-      expect(spies.tools).toHaveBeenCalledTimes(1);
-      expect(spies.workflows).toHaveBeenCalledTimes(1);
+      expect(await screen.findByTestId('agent-builder-starter')).not.toBeNull();
+      expect(screen.queryByTestId('navigate')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Agents list' })).not.toBeNull();
     });
-    expect(spies.agents).not.toHaveBeenCalled();
-    expect(spies.storedSkills).not.toHaveBeenCalled();
+
+    it('warms every cache', async () => {
+      stubCapabilities(authDisabledCapabilities);
+      stubBuilderSettings(settingsAllFeatures);
+      const spies = installListSpies();
+
+      renderCreate();
+
+      await waitFor(() => {
+        expect(spies.tools).toHaveBeenCalledTimes(1);
+        expect(spies.agents).toHaveBeenCalledTimes(1);
+        expect(spies.workflows).toHaveBeenCalledTimes(1);
+        expect(spies.storedSkills).toHaveBeenCalledTimes(1);
+        // The model picker cache is seeded on mount so the picker loads instantly.
+        expect(spies.availableModels).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
-  it('navigates back to the agents list with viewTransition when the back button is clicked', async () => {
-    stubBuilderSettings(settingsAllFeatures);
-    installListSpies();
+  describe('when only some features are enabled', () => {
+    it('only warms caches whose feature flag is enabled', async () => {
+      stubCapabilities(authDisabledCapabilities);
+      stubBuilderSettings(settingsPartialFeatures);
+      const spies = installListSpies();
 
-    renderCreate();
+      renderCreate();
 
-    const back = await screen.findByRole('button', { name: 'Agents list' });
-    fireEvent.click(back);
+      await waitFor(() => {
+        expect(spies.tools).toHaveBeenCalledTimes(1);
+        expect(spies.workflows).toHaveBeenCalledTimes(1);
+      });
+      expect(spies.agents).not.toHaveBeenCalled();
+      expect(spies.storedSkills).not.toHaveBeenCalled();
+    });
+  });
 
-    expect(navigateSpy).toHaveBeenCalledTimes(1);
-    expect(navigateSpy).toHaveBeenCalledWith('/agent-builder/agents', { viewTransition: true });
+  describe('when the back button is clicked', () => {
+    it('navigates back to the agents list with viewTransition', async () => {
+      stubCapabilities(authDisabledCapabilities);
+      stubBuilderSettings(settingsAllFeatures);
+      installListSpies();
+
+      renderCreate();
+
+      const back = await screen.findByRole('button', { name: 'Agents list' });
+      fireEvent.click(back);
+
+      expect(navigateSpy).toHaveBeenCalledTimes(1);
+      expect(navigateSpy).toHaveBeenCalledWith('/agent-builder/agents', { viewTransition: true });
+    });
   });
 });

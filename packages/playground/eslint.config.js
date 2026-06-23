@@ -119,6 +119,57 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   })),
 );
 
+// Enforce the playground testing contract (packages/playground/AGENTS.md + the
+// `playground-msw-tests` skill): drive the real @mastra/client-js + React Query
+// stack and ONLY mock the network. Mocking our own data hooks/services/auth
+// gating or the SDK hides cache, transport, and gating bugs. The allowed seams
+// are MSW network handlers, jsdom DOM-API polyfills in vitest.setup.ts, and the
+// three thin presentational seams (react-router's Navigate, a heavy child that
+// has its own dedicated test, atoms needing global context).
+const PROHIBITED_MOCK_MESSAGE =
+  'Do not vi.mock our own data hooks/services/auth gating or the SDK. ' +
+  'Drive the real @mastra/client-js + React Query stack through MSW network ' +
+  'handlers and typed fixtures instead (see packages/playground/AGENTS.md and ' +
+  'the playground-msw-tests skill). Allowed seams: MSW handlers, DOM-API ' +
+  "polyfills in vitest.setup.ts, react-router's Navigate, and thin stubs of a " +
+  'heavy child that has its own test.';
+
+// First-argument string literals to vi.mock() that are always prohibited.
+// Covers @ aliases for our domains/hooks/services and the two SDK packages.
+// Relative-path mocks of the same modules (e.g. ../../hooks/use-x) are caught
+// by the second selector.
+// Patterns are matched against the vi.mock() module string. Forward slashes
+// must be escaped as `\/` because esquery parses the value as a regex literal,
+// and we use `(\/|$)` boundaries instead of a bare `$`.
+const prohibitedMockModulePatterns = [
+  '^@\\/domains\\/[^\\/]+\\/(hooks|services)(\\/|$)',
+  '^@\\/domains\\/auth(\\/|$)',
+  '^@\\/domains\\/(llm|agent-builder|agents)$',
+  '^@\\/hooks(\\/|$)',
+  '^@mastra\\/client-js$',
+  '^@mastra\\/react$',
+];
+
+const restrictedTestMockSelectors = [
+  {
+    selector: prohibitedMockModulePatterns
+      .map(
+        pattern =>
+          `CallExpression[callee.object.name="vi"][callee.property.name="mock"] > Literal[value=/${pattern}/]:first-child`,
+      )
+      .join(', '),
+    message: PROHIBITED_MOCK_MESSAGE,
+  },
+  {
+    // Relative-path mocks resolving to our own hooks/services/auth, use-* hooks,
+    // or a domain barrel that re-exports them (agent-builder/llm/agents).
+    selector:
+      'CallExpression[callee.object.name="vi"][callee.property.name="mock"] > ' +
+      'Literal[value=/^\\.\\.?\\/.*(\\/(hooks|services)\\/|\\/use-|\\/auth(\\/|$)|\\/(agent-builder|llm|agents)$)/]:first-child',
+    message: PROHIBITED_MOCK_MESSAGE,
+  },
+];
+
 /** @type {import("eslint").Linter.Config[]} */
 export default [
   { ignores: ['e2e/**'] },
@@ -133,6 +184,16 @@ export default [
       'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       'no-restricted-syntax': ['error', ...restrictedPlaygroundUiBarrelImportSpecifiers],
+    },
+  },
+  {
+    files: ['src/**/*.{test,spec}.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedPlaygroundUiBarrelImportSpecifiers,
+        ...restrictedTestMockSelectors,
+      ],
     },
   },
 ];

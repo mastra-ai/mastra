@@ -31,10 +31,6 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-vi.mock('@/domains/auth/hooks/use-default-visibility', () => ({
-  useDefaultVisibility: () => 'private',
-}));
-
 const BASE_URL = 'http://localhost:4111';
 
 const renderStarter = () => {

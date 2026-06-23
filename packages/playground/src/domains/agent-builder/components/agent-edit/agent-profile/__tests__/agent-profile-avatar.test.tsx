@@ -1,29 +1,50 @@
 // @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
-import { cleanup, render } from '@testing-library/react';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, render, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { AgentProfileAvatar } from '../agent-profile-avatar';
+import { buildBuilderSettings } from './fixtures/builder';
+import { server } from '@/test/msw-server';
 
-const builderFeatures = {
-  tools: true,
-  memory: true,
-  workflows: true,
-  agents: true,
-  skills: true,
-  avatarUpload: true,
-  model: true,
-  favorites: true,
-  browser: true,
+const BASE_URL = 'http://localhost:4111';
+
+/**
+ * Drives `useBuilderAgentFeatures` through the real builder-settings query
+ * (`GET /api/editor/builder/settings`) instead of mocking the hook, so the
+ * avatar's feature gating is exercised against the live data flow.
+ */
+const registerSettings = (avatarUpload: boolean) => {
+  let resolved = false;
+  server.use(
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () => {
+      resolved = true;
+      return HttpResponse.json(buildBuilderSettings({ features: { agent: { ...allFeaturesOff, avatarUpload } } }));
+    }),
+  );
+  return { whenSettingsResolved: () => waitFor(() => expect(resolved).toBe(true)) };
 };
 
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
-  useBuilderAgentFeatures: () => builderFeatures,
-}));
+const allFeaturesOff = {
+  tools: false,
+  memory: false,
+  workflows: false,
+  agents: false,
+  skills: false,
+  avatarUpload: false,
+  model: false,
+  favorites: false,
+  browser: false,
+};
 
-const Wrapper = ({ children }: { children: React.ReactNode }) => {
+const Wrapper = ({ children }: { children: ReactNode }) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: 'My agent',
@@ -34,43 +55,70 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => {
     } as AgentBuilderEditFormValues,
   });
   return (
-    <TooltipProvider>
-      <FormProvider {...methods}>
-        <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
-      </FormProvider>
-    </TooltipProvider>
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <FormProvider {...methods}>
+            <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
+          </FormProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>
   );
 };
 
 describe('AgentProfileAvatar', () => {
-  beforeEach(() => {
-    builderFeatures.avatarUpload = true;
-  });
-
   afterEach(() => {
     cleanup();
   });
 
-  it('renders the upload trigger when editable and avatarUpload feature is enabled', () => {
-    const { getByTestId, queryByTestId } = render(
-      <Wrapper>
-        <AgentProfileAvatar />
-      </Wrapper>,
-    );
+  describe('when the avatarUpload feature is enabled', () => {
+    it('renders the upload trigger', async () => {
+      registerSettings(true);
+      const { findByTestId } = render(
+        <Wrapper>
+          <AgentProfileAvatar />
+        </Wrapper>,
+      );
 
-    expect(getByTestId('agent-configure-avatar-trigger')).not.toBeNull();
-    expect(queryByTestId('agent-configure-avatar-display')).toBeNull();
+      expect(await findByTestId('agent-configure-avatar-trigger')).not.toBeNull();
+    });
+
+    it('does not render the read-only display', async () => {
+      registerSettings(true);
+      const { findByTestId, queryByTestId } = render(
+        <Wrapper>
+          <AgentProfileAvatar />
+        </Wrapper>,
+      );
+
+      await findByTestId('agent-configure-avatar-trigger');
+      expect(queryByTestId('agent-configure-avatar-display')).toBeNull();
+    });
   });
 
-  it('hides the upload trigger when the avatarUpload feature is disabled', () => {
-    builderFeatures.avatarUpload = false;
-    const { getByTestId, queryByTestId } = render(
-      <Wrapper>
-        <AgentProfileAvatar />
-      </Wrapper>,
-    );
+  describe('when the avatarUpload feature is disabled', () => {
+    it('renders the read-only display', async () => {
+      registerSettings(false);
+      const { findByTestId } = render(
+        <Wrapper>
+          <AgentProfileAvatar />
+        </Wrapper>,
+      );
 
-    expect(queryByTestId('agent-configure-avatar-trigger')).toBeNull();
-    expect(getByTestId('agent-configure-avatar-display')).not.toBeNull();
+      expect(await findByTestId('agent-configure-avatar-display')).not.toBeNull();
+    });
+
+    it('does not render the upload trigger', async () => {
+      const { whenSettingsResolved } = registerSettings(false);
+      const { queryByTestId } = render(
+        <Wrapper>
+          <AgentProfileAvatar />
+        </Wrapper>,
+      );
+
+      await whenSettingsResolved();
+      expect(queryByTestId('agent-configure-avatar-trigger')).toBeNull();
+    });
   });
 });

@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageRow } from '../messages';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
@@ -17,6 +20,7 @@ import {
   SET_AGENT_TOOLS_TOOL_NAME,
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
+import { server } from '@/test/msw-server';
 
 type ToolPart = MastraMessagePart;
 
@@ -60,13 +64,17 @@ vi.mock('../../../contexts/agent-primitives-context', () => ({
   useAgentPrimitives: () => primitivesMock,
 }));
 
-vi.mock('../../../../agent-builder', () => ({
-  useBuilderPickerVisibility: () => ({
-    visibleTools: null,
-    visibleAgents: null,
-    visibleWorkflows: null,
-  }),
-}));
+const BASE_URL = 'http://localhost:4111';
+
+// Builder settings with no `picker` → `useBuilderPickerVisibility` resolves to
+// unrestricted (all visible* null), matching the prior stubbed behavior.
+const builderSettingsHandler = http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+  HttpResponse.json({ enabled: true }),
+);
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+});
 
 const FormWrapper = ({
   children,
@@ -78,7 +86,13 @@ const FormWrapper = ({
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: { name: '', description: '', instructions: '', ...defaultValues },
   });
-  return <FormProvider {...methods}>{children}</FormProvider>;
+  return (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <FormProvider {...methods}>{children}</FormProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>
+  );
 };
 
 const renderMessage = (message: MastraDBMessage, defaultValues?: Partial<AgentBuilderEditFormValues>) =>
@@ -103,6 +117,10 @@ const buildMessage = (parts: ToolPart[]): MastraDBMessage =>
   }) as unknown as MastraDBMessage;
 
 describe('MessageRow dynamic-tool rendering', () => {
+  beforeAll(() => {
+    server.use(builderSettingsHandler);
+  });
+
   beforeEach(() => {
     primitivesMock = {
       agentId: 'agent-1',

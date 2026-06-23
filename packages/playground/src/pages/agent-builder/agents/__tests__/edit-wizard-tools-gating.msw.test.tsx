@@ -11,6 +11,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderAgentEdit from '../edit';
+import { authEnabledNoRbacCapabilities, currentUser } from './fixtures/auth';
 import { emptyAgents, oneOtherAgent, settingsAgentsOnly } from './fixtures/builder';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
@@ -23,22 +24,6 @@ vi.mock('@mastra/playground-ui', async () => {
     usePlaygroundStore: () => ({ requestContext: undefined }),
   };
 });
-
-vi.mock('@/domains/auth/hooks/use-current-user', () => ({
-  useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
-  isUnauthenticatedError: () => false,
-}));
-
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
-  useBuilderAgentAccess: () => ({
-    hasAccess: true,
-    canWrite: true,
-    canExecute: true,
-    canManageSkills: true,
-    canUseFavorites: true,
-    denialReason: null,
-  }),
-}));
 
 // Stub heavy chat panels so we can focus on the wizard step tree.
 vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () => ({
@@ -55,11 +40,6 @@ vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
 
 vi.mock('@/domains/agent-builder/contexts/stream-chat-provider', () => ({
   StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-// Drive the starter message so the wizard begins in the onboarding flow.
-vi.mock('@/domains/agent-builder/hooks/use-starter-user-message', () => ({
-  useStarterUserMessage: () => 'hello',
 }));
 
 const BASE_URL = 'http://localhost:4111';
@@ -101,7 +81,11 @@ function renderPage() {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
           <TooltipProvider>
-            <MemoryRouter initialEntries={['/agent-builder/agents/agent-wizard/edit']}>
+            <MemoryRouter
+              initialEntries={[
+                { pathname: '/agent-builder/agents/agent-wizard/edit', state: { userMessage: 'hello' } },
+              ]}
+            >
               <Routes>
                 <Route path="/agent-builder/agents/:id/edit" element={<AgentBuilderAgentEdit />} />
                 <Route path="/agent-builder/agents/:id/view" element={<div data-testid="view-page" />} />
@@ -156,7 +140,8 @@ const installRadixDomShims = () => {
 };
 
 const baseHandlers = (agents: Record<string, GetAgentResponse>) => [
-  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, user: { id: 'user-1' } })),
+  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authEnabledNoRbacCapabilities)),
+  http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(currentUser)),
   http.get(`${BASE_URL}/api/stored/agents/agent-wizard`, () => HttpResponse.json(storedAgent)),
   http.patch(`${BASE_URL}/api/stored/agents/agent-wizard`, async ({ request }) => {
     const body = (await request.json()) as Partial<typeof storedAgent>;
@@ -178,38 +163,40 @@ describe('AgentBuilderAgentEdit MSW integration — wizard tools-step gating', (
     cleanup();
   });
 
-  it('agents-only features with another agent available: Continue reaches the Tools step', async () => {
-    server.use(...baseHandlers(oneOtherAgent));
+  describe('when agents-only features are enabled and another agent is available', () => {
+    it('includes the Tools step because sub-agents count as agent tools', async () => {
+      server.use(...baseHandlers(oneOtherAgent));
 
-    renderPage();
+      renderPage();
 
-    // Split layout with the per-step Continue CTA (all mandatory fields filled).
-    await waitFor(() => {
-      expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
+      // Split layout with the per-step Continue CTA (all mandatory fields filled).
+      await waitFor(() => {
+        expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
+      });
+
+      fireEvent.click(await screen.findByTestId('agent-builder-ready-review'));
+      fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
+
+      expect(await screen.findByText('Available tools')).toBeTruthy();
     });
-
-    fireEvent.click(await screen.findByTestId('agent-builder-ready-review'));
-    fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
-
-    // Sub-agents count as agent tools, so the wizard must include the tools step.
-    expect(await screen.findByText('Available tools')).toBeTruthy();
   });
 
-  it('agents-only features with no agent tools at all: the wizard skips the Tools step', async () => {
-    server.use(...baseHandlers(emptyAgents));
+  describe('when agents-only features are enabled but no agent tools exist', () => {
+    it('skips the Tools step and lands on Instructions', async () => {
+      server.use(...baseHandlers(emptyAgents));
 
-    renderPage();
+      renderPage();
 
-    await waitFor(() => {
-      expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
+      await waitFor(() => {
+        expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
+      });
+
+      fireEvent.click(await screen.findByTestId('agent-builder-ready-review'));
+      fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
+
+      // Parity with the Tools tab, which is hidden without available tools.
+      expect(await screen.findByText('Instructions')).toBeTruthy();
+      expect(screen.queryByText('Available tools')).toBeNull();
     });
-
-    fireEvent.click(await screen.findByTestId('agent-builder-ready-review'));
-    fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
-
-    // Once tool availability resolves to empty, the wizard lands on Instructions
-    // (parity with the Tools tab, which is hidden without available tools).
-    expect(await screen.findByText('Instructions')).toBeTruthy();
-    expect(screen.queryByText('Available tools')).toBeNull();
   });
 });
