@@ -1,5 +1,16 @@
 # @mastra/redis-streams
 
+## 0.2.0-alpha.1
+
+### Patch Changes
+
+- Honor the `localOnly` publish option so in-process subscribers can receive events without round-tripping through the broker. ([#17836](https://github.com/mastra-ai/mastra/pull/17836))
+
+  This matches the contract already implemented by `UnixSocketPubSub` in `@mastra/core`: when `Mastra` tags an internal workflow event as `localOnly`, the payload is delivered by reference to local subscribers and the broker is skipped entirely. Live runtime values like `MastraModelOutput` instances now keep their prototypes when the evented agent loop runs against a Redis Streams or Google Cloud Pub/Sub broker, fixing `output.consumeStream is not a function` style failures.
+
+- Updated dependencies [[`5c4e9a4`](https://github.com/mastra-ai/mastra/commit/5c4e9a4cfb2216bb3ea7f8988ad3727f3b92bb3a), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`7b29f33`](https://github.com/mastra-ai/mastra/commit/7b29f332a357a83e555f29e718e5f2fab9979943), [`24912b1`](https://github.com/mastra-ai/mastra/commit/24912b1f855d29ec36af4ef4bde1f7417e20cdf5), [`7686216`](https://github.com/mastra-ai/mastra/commit/7686216f37e74568feddec17cef3c3d24e10e60a), [`975c59a`](https://github.com/mastra-ai/mastra/commit/975c59ae363ee275fc55062392e1ffd2cbccbd53), [`d95f394`](https://github.com/mastra-ai/mastra/commit/d95f394fd24c8411886930d727679c4d5252aa26), [`f3f0c9d`](https://github.com/mastra-ai/mastra/commit/f3f0c9d7c878db5a13177871ce3523a14f14b311)]:
+  - @mastra/core@1.46.0-alpha.4
+
 ## 0.2.0-alpha.0
 
 ### Minor Changes
