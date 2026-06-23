@@ -1,7 +1,7 @@
 import { InferenceRunner } from '@livekit/agents';
 import type { JobContext, JobProcess } from '@livekit/agents';
 import type { Mastra } from '@mastra/core/mastra';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLiveKitWorker } from './worker';
 import { workerSetupComplete } from './worker-setup';
 
@@ -27,6 +27,19 @@ function fakeJobContext(metadata?: string): JobContext {
 }
 
 describe('createLiveKitWorker', () => {
+  // createLiveKitWorker prunes InferenceRunner.registeredRunners (a process-global), so
+  // snapshot and restore it around each test to keep registry state from leaking between tests.
+  let runnerSnapshot: Record<string, unknown>;
+  beforeEach(() => {
+    runnerSnapshot = { ...InferenceRunner.registeredRunners };
+  });
+  afterEach(() => {
+    for (const key of Object.keys(InferenceRunner.registeredRunners)) {
+      delete InferenceRunner.registeredRunners[key];
+    }
+    Object.assign(InferenceRunner.registeredRunners, runnerSnapshot);
+  });
+
   it('registers only the requested turn detector inference runner before the server starts', async () => {
     createLiveKitWorker({ mastra: fakeMastra(), vad: false, turnDetection: 'multilingual' });
     // runLiveKitWorker awaits this before booting the agent server; the server only
