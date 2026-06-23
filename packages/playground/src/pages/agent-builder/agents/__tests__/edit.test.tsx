@@ -155,6 +155,7 @@ const commonHandlers = (overrides?: { agent?: Partial<typeof storedAgent>; meDel
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
+  http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json([])),
 ];
 
 describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
@@ -241,6 +242,7 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
     const listConnections = vi.fn();
 
     server.use(
+      http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json(composioProviderList)),
       ...commonHandlers({
         agent: {
           toolProviders: {
@@ -255,7 +257,6 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
           },
         },
       }),
-      http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json(composioProviderList)),
       http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () => {
         listToolkits();
         return HttpResponse.json(composioToolkits);
@@ -296,9 +297,13 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
         draftRequests.push(new URL(request.url).search);
         return HttpResponse.json(storedAgent);
       }),
+      http.get(`${BASE_URL}/api/stored/agents/agent-123/dependents`, () =>
+        HttpResponse.json({ dependents: [], hiddenCount: 0 }),
+      ),
       http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
       http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
       http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
+      http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json([])),
     );
 
     renderPage();

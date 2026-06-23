@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -63,6 +62,9 @@ const stubAgentDependents = (agentId: string, payload: DependentsStub = { depend
 describe('VisibilitySelect', () => {
   beforeEach(() => {
     stubAgentDependents(AGENT_ID);
+    // The visibility mutation reads auth capabilities to gate workspace writes;
+    // default to auth-disabled so permission checks pass without network noise.
+    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })));
   });
 
   afterEach(() => {

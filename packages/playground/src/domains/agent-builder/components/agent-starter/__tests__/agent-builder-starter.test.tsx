@@ -60,6 +60,7 @@ describe('AgentBuilderStarter', () => {
         HttpResponse.json({ enabled: true, modelPolicy: { active: false } }),
       ),
       http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
+      http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
       http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, login: null })),
     );
   });

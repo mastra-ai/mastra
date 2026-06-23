@@ -90,3 +90,30 @@ describe('AgentEditPage', () => {
 Fixtures live in a nearby `__tests__/fixtures/` folder, typed with response types re-exported from `@mastra/client-js`. No bespoke inline types, no `as any`, no `as unknown as`.
 
 When removing a mock surfaces a real product gap (an endpoint with no handler, a gating branch that was never exercised), fix the test/fixture or file the gap — never re-mock to paper over it. MSW runs with `onUnhandledRequest: 'error'`, so an unstubbed request fails loudly on purpose.
+
+### Wrap mutation calls in `act`
+
+When a `renderHook` test fires a mutation (or any call that triggers React state updates outside an event handler), wrap it in `await act(...)`. Awaiting `mutateAsync` alone is not enough: the mutation resolves, but React Query's observer notifications (and any chained mutations like a best-effort workspace write) settle in a later microtask, producing "An update to TestComponent inside a test was not wrapped in act(...)" and, under jsdom teardown, flaky `window is not defined` errors.
+
+**Incorrect (bare `mutateAsync`; trailing state update escapes `act`):**
+
+```tsx
+const { result } = renderHookWithProviders(() => useCreateSkill());
+await waitFor(() => expect(result.current.permissions.isLoading).toBe(false));
+await result.current.create.mutateAsync({ name: 'n', files });
+```
+
+**Correct (mutation wrapped, then drain React Query):**
+
+```tsx
+const { result, queryClient } = renderHookWithProviders(() => useCreateSkill());
+await waitFor(() => expect(result.current.permissions.isLoading).toBe(false));
+await act(async () => {
+  await result.current.create.mutateAsync({ name: 'n', files });
+});
+await waitForMutationsIdle(queryClient);
+```
+
+### Hooks don't own UI toasts
+
+Data hooks return state; **components own user-facing feedback**. A hook's `onError` must not call `toast.error(...)` — that couples a reusable hook to a specific UI surface, fires duplicate toasts when several callers wrap the same hook, and makes errors invisible to non-UI callers (e.g. a tool's `execute` that surfaces the failure to the agent). Let the mutation reject and toast at the component boundary in a `try/catch` around `mutateAsync`. This also keeps tests honest: a real-stack test asserts the rejection, not a spied toast.

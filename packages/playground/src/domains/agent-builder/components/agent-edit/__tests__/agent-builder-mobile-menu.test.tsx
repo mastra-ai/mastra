@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,7 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter, useLocation } from 'react-router';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentBuilderMobileMenu } from '../agent-builder-mobile-menu';
 import { server } from '@/test/msw-server';
@@ -76,6 +75,17 @@ const installRadixDomShims = () => {
 describe('AgentBuilderMobileMenu', () => {
   beforeAll(() => {
     installRadixDomShims();
+  });
+
+  beforeEach(() => {
+    // The visibility-change flow warms the agent's dependents to decide whether
+    // to show impact warnings. Default to an empty list so the dialog renders
+    // without unhandled-request noise; individual cases can override.
+    server.use(
+      http.get(`${BASE_URL}/api/stored/agents/:id/dependents`, () =>
+        HttpResponse.json({ dependents: [], hiddenCount: 0 }),
+      ),
+    );
   });
 
   afterEach(() => {

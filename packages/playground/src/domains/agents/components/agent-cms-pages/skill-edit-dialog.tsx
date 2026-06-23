@@ -10,6 +10,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
+  toast,
 } from '@mastra/playground-ui';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { AlertTriangle, ChevronDown, ChevronRight, CopyIcon, Globe, LockIcon, Pencil, Settings2 } from 'lucide-react';
@@ -210,13 +211,19 @@ export function SkillEditDialog({
       onSkillUpdated?.(result);
       onClose();
     } else {
-      const result = await createSkill.mutateAsync({
-        name,
-        description,
-        visibility,
-        workspaceId,
-        files: filesToSave,
-      });
+      let result: StoredSkillResponse;
+      try {
+        result = await createSkill.mutateAsync({
+          name,
+          description,
+          visibility,
+          workspaceId,
+          files: filesToSave,
+        });
+      } catch (error) {
+        toast.error(`Failed to create skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return;
+      }
       onSkillCreated?.(result, workspaceId);
       onClose();
     }
