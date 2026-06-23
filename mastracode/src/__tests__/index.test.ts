@@ -732,9 +732,9 @@ describe('createMastraCode', () => {
     const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
       | { maxRetries?: number; delayMs?: (args: { retryCount: number }) => number; matchers?: Array<unknown> }
       | undefined;
-    expect(options?.maxRetries).toBeGreaterThanOrEqual(2);
+    expect(options?.maxRetries).toBe(2);
     // The global policy must opt in the ECONNRESET matcher.
-    expect(options?.matchers?.length).toBeGreaterThanOrEqual(1);
+    expect(options?.matchers).toHaveLength(1);
     // delayMs must be an exponential-backoff function capped at a max delay.
     expect(typeof options?.delayMs).toBe('function');
     expect(options!.delayMs!({ retryCount: 0 })).toBe(1000);
