@@ -14,8 +14,8 @@ import {
   SelectList,
   Spacer,
   Text,
-  truncateToWidth,
   visibleWidth,
+  wrapTextWithAnsi,
 } from '@earendil-works/pi-tui';
 import type { Component, Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
@@ -50,68 +50,18 @@ class PlanContentBox implements Component {
     const bottom = `${border('╰')}${border('─'.repeat(innerWidth + 2))}${border('╯')}`;
     const body: string[] = [];
     for (const line of rendered) {
-      const contentVis = visibleWidth(line);
-      if (contentVis <= innerWidth) {
-        const padding = ' '.repeat(Math.max(0, innerWidth - contentVis));
-        body.push(`${border('│')} ${line}${padding} ${border('│')}`);
-      } else {
-        // Wrap overflowing markdown lines instead of truncating
-        const chunks = wrapStyledLine(line, innerWidth);
-        for (const chunk of chunks) {
-          const chunkVis = visibleWidth(chunk);
-          const padding = ' '.repeat(Math.max(0, innerWidth - chunkVis));
-          body.push(`${border('│')} ${chunk}${padding} ${border('│')}`);
-        }
+      // Always wrap every line to innerWidth using the library's ANSI-aware
+      // wrapper. This handles paragraphs that the Markdown renderer outputs
+      // as single long lines without wrapping.
+      const wrapped = wrapTextWithAnsi(line, innerWidth);
+      for (const chunk of wrapped) {
+        const chunkVis = visibleWidth(chunk);
+        const padding = ' '.repeat(Math.max(0, innerWidth - chunkVis));
+        body.push(`${border('│')} ${chunk}${padding} ${border('│')}`);
       }
     }
     return [top, ...body, bottom];
   }
-}
-
-/**
- * Wrap a line that may contain ANSI styling by using truncateToWidth to extract
- * successive chunks of the target width.
- */
-function wrapStyledLine(line: string, maxWidth: number): string[] {
-  const chunks: string[] = [];
-  let remaining = line;
-
-  while (visibleWidth(remaining) > maxWidth) {
-    chunks.push(truncateToWidth(remaining, maxWidth));
-    // Remove the visible characters we just consumed. Since truncateToWidth
-    // may leave trailing ANSI resets, strip them and figure out the remainder
-    // by removing the first maxWidth visible characters.
-    const consumed = visibleWidth(chunks[chunks.length - 1]!);
-    if (consumed <= 0) break; // safety: avoid infinite loop
-    remaining = sliceVisibleChars(remaining, consumed);
-  }
-  if (remaining.length > 0) chunks.push(remaining);
-
-  return chunks.length > 0 ? chunks : [''];
-}
-
-/**
- * Remove the first `count` visible characters from a string that may contain
- * ANSI escape sequences, preserving escape sequences that follow.
- */
-function sliceVisibleChars(str: string, count: number): string {
-  let visible = 0;
-  let i = 0;
-  while (i < str.length && visible < count) {
-    if (str[i] === '\x1b') {
-      // Skip entire ANSI escape sequence
-      const end = str.indexOf('m', i);
-      if (end !== -1) {
-        i = end + 1;
-      } else {
-        i++;
-      }
-    } else {
-      visible++;
-      i++;
-    }
-  }
-  return str.slice(i);
 }
 
 /**
@@ -149,8 +99,9 @@ class PlanDiffBox implements Component {
       const prefixWidth = 2;
       const textWidth = innerWidth - prefixWidth;
 
-      // Wrap long text across multiple lines
-      const wrappedChunks = wrapText(entry.text, textWidth);
+      // Use the library's ANSI-aware word-wrap on the raw text first, then
+      // colorize each resulting chunk. This guarantees every line fits.
+      const wrappedChunks = wrapTextWithAnsi(entry.text, textWidth);
       for (let ci = 0; ci < wrappedChunks.length; ci++) {
         const linePrefix = ci === 0 ? prefix : '  ';
         const content = colorFn(`${linePrefix}${wrappedChunks[ci]}`);
@@ -194,31 +145,6 @@ function generatePlanDiff(oldText: string, newText: string): DiffEntry[] {
   return entries;
 }
 
-/**
- * Wrap a plain text string into chunks that fit within maxWidth.
- * Wraps at word boundaries when possible, hard-breaks otherwise.
- */
-function wrapText(text: string, maxWidth: number): string[] {
-  if (maxWidth <= 0) return [text];
-  if (text.length <= maxWidth) return [text];
-
-  const chunks: string[] = [];
-  let remaining = text;
-
-  while (remaining.length > maxWidth) {
-    // Find last space within maxWidth
-    let breakAt = remaining.lastIndexOf(' ', maxWidth);
-    if (breakAt <= 0) {
-      // No space found — hard break
-      breakAt = maxWidth;
-    }
-    chunks.push(remaining.slice(0, breakAt));
-    remaining = remaining.slice(breakAt).replace(/^ /, '');
-  }
-  if (remaining.length > 0) chunks.push(remaining);
-
-  return chunks.length > 0 ? chunks : [''];
-}
 
 export class PlanApprovalInlineComponent extends Container implements Focusable {
   private contentBox: Box;
