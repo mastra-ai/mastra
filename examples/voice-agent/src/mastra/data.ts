@@ -63,7 +63,12 @@ export const appointments: Appointment[] = [];
 const OPEN_HOURS = ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
 
 function toIsoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  // Build from local components: upcomingBusinessDays() filters weekdays with the local
+  // getDay(), so a UTC toISOString() here could shift the day and desync the two.
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function describeDate(isoDate: string): string {
