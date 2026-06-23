@@ -34,4 +34,13 @@ new Agent({
 
 For runtimes where `waitUntil` lives on the request context but isn't covered by the default, pass `resolveWaitUntil: (c) => fn | undefined` instead.
 
+```ts
+new Agent({
+  channels: {
+    adapters: { slack: createSlackAdapter({ ... }) },
+    resolveWaitUntil: c => c.var.runtime?.waitUntil,
+  },
+});
+```
+
 Resolution order: `waitUntil` → `resolveWaitUntil(c)` → core default.

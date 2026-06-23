@@ -176,11 +176,13 @@ export class ChatChannelOutputProcessor {
     // `messageId` for the incoming `tool-result` even though it never saw the
     // pre-suspension `tool-call`.
     if (render.approvalContext) {
+      const existing = render.getPendingApproval(render.approvalContext.toolCallId);
       render.onApprovalPosted(render.approvalContext.toolCallId, {
+        ...existing,
         messageId: render.approvalContext.messageId,
-        displayName: '',
-        argsSummary: '',
-        startedAt: Date.now(),
+        displayName: existing?.displayName ?? '',
+        argsSummary: existing?.argsSummary ?? '',
+        startedAt: existing?.startedAt ?? Date.now(),
       });
     }
 
