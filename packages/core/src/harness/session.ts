@@ -1,6 +1,5 @@
 import type { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
-import { trace } from './debug-trace';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
   AgentThreadSubscription,
@@ -17,6 +16,8 @@ import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import { safeStringify } from '../utils';
+
+import { trace } from './debug-trace';
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
@@ -322,7 +323,11 @@ export class SessionThread {
     trace('thread.list:result', {
       resourceId,
       count: threads.length,
-      threads: threads.map(t => ({ id: t.id, resourceId: t.resourceId, projectPath: (t.metadata as any)?.projectPath })),
+      threads: threads.map(t => ({
+        id: t.id,
+        resourceId: t.resourceId,
+        projectPath: (t.metadata as any)?.projectPath,
+      })),
     });
     return threads;
   }
@@ -721,9 +726,7 @@ export class SessionThread {
         projectPath: (thread?.metadata as any)?.projectPath,
         currentModelId: (thread?.metadata as any)?.currentModelId,
         currentModeId: (thread?.metadata as any)?.currentModeId,
-        modeModelKeys: thread?.metadata
-          ? Object.keys(thread.metadata).filter(k => k.startsWith('modeModelId_'))
-          : [],
+        modeModelKeys: thread?.metadata ? Object.keys(thread.metadata).filter(k => k.startsWith('modeModelId_')) : [],
       });
 
       // Load token usage

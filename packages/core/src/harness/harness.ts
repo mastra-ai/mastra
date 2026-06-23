@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { trace } from './debug-trace';
-
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { mastraDBMessageToSignal } from '../agent/signals';
@@ -19,6 +17,7 @@ import type { ObservationalMemoryRecord } from '../storage/types';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
+import { trace } from './debug-trace';
 import { Session } from './session';
 import type { ThreadDataStore } from './session';
 import {
