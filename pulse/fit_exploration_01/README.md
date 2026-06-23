@@ -38,4 +38,4 @@ Skip initial Pulse emission for:
 - `02-family-fit-matrix.md`: event-family classification and first-pass Pulse fit.
 - `03-worked-examples.md`: concrete sample Pulses for representative events.
 - `04-open-questions.md`: questions discovered during the fit pass.
-
+- `05-learnings-summary.md`: reviewed takeaways and current shape corrections from this pass.

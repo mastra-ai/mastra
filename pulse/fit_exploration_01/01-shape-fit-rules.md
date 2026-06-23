@@ -157,7 +157,6 @@ An event is a good initial Pulse candidate if all are true:
 1. It is part of a user primitive execution or primitive-owned state.
 2. It changes what the user/model/runtime can observe about that execution.
 3. It can be recorded as a point in time.
-4. It does not require duration as a primary field.
 5. It does not duplicate information already on a parent Pulse.
 
 An event should be skipped if any are true:
