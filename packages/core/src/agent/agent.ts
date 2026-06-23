@@ -986,7 +986,10 @@ export class Agent<
    * Agent-level skills win on name conflicts when both are present.
    * @internal
    */
-  private async resolveSkills(requestContext?: RequestContext): Promise<WorkspaceSkills | undefined> {
+  private async resolveSkills(
+    requestContext?: RequestContext,
+    workspaceOverride?: AnyWorkspace,
+  ): Promise<WorkspaceSkills | undefined> {
     const rc = requestContext || new RequestContext();
 
     // Resolve agent-level skills (if configured)
@@ -1004,7 +1007,7 @@ export class Agent<
     }
 
     // Resolve workspace-level skills (if configured)
-    const workspace = await this.getWorkspace({ requestContext: rc });
+    const workspace = workspaceOverride ?? (await this.getWorkspace({ requestContext: rc }));
     const workspaceSkills = workspace?.skills;
 
     // Merge if both exist (agent skills win on name conflicts)
@@ -1032,8 +1035,11 @@ export class Agent<
       return [];
     }
 
+    const rc = requestContext || new RequestContext();
+    const workspace = await this.getWorkspace({ requestContext: rc });
+
     // Resolve combined skills from agent-level and/or workspace
-    const skills = await this.resolveSkills(requestContext);
+    const skills = await this.resolveSkills(rc, workspace ?? undefined);
     if (!skills) {
       return [];
     }
@@ -1046,7 +1052,6 @@ export class Agent<
       return [new AgentSkillsProcessorAdapter(skills, this.#skillsFormat)];
     }
 
-    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
     if (workspace) {
       return [new SkillsProcessor({ workspace, format: this.#skillsFormat })];
     }
@@ -3488,13 +3493,14 @@ export class Agent<
       return convertedSkillTools;
     }
 
-    // Resolve skills from agent-level config and/or workspace
-    const skills = await this.resolveSkills(requestContext);
+    const workspace = await this.getWorkspace({ requestContext });
+
+    // Resolve skills from agent-level config and/or workspace (pass workspace to avoid double resolution)
+    const skills = await this.resolveSkills(requestContext, workspace ?? undefined);
     if (!skills) {
       return convertedSkillTools;
     }
 
-    const workspace = await this.getWorkspace({ requestContext });
     const skillTools = createSkillTools(skills);
 
     if (Object.keys(skillTools).length > 0) {
@@ -3731,6 +3737,7 @@ export class Agent<
       inputProcessorOverrides?.length ||
       this.#inputProcessors ||
       this.#memory ||
+      this.#skills ||
       this.#workspace ||
       this.#mastra?.getWorkspace() ||
       this.#browser ||

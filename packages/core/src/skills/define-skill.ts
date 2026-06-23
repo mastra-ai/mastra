@@ -40,7 +40,7 @@ export function defineSkill(input: InlineSkillInput): InlineSkill {
 
   // Validate metadata (same checks as filesystem-discovered skills)
   const validation = validateSkillMetadata(
-    { name, description, license, compatibility, metadata },
+    { name, description, license, compatibility, 'user-invocable': input['user-invocable'], metadata },
     undefined,
     instructions,
   );
