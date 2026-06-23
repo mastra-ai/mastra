@@ -1,5 +1,4 @@
 import {
-  ErrorState,
   NoDataPageLayout,
   PageLayout,
   PermissionDenied,
@@ -7,6 +6,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { useState } from 'react';
 import { ScorersToolbar, useScorers } from '@/domains/scores';
 import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';

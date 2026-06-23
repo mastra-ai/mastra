@@ -1,6 +1,7 @@
 'use client';
 
-import { MarkdownRenderer, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useMemo } from 'react';
 
 // Priority emoji to color mapping

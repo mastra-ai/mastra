@@ -4,18 +4,17 @@ import {
   EntityDescription,
   EntityContent,
   Entity,
-  Notice,
   Popover,
   PopoverTrigger,
   PopoverContent,
   ScrollArea,
-  Section,
-  SubSectionRoot,
   Icon,
   ToolsIcon,
   cn,
 } from '@mastra/playground-ui';
 import type { RuleGroup } from '@mastra/playground-ui';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';

@@ -1,4 +1,5 @@
-import { Checkbox, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { useContext } from 'react';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 

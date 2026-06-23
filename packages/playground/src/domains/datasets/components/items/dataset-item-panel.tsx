@@ -1,9 +1,11 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { AlertDialog, Button, ButtonsGroup, DropdownMenu, toast } from '@mastra/playground-ui';
+import { Button, ButtonsGroup, toast } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { format } from 'date-fns/format';
 import {
   BracesIcon,
