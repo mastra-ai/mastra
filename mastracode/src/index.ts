@@ -16,6 +16,7 @@ import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import {
   AgentsMDInjector,
+  isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
@@ -122,19 +123,6 @@ function isECONNRESETError(error: unknown): boolean {
   return false;
 }
 
-/**
- * Matcher for transient OpenAI Bad Request (400) failures. OpenAI occasionally
- * returns HTTP 400 during service degradation that succeeds on retry. Limited
- * to 1 retry (via a separate StreamErrorRetryProcessor instance) since it could
- * also be a genuinely invalid request.
- */
-function isBadRequestError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-
-  if ('statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400) return true;
-
-  return false;
-}
 
 function applyEffectiveDefaultsToModes(modes: HarnessMode[], effectiveDefaults: Record<string, string>): HarnessMode[] {
   return modes.map(mode => {
@@ -563,6 +551,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     errorProcessors: [
       new StreamErrorRetryProcessor({
         maxRetries: 1,
+        delayMs: 2000,
         matchers: [isBadRequestError],
       }),
       new StreamErrorRetryProcessor({

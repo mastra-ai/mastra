@@ -2,7 +2,11 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageList } from '../agent/message-list';
-import { isRetryableOpenAIResponsesStreamError, StreamErrorRetryProcessor } from './stream-error-retry-processor';
+import {
+  isBadRequestError,
+  isRetryableOpenAIResponsesStreamError,
+  StreamErrorRetryProcessor,
+} from './stream-error-retry-processor';
 import type { ProcessAPIErrorArgs } from './index';
 
 function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIErrorArgs {
@@ -151,6 +155,62 @@ describe('StreamErrorRetryProcessor', () => {
     };
 
     await expect(processor.processAPIError(makeArgs({ error }))).resolves.toBeUndefined();
+  });
+
+  it('detects Bad Request (400) errors via isBadRequestError', () => {
+    const error = new APICallError({
+      message: 'Invalid request: Bad Request',
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      isRetryable: false,
+    });
+
+    expect(isBadRequestError(error)).toBe(true);
+  });
+
+  it('isBadRequestError returns false for non-400 errors', () => {
+    const error = new APICallError({
+      message: 'server failed',
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 500,
+      isRetryable: true,
+    });
+
+    expect(isBadRequestError(error)).toBe(false);
+  });
+
+  it('retries Bad Request errors when configured with isBadRequestError matcher', async () => {
+    const processor = new StreamErrorRetryProcessor({
+      maxRetries: 1,
+      matchers: [isBadRequestError],
+    });
+    const error = new APICallError({
+      message: 'Invalid request: Bad Request',
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      isRetryable: false,
+    });
+
+    await expect(processor.processAPIError(makeArgs({ error }))).resolves.toEqual({ retry: true });
+  });
+
+  it('does not retry Bad Request more than maxRetries allows', async () => {
+    const processor = new StreamErrorRetryProcessor({
+      maxRetries: 1,
+      matchers: [isBadRequestError],
+    });
+    const error = new APICallError({
+      message: 'Invalid request: Bad Request',
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      isRetryable: false,
+    });
+
+    await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
   });
 
   it('respects maxRetries', async () => {

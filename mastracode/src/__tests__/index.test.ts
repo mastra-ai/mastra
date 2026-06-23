@@ -154,6 +154,7 @@ vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
   },
+  isBadRequestError: (error: unknown) => typeof error === 'object' && error !== null && 'statusCode' in error,
   PrefillErrorHandler: class {
     readonly id = 'prefill-error-handler';
   },
@@ -735,8 +736,8 @@ describe('createMastraCode', () => {
       | undefined;
     expect(options?.maxRetries).toBe(1);
     expect(options?.matchers).toHaveLength(1);
-    // No delay for Bad Request retries — they either succeed immediately or fail permanently.
-    expect(options?.delayMs).toBeUndefined();
+    // Wait 2 seconds before retrying to give the provider time to recover.
+    expect(options?.delayMs).toBe(2000);
   });
 
   it('configures the StreamErrorRetryProcessor with a global ECONNRESET retry policy', async () => {

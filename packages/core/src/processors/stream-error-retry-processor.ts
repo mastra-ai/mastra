@@ -93,6 +93,19 @@ export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
   return hasRetryableOpenAIErrorCode(payload) || hasExplicitRetryMessage(payload);
 }
 
+/**
+ * Matcher for transient HTTP 400 (Bad Request) failures. Providers like OpenAI
+ * occasionally return 400 during service degradation that succeeds on retry.
+ * Recommended with `maxRetries: 1` since a 400 could also be genuinely invalid.
+ */
+export function isBadRequestError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  if ('statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400) return true;
+
+  return false;
+}
+
 function isRetryableProviderMetadata(error: unknown): boolean {
   const retryable = APICallError.isInstance(error)
     ? error.isRetryable
