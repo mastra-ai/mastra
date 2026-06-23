@@ -2645,6 +2645,14 @@ export interface Experiment {
   metadata?: Record<string, unknown>;
   datasetId: string | null;
   datasetVersion: number | null;
+  /**
+   * The kind of executor this experiment runs against (agent / workflow / scorer / processor).
+   *
+   * Required: an experiment by definition replays inputs against a specific target, so the runner
+   * always needs a target type to resolve the executor. This differs from
+   * {@link CreateDatasetInput.targetType} (optional) — a dataset can exist without a designated
+   * target, but a dataset without one is not experiment-eligible.
+   */
   targetType: TargetType;
   targetId: string;
   status: ExperimentStatus;
