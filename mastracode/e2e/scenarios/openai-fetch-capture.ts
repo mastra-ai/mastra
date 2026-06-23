@@ -6,6 +6,7 @@ export type OpenAIFetchCaptureOptions = {
   capturePath: string;
   append?: boolean;
   inputTokens?: number;
+  requireBodyIncludes?: Array<string | { value: string; label?: string }>;
 };
 
 function getFetchUrl(input: Parameters<typeof fetch>[0]): string {
@@ -54,6 +55,14 @@ export function installOpenAIFetchCapture(options: OpenAIFetchCaptureOptions): (
       if (bodyText) {
         if (options.append) appendFileSync(options.capturePath, `${JSON.stringify({ url, body: bodyText })}\n`);
         else writeFileSync(options.capturePath, bodyText);
+
+        for (const required of options.requireBodyIncludes ?? []) {
+          const value = typeof required === 'string' ? required : required.value;
+          const label = typeof required === 'string' ? required : (required.label ?? required.value);
+          if (!bodyText.includes(value)) {
+            throw new Error(`Expected OpenAI request body to include ${label}`);
+          }
+        }
       }
       return originalFetch(input, { ...init, body: nextBody });
     }
