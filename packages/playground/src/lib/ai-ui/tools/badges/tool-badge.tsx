@@ -1,10 +1,16 @@
-import { CodeEditor, ToolsIcon } from '@mastra/playground-ui';
+import { CodeBlock, CodeEditor, ToolsIcon } from '@mastra/playground-ui';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
+
+const JsonCodeBlock = ({ value, testId }: { value: unknown; testId: string }) => (
+  <div data-testid={testId}>
+    <CodeBlock code={JSON.stringify(value, null, 2) ?? String(value)} lang="json" overflow="scroll" />
+  </div>
+);
 
 export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
@@ -34,7 +40,7 @@ export const ToolBadge = ({
 
   try {
     const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
-    argSlot = <CodeEditor data={formattedArgs} data-testid="tool-args" />;
+    argSlot = <JsonCodeBlock value={formattedArgs} testId="tool-args" />;
   } catch {
     argSlot = <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as string}</pre>;
   }
@@ -43,7 +49,7 @@ export const ToolBadge = ({
     typeof result === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{result}</pre>
     ) : (
-      <CodeEditor data={result} data-testid="tool-result" />
+      <JsonCodeBlock value={result} testId="tool-result" />
     );
 
   let suspendPayloadSlot =
