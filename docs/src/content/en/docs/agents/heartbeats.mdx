@@ -22,7 +22,7 @@ Heartbeats are persisted, so they survive restarts and redeploys. Manage them at
 
 ## Prerequisites
 
-Heartbeats require a storage adapter that implements the schedules domain, for example [`@mastra/libsql`](/docs/storage/overview). Without one, `mastra.heartbeats.create()` throws.
+Heartbeats require a [storage](/docs/memory/storage) adapter that implements the schedules domain, for example `@mastra/libsql`. Without one, `mastra.heartbeats.create()` throws.
 
 ## Quickstart
 
