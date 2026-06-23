@@ -142,7 +142,7 @@ jobs:
   test-suite:
     name: Unit and E2E Tests
     needs: [changes, prebuild, affected-tests]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || (needs.prebuild.result == 'success' && needs.affected-tests.result == 'success'))
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || needs.prebuild.result == 'success')
     uses: ./.github/workflows/test-suite.yml
     permissions:
       actions: read
