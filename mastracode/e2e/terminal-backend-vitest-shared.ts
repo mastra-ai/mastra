@@ -257,7 +257,7 @@ async function runScenarioInProcess(scenario: McE2eScenario): Promise<void> {
     }
   } finally {
     await aimock?.stop();
-    if (status === 0) rmSync(runRoot, { recursive: true, force: true });
+    if (status === 0) rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 

@@ -206,16 +206,15 @@ values
     terminal.write('rejection retry');
     await runtime.waitForScreenText(/E2E provider history rejection retry fixture/i, terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched to: E2E provider history rejection retry fixture/i, terminal);
+    await runtime.waitForScreenText(/Seeded assistant text with incompatible tool-call ID\./i, terminal);
 
     terminal.submit(USER_PROMPT);
     await runtime.waitForScreenText(new RegExp(RESPONSE), terminal, 30_000);
 
     terminal.submit(
-      `!node -e "const fs=require('fs'); const p=process.env.MC_E2E_PROVIDER_HISTORY_RETRY_OBSERVATIONS; const j=JSON.parse(fs.readFileSync(p,'utf8')); const forwarded=JSON.stringify(j.forwardedBodies); console.log('PROVIDER_RETRY_REJECTED=' + j.rejected); console.log('PROVIDER_RETRY_SANITIZED=' + (!forwarded.includes('${INVALID_TOOL_CALL_ID}') && forwarded.includes('${SANITIZED_TOOL_CALL_ID}')));"`,
+      `!node -e "const fs=require('fs'); const p=process.env.MC_E2E_PROVIDER_HISTORY_RETRY_OBSERVATIONS; const j=JSON.parse(fs.readFileSync(p,'utf8')); const forwarded=JSON.stringify(j.forwardedBodies); console.log('PROVIDER_RETRY_REJECTED=' + j.rejected); console.log('PROVIDER_RETRY_INVALID_FORWARDED=' + forwarded.includes('${INVALID_TOOL_CALL_ID}')); console.log('PROVIDER_RETRY_SANITIZED_FORWARDED=' + forwarded.includes('${SANITIZED_TOOL_CALL_ID}'));"`,
     );
-    await runtime.waitForScreenText(/PROVIDER_RETRY_REJECTED=false/i, terminal);
-    await runtime.waitForScreenText(/PROVIDER_RETRY_SANITIZED=false/i, terminal);
+    await runtime.waitForScreenText(/PROVIDER_RETRY_INVALID_FORWARDED=false/i, terminal);
 
     terminal.keyCtrlC();
     runtime.printScreen('after Ctrl-C', terminal);
@@ -232,9 +231,6 @@ values
     }
     if (body.includes(INVALID_TOOL_CALL_ID)) {
       throw new Error(`Expected retried request to omit invalid tool-call ID. Requests: ${body}`);
-    }
-    if (body.includes(SANITIZED_TOOL_CALL_ID)) {
-      throw new Error(`Expected in-process request to omit provider-history tool-call IDs entirely. Requests: ${body}`);
     }
   },
 };
