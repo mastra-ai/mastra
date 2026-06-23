@@ -24,6 +24,24 @@ import { noopObserve } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
+import type { RunScopeContext } from '../../run-scope-access';
+import { readScoped, writeScoped } from '../../run-scope-access';
+import {
+  AGENT_BACKGROUND_CONFIG_KEY,
+  BACKGROUND_TASK_MANAGER_CONFIG_KEY,
+  BACKGROUND_TASK_MANAGER_KEY,
+  GENERATE_ID_KEY,
+  MEMORY_CONFIG_KEY,
+  MEMORY_KEY,
+  RESOURCE_ID_KEY,
+  SAVE_QUEUE_MANAGER_KEY,
+  STEP_ACTIVE_TOOLS_KEY,
+  STEP_TOOLS_KEY,
+  STEP_WORKSPACE_KEY,
+  THREAD_EXISTS_KEY,
+  THREAD_ID_KEY,
+  TOOL_PAYLOAD_TRANSFORM_KEY,
+} from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -67,17 +85,20 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
     inputSchema: toolCallInputSchema,
     outputSchema: toolCallOutputSchema,
     execute: async ({ inputData, suspend, resumeData: workflowResumeData, suspendData, requestContext }) => {
-      // Use tools from _internal.stepTools if available (set by llmExecutionStep via prepareStep/processInputStep)
-      // This avoids serialization issues - _internal is a mutable object that preserves execute functions
-      // Fall back to the original tools from the closure if not set
-      const stepTools = (_internal?.stepTools as Tools) || tools;
-      const stepActiveTools = _internal?.stepActiveTools;
+      // Resolve run-scoped state from either the Mastra-managed RunScope (production
+      // path via loop.ts hydration) or the legacy `_internal` bag (tests).
+      const scopeCtx: RunScopeContext = { mastra, runId, _internal };
+      // Use tools from the scope (set by llmExecutionStep via prepareStep/processInputStep)
+      // when available. This avoids serialization — execute functions live off-the-wire.
+      // Fall back to the original tools from the closure if not set.
+      const stepTools = (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) || tools;
+      const stepActiveTools = readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools');
       const tool =
         stepTools?.[inputData.toolName] ||
         findProviderToolByName(stepTools, inputData.toolName) ||
         Object.values(stepTools || {})?.find((t: any) => `id` in t && t.id === inputData.toolName);
       const transformSource = {
-        policy: _internal?.toolPayloadTransform,
+        policy: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
         toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
       };
       const transformChunk = async (
@@ -324,7 +345,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       // Helper function to flush messages before suspension
       const flushMessagesBeforeSuspension = async () => {
-        const { saveQueueManager, memoryConfig, threadId, resourceId, memory } = _internal || {};
+        const saveQueueManager = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
+        const memoryConfig = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
+        const threadId = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+        const resourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
+        const memory = readScoped(scopeCtx, MEMORY_KEY, 'memory');
 
         if (!saveQueueManager || !threadId) {
           return;
@@ -332,7 +357,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         try {
           // Ensure thread exists before flushing messages
-          if (memory && !_internal.threadExists && resourceId) {
+          const threadExists = readScoped(scopeCtx, THREAD_EXISTS_KEY, 'threadExists');
+          if (memory && !threadExists && resourceId) {
             const thread = await memory.getThreadById?.({ threadId });
             if (!thread) {
               // Thread doesn't exist yet, create it now
@@ -342,7 +368,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 memoryConfig,
               });
             }
-            _internal.threadExists = true;
+            writeScoped(scopeCtx, THREAD_EXISTS_KEY, 'threadExists', true);
           }
 
           // Flush all pending messages immediately
@@ -441,7 +467,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 [...requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
               )
             : {},
-          workspace: _internal?.stepWorkspace,
+          workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
         });
 
         let globalRequiresApproval: boolean;
@@ -562,18 +588,20 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           observe: noopObserve,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
-          // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)
-          workspace: _internal?.stepWorkspace,
+          // Pass workspace from the run scope (set by llmExecutionStep via prepareStep/processInputStep)
+          workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
           // Forward requestContext so tools receive values set by the workflow step
           requestContext,
           actor,
           // Let tools that read thread history mid-stream (e.g. forked subagents
           // cloning the parent thread) drain the save queue so the store reflects
           // the latest user/assistant messages before they read.
-          flushMessages:
-            _internal?.saveQueueManager && _internal?.threadId
-              ? () => _internal.saveQueueManager!.flushMessages(messageList, _internal.threadId, _internal.memoryConfig)
-              : undefined,
+          flushMessages: (() => {
+            const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
+            const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+            const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
+            return sqm && tid ? () => sqm.flushMessages(messageList, tid, mcfg) : undefined;
+          })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
               const approvalChunk = await transformChunk(
@@ -783,8 +811,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (isAgentTool) {
           if (typeof args === 'object' && args !== null && 'prompt' in args) {
-            args.threadId = _internal?.threadId;
-            args.resourceId = _internal?.resourceId;
+            args.threadId = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+            args.resourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
           }
         }
 
@@ -811,14 +839,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         // --- Background task dispatch ---
-        const backgroundTaskManager = _internal?.backgroundTaskManager;
-        const agentBgConfigCheck = _internal?.agentBackgroundConfig;
+        const backgroundTaskManager = readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager');
+        const agentBgConfigCheck = readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig');
         // Skip background dispatch entirely when disabled (e.g., for sub-agents whose
         // entire invocation is itself dispatched as a background task by the parent)
         if (backgroundTaskManager && !agentBgConfigCheck?.disabled && typeof args === 'object' && args !== null) {
           const toolBgConfig = (tool as any).backgroundConfig as ToolBackgroundConfig | undefined;
           const agentBgConfig = agentBgConfigCheck;
-          const managerConfig = _internal?.backgroundTaskManagerConfig;
+          const managerConfig = readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_CONFIG_KEY, 'backgroundTaskManagerConfig');
 
           const bgResolved = resolveBackgroundConfig({
             llmBgOverrides,
@@ -830,7 +858,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
           if (bgResolved.runInBackground) {
             // Resolve the tool executor from the current closure
-            const stepTools = (_internal?.stepTools as Tools) || tools;
+            const stepTools = (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) || tools;
             const resolvedTool =
               stepTools?.[inputData.toolName] ||
               Object.values(stepTools || {})?.find((t: any) => 'id' in t && t.id === inputData.toolName);
@@ -846,8 +874,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolCallId: inputData.toolCallId,
               args: args as Record<string, unknown>,
               agentId,
-              threadId: _internal?.threadId,
-              resourceId: _internal?.resourceId,
+              threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+              resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
               timeoutMs: bgResolved.timeoutMs,
               maxRetries: bgResolved.maxRetries,
               runId,
@@ -1078,7 +1106,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                           {
                             role: 'tool' as const,
                             type: 'tool-call',
-                            id: _internal?.generateId?.() ?? randomUUID(),
+                            id: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID(),
                             createdAt: new Date(),
                             content: [
                               {
@@ -1113,12 +1141,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   }
 
                   // Flush to memory if available
-                  if (_internal?.saveQueueManager && _internal?.threadId) {
-                    await _internal.saveQueueManager.flushMessages(
-                      messageList,
-                      _internal.threadId,
-                      _internal.memoryConfig,
-                    );
+                  {
+                    const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
+                    const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+                    if (sqm && tid) {
+                      await sqm.flushMessages(
+                        messageList,
+                        tid,
+                        readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig'),
+                      );
+                    }
                   }
                 },
                 // Execution injector — updates the existing tool-invocation in the
@@ -1178,8 +1210,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolCallId: inputData.toolCallId,
               runId,
               agentId,
-              threadId: _internal?.threadId,
-              resourceId: _internal?.resourceId,
+              threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+              resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
               toolName: inputData.toolName,
             });
             if (isSuspended && resumeDataToPassToToolOptions) {
