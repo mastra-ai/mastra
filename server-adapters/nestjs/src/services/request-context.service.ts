@@ -125,9 +125,14 @@ export class RequestContextService {
   }
 
   private applyRequestMetadata(context: RequestContext): void {
-    if (isStudioClientTypeHeader(this.request.get(MASTRA_CLIENT_TYPE_HEADER))) {
+    if (isStudioClientTypeHeader(this.getHeader(MASTRA_CLIENT_TYPE_HEADER))) {
       context.set(MASTRA_IS_STUDIO_KEY, true);
     }
+  }
+
+  private getHeader(name: string): string | undefined {
+    const value = this.request.get?.(name) ?? this.request.headers?.[name.toLowerCase()];
+    return Array.isArray(value) ? value[0] : value;
   }
 
   /**
