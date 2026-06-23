@@ -36,9 +36,8 @@ await mastra.heartbeats.resume(hb.id);
 await mastra.heartbeats.run(hb.id); // fire once now
 await mastra.heartbeats.delete(hb.id);
 
-// Sugar on Agent: auto-scopes agentId
-await agent.heartbeats.create({ cron: '*/5 * * * *', prompt: 'ping' });
-await agent.heartbeats.list({ threadId });
+// Filter by agent (no per-agent sugar — `mastra.heartbeats.*` is the sole CRUD surface).
+await mastra.heartbeats.list({ agentId: 'chef', threadId });
 ```
 
 Heartbeats survive process restarts: any persisted heartbeat row automatically starts the scheduler on boot, with no per-process registration step.
@@ -73,46 +72,50 @@ only on the `wake`/`deliver` arms.
 
 ### Heartbeat lifecycle hooks
 
-Agents can react to and customise heartbeat runs via `heartbeat` hooks on the
-`Agent` constructor. The shape mirrors `agent.stream` (`onFinish` /
-`onError` / `onAbort`) and adds a `prepare` hook for resolving fire-time
-parameters dynamically (for example, creating a fresh Slack thread per fire
-and returning its `threadId` / `resourceId`).
+React to and customise heartbeat runs via `heartbeat.hooks` on the `Mastra`
+constructor, keyed by agentId (so stored agents are covered too). The shape
+mirrors `agent.stream` (`onFinish` / `onError` / `onAbort`) and adds a
+`prepare` hook for resolving fire-time parameters dynamically (for example,
+creating a fresh Slack thread per fire and returning its `threadId` /
+`resourceId`).
 
 ```ts
-new Agent({
-  name: 'slack-demo-agent',
+new Mastra({
   // ...
   heartbeat: {
-    // Resolve dynamic params at fire time. Return overrides, `null` to skip
-    // this fire, or `undefined` to use the heartbeat row's defaults.
-    prepare: async ({ mastra, heartbeat, trigger }) => {
-      if (heartbeat.name === 'daily-digest') {
-        const { threadId } = await mastra.channels.slack.chat.createThread({
-          /* … */
-        });
-        return { threadId, resourceId: 'slack:U095PUH0FKL' };
-      }
-    },
+    hooks: {
+      chef: {
+        // Resolve dynamic params at fire time. Return overrides, `null` to skip
+        // this fire, or `undefined` to use the heartbeat row's defaults.
+        prepare: async ({ mastra, heartbeat, trigger }) => {
+          if (heartbeat.name === 'daily-digest') {
+            const { threadId } = await mastra.channels.slack.chat.createThread({
+              /* … */
+            });
+            return { threadId, resourceId: 'slack:U095PUH0FKL' };
+          }
+        },
 
-    // Fires once per trigger when the trigger reached a non-error,
-    // non-abort terminal state.
-    onFinish: ({ outcome, result, heartbeat }) => {
-      metrics.record({
-        heartbeat: heartbeat.name,
-        outcome, // 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped'
-        tokens: result?.usage?.totalTokens,
-      });
-    },
+        // Fires once per trigger when the trigger reached a non-error,
+        // non-abort terminal state.
+        onFinish: ({ outcome, result, heartbeat }) => {
+          metrics.record({
+            heartbeat: heartbeat.name,
+            outcome, // 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped'
+            tokens: result?.usage?.totalTokens,
+          });
+        },
 
-    // Fires when `prepare`, `sendSignal`, or the agent run threw.
-    onError: ({ error, phase, heartbeat }) => {
-      alerts.send(`heartbeat ${heartbeat.name} failed in ${phase}: ${error.message}`);
-    },
+        // Fires when `prepare`, `sendSignal`, or the agent run threw.
+        onError: ({ error, phase, heartbeat }) => {
+          alerts.send(`heartbeat ${heartbeat.name} failed in ${phase}: ${error.message}`);
+        },
 
-    // Fires when the run was aborted mid-stream.
-    onAbort: ({ heartbeat, runId }) => {
-      logger.info({ heartbeat: heartbeat.name, runId }, 'heartbeat aborted');
+        // Fires when the run was aborted mid-stream.
+        onAbort: ({ heartbeat, runId }) => {
+          logger.info({ heartbeat: heartbeat.name, runId }, 'heartbeat aborted');
+        },
+      },
     },
   },
 });
