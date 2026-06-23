@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { renderHook } from '@testing-library/react';
 import type { Edge } from '@xyflow/react';
 import type { PropsWithChildren } from 'react';
