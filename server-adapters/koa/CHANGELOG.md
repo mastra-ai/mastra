@@ -1,5 +1,15 @@
 # @mastra/koa
 
+## 1.6.1-alpha.2
+
+### Patch Changes
+
+- Fix crash on every request when deployed with `@mastra/core` < 1.42.0. The fastify, hono, and koa server adapters called `this.mastra.getStudio()` non-optionally during RBAC pre-checks. On older core versions that method doesn't exist on the `Mastra` class, so every request threw `TypeError: this.mastra.getStudio is not a function` and returned a 500 — even for projects with no auth configured. The call site now uses optional chaining (`getStudio?.()`), matching the pattern already applied in `@mastra/server` (#18075), and the adapters gracefully fall back to server-only auth. ([#18319](https://github.com/mastra-ai/mastra/pull/18319))
+
+- Updated dependencies [[`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c)]:
+  - @mastra/core@1.46.0-alpha.2
+  - @mastra/server@1.46.0-alpha.2
+
 ## 1.6.1-alpha.1
 
 ### Patch Changes
