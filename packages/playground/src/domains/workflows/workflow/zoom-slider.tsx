@@ -1,4 +1,5 @@
-import { Button, Slider, cn } from '@mastra/playground-ui';
+import { Button, cn } from '@mastra/playground-ui';
+import { Slider } from '@mastra/playground-ui/components/Slider';
 import type { PanelProps } from '@xyflow/react';
 import { Panel, useViewport, useReactFlow } from '@xyflow/react';
 import { Maximize, Minus, Plus } from 'lucide-react';

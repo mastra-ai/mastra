@@ -1,6 +1,7 @@
 'use client';
 
-import { Button, ButtonsGroup, Checkbox, Column, ItemList } from '@mastra/playground-ui';
+import { Button, ButtonsGroup, Checkbox, Column } from '@mastra/playground-ui';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { format } from 'date-fns';
 import { XIcon, GitCompareIcon, ArrowRightIcon } from 'lucide-react';
 import { useState } from 'react';
