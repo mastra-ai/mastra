@@ -1,6 +1,15 @@
 import { addPendingUserMessage, removePendingUserMessage } from '../render-messages.js';
 import type { SlashCommandContext } from './types.js';
 
+function getSlashCommandPayload(content: string): { commandName: string; commandContent: string } | undefined {
+  const match = content.trim().match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
+  if (!match) return undefined;
+  return {
+    commandName: match[1]!,
+    commandContent: match[2]!.trim(),
+  };
+}
+
 export function isCurrentThreadActive(ctx: SlashCommandContext): boolean {
   return ctx.state.session?.stream?.isActive?.() ?? ctx.state.session?.displayState?.get?.().isRunning ?? false;
 }
@@ -18,7 +27,12 @@ export async function sendSlashCommandMessage(
 
   if (isCurrentThreadActive(ctx)) {
     const signal = ctx.state.session.sendSignal({ content });
-    addPendingUserMessage(ctx.state, signal.id, displayText);
+    const slashPayload = getSlashCommandPayload(content);
+    addPendingUserMessage(ctx.state, signal.id, displayText, undefined, {
+      ...(slashPayload
+        ? { slashCommand: { name: slashPayload.commandName, content: slashPayload.commandContent } }
+        : {}),
+    });
     try {
       await signal.accepted;
     } catch (error) {

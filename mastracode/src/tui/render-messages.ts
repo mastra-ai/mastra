@@ -244,7 +244,7 @@ export function addPendingUserMessage(
   messageId: string,
   text: string,
   images?: Array<{ data: string; mimeType: string }>,
-  options?: { isInterjection?: boolean },
+  options?: { isInterjection?: boolean; slashCommand?: { name: string; content: string } },
 ): void {
   const existing = state.pendingSignalMessageComponentsById.get(messageId);
   if (existing) {
@@ -258,6 +258,7 @@ export function addPendingUserMessage(
     text,
     images,
     isInterjection: options?.isInterjection,
+    slashCommand: options?.slashCommand,
   });
   state.chatContainer.addChild(component);
   reconcileChatBoundarySpacers(state.chatContainer);
@@ -321,6 +322,31 @@ export function clearPendingUserMessages(state: TUIState): void {
   }
   state.pendingSignalMessageComponentsById.clear();
   state.ui.requestRender();
+}
+
+function confirmMatchingPendingSlashCommand(
+  state: TUIState,
+  commandName: string,
+  commandContent: string,
+): SlashCommandComponent | undefined {
+  for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
+    const slashCommand = pending.slashCommand;
+    if (!slashCommand || slashCommand.name !== commandName || slashCommand.content !== commandContent) continue;
+
+    const slashComp = new SlashCommandComponent(commandName, commandContent);
+    state.allSlashCommandComponents.push(slashComp);
+    const idx = state.chatContainer.children.indexOf(pending.component as never);
+    if (idx >= 0) {
+      (state.chatContainer.children as unknown[]).splice(idx, 1, slashComp);
+      reconcileChatBoundarySpacers(state.chatContainer);
+    } else {
+      addChildBeforeFollowUps(state, slashComp);
+    }
+    state.pendingSignalMessageComponentsById.delete(pendingId);
+    state.ui.requestRender();
+    return slashComp;
+  }
+  return undefined;
 }
 
 function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, text: string): boolean {
@@ -519,6 +545,11 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
       state.chatContainer.removeChild(pending.component as never);
       state.pendingSignalMessageComponentsById.delete(message.id);
       reconcileChatBoundarySpacers(state.chatContainer);
+    }
+    const pendingSlashComp = confirmMatchingPendingSlashCommand(state, commandName, commandContent);
+    if (pendingSlashComp) {
+      state.messageComponentsById.set(message.id, pendingSlashComp);
+      return;
     }
     const existingSlashComp = state.allSlashCommandComponents.find(
       component =>

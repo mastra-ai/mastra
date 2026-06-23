@@ -20,8 +20,18 @@ const autocompleteProviders: Array<{
   fdPath: string | null | undefined;
 }> = [];
 
+type MockAutocompleteItem = { value: string; label: string; description?: string };
+
 vi.mock('@earendil-works/pi-tui', () => ({
   CombinedAutocompleteProvider: class {
+    commands: Array<{
+      name: string;
+      description: string;
+      getArgumentCompletions?: (prefix: string) => Array<{ value: string }>;
+    }>;
+    cwd: string;
+    fdPath: string | null | undefined;
+
     constructor(
       commands: Array<{
         name: string;
@@ -31,7 +41,40 @@ vi.mock('@earendil-works/pi-tui', () => ({
       cwd: string,
       fdPath?: string,
     ) {
+      this.commands = commands;
+      this.cwd = cwd;
+      this.fdPath = fdPath;
       autocompleteProviders.push({ commands, cwd, fdPath });
+    }
+
+    getSuggestions(lines: string[], cursorLine: number, cursorCol: number) {
+      const prefix = (lines[cursorLine] || '').slice(0, cursorCol);
+      return {
+        prefix,
+        items: this.commands.map(command => ({
+          value: command.name,
+          label: command.name,
+          description: command.description,
+        })),
+      };
+    }
+
+    applyCompletion(
+      lines: string[],
+      cursorLine: number,
+      cursorCol: number,
+      item: MockAutocompleteItem,
+      prefix: string,
+    ) {
+      const currentLine = lines[cursorLine] || '';
+      const beforePrefix = currentLine.slice(0, cursorCol - prefix.length);
+      const updatedLines = [...lines];
+      updatedLines[cursorLine] = `${beforePrefix}${item.value}${currentLine.slice(cursorCol)}`;
+      return {
+        lines: updatedLines,
+        cursorLine,
+        cursorCol: beforePrefix.length + item.value.length,
+      };
     }
   },
   Container: class {},
@@ -178,6 +221,92 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames).toContain('goal/deploy');
     expect(commandNames).toContain('goal/review');
     expect(commandNames.slice(-5)).toEqual(['/deploy', 'goal/deploy', '/ship', 'skill/lint-fix', 'goal/review']);
+  });
+
+  it('preserves the leading slash when completing nested slash commands', () => {
+    autocompleteProviders.length = 0;
+    const { state } = createState(false);
+    state.customSlashCommands = [
+      { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '', goal: true },
+    ];
+
+    setupAutocomplete(state);
+
+    const result = state.autocompleteProvider.applyCompletion(
+      ['/goal/depl'],
+      0,
+      '/goal/depl'.length,
+      { value: 'goal/deploy', label: 'goal/deploy' },
+      '/goal/depl',
+    );
+    expect(result.lines[0]).toBe('/goal/deploy ');
+  });
+
+  it('narrows double-slash autocomplete to custom slash commands', async () => {
+    autocompleteProviders.length = 0;
+    const { state } = createState(false);
+    state.customSlashCommands = [
+      { name: 'deploy', description: 'Deploy to prod', template: '', sourcePath: '', goal: true },
+      { name: 'ship', description: 'Ship release', template: '', sourcePath: '' },
+    ];
+
+    setupAutocomplete(state);
+
+    const suggestions = await state.autocompleteProvider.getSuggestions(['//'], 0, 2, { force: false });
+    expect(suggestions?.prefix).toBe('//');
+    expect(suggestions?.items.map((item: { value: string }) => item.value)).toEqual(['/deploy', '/ship']);
+
+    const result = state.autocompleteProvider.applyCompletion(
+      ['//'],
+      0,
+      2,
+      { value: '/deploy', label: '/deploy' },
+      '//',
+    );
+    expect(result.lines[0]).toBe('//deploy ');
+  });
+
+  it('does not duplicate partial @ prefixes when accepting file completions', () => {
+    autocompleteProviders.length = 0;
+    const { state } = createState(false);
+
+    setupAutocomplete(state);
+
+    const result = state.autocompleteProvider.applyCompletion(
+      ['Attach @auto'],
+      0,
+      'Attach @auto'.length,
+      { value: '@src/autocomplete-target.ts', label: 'autocomplete-target.ts' },
+      'auto',
+    );
+    expect(result.lines[0]).toBe('Attach @src/autocomplete-target.ts ');
+
+    const partialResult = state.autocompleteProvider.applyCompletion(
+      ['Attach @auto'],
+      0,
+      'Attach @auto'.length,
+      { value: '@src/autocomplete-target.ts', label: 'autocomplete-target.ts' },
+      'uto',
+    );
+    expect(partialResult.lines[0]).toBe('Attach @src/autocomplete-target.ts ');
+
+    const retainedPrefixResult = state.autocompleteProvider.applyCompletion(
+      ['Attach @auto'],
+      0,
+      'Attach @auto'.length,
+      { value: '@src/autocomplete-target.ts', label: 'autocomplete-target.ts' },
+      'to',
+    );
+    expect(retainedPrefixResult.lines[0]).toBe('Attach @src/autocomplete-target.ts ');
+
+    const scopedPackageResult = state.autocompleteProvider.applyCompletion(
+      ['Install @scope/pkg and run /he'],
+      0,
+      'Install @scope/pkg and run /he'.length,
+      { value: 'help', label: 'help' },
+      'he',
+    );
+    expect(scopedPackageResult.lines[0]).toBe('Install @scope/pkg and run /help');
   });
 
   it('passes detected fd path and cwd into the autocomplete provider', () => {

@@ -169,6 +169,7 @@ import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../provi
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import {
   createMastraCodeGateway,
+  createMastraCodeModelCatalogProvider,
   resolveModel,
   getDynamicModel,
   getAnthropicApiKey,
@@ -246,6 +247,20 @@ describe('resolveModel', () => {
         models: ['gpt-4.1'],
       },
     });
+    const catalog = createMastraCodeModelCatalogProvider(gateway);
+    await expect(catalog()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'acme-models/reasoner-v1',
+          provider: 'acme-models',
+          modelName: 'reasoner-v1',
+          hasApiKey: true,
+        }),
+      ]),
+    );
+    await expect(catalog()).resolves.not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'mastracode/acme-models/reasoner-v1' })]),
+    );
     expect(mockGetCopilotModelCatalog).toHaveBeenCalled();
   });
 
