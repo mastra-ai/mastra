@@ -173,12 +173,15 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   }
 
   // ask_user tool renders a custom interactive badge for answering questions.
-  if (isAskUserTool(toolName) && suspendedToolMetadata?.suspendPayload && isAskUserSuspendPayload(suspendedToolMetadata.suspendPayload)) {
+  // Access suspendedTools directly (bypassing the mode check) because when messages
+  // are loaded from the database, metadata.mode may not be persisted.
+  const askUserSuspendMeta = metadata?.suspendedTools?.[toolName] ?? suspendedToolMetadata;
+  if (isAskUserTool(toolName) && askUserSuspendMeta?.suspendPayload && isAskUserSuspendPayload(askUserSuspendMeta.suspendPayload)) {
     return (
       <AskUserBadge
         toolCallId={toolCallId}
         toolName={toolName}
-        suspendPayload={suspendedToolMetadata.suspendPayload}
+        suspendPayload={askUserSuspendMeta.suspendPayload}
         result={result}
         isGenerateMode={metadata?.mode === 'generate'}
       />
