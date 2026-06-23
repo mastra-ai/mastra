@@ -1,8 +1,4 @@
-import type {
-  HeartbeatBroadcastMode,
-  HeartbeatIfActive,
-  HeartbeatIfIdle,
-} from '../../../agent/heartbeat/types';
+import type { HeartbeatBroadcastMode, HeartbeatIfActive, HeartbeatIfIdle } from '../../../agent/heartbeat/types';
 import type { AgentSignalType } from '../../../agent/signals';
 import { StorageDomain } from '../base';
 
@@ -28,11 +24,7 @@ export type WorkflowScheduleTarget = {
 // Heartbeat semantic types are owned by `agent/heartbeat/types.ts` (the
 // feature module) and re-exported here so callers describing schedule rows can
 // reach them through the storage barrel.
-export type {
-  HeartbeatBroadcastMode,
-  HeartbeatIfActive,
-  HeartbeatIfIdle,
-} from '../../../agent/heartbeat/types';
+export type { HeartbeatBroadcastMode, HeartbeatIfActive, HeartbeatIfIdle } from '../../../agent/heartbeat/types';
 
 /**
  * Schedule target that fires an agent run on a cron. The heartbeat
