@@ -1,6 +1,5 @@
 import {
   Button,
-  MarkdownRenderer,
   ScrollArea,
   Skeleton,
   Tooltip,
@@ -9,6 +8,7 @@ import {
   toast,
   cn,
 } from '@mastra/playground-ui';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
 import { useState } from 'react';

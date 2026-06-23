@@ -2,8 +2,6 @@ import type { DatasetRecord } from '@mastra/client-js';
 import {
   Badge,
   Button,
-  Column,
-  Columns,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -12,9 +10,7 @@ import {
   EmptyState,
   DataList,
   DataListSkeleton,
-  Searchbar,
   Spinner,
-  StatusBadge,
   Tabs,
   TabContent,
   TabList,
@@ -22,6 +18,9 @@ import {
   Txt,
   toast,
 } from '@mastra/playground-ui';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
