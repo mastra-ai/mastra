@@ -101,7 +101,3 @@ grep -l "Tanstack" references/rules/
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
 - `structure-*` - Component/hook structure (2 rules)
-
-## Maintaining This Skill
-
-Only when editing this skill's rule files or catalog, run `python3 .claude/scripts/validate-best-practice-catalogs.py` to keep the catalog in sync with the canonical rule files.

@@ -76,7 +76,3 @@ grep -l "className" references/rules/
 - `component-*` - Component usage rules (1 rule)
 - `tokens-*` - Design token rules (2 rules)
 - `classname-*` - ClassName usage rules (2 rules)
-
-## Maintaining This Skill
-
-Only when editing this skill's rule files or catalog, run `python3 .claude/scripts/validate-best-practice-catalogs.py` to keep the catalog in sync with the canonical rule files.
