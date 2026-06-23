@@ -1,6 +1,6 @@
 ---
 title: "Desktop app | Studio"
-description: Run Mastra Studio as an installable desktop app with a bundled local runtime and local model presets.
+description: Run Mastra Studio as an installable desktop app with bundled, local, and hosted Studio connections.
 packages:
   - "@mastra/core"
   - "@mastra/editor"
@@ -8,17 +8,29 @@ packages:
 
 # Studio desktop app
 
-Mastra Studio Desktop is an installable Electron shell for local Studio usage. It starts a bundled Mastra runtime, embeds Studio, and helps connect the default agent to an OpenAI-compatible local model server such as LM Studio.
+Mastra Studio Desktop is an installable Electron shell for Studio. It opens Studio tabs for a bundled local runtime, a running Mastra dev server, or a hosted Studio project from a Platform account.
 
 ## When to use the desktop app
 
-Use the desktop app when you want a local Studio experience without opening a terminal for every session.
+Use the desktop app when you want Studio as a desktop control surface for local and hosted Mastra projects.
 
 - Local model workflows: Connect Studio to LM Studio through `http://localhost:1234/v1`.
-- Non-developer iteration: Use Studio and Editor drafts without editing source files.
-- Local demos: Keep the Mastra API, Studio UI, settings, and logs in one app window.
+- Local development: Connect a tab to a running `mastra dev` server, such as `http://127.0.0.1:4111`.
+- Hosted project access: Sign in to Mastra Platform and open deployed Studio projects from the app.
+- Local demos: Use the bundled starter runtime, Studio UI, settings, and logs in one app window.
 
 For custom Electron applications that call a Mastra server from their own UI, use the [Electron framework guide](/guides/getting-started/electron).
+
+## Studio sources
+
+The desktop app opens a new tab picker when you create a tab. The picker supports these Studio sources:
+
+- **Bundled Template**: Starts the packaged Mastra runtime and opens Studio against it.
+- **Localhost :4111**: Probes the default Mastra dev server URL and opens Studio when `/api/agents` responds.
+- **Connect local server**: Accepts a port or URL for another running Mastra dev server.
+- **Platform Studios**: Lists hosted Studio projects after you sign in to Mastra Platform.
+
+Platform Studio tabs use the same deploy single sign-on URL as the Platform web app. The desktop app lists and opens hosted Studios, but it doesn't create deployments or manage cloud runtime state in this version.
 
 ## Local model preset
 

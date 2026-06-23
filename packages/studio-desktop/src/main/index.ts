@@ -1,12 +1,26 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import type { Server } from 'node:http';
-import { join } from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
-import type { DesktopSettings, DesktopState } from '../shared/types';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell, WebContentsView } from 'electron';
+import type { CreateDevTabInput, DesktopSettings, DesktopState, DesktopTab, PlatformState } from '../shared/types';
 import { DEFAULT_RUNTIME_PORT, DEFAULT_STUDIO_PORT, LOCALHOST } from './defaults';
 import { probeLmStudioModels } from './lmstudio';
+import { probeMastraServer } from './local-dev';
 import { LogBuffer } from './log-buffer';
 import { resolveAppIconPath, resolveStarterOutputPath, resolveStudioDistPath } from './paths';
+import {
+  buildHostedStudioLoginUrl,
+  buildPlatformCliLoginUrl,
+  fetchPlatformProjects,
+  isLaunchableStudioStatus,
+  normalizePlatformBaseUrl,
+  refreshPlatformAccessToken,
+} from './platform';
+import type { PlatformSession } from './platform';
+import { deletePlatformSession, readPlatformSession, writePlatformSession } from './platform-session';
 import { findAvailablePort } from './ports';
 import { buildLmStudioPresetSettings, LM_STUDIO_PRESET, selectLmStudioModelId } from './presets';
 import { ManagedMastraRuntime } from './runtime';
@@ -14,50 +28,241 @@ import { readSettings, updateSettings, writeSettings } from './settings';
 import { startStudioShellServer } from './studio-server';
 import { buildLocalUrl, normalizeServerUrl } from './url';
 
+interface StudioShellEntry {
+  key: string;
+  port: number;
+  url: string;
+  serverUrl: string;
+  server: Server;
+}
+
+interface StudioContentViewEntry {
+  url: string;
+  view: WebContentsView;
+}
+
+const thisFile = fileURLToPath(import.meta.url);
+const thisDir = dirname(thisFile);
+const CHROME_HEIGHT = 42;
+
 let mainWindow: BrowserWindow | undefined;
-let studioServer: Server | undefined;
 let runtime: ManagedMastraRuntime | undefined;
 let settingsPath = '';
+let platformSessionPath = '';
 let userDataPath = '';
 let currentSettings: DesktopSettings;
-let currentState: DesktopState | undefined;
+let platformSession: PlatformSession | undefined;
+let platformState: PlatformState;
+let activeTabId: string | undefined;
+let managedShellKey: string | undefined;
+let managedStudio: { port?: number; url?: string } = {};
+let activeServerUrl: string | undefined;
+let isQuitting = false;
 
 const logs = new LogBuffer();
+const tabs: DesktopTab[] = [];
+const studioShellServers = new Map<string, StudioShellEntry>();
+const studioContentViews = new Map<string, StudioContentViewEntry>();
 
 app.setName('Mastra Studio');
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
-function emitState() {
-  if (mainWindow && !mainWindow.isDestroyed() && currentState) {
-    mainWindow.webContents.send('desktop:state-changed', currentState);
+function defaultPlatformState(baseUrl: string): PlatformState {
+  return {
+    baseUrl,
+    status: 'signed-out',
+    signedIn: false,
+    organizations: [],
+    projects: [],
+  };
+}
+
+function buildState(patch: Partial<DesktopState> = {}): DesktopState {
+  return {
+    settings: currentSettings,
+    runtime: runtime?.status ?? { state: 'idle' },
+    studio: managedStudio,
+    activeServerUrl,
+    tabs: [...tabs],
+    activeTabId,
+    platform: platformState,
+    logs: logs.all(),
+    ...patch,
+  };
+}
+
+function studioViewBounds() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { x: 0, y: CHROME_HEIGHT, width: 0, height: 0 };
   }
+
+  const [width, height] = mainWindow.getContentSize();
+  return {
+    x: 0,
+    y: CHROME_HEIGHT,
+    width,
+    height: Math.max(0, height - CHROME_HEIGHT),
+  };
+}
+
+function createStudioContentView() {
+  const view = new WebContentsView({
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      partition: 'persist:mastra-studio-tabs',
+    },
+  });
+  view.setBackgroundColor('#101113');
+
+  view.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  view.webContents.on('will-navigate', event => {
+    const url = event.url;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      event.preventDefault();
+      void shell.openExternal(url);
+    }
+  });
+  view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    const frame = isMainFrame ? 'main frame' : 'subframe';
+    addAppLog(`Studio view failed to load ${frame} ${validatedURL}: ${errorCode} ${errorDescription}`);
+  });
+  view.webContents.on('render-process-gone', (_event, details) => {
+    addAppLog(`Studio view process exited: ${details.reason} (${details.exitCode})`);
+  });
+
+  return {
+    url: '',
+    view,
+  };
+}
+
+function removeStudioContentView(tabId: string) {
+  const entry = studioContentViews.get(tabId);
+  if (!entry) return;
+  studioContentViews.delete(tabId);
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.contentView.removeChildView(entry.view);
+  }
+  if (!entry.view.webContents.isDestroyed()) {
+    entry.view.webContents.close();
+  }
+}
+
+function syncStudioViewBounds() {
+  const bounds = studioViewBounds();
+  for (const entry of studioContentViews.values()) {
+    entry.view.setBounds(bounds);
+  }
+}
+
+function syncStudioContentViews() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+
+  const tabIds = new Set(tabs.map(tab => tab.id));
+  for (const tabId of studioContentViews.keys()) {
+    if (!tabIds.has(tabId)) {
+      removeStudioContentView(tabId);
+    }
+  }
+
+  const active = activeTab();
+  const bounds = studioViewBounds();
+  for (const tab of tabs) {
+    if (!tab.url) {
+      const entry = studioContentViews.get(tab.id);
+      if (entry) {
+        entry.view.setVisible(false);
+      }
+      continue;
+    }
+
+    let entry = studioContentViews.get(tab.id);
+    if (!entry) {
+      entry = createStudioContentView();
+      studioContentViews.set(tab.id, entry);
+      mainWindow.contentView.addChildView(entry.view);
+    }
+
+    entry.view.setBounds(bounds);
+    if (entry.url !== tab.url) {
+      entry.url = tab.url;
+      void entry.view.webContents.loadURL(tab.url).catch(error => {
+        addAppLog(`Studio view failed to load ${tab.url}: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    }
+
+    const isActive = tab.id === active?.id;
+    entry.view.setVisible(isActive);
+    if (isActive) {
+      mainWindow.contentView.addChildView(entry.view);
+    }
+  }
+}
+
+function emitState() {
+  syncStudioContentViews();
+  const state = buildState();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('desktop:state-changed', state);
+  }
+}
+
+function snapshotState(patch: Partial<DesktopState> = {}) {
+  syncStudioContentViews();
+  const state = buildState(patch);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('desktop:state-changed', state);
+  }
+  return state;
 }
 
 function addAppLog(message: string) {
   logs.add(message);
-  if (!currentState) return;
-  currentState = { ...currentState, logs: logs.all() };
   emitState();
 }
 
-function snapshotState(patch: Partial<DesktopState> = {}) {
-  currentState = {
-    settings: currentSettings,
-    runtime: runtime?.status ?? { state: 'idle' },
-    studio: currentState?.studio ?? {},
-    activeServerUrl: currentState?.activeServerUrl,
-    logs: logs.all(),
-    ...patch,
-  };
-  emitState();
-  return currentState;
+function activeTab() {
+  return tabs.find(tab => tab.id === activeTabId);
 }
 
-async function closeStudioServer() {
-  if (!studioServer) return;
-  const server = studioServer;
-  studioServer = undefined;
-  await new Promise<void>(resolve => server.close(() => resolve()));
+function upsertTab(tab: DesktopTab) {
+  const index = tabs.findIndex(candidate => candidate.id === tab.id);
+  if (index >= 0) {
+    tabs[index] = tab;
+  } else {
+    tabs.push(tab);
+  }
+  activeTabId = tab.id;
+  emitState();
+}
+
+function createLauncherTab() {
+  upsertTab({
+    id: randomUUID(),
+    kind: 'launcher',
+    title: 'New tab',
+    subtitle: 'Choose a Studio connection',
+    status: 'ready',
+  });
+  return snapshotState();
+}
+
+async function closeStudioShellServer(key: string | undefined) {
+  if (!key) return;
+  const entry = studioShellServers.get(key);
+  if (!entry) return;
+  studioShellServers.delete(key);
+  await new Promise<void>(resolve => entry.server.close(() => resolve()));
+}
+
+async function closeAllStudioShellServers() {
+  await Promise.all([...studioShellServers.keys()].map(key => closeStudioShellServer(key)));
 }
 
 async function stopRuntime() {
@@ -66,18 +271,48 @@ async function stopRuntime() {
   runtime = undefined;
 }
 
-function externalServerUrl(settings: DesktopSettings) {
-  return normalizeServerUrl(settings.externalServerUrl || 'http://127.0.0.1:4111');
+async function startStudioShellForServer(serverUrl: string): Promise<StudioShellEntry> {
+  const key = normalizeServerUrl(serverUrl);
+  const existing = studioShellServers.get(key);
+  if (existing) return existing;
+
+  const studioPort = await findAvailablePort(DEFAULT_STUDIO_PORT + studioShellServers.size);
+  const studioDistPath = resolveStudioDistPath({
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+  });
+  const server = await startStudioShellServer({
+    builtStudioPath: studioDistPath,
+    port: studioPort,
+    serverUrl: key,
+  });
+  const entry = {
+    key,
+    port: studioPort,
+    url: buildLocalUrl(studioPort),
+    serverUrl: key,
+    server,
+  };
+
+  studioShellServers.set(key, entry);
+  logs.add(`Studio shell for ${key} listening on ${entry.url}`);
+  emitState();
+  return entry;
 }
 
-async function startServices(settings: DesktopSettings) {
-  await closeStudioServer();
+async function ensureManagedStudio(forceRestart = false) {
+  if (!forceRestart && managedStudio.url && activeServerUrl && runtime?.status.state === 'running') {
+    return managedStudio.url;
+  }
 
-  let activeServerUrl: string;
-  let runtimeStatus = runtime?.status ?? { state: 'idle' as const };
-
-  if (settings.serverMode === 'managed') {
+  if (forceRestart) {
+    await closeStudioShellServer(managedShellKey);
+    managedShellKey = undefined;
+    managedStudio = {};
     await stopRuntime();
+  }
+
+  if (!runtime) {
     const runtimePort = await findAvailablePort(DEFAULT_RUNTIME_PORT);
     const outputDir = resolveStarterOutputPath({
       packaged: app.isPackaged,
@@ -89,47 +324,241 @@ async function startServices(settings: DesktopSettings) {
       userDataPath,
       logs,
     });
-    runtimeStatus = await runtime.start(settings, runtimePort);
-    activeServerUrl = runtimeStatus.url ?? buildLocalUrl(runtimePort).replace(/\/$/, '');
-  } else {
-    await stopRuntime();
-    runtimeStatus = { state: 'idle' };
-    activeServerUrl = externalServerUrl(settings);
+    await runtime.start(currentSettings, runtimePort);
   }
 
-  const studioPort = await findAvailablePort(DEFAULT_STUDIO_PORT);
-  const studioDistPath = resolveStudioDistPath({
-    packaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
+  activeServerUrl = runtime.status.url;
+  if (!activeServerUrl) {
+    throw new Error(runtime.status.error ?? 'Managed Mastra runtime did not return a URL');
+  }
+
+  const studio = await startStudioShellForServer(activeServerUrl);
+  managedShellKey = studio.key;
+  managedStudio = {
+    port: studio.port,
+    url: studio.url,
+  };
+  emitState();
+  return studio.url;
+}
+
+async function restartManagedRuntime() {
+  const url = await ensureManagedStudio(true);
+  for (const tab of tabs) {
+    if (tab.kind === 'managed') {
+      tab.url = url;
+      tab.sourceUrl = activeServerUrl;
+      tab.status = 'ready';
+      tab.error = undefined;
+    }
+  }
+  return snapshotState();
+}
+
+async function createManagedTab() {
+  const url = await ensureManagedStudio();
+  upsertTab({
+    id: randomUUID(),
+    kind: 'managed',
+    title: 'Bundled Template',
+    subtitle: 'Local starter runtime',
+    url,
+    sourceUrl: activeServerUrl,
+    externalUrl: url,
+    status: 'ready',
   });
-  studioServer = await startStudioShellServer({
-    builtStudioPath: studioDistPath,
-    port: studioPort,
-    serverUrl: activeServerUrl,
+  return snapshotState();
+}
+
+async function createDevTab(input: CreateDevTabInput) {
+  const probe = await probeMastraServer(input.serverUrl);
+  if (!probe.ok) {
+    throw new Error(probe.error ?? `Unable to reach ${probe.serverUrl}`);
+  }
+
+  currentSettings = await updateSettings(settingsPath, {
+    devServerUrl: probe.serverUrl,
+    externalServerUrl: probe.serverUrl,
   });
 
-  logs.add(`Studio shell listening on http://${LOCALHOST}:${studioPort}`);
-  snapshotState({
-    runtime: runtimeStatus,
-    studio: {
-      port: studioPort,
-      url: buildLocalUrl(studioPort),
-    },
-    activeServerUrl,
-    logs: logs.all(),
+  const studio = await startStudioShellForServer(probe.serverUrl);
+  const title = new URL(probe.serverUrl).host;
+  upsertTab({
+    id: randomUUID(),
+    kind: 'dev',
+    title,
+    subtitle: 'Local Mastra dev server',
+    url: studio.url,
+    sourceUrl: probe.serverUrl,
+    externalUrl: studio.url,
+    status: 'ready',
+  });
+  return snapshotState();
+}
+
+async function createPlatformTab(projectId: string) {
+  const project = platformState.projects.find(candidate => candidate.id === projectId);
+  if (!project) {
+    throw new Error('Platform Studio project was not found');
+  }
+  if (!project.instanceUrl || !isLaunchableStudioStatus(project.latestDeployStatus)) {
+    throw new Error('This hosted Studio is not launchable yet');
+  }
+
+  upsertTab({
+    id: randomUUID(),
+    kind: 'platform',
+    title: project.name,
+    subtitle: project.instanceUrl,
+    url: buildHostedStudioLoginUrl(platformState.baseUrl, project.instanceUrl),
+    sourceUrl: project.instanceUrl,
+    externalUrl: project.instanceUrl,
+    status: 'ready',
+  });
+  return snapshotState();
+}
+
+async function refreshPlatform() {
+  if (!platformSession) {
+    platformState = defaultPlatformState(currentSettings.platformBaseUrl);
+    emitState();
+    return snapshotState();
+  }
+
+  platformState = {
+    ...platformState,
+    status: 'loading',
+    signedIn: true,
+    error: undefined,
+  };
+  emitState();
+
+  try {
+    let result;
+    try {
+      result = await fetchPlatformProjects(platformSession);
+    } catch (error) {
+      platformSession = await refreshPlatformAccessToken(platformSession);
+      await writePlatformSession(platformSessionPath, platformSession, safeStorage);
+      result = await fetchPlatformProjects(platformSession);
+      if (error instanceof Error) {
+        logs.add(`Platform token refreshed after request failure: ${error.message}`);
+      }
+    }
+
+    platformSession = {
+      ...platformSession,
+      organizationId: result.organizationId,
+    };
+    await writePlatformSession(platformSessionPath, platformSession, safeStorage);
+    currentSettings = await updateSettings(settingsPath, {
+      platformBaseUrl: platformSession.baseUrl,
+      platformOrganizationId: result.organizationId,
+    });
+    platformState = {
+      baseUrl: platformSession.baseUrl,
+      status: 'ready',
+      signedIn: true,
+      user: platformSession.user,
+      organizationId: result.organizationId,
+      organizations: result.organizations,
+      projects: result.projects,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to load Platform projects';
+    platformState = {
+      ...platformState,
+      status: 'error',
+      signedIn: true,
+      error: message,
+    };
+    logs.add(`Platform refresh failed: ${message}`);
+  }
+
+  return snapshotState();
+}
+
+async function waitForPlatformLoginCallback(port: number, state: string): Promise<PlatformSession> {
+  return new Promise((resolve, reject) => {
+    const server = createServer((req, res) => {
+      const reqUrl = new URL(req.url ?? '/', `http://${LOCALHOST}:${port}`);
+      if (reqUrl.pathname !== '/callback') {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+
+      const error = reqUrl.searchParams.get('error');
+      const returnedState = reqUrl.searchParams.get('state');
+      const token = reqUrl.searchParams.get('token');
+      const refreshToken = reqUrl.searchParams.get('refresh_token');
+      const organizationId = reqUrl.searchParams.get('org') || undefined;
+      const userParam = reqUrl.searchParams.get('user');
+
+      if (error) {
+        reject(new Error(reqUrl.searchParams.get('error_description') || error));
+      } else if (returnedState !== state) {
+        reject(new Error('Platform login state did not match'));
+      } else if (!token || !refreshToken) {
+        reject(new Error('Platform login did not return tokens'));
+      } else {
+        let user: PlatformSession['user'] | undefined;
+        if (userParam) {
+          try {
+            user = JSON.parse(userParam) as PlatformSession['user'];
+          } catch (parseError) {
+            logs.add(
+              `Platform login returned an unreadable user payload: ${
+                parseError instanceof Error ? parseError.message : String(parseError)
+              }`,
+            );
+          }
+        }
+        resolve({
+          baseUrl: normalizePlatformBaseUrl(currentSettings.platformBaseUrl),
+          accessToken: token,
+          refreshToken,
+          organizationId,
+          user,
+        });
+      }
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<!doctype html><title>Mastra Studio</title><p>You can return to Mastra Studio.</p>');
+      server.close();
+    });
+
+    server.once('error', reject);
+    server.listen(port, LOCALHOST);
+    setTimeout(() => {
+      server.close();
+      reject(new Error('Platform login timed out'));
+    }, 120_000).unref();
   });
 }
 
-async function loadStudioInWindow() {
-  if (!mainWindow || mainWindow.isDestroyed() || !currentState?.studio.url) return;
-  await mainWindow.loadURL(currentState.studio.url);
+async function startPlatformLogin() {
+  const port = await findAvailablePort(52881);
+  const state = randomUUID();
+  const callback = waitForPlatformLoginCallback(port, state);
+  platformState = {
+    ...platformState,
+    status: 'signing-in',
+    error: undefined,
+  };
+  emitState();
+
+  await shell.openExternal(buildPlatformCliLoginUrl(currentSettings.platformBaseUrl, port, state));
+  platformSession = await callback;
+  await writePlatformSession(platformSessionPath, platformSession, safeStorage);
+  return refreshPlatform();
 }
 
-async function reloadServicesWithSettings(settings: DesktopSettings) {
-  currentSettings = await writeSettings(settingsPath, settings);
-  await startServices(currentSettings);
-  await loadStudioInWindow();
-  return snapshotState({ logs: logs.all() });
+async function logoutPlatform() {
+  platformSession = undefined;
+  await deletePlatformSession(platformSessionPath);
+  platformState = defaultPlatformState(currentSettings.platformBaseUrl);
+  return snapshotState();
 }
 
 async function showMessage(options: Electron.MessageBoxOptions) {
@@ -145,7 +574,7 @@ async function checkLmStudioServer() {
   const result = await probeLmStudioModels(currentSettings.modelUrl || LM_STUDIO_PRESET.modelUrl);
   if (!result.ok) {
     logs.add(`LM Studio probe failed: ${result.error ?? 'unknown error'}`);
-    snapshotState({ logs: logs.all() });
+    emitState();
     await showMessage({
       type: 'warning',
       title: 'LM Studio unavailable',
@@ -160,7 +589,7 @@ async function checkLmStudioServer() {
       ? result.models.map(model => `- ${model}`).join('\n')
       : 'LM Studio responded, but it did not report any loaded models.';
   logs.add(`LM Studio probe succeeded with ${result.models.length} model(s).`);
-  snapshotState({ logs: logs.all() });
+  emitState();
   await showMessage({
     type: result.models.length > 0 ? 'info' : 'warning',
     title: 'LM Studio models',
@@ -173,7 +602,8 @@ async function checkLmStudioServer() {
 async function applyLmStudioPreset() {
   const result = await probeLmStudioModels(LM_STUDIO_PRESET.modelUrl);
   const modelId = selectLmStudioModelId(result);
-  await reloadServicesWithSettings(buildLmStudioPresetSettings(currentSettings, modelId));
+  currentSettings = await writeSettings(settingsPath, buildLmStudioPresetSettings(currentSettings, modelId));
+  await restartManagedRuntime();
 
   const detail = result.ok
     ? result.models.length > 0
@@ -189,6 +619,10 @@ async function applyLmStudioPreset() {
   });
 }
 
+function rendererUrl() {
+  return process.env.ELECTRON_RENDERER_URL;
+}
+
 async function loadMainWindow() {
   const icon = resolveAppIconPath({
     packaged: app.isPackaged,
@@ -202,8 +636,9 @@ async function loadMainWindow() {
     minHeight: 700,
     title: 'Mastra Studio',
     icon,
-    backgroundColor: '#101113',
+    backgroundColor: '#111111',
     webPreferences: {
+      preload: join(thisDir, '../preload/index.js'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -229,16 +664,23 @@ async function loadMainWindow() {
     addAppLog(`Renderer process exited: ${details.reason} (${details.exitCode})`);
   });
 
-  mainWindow.webContents.on('will-navigate', event => {
-    const targetUrl = event.url;
-    if (targetUrl.startsWith('file:') || targetUrl.startsWith(`http://${LOCALHOST}:`)) {
-      return;
+  const devRendererUrl = rendererUrl();
+  if (devRendererUrl) {
+    await mainWindow.loadURL(devRendererUrl);
+  } else {
+    await mainWindow.loadFile(join(thisDir, '../renderer/index.html'));
+  }
+  mainWindow.on('resize', syncStudioViewBounds);
+  mainWindow.on('maximize', syncStudioViewBounds);
+  mainWindow.on('unmaximize', syncStudioViewBounds);
+  mainWindow.on('enter-full-screen', syncStudioViewBounds);
+  mainWindow.on('leave-full-screen', syncStudioViewBounds);
+  mainWindow.on('closed', () => {
+    for (const tabId of [...studioContentViews.keys()]) {
+      removeStudioContentView(tabId);
     }
-    event.preventDefault();
-    void shell.openExternal(targetUrl);
   });
-
-  await loadStudioInWindow();
+  syncStudioContentViews();
 }
 
 function installMenu() {
@@ -247,9 +689,17 @@ function installMenu() {
       label: 'Mastra Studio',
       submenu: [
         {
-          label: 'Open Studio in Browser',
+          label: 'New Tab',
+          accelerator: 'CmdOrCtrl+T',
           click: () => {
-            if (currentState?.studio.url) void shell.openExternal(currentState.studio.url);
+            void createLauncherTab();
+          },
+        },
+        {
+          label: 'Open Active Tab in Browser',
+          click: () => {
+            const tab = activeTab();
+            if (tab?.externalUrl || tab?.url) void shell.openExternal(tab.externalUrl || tab.url!);
           },
         },
         {
@@ -281,7 +731,7 @@ function installMenu() {
         {
           label: 'Restart Managed Runtime',
           click: () => {
-            void reloadServicesWithSettings(currentSettings);
+            void restartManagedRuntime();
           },
         },
       ],
@@ -296,38 +746,80 @@ function installMenu() {
 }
 
 function installIpc() {
-  ipcMain.handle('desktop:get-state', () => snapshotState({ logs: logs.all() }));
+  ipcMain.handle('desktop:get-state', () => snapshotState());
 
   ipcMain.handle('desktop:update-settings', async (_event, updates: Partial<DesktopSettings>) => {
     currentSettings = await updateSettings(settingsPath, updates);
-    await startServices(currentSettings);
-    await loadStudioInWindow();
+    platformState = {
+      ...platformState,
+      baseUrl: currentSettings.platformBaseUrl,
+    };
     return {
       settings: currentSettings,
-      state: snapshotState({ logs: logs.all() }),
+      state: snapshotState(),
     };
   });
+
+  ipcMain.handle('desktop:create-launcher-tab', () => createLauncherTab());
+  ipcMain.handle('desktop:create-managed-tab', () => createManagedTab());
+  ipcMain.handle('desktop:create-dev-tab', (_event, input: CreateDevTabInput) => createDevTab(input));
+  ipcMain.handle('desktop:create-platform-tab', (_event, projectId: string) => createPlatformTab(projectId));
+  ipcMain.handle('desktop:activate-tab', (_event, tabId: string) => {
+    if (tabs.some(tab => tab.id === tabId)) {
+      activeTabId = tabId;
+    }
+    return snapshotState();
+  });
+  ipcMain.handle('desktop:close-tab', (_event, tabId: string) => {
+    const index = tabs.findIndex(tab => tab.id === tabId);
+    if (index >= 0) {
+      tabs.splice(index, 1);
+    }
+    if (activeTabId === tabId) {
+      activeTabId = tabs[Math.max(0, index - 1)]?.id ?? tabs[0]?.id;
+    }
+    if (tabs.length === 0) {
+      createLauncherTab();
+    }
+    return snapshotState();
+  });
+  ipcMain.handle('desktop:reload-tab', (_event, tabId: string) => {
+    const tab = tabs.find(candidate => candidate.id === tabId);
+    if (tab) {
+      tab.status = 'ready';
+      tab.error = undefined;
+      const entry = studioContentViews.get(tabId);
+      if (entry && !entry.view.webContents.isDestroyed()) {
+        entry.view.webContents.reload();
+      }
+    }
+    return snapshotState();
+  });
+  ipcMain.handle('desktop:open-tab-external', async (_event, tabId: string) => {
+    const tab = tabs.find(candidate => candidate.id === tabId);
+    if (tab?.externalUrl || tab?.url) {
+      await shell.openExternal(tab.externalUrl || tab.url!);
+    }
+  });
+  ipcMain.handle('desktop:start-platform-login', () => startPlatformLogin());
+  ipcMain.handle('desktop:logout-platform', () => logoutPlatform());
+  ipcMain.handle('desktop:refresh-platform', () => refreshPlatform());
 
   ipcMain.handle('desktop:probe-lmstudio-models', async (_event, modelUrl?: string) => {
     const result = await probeLmStudioModels(modelUrl ?? currentSettings.modelUrl);
     if (!result.ok) {
       logs.add(`LM Studio probe failed: ${result.error ?? 'unknown error'}`);
     }
-    snapshotState({ logs: logs.all() });
+    emitState();
     return result;
   });
 
-  ipcMain.handle('desktop:restart-runtime', async () => {
-    if (currentSettings.serverMode === 'managed') {
-      await reloadServicesWithSettings(currentSettings);
-    }
-    return snapshotState({ logs: logs.all() });
-  });
-
+  ipcMain.handle('desktop:restart-runtime', () => restartManagedRuntime());
   ipcMain.handle('desktop:get-logs', () => logs.all());
 
   ipcMain.handle('desktop:open-studio-external', async () => {
-    if (currentState?.studio.url) await shell.openExternal(currentState.studio.url);
+    const tab = activeTab();
+    if (tab?.externalUrl || tab?.url) await shell.openExternal(tab.externalUrl || tab.url!);
   });
 
   ipcMain.handle('desktop:open-data-folder', async () => {
@@ -338,6 +830,7 @@ function installIpc() {
 async function boot() {
   userDataPath = app.getPath('userData');
   settingsPath = join(userDataPath, 'settings.json');
+  platformSessionPath = join(userDataPath, 'platform-session.json');
   await mkdir(userDataPath, { recursive: true });
 
   if (process.platform === 'darwin' && app.dock) {
@@ -350,18 +843,35 @@ async function boot() {
   }
 
   currentSettings = await readSettings(settingsPath);
-  await writeSettings(settingsPath, currentSettings);
-  currentState = {
-    settings: currentSettings,
-    runtime: { state: 'idle' },
-    studio: {},
-    logs: logs.all(),
-  };
+  currentSettings = await writeSettings(settingsPath, currentSettings);
+  platformState = defaultPlatformState(currentSettings.platformBaseUrl);
+  platformSession = await readPlatformSession(platformSessionPath, safeStorage).catch(error => {
+    logs.add(`Unable to read saved Platform session: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
+  });
+  if (platformSession) {
+    platformState = {
+      ...platformState,
+      baseUrl: platformSession.baseUrl,
+      status: 'loading',
+      signedIn: true,
+      user: platformSession.user,
+      organizationId: platformSession.organizationId,
+    };
+  }
 
   installMenu();
   installIpc();
-  await startServices(currentSettings);
+  await ensureManagedStudio();
+  await createManagedTab();
   await loadMainWindow();
+  if (platformSession) {
+    void refreshPlatform();
+  }
+}
+
+async function cleanup() {
+  await Promise.all([closeAllStudioShellServers(), stopRuntime()]);
 }
 
 if (!hasSingleInstanceLock) {
@@ -387,9 +897,13 @@ if (!hasSingleInstanceLock) {
   });
 
   app.on('before-quit', event => {
+    if (isQuitting) return;
     event.preventDefault();
-    Promise.all([closeStudioServer(), stopRuntime()])
+    cleanup()
       .catch(error => logs.add(error instanceof Error ? error.message : String(error)))
-      .finally(() => app.exit(0));
+      .finally(() => {
+        isQuitting = true;
+        app.exit(0);
+      });
   });
 }

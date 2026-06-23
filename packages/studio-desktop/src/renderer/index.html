@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:* https:; frame-src http://127.0.0.1:* http://localhost:* https:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mastra Studio</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="chrome">
+        <div id="tab-strip" class="tab-strip"></div>
+        <button id="new-tab-button" class="icon-button" type="button" title="New tab">+</button>
+      </header>
+      <main class="surface">
+        <section id="launcher" class="launcher" hidden></section>
+        <section id="webviews" class="webviews"></section>
+      </main>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

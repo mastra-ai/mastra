@@ -38,6 +38,7 @@ describe('LM Studio preset', () => {
         'detected-model',
       ),
     ).toEqual({
+      ...DEFAULT_SETTINGS,
       serverMode: 'managed',
       externalServerUrl: 'http://127.0.0.1:5222',
       modelUrl: LM_STUDIO_PRESET.modelUrl,

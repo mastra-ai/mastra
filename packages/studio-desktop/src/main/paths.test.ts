@@ -22,15 +22,15 @@ describe('desktop resource paths', () => {
   });
 
   it('resolves packaged Studio and starter resources from Electron resources', () => {
-    expect(resolveStudioDistPath({ packaged: true, resourcesPath: '/Applications/Mastra Studio.app/Contents/Resources' })).toBe(
-      '/Applications/Mastra Studio.app/Contents/Resources/studio',
-    );
+    expect(
+      resolveStudioDistPath({ packaged: true, resourcesPath: '/Applications/Mastra Studio.app/Contents/Resources' }),
+    ).toBe('/Applications/Mastra Studio.app/Contents/Resources/studio');
     expect(
       resolveStarterOutputPath({ packaged: true, resourcesPath: '/Applications/Mastra Studio.app/Contents/Resources' }),
     ).toBe('/Applications/Mastra Studio.app/Contents/Resources/starter-output');
-    expect(resolveAppIconPath({ packaged: true, resourcesPath: '/Applications/Mastra Studio.app/Contents/Resources' })).toBe(
-      '/Applications/Mastra Studio.app/Contents/Resources/icon.png',
-    );
+    expect(
+      resolveAppIconPath({ packaged: true, resourcesPath: '/Applications/Mastra Studio.app/Contents/Resources' }),
+    ).toBe('/Applications/Mastra Studio.app/Contents/Resources/icon.png');
   });
 
   it('allows local resource path overrides for development smoke checks', () => {

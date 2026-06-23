@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { DesktopSettings } from '../shared/types';
 import { DEFAULT_SETTINGS } from './defaults';
+import { normalizeServerUrl } from './url';
 
 function cleanOptionalUrl(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -15,12 +16,26 @@ function cleanRequired(value: unknown, fallback: string): string {
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
+function cleanUrl(value: unknown, fallback: string): string {
+  const source = cleanRequired(value, fallback);
+  try {
+    return normalizeServerUrl(source);
+  } catch {
+    return fallback;
+  }
+}
+
 export function normalizeSettings(value: unknown): DesktopSettings {
   const source = typeof value === 'object' && value !== null ? (value as Partial<DesktopSettings>) : {};
+  const externalServerUrl = cleanOptionalUrl(source.externalServerUrl);
   return {
+    version: 2,
     serverMode: source.serverMode === 'external' ? 'external' : 'managed',
-    externalServerUrl: cleanOptionalUrl(source.externalServerUrl),
-    modelUrl: cleanRequired(source.modelUrl, DEFAULT_SETTINGS.modelUrl),
+    externalServerUrl,
+    devServerUrl: cleanUrl(source.devServerUrl ?? externalServerUrl, DEFAULT_SETTINGS.devServerUrl),
+    platformBaseUrl: cleanUrl(source.platformBaseUrl, DEFAULT_SETTINGS.platformBaseUrl),
+    platformOrganizationId: cleanOptionalUrl(source.platformOrganizationId),
+    modelUrl: cleanUrl(source.modelUrl, DEFAULT_SETTINGS.modelUrl),
     modelId: cleanRequired(source.modelId, DEFAULT_SETTINGS.modelId),
     modelApiKey: cleanRequired(source.modelApiKey, DEFAULT_SETTINGS.modelApiKey),
   };

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": false,
+    "declarationMap": false,
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "types": [],
+    "paths": {
+      "@shared/*": ["./src/shared/*"]
+    }
+  },
+  "include": ["src/renderer/**/*.ts", "src/shared/**/*.ts"]
+}
