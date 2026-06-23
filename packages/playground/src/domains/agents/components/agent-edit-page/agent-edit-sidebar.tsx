@@ -1,8 +1,6 @@
 import {
   Button,
   Input,
-  JSONSchemaForm,
-  jsonSchemaToFields,
   Label,
   ScrollArea,
   Spinner,
@@ -10,13 +8,15 @@ import {
   TabList,
   Tab,
   TabContent,
-  Textarea,
   Icon,
   AgentIcon,
   ToolsIcon,
   VariablesIcon,
 } from '@mastra/playground-ui';
-import type { JsonSchema, SchemaField } from '@mastra/playground-ui';
+import type { JsonSchema } from '@mastra/playground-ui';
+import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
+import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Check, PlusIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import type { RefObject } from 'react';

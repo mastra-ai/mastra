@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Checkbox, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { useFormContext } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 

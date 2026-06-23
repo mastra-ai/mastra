@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { MainSidebarProvider, TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { cleanup, render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';

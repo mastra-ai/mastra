@@ -1,6 +1,5 @@
 import {
   Badge,
-  CopyButton,
   HoverPopover,
   PopoverTrigger,
   PopoverContent,
@@ -11,6 +10,7 @@ import {
   cn,
 } from '@mastra/playground-ui';
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Braces, ChevronDown, ChevronRight, Wrench, Cpu, Eye, Pencil } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
