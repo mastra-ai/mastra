@@ -154,7 +154,8 @@ vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
   },
-  isBadRequestError: (error: unknown) => typeof error === 'object' && error !== null && 'statusCode' in error,
+  isBadRequestError: (error: unknown) =>
+    typeof error === 'object' && error !== null && 'statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400,
   PrefillErrorHandler: class {
     readonly id = 'prefill-error-handler';
   },
