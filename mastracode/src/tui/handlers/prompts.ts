@@ -327,10 +327,14 @@ export async function handlePlanApproval(
       onReject: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        // Abort the run immediately — no additional LLM call needed. The plan
-        // file on disk provides context for the next run; the user will send
-        // revision feedback as a normal chat message.
-        state.session.abort();
+        // Resume the tool with a rejection so the result is persisted in thread
+        // history. The PlanRejectionAbortProcessor detects the rejection tool
+        // result and aborts from within the agentic loop — preventing any
+        // additional LLM call without a timing gap.
+        await state.session.respondToToolSuspension({
+          toolCallId,
+          resumeData: { action: 'rejected' },
+        });
         resolve();
       },
     };
