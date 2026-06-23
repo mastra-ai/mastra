@@ -8,7 +8,8 @@ import {
 } from '@internal/ai-v6';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingOptions } from '@mastra/core/observability';
-import { MASTRA_RESOURCE_ID_KEY, type RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { toAISdkStream } from './convert-streams';
 import type {
@@ -85,7 +86,15 @@ export async function handleWorkflowStream({
   sendReasoning = false,
   sendSources = false,
 }: WorkflowStreamHandlerOptions): Promise<SupportedUIMessageStream> {
-  const { runId, resourceId: resourceIdFromParams, inputData, initialState, resumeData, requestContext, ...rest } = params;
+  const {
+    runId,
+    resourceId: resourceIdFromParams,
+    inputData,
+    initialState,
+    resumeData,
+    requestContext,
+    ...rest
+  } = params;
   const resourceIdFromContext = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
   const resourceId = resourceIdFromContext ?? resourceIdFromParams;
 
