@@ -340,9 +340,9 @@ describe('MongoDBVector Integration Tests', () => {
     });
   });
 
-  // ─── Regression: NODE-7556 ───────────────────────────────────────────────────
-  describe('Regression: NODE-7556', () => {
-    it('F2: updateVector with a vector must not throw when collectionForValidation was never set', async () => {
+  // ─── Hardening: NODE-7556 ───────────────────────────────────────────────────
+  describe('Hardening: NODE-7556', () => {
+    test('F2: updateVector with a vector must not throw when collectionForValidation was never set', async () => {
       const indexName = `f2-npe-${Date.now()}`;
 
       // Create the index and upsert a document via the shared vectorDB instance.
@@ -377,6 +377,39 @@ describe('MongoDBVector Integration Tests', () => {
         await deleteIndexAndWait(vectorDB, indexName);
       }
     });
+
+    test.todo(
+      'F1: concurrent upserts to the same index must not write dimension metadata to the wrong collection ' +
+        '(non-deterministic timing: requires a controlled async yield between upsert calls)',
+    );
+
+    test.todo(
+      'F3: concurrent swapBufferedToActive calls must not duplicate observation chunks ' +
+        '(non-deterministic: requires two goroutine-equivalent async tasks to read the same snapshot)',
+    );
+
+    test.todo(
+      'F4: concurrent updateBufferedReflection calls must not lose one write ' +
+        '(non-deterministic: lost update requires two writes to race on the same document)',
+    );
+
+    test.todo(
+      'F6: query with a pre-filter matching >370 000 documents must not hit the 16 MB BSON limit ' +
+        '(requires seeding ~400 000 documents — impractical in CI; fix is to pass combinedFilter directly to $vectorSearch)',
+    );
+
+    test.todo(
+      'F12: upsert immediately after createIndex must not fail with index-not-ready ' +
+        '(non-deterministic in atlas-local where indexes become READY within milliseconds; ' +
+        'fix: callers must call waitForIndexReady after createIndex before querying — ' +
+        'see createIndex JSDoc and the createIndexAndWait helper in this test file)',
+    );
+
+    test.todo(
+      'F15: getCollection with throwIfNotExists=true must throw after the collection is dropped externally ' +
+        '(failure mode is a wrong error message not silence, making a clear red/green assertion impractical; ' +
+        'fix: phantom handles are no longer cached when collectionExists=false)',
+    );
   });
   // ─────────────────────────────────────────────────────────────────────────────
 });

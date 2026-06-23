@@ -133,6 +133,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
+  /**
+   * Creates a MongoDB collection and the Atlas Search indexes that back a
+   * Mastra index with the given name.
+   *
+   * **Async index lifecycle:** Atlas Search indexes transition through
+   * PENDING → BUILDING → READY after this method returns. If you need to
+   * `upsert` or `query` immediately after calling `createIndex`, call
+   * `waitForIndexReady({ indexName })` first to block until the index is
+   * queryable. Skipping that step on a real Atlas cluster may cause
+   * "index not found" or "index not ready" errors on subsequent operations.
+   */
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     let mongoMetric;
     try {
@@ -214,7 +225,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         );
       }
     }
-
   }
 
   /**
@@ -777,7 +787,26 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
-  // Private methods
+  /**
+   * Returns the MongoDB Collection that backs the given Mastra index.
+   *
+   * **Index vs. collection:** In this driver, each Mastra index is stored as a
+   * MongoDB collection whose name equals the index name. The Atlas Vector Search
+   * index (named `${indexName}_vector_index`) lives on that collection. The two
+   * terms are distinct: "index" is the Mastra concept; "collection" is the
+   * MongoDB storage primitive that implements it.
+   *
+   * **Caching:** Collection handles are cached on first successful lookup to
+   * avoid redundant `listCollections` round-trips. Only handles for collections
+   * that actually exist are cached; a handle for a missing collection is returned
+   * without being cached so the next call re-checks existence rather than
+   * returning a stale phantom.
+   *
+   * @param indexName - Mastra index name, which is also the MongoDB collection name.
+   * @param throwIfNotExists - When `true` (default), throws if no MongoDB
+   *   collection exists for this index name. Pass `false` when absence is not an
+   *   error (e.g., inside `deleteIndex`).
+   */
   private async getCollection(
     indexName: string,
     throwIfNotExists: boolean = true,
@@ -788,13 +817,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     const collection = this.db.collection<MongoDBDocument>(indexName);
 
-    // Check if collection exists
     const collectionExists = await this.db.listCollections({ name: indexName }).hasNext();
     if (!collectionExists && throwIfNotExists) {
-      throw new Error(`Index (Collection) "${indexName}" does not exist`);
+      throw new Error(
+        `Mastra index "${indexName}" has no backing MongoDB collection. ` +
+          `Call createIndex first, or verify the collection was not dropped externally.`,
+      );
     }
 
-    this.collections.set(indexName, collection);
+    if (collectionExists) {
+      this.collections.set(indexName, collection);
+    }
     return collection;
   }
 
