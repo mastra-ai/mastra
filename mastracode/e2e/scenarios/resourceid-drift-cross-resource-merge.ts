@@ -32,8 +32,7 @@ function gitInDir(args: string[], cwd: string): void {
  */
 export const resourceidDriftCrossResourceMergeScenario: McE2eScenario = {
   name: 'resourceid-drift-cross-resource-merge',
-  description:
-    'Verify MC resumes the most-recent tagged thread even when a newer-resourceId thread also exists.',
+  description: 'Verify MC resumes the most-recent tagged thread even when a newer-resourceId thread also exists.',
   testName: 'prefers most-recent cross-resource thread over same-resource thread after drift',
   env() {
     return { MASTRA_RESOURCE_ID: NEW_RESOURCE_ID };
