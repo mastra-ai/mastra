@@ -1,5 +1,5 @@
-import { activeSignalFollowupScenario } from './active-signal-followup.js';
 import { abortFollowupScenario } from './abort-followup.js';
+import { activeSignalFollowupScenario } from './active-signal-followup.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
