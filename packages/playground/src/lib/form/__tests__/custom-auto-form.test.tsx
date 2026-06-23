@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { AutoFormFieldProps } from '@autoform/react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { FormHTMLAttributes, PropsWithChildren } from 'react';

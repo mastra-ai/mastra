@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter, useSearchParams } from 'react-router';
