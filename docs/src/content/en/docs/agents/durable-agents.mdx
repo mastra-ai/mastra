@@ -208,10 +208,6 @@ for await (const chunk of output.fullStream) {
 cleanup()
 ```
 
-### Cleanup
-
-Every `stream()` and `observe()` call returns a `cleanup` function. Calling it unsubscribes from PubSub and removes the run from the internal registry. If you forget to call it, an automatic timer fires after the stream ends, but calling `cleanup()` yourself frees resources immediately.
-
 Pass `{ maxIdleMs }` to customize the idle timeout (defaults to 5 minutes):
 
 ```typescript
@@ -226,6 +222,10 @@ await durableAgent.stream('Research topic', {
 Visit [Background tasks](/docs/agents/background-tasks) for the full background task guide, including configuration, subagents, and suspend/resume.
 
 :::
+
+## Cleanup
+
+Every `stream()` and `observe()` call returns a `cleanup` function. Calling it unsubscribes from PubSub and removes the run from the internal registry. If you forget to call it, an automatic timer fires after the stream ends, but calling `cleanup()` yourself frees resources immediately.
 
 ## Tool approval
 
