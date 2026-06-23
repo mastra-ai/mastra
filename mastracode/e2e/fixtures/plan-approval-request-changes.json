@@ -28,20 +28,6 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
-        "turnIndex": 1
-      },
-      "response": {
-        "content": "Understood, I'll wait for your revision feedback."
-      },
-      "streamingProfile": {
-        "ttft": 100,
-        "tps": 50
-      }
-    },
-    {
-      "match": {
-        "model": "gpt-5.4-mini",
-        "endpoint": "chat",
         "userMessage": "Add a testing section with unit and integration tests"
       },
       "response": {

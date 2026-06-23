@@ -48,28 +48,81 @@ class PlanContentBox implements Component {
     const border = (text: string) => chalk.hex(mastra.purple)(text);
     const top = `${border('╭')}${border('─'.repeat(innerWidth + 2))}${border('╮')}`;
     const bottom = `${border('╰')}${border('─'.repeat(innerWidth + 2))}${border('╯')}`;
-    const body = rendered.map(line => {
-      let content = line;
-      let contentVis = visibleWidth(content);
-      if (contentVis > innerWidth) {
-        content = truncateToWidth(content, innerWidth);
-        contentVis = visibleWidth(content);
+    const body: string[] = [];
+    for (const line of rendered) {
+      const contentVis = visibleWidth(line);
+      if (contentVis <= innerWidth) {
+        const padding = ' '.repeat(Math.max(0, innerWidth - contentVis));
+        body.push(`${border('│')} ${line}${padding} ${border('│')}`);
+      } else {
+        // Wrap overflowing markdown lines instead of truncating
+        const chunks = wrapStyledLine(line, innerWidth);
+        for (const chunk of chunks) {
+          const chunkVis = visibleWidth(chunk);
+          const padding = ' '.repeat(Math.max(0, innerWidth - chunkVis));
+          body.push(`${border('│')} ${chunk}${padding} ${border('│')}`);
+        }
       }
-      const padding = ' '.repeat(Math.max(0, innerWidth - contentVis));
-      return `${border('│')} ${content}${padding} ${border('│')}`;
-    });
+    }
     return [top, ...body, bottom];
   }
 }
 
 /**
+ * Wrap a line that may contain ANSI styling by using truncateToWidth to extract
+ * successive chunks of the target width.
+ */
+function wrapStyledLine(line: string, maxWidth: number): string[] {
+  const chunks: string[] = [];
+  let remaining = line;
+
+  while (visibleWidth(remaining) > maxWidth) {
+    chunks.push(truncateToWidth(remaining, maxWidth));
+    // Remove the visible characters we just consumed. Since truncateToWidth
+    // may leave trailing ANSI resets, strip them and figure out the remainder
+    // by removing the first maxWidth visible characters.
+    const consumed = visibleWidth(chunks[chunks.length - 1]!);
+    if (consumed <= 0) break; // safety: avoid infinite loop
+    remaining = sliceVisibleChars(remaining, consumed);
+  }
+  if (remaining.length > 0) chunks.push(remaining);
+
+  return chunks.length > 0 ? chunks : [''];
+}
+
+/**
+ * Remove the first `count` visible characters from a string that may contain
+ * ANSI escape sequences, preserving escape sequences that follow.
+ */
+function sliceVisibleChars(str: string, count: number): string {
+  let visible = 0;
+  let i = 0;
+  while (i < str.length && visible < count) {
+    if (str[i] === '\x1b') {
+      // Skip entire ANSI escape sequence
+      const end = str.indexOf('m', i);
+      if (end !== -1) {
+        i = end + 1;
+      } else {
+        i++;
+      }
+    } else {
+      visible++;
+      i++;
+    }
+  }
+  return str.slice(i);
+}
+
+/**
  * Renders a unified diff between two plan texts inside a bordered box.
+ * Long lines are wrapped (not truncated) so the full plan text is visible.
  */
 class PlanDiffBox implements Component {
-  private diffLines: string[];
+  private diffEntries: DiffEntry[];
 
   constructor(oldPlan: string, newPlan: string) {
-    this.diffLines = generatePlanDiff(oldPlan, newPlan);
+    this.diffEntries = generatePlanDiff(oldPlan, newPlan);
   }
 
   invalidate(): void {}
@@ -80,48 +133,91 @@ class PlanDiffBox implements Component {
     const border = (text: string) => chalk.hex(mastra.purple)(text);
     const top = `${border('╭')}${border('─'.repeat(innerWidth + 2))}${border('╮')}`;
     const bottom = `${border('╰')}${border('─'.repeat(innerWidth + 2))}${border('╯')}`;
-    const body = this.diffLines.map(line => {
-      let content = line;
-      let contentVis = visibleWidth(content);
-      if (contentVis > innerWidth) {
-        content = truncateToWidth(content, innerWidth);
-        contentVis = visibleWidth(content);
+
+    const removedColor = chalk.hex(mastra.red);
+    const addedColor = chalk.hex(theme.getTheme().success);
+
+    const body: string[] = [];
+    for (const entry of this.diffEntries) {
+      const colorFn =
+        entry.type === 'added'
+          ? addedColor
+          : entry.type === 'removed'
+            ? removedColor
+            : (t: string) => theme.fg('muted', t);
+      const prefix = entry.type === 'added' ? '+ ' : entry.type === 'removed' ? '- ' : '  ';
+      const prefixWidth = 2;
+      const textWidth = innerWidth - prefixWidth;
+
+      // Wrap long text across multiple lines
+      const wrappedChunks = wrapText(entry.text, textWidth);
+      for (let ci = 0; ci < wrappedChunks.length; ci++) {
+        const linePrefix = ci === 0 ? prefix : '  ';
+        const content = colorFn(`${linePrefix}${wrappedChunks[ci]}`);
+        const contentVis = visibleWidth(content);
+        const padding = ' '.repeat(Math.max(0, innerWidth - contentVis));
+        body.push(`${border('│')} ${content}${padding} ${border('│')}`);
       }
-      const padding = ' '.repeat(Math.max(0, innerWidth - contentVis));
-      return `${border('│')} ${content}${padding} ${border('│')}`;
-    });
+    }
     return [top, ...body, bottom];
   }
 }
 
+interface DiffEntry {
+  type: 'added' | 'removed' | 'context';
+  text: string;
+}
+
 /**
- * Generate colored diff lines between two plan texts.
- * Context lines are muted, removed lines are red, added lines are green.
+ * Generate structured diff entries between two plan texts.
  */
-function generatePlanDiff(oldText: string, newText: string): string[] {
+function generatePlanDiff(oldText: string, newText: string): DiffEntry[] {
   const oldLines = oldText.split('\n');
   const newLines = newText.split('\n');
-  const lines: string[] = [];
-
-  const removedColor = chalk.hex(mastra.red);
-  const addedColor = chalk.hex(theme.getTheme().success);
+  const entries: DiffEntry[] = [];
 
   const maxLines = Math.max(oldLines.length, newLines.length);
 
   for (let i = 0; i < maxLines; i++) {
     if (i >= oldLines.length) {
-      lines.push(addedColor(`+ ${newLines[i]}`));
+      entries.push({ type: 'added', text: newLines[i]! });
     } else if (i >= newLines.length) {
-      lines.push(removedColor(`- ${oldLines[i]}`));
+      entries.push({ type: 'removed', text: oldLines[i]! });
     } else if (oldLines[i] !== newLines[i]) {
-      lines.push(removedColor(`- ${oldLines[i]!}`));
-      lines.push(addedColor(`+ ${newLines[i]!}`));
+      entries.push({ type: 'removed', text: oldLines[i]! });
+      entries.push({ type: 'added', text: newLines[i]! });
     } else {
-      lines.push(theme.fg('muted', `  ${oldLines[i]!}`));
+      entries.push({ type: 'context', text: oldLines[i]! });
     }
   }
 
-  return lines;
+  return entries;
+}
+
+/**
+ * Wrap a plain text string into chunks that fit within maxWidth.
+ * Wraps at word boundaries when possible, hard-breaks otherwise.
+ */
+function wrapText(text: string, maxWidth: number): string[] {
+  if (maxWidth <= 0) return [text];
+  if (text.length <= maxWidth) return [text];
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > maxWidth) {
+    // Find last space within maxWidth
+    let breakAt = remaining.lastIndexOf(' ', maxWidth);
+    if (breakAt <= 0) {
+      // No space found — hard break
+      breakAt = maxWidth;
+    }
+    chunks.push(remaining.slice(0, breakAt));
+    remaining = remaining.slice(breakAt).replace(/^ /, '');
+  }
+  if (remaining.length > 0) chunks.push(remaining);
+
+  return chunks.length > 0 ? chunks : [''];
 }
 
 export class PlanApprovalInlineComponent extends Container implements Focusable {

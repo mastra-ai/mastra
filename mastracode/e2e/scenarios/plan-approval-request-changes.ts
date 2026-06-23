@@ -4,7 +4,7 @@ import type { McE2eScenario } from './types.js';
 export const planApprovalRequestChangesScenario: McE2eScenario = {
   name: 'plan-approval-request-changes',
   description:
-    'Submit a plan, request changes, resubmit with a diff, then approve — exercising the full revision flow.',
+    'Submit a plan, request changes (immediate abort), resubmit with a diff, then approve — exercising the full revision flow.',
   testName: 'requests changes on an AIMock-driven plan, shows diff on resubmission, then approves',
   useOpenAIModel: true,
   aimockFixture: 'plan-approval-request-changes.json',
@@ -28,18 +28,15 @@ export const planApprovalRequestChangesScenario: McE2eScenario = {
     terminal.write('\x1b[B'); // Down
     terminal.write('\r'); // Enter
 
-    // Verify rejection UX: status + feedback hint
+    // Verify rejection UX: status + feedback hint. The run is aborted
+    // immediately — no additional LLM call or agent text output.
     await runtime.waitForScreenText(/✗\s+Changes requested/i, terminal, 10_000);
     await runtime.waitForScreenText(/Send a message with your revision feedback/i, terminal, 10_000);
 
-    // The rejection resumes the tool call. The model gets the "Plan was not
-    // approved" result and responds with an acknowledgement. Wait for the run
-    // to finish before submitting revision feedback so the next message starts
-    // a fresh run instead of being sent as a steer.
-    await runtime.waitForScreenText(/wait for your revision feedback/i, terminal, 10_000);
+    // Small delay to confirm no model response leaks through after abort
     await runtime.sleep(500);
 
-    // Send revision feedback as a normal chat message
+    // Send revision feedback as a normal chat message (starts a fresh run)
     terminal.submit('Add a testing section with unit and integration tests');
 
     // AIMock returns revised submit_plan — TUI should show diff, not full plan
@@ -62,26 +59,16 @@ export const planApprovalRequestChangesScenario: McE2eScenario = {
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
-    if (requests.length < 3) {
+    if (requests.length < 2) {
       throw new Error(
-        `Expected plan request-changes scenario to make at least 3 AIMock requests, received ${requests.length}`,
+        `Expected plan request-changes scenario to make at least 2 AIMock requests, received ${requests.length}`,
       );
     }
     const body = JSON.stringify(requests);
 
-    // Verify initial submit_plan call happened
-    if (!body.includes('call_plan_rc_e2e_initial')) {
-      throw new Error('Expected AIMock requests to include the initial submit_plan tool call id');
-    }
-
     // Verify revised submit_plan call happened (after user feedback)
     if (!body.includes('call_plan_rc_e2e_revised')) {
       throw new Error('Expected AIMock requests to include the revised submit_plan tool call id');
-    }
-
-    // Verify the rejection tool result was persisted and sent back to the model
-    if (!body.includes('Plan was not approved')) {
-      throw new Error('Expected AIMock requests to include the rejected submit_plan tool result');
     }
 
     // Verify the approved tool result was sent back to the model
