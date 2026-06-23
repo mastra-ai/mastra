@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../../mastra';
 import type { ScheduleTarget } from '../../storage/domains/schedules/base';
-import { executeHeartbeat, isWithinActiveHours } from './worker';
+import { executeHeartbeat } from './worker';
 
 type HeartbeatTarget = Extract<ScheduleTarget, { type: 'heartbeat' }>;
 
@@ -221,32 +221,6 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
     expect(sendSignal).not.toHaveBeenCalled();
   });
 
-  it('skips when outside active hours', async () => {
-    const sendSignal = vi.fn();
-    const generate = vi.fn();
-    const agent = { sendSignal, generate, getMemory: vi.fn() };
-    const mastra = makeMastra({ agent });
-
-    // Pick a window definitely not "now"
-    const now = new Date();
-    const hour = now.getUTCHours();
-    const startHour = (hour + 2) % 24;
-    const endHour = (hour + 3) % 24;
-    const pad = (n: number) => n.toString().padStart(2, '0');
-
-    const result = await executeHeartbeat(
-      mastra,
-      'hb_a1',
-      makeTarget({
-        activeHours: { start: `${pad(startHour)}:00`, end: `${pad(endHour)}:00`, timezone: 'UTC' },
-      }),
-    );
-
-    expect(result.status).toBe('skipped-outside-hours');
-    expect(generate).not.toHaveBeenCalled();
-    expect(sendSignal).not.toHaveBeenCalled();
-  });
-
   it('does not self-clean on regular outcomes', async () => {
     const storage = makeStorage();
     const agent = { sendSignal: vi.fn(), generate: vi.fn(async () => ({})), getMemory: vi.fn() };
@@ -254,26 +228,5 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
 
     await executeHeartbeat(mastra, 'hb_a1', makeTarget());
     expect(storage.deleteSchedule).not.toHaveBeenCalled();
-  });
-});
-
-describe('isWithinActiveHours', () => {
-  // Use UTC to avoid host-tz flakiness.
-  const at = (h: number, m = 0) => Date.UTC(2026, 0, 1, h, m);
-
-  it('returns true inside a non-wrapping window', () => {
-    expect(isWithinActiveHours({ start: '09:00', end: '17:00', timezone: 'UTC' }, at(12))).toBe(true);
-  });
-
-  it('returns false outside a non-wrapping window', () => {
-    expect(isWithinActiveHours({ start: '09:00', end: '17:00', timezone: 'UTC' }, at(8))).toBe(false);
-    expect(isWithinActiveHours({ start: '09:00', end: '17:00', timezone: 'UTC' }, at(17))).toBe(false);
-  });
-
-  it('handles wrapping (overnight) windows', () => {
-    const win = { start: '22:00', end: '06:00', timezone: 'UTC' };
-    expect(isWithinActiveHours(win, at(23))).toBe(true);
-    expect(isWithinActiveHours(win, at(2))).toBe(true);
-    expect(isWithinActiveHours(win, at(12))).toBe(false);
   });
 });

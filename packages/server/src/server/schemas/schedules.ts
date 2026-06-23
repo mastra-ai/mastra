@@ -21,7 +21,6 @@ const heartbeatScheduleTargetSchema = z.object({
   signalType: z.string().optional(),
   ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
-  activeHours: z.object({ start: z.string(), end: z.string(), timezone: z.string().optional() }).optional(),
   idleThresholdMs: z.number().int().positive().optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),

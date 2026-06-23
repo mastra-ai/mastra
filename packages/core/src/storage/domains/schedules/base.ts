@@ -1,5 +1,4 @@
 import type {
-  HeartbeatActiveHours,
   HeartbeatBroadcastMode,
   HeartbeatIfActive,
   HeartbeatIfIdle,
@@ -30,7 +29,6 @@ export type WorkflowScheduleTarget = {
 // feature module) and re-exported here so callers describing schedule rows can
 // reach them through the storage barrel.
 export type {
-  HeartbeatActiveHours,
   HeartbeatBroadcastMode,
   HeartbeatIfActive,
   HeartbeatIfIdle,
@@ -63,8 +61,6 @@ export type HeartbeatScheduleTarget = {
   ifActive?: HeartbeatIfActive;
   /** Behavior when the target thread is idle. Threaded only. */
   ifIdle?: HeartbeatIfIdle;
-  /** Restrict fires to a daily window. */
-  activeHours?: HeartbeatActiveHours;
   /** Skip the fire if the thread was updated within this many ms. */
   idleThresholdMs?: number;
   /** Broadcast policy for the heartbeat run's stream chunks. Defaults to `'live'`. */

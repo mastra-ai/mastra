@@ -29,18 +29,6 @@ export type HeartbeatIfActive = 'deliver' | 'persist' | 'discard';
 /** Action to take when the target thread is idle. Threaded only. */
 export type HeartbeatIfIdle = 'wake' | 'persist' | 'discard';
 
-/**
- * Daily active-hours window. Outside the window heartbeat fires are
- * skipped (`status: 'skipped-outside-hours'`). Times are HH:mm in the
- * provided IANA `timezone` (defaults to UTC). When `start > end` the
- * window wraps midnight.
- */
-export type HeartbeatActiveHours = {
-  start: string;
-  end: string;
-  timezone?: string;
-};
-
 /** Stable schedule id prefix for heartbeats. */
 export const HEARTBEAT_SCHEDULE_PREFIX = 'hb_';
 
@@ -56,23 +44,11 @@ export const HEARTBEAT_SCHEDULE_PREFIX = 'hb_';
 export type HeartbeatRunStatus =
   | 'fired'
   | 'signal-accepted'
-  | 'skipped-outside-hours'
   | 'skipped-idle-threshold'
   | 'skipped-thread-blocked'
   | 'thread-missing'
   | 'agent-missing'
   | 'invalid-input';
-
-/**
- * Active hours window — heartbeats only fire when `now` (in `timezone`) is
- * between `start` and `end` (24-hour `HH:mm` strings). When `start > end`
- * the window wraps midnight (e.g. 22:00-06:00 covers 22-23:59 and 0-6).
- */
-export const ActiveHoursSchema = z.object({
-  start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:mm'),
-  end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:mm'),
-  timezone: z.string().optional(),
-});
 
 /**
  * Input payload persisted in `Schedule.target.inputData` for the built-in
@@ -87,7 +63,6 @@ export const HeartbeatInputSchema = z.object({
   signalType: z.enum(['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder']).optional(),
   ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
-  activeHours: ActiveHoursSchema.optional(),
   idleThresholdMs: z.number().int().positive().optional(),
   /**
    * Broadcast mode for the chunks produced by this heartbeat-driven run.
@@ -104,7 +79,6 @@ export const HeartbeatOutputSchema = z.object({
   status: z.enum([
     'fired',
     'signal-accepted',
-    'skipped-outside-hours',
     'skipped-idle-threshold',
     'skipped-thread-blocked',
     'thread-missing',
@@ -119,7 +93,8 @@ export type HeartbeatOutput = z.infer<typeof HeartbeatOutputSchema>;
 // ---------------------------------------------------------------------------
 // Lifecycle hooks
 //
-// User-defined callbacks on `new Agent({ heartbeat: { ... } })`. Mirror the
+// User-defined callbacks configured via `new Mastra({ heartbeat: { hooks } })`
+// keyed by agentId. Mirror the
 // `agent.stream` `onFinish`/`onError`/`onAbort` conventions so users learn one
 // mental model. `prepare` lets users compute fire-time parameters (e.g. create
 // a Slack thread per fire) or skip the fire entirely by returning null.
@@ -213,7 +188,7 @@ export type HeartbeatAbortContext<TMastra = unknown> = {
 };
 
 /**
- * Bundle of lifecycle hooks accepted by `new Agent({ heartbeat: { ... } })`.
+ * Bundle of lifecycle hooks configured via `new Mastra({ heartbeat: { hooks } })`.
  *
  * `onFinish` fires once per heartbeat trigger when the trigger reached a
  * non-error, non-abort terminal state. `onError` fires when `prepare`,
@@ -231,4 +206,29 @@ export type HeartbeatHooks<TMastra = unknown> = {
   onFinish?: (ctx: HeartbeatFinishContext<TMastra>) => Promise<void> | void;
   onError?: (ctx: HeartbeatErrorContext<TMastra>) => Promise<void> | void;
   onAbort?: (ctx: HeartbeatAbortContext<TMastra>) => Promise<void> | void;
+};
+
+/**
+ * Heartbeat runtime configuration passed to the Mastra constructor via
+ * `heartbeat`. Lifecycle hooks are keyed by `agentId` so they apply to both
+ * code-defined and stored agents (stored agents cannot define functions in
+ * their serialized config, so hooks must live at the Mastra level).
+ *
+ * @example
+ * ```typescript
+ * new Mastra({
+ *   heartbeat: {
+ *     hooks: {
+ *       'pinger': {
+ *         prepare: async ({ heartbeat }) => ({ threadId: '...' }),
+ *         onFinish: async ({ trigger }) => { ... },
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export type HeartbeatConfig<TMastra = unknown> = {
+  /** Lifecycle hooks keyed by `agentId`. */
+  hooks?: Record<string, HeartbeatHooks<TMastra>>;
 };

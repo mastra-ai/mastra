@@ -33,35 +33,6 @@ export interface HeartbeatFireEventData {
 }
 
 /**
- * Returns `true` when `nowMs` (UTC ms) falls inside the daily window
- * defined by `window.start` / `window.end` (HH:mm) in `window.timezone`
- * (defaults to UTC). When `start > end` the window wraps midnight.
- */
-export function isWithinActiveHours(window: { start: string; end: string; timezone?: string }, nowMs: number): boolean {
-  const tz = window.timezone ?? 'UTC';
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(new Date(nowMs));
-  const hour = Number(parts.find(p => p.type === 'hour')?.value ?? 0);
-  const minute = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
-  const nowMinutes = hour * 60 + minute;
-
-  const [sh, sm] = window.start.split(':').map(Number);
-  const [eh, em] = window.end.split(':').map(Number);
-  const startMinutes = sh! * 60 + sm!;
-  const endMinutes = eh! * 60 + em!;
-
-  if (startMinutes <= endMinutes) {
-    return nowMinutes >= startMinutes && nowMinutes < endMinutes;
-  }
-  // Wrapped window (e.g. 22:00 -> 06:00)
-  return nowMinutes >= startMinutes || nowMinutes < endMinutes;
-}
-
-/**
  * Consumes `heartbeat.fire` events published by the scheduler and runs
  * the configured agent — either by `sendSignal` (threaded) or
  * `agent.generate` (threadless). Mirrors `OrchestrationWorker`'s
@@ -237,7 +208,7 @@ export interface ExecuteHeartbeatContext {
 
 /**
  * Resolves the agent, runs the user `prepare` hook (if any), applies
- * activeHours/idle filters, and either `sendSignal`s into the target
+ * idle filters, and either `sendSignal`s into the target
  * thread or runs `agent.generate`. The returned `runId` is the agent
  * run id from the SDK call (when a run was actually started), suitable
  * for trigger-row linkability.
@@ -277,10 +248,10 @@ export async function executeHeartbeat(
 
   const hooks =
     (
-      agent as unknown as {
-        __getHeartbeatHooks?: () => HeartbeatHooks | null | undefined;
+      mastra as unknown as {
+        __getHeartbeatHooks?: (agentId: string) => HeartbeatHooks | null | undefined;
       }
-    ).__getHeartbeatHooks?.() ?? undefined;
+    ).__getHeartbeatHooks?.(agentId) ?? undefined;
 
   // Build a partial `Heartbeat` view for hook contexts. Best-effort —
   // pulls from the live schedule row when available, otherwise from the
@@ -344,22 +315,7 @@ export async function executeHeartbeat(
     ...(effective.threadId ? { threadId: effective.threadId } : {}),
   };
 
-  // 2. activeHours filter (post-prepare so `prepare` can override the row).
-  const activeHours = target.activeHours; // currently not overridable via hook
-  if (activeHours && !isWithinActiveHours(activeHours, Date.now())) {
-    await safeHookCall(log, () =>
-      hooks?.onFinish?.({
-        mastra,
-        heartbeat: heartbeatRef,
-        trigger,
-        outcome: 'skipped',
-        effective,
-      }),
-    );
-    return { status: 'skipped-outside-hours', outcome: 'skipped' };
-  }
-
-  // 3. threaded vs threadless
+  // 2. threaded vs threadless
   if (effective.threadId) {
     if (!effective.resourceId) {
       const reason = 'resourceId required when threadId is set';

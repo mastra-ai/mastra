@@ -4,7 +4,7 @@ import type { Mastra } from '../../mastra';
 import type { Schedule } from '../../storage/domains/schedules/base';
 import { computeNextFireAt, validateCron } from '../../workflows/scheduler/cron';
 import type { AgentSignalType } from '../signals';
-import type { HeartbeatActiveHours, HeartbeatBroadcastMode, HeartbeatIfActive, HeartbeatIfIdle } from './types';
+import type { HeartbeatBroadcastMode, HeartbeatIfActive, HeartbeatIfIdle } from './types';
 import { HEARTBEAT_SCHEDULE_PREFIX } from './types';
 
 type HeartbeatTarget = Extract<Schedule['target'], { type: 'heartbeat' }>;
@@ -31,7 +31,6 @@ export interface Heartbeat {
   signalType?: AgentSignalType;
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
-  activeHours?: HeartbeatActiveHours;
   idleThresholdMs?: number;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
@@ -52,7 +51,6 @@ export interface CreateHeartbeatInput {
   signalType?: AgentSignalType;
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
-  activeHours?: HeartbeatActiveHours;
   idleThresholdMs?: number;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
@@ -69,7 +67,6 @@ export interface UpdateHeartbeatInput {
   signalType?: AgentSignalType;
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
-  activeHours?: HeartbeatActiveHours;
   idleThresholdMs?: number;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
@@ -172,7 +169,6 @@ export class Heartbeats {
       ...(input.signalType ? { signalType: input.signalType } : {}),
       ...(input.ifActive ? { ifActive: input.ifActive } : {}),
       ...(input.ifIdle ? { ifIdle: input.ifIdle } : {}),
-      ...(input.activeHours ? { activeHours: input.activeHours } : {}),
       ...(input.idleThresholdMs !== undefined ? { idleThresholdMs: input.idleThresholdMs } : {}),
       ...(input.broadcast ? { broadcast: input.broadcast } : {}),
     };
@@ -243,7 +239,6 @@ export class Heartbeats {
       ...(patch.signalType !== undefined ? { signalType: patch.signalType } : {}),
       ...(patch.ifActive !== undefined ? { ifActive: patch.ifActive } : {}),
       ...(patch.ifIdle !== undefined ? { ifIdle: patch.ifIdle } : {}),
-      ...(patch.activeHours !== undefined ? { activeHours: patch.activeHours } : {}),
       ...(patch.idleThresholdMs !== undefined ? { idleThresholdMs: patch.idleThresholdMs } : {}),
       ...(patch.broadcast !== undefined ? { broadcast: patch.broadcast } : {}),
     };
@@ -368,7 +363,6 @@ export function toHeartbeat(schedule: Schedule): Heartbeat | null {
     ...(target.signalType ? { signalType: target.signalType } : {}),
     ...(target.ifActive ? { ifActive: target.ifActive } : {}),
     ...(target.ifIdle ? { ifIdle: target.ifIdle } : {}),
-    ...(target.activeHours ? { activeHours: target.activeHours } : {}),
     ...(target.idleThresholdMs !== undefined ? { idleThresholdMs: target.idleThresholdMs } : {}),
     ...(target.broadcast ? { broadcast: target.broadcast } : {}),
     ...(schedule.metadata ? { metadata: schedule.metadata } : {}),

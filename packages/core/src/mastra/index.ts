@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
 import { Heartbeats } from '../agent/heartbeat/heartbeats';
+import type { HeartbeatConfig, HeartbeatHooks } from '../agent/heartbeat/types';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -484,6 +485,15 @@ export interface Config<
   };
 
   /**
+   * Heartbeat runtime configuration. Lifecycle hooks are keyed by `agentId`
+   * and invoked by the heartbeat worker around heartbeat-driven agent runs.
+   * Keying by `agentId` (rather than configuring hooks on the Agent) lets
+   * both code-defined and stored agents share the same hook surface, since
+   * stored agents cannot define functions in their serialized config.
+   */
+  heartbeat?: HeartbeatConfig<Mastra>;
+
+  /**
    * Platform channels for messaging integrations (Slack, Discord, etc.).
    * Routes are automatically registered and agents can reference channel configs.
    *
@@ -630,6 +640,7 @@ export class Mastra<
   #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
   #heartbeats?: Heartbeats;
+  #heartbeatConfig?: HeartbeatConfig<Mastra>;
   #environment?: string;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #workers: MastraWorker[] = [];
@@ -893,6 +904,18 @@ export class Mastra<
   public get heartbeats(): Heartbeats {
     this.#heartbeats ??= new Heartbeats(this as unknown as Mastra);
     return this.#heartbeats;
+  }
+
+  /**
+   * Returns the heartbeat lifecycle hooks configured for a given agent via
+   * `new Mastra({ heartbeat: { hooks: { [agentId]: ... } } })`, if any.
+   * Internal: consumed by the {@link HeartbeatWorker} to invoke `prepare`,
+   * `onFinish`, `onError`, and `onAbort` around heartbeat-driven runs.
+   *
+   * @internal
+   */
+  __getHeartbeatHooks(agentId: string): HeartbeatHooks<Mastra> | undefined {
+    return this.#heartbeatConfig?.hooks?.[agentId];
   }
 
   /**
@@ -1320,6 +1343,7 @@ export class Mastra<
 
     this.#schedulerConfig = config?.scheduler;
     this.#notificationDispatchConfig = config?.notifications?.dispatch;
+    this.#heartbeatConfig = config?.heartbeat;
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;

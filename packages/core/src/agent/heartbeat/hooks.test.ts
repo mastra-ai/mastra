@@ -41,6 +41,7 @@ function makeMastra(opts: { agent?: any; storage?: ReturnType<typeof makeStorage
     heartbeats: {
       get: vi.fn(async () => null),
     },
+    __getHeartbeatHooks: (_agentId: string) => opts.agent?.__getHeartbeatHooks?.(),
   } as unknown as Mastra;
 }
 

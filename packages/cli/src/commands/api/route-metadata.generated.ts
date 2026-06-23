@@ -5695,7 +5695,6 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "activeHours",
       "broadcast",
       "cron",
       "idleThresholdMs",
@@ -5724,7 +5723,6 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "activeHours",
       "broadcast",
       "cron",
       "idleThresholdMs",

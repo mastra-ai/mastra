@@ -36,13 +36,6 @@ export const heartbeatSchema = z.object({
   signalType: z.string().optional(),
   ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
-  activeHours: z
-    .object({
-      start: z.string(),
-      end: z.string(),
-      timezone: z.string().optional(),
-    })
-    .optional(),
   idleThresholdMs: z.number().int().positive().optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -69,12 +62,6 @@ export const heartbeatPathParams = heartbeatAgentPathParams.extend({
   heartbeatId: z.string(),
 });
 
-const activeHoursBodySchema = z.object({
-  start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:mm'),
-  end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:mm'),
-  timezone: z.string().optional(),
-});
-
 /** Body for POST /agents/:agentId/heartbeats — creates a heartbeat. */
 export const createHeartbeatBodySchema = z.object({
   cron: z.string(),
@@ -86,7 +73,6 @@ export const createHeartbeatBodySchema = z.object({
   signalType: z.string().optional(),
   ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
-  activeHours: activeHoursBodySchema.optional(),
   idleThresholdMs: z.number().int().positive().optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -106,7 +92,6 @@ export const updateHeartbeatBodySchema = z.object({
   signalType: z.string().optional(),
   ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
-  activeHours: activeHoursBodySchema.optional(),
   idleThresholdMs: z.number().int().positive().optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),

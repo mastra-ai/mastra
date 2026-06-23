@@ -124,7 +124,6 @@ import type {
 } from './agent.types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
-import type { HeartbeatHooks } from './heartbeat/types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -399,7 +398,6 @@ export class Agent<
   #goal?: GoalConfig;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #editorConfig?: AgentEditorConfig;
-  #heartbeatHooks?: HeartbeatHooks<Mastra>;
   /**
    * Tracks the active `streamUntilIdle` wrapper per `(threadId|resourceId)`
    * scope on this Agent instance. A new call for the same scope aborts the
@@ -538,10 +536,6 @@ export class Agent<
       }
     } else {
       this.#voice = new DefaultVoice();
-    }
-
-    if (config.heartbeat) {
-      this.#heartbeatHooks = config.heartbeat;
     }
 
     if (config.channels) {
@@ -849,17 +843,6 @@ export class Agent<
     if (typeof this.#agents === 'function') return true;
     const record = this.#agents as Record<string, SubAgent> | undefined;
     return !!record && Object.keys(record).length > 0;
-  }
-
-  /**
-   * Returns the heartbeat lifecycle hooks configured on this agent, if any.
-   * Internal: consumed by {@link HeartbeatWorker} to invoke `prepare`,
-   * `onFinish`, `onError`, and `onAbort` around heartbeat-driven runs.
-   *
-   * @internal
-   */
-  __getHeartbeatHooks(): HeartbeatHooks<Mastra> | undefined {
-    return this.#heartbeatHooks;
   }
 
   /**

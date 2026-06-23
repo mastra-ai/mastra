@@ -11,6 +11,7 @@ export {
   type HeartbeatOutput,
   type HeartbeatRunStatus,
   type HeartbeatHooks,
+  type HeartbeatConfig,
   type HeartbeatPrepareContext,
   type HeartbeatPrepareResult,
   type HeartbeatFinishContext,
