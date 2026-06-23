@@ -1,7 +1,9 @@
 'use client';
 
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { Button, ButtonsGroup, DataKeysAndValues, DataList, DataPanel, Notice, TraceIcon } from '@mastra/playground-ui';
+import { Button, ButtonsGroup, DataList, Notice, TraceIcon } from '@mastra/playground-ui';
+import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { format } from 'date-fns/format';
 import {
   ChevronsDownUpIcon,

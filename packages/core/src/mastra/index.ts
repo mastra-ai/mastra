@@ -18,6 +18,7 @@ import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
+import type { Harness } from '../harness';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
@@ -270,6 +271,15 @@ export interface Config<
    * Workflows provide type-safe, composable task execution with built-in error handling.
    */
   workflows?: TWorkflows;
+
+  /**
+   * Harnesses to host on this Mastra instance, keyed by id. Each registered
+   * Harness uses this Mastra (its storage, agents, gateways, and observability)
+   * instead of building its own internal one, and is reachable via
+   * {@link Mastra.getHarness} / {@link Mastra.listHarnesses}. This is how a
+   * server exposes multiple Harnesses' sessions over HTTP.
+   */
+  harnesses?: Record<string, Harness<any>>;
 
   /**
    * Text-to-speech providers for voice synthesis capabilities.
@@ -582,6 +592,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
@@ -1442,6 +1453,13 @@ export class Mastra<
       });
     }
 
+    if (config?.harnesses) {
+      for (const [key, harness] of Object.entries(config.harnesses)) {
+        this.#harnesses[key] = harness;
+        harness.__registerMastra(this);
+      }
+    }
+
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     /*
@@ -1890,6 +1908,50 @@ export class Mastra<
    */
   public listAgents() {
     return this.#agents;
+  }
+
+  /**
+   * Get a Harness hosted on this Mastra instance by its registration key (the
+   * key it was registered under in `new Mastra({ harnesses })`). Returns
+   * `undefined` when no harness is registered under that key. Server route
+   * handlers use this to create and drive sessions over HTTP.
+   *
+   * @example
+   * ```typescript
+   * const code = new Harness({ id: 'code-harness', modes });
+   * const mastra = new Mastra({ harnesses: { code } });
+   *
+   * mastra.getHarness('code'); // → the Harness (by key)
+   * ```
+   */
+  public getHarness(key: string): Harness<any> | undefined {
+    return this.#harnesses[key];
+  }
+
+  /**
+   * Get a Harness hosted on this Mastra instance by its unique `id` (the `id`
+   * passed to the `Harness` constructor). Falls back to a registration-key
+   * lookup when no harness matches by id, mirroring {@link getAgentById}.
+   * Returns `undefined` when none is found.
+   *
+   * @example
+   * ```typescript
+   * const code = new Harness({ id: 'code-harness', modes });
+   * const mastra = new Mastra({ harnesses: { code } });
+   *
+   * mastra.getHarnessById('code-harness'); // → the Harness (by id)
+   * ```
+   */
+  public getHarnessById(id: string): Harness<any> | undefined {
+    return Object.values(this.#harnesses).find(harness => harness.id === id) ?? this.#harnesses[id];
+  }
+
+  /**
+   * List all Harnesses hosted on this Mastra instance, keyed by their
+   * registration key.
+   */
+  public listHarnesses(): Record<string, Harness<any>> {
+    return this.#harnesses;
   }
 
   /**
@@ -4843,6 +4905,19 @@ export class Mastra<
       if (result.status === 'rejected') {
         this.#logger?.error('Failed to destroy workspace during shutdown', {
           workspaceId: workspaceIds[index],
+          error: result.reason,
+        });
+      }
+    });
+
+    // Tear down hosted Harnesses (heartbeats, workspaces) before closing storage,
+    // since teardown may still flush to the shared store.
+    const harnessKeys = Object.keys(this.#harnesses);
+    const harnessTeardown = await Promise.allSettled(harnessKeys.map(key => this.#harnesses[key]!.destroy()));
+    harnessTeardown.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Failed to destroy harness during shutdown', {
+          harnessKey: harnessKeys[index],
           error: result.reason,
         });
       }

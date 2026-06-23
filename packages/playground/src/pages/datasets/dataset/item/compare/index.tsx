@@ -2,7 +2,6 @@ import type { DatasetItem } from '@mastra/client-js';
 import {
   Button,
   ButtonsGroup,
-  CodeDiff,
   Column,
   Columns,
   MainContentContent,
@@ -19,6 +18,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
 import { ArrowLeft, GitCompareIcon, History, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
