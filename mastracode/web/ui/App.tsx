@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { matchCommands, SLASH_COMMANDS } from './commands';
 import { GoalPanel, StatusLine, Transcript } from './components';
 import { loadProjects, DEFAULT_RESOURCE_ID, projectResourceId } from './projects';
 import type { Project } from './projects';
@@ -19,6 +20,48 @@ export default function App() {
   const { transcript, status, modes, threads, send, steer, abort } = session;
   const [draft, setDraft] = useState('');
   const threadRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // ── Slash-command autocomplete ──────────────────────────────────────
+  const suggestions = useMemo(() => matchCommands(draft), [draft]);
+  const showSuggestions = suggestions.length > 0;
+  const [activeSuggestion, setActiveSuggestion] = useState(0);
+
+  // Reset the highlighted item whenever the suggestion set changes.
+  useEffect(() => {
+    setActiveSuggestion(0);
+  }, [draft]);
+
+  /** Insert the chosen command into the draft, ready for its args. */
+  const applyCommand = (name: string) => {
+    setDraft(`/${name} `);
+    inputRef.current?.focus();
+  };
+
+  const onComposerKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showSuggestions) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveSuggestion(i => (i + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveSuggestion(i => (i - 1 + suggestions.length) % suggestions.length);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      applyCommand(suggestions[activeSuggestion]!.name);
+    } else if (e.key === 'Enter') {
+      // If the draft already names a complete command exactly, let Enter submit
+      // it (runs no-arg commands like /yolo). Otherwise complete the highlighted
+      // suggestion so the user can type its args.
+      const exact = draft.slice(1) === suggestions[activeSuggestion]!.name && suggestions.length === 1;
+      if (exact) return; // fall through to the form's onSubmit
+      e.preventDefault();
+      applyCommand(suggestions[activeSuggestion]!.name);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setDraft('');
+    }
+  };
 
   // Auto-scroll the transcript.
   useEffect(() => {
@@ -119,23 +162,15 @@ export default function App() {
         case 'follow-up':
         case 'followup': if (arg) await session.followUp(arg); return;
         case 'abort': await session.abort(); return;
-        case 'help':
-          session.pushNotice([
-            'Available commands:',
-            '  /mode <id>        — Switch mode',
-            '  /model <id>       — Switch model',
-            '  /new [title]       — Create new thread',
-            '  /rename <title>    — Rename current thread',
-            '  /delete <id>       — Delete a thread',
-            '  /clone             — Clone current thread',
-            '  /goal <objective>  — Set a goal',
-            '  /permissions       — Show permission rules',
-            '  /yolo              — Auto-allow all tools',
-            '  /cost              — Show token usage',
-            '  /settings          — Show session state',
-            '  /help              — Show this list',
-          ].join('\n'));
+        case 'help': {
+          const width = Math.max(...SLASH_COMMANDS.map(c => `/${c.name} ${c.args ?? ''}`.length));
+          const lines = SLASH_COMMANDS.map(c => {
+            const sig = `/${c.name} ${c.args ?? ''}`.padEnd(width);
+            return `  ${sig}  — ${c.description}`;
+          });
+          session.pushNotice(['Available commands:', ...lines].join('\n'));
           return;
+        }
         default:
           session.pushNotice(`Unknown command: /${cmd}. Type /help for available commands.`, 'error');
           return;
@@ -219,10 +254,29 @@ export default function App() {
         </div>
 
         <form className="composer" onSubmit={onSubmit}>
+          {showSuggestions && (
+            <div className="cmd-menu">
+              {suggestions.map((c, i) => (
+                <button
+                  type="button"
+                  key={c.name}
+                  className={`cmd-item ${i === activeSuggestion ? 'active' : ''}`}
+                  onMouseEnter={() => setActiveSuggestion(i)}
+                  onClick={() => applyCommand(c.name)}
+                >
+                  <span className="cmd-name">/{c.name}</span>
+                  {c.args && <span className="cmd-args">{c.args}</span>}
+                  <span className="cmd-desc">{c.description}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <input
+            ref={inputRef}
             className="input composer-input"
             value={draft}
             onChange={e => setDraft(e.target.value)}
+            onKeyDown={onComposerKeyDown}
             placeholder="Message the agent, or /mode plan..."
             disabled={status === 'error'}
           />
