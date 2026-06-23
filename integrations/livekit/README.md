@@ -52,6 +52,10 @@ npx livekit-agents download-files
 npx tsx src/mastra/voice-worker.ts dev
 ```
 
+## Observability
+
+When the Mastra instance has observability configured, the worker traces each call. It opens one `voice call` span per session, nests every turn's Mastra agent run under it, and adds a child span for each LiveKit pipeline metric — speech-to-text, text-to-speech, end-of-utterance, voice activity detection, and LLM time-to-first-token. The span closes with a per-model token, character, and audio usage roll-up. Tracing is on by default; pass `observability: false` to `createLiveKitWorker` to disable it.
+
 ## Documentation
 
 - [Using LiveKit with Mastra](https://mastra.ai/docs/voice/livekit)

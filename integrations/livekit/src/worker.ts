@@ -7,6 +7,7 @@ import { createMastraVoiceAgent } from './bridge';
 import type { MastraVoiceAgent, MastraVoiceAgentMemory, VoiceToolCall } from './bridge';
 import { parseSessionMetadata } from './metadata';
 import type { LiveKitSessionMetadata } from './metadata';
+import { startVoiceCallObservability } from './observability';
 import { ensureVoiceCallThread, persistSpokenGreeting } from './voice-thread';
 import { isEouMethodRequested, queueWorkerSetup, requestEouMethod } from './worker-setup';
 
@@ -66,9 +67,7 @@ export interface CreateLiveKitWorkerOptions {
    * metadata.resourceId ?? thread }` when the resolved agent has memory configured.
    * Pass `false` to disable, or a function to customize.
    */
-  memory?:
-    | false
-    | ((args: ResolveMastraAgentArgs & { roomName: string }) => MastraVoiceAgentMemory | false);
+  memory?: false | ((args: ResolveMastraAgentArgs & { roomName: string }) => MastraVoiceAgentMemory | false);
   /** Spoken while a Mastra tool call runs. See {@link MastraVoiceAgentOptions.toolFeedback}. */
   toolFeedback?: (toolCall: VoiceToolCall) => string | undefined | void;
   /** Static greeting spoken when the session starts. */
@@ -79,6 +78,13 @@ export interface CreateLiveKitWorkerOptions {
    * greeting is set and memory is enabled.
    */
   persistGreeting?: boolean;
+  /**
+   * Voice-pipeline observability. When the Mastra instance has observability configured, each
+   * session opens a `voice call` trace: LiveKit's STT, TTS, end-of-utterance, VAD, and LLM
+   * latency metrics become child spans, and every turn's Mastra agent run nests under the call,
+   * which closes with a token/audio usage roll-up. Defaults to `true`; pass `false` to disable.
+   */
+  observability?: boolean;
   inputOptions?: Parameters<voice.AgentSession['start']>[0]['inputOptions'];
   outputOptions?: Parameters<voice.AgentSession['start']>[0]['outputOptions'];
   /** Called after the session starts — attach event listeners, trigger replies, etc. */
@@ -273,12 +279,34 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         }
       }
 
+      // One `voice call` trace per session: per-turn agent runs nest under it (via
+      // tracingContext below) and LiveKit's pipeline metrics attach as child spans. No-ops
+      // when the Mastra instance has no observability configured.
+      const voiceObs =
+        options.observability === false
+          ? undefined
+          : startVoiceCallObservability({
+              mastra: options.mastra,
+              agentId: mastraAgent.id ?? mastraAgent.name,
+              roomName,
+              metadata,
+              requestContext,
+            });
+      // Close the call span when the job ends, however it ends (registered up front so a
+      // failed start still finalizes); finalize() is idempotent.
+      if (voiceObs) {
+        ctx.addShutdownCallback(async () => {
+          voiceObs.finalize();
+        });
+      }
+
       const agent = createMastraVoiceAgent({
         agent: mastraAgent,
         instructions: await resolveInstructions(mastraAgent, requestContext),
         memory,
         requestContext,
         toolFeedback: options.toolFeedback,
+        streamOptions: voiceObs ? { tracingContext: voiceObs.tracingContext } : undefined,
       });
 
       const session = new voice.AgentSession({
@@ -289,29 +317,37 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         ...options.sessionOptions,
       });
 
-      await session.start({
-        agent,
-        room: ctx.room,
-        inputOptions: options.inputOptions,
-        outputOptions: options.outputOptions,
-      });
+      // Subscribe before start so the first turn's metrics are captured.
+      voiceObs?.attach(session);
 
-      if (options.greeting) {
-        session.say(options.greeting);
-        if (options.persistGreeting !== false && memory && memoryInstance) {
-          try {
-            await persistSpokenGreeting({
-              memory: memoryInstance,
-              threadId: memory.thread,
-              resourceId: memory.resource ?? memory.thread,
-              greeting: options.greeting,
-            });
-          } catch (error) {
-            console.warn('@mastra/livekit: failed to persist the greeting', error);
+      try {
+        await session.start({
+          agent,
+          room: ctx.room,
+          inputOptions: options.inputOptions,
+          outputOptions: options.outputOptions,
+        });
+
+        if (options.greeting) {
+          session.say(options.greeting);
+          if (options.persistGreeting !== false && memory && memoryInstance) {
+            try {
+              await persistSpokenGreeting({
+                memory: memoryInstance,
+                threadId: memory.thread,
+                resourceId: memory.resource ?? memory.thread,
+                greeting: options.greeting,
+              });
+            } catch (error) {
+              console.warn('@mastra/livekit: failed to persist the greeting', error);
+            }
           }
         }
+        await options.onSessionStart?.({ session, ctx, agent, metadata });
+      } catch (error) {
+        voiceObs?.finalize({ error });
+        throw error;
       }
-      await options.onSessionStart?.({ session, ctx, agent, metadata });
     },
   });
 }

@@ -169,6 +169,36 @@ await dispatchVoiceSession({
 })
 ```
 
+## Observability
+
+When the Mastra instance has [observability](/docs/observability/overview) configured, the worker traces each call. It opens one `voice call` span per session and nests everything under it:
+
+- Every turn's Mastra agent run, with model generation, tool calls, and memory operations, exactly as a text chat records them.
+- A child span for each LiveKit pipeline metric: speech-to-text, text-to-speech, end-of-utterance (turn detection), voice activity detection, and the model's time-to-first-token. These carry the latency and audio measurements that text traces can't show.
+- A per-model usage roll-up — token, character, and audio totals for the whole call — written to the span when the session ends.
+
+The worker is a separate process, so point storage at a backend that accepts concurrent writes from both the server and the worker. SQLite-backed [LibSQL](/reference/storage/libsql) works; single-writer stores do not. Traces, memory, and threads can share one store:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({ url: 'file:./voice-agent.db' }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'voice-agent',
+        exporters: [new MastraStorageExporter()],
+      },
+    },
+  }),
+})
+```
+
+Tracing is on by default. Pass `observability: false` to `createLiveKitWorker` to turn it off.
+
 ## Deployment
 
 The worker is a separate process from your Mastra server. Deploy it as a long-running Node service with the production command:

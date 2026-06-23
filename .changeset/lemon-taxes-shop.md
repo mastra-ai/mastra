@@ -13,6 +13,7 @@ LiveKit's agents framework runs the audio loop — WebRTC transport, voice activ
 - `createMastraVoiceAgent()`: the lower-level bridge for custom worker setups
 - `liveKitConnectionRoute()`: an API route that mints LiveKit tokens and dispatches the voice agent into a room
 - `dispatchVoiceSession()`: programmatic dispatch for server-initiated sessions such as outbound calls
+- Built-in observability: when the Mastra instance has observability configured, each call opens a `voice call` trace that nests every turn's agent run and adds a child span for LiveKit's speech-to-text, text-to-speech, turn-detection, and LLM latency metrics, closing with a per-model token, character, and audio usage roll-up. On by default; pass `observability: false` to disable.
 
 ```ts
 // src/mastra/voice-worker.ts

@@ -118,6 +118,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     defaultValue: 'true',
   },
   {
+    name: 'observability',
+    type: 'boolean',
+    description:
+      "Trace each call when the Mastra instance has observability configured. Opens a `voice call` span per session: every turn's agent run nests under it, LiveKit's STT, TTS, end-of-utterance, VAD, and LLM latency metrics become child spans, and the span closes with a per-model usage roll-up. Pass false to disable.",
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
     name: 'inputOptions',
     type: 'Partial<RoomInputOptions>',
     description: 'LiveKit room input options passed to session.start().',
