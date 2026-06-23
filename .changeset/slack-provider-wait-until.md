@@ -3,20 +3,18 @@
 '@mastra/core': minor
 ---
 
-Forward a runtime-provided `waitUntil` from channels to the Chat SDK so background
-agent runs survive serverless responses. Without `waitUntil` the runtime freezes the
-invocation as soon as the 200 ack returns, killing the agent run mid-flight and
-leaving the user with no reply.
+Added `waitUntil` support for channels so background agent runs survive serverless responses.
 
-**Defaults (no config needed):** `@mastra/core/channels` ships a default resolver
-that reads `waitUntil` from the request context for the common cases:
+Without `waitUntil`, the runtime freezes the invocation as soon as the webhook response returns, killing the agent run mid-flight and leaving the user with no reply.
 
-- **Cloudflare Workers** — `c.executionCtx.waitUntil` (populated by Hono's CF adapter).
-- **Netlify Functions** — `c.env.context.waitUntil` (forwarded by `hono/netlify`).
+**Auto-detected (no config needed):**
 
-**Vercel and AWS Lambda** need an explicit `waitUntil` because Vercel exposes
-`waitUntil` via AsyncLocalStorage (not the request context) and AWS Lambda has none
-natively. Pass it via the new `waitUntil` option on `SlackProvider` or `ChannelConfig`:
+- **Cloudflare Workers** — reads `c.executionCtx.waitUntil`
+- **Netlify Functions** — reads `c.env.context.waitUntil`
+
+**Requires explicit config:**
+
+Vercel and AWS Lambda need a `waitUntil` function passed directly, because Vercel exposes it via AsyncLocalStorage (not request context) and Lambda has none natively:
 
 ```ts
 import { waitUntil } from '@vercel/functions';
@@ -34,7 +32,6 @@ new Agent({
 });
 ```
 
-For runtimes where `waitUntil` lives on the request context but isn't covered by the
-default helper, pass `resolveWaitUntil: (c) => fn | undefined` instead.
+For runtimes where `waitUntil` lives on the request context but isn't covered by the default, pass `resolveWaitUntil: (c) => fn | undefined` instead.
 
-Resolution order: bare `waitUntil` → `resolveWaitUntil(c)` → core default.
+Resolution order: `waitUntil` → `resolveWaitUntil(c)` → core default.
