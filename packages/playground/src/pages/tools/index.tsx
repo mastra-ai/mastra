@@ -1,6 +1,4 @@
 import {
-  ErrorState,
-  ListSearch,
   NoDataPageLayout,
   PageLayout,
   PermissionDenied,
@@ -8,6 +6,8 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { useState } from 'react';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';

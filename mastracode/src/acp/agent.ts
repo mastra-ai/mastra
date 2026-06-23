@@ -11,7 +11,7 @@ import type {
   ContentBlock,
 } from '@agentclientprotocol/sdk';
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
-import type { Harness, HarnessMode } from '@mastra/core/harness';
+import type { Harness, HarnessMode, Session } from '@mastra/core/harness';
 import { handleHarnessEvent } from './event-mapper.js';
 import type { PromptState } from './event-mapper.js';
 
@@ -22,7 +22,9 @@ import type { PromptState } from './event-mapper.js';
 export class MastraCodeAcpAgent implements Agent {
   private readonly connection: AgentSideConnection;
   private readonly harness: Harness;
+  private readonly session: Session;
   private readonly modes: HarnessMode[];
+  private readonly unsubscribeSessionEvents: () => void;
   private readonly sessionMap = new Map<string, string>(); // sessionId -> threadId
   private currentPromptState: PromptState | null = null;
   private promptMutex: Promise<void> = Promise.resolve();
@@ -35,15 +37,20 @@ export class MastraCodeAcpAgent implements Agent {
     return threadId;
   }
 
-  constructor(connection: AgentSideConnection, harness: Harness, modes: HarnessMode[]) {
+  constructor(connection: AgentSideConnection, harness: Harness, session: Session, modes: HarnessMode[]) {
     this.connection = connection;
     this.harness = harness;
+    this.session = session;
     this.modes = modes;
 
     // Register persistent event listener
-    this.harness.subscribe(event => {
-      handleHarnessEvent(event, this.currentPromptState, this.connection, this.harness);
+    this.unsubscribeSessionEvents = this.session.subscribe(event => {
+      handleHarnessEvent(event, this.currentPromptState, this.connection, this.session);
     });
+  }
+
+  dispose(): void {
+    this.unsubscribeSessionEvents();
   }
 
   async initialize(_request: InitializeRequest): Promise<InitializeResponse> {
@@ -65,12 +72,12 @@ export class MastraCodeAcpAgent implements Agent {
   }
 
   async newSession(_request: NewSessionRequest): Promise<NewSessionResponse> {
-    const thread = await this.harness.createThread();
+    const thread = await this.session.thread.create();
     const sessionId = thread.id;
     this.sessionMap.set(sessionId, thread.id);
 
     // Switch to the new thread
-    await this.harness.switchThread({ threadId: thread.id });
+    await this.session.thread.switch({ threadId: thread.id });
 
     // Build modes list from constructor param
     const availableModes = this.modes.map((m: HarnessMode) => ({
@@ -78,13 +85,13 @@ export class MastraCodeAcpAgent implements Agent {
       name: m.name ?? m.id,
     }));
 
-    const currentModeId = this.harness.session.mode.get();
+    const currentModeId = this.session.mode.get();
 
     // Build models list (best-effort)
     let models: NewSessionResponse['models'];
     try {
       const availableModels = await this.harness.listAvailableModels();
-      const currentModelId = this.harness.session.model.get();
+      const currentModelId = this.session.model.get();
       models = {
         currentModelId: currentModelId ?? '',
         availableModels: availableModels.map(m => ({
@@ -112,9 +119,7 @@ export class MastraCodeAcpAgent implements Agent {
     // Extract text from content blocks
     const text = extractTextFromContentBlocks(contentBlocks);
 
-    // Ensure we're on the right thread
     const threadId = this.getThreadIdOrThrow(sessionId);
-    await this.harness.switchThread({ threadId });
 
     // Serialize prompts via mutex
     const prevMutex = this.promptMutex;
@@ -126,6 +131,9 @@ export class MastraCodeAcpAgent implements Agent {
     await prevMutex;
 
     try {
+      // Ensure we're on the right thread while prompts are serialized
+      await this.session.thread.switch({ threadId });
+
       // Create prompt state that will be resolved when agent_end fires
       const result = new Promise<{
         reason: 'complete' | 'aborted' | 'error' | 'suspended';
@@ -148,9 +156,9 @@ export class MastraCodeAcpAgent implements Agent {
         };
       });
 
-      // Send the message to the harness
+      // Send the message to the session
       try {
-        await this.harness.sendMessage({ content: text });
+        await this.session.sendMessage({ content: text });
       } catch (error) {
         this.currentPromptState = null;
         throw error;
@@ -176,19 +184,19 @@ export class MastraCodeAcpAgent implements Agent {
   }
 
   async cancel(_notification: CancelNotification): Promise<void> {
-    this.harness.abort();
+    this.session.abort();
   }
 
   async setSessionMode(params: { sessionId: string; modeId: string }): Promise<void> {
     const threadId = this.getThreadIdOrThrow(params.sessionId);
-    await this.harness.switchThread({ threadId });
-    this.harness.session.mode.set({ modeId: params.modeId });
+    await this.session.thread.switch({ threadId });
+    this.session.mode.set({ modeId: params.modeId });
   }
 
   async unstable_setSessionModel(params: { sessionId: string; modelId: string }): Promise<void> {
     const threadId = this.getThreadIdOrThrow(params.sessionId);
-    await this.harness.switchThread({ threadId });
-    this.harness.session.model.set({ modelId: params.modelId });
+    await this.session.thread.switch({ threadId });
+    this.session.model.set({ modelId: params.modelId });
   }
 }
 

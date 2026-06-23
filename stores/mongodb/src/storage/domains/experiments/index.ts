@@ -88,6 +88,7 @@ function transformExperimentResultRow(row: Record<string, unknown>): ExperimentR
     traceId: (row.traceId as string | null) ?? null,
     status: (row.status as ExperimentResultStatus | null) ?? null,
     tags: Array.isArray(row.tags) ? row.tags : (parseJsonField(row.tags) ?? null),
+    toolMockReport: (parseJsonField(row.toolMockReport) as ExperimentResult['toolMockReport']) ?? null,
     createdAt: toDate(row.createdAt),
   };
 }
@@ -400,6 +401,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
+      toolMockReport: input.toolMockReport ?? null,
       createdAt: now,
     };
 
@@ -422,6 +424,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
+        toolMockReport: input.toolMockReport ?? null,
         createdAt: now,
       };
     } catch (error) {

@@ -1,14 +1,10 @@
 import { EntityType } from '@mastra/core/observability';
 import {
   Button,
-  DateTimeRangePicker,
   Label,
   NoTracesInfo,
-  Notice,
   PageLayout,
-  PropertyFilterCreator,
   SpanDataPanelView,
-  Switch,
   TraceDataPanelView,
   TracesErrorContent,
   TracesLayout,
@@ -31,6 +27,10 @@ import {
   useTraces,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { CircleSlash2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';

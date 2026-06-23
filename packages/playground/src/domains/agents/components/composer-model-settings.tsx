@@ -1,6 +1,5 @@
 import {
   Button,
-  Checkbox,
   Dialog,
   DialogBody,
   DialogContent,
@@ -10,17 +9,17 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  RadioGroup,
-  RadioGroupItem,
   Skeleton,
-  Slider,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
   Txt,
   cn,
 } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Entry } from '@mastra/playground-ui/components/Entry';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Info, Sliders } from 'lucide-react';
 import { useState } from 'react';
 
