@@ -1,6 +1,7 @@
 import { cva } from 'class-variance-authority';
 import type { ReactNode, RefObject } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
+import type { ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { cn } from '@/lib/utils';
 
 /**
@@ -13,10 +14,9 @@ import { cn } from '@/lib/utils';
  */
 export type DataListVariant = 'striped' | 'lined';
 
-export type DataListRootProps = {
+export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask' | 'viewportRef'> & {
   children: ReactNode;
   columns: string;
-  className?: string;
   variant?: DataListVariant;
   /**
    * Ref to the scroll container — pass this to TanStack Virtual's
@@ -82,7 +82,14 @@ const dataListRootVariants = cva('grid min-w-0 max-w-full content-start', {
   },
 });
 
-export function DataListRoot({ children, columns, className, variant = 'lined', scrollRef }: DataListRootProps) {
+export function DataListRoot({
+  children,
+  columns,
+  className,
+  variant = 'lined',
+  scrollRef,
+  ...props
+}: DataListRootProps) {
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
@@ -107,6 +114,7 @@ export function DataListRoot({ children, columns, className, variant = 'lined', 
       mask={{ top: false }}
       viewportRef={scrollRef}
       className={cn('h-full w-full rounded-t-xl', className)}
+      {...props}
     >
       {grid}
     </ScrollArea>

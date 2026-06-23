@@ -4,7 +4,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList/data-list';
-import type { DataListRootProps, DataListVariant } from '@/ds/components/DataList/data-list-root';
+import type { DataListRootProps } from '@/ds/components/DataList/data-list-root';
 import { FieldBlock } from '@/ds/components/FormFieldBlocks';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { Notice } from '@/ds/components/Notice';
@@ -16,10 +16,10 @@ import { cn } from '@/lib/utils';
 
 export type EnvironmentVariablesEditorRowErrors = Record<number, { key?: ReactNode; value?: ReactNode }>;
 
-export interface EnvironmentVariablesEditorProps<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry> {
+export interface EnvironmentVariablesEditorProps<
+  TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry,
+> extends ComponentPropsWithoutRef<'div'> {
   editor: EnvironmentVariablesEditorController<TRow>;
-  className?: string;
-  children?: ReactNode;
   disabled?: boolean;
   readOnly?: boolean;
   showUpload?: boolean;
@@ -36,28 +36,24 @@ export interface EnvironmentVariablesEditorProps<TRow extends EnvironmentVariabl
   actions?: ReactNode;
 }
 
-export interface EnvironmentVariablesEditorUploadProps {
-  className?: string;
+export interface EnvironmentVariablesEditorUploadProps extends Omit<ComponentPropsWithoutRef<'div'>, 'children'> {
+  children?: ReactNode;
   label?: ReactNode;
   inputLabel?: string;
   show?: boolean;
 }
 
-export interface EnvironmentVariablesEditorRowsProps {
-  className?: string;
+export interface EnvironmentVariablesEditorRowsProps extends ComponentPropsWithoutRef<'div'> {
   rowErrors?: EnvironmentVariablesEditorRowErrors;
 }
 
-export interface EnvironmentVariablesEditorRowProps {
+export interface EnvironmentVariablesEditorRowProps extends Omit<ComponentPropsWithoutRef<'div'>, 'children'> {
   row: EnvironmentVariableEntry;
   index: number;
   rowErrors?: EnvironmentVariablesEditorRowErrors;
 }
 
-export interface EnvironmentVariablesEditorAddButtonProps {
-  className?: string;
-  children?: ReactNode;
-}
+export type EnvironmentVariablesEditorAddButtonProps = ComponentPropsWithoutRef<'div'>;
 
 export interface EnvironmentVariablesEditorMessagesProps {
   duplicateKeyMessage?: ReactNode;
@@ -124,9 +120,7 @@ function useEnvironmentVariablesEditorContext(componentName: string) {
   return context;
 }
 
-export interface EnvironmentVariablesEditorReadOnlyListProps {
-  children: ReactNode;
-  className?: string;
+export interface EnvironmentVariablesEditorReadOnlyListProps extends Omit<DataListRootProps, 'columns'> {
   columns?: string;
   header?: ReactNode;
   showHeader?: boolean;
@@ -134,23 +128,23 @@ export interface EnvironmentVariablesEditorReadOnlyListProps {
   nameLabel?: ReactNode;
   valueLabel?: ReactNode;
   updatedAtLabel?: ReactNode;
-  variant?: DataListVariant;
-  scrollRef?: DataListRootProps['scrollRef'];
 }
 
-export interface EnvironmentVariablesEditorReadOnlyHeaderProps {
-  className?: string;
+export interface EnvironmentVariablesEditorReadOnlyHeaderProps extends Omit<
+  ComponentPropsWithoutRef<typeof DataList.Top>,
+  'children'
+> {
   nameLabel?: ReactNode;
   valueLabel?: ReactNode;
   updatedAtLabel?: ReactNode;
 }
 
-export interface EnvironmentVariablesEditorReadOnlyEmptyProps {
-  className?: string;
-  message?: string;
-}
+export type EnvironmentVariablesEditorReadOnlyEmptyProps = ComponentPropsWithoutRef<typeof DataList.NoMatch>;
 
-export interface EnvironmentVariablesEditorReadOnlyItemProps extends ComponentPropsWithoutRef<'div'> {
+export interface EnvironmentVariablesEditorReadOnlyItemProps extends Omit<
+  ComponentPropsWithoutRef<typeof DataList.RowStatic>,
+  'children'
+> {
   name: ReactNode;
   value?: ReactNode;
   copyValue?: string;
@@ -181,6 +175,7 @@ function EnvironmentVariablesEditorRoot<TRow extends EnvironmentVariableEntry = 
   rowErrors,
   error,
   actions,
+  ...props
 }: EnvironmentVariablesEditorProps<TRow>) {
   const contextValue = useMemo<EnvironmentVariablesEditorContextValue>(
     () => ({
@@ -235,7 +230,7 @@ function EnvironmentVariablesEditorRoot<TRow extends EnvironmentVariableEntry = 
 
   return (
     <EnvironmentVariablesEditorContext.Provider value={contextValue}>
-      <div className={children ? className : cn('space-y-3', className)}>
+      <div className={cn(!children && 'space-y-3', className)} {...props}>
         {children ?? (
           <>
             <EnvironmentVariablesEditorUpload />
@@ -253,9 +248,11 @@ function EnvironmentVariablesEditorRoot<TRow extends EnvironmentVariableEntry = 
 
 function EnvironmentVariablesEditorUpload({
   className,
+  children,
   label,
   inputLabel,
   show,
+  ...props
 }: EnvironmentVariablesEditorUploadProps) {
   const { editor, disabled, readOnly, showUpload, labels } = useEnvironmentVariablesEditorContext(
     'EnvironmentVariablesEditor.Upload',
@@ -264,7 +261,7 @@ function EnvironmentVariablesEditorUpload({
   if (!(show ?? showUpload) || readOnly) return null;
 
   return (
-    <div className={cn('flex flex-wrap items-center justify-end gap-2', className)}>
+    <div className={cn('flex flex-wrap items-center justify-end gap-2', className)} {...props}>
       <input
         ref={editor.fileInputRef}
         type="file"
@@ -282,20 +279,20 @@ function EnvironmentVariablesEditorUpload({
         onClick={() => editor.fileInputRef.current?.click()}
       >
         <UploadIcon />
-        {label ?? labels.upload}
+        {children ?? label ?? labels.upload}
       </Button>
     </div>
   );
 }
 
-function EnvironmentVariablesEditorRows({ className, rowErrors }: EnvironmentVariablesEditorRowsProps) {
+function EnvironmentVariablesEditorRows({ className, rowErrors, ...props }: EnvironmentVariablesEditorRowsProps) {
   const { editor, rowErrors: contextRowErrors } = useEnvironmentVariablesEditorContext(
     'EnvironmentVariablesEditor.Rows',
   );
   const resolvedRowErrors = rowErrors ?? contextRowErrors;
 
   return (
-    <div className={cn('space-y-2', className)}>
+    <div className={cn('space-y-2', className)} {...props}>
       {editor.rows.map((row, index) => (
         <EnvironmentVariablesEditorRow
           key={editor.getRowId(index)}
@@ -308,7 +305,13 @@ function EnvironmentVariablesEditorRows({ className, rowErrors }: EnvironmentVar
   );
 }
 
-function EnvironmentVariablesEditorRow({ row, index, rowErrors }: EnvironmentVariablesEditorRowProps) {
+function EnvironmentVariablesEditorRow({
+  row,
+  index,
+  rowErrors,
+  className,
+  ...props
+}: EnvironmentVariablesEditorRowProps) {
   const {
     editor,
     disabled,
@@ -327,7 +330,7 @@ function EnvironmentVariablesEditorRow({ row, index, rowErrors }: EnvironmentVar
   }
 
   return (
-    <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-start">
+    <div className={cn('flex flex-col items-stretch gap-2 sm:flex-row sm:items-start', className)} {...props}>
       <div className="flex-1">
         <FieldBlock.Layout>
           <FieldBlock.Column>
@@ -409,7 +412,11 @@ function EnvironmentVariablesEditorRow({ row, index, rowErrors }: EnvironmentVar
   );
 }
 
-function EnvironmentVariablesEditorAddButton({ className, children }: EnvironmentVariablesEditorAddButtonProps) {
+function EnvironmentVariablesEditorAddButton({
+  className,
+  children,
+  ...props
+}: EnvironmentVariablesEditorAddButtonProps) {
   const { editor, disabled, readOnly, labels } = useEnvironmentVariablesEditorContext(
     'EnvironmentVariablesEditor.AddButton',
   );
@@ -417,7 +424,7 @@ function EnvironmentVariablesEditorAddButton({ className, children }: Environmen
   if (readOnly) return null;
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <div className={cn('flex items-center gap-2', className)} {...props}>
       <span aria-hidden="true" className="h-px flex-1 bg-border1" />
       <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => editor.appendRow()}>
         <PlusIcon />
@@ -471,13 +478,20 @@ function EnvironmentVariablesEditorReadOnlyList({
   updatedAtLabel,
   variant = 'lined',
   scrollRef,
+  ...props
 }: EnvironmentVariablesEditorReadOnlyListProps) {
   const resolvedColumns = columns ?? (showIcon ? READ_ONLY_COLUMNS_WITH_ICON : READ_ONLY_COLUMNS);
   const contextValue = useMemo(() => ({ showIcon }), [showIcon]);
 
   return (
     <EnvironmentVariablesEditorReadOnlyListContext.Provider value={contextValue}>
-      <DataList columns={resolvedColumns} variant={variant} scrollRef={scrollRef} className={cn('min-h-0', className)}>
+      <DataList
+        columns={resolvedColumns}
+        variant={variant}
+        scrollRef={scrollRef}
+        className={cn('min-h-0', className)}
+        {...props}
+      >
         {showHeader &&
           (header ?? (
             <EnvironmentVariablesEditorReadOnlyHeader
@@ -497,11 +511,12 @@ function EnvironmentVariablesEditorReadOnlyHeader({
   nameLabel = 'Key',
   valueLabel = 'Value',
   updatedAtLabel = 'Last Updated',
+  ...props
 }: EnvironmentVariablesEditorReadOnlyHeaderProps) {
   const { showIcon } = use(EnvironmentVariablesEditorReadOnlyListContext);
 
   return (
-    <DataList.Top className={className}>
+    <DataList.Top className={className} {...props}>
       {showIcon && (
         <DataList.TopCell aria-hidden="true" className="justify-center">
           <span />
@@ -517,8 +532,9 @@ function EnvironmentVariablesEditorReadOnlyHeader({
 function EnvironmentVariablesEditorReadOnlyEmpty({
   className,
   message = 'No environment variables found',
+  ...props
 }: EnvironmentVariablesEditorReadOnlyEmptyProps) {
-  return <DataList.NoMatch message={message} className={className} />;
+  return <DataList.NoMatch message={message} className={className} {...props} />;
 }
 
 function EnvironmentVariablesEditorReadOnlyItem({

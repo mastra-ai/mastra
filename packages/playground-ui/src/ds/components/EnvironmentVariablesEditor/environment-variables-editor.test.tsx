@@ -69,10 +69,12 @@ function CompoundTestEditor({
   const editor = useEnvironmentVariablesEditor({ initialRows });
 
   return (
-    <EnvironmentVariablesEditor.Root editor={editor} addLabel="Add Another">
+    <EnvironmentVariablesEditor.Root editor={editor} addLabel="Add Another" data-testid="env-editor-root">
       <EnvironmentVariablesEditor.Messages showDuplicateKeys={false} showUploadError />
-      <EnvironmentVariablesEditor.Rows />
-      <EnvironmentVariablesEditor.AddButton />
+      <EnvironmentVariablesEditor.Rows data-testid="env-editor-rows" />
+      <EnvironmentVariablesEditor.AddButton data-testid="env-editor-add">
+        Add Another
+      </EnvironmentVariablesEditor.AddButton>
       <EnvironmentVariablesEditor.Messages />
       <EnvironmentVariablesEditor.Actions>
         <button
@@ -170,6 +172,10 @@ describe('EnvironmentVariablesEditor', () => {
   it('composes nested editor parts from root context', () => {
     const onSave = vi.fn();
     render(<CompoundTestEditor initialRows={[{ key: '', value: '' }]} onSave={onSave} />);
+
+    expect(screen.getByTestId('env-editor-root')).toBeDefined();
+    expect(screen.getByTestId('env-editor-rows')).toBeDefined();
+    expect(screen.getByTestId('env-editor-add')).toBeDefined();
 
     fireEvent.change(screen.getByPlaceholderText('KEY'), {
       target: { value: 'API_KEY' },
@@ -312,6 +318,37 @@ describe('EnvironmentVariablesEditor', () => {
     rerender(<EnvironmentVariablesEditor.ReadOnlyList showIcon>{item}</EnvironmentVariablesEditor.ReadOnlyList>);
 
     expect(screen.getByText('Variable icon')).toBeDefined();
+  });
+
+  it('forwards read-only primitive props through the DataList parts', () => {
+    render(
+      <EnvironmentVariablesEditor.ReadOnlyList
+        data-testid="env-readonly-list"
+        header={<EnvironmentVariablesEditor.ReadOnlyHeader data-testid="env-readonly-header" />}
+      >
+        <EnvironmentVariablesEditor.ReadOnlyItem
+          data-testid="env-readonly-item"
+          name="API_KEY"
+          value="secret"
+          updatedAt="Updated Jun 18"
+        />
+      </EnvironmentVariablesEditor.ReadOnlyList>,
+    );
+
+    expect(screen.getByTestId('env-readonly-list')).toBeDefined();
+    expect(screen.getByTestId('env-readonly-header')).toBeDefined();
+    expect(screen.getByTestId('env-readonly-item')).toBeDefined();
+  });
+
+  it('forwards empty-state primitive props through DataList.NoMatch', () => {
+    render(
+      <EnvironmentVariablesEditor.ReadOnlyList>
+        <EnvironmentVariablesEditor.ReadOnlyEmpty data-testid="env-readonly-empty" message="No variables" />
+      </EnvironmentVariablesEditor.ReadOnlyList>,
+    );
+
+    expect(screen.getByTestId('env-readonly-empty')).toBeDefined();
+    expect(screen.getByText('No variables')).toBeDefined();
   });
 
   it('copies revealed read-only values from the value action', async () => {
