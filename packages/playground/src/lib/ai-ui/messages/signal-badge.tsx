@@ -1,4 +1,4 @@
-import { Bell, CheckCircle2, Circle, Database, ListChecks, Loader2, Radio } from 'lucide-react';
+import { Bell, Database, Radio } from 'lucide-react';
 
 import { getNotificationMetadata, isRecord, isSignalData } from './signal-data';
 import type { SignalData } from './signal-data';
@@ -98,61 +98,16 @@ function getTaskSignalData(signal: SignalData): { tasks: TaskItem[]; mode: 'snap
   return { tasks, mode };
 }
 
-const taskStatusIcon: Record<TaskItem['status'], React.ReactNode> = {
-  completed: <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-500" />,
-  in_progress: <Loader2 className="h-3.5 w-3.5 shrink-0 text-yellow-500 animate-spin" />,
-  pending: <Circle className="h-3.5 w-3.5 shrink-0 text-neutral4" />,
-};
-
-const taskStatusTextClass: Record<TaskItem['status'], string> = {
-  completed: 'text-neutral4 line-through',
-  in_progress: 'text-yellow-500 font-medium',
-  pending: 'text-neutral5',
-};
-
-const TaskSignalBadge = ({ tasks, mode }: { tasks: TaskItem[]; mode: 'snapshot' | 'delta' }) => {
-  const completed = tasks.filter(t => t.status === 'completed').length;
-  const total = tasks.length;
-  const allDone = completed === total;
-
-  return (
-    <div className="my-2 max-w-[80%] rounded-lg border border-border1 bg-surface2 px-3 py-2.5">
-      <div className="flex items-center gap-2 mb-2">
-        <ListChecks className={`h-4 w-4 shrink-0 ${allDone ? 'text-green-500' : 'text-icon3'}`} />
-        <p className="text-ui-sm leading-ui-sm font-medium text-neutral6">Tasks</p>
-        {mode === 'delta' && <Pill>update</Pill>}
-        <span className="text-ui-xs leading-ui-xs text-neutral4 ml-auto tabular-nums">
-          {completed}/{total}
-        </span>
-      </div>
-      <div className="h-1 w-full rounded-full bg-surface4 mb-2">
-        <div
-          className={`h-full rounded-full transition-all duration-300 ${allDone ? 'bg-green-500' : 'bg-accent6'}`}
-          style={{ width: `${total > 0 ? (completed / total) * 100 : 0}%` }}
-        />
-      </div>
-      <ul className="space-y-1">
-        {tasks.map(task => (
-          <li key={task.id} className="flex items-start gap-2 py-0.5">
-            {taskStatusIcon[task.status]}
-            <span className={`text-ui-sm leading-ui-sm ${taskStatusTextClass[task.status]}`}>
-              {task.status === 'in_progress' ? task.activeForm : task.content}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
-
 export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
   if (!isSignalData(value)) return null;
 
   const text = contentsToText(value.contents);
 
   if (value.type === 'state') {
+    // Task signals are rendered in the docked TaskPanel (bottom of chat) instead
+    // of inline to avoid repetition. Hide them here.
     const taskSignal = getTaskSignalData(value);
-    if (taskSignal) return <TaskSignalBadge tasks={taskSignal.tasks} mode={taskSignal.mode} />;
+    if (taskSignal) return null;
 
     const state = getStateLabel(value);
     return (
