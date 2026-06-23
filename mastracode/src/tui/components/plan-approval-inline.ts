@@ -145,7 +145,6 @@ function generatePlanDiff(oldText: string, newText: string): DiffEntry[] {
   return entries;
 }
 
-
 export class PlanApprovalInlineComponent extends Container implements Focusable {
   private contentBox: Box;
   private selectList?: SelectList;
