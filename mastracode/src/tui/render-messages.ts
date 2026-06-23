@@ -7,6 +7,7 @@ import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
+import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import chalk from 'chalk';
 import {
@@ -16,6 +17,7 @@ import {
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
+import { JudgeDisplayComponent } from './components/judge-display.js';
 import { NotificationSummaryComponent } from './components/notification-summary.js';
 import { NotificationComponent } from './components/notification.js';
 import { OMMarkerComponent } from './components/om-marker.js';
@@ -60,7 +62,7 @@ function getPendingUserMessageLabel(isInterjection?: boolean): string | undefine
 }
 
 function getCurrentModeColor(state: TUIState): string | undefined {
-  const color = state.harness.getCurrentMode?.()?.metadata?.color;
+  const color = state.session.mode.resolve().metadata?.color;
   return typeof color === 'string' ? color : undefined;
 }
 
@@ -200,7 +202,12 @@ export function addPendingUserMessage(
   }
 
   const component = new PendingUserMessageComponent(text, images?.length ?? 0);
-  state.pendingSignalMessageComponentsById.set(messageId, { component, text, isInterjection: options?.isInterjection });
+  state.pendingSignalMessageComponentsById.set(messageId, {
+    component,
+    text,
+    images,
+    isInterjection: options?.isInterjection,
+  });
   state.chatContainer.addChild(component);
   reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
@@ -210,7 +217,7 @@ export function confirmPendingUserMessage(state: TUIState, messageId: string, te
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+  if (state.streamingComponent && state.session.displayState.get().isRunning) {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   }
@@ -222,8 +229,10 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
+  const imageCount = pending.images?.length ?? 0;
+  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   const label = getPendingUserMessageLabel(pending.isInterjection);
-  const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+  const confirmed = new UserMessageComponent(prefix + text, getMarkdownTheme(), {
     ...(label ? { label } : {}),
   });
   const idx = state.chatContainer.children.indexOf(pending.component as never);
@@ -243,6 +252,15 @@ export function removePendingUserMessage(state: TUIState, messageId: string): vo
   if (!pending) return;
   state.chatContainer.removeChild(pending.component as never);
   state.pendingSignalMessageComponentsById.delete(messageId);
+  state.ui.requestRender();
+}
+
+export function removeUserMessage(state: TUIState, messageId: string): void {
+  const component = state.messageComponentsById.get(messageId);
+  if (!component) return;
+  state.chatContainer.removeChild(component as never);
+  state.messageComponentsById.delete(messageId);
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 
@@ -293,7 +311,25 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   );
 
   if (reminderPart) {
-    const goalMetadata = reminderPart as typeof reminderPart & { goalMaxTurns?: number; judgeModelId?: string };
+    const goalMetadata = reminderPart as typeof reminderPart & {
+      goalMaxTurns?: number;
+      judgeModelId?: string;
+      goalEvaluation?: GoalEvaluationPayload;
+    };
+
+    if (reminderPart.reminderType === 'goal-judge' && goalMetadata.goalEvaluation) {
+      const judgeComponent = new JudgeDisplayComponent(
+        null,
+        goalMetadata.goalEvaluation.iteration,
+        goalMetadata.goalEvaluation.maxRuns,
+      );
+      judgeComponent.setEvaluation(goalMetadata.goalEvaluation);
+      addChildBeforeMessageOrFollowUps(state, judgeComponent, reminderPart.precedesMessageId);
+      state.messageComponentsById.set(message.id, judgeComponent);
+      state.ui.requestRender();
+      return;
+    }
+
     const reminderComponent = createReminderComponent(reminderPart.reminderType, {
       message: reminderPart.message,
       path: reminderPart.path,
@@ -417,6 +453,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     .join('\n');
 
   const imageCount = message.content.filter(c => c.type === 'image').length;
+  const fileCount = message.content.filter(c => c.type === 'file').length;
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
@@ -519,7 +556,11 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     return;
   }
 
-  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
+  const attachmentLabels = [
+    imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}]` : '',
+    fileCount > 0 ? `[${fileCount} file${fileCount > 1 ? 's' : ''}]` : '',
+  ].filter(Boolean);
+  const prefix = attachmentLabels.length > 0 ? `${attachmentLabels.join(' ')} ` : '';
   if (displayText || prefix) {
     const label = getUserMessageLabel(message, options?.label);
     const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
@@ -528,7 +569,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     state.messageComponentsById.set(message.id, userComponent);
 
-    if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+    if (state.streamingComponent && state.session.displayState.get().isRunning) {
       state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
       reconcileChatBoundarySpacers(state.chatContainer);
@@ -616,7 +657,7 @@ function applyTaskToolResult(
 // renderExistingMessages
 // =============================================================================
 
-const STARTUP_MESSAGE_WINDOW_SIZE = 40;
+const STARTUP_MESSAGE_WINDOW_SIZE = 200;
 
 function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefined {
   let latest: number | undefined;
@@ -633,7 +674,7 @@ function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefin
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
-  const messages = await state.harness.listMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
+  const messages = await state.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
   state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
   state.chatContainer.clear();
@@ -698,10 +739,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             // Parse embedded metadata for model ID, duration, tool calls
             const meta = rawResult ? parseSubagentMeta(rawResult) : null;
             const resultText = meta?.text ?? rawResult;
-            const currentModelId =
-              typeof (state.harness as { getFullModelId?: () => string }).getFullModelId === 'function'
-                ? (state.harness as { getFullModelId: () => string }).getFullModelId()
-                : undefined;
+            const currentModelId = state.session.model.get() || undefined;
             const modelId = meta?.modelId ?? subArgs?.modelId ?? (subArgs?.forked ? currentModelId : undefined);
             const durationMs = meta?.durationMs ?? 0;
 
@@ -916,22 +954,16 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     if (state.taskProgress) {
       state.taskProgress.updateTasks(previousTasksAcc);
     }
-    const currentTasks =
-      typeof state.harness.getState === 'function'
-        ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
-        : undefined;
+    const currentTasks = (state.session.state.get() as { tasks?: TaskItemSnapshot[] } | undefined)?.tasks;
     if (!areTasksEqual(currentTasks, previousTasksAcc)) {
       try {
-        await state.harness.setState({ tasks: previousTasksAcc });
+        await state.session.state.set({ tasks: previousTasksAcc });
       } catch {
         // Custom harness state schemas may not accept TUI replayed task state.
         // Keep the reconstructed task list local to display state in that case.
       }
     }
-    const harnessWithReplayTasks = state.harness as typeof state.harness & {
-      restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
-    };
-    harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
+    state.session.displayState.restoreTasks(previousTasksAcc);
   }
 
   reconcileChatBoundarySpacers(state.chatContainer);

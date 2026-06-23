@@ -16,7 +16,8 @@
     "@mastra/libsql": "latest",
     "@mastra/observability": "latest",
     "@mastra/slack": "latest",
-    "@mastra/stagehand": "latest"
+    "@mastra/stagehand": "latest",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "latest",

@@ -33,7 +33,7 @@ function persistGlobalThinkingLevel(level: ThinkingLevelSetting): void {
 }
 
 function getModelNote(ctx: SlashCommandContext): string | null {
-  const modelId = ctx.state.harness.getCurrentModelId() ?? '';
+  const modelId = ctx.state.session.model.get() ?? '';
   if (!modelId) return 'No model selected.';
   if (!supportsThinking(modelId)) {
     return `Warning: current model (${modelId}) may not support reasoning effort. Setting will be saved but may not take effect.`;
@@ -42,8 +42,8 @@ function getModelNote(ctx: SlashCommandContext): string | null {
 }
 
 export async function handleThinkCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
-  const currentLevel = ((ctx.harness.getState() as any)?.thinkingLevel ?? 'off') as string;
-  const modelId = ctx.state.harness.getCurrentModelId() ?? '';
+  const currentLevel = ((ctx.state.session.state.get() as any)?.thinkingLevel ?? 'off') as string;
+  const modelId = ctx.state.session.model.get() ?? '';
   const thinkingLevels = getThinkingLevelsForModel(modelId);
   const arg = args[0]?.toLowerCase();
 
@@ -62,7 +62,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
       return;
     }
     const note = getModelNote(ctx);
-    await ctx.harness.setState({ thinkingLevel: selected.id } as any);
+    await ctx.state.session.state.set({ thinkingLevel: selected.id } as any);
     persistGlobalThinkingLevel(selected.id);
     ctx.showInfo(getThinkingStatusLine(modelId, selected.id) + (note ? ` (${note})` : ''));
     return;
@@ -96,7 +96,7 @@ export async function handleThinkCommand(ctx: SlashCommandContext, args: string[
       }
 
       try {
-        await ctx.harness.setState({ thinkingLevel: selectedLevel } as any);
+        await ctx.state.session.state.set({ thinkingLevel: selectedLevel } as any);
         persistGlobalThinkingLevel(selectedLevel);
         const selectedLabel = getThinkingLevelForModel(modelId, selectedLevel).label;
         ctx.showInfo(`Thinking → ${selectedLevel === currentLevel ? `${selectedLabel} (unchanged)` : selectedLabel}`);

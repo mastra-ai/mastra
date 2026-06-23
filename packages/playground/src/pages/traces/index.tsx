@@ -1,7 +1,6 @@
 import { EntityType } from '@mastra/core/observability';
 import {
   Button,
-  DateTimeRangePicker,
   Label,
   NoTracesInfo,
   Notice,
@@ -31,6 +30,7 @@ import {
   useTraces,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { CircleSlash2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';

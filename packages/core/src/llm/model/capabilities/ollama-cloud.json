@@ -8,12 +8,12 @@
     "gemma4:31b",
     "kimi-k2.5",
     "kimi-k2.6",
+    "kimi-k2.7-code",
+    "minimax-m3",
     "ministral-3:14b",
     "ministral-3:3b",
     "ministral-3:8b",
     "mistral-large-3:675b",
-    "qwen3-vl:235b",
-    "qwen3-vl:235b-instruct",
     "qwen3.5:397b"
   ]
 }
