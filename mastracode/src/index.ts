@@ -105,9 +105,10 @@ const MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS = 30000;
 const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
 
 /**
- * Matcher for transient network-reset failures. Node's `ECONNRESET` is surfaced
- * as an error code on either the top-level error or a nested `cause`. Some
- * SDKs/undici also surface resets as a `socket hang up` message.
+ * Matcher for transient network-reset failures. Checks the immediate error for
+ * an `ECONNRESET` code or a `socket hang up` message. Cause-chain traversal is
+ * handled by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls
+ * each matcher at every level of the cause chain.
  */
 function isECONNRESETError(error: unknown): boolean {
   if (!error) return false;
