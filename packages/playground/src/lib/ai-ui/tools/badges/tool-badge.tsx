@@ -6,7 +6,7 @@ import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
-const renderJsonCodeBlock = (value: unknown, testId: string) => (
+const JsonCodeBlock = ({ value, testId }: { value: unknown; testId: string }) => (
   <div data-testid={testId}>
     <CodeBlock code={JSON.stringify(value, null, 2) ?? String(value)} lang="json" overflow="scroll" />
   </div>
@@ -40,7 +40,7 @@ export const ToolBadge = ({
 
   try {
     const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
-    argSlot = renderJsonCodeBlock(formattedArgs, 'tool-args');
+    argSlot = <JsonCodeBlock value={formattedArgs} testId="tool-args" />;
   } catch {
     argSlot = <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as string}</pre>;
   }
@@ -49,7 +49,7 @@ export const ToolBadge = ({
     typeof result === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{result}</pre>
     ) : (
-      renderJsonCodeBlock(result, 'tool-result')
+      <JsonCodeBlock value={result} testId="tool-result" />
     );
 
   let suspendPayloadSlot =
