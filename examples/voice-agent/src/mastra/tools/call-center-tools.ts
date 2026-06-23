@@ -124,11 +124,15 @@ export const rescheduleAppointment = createTool({
     if (!appointment || appointment.status !== 'confirmed') {
       return { rescheduled: false as const, message: 'No active appointment found for that confirmation code.' };
     }
-    if (!openSlots(date).includes(time)) {
+    // openSlots(date) excludes this appointment's own slot (it's booked by it), so a no-op
+    // move to the same date/time would otherwise read as unavailable.
+    const isSameSlot = appointment.date === date && appointment.time === time;
+    const availableTimes = openSlots(date);
+    if (!isSameSlot && !availableTimes.includes(time)) {
       return {
         rescheduled: false as const,
         message: `${time} on ${describeDate(date)} is not available.`,
-        openTimes: openSlots(date),
+        openTimes: availableTimes,
       };
     }
     appointment.date = date;
