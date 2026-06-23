@@ -5,7 +5,6 @@ import {
   DateRangeSelector,
   EmptyState,
   ErrorState,
-  MetricsFlexGrid,
   MetricsProvider,
   NoDataPageLayout,
   PageLayout,
@@ -30,6 +29,7 @@ import {
   useServiceNames,
   useTags,
 } from '@mastra/playground-ui';
+import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
