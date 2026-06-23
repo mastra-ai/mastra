@@ -77,10 +77,12 @@ Rules are prioritized by impact:
 
 ## References
 
-Full documentation with code examples is available in:
+Rule files are the canonical source for detailed guidance and examples:
 
-- `references/react-best-practices-reference.md` - Complete guide with all patterns
-- `references/rules/` - Individual rule files organized by category
+- `references/react-best-practices-reference.md` - Rule catalog with category order and rule-file paths
+- `references/rules/` - Canonical individual rule files organized by category
+
+Load only the relevant rule file when implementing or reviewing a specific pattern. Use the catalog to choose the right rule without loading every example.
 
 To look up a specific pattern, grep the rules directory:
 
