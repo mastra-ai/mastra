@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
+import { trace } from './debug-trace';
+
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { mastraDBMessageToSignal } from '../agent/signals';
@@ -364,6 +366,14 @@ export class Harness<TState = {}> {
   }
 
   async #createSessionForResource(effectiveResourceId: string): Promise<Session<TState>> {
+    trace('createSessionForResource:start', {
+      effectiveResourceId,
+      configResourceId: this.config.resourceId,
+      configId: this.config.id,
+      hasStorage: !!this.config.storage,
+      initialStateProjectPath: (this.config.initialState as any)?.projectPath,
+    });
+
     const session = this.#wireSession(
       new Session({
         resourceId: effectiveResourceId,
@@ -391,10 +401,29 @@ export class Harness<TState = {}> {
     // Bring the session online with a current thread: resume the most recent
     // thread for this resource, or create a fresh one when none exist.
     const threads = await session.thread.list();
+    trace('createSessionForResource:threadList', {
+      effectiveResourceId,
+      threadCount: threads.length,
+      threads: threads.map(t => ({
+        id: t.id,
+        resourceId: t.resourceId,
+        projectPath: (t.metadata as any)?.projectPath,
+        updatedAt: t.updatedAt?.toISOString(),
+        title: t.title?.slice(0, 60),
+      })),
+    });
+
     if (threads.length === 0) {
+      trace('createSessionForResource:createNew', { effectiveResourceId });
       await session.thread.create();
     } else {
       const mostRecent = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+      trace('createSessionForResource:resumeMostRecent', {
+        effectiveResourceId,
+        threadId: mostRecent.id,
+        threadResourceId: mostRecent.resourceId,
+        threadProjectPath: (mostRecent.metadata as any)?.projectPath,
+      });
       await this.config.threadLock?.acquire(mostRecent.id);
       session.thread.set({ threadId: mostRecent.id });
       await session.thread.loadMetadata();
@@ -676,6 +705,7 @@ export class Harness<TState = {}> {
   }): Promise<void> {
     if (!this.#resolveStorage()) return;
     try {
+      trace('writeThreadMetadata', { threadId, key, value: typeof value === 'string' ? value : typeof value });
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
       if (thread) {
@@ -731,12 +761,25 @@ export class Harness<TState = {}> {
     resourceId?: string;
     includeForkedSubagents?: boolean;
   }): Promise<HarnessThread[]> {
-    if (!this.#resolveStorage()) return [];
+    if (!this.#resolveStorage()) {
+      trace('queryThreads:noStorage', { resourceId });
+      return [];
+    }
 
     const memoryStorage = await this.getMemoryStorage();
     const filter: { resourceId?: string } | undefined = resourceId === undefined ? undefined : { resourceId };
 
+    trace('queryThreads:query', { resourceId, filter, includeForkedSubagents });
     const result = await memoryStorage.listThreads({ filter, perPage: false });
+    trace('queryThreads:result', {
+      resourceId,
+      totalBeforeFilter: result.threads.length,
+      threads: result.threads.map(t => ({
+        id: t.id,
+        resourceId: t.resourceId,
+        projectPath: (t.metadata as any)?.projectPath,
+      })),
+    });
 
     const threads = includeForkedSubagents
       ? result.threads

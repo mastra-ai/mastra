@@ -76,6 +76,7 @@ import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
+import { trace } from '@mastra/core/harness';
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
@@ -279,6 +280,18 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     project.resourceId = resourceIdOverride;
     project.resourceIdOverride = true;
   }
+
+  trace('detectProject', {
+    cwd,
+    rootPath: project.rootPath,
+    resourceId: project.resourceId,
+    resourceIdOverride: resourceIdOverride ?? null,
+    gitUrl: project.gitUrl ?? null,
+    gitBranch: project.gitBranch ?? null,
+    isWorktree: project.isWorktree,
+    mainRepoPath: project.mainRepoPath ?? null,
+    name: project.name,
+  });
 
   const configuredPubSub = config?.pubsub;
   const useUnixSocketPubSub =
@@ -724,9 +737,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Bring up shared harness resources, then mint the single session that all
   // work in this process runs through. The Harness owns no session of its own.
+  trace('harness:init:start', { resourceId: project.resourceId });
   await harness.init();
   await harness.getMastra()?.startWorkers();
+  trace('harness:createSession:start', { resourceId: project.resourceId });
   const session = await harness.createSession();
+  trace('harness:createSession:done', { resourceId: project.resourceId, threadId: session.thread.id() });
   activeSession = session;
 
   // Sync hookManager session ID on thread changes

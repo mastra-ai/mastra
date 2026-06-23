@@ -1,5 +1,6 @@
 import type { Agent } from '../agent';
 import { createSignal } from '../agent/signals';
+import { trace } from './debug-trace';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
   AgentThreadSubscription,
@@ -308,11 +309,22 @@ export class SessionThread {
 
   /** List this session's threads (its own resource by default, or all resources). */
   async list(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
-    if (!this.#store) return [];
-    return this.#store.listThreads({
-      resourceId: options?.allResources ? undefined : this.#getResourceId(),
+    if (!this.#store) {
+      trace('thread.list:noStore', {});
+      return [];
+    }
+    const resourceId = options?.allResources ? undefined : this.#getResourceId();
+    trace('thread.list:query', { resourceId, allResources: options?.allResources });
+    const threads = await this.#store.listThreads({
+      resourceId,
       includeForkedSubagents: options?.includeForkedSubagents,
     });
+    trace('thread.list:result', {
+      resourceId,
+      count: threads.length,
+      threads: threads.map(t => ({ id: t.id, resourceId: t.resourceId, projectPath: (t.metadata as any)?.projectPath })),
+    });
+    return threads;
   }
 
   /** Fetch a single thread by id, or null when it doesn't exist / no storage. */
@@ -451,6 +463,17 @@ export class SessionThread {
     if (projectPath) {
       metadata.projectPath = projectPath;
     }
+
+    trace('thread.create', {
+      threadId: thread.id,
+      resourceId: thread.resourceId,
+      modelId,
+      currentStateModel,
+      defaultModelId: currentMode.defaultModelId,
+      modeId: session.mode.get(),
+      projectPath,
+      metadataKeys: Object.keys(metadata),
+    });
 
     // Acquire lock on new thread before releasing old one.
     // If acquire fails, attempt to re-acquire the old lock before rethrowing.
@@ -603,6 +626,7 @@ export class SessionThread {
   async switch({ threadId, emitEvent = true }: { threadId: string; emitEvent?: boolean }): Promise<void> {
     const session = this.#owner;
     const store = this.#store;
+    trace('thread.switch:start', { threadId, previousThreadId: this.#threadId });
     session.abort();
     this.cleanupSubscription();
 
@@ -623,6 +647,7 @@ export class SessionThread {
       try {
         await this.#requireOwnedThread({ threadId });
       } catch (err) {
+        trace('thread.switch:notFound', { threadId, error: String(err) });
         // Release the just-acquired foreign lock and restore the previous
         // thread's lock so the still-bound session is not left unlocked.
         await store.releaseLock(threadId).catch(() => {});
@@ -681,12 +706,25 @@ export class SessionThread {
     const store = this.#store;
     const threadId = this.#threadId;
     if (!threadId || !store?.hasStorage()) {
+      trace('loadMetadata:skip', { threadId, hasStore: !!store, hasStorage: !!store?.hasStorage() });
       session.resetTokenUsage();
       return;
     }
 
     try {
       const thread = await store.getById({ threadId });
+      trace('loadMetadata:thread', {
+        threadId,
+        found: !!thread,
+        resourceId: thread?.resourceId,
+        metadataKeys: thread?.metadata ? Object.keys(thread.metadata) : [],
+        projectPath: (thread?.metadata as any)?.projectPath,
+        currentModelId: (thread?.metadata as any)?.currentModelId,
+        currentModeId: (thread?.metadata as any)?.currentModeId,
+        modeModelKeys: thread?.metadata
+          ? Object.keys(thread.metadata).filter(k => k.startsWith('modeModelId_'))
+          : [],
+      });
 
       // Load token usage
       const savedUsage = thread?.metadata?.tokenUsage as TokenUsage | undefined;
@@ -729,12 +767,31 @@ export class SessionThread {
       const currentModeId = session.mode.get();
       const modeModelKey = `modeModelId_${currentModeId}`;
       if (meta?.[modeModelKey]) {
+        trace('loadMetadata:modelRestore', {
+          threadId,
+          source: 'modeModelKey',
+          modeModelKey,
+          modelId: meta[modeModelKey],
+          currentModeId,
+        });
         session.model.set({ modelId: meta[modeModelKey] as string });
       } else {
         const currentMode = session.mode.resolve();
         if (currentMode.defaultModelId) {
+          trace('loadMetadata:modelRestore', {
+            threadId,
+            source: 'mode.defaultModelId',
+            modelId: currentMode.defaultModelId,
+            currentModeId,
+          });
           session.model.set({ modelId: currentMode.defaultModelId });
         } else if (meta?.currentModelId) {
+          trace('loadMetadata:modelRestore', {
+            threadId,
+            source: 'meta.currentModelId',
+            modelId: meta.currentModelId,
+            currentModeId,
+          });
           session.model.set({ modelId: meta.currentModelId as string });
         }
       }

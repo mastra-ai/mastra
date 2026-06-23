@@ -1,3 +1,4 @@
+export { trace } from './debug-trace';
 export { Harness } from './harness';
 export { Session } from './session';
 export {
