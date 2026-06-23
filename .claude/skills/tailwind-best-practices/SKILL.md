@@ -7,7 +7,7 @@ description: Tailwind CSS styling guidelines for Mastra Playground UI. This skil
 
 ## Overview
 
-Styling guidelines for the Mastra Playground UI, containing 5 rules across 3 categories. Rules are prioritized by impact to guide automated refactoring and code generation. These rules ensure design system consistency, prevent token drift, and maintain component library integrity.
+Routing and priority guide for Mastra Playground UI styling, containing 5 rules across 3 categories. Rule files hold the detailed explanations, examples, and review guidance that ensure design system consistency, prevent token drift, and maintain component library integrity.
 
 ## Scope
 
@@ -76,3 +76,7 @@ grep -l "className" references/rules/
 - `component-*` - Component usage rules (1 rule)
 - `tokens-*` - Design token rules (2 rules)
 - `classname-*` - ClassName usage rules (2 rules)
+
+## Maintaining This Skill
+
+Only when editing this skill's rule files or catalog, run `python3 .claude/scripts/validate-best-practice-catalogs.py` to keep the catalog in sync with the canonical rule files.

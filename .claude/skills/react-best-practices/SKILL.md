@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Comprehensive performance optimization guide for React applications, containing 15 rules across 7 categories. Rules are prioritized by impact to guide automated refactoring and code generation.
+Routing and priority guide for React performance optimization, containing 15 rules across 7 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
 ## When to Apply
 
@@ -101,3 +101,7 @@ grep -l "Tanstack" references/rules/
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
 - `structure-*` - Component/hook structure (2 rules)
+
+## Maintaining This Skill
+
+Only when editing this skill's rule files or catalog, run `python3 .claude/scripts/validate-best-practice-catalogs.py` to keep the catalog in sync with the canonical rule files.

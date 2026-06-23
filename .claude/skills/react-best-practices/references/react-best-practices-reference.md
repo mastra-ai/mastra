@@ -1,10 +1,12 @@
 # React Best Practices Rule Catalog
 
-**Version 0.1.0**
+**Version 0.2.0**
 Mastra Engineering
 January 2026
 
-This catalog is an index. The canonical guidance, examples, and review smells live in `references/rules/*.md`.
+This catalog is an index for React performance guidance used by agents and LLMs. The canonical guidance, examples, and review smells live in `references/rules/*.md`.
+
+Performance optimization guide for React applications, designed for AI agents and LLMs. Contains 15 rules across 7 categories, prioritized by impact from critical (eliminating waterfalls, reducing bundle size) to incremental (JavaScript micro-optimizations). Each rule includes detailed explanations, real-world examples comparing incorrect vs. correct implementations, and specific impact metrics to guide automated refactoring and code generation.
 
 ## How to Use This Catalog
 
@@ -23,6 +25,18 @@ This catalog is an index. The canonical guidance, examples, and review smells li
 | 5        | Rendering Performance     | MEDIUM                        | 2          |
 | 6        | JavaScript Performance    | LOW-MEDIUM                    | 3          |
 | 7        | Component Structure       | MEDIUM-HIGH (maintainability) | 2          |
+
+## Category Focus
+
+| Category                  | Focus                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Eliminating Waterfalls    | Waterfalls are the #1 performance killer. Each sequential await adds full network latency. Eliminating them yields the largest gains. |
+| Bundle Size Optimization  | Reducing initial bundle size improves Time to Interactive and Largest Contentful Paint.                                               |
+| Client-Side Data Fetching | Automatic deduplication and efficient data fetching patterns reduce redundant network requests.                                       |
+| Re-render Optimization    | Reducing unnecessary re-renders minimizes wasted computation and improves UI responsiveness.                                          |
+| Rendering Performance     | Optimizing the rendering process reduces the work the browser needs to do.                                                            |
+| JavaScript Performance    | Micro-optimizations for hot paths can add up to meaningful improvements.                                                              |
+| Component Structure       | Bloated components are hard to test, review, and reuse, and unrelated state changes re-render everything.                             |
 
 ## Rules
 
@@ -76,6 +90,7 @@ This catalog is an index. The canonical guidance, examples, and review smells li
 | `structure-single-responsibility` | One Component or Hook = One Responsibility = One File | MEDIUM-HIGH | Split domain components and hooks so each file owns one responsibility.              | `references/rules/structure-single-responsibility.md` |
 | `structure-component-naming`      | JSX-Returning Helpers Must Be Components              | MEDIUM      | Name reusable JSX-returning helpers as PascalCase components and call them with JSX. | `references/rules/structure-component-naming.md`      |
 
-## Maintenance
+## External References
 
-Run `python3 .claude/scripts/validate-best-practice-catalogs.py` after editing this skill.
+- [React](https://react.dev)
+- [TanStack Query](https://tanstack.com/query)
