@@ -18,6 +18,7 @@ import {
   TargetIcon,
 } from 'lucide-react';
 import { useState } from 'react';
+import { ToolMockReportSection } from './tool-mock-report-section';
 
 export type ExperimentResultPanelProps = {
   result: DatasetExperimentResult;
@@ -136,6 +137,8 @@ export function ExperimentResultPanel({
                 ))}
               </DataList>
             )}
+
+            {result.toolMockReport && <ToolMockReportSection report={result.toolMockReport} />}
 
             {(result.status || tags.length > 0 || canFlag) && (
               <div className="grid gap-2">

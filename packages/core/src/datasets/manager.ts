@@ -100,7 +100,7 @@ export class DatasetsManager {
     targetIds?: string[];
     scorerIds?: string[];
     organizationId?: string | null;
-    resourceId?: string | null;
+    projectId?: string | null;
     candidateKey?: string | null;
     candidateId?: string | null;
   }): Promise<Dataset> {
@@ -153,7 +153,7 @@ export class DatasetsManager {
     perPage?: number;
     filters?: {
       organizationId?: string;
-      resourceId?: string;
+      projectId?: string;
       candidateKey?: string;
       candidateId?: string;
     };

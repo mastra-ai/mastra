@@ -401,6 +401,16 @@
         "default": "./dist/schema/index.cjs"
       }
     },
+    "./skills": {
+      "import": {
+        "types": "./dist/skills/index.d.ts",
+        "default": "./dist/skills/index.js"
+      },
+      "require": {
+        "types": "./dist/skills/index.d.ts",
+        "default": "./dist/skills/index.cjs"
+      }
+    },
     "./server": {
       "import": {
         "types": "./dist/server/index.d.ts",
