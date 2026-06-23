@@ -140,54 +140,17 @@ export interface ToolMockScenarioResult {
 
 /**
  * Run one dataset item through the REAL {@link runExperiment} orchestration
- * against a REAL agent whose only fake is the scripted model. A real
- * {@link InMemoryStore} backs the run so retry-skip and report persistence
- * exercise the same code paths as production.
+ * against a REAL agent whose only fake is the scripted model.
  *
- * The single inline data item carries the tool mocks under test. Returns the
- * full {@link ExperimentSummary} and the single item result.
+ * The dataset item (carrying the tool mocks under test) is persisted to a real
+ * {@link InMemoryStore} first, then the experiment runs by `datasetId` — the
+ * same storage-backed path Studio uses, where `toolMocks` are read off the
+ * persisted `DatasetItemRow` rather than passed inline. Retry-skip and report
+ * persistence therefore exercise the same code paths as production.
+ *
+ * Returns the full {@link ExperimentSummary} and the single item result.
  */
 export async function runToolMockScenario(opts: RunToolMockScenarioOptions): Promise<ToolMockScenarioResult> {
-  const agentId = `tool-mock-scenario-agent-${++counter}`;
-  const agent = new Agent({
-    id: agentId,
-    name: 'Tool Mock Scenario Agent',
-    instructions: 'You are a test agent driven by a scripted model.',
-    model: scriptedModel(opts.turns),
-    tools: opts.tools,
-  });
-  const mastra = new Mastra({
-    agents: { [agentId]: agent },
-    storage: new InMemoryStore(),
-    logger: false,
-  });
-
-  const summary = await runExperiment(mastra, {
-    targetType: 'agent',
-    targetId: agentId,
-    scorers: [],
-    maxConcurrency: 1,
-    maxRetries: opts.maxRetries ?? 0,
-    data: [
-      {
-        input: opts.prompt ?? 'run the scenario',
-        toolMocks: opts.toolMocks,
-      },
-    ],
-  });
-
-  const item = summary.results[0]!;
-  return { summary, item };
-}
-
-/**
- * Like {@link runToolMockScenario}, but persists the dataset item (with its
- * `toolMocks`) to a real {@link InMemoryStore} first, then runs the experiment
- * by `datasetId`. This exercises the storage-backed resolution path in
- * `runExperiment` — where `toolMocks` are read off the persisted
- * `DatasetItemRow` rather than passed inline — which is how Studio runs work.
- */
-export async function runStoredToolMockScenario(opts: RunToolMockScenarioOptions): Promise<ToolMockScenarioResult> {
   const agentId = `tool-mock-scenario-agent-${++counter}`;
   const agent = new Agent({
     id: agentId,
