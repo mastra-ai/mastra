@@ -14,4 +14,6 @@ Fixed channel rendering on serverless runtimes (Vercel, AWS Lambda, Cloudflare W
 
 **Tool approval and decline use the same rendering path as regular messages.** Approval and decline actions now flow through the per-run output processor instead of a separate subscription-based path, making rendering consistent across all message types.
 
+**User output processors now run before channel rendering.** User-configured output processors (e.g. PII redaction, translation) now transform chunks before the channel renders them to the platform, instead of after.
+
 **Concurrency strategy switched to `concurrent`.** The chat-sdk queue lock could get stuck in frozen serverless invocations. Ordering is now handled by the signals/lease layer, removing the stale-lock failure mode.

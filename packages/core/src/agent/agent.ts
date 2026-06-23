@@ -1395,9 +1395,10 @@ export class Agent<
     const channelProcessors = this.#agentChannels ? this.#agentChannels.getOutputProcessors(configuredProcessors) : [];
 
     // Combine all processors into a single workflow
-    // Channel processors run before configured/memory so the platform sees
-    // chunks before user-supplied transforms or persistence.
-    const allProcessors = [...channelProcessors, ...configuredProcessors, ...memoryProcessors];
+    // User-configured processors run first so they can transform chunks
+    // (e.g. PII redaction, translation) before the channel renders them.
+    // Memory processors run last to persist the final form.
+    const allProcessors = [...configuredProcessors, ...channelProcessors, ...memoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
