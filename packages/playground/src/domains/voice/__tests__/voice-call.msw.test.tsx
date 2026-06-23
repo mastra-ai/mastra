@@ -208,4 +208,34 @@ describe('voice call', () => {
     await waitFor(() => expect(screen.queryByTestId('voice-call-panel')).toBeNull());
     expect(fakeRooms).toHaveLength(0);
   });
+
+  it('aborts an in-flight start when the hook unmounts: no room is connected', async () => {
+    // Gate the connection-details response so the call is stuck in 'connecting' when we
+    // tear the hook down.
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    server.use(
+      http.post(`${BASE_URL}/voice/livekit/connection-details`, async () => {
+        await gate;
+        return HttpResponse.json(connectionDetails);
+      }),
+    );
+
+    const { unmount } = renderHarness();
+    fireEvent.click(screen.getByTestId('voice-call-button'));
+    // 'connecting' state is live with the fetch in flight.
+    await waitFor(() => expect(screen.getByTestId('voice-call-panel')).not.toBeNull());
+
+    // Unmount mid-connect, then let the (now superseded) fetch settle.
+    unmount();
+    await act(async () => {
+      release();
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+
+    // The superseded start neither constructs nor connects a room.
+    expect(fakeRooms).toHaveLength(0);
+  });
 });

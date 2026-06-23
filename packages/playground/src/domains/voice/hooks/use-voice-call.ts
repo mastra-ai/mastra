@@ -62,6 +62,10 @@ export const useVoiceCall = ({ agentId, threadId, onCallStarted }: UseVoiceCallA
   const roomRef = useRef<Room | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // start() runs several awaits; cleanup() bumps this epoch (and aborts the fetch) so a
+  // start whose epoch is superseded stops touching state or connecting a room.
+  const startEpochRef = useRef(0);
+  const startAbortRef = useRef<AbortController | null>(null);
 
   const refreshThread = useCallback(() => {
     if (threadId) void queryClient.invalidateQueries({ queryKey: ['memory', 'messages', threadId] });
@@ -80,6 +84,11 @@ export const useVoiceCall = ({ agentId, threadId, onCallStarted }: UseVoiceCallA
   }, [refreshThread]);
 
   const cleanup = useCallback(() => {
+    // Supersede any in-flight start() and abort its fetch so a stopped/unmounted call
+    // can't finish connecting a room after the fact.
+    startEpochRef.current += 1;
+    startAbortRef.current?.abort();
+    startAbortRef.current = null;
     const room = roomRef.current;
     roomRef.current = null;
     if (room) {
@@ -106,6 +115,11 @@ export const useVoiceCall = ({ agentId, threadId, onCallStarted }: UseVoiceCallA
 
   const start = useCallback(async () => {
     if (status !== 'idle') return;
+    // Claim this run; any later cleanup()/start() supersedes it.
+    const epoch = (startEpochRef.current += 1);
+    const abortController = new AbortController();
+    startAbortRef.current = abortController;
+    const superseded = () => startEpochRef.current !== epoch;
     setStatus('connecting');
     setCaptions([]);
     try {
@@ -116,7 +130,9 @@ export const useVoiceCall = ({ agentId, threadId, onCallStarted }: UseVoiceCallA
         // resourceId matches the sidebar's thread listing (resourceId === agentId), so
         // the call's thread and messages land where Studio reads them.
         body: JSON.stringify({ agentId, threadId, resourceId: agentId }),
+        signal: abortController.signal,
       });
+      if (superseded()) return;
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(
@@ -125,8 +141,10 @@ export const useVoiceCall = ({ agentId, threadId, onCallStarted }: UseVoiceCallA
         );
       }
       const details = (await response.json()) as LiveKitConnectionDetails;
+      if (superseded()) return;
 
       const { Room, RoomEvent, Track } = await import('livekit-client');
+      if (superseded()) return;
       const room = new Room();
       roomRef.current = room;
 
@@ -162,12 +180,24 @@ export const useVoiceCall = ({ agentId, threadId, onCallStarted }: UseVoiceCallA
       });
 
       await room.connect(details.serverUrl, details.participantToken);
+      if (superseded()) {
+        void room.disconnect();
+        if (roomRef.current === room) roomRef.current = null;
+        return;
+      }
       await room.localParticipant.setMicrophoneEnabled(true);
+      if (superseded()) {
+        void room.disconnect();
+        if (roomRef.current === room) roomRef.current = null;
+        return;
+      }
       setStatus('active');
       // The worker creates the call's thread on session start; show it in the sidebar.
       refreshThread();
       await Promise.resolve(onCallStartedRef.current?.()).catch(() => {});
     } catch (error) {
+      // Aborted by cleanup() (stop/unmount) or otherwise superseded — not a real failure.
+      if (abortController.signal.aborted || superseded()) return;
       cleanup();
       toast.error(error instanceof Error ? error.message : 'Failed to start the voice call.');
     }
