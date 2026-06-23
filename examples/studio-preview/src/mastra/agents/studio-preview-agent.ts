@@ -1,8 +1,20 @@
 import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
+import type { ModelRouterModelId } from '@mastra/core/llm';
+import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models';
 import { previewStatusTool } from '../tools/preview-status';
 
-const model = openai(process.env.MASTRA_PREVIEW_MODEL ?? '__AI_SDK_OPENAI_MODEL_BASE__');
+function resolvePreviewModel() {
+  if (process.env.MASTRA_PREVIEW_MODEL) {
+    return MODEL_TOKENS[process.env.MASTRA_PREVIEW_MODEL] ?? process.env.MASTRA_PREVIEW_MODEL;
+  }
+
+  if (process.env.OPENAI_API_KEY) return MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__;
+  if (process.env.ANTHROPIC_API_KEY) return MODEL_TOKENS.__GATEWAY_ANTHROPIC_MODEL_SONNET__;
+
+  return MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__;
+}
+
+const model = resolvePreviewModel() as ModelRouterModelId;
 
 export const studioPreviewAgent = new Agent({
   id: 'studio-preview-agent',
