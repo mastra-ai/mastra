@@ -1,7 +1,6 @@
 import { EntityType } from '@mastra/core/observability';
 import {
   Button,
-  Label,
   NoTracesInfo,
   PageLayout,
   SpanDataPanelView,
@@ -28,6 +27,7 @@ import {
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import { Switch } from '@mastra/playground-ui/components/Switch';

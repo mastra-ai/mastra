@@ -1,6 +1,5 @@
 import {
   Button,
-  Spinner,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -8,6 +7,7 @@ import {
   fileToBase64,
   isBrowserFetchableUrl,
 } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
