@@ -246,5 +246,66 @@ describe('StreamErrorRetryProcessor', () => {
 
       await expect(processor.processAPIError(makeArgs({ error }))).resolves.toEqual({ retry: true });
     });
+
+    it('removes the abort listener after timeout resolves', async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const addSpy = vi.spyOn(controller.signal, 'addEventListener');
+      const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+      const processor = new StreamErrorRetryProcessor({
+        delayMs: 1000,
+        matchers: [() => true],
+      });
+
+      const promise = processor.processAPIError(makeArgs({ error: new Error('x'), abortSignal: controller.signal }));
+      await vi.advanceTimersByTimeAsync(1000);
+      await expect(promise).resolves.toEqual({ retry: true });
+      expect(addSpy).toHaveBeenCalledWith('abort', expect.any(Function), { once: true });
+      expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    });
+
+    it('removes the abort listener when abort fires during delay', async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+      const processor = new StreamErrorRetryProcessor({
+        delayMs: 60_000,
+        matchers: [() => true],
+      });
+
+      const promise = processor.processAPIError(makeArgs({ error: new Error('x'), abortSignal: controller.signal }));
+      await vi.advanceTimersByTimeAsync(500);
+      controller.abort();
+      await expect(promise).resolves.toEqual({ retry: true });
+      expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    });
+
+    it('does not accumulate listeners across retries on a long-lived signal', async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const addSpy = vi.spyOn(controller.signal, 'addEventListener');
+      const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+      const processor = new StreamErrorRetryProcessor({
+        delayMs: 1000,
+        maxRetries: 3,
+        matchers: [() => true],
+      });
+
+      // First retry
+      let promise = processor.processAPIError(makeArgs({ error: new Error('x'), abortSignal: controller.signal }));
+      await vi.advanceTimersByTimeAsync(1000);
+      await expect(promise).resolves.toEqual({ retry: true });
+      expect(addSpy).toHaveBeenCalledTimes(1);
+      expect(removeSpy).toHaveBeenCalledTimes(1);
+
+      // Second retry — listener count should not grow
+      promise = processor.processAPIError(
+        makeArgs({ error: new Error('x'), abortSignal: controller.signal, retryCount: 1 }),
+      );
+      await vi.advanceTimersByTimeAsync(1000);
+      await expect(promise).resolves.toEqual({ retry: true });
+      expect(addSpy).toHaveBeenCalledTimes(2);
+      expect(removeSpy).toHaveBeenCalledTimes(2);
+    });
   });
 });

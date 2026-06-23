@@ -169,17 +169,28 @@ async function waitDelay(
   const ms = clampDelayMs(delay);
   if (ms <= 0) return;
 
-  if (abortSignal?.aborted) return;
+  if (!abortSignal) {
+    await new Promise<void>(resolve => setTimeout(resolve, ms));
+    return;
+  }
 
   await new Promise<void>(resolve => {
-    const timeout = setTimeout(resolve, ms);
-    abortSignal?.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timeout);
-        resolve();
-      },
-      { once: true },
-    );
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const onAbort = () => {
+      if (timeout) clearTimeout(timeout);
+      abortSignal.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    // Register before checking aborted to close the race window where
+    // abort fires between the check and addEventListener.
+    abortSignal.addEventListener('abort', onAbort, { once: true });
+    if (abortSignal.aborted) {
+      onAbort();
+      return;
+    }
+    timeout = setTimeout(() => {
+      abortSignal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
   });
 }
