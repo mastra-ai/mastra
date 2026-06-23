@@ -97,10 +97,22 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   /**
    * Returns default index definitions for the experiments domain tables.
-   * Currently no default indexes are defined for experiments.
    */
   static getDefaultIndexDefs(_prefix: string = ''): CreateIndexOptions[] {
-    return [];
+    return [
+      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with
+      // pg/libsql/spanner/mongodb experiments adapters).
+      {
+        name: 'idx_experiments_org_project',
+        table: TABLE_EXPERIMENTS,
+        columns: ['organizationId', 'projectId'],
+      },
+      {
+        name: 'idx_experiment_results_org_project',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['organizationId', 'projectId'],
+      },
+    ];
   }
 
   /**
@@ -140,11 +152,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   /**
    * Creates default indexes for optimal query performance.
-   * Currently no default indexes are defined for experiments.
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) return;
-    // No default indexes for experiments domain
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   /**
@@ -647,6 +660,14 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
       const conditions: string[] = [`${quoteIdentifier('experimentId', 'column name')} = ?`];
       const params: any[] = [args.experimentId];
+      if (args.traceId) {
+        conditions.push(`${quoteIdentifier('traceId', 'column name')} = ?`);
+        params.push(args.traceId);
+      }
+      if (args.status) {
+        conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
+        params.push(args.status);
+      }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {

@@ -19,3 +19,34 @@ This release also clarifies the `targetType` contract via JSDoc:
 - `Experiment.targetType` / `CreateExperimentInput.targetType` stay required. An experiment by definition replays inputs against a specific target.
 
 No behavior change for existing OSS-created experiments; the new fields are additive and optional.
+
+Example:
+
+```ts
+// Create an experiment scoped to a tenancy bucket. When the parent dataset
+// already carries `organizationId` / `projectId`, `runExperiment` hydrates
+// these fields automatically from the dataset record.
+const experiment = await storage.createExperiment({
+  name: 'qa-regression',
+  datasetId: 'ds_123',
+  datasetVersion: 1,
+  targetType: 'agent',
+  targetId: 'agent_qa',
+  totalItems: 10,
+  organizationId: 'org_123',
+  projectId: 'proj_123',
+});
+
+// List experiments within a tenancy bucket.
+const experiments = await storage.listExperiments({
+  pagination: { page: 0, perPage: 20 },
+  filters: { organizationId: 'org_123', projectId: 'proj_123' },
+});
+
+// List per-item results within the same bucket.
+const results = await storage.listExperimentResults({
+  experimentId: experiment.id,
+  pagination: { page: 0, perPage: 50 },
+  filters: { organizationId: 'org_123', projectId: 'proj_123' },
+});
+```
