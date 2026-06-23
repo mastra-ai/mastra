@@ -126,6 +126,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/durable-agents',
+          label: 'Durable Agents',
+        },
+        {
+          type: 'doc',
           id: 'agents/channels',
           label: 'Channels',
         },
