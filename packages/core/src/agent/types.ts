@@ -49,6 +49,7 @@ import type {
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
+import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
@@ -671,6 +672,45 @@ interface AgentConfigBase<
    * Memory module used for storing and retrieving stateful context.
    */
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
+  /**
+   * Skills that guide agent behavior — reusable instructions the model loads on demand.
+   *
+   * Accepts an array of path strings (pointing to SKILL.md directories on disk) and/or
+   * inline skills created with `createSkill()`. Can also be a dynamic function that
+   * resolves skills per request.
+   *
+   * Skills work without a Workspace. When both `skills` and `workspace.skills` are
+   * configured, they are merged (agent-level skills win on name conflicts).
+   *
+   * @example Path-based skills
+   * ```typescript
+   * skills: ['./skills/review', './skills/testing']
+   * ```
+   *
+   * @example Inline skills
+   * ```typescript
+   * import { createSkill } from '@mastra/core/skills';
+   *
+   * skills: [
+   *   createSkill({
+   *     name: 'code-review',
+   *     description: 'Use when reviewing code.',
+   *     instructions: 'When reviewing code...',
+   *   }),
+   * ]
+   * ```
+   *
+   * @example Dynamic skills
+   * ```typescript
+   * skills: ({ requestContext }) => {
+   *   const tier = requestContext.get('tier');
+   *   return tier === 'premium'
+   *     ? ['./skills/basic', './skills/premium']
+   *     : ['./skills/basic'];
+   * }
+   * ```
+   */
+  skills?: AgentSkillsInput;
   /**
    * Format for skill information injection when workspace has skills.
    * @default 'xml'
