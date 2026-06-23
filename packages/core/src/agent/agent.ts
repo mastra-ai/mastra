@@ -3837,7 +3837,7 @@ export class Agent<
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
     let nextTools = tools;
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
+    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory || this.#skills) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,

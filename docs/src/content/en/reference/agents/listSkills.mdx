@@ -25,26 +25,26 @@ for (const skill of skills) {
 
 <PropertiesTable
   content={[
-    {
-      name: 'options',
-      type: 'object',
-      isOptional: true,
-      description: 'Options for skill resolution.',
-      properties: [
-        {
-          type: 'object',
-          parameters: [
-            {
-              name: 'requestContext',
-              type: 'RequestContext',
-              isOptional: true,
-              description: 'Request context passed to dynamic skill resolvers.',
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+  {
+    name: 'options',
+    type: 'object',
+    isOptional: true,
+    description: 'Options for skill resolution.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            description: 'Request context passed to dynamic skill resolvers.',
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
 ## Return value

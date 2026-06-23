@@ -17,8 +17,8 @@ import { agent } from '../mastra/agents'
 const skill = await agent.skill('code-review')
 
 if (skill) {
-  console.log(skill.name)         // "code-review"
-  console.log(skill.description)  // "Use when reviewing code changes."
+  console.log(skill.name) // "code-review"
+  console.log(skill.description) // "Use when reviewing code changes."
   console.log(skill.instructions) // Full markdown instructions
 }
 ```
@@ -27,31 +27,31 @@ if (skill) {
 
 <PropertiesTable
   content={[
-    {
-      name: 'skillName',
-      type: 'string',
-      description: 'The name of the skill to retrieve.',
-    },
-    {
-      name: 'options',
-      type: 'object',
-      isOptional: true,
-      description: 'Options for skill resolution.',
-      properties: [
-        {
-          type: 'object',
-          parameters: [
-            {
-              name: 'requestContext',
-              type: 'RequestContext',
-              isOptional: true,
-              description: 'Request context passed to dynamic skill resolvers.',
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+  {
+    name: 'skillName',
+    type: 'string',
+    description: 'The name of the skill to retrieve.',
+  },
+  {
+    name: 'options',
+    type: 'object',
+    isOptional: true,
+    description: 'Options for skill resolution.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            description: 'Request context passed to dynamic skill resolvers.',
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
 ## Return value

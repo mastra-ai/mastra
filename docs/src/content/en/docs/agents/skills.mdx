@@ -93,9 +93,11 @@ export const agent = new Agent({
   id: 'my-agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   skills: [
-    './skills/code-review',    // path to a SKILL.md directory
-    './skills/testing',        // another filesystem skill
-    defineSkill({ /* ... */ }), // inline skill
+    './skills/code-review', // path to a SKILL.md directory
+    './skills/testing', // another filesystem skill
+    defineSkill({
+      /* ... */
+    }), // inline skill
   ],
 })
 ```
@@ -148,11 +150,11 @@ import { defineSkill } from '@mastra/core/skills'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ['skills'],  // provides "code-review" skill
+  skills: ['skills'], // provides "code-review" skill
 })
 
 const customReview = defineSkill({
-  name: 'code-review',  // same name as workspace skill
+  name: 'code-review', // same name as workspace skill
   description: 'Custom review process.',
   instructions: '...',
 })
@@ -161,7 +163,7 @@ export const agent = new Agent({
   id: 'reviewer',
   model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
-  skills: [customReview],  // agent-level "code-review" wins
+  skills: [customReview], // agent-level "code-review" wins
 })
 ```
 
