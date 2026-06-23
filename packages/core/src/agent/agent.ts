@@ -162,6 +162,8 @@ import type {
   SendAgentSignalResult,
   SendAgentStateSignalOptions,
   SendAgentStateSignalResult,
+  SendAgentStreamResumeOptions,
+  SendAgentStreamResumeResult,
   StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
@@ -7510,7 +7512,7 @@ export class Agent<
       });
     }
 
-    agentThreadStreamRuntime.registerRun(
+    await agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
@@ -7835,7 +7837,7 @@ export class Agent<
       });
     }
 
-    agentThreadStreamRuntime.registerRun(
+    await agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result as unknown as MastraModelOutput<OUTPUT>,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
@@ -8022,17 +8024,68 @@ export class Agent<
     return this.resumeStream({ approved: true }, options);
   }
 
+  async sendStreamResume<OUTPUT = undefined>(
+    options: SendAgentStreamResumeOptions<OUTPUT>,
+  ): Promise<SendAgentStreamResumeResult> {
+    const { threadId, resourceId, runId, toolCallId, resumeData, streamOptions } = options;
+
+    if (!threadId || !resourceId || !runId) {
+      throw new MastraError({
+        id: 'AGENT_SEND_STREAM_RESUME_MISSING_TARGET',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'sendStreamResume() requires threadId, resourceId, and runId.',
+        details: { threadId, resourceId, runId, agentName: this.name },
+      });
+    }
+
+    const resumableRun = agentThreadStreamRuntime.getResumableThreadRun(
+      { threadId, resourceId, runId, toolCallId },
+      this.getPubSub(),
+    );
+    if (!resumableRun) {
+      throw new MastraError({
+        id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" sendStreamResume() could not find a suspended run "${runId}" for thread "${threadId}".`,
+        details: {
+          threadId,
+          resourceId,
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+
+    const resumeOptions = (streamOptions ?? {}) as AgentExecutionOptionsBase<unknown> & { toolCallId?: string };
+
+    await this.resumeStream(resumeData, {
+      ...resumeOptions,
+      runId,
+      ...(resumableRun.toolCallId ? { toolCallId: resumableRun.toolCallId } : {}),
+      memory: {
+        ...(resumeOptions.memory ?? {}),
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    return { accepted: true, runId, toolCallId: resumableRun.toolCallId };
+  }
+
   async sendToolApproval<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & {
       threadId: string;
       resourceId: string;
       toolCallId?: string;
       approved: boolean;
+      declineContext?: { reason?: string; message?: string };
       messages?: MessageListInput;
       streamOptions?: AgentExecutionOptions<OUTPUT>;
     },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, approved, messages, streamOptions, ...executionOptions } = options;
+    const { threadId, resourceId, approved, declineContext, messages, streamOptions, ...executionOptions } = options;
 
     if (messages && approved) {
       const continuation = agentThreadStreamRuntime.continueWithMessages(
@@ -8067,22 +8120,26 @@ export class Agent<
       });
     }
 
-    const approvalOptions = {
-      ...executionOptions,
-      runId,
-      memory: {
-        ...(executionOptions.memory ?? {}),
-        thread: executionOptions.memory?.thread ?? threadId,
-        resource: executionOptions.memory?.resource ?? resourceId,
-      },
-    } as unknown as AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string };
+    const resumeOptions = deepMerge(
+      (streamOptions ?? {}) as Record<string, unknown>,
+      executionOptions as Record<string, unknown>,
+    ) as unknown as AgentExecutionOptions<OUTPUT>;
 
-    if (approved) {
-      await this.approveToolCall(approvalOptions);
-    } else {
-      await this.declineToolCall(approvalOptions);
-    }
-    return { accepted: true, runId, toolCallId: options.toolCallId };
+    return this.sendStreamResume({
+      threadId,
+      resourceId,
+      runId,
+      toolCallId: options.toolCallId,
+      resumeData: approved ? { approved } : declineContext ? { approved, ...declineContext } : { approved },
+      streamOptions: {
+        ...resumeOptions,
+        memory: {
+          ...(resumeOptions.memory ?? {}),
+          thread: resumeOptions.memory?.thread ?? threadId,
+          resource: resumeOptions.memory?.resource ?? resourceId,
+        },
+      },
+    });
   }
 
   /**

@@ -101,6 +101,16 @@ afterEach(() => {
   }
 });
 
+async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const start = Date.now();
+  while (!condition()) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('Timed out waiting for condition');
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
 async function captureProcessOutput<T>(fn: () => Promise<T>) {
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
@@ -242,6 +252,77 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(types).toContain('tool_start');
     expect(types).toContain('tool_end');
     expect(mockExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it('resumes same-run-id suspended tools through the subscribed thread stream exactly once', async () => {
+    const confirmTool = createTool({
+      id: 'confirmAction',
+      description: 'Confirm an action',
+      inputSchema: z.object({ action: z.string() }),
+      execute: async (input: { action: string }, context?: any) => {
+        const resumeData = context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+        if (resumeData) {
+          return { result: `${input.action} confirmed`, resumeData };
+        }
+
+        const suspend = context?.suspend ?? context?.agent?.suspend;
+        if (!suspend) throw new Error('suspend not available in context');
+        await suspend({ action: input.action });
+        return { result: `${input.action} pending` };
+      },
+    });
+
+    let callCount = 0;
+    const harness = createHarnessWithAgent({
+      doStream: async () => {
+        callCount++;
+        return {
+          stream:
+            callCount === 1
+              ? createToolCallStream('confirmAction', '{"action":"deploy"}')
+              : createTextStream('Deployment confirmed.'),
+        };
+      },
+      tools: { confirmAction: confirmTool },
+    });
+
+    await harness.init();
+    const session = await harness.createSession();
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    await session.sendMessage({ content: 'Deploy to production' });
+
+    expect(events.some(e => e.type === 'tool_suspended')).toBe(true);
+    const suspendedEndCount = events.filter(e => e.type === 'agent_end' && (e as any).reason === 'suspended').length;
+    expect(suspendedEndCount).toBe(1);
+
+    const resumeStartIndex = events.length;
+    // Generic tool resume reuses the suspended runId and resumes from tool-result
+    // chunks, not a fresh start chunk. The subscribed thread stream must own that
+    // output; otherwise this waits forever or produces duplicate resume events.
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await waitFor(() =>
+      events.slice(resumeStartIndex).some(e => e.type === 'agent_end' && (e as any).reason === 'complete'),
+    );
+
+    const resumeEvents = events.slice(resumeStartIndex);
+    expect(callCount).toBe(2);
+    expect(resumeEvents.filter(e => e.type === 'agent_start')).toHaveLength(1);
+    expect(resumeEvents.filter(e => e.type === 'agent_end' && (e as any).reason === 'complete')).toHaveLength(1);
+    expect(
+      resumeEvents.some(e =>
+        e.type === 'message_update'
+          ? (e as any).message?.content?.some(
+              (part: any) => part.type === 'text' && part.text?.includes('Deployment confirmed'),
+            )
+          : false,
+      ),
+    ).toBe(true);
+    expect(resumeEvents.some(e => e.type === 'error')).toBe(false);
   });
 
   it('streams message_update events with text content', async () => {
