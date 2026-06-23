@@ -15,7 +15,6 @@ export const promptContextInstructionsScenario: McE2eScenario = {
   name: 'prompt-context-instructions',
   description: 'Verify project instruction files reach the real model request built from a TUI prompt.',
   testName: 'injects winning project instructions into the AIMock-backed TUI model request',
-  skipReason: 'current main no longer includes fixture AGENTS.md content in this TUI model request path',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
   aimockFixture: 'prompt-context-instructions.json',

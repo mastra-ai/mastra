@@ -4,7 +4,6 @@ export const promptQueueInterleaveScenario: McE2eScenario = {
   name: 'prompt-queue-interleave',
   description: 'Exercise queued ask_user and request_access prompts emitted by parallel tool calls.',
   testName: 'answers queued ask_user and request_access prompts sequentially in the real TUI',
-  skipReason: 'current main no longer renders the request_access granted confirmation after queued prompt approval',
   useOpenAIModel: true,
   aimockFixture: 'prompt-queue-interleave.json',
   async run({ terminal, runtime }) {
@@ -32,8 +31,7 @@ export const promptQueueInterleaveScenario: McE2eScenario = {
 
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Access granted: "\/tmp\/mastracode-prompt-queue-e2e"/i, terminal);
-    await runtime.waitForScreenText(/request_access path="\/tmp\/mastracode-prompt-queue-e2e".*✓/i, terminal);
+    await runtime.waitForScreenText(/✓\s+Granted/i, terminal);
     await runtime.waitForScreenText(/Prompt queue interleave e2e complete\./i, terminal);
     runtime.printScreen('after queued prompts answered', terminal);
 

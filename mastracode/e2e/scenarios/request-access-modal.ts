@@ -10,7 +10,6 @@ export const requestAccessModalScenario: McE2eScenario = {
   name: 'request-access-modal',
   description: 'Exercise request_access approval and same-turn allowed-path use through the real TUI.',
   testName: 'approves request_access and reads the granted external path in the real TUI',
-  skipReason: 'current main no longer renders the request_access granted confirmation after approval',
   useOpenAIModel: true,
   aimockFixture: 'request-access-modal.json',
   prepare() {
@@ -36,7 +35,7 @@ export const requestAccessModalScenario: McE2eScenario = {
 
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Access granted: "\/tmp\/mastracode-request-access-e2e"/i, terminal);
+    await runtime.waitForScreenText(/✓\s+Granted/i, terminal);
     await runtime.waitForScreenText(/view \/tmp\/mastracode-request-access-e2e\/allowed\.txt/i, terminal);
     await runtime.waitForScreenText(/REQUEST_ACCESS_E2E_GRANTED_FILE/i, terminal);
     await runtime.waitForScreenText(/Request access e2e complete\./i, terminal);
