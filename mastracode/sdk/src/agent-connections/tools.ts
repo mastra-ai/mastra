@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { AgentConnectionRegistry } from './registry.js';
+import { AgentConnectionRegistry, stablePeerId } from './registry.js';
 import {
   isMemoryBacked,
   readAgentConnections,
@@ -55,6 +55,8 @@ const signalResultSchema = z.object({
   content: z.string(),
   target: peerSchema.optional(),
   priority: prioritySchema.optional(),
+  expectsReply: z.boolean().optional(),
+  returnPeerId: z.string().optional(),
   notification: z.unknown().optional(),
   isError: z.boolean().optional(),
 });
@@ -182,15 +184,19 @@ Use agent_connections_list first, then pass peer ids from that result. Connected
     id: 'agent_signal_send',
     description: `Send a prioritized notification signal to a connected peer agent.
 
-The target must already be connected and currently available. Use priority to indicate urgency: low, medium, high, or urgent.`,
+The target must already be connected and currently available. Use expectsReply to declare whether the peer should send one signal back to this thread. Use priority to indicate urgency: low, medium, high, or urgent.`,
     inputSchema: z.object({
       targetId: z.string().min(1).describe('Connected peer id.'),
       summary: z.string().min(1).describe('Short summary to deliver to the peer.'),
       priority: prioritySchema.default('medium'),
+      expectsReply: z.boolean().describe('Whether the peer is expected to send one signal back to this thread.'),
       payload: z.unknown().optional().describe('Optional structured payload for the peer.'),
     }),
     outputSchema: signalResultSchema,
-    execute: async ({ targetId, summary, priority = 'medium', payload }, context): Promise<AgentSignalSendResult> => {
+    execute: async (
+      { targetId, summary, priority = 'medium', expectsReply, payload },
+      context,
+    ): Promise<AgentSignalSendResult> => {
       const agentContext = context as AgentConnectionContext;
       try {
         if (!isMemoryBacked(agentContext.agent)) {
@@ -210,16 +216,29 @@ The target must already be connected and currently available. Use priority to in
             isError: true,
           };
         }
+        const currentAgent = agentContext.agent as { resourceId: string; threadId: string; agentId?: string };
+        const returnPeerId = stablePeerId({
+          agentId: currentAgent.agentId || undefined,
+          resourceId: currentAgent.resourceId,
+          threadId: currentAgent.threadId,
+        });
+        const crossAgentMessaging = {
+          expectsReply,
+          returnPeerId,
+          from: { resourceId: currentAgent.resourceId, threadId: currentAgent.threadId },
+          targetId,
+        };
         const notification = await agent.sendNotificationSignal(
           {
             source: 'agent-connection',
             kind: 'peer-signal',
             priority: priority as AgentSignalPriority,
             summary,
+            attributes: expectsReply ? { expectsReply, returnPeerId } : { expectsReply },
+            metadata: { crossAgentMessaging },
             payload: {
               ...(payload === undefined ? {} : { payload }),
-              from: { resourceId: agentContext.agent?.resourceId, threadId: agentContext.agent?.threadId },
-              targetId,
+              ...crossAgentMessaging,
             },
           },
           {
@@ -232,6 +251,8 @@ The target must already be connected and currently available. Use priority to in
           content: `Sent ${priority} signal to ${target.label ?? target.title ?? target.id}: ${summary}`,
           target,
           priority: priority as AgentSignalPriority,
+          expectsReply,
+          returnPeerId,
           notification,
           isError: false,
         };

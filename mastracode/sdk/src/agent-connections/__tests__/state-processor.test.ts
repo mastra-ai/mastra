@@ -139,6 +139,32 @@ describe('AgentConnectionsStateProcessor', () => {
     });
   });
 
+  it('refreshes connected peer availability from the provider runtime agent', async () => {
+    const stalePeer: ConnectedAgentPeer = { ...PEER, status: 'offline', lastSeenAt: 1_000, offlineAt: 49_000 };
+    const refreshedPeer = { ...PEER, status: 'available' as const, lastSeenAt: 50_000 };
+    const processor = new AgentConnectionsStateProcessor({
+      now: () => 50_000,
+      offlineTtlMs: 1_000,
+      getAgent: () => ({ discoverThreadPeers: async () => [refreshedPeer] }),
+    });
+    processor.__registerMastra({
+      getStorage: () => ({
+        getStore: () => ({
+          getState: async () => ({ peers: [stalePeer] }),
+          setState: async () => {},
+        }),
+      }),
+    } as any);
+
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshotPeers: [stalePeer] }));
+
+    expect(result).toMatchObject({
+      mode: 'delta',
+      delta: { ops: [{ op: 'status-change', id: 'peer-1', status: 'available' }] },
+      value: { peers: [expect.objectContaining({ id: 'peer-1', status: 'available', lastSeenAt: 50_000 })] },
+    });
+  });
+
   it('compacts to a snapshot after enough deltas', async () => {
     const processor = new AgentConnectionsStateProcessor();
     const changed = [{ ...PEER, label: 'Changed' }];

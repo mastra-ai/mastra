@@ -68,6 +68,8 @@ export interface AgentSignalSendResult {
   content: string;
   target?: ConnectedAgentPeer;
   priority?: AgentSignalPriority;
+  expectsReply?: boolean;
+  returnPeerId?: string;
   notification?: unknown;
   isError?: boolean;
 }

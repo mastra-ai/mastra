@@ -10,7 +10,7 @@ export type ResolvedAgentConnectionStore = {
 };
 
 export interface AgentConnectionContext {
-  agent?: { threadId?: string; resourceId?: string };
+  agent?: { threadId?: string; resourceId?: string; agentId?: string };
   requestContext?: RequestContext;
   mastra?: { getStorage?: () => any };
   runtimeAgent?: { discoverThreadPeers?: (...args: any[]) => Promise<unknown> };

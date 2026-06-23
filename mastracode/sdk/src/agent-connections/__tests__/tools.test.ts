@@ -109,17 +109,31 @@ describe('agent connection tools', () => {
     ]);
 
     const result = await (tools.agent_signal_send as any).execute(
-      { targetId: 'peer-1', summary: 'Please review this', priority: 'high' },
+      { targetId: 'peer-1', summary: 'Please review this', priority: 'high', expectsReply: true },
       context,
     );
 
-    expect(result).toMatchObject({ isError: false, priority: 'high', target: { id: 'peer-1' } });
+    expect(result).toMatchObject({
+      isError: false,
+      priority: 'high',
+      target: { id: 'peer-1' },
+      expectsReply: true,
+      returnPeerId: 'code-agent:resource-1:thread-1',
+    });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         source: 'agent-connection',
         kind: 'peer-signal',
         priority: 'high',
         summary: 'Please review this',
+        attributes: { expectsReply: true, returnPeerId: 'code-agent:resource-1:thread-1' },
+        metadata: {
+          crossAgentMessaging: expect.objectContaining({
+            expectsReply: true,
+            returnPeerId: 'code-agent:resource-1:thread-1',
+            targetId: 'peer-1',
+          }),
+        },
       }),
       expect.objectContaining({ resourceId: 'resource-2', threadId: 'thread-2', ifIdle: { behavior: 'wake' } }),
     );
@@ -133,7 +147,7 @@ describe('agent connection tools', () => {
     const { context } = createContext();
 
     const result = await (tools.agent_signal_send as any).execute(
-      { targetId: 'peer-1', summary: 'Please review this', priority: 'medium' },
+      { targetId: 'peer-1', summary: 'Please review this', priority: 'medium', expectsReply: false },
       context,
     );
 

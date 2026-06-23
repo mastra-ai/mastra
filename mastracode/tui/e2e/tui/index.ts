@@ -1,5 +1,6 @@
 import { abortFollowupScenario } from './abort-followup.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
+import { agentConnectionsExpectedReplyWatchdogScenario } from './agent-connections-expected-reply-watchdog.js';
 import { agentConnectionsNotificationSignalScenario } from './agent-connections-notification-signal.js';
 import { agentConnectionsToolFlowScenario } from './agent-connections-tool-flow.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
@@ -186,6 +187,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'abort-followup': abortFollowupScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
+  'agent-connections-expected-reply-watchdog': agentConnectionsExpectedReplyWatchdogScenario,
   'agent-connections-notification-signal': agentConnectionsNotificationSignalScenario,
   'agent-connections-tool-flow': agentConnectionsToolFlowScenario,
   'autocomplete-wrapping-navigation': autocompleteWrappingNavigationScenario,

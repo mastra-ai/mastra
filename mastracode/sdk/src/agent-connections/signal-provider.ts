@@ -1,26 +1,34 @@
-import type { InputProcessorOrWorkflow } from '@mastra/core/processors';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '@mastra/core/processors';
 import { SignalProvider } from '@mastra/core/signals';
 
+import { CrossAgentMessagingExpectedReplyProcessor } from './messaging-processor.js';
 import { AgentConnectionRegistry, type AgentConnectionRegistryOptions } from './registry.js';
 import { AgentConnectionsStateProcessor } from './state-processor.js';
 import { createAgentConnectionTools } from './tools.js';
 
-export interface AgentConnectionsSignalProviderOptions extends AgentConnectionRegistryOptions {}
+export interface CrossAgentMessagingSignalProviderOptions extends AgentConnectionRegistryOptions {}
+export interface AgentConnectionsSignalProviderOptions extends CrossAgentMessagingSignalProviderOptions {}
 
-export class AgentConnectionsSignalProvider extends SignalProvider<'agent-connections'> {
-  readonly id = 'agent-connections';
+export class CrossAgentMessagingSignalProvider extends SignalProvider<'cross-agent-messaging'> {
+  readonly id = 'cross-agent-messaging';
 
   readonly #registry: AgentConnectionRegistry;
-  readonly #processor: AgentConnectionsStateProcessor;
+  readonly #stateProcessor: AgentConnectionsStateProcessor;
+  readonly #expectedReplyProcessor: CrossAgentMessagingExpectedReplyProcessor;
 
-  constructor(options: AgentConnectionsSignalProviderOptions = {}) {
+  constructor(options: CrossAgentMessagingSignalProviderOptions = {}) {
     super();
     this.#registry = new AgentConnectionRegistry(options);
-    this.#processor = new AgentConnectionsStateProcessor(options);
+    this.#stateProcessor = new AgentConnectionsStateProcessor({ ...options, getAgent: () => this.agent });
+    this.#expectedReplyProcessor = new CrossAgentMessagingExpectedReplyProcessor();
   }
 
   getInputProcessors(): InputProcessorOrWorkflow[] {
-    return [this.#processor];
+    return [this.#stateProcessor];
+  }
+
+  getOutputProcessors(): OutputProcessorOrWorkflow[] {
+    return [this.#expectedReplyProcessor];
   }
 
   getTools() {
@@ -30,3 +38,5 @@ export class AgentConnectionsSignalProvider extends SignalProvider<'agent-connec
     });
   }
 }
+
+export class AgentConnectionsSignalProvider extends CrossAgentMessagingSignalProvider {}

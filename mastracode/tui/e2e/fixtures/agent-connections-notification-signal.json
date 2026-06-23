@@ -53,6 +53,7 @@
               "targetId": "peer-signal-target",
               "summary": "Agent connection e2e signal: please review the handoff",
               "priority": "high",
+              "expectsReply": false,
               "payload": {
                 "scenario": "agent-connections-notification-signal"
               }

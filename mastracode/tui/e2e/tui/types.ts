@@ -8,6 +8,7 @@ export type ScenarioName =
   | 'abort-followup'
   | 'branch-context-long-name'
   | 'active-signal-followup'
+  | 'agent-connections-expected-reply-watchdog'
   | 'agent-connections-tool-flow'
   | 'agent-connections-notification-signal'
   | 'autocomplete-wrapping-navigation'

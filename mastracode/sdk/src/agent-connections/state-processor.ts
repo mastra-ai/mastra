@@ -24,15 +24,24 @@ import {
 
 const DELTA_SNAPSHOT_CAP = 10;
 
+type AgentConnectionRuntimeAgent = { discoverThreadPeers?: (...args: any[]) => Promise<unknown> };
+
+export interface AgentConnectionsStateProcessorOptions extends AgentConnectionRegistryOptions {
+  getAgent?: () => AgentConnectionRuntimeAgent | undefined;
+}
+
 export class AgentConnectionsStateProcessor {
   readonly id = 'agent-connections-state';
   readonly stateId = AGENT_CONNECTIONS_STATE_ID;
 
   readonly #registry: AgentConnectionRegistry;
+  readonly #getAgent?: () => AgentConnectionRuntimeAgent | undefined;
   protected mastra?: Mastra<any, any, any, any, any, any, any, any, any, any>;
 
-  constructor(options: AgentConnectionRegistryOptions = {}) {
-    this.#registry = new AgentConnectionRegistry(options);
+  constructor(options: AgentConnectionsStateProcessorOptions = {}) {
+    const { getAgent, ...registryOptions } = options;
+    this.#registry = new AgentConnectionRegistry(registryOptions);
+    this.#getAgent = getAgent;
   }
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
@@ -76,7 +85,7 @@ export class AgentConnectionsStateProcessor {
         agent: { threadId: args.threadId, resourceId: args.resourceId },
         requestContext: args.requestContext,
         mastra: this.mastra,
-        runtimeAgent: getRuntimeAgent(args.requestContext),
+        runtimeAgent: this.#getAgent?.() ?? getRuntimeAgent(args.requestContext),
       });
       currentPeers = mergeAvailability(currentPeers, refreshed);
       args.requestContext?.set(AGENT_CONNECTIONS_REQUEST_CONTEXT_KEY, currentPeers);
