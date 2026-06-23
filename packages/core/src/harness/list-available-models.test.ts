@@ -121,8 +121,10 @@ describe('Harness.listAvailableModels', () => {
         defaultObserverModelId: 'test-gateway/acme/sonic-fast',
       },
     });
+    await harness.init();
+    const session = await harness.createSession();
 
-    const observerModel = harness.session.om.observer.resolvedModel() as { modelId?: string };
+    const observerModel = session.om.observer.resolvedModel() as { modelId?: string };
     expect(observerModel).toMatchObject({ modelId: 'test-gateway/acme/sonic-fast' });
     expect(resolveModel).toHaveBeenCalledWith('test-gateway/acme/sonic-fast');
 
@@ -134,6 +136,9 @@ describe('Harness.listAvailableModels', () => {
       apiKeyEnvVar: 'ACME_API_KEY',
     });
 
-    await expect(harness.getCurrentModelAuthStatus()).resolves.toEqual({ hasAuth: true, apiKeyEnvVar: undefined });
+    await expect(harness.getCurrentModelAuthStatus(session)).resolves.toEqual({
+      hasAuth: true,
+      apiKeyEnvVar: undefined,
+    });
   });
 });

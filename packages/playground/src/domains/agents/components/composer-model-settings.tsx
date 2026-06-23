@@ -6,7 +6,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  Entry,
   Label,
   Popover,
   PopoverContent,
@@ -14,13 +13,14 @@ import {
   RadioGroup,
   RadioGroupItem,
   Skeleton,
-  Slider,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
   Txt,
   cn,
 } from '@mastra/playground-ui';
+import { Entry } from '@mastra/playground-ui/components/Entry';
+import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Info, Sliders } from 'lucide-react';
 import { useState } from 'react';
 

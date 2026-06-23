@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Comprehensive performance optimization guide for React applications, containing 14 rules across 7 categories. Rules are prioritized by impact to guide automated refactoring and code generation.
+Comprehensive performance optimization guide for React applications, containing 15 rules across 7 categories. Rules are prioritized by impact to guide automated refactoring and code generation.
 
 ## When to Apply
 
@@ -62,6 +62,7 @@ Rules are prioritized by impact:
 **Component Structure:**
 
 - One domain component/hook per file, one responsibility each — split bloated components (`structure-single-responsibility`)
+- Use PascalCase components for JSX-returning helpers; keep lowercase helpers for non-JSX values (`structure-component-naming`)
 
 ### Rendering Patterns
 
@@ -97,4 +98,4 @@ grep -l "Tanstack" references/rules/
 - `rerender-*` - Re-render optimization (4 rules)
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
-- `structure-*` - Component/hook structure (1 rule)
+- `structure-*` - Component/hook structure (2 rules)

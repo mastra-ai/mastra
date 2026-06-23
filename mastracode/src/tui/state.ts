@@ -41,6 +41,7 @@ import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 export interface PendingSignalMessage {
   component: Component;
   text: string;
+  images?: Array<{ data: string; mimeType: string }>;
   isInterjection?: boolean;
 }
 
@@ -90,6 +91,9 @@ export function getGithubPrSubscriptionsFromMetadata(
 export interface MastraTUIOptions {
   /** The harness instance to control */
   harness: Harness<any>;
+
+  /** The session created from the harness that all work runs through */
+  session: Session<any>;
 
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
@@ -231,8 +235,8 @@ export interface TUIState {
   pendingSlashCommands: string[];
   /** Pending user-message component ids for queued slash commands */
   pendingSlashCommandMessageIds: string[];
-  /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
-  pendingApprovalDismiss: (() => void) | null;
+  /** Active approval dialog dismiss callback — called on Ctrl+C or user interruption to unblock the dialog */
+  pendingApprovalDismiss: ((context?: { reason?: string; message?: string }) => void) | null;
 
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;
@@ -308,7 +312,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const result: TUIState = {
     // Core dependencies
     harness: options.harness,
-    session: options.harness.session,
+    session: options.session,
     options,
     hookManager: options.hookManager,
     analytics: options.analytics,

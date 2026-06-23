@@ -2,34 +2,34 @@ import { randomUUID } from 'node:crypto';
 
 import { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
-import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
-import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
-import type {
-  AgentInstructions,
-  AgentThreadSubscription,
-  SendAgentNotificationSignalOptions,
-  SendAgentNotificationSignalResult,
-  ToolsInput,
-  ToolsetsInput,
-} from '../agent/types';
+import { mastraDBMessageToSignal } from '../agent/signals';
+import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { getErrorFromUnknown } from '../error';
-import { getServerSideFallbackInfo } from '../llm/model/server-side-fallback';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
-import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
+import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
-import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
-import type { ToolPayloadTransformPhase } from '../tools/types';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
-import { Session, SessionStream } from './session';
+import { Session } from './session';
 import type { ThreadDataStore } from './session';
+import {
+  getRecordValue,
+  signalContentsToHarnessContent,
+  signalContentsToText,
+  toNotificationContent,
+  toNotificationSummaryContent,
+  toReactiveSignalContent,
+  toStateSignalContent,
+  toSystemReminderContent,
+  toUserSignalMessage,
+} from './stream-content';
 import {
   askUserTool,
   createSubagentTool,
@@ -39,38 +39,18 @@ import {
   taskUpdateTool,
   taskWriteTool,
 } from './tools';
-import { createEmptyTokenUsage } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
   HarnessConfig,
-  HarnessEvent,
-  HarnessEventListener,
   HarnessMessage,
   HarnessMessageContent,
   HarnessMode,
   HarnessRequestContext,
-  HarnessSession,
   HarnessThread,
   ModelAuthStatus,
-  PermissionPolicy,
-  TokenUsage,
   ToolCategory,
 } from './types';
-
-type HarnessStreamState = {
-  currentMessage: HarnessMessage;
-  lastFinishedMessage?: HarnessMessage;
-  isSuspended: boolean;
-  textContentById: Map<string, { index: number; text: string }>;
-  thinkingContentById: Map<string, { index: number; text: string }>;
-  /**
-   * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
-   * `error`, `length`). Carries the user-facing message so the run finalizes
-   * into an explicit terminal error state instead of silently completing.
-   */
-  terminalError?: string;
-};
 
 function validateModes(modes: HarnessMode[]): void {
   const modeIds = new Set<string>();
@@ -100,14 +80,6 @@ function validateModes(modes: HarnessMode[]): void {
   }
 }
 
-type HarnessSendNotificationSignalOptions = {
-  ifActive?: SendAgentNotificationSignalOptions['ifActive'];
-  ifIdle?: SendAgentNotificationSignalOptions['ifIdle'];
-  tracingContext?: TracingContext;
-  tracingOptions?: TracingOptions;
-  requestContext?: RequestContext;
-};
-
 /**
  * Build a user-facing message for a non-success stream finish reason.
  *
@@ -118,26 +90,6 @@ type HarnessSendNotificationSignalOptions = {
  * silently stop. Returning a message here lets the harness finalize the run
  * into an explicit terminal error state.
  */
-export function describeNonSuccessFinishReason(reason: string, providerMetadata: unknown): string | undefined {
-  switch (reason) {
-    case 'content-filter': {
-      const stopDetails = (providerMetadata as { anthropic?: { stopDetails?: Record<string, unknown> } } | undefined)
-        ?.anthropic?.stopDetails;
-      const explanation =
-        stopDetails && typeof stopDetails.explanation === 'string' ? stopDetails.explanation : undefined;
-      const category = stopDetails && typeof stopDetails.category === 'string' ? stopDetails.category : undefined;
-      const detail = explanation ?? (category ? `category: ${category}` : undefined);
-      return detail ? `The model stopped on a content filter (${detail}).` : 'The model stopped on a content filter.';
-    }
-    case 'error':
-      return 'The model stream ended with an error before producing a final response.';
-    case 'length':
-      return 'The model stopped because it reached its maximum output length before finishing.';
-    default:
-      return undefined;
-  }
-}
-
 /**
  * The Anthropic model that `claude-fable-5` runs are automatically retried on
  * server-side when fable-5's safety classifiers block a turn. See
@@ -191,227 +143,6 @@ export function buildFableFallbackProviderOptions(
  * Without a notice the user has no way to tell that the response did not come
  * from the model they selected.
  */
-export function describeServerSideFallback(providerMetadata: unknown): string | undefined {
-  const fallback = getServerSideFallbackInfo(providerMetadata);
-  if (!fallback) {
-    return undefined;
-  }
-  return fallback.model
-    ? `The selected model declined this turn; the response was generated by fallback model ${fallback.model}.`
-    : 'The selected model declined this turn; the response was generated by a fallback model.';
-}
-
-function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
-  const value = usage[key];
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === 'string' && value.trim() !== '') {
-    const numericValue = Number(value);
-    if (Number.isFinite(numericValue)) {
-      return numericValue;
-    }
-  }
-  return undefined;
-}
-
-function addOptionalUsageField(
-  usage: TokenUsage,
-  key: keyof Pick<TokenUsage, 'reasoningTokens' | 'cachedInputTokens' | 'cacheCreationInputTokens'>,
-  value: number | undefined,
-): void {
-  if (value !== undefined) {
-    usage[key] = (usage[key] ?? 0) + value;
-  }
-}
-
-function getDisplayTransform(metadata: unknown, phase: ToolPayloadTransformPhase, fallback: unknown) {
-  const transform = getTransformedToolPayload(metadata, 'display', phase);
-  return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
-}
-
-function getStringValue(value: unknown): string | undefined {
-  return typeof value === 'string' ? value : undefined;
-}
-
-function getRecordValue(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
-}
-
-function signalContentsToHarnessContent(contents: AgentSignalContents): HarnessMessageContent[] {
-  if (typeof contents === 'string') return [{ type: 'text', text: contents }];
-  return contents.flatMap((part): HarnessMessageContent[] => {
-    if (part.type === 'text') {
-      return [{ type: 'text', text: part.text }];
-    }
-    if (typeof part.data !== 'string') return [];
-    if (part.mediaType.startsWith('image/')) {
-      return [{ type: 'image', data: part.data, mimeType: part.mediaType }];
-    }
-    return [
-      {
-        type: 'file',
-        data: part.data,
-        mediaType: part.mediaType,
-        filename: part.filename,
-      },
-    ];
-  });
-}
-
-function toSystemReminderContent(
-  payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
-  const attributes = getRecordValue(payload.attributes);
-  const metadata = getRecordValue(payload.metadata);
-  const message = signalContentsToText(payload.contents);
-  if (!message) return undefined;
-
-  return {
-    type: 'system_reminder',
-    message,
-    reminderType:
-      getStringValue(payload.reminderType) ?? getStringValue(attributes?.type) ?? getStringValue(payload.type),
-    path: getStringValue(payload.path) ?? getStringValue(attributes?.path),
-    precedesMessageId: getStringValue(payload.precedesMessageId) ?? getStringValue(attributes?.precedesMessageId),
-    gapText: getStringValue(payload.gapText) ?? getStringValue(attributes?.gapText),
-    gapMs:
-      typeof payload.gapMs === 'number'
-        ? payload.gapMs
-        : typeof attributes?.gapMs === 'number'
-          ? attributes.gapMs
-          : undefined,
-    timestamp: getStringValue(payload.timestamp) ?? getStringValue(attributes?.timestamp),
-    goalMaxTurns:
-      typeof payload.goalMaxTurns === 'number'
-        ? payload.goalMaxTurns
-        : typeof metadata?.goalMaxTurns === 'number'
-          ? metadata.goalMaxTurns
-          : undefined,
-    judgeModelId: getStringValue(payload.judgeModelId) ?? getStringValue(metadata?.judgeModelId),
-    goalEvaluation: getRecordValue(metadata?.goalEvaluation) as
-      | Extract<HarnessMessageContent, { type: 'system_reminder' }>['goalEvaluation']
-      | undefined,
-  };
-}
-
-function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
-  const id = getStringValue(payload.id);
-  const rawContents = payload.contents;
-  if (!id || rawContents === undefined) return undefined;
-
-  const signal = createSignal({
-    id,
-    type: 'user',
-    tagName: 'user',
-    contents: rawContents as AgentSignalContents,
-    attributes: getRecordValue(payload.attributes) as AgentSignalInput['attributes'],
-    createdAt: getStringValue(payload.createdAt),
-  });
-  const content = signalContentsToHarnessContent(signal.contents);
-  if (content.length === 0) return undefined;
-
-  return {
-    id: signal.id,
-    role: 'user',
-    content,
-    createdAt: signal.createdAt,
-    attributes: signal.attributes,
-  };
-}
-
-function signalContentsToText(contents: unknown): string {
-  if (typeof contents === 'string') return contents;
-  if (!Array.isArray(contents)) return '';
-  return contents
-    .filter((part): part is { type: 'text'; text: string } => getRecordValue(part)?.type === 'text')
-    .map(part => part.text)
-    .join('\n');
-}
-
-function toStateSignalContent(
-  payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'state_signal' }> | undefined {
-  const stateMetadata = getRecordValue(getRecordValue(payload.metadata)?.state);
-  const stateId = getStringValue(stateMetadata?.id) ?? getStringValue(payload.tagName) ?? 'state';
-
-  return {
-    type: 'state_signal',
-    id: getStringValue(payload.id),
-    stateId,
-    mode: stateMetadata?.mode === 'delta' ? 'delta' : 'snapshot',
-    cacheKey: getStringValue(stateMetadata?.cacheKey),
-    version: typeof stateMetadata?.version === 'number' ? stateMetadata.version : undefined,
-    message: signalContentsToText(payload.contents),
-  };
-}
-
-function toNotificationSummaryContent(
-  payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'notification_summary' }> | undefined {
-  const metadataSummary = getRecordValue(getRecordValue(payload.metadata)?.notificationSummary);
-  const bySource = getRecordValue(metadataSummary?.bySource) ?? {};
-  const byPriority = getRecordValue(metadataSummary?.byPriority) ?? {};
-  const notificationIds = Array.isArray(metadataSummary?.notificationIds)
-    ? metadataSummary.notificationIds.filter((id): id is string => typeof id === 'string')
-    : [];
-  const pending = typeof metadataSummary?.pending === 'number' ? metadataSummary.pending : undefined;
-
-  return {
-    type: 'notification_summary',
-    id: getStringValue(payload.id),
-    message: signalContentsToText(payload.contents),
-    pending: pending ?? notificationIds.length,
-    bySource: Object.fromEntries(
-      Object.entries(bySource).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
-    ),
-    byPriority: Object.fromEntries(
-      Object.entries(byPriority).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
-    ),
-    notificationIds,
-  };
-}
-
-function toReactiveSignalContent(
-  payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'reactive_signal' }> | undefined {
-  const tagName = getStringValue(payload.tagName);
-  if (!tagName) return undefined;
-
-  return {
-    type: 'reactive_signal',
-    id: getStringValue(payload.id),
-    tagName,
-    message: signalContentsToText(payload.contents),
-    attributes: getRecordValue(payload.attributes),
-    metadata: getRecordValue(payload.metadata),
-  };
-}
-
-function toNotificationContent(
-  payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'notification' }> | undefined {
-  const attributes = getRecordValue(payload.attributes) ?? {};
-  const metadata = getRecordValue(payload.metadata) ?? {};
-  const notificationMetadata = getRecordValue(metadata.notification);
-  const message = signalContentsToText(payload.contents);
-  if (!message) return undefined;
-
-  return {
-    type: 'notification',
-    id: getStringValue(payload.id),
-    notificationId: getStringValue(attributes.id) ?? getStringValue(notificationMetadata?.recordId),
-    message,
-    source: getStringValue(attributes.source) ?? getStringValue(notificationMetadata?.source),
-    kind:
-      getStringValue(attributes.kind) ?? getStringValue(attributes.type) ?? getStringValue(notificationMetadata?.kind),
-    priority: getStringValue(attributes.priority) ?? getStringValue(notificationMetadata?.priority),
-    status: getStringValue(attributes.status) ?? getStringValue(notificationMetadata?.status),
-    attributes,
-    metadata,
-  };
-}
-
 /**
  * The Harness orchestrates multiple agent modes, shared state, memory, and storage.
  * It's the core abstraction that a TUI (or other UI) controls.
@@ -442,7 +173,6 @@ export class Harness<TState = {}> {
   readonly id: string;
 
   private config: HarnessConfig<TState>;
-  private listeners: HarnessEventListener[] = [];
   private workspace: Workspace | undefined = undefined;
   private workspaceFn:
     | ((ctx: {
@@ -451,16 +181,39 @@ export class Harness<TState = {}> {
       }) => Promise<Workspace | undefined> | Workspace | undefined)
     | undefined = undefined;
   private workspaceInitialized = false;
+  private initPromise: Promise<void> | undefined = undefined;
+  private workspaceError: Error | undefined = undefined;
   private browser: MastraBrowser | undefined = undefined;
   private browserFn:
     | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
     | undefined = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
-  readonly #session: Session<TState>;
+  /**
+   * The mode every new session starts in. Resolved once at construction from
+   * `config.defaultModeId` (or the configured default/first mode) and reused by
+   * every {@link createSession} call. The Harness itself holds no session.
+   */
+  readonly #defaultMode: HarnessMode;
+  /**
+   * Live sessions created by {@link createSession}, keyed by resourceId. A
+   * resourceId maps to exactly one session per Harness (get-or-create). Stores
+   * the in-flight creation promise so concurrent calls share one session. Lets
+   * Harness-external callers (e.g. notification delivery) resolve "the session
+   * that owns this resource" so a woken run uses that session's model/mode/state
+   * instead of an arbitrary one.
+   */
+  readonly #sessionsByResource = new Map<string, Promise<Session<TState>>>();
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
+  /**
+   * Set when this Harness is registered on a parent Mastra (via
+   * {@link __registerMastra}). When present it is used in place of the
+   * lazily-created internal Mastra, so a server-hosted Harness shares the
+   * server's storage/agents/gateways instead of spinning up its own.
+   */
+  #externalMastra: Mastra | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
   constructor(config: HarnessConfig<TState>) {
@@ -469,15 +222,6 @@ export class Harness<TState = {}> {
     this.id = config.id;
     this.config = config;
     this.#instructions = config.instructions;
-
-    this.#session = new Session({
-      resourceId: config.resourceId ?? config.id,
-      state: {
-        initialState: config.initialState,
-        stateSchema: config.stateSchema,
-        emit: event => this.emit(event),
-      },
-    });
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
@@ -489,41 +233,8 @@ export class Harness<TState = {}> {
           : 'Harness requires at least one agent mode',
       );
     }
-    this.#session.mode.set({ modeId: defaultMode.id });
-    this.#session.setStore({
-      get: key => this.#session.thread.getSetting({ key }),
-      set: (key, value) => this.#session.thread.setSetting({ key, value }),
-    });
-    this.#session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
-    this.#session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
-    this.#session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null, {
-      abort: () => this.abort(),
-      emit: event => this.emit(event),
-    });
-    this.#session.model.setResolver({
-      getCurrentModeId: () => this.#session.mode.get(),
-      emit: event => this.emit(event),
-      trackModelUse: this.config.modelUseCountTracker,
-    });
-    this.#session.om.setResolver({
-      getState: () => this.#session.state.get() as Record<string, unknown>,
-      setState: updates => this.#session.state.set(updates as Partial<TState>),
-      setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
-      emit: event => this.emit(event),
-      omConfig: this.config.omConfig,
-      resolveModel: this.config.resolveModel,
-    });
-    this.#session.permissions.setResolver({
-      getState: () => this.#session.state.get() as Record<string, unknown>,
-      setState: updates => this.#session.state.set(updates as Partial<TState>),
-    });
-    this.#session.subagents.setResolver({
-      getState: () => this.#session.state.get() as Record<string, unknown>,
-      setState: updates => this.#session.state.set(updates as Partial<TState>),
-      setSetting: ({ key, value }) => this.#session.thread.setSetting({ key, value }),
-      emit: event => this.emit(event),
-    });
-    this.#session.thread.connect(this.createThreadDataStore());
+
+    this.#defaultMode = defaultMode;
 
     // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
     if (config.workspace instanceof Workspace) {
@@ -538,17 +249,169 @@ export class Harness<TState = {}> {
     } else if (typeof config.browser === 'function') {
       this.browserFn = config.browser;
     }
+  }
+
+  /**
+   * Wire a freshly-constructed {@link Session} to this Harness: install the
+   * thread-settings store, resolvers (mode/model/om/permissions/subagents),
+   * thread data store, and seed the initial mode + model. Returns the same
+   * session for convenient assignment.
+   *
+   * The session owns its own event bus, so the Harness no longer injects an
+   * `emit` callback — `#wireSession` only injects genuinely Harness-owned
+   * dependencies (config catalog, resolvers, tracker, thread store). Extracted
+   * from the constructor so additional sessions can be wired the same way.
+   */
+  #wireSession(session: Session<TState>): Session<TState> {
+    const defaultMode = this.#defaultMode;
+    session.mode.set({ modeId: defaultMode.id });
+    session.setStore({
+      get: key => session.thread.getSetting({ key }),
+      set: (key, value) => session.thread.setSetting({ key, value }),
+    });
+    session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
+    session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
+    session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
+    session.model.setResolver({
+      getCurrentModeId: () => session.mode.get(),
+      trackModelUse: this.config.modelUseCountTracker,
+    });
+    session.om.setResolver({
+      getState: () => session.state.get() as Record<string, unknown>,
+      setState: updates => void session.state.set(updates as Partial<TState>),
+      setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
+      omConfig: this.config.omConfig,
+      resolveModel: this.config.resolveModel,
+    });
+    session.permissions.setResolver({
+      getState: () => session.state.get() as Record<string, unknown>,
+      setState: updates => session.state.set(updates as Partial<TState>),
+    });
+    session.subagents.setResolver({
+      getState: () => session.state.get() as Record<string, unknown>,
+      setState: updates => void session.state.set(updates as Partial<TState>),
+      setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
+    });
+    session.thread.connect(this.createThreadDataStore(session), session as Session);
+    session.setMachinery({
+      getAgent: () => this.getCurrentAgent(session),
+      subscribeToThread: ({ resourceId, threadId }) =>
+        this.getCurrentAgent(session).subscribeToThread({ resourceId, threadId }),
+      buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
+      buildSharedRunOptions: () => this.buildSharedRunOptions(session),
+      buildToolsets: requestContext => this.buildToolsets(session, requestContext),
+      buildRequestContext: requestContext => this.buildRequestContext(session, requestContext),
+      persistTokenUsage: () => this.persistTokenUsage(session),
+      generateId: () => this.generateId(),
+      resolveTransitionModeId: () => this.resolveTransitionModeId(session),
+      saveSystemReminder: input => this.saveSystemReminder(input),
+    });
 
     // Seed the selected model: an explicit initialState.currentModelId wins,
     // otherwise fall back to the default mode's model. The model lives on the
     // session, not in persisted state, so initialState.currentModelId is read
     // here as a construction-time input only.
-    const initialModelId = (config.initialState as { currentModelId?: string } | undefined)?.currentModelId;
+    const initialModelId = (this.config.initialState as { currentModelId?: string } | undefined)?.currentModelId;
     if (initialModelId) {
-      this.#session.model.set({ modelId: initialModelId });
+      session.model.set({ modelId: initialModelId });
     } else if (defaultMode.defaultModelId) {
-      this.#session.model.set({ modelId: defaultMode.defaultModelId });
+      session.model.set({ modelId: defaultMode.defaultModelId });
     }
+
+    return session;
+  }
+
+  /**
+   * Create a new, fully-wired {@link Session} and bring it online: it starts in
+   * the default mode with the seeded model, is connected to the Harness's shared
+   * machinery (agent, storage/lock, config catalog), and has a current thread
+   * (the most recent thread for `resourceId`, or a freshly created one).
+   *
+   * The Harness owns no session of its own — every consumer creates its own
+   * session and drives all work through it (`session.sendMessage`,
+   * `session.mode.switch`, `session.thread.*`, `session.subscribe`, ...). In a
+   * server / multiplayer setting, each request / thread / user gets its own
+   * session, isolated from every other: independent event bus, mode, model,
+   * state, and current thread.
+   *
+   * Call {@link init} once before creating sessions so shared storage and
+   * workspace are ready.
+   */
+  async createSession({ resourceId }: { resourceId?: string } = {}): Promise<Session<TState>> {
+    const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
+
+    // Get-or-create: a resourceId maps to exactly one durable session per
+    // Harness. Asking for the same resource twice returns the same session, so
+    // a user/thread always resumes their own session and notification delivery
+    // reuses it rather than spawning a split-brain duplicate. Cache the in-flight
+    // promise so concurrent calls for the same resource resolve to one session.
+    const existing = this.#sessionsByResource.get(effectiveResourceId);
+    if (existing) {
+      return existing;
+    }
+
+    const creation = this.#createSessionForResource(effectiveResourceId);
+    this.#sessionsByResource.set(effectiveResourceId, creation);
+    try {
+      return await creation;
+    } catch (error) {
+      // Don't cache a failed creation — let the next call retry.
+      if (this.#sessionsByResource.get(effectiveResourceId) === creation) {
+        this.#sessionsByResource.delete(effectiveResourceId);
+      }
+      throw error;
+    }
+  }
+
+  async #createSessionForResource(effectiveResourceId: string): Promise<Session<TState>> {
+    const session = this.#wireSession(
+      new Session({
+        resourceId: effectiveResourceId,
+        state: {
+          initialState: this.config.initialState,
+          stateSchema: this.config.stateSchema,
+        },
+      }),
+    );
+
+    // Replay current workspace status onto the new session so a session created
+    // after init() still observes the shared workspace being ready (or failed).
+    if (this.workspace && this.workspaceInitialized) {
+      session.emit({ type: 'workspace_status_changed', status: 'ready' });
+      session.emit({
+        type: 'workspace_ready',
+        workspaceId: this.workspace.id,
+        workspaceName: this.workspace.name,
+      });
+    } else if (this.workspaceError) {
+      session.emit({ type: 'workspace_status_changed', status: 'error', error: this.workspaceError });
+      session.emit({ type: 'workspace_error', error: this.workspaceError });
+    }
+
+    // Bring the session online with a current thread: resume the most recent
+    // thread for this resource, or create a fresh one when none exist.
+    const threads = await session.thread.list();
+    if (threads.length === 0) {
+      await session.thread.create();
+    } else {
+      const mostRecent = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+      await this.config.threadLock?.acquire(mostRecent.id);
+      session.thread.set({ threadId: mostRecent.id });
+      await session.thread.loadMetadata();
+      await session.thread.ensureCurrentSubscription();
+    }
+
+    return session;
+  }
+
+  /**
+   * Resolve a live session by resourceId, if one was created for it via
+   * {@link createSession}. Returns `undefined` when no session owns the
+   * resource. Used by notification delivery to run woken signals as the session
+   * that owns the target thread, rather than an arbitrary session.
+   */
+  async getSessionByResource(resourceId: string): Promise<Session<TState> | undefined> {
+    return this.#sessionsByResource.get(resourceId);
   }
 
   // ===========================================================================
@@ -556,21 +419,39 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   /**
-   * Access the internal Mastra instance.
-   * Available after `init()` when storage is configured.
+   * Access the Mastra instance backing this Harness.
+   *
+   * Returns the parent Mastra when this Harness is registered on one (see
+   * {@link __registerMastra}); otherwise the internal Mastra created during
+   * `init()` when storage is configured.
+   *
    * Useful for scorer registration, observability access, and eval tooling.
    */
   getMastra(): Mastra | undefined {
-    return this.#internalMastra;
+    return this.#externalMastra ?? this.#internalMastra;
   }
 
   /**
-   * The current harness session. Owns per-session runtime state such as
-   * session-scoped permission grants. Prefer `harness.session.*` over the
-   * (removed) re-exposed grant helpers on the Harness.
+   * Register this Harness on a parent Mastra. Called by Mastra during
+   * construction when a harness is passed in its config. Once registered, the
+   * Harness uses the parent Mastra (its storage, agents, gateways, and
+   * observability) instead of building its own internal one during `init()`.
+   *
+   * @internal
    */
-  get session(): Session<TState> {
-    return this.#session;
+  __registerMastra(mastra: Mastra): void {
+    this.#externalMastra = mastra;
+  }
+
+  /**
+   * Resolve the storage this Harness reads and writes through.
+   *
+   * When registered on a parent Mastra, the Harness inherits that Mastra's
+   * configured storage so the host and its Harnesses persist to a single store.
+   * A standalone Harness falls back to its own `config.storage`.
+   */
+  #resolveStorage(): MastraCompositeStore | undefined {
+    return this.#externalMastra?.getStorage() ?? this.config.storage;
   }
 
   /**
@@ -603,14 +484,24 @@ export class Harness<TState = {}> {
 
   /**
    * Initialize the harness — loads storage and workspace.
-   * Must be called before using the harness.
+   * Must be called before using the harness. Idempotent: repeated calls
+   * return the same in-flight/completed initialization instead of rebuilding
+   * the internal Mastra instance (which would orphan registered agents).
    */
   async init(): Promise<void> {
+    this.initPromise ??= this.runInit();
+    return this.initPromise;
+  }
+
+  private async runInit(): Promise<void> {
     // Create an internal Mastra instance so agents have access to storage
     // (required for tool approval snapshot persistence/resume).
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
-    if (this.config.storage) {
+    //
+    // Skip this when registered on a parent Mastra: that Mastra already owns
+    // storage/agents/gateways, and getMastra() resolves to it.
+    if (this.config.storage && !this.#externalMastra) {
       const enabledGateways = this.config.gateways?.filter(gateway => gateway.shouldEnable?.() ?? true);
       const gateways = enabledGateways?.length
         ? Object.fromEntries(enabledGateways.map(gateway => [gateway.id, gateway]))
@@ -624,6 +515,12 @@ export class Harness<TState = {}> {
         ...(gateways ? { gateways } : {}),
       });
       await this.#internalMastra.getStorage()!.init();
+    } else if (this.#externalMastra) {
+      // Registered on a parent Mastra: don't build an internal Mastra, but make
+      // sure the inherited storage is initialized before any session reads or
+      // writes through it. Init is idempotent on MastraCompositeStore, so this
+      // is safe even when the parent already initialized it.
+      await this.#externalMastra.getStorage()?.init();
     }
 
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
@@ -633,23 +530,16 @@ export class Harness<TState = {}> {
           this.workspace = new Workspace(this.config.workspace as WorkspaceConfig);
         }
 
-        this.emit({ type: 'workspace_status_changed', status: 'initializing' });
         await this.workspace.init();
         this.workspaceInitialized = true;
-
-        this.emit({ type: 'workspace_status_changed', status: 'ready' });
-        this.emit({
-          type: 'workspace_ready',
-          workspaceId: this.workspace.id,
-          workspaceName: this.workspace.name,
-        });
+        this.workspaceError = undefined;
       } catch (error) {
         const err = getErrorFromUnknown(error);
         this.workspace = undefined;
         this.workspaceInitialized = false;
-
-        this.emit({ type: 'workspace_status_changed', status: 'error', error: err });
-        this.emit({ type: 'workspace_error', error: err });
+        // Remember the failure so sessions created later can surface it; the
+        // Harness holds no session of its own to emit onto during init().
+        this.workspaceError = err;
       }
     }
 
@@ -673,31 +563,12 @@ export class Harness<TState = {}> {
     this.startHeartbeats();
   }
 
-  /**
-   * Select the most recent thread, or create one if none exist.
-   */
-  async selectOrCreateThread(): Promise<HarnessThread> {
-    const threads = await this.#session.thread.list();
-
-    if (threads.length === 0) {
-      return await this.createThread();
-    }
-
-    const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-    const mostRecent = sortedThreads[0]!;
-    await this.config.threadLock?.acquire(mostRecent.id);
-    this.#session.thread.set({ threadId: mostRecent.id });
-    await this.loadThreadMetadata();
-    await this.ensureCurrentAgentThreadSubscription();
-
-    return mostRecent;
-  }
-
   private async getMemoryStorage(): Promise<MemoryStorage> {
-    if (!this.config.storage) {
+    const storage = this.#resolveStorage();
+    if (!storage) {
       throw new Error('Storage is not configured on this Harness');
     }
-    const memoryStorage = await this.config.storage.getStore('memory');
+    const memoryStorage = await storage.getStore('memory');
     if (!memoryStorage) {
       throw new Error('Storage does not have a memory domain configured');
     }
@@ -709,7 +580,7 @@ export class Harness<TState = {}> {
    * through. The Session owns the thread-domain logic; this adapter just maps
    * raw storage rows to Harness types — it does not call back into Session.
    */
-  private createThreadDataStore(): ThreadDataStore {
+  private createThreadDataStore(session: Session<TState>): ThreadDataStore {
     return {
       listThreads: ({ resourceId, includeForkedSubagents }) =>
         this.queryThreads({ resourceId, includeForkedSubagents }),
@@ -719,11 +590,70 @@ export class Harness<TState = {}> {
       getMetadata: ({ threadId, key }) => this.readThreadMetadataValue({ threadId, key }),
       setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
       deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
+      hasStorage: () => !!this.#resolveStorage(),
+      saveThread: ({ thread }) => this.persistThreadRow(thread),
+      deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
+      cloneThread: ({ sourceThreadId, resourceId, title }) =>
+        this.cloneThreadRow(session, { sourceThreadId, resourceId, title }),
+      acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
+      releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
+      getModeIds: () => this.config.modes.map(m => m.id),
+    };
+  }
+
+  /** Persist a thread row to memory storage (gateway primitive for the Session thread domain). */
+  private async persistThreadRow(thread: HarnessThread): Promise<void> {
+    if (!this.#resolveStorage()) return;
+    const memoryStorage = await this.getMemoryStorage();
+    await memoryStorage.saveThread({
+      thread: {
+        id: thread.id,
+        resourceId: thread.resourceId,
+        title: thread.title ?? '',
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+        metadata: thread.metadata,
+      },
+    });
+  }
+
+  /** Delete a thread row from memory storage (gateway primitive for the Session thread domain). */
+  private async deleteThreadRow(threadId: string): Promise<void> {
+    if (!this.#resolveStorage()) return;
+    const memoryStorage = await this.getMemoryStorage();
+    await memoryStorage.deleteThread({ threadId });
+  }
+
+  /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
+  private async cloneThreadRow(
+    session: Session<TState>,
+    {
+      sourceThreadId,
+      resourceId,
+      title,
+    }: {
+      sourceThreadId: string;
+      resourceId: string;
+      title?: string;
+    },
+  ): Promise<HarnessThread> {
+    if (!this.config.memory) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    const memory = await this.resolveMemory(session);
+    const result = await memory.cloneThread({ sourceThreadId, resourceId, title });
+    return {
+      id: result.thread.id,
+      resourceId: result.thread.resourceId,
+      title: result.thread.title ?? 'Cloned Thread',
+      createdAt: result.thread.createdAt,
+      updatedAt: result.thread.updatedAt,
+      metadata: result.thread.metadata,
     };
   }
 
   private async readThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
-    if (!this.config.storage) return undefined;
+    if (!this.#resolveStorage()) return undefined;
     try {
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
@@ -744,7 +674,7 @@ export class Harness<TState = {}> {
     key: string;
     value: unknown;
   }): Promise<void> {
-    if (!this.config.storage) return;
+    if (!this.#resolveStorage()) return;
     try {
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
@@ -759,7 +689,7 @@ export class Harness<TState = {}> {
   }
 
   private async removeThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<void> {
-    if (!this.config.storage) return;
+    if (!this.#resolveStorage()) return;
     try {
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
@@ -780,7 +710,7 @@ export class Harness<TState = {}> {
   }
 
   private async queryThreadById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
-    if (!this.config.storage) return null;
+    if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const thread = await memoryStorage.getThreadById({ threadId });
     if (!thread) return null;
@@ -801,7 +731,7 @@ export class Harness<TState = {}> {
     resourceId?: string;
     includeForkedSubagents?: boolean;
   }): Promise<HarnessThread[]> {
-    if (!this.config.storage) return [];
+    if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
     const filter: { resourceId?: string } | undefined = resourceId === undefined ? undefined : { resourceId };
@@ -832,7 +762,7 @@ export class Harness<TState = {}> {
     threadId: string;
     limit?: number;
   }): Promise<HarnessMessage[]> {
-    if (!this.config.storage) return [];
+    if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
 
@@ -851,7 +781,7 @@ export class Harness<TState = {}> {
   }
 
   private async queryFirstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
-    if (!this.config.storage || threadIds.length === 0) return new Map();
+    if (!this.#resolveStorage() || threadIds.length === 0) return new Map();
 
     const memoryStorage = await this.getMemoryStorage();
     const result = await memoryStorage.listMessages({
@@ -882,7 +812,6 @@ export class Harness<TState = {}> {
   }
 
   private propagateRuntimeServicesToAgent(agent: Agent): Agent {
-    const alreadyHasMastra = !!agent.getMastraInstance();
     const workspaceForAgents = this.workspaceFn ?? this.workspace;
     const browserForAgents = this.browserFn ?? this.browser;
 
@@ -899,8 +828,13 @@ export class Harness<TState = {}> {
       agent.__setPubSub(this.config.pubsub);
     }
 
-    if (this.#internalMastra && !alreadyHasMastra) {
-      this.#internalMastra.addAgent(agent);
+    // Register the agent on the resolved Mastra (the parent when registered,
+    // otherwise the internal one). Re-bind when the agent currently has no
+    // Mastra OR is bound to a different instance — e.g. an agent that built its
+    // own internal Mastra before this Harness was registered on a parent.
+    const mastra = this.getMastra();
+    if (mastra && agent.getMastraInstance() !== mastra) {
+      mastra.addAgent(agent);
     }
 
     return agent;
@@ -953,8 +887,8 @@ export class Harness<TState = {}> {
    * `buildAgentMessageStreamOptions` so the agent's own instructions are
    * never mutated.
    */
-  private resolveCurrentModeInstructions(): string | undefined {
-    const mode = this.#session.mode.resolve();
+  private resolveCurrentModeInstructions(session: Session<TState>): string | undefined {
+    const mode = session.mode.resolve();
     const combined = [this.#instructions ?? '', mode?.instructions ?? ''].filter(Boolean).join('\n');
     return combined || undefined;
   }
@@ -984,8 +918,8 @@ export class Harness<TState = {}> {
    * (`setObjective`/`getObjective`/`clearObjective`/`updateObjectiveOptions`),
    * which read/write the durable `threadState` `'goal'` slot.
    */
-  getCurrentAgent(): Agent {
-    const mode = this.#session.mode.resolve();
+  getCurrentAgent(session: Session<TState>): Agent {
+    const mode = session.mode.resolve();
 
     return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
   }
@@ -994,8 +928,8 @@ export class Harness<TState = {}> {
    * Check if the current model's provider has authentication configured.
    * Uses app-provided catalog/auth hooks; Harness does not resolve gateway auth itself.
    */
-  async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
-    const modelId = this.#session.model.get();
+  async getCurrentModelAuthStatus(session: Session<TState>): Promise<ModelAuthStatus> {
+    const modelId = session.model.get();
     if (!modelId) return { hasAuth: true };
 
     try {
@@ -1072,383 +1006,42 @@ export class Harness<TState = {}> {
   // Thread Management
   // ===========================================================================
 
-  async getResolvedMemory(): Promise<MastraMemory | null> {
-    if (!this.config.memory) return null;
-    return this.resolveMemory();
-  }
-
   /**
    * Point the session at a different memory resourceId. The resourceId itself
    * lives on the session (`session.identity`); the Harness orchestrates the
    * surrounding teardown — dropping the current thread subscription and clearing
    * the active thread — since those are Harness-owned.
    */
-  setResourceId({ resourceId }: { resourceId: string }): void {
-    this.cleanupAgentThreadSubscription();
-    this.#session.identity.setResourceId({ resourceId });
-    this.#session.thread.clear();
+  async setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): Promise<void> {
+    const previousResourceId = session.identity.getResourceId();
+    session.thread.cleanupSubscription();
+    session.identity.setResourceId({ resourceId });
+    const releasePreviousThreadLock = session.thread.clearAndReleaseLock();
+
+    // Re-key the resource registry so this session is the one resolved for its
+    // new resourceId (and is no longer resolved for the old one). This session
+    // becomes the authoritative owner of the target resource, replacing any
+    // prior session registered there.
+    const dropPreviousResource = this.#dropSessionFromRegistry(previousResourceId, session);
+    this.#sessionsByResource.set(resourceId, Promise.resolve(session));
+    await releasePreviousThreadLock;
+    await dropPreviousResource;
   }
 
-  async getKnownResourceIds(): Promise<string[]> {
-    const threads = await this.#session.thread.list({ allResources: true });
+  /** Remove `resourceId` from the registry only if it still resolves to `session`. */
+  async #dropSessionFromRegistry(resourceId: string, session: Session<TState>): Promise<void> {
+    const pending = this.#sessionsByResource.get(resourceId);
+    if (!pending) return;
+    const resolved = await pending.catch(() => undefined);
+    if (resolved === session && this.#sessionsByResource.get(resourceId) === pending) {
+      this.#sessionsByResource.delete(resourceId);
+    }
+  }
+
+  async getKnownResourceIds(session: Session<TState>): Promise<string[]> {
+    const threads = await session.thread.list({ allResources: true });
     const ids = new Set(threads.map(t => t.resourceId));
     return [...ids].sort();
-  }
-
-  async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
-    this.cleanupAgentThreadSubscription();
-    const now = new Date();
-    const thread: HarnessThread = {
-      id: this.generateId(),
-      resourceId: this.#session.identity.getResourceId(),
-      title: title || '',
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const currentStateModel = this.#session.model.get();
-    const currentMode = this.#session.mode.resolve();
-    const modelId = currentStateModel || currentMode.defaultModelId;
-
-    const metadata: Record<string, unknown> = {};
-    if (modelId) {
-      metadata.currentModelId = modelId;
-      metadata[`modeModelId_${this.#session.mode.get()}`] = modelId;
-    }
-
-    // Auto-tag with projectPath from state so threads are scoped to the working directory
-    const projectPath = (this.#session.state.get() as any).projectPath;
-    if (projectPath) {
-      metadata.projectPath = projectPath;
-    }
-
-    // Acquire lock on new thread before releasing old one.
-    // If acquire fails, attempt to re-acquire the old lock before rethrowing.
-    const oldThreadId = this.#session.thread.getId();
-    if (this.config.threadLock) {
-      try {
-        await this.config.threadLock.acquire(thread.id);
-      } catch (err) {
-        if (oldThreadId) {
-          try {
-            await this.config.threadLock.acquire(oldThreadId);
-          } catch {
-            // Best-effort re-acquire; original error is more important
-          }
-        }
-        throw err;
-      }
-      if (oldThreadId) {
-        await this.config.threadLock.release(oldThreadId);
-      }
-    }
-
-    if (this.config.storage) {
-      const memoryStorage = await this.getMemoryStorage();
-      try {
-        await memoryStorage.saveThread({
-          thread: {
-            id: thread.id,
-            resourceId: thread.resourceId,
-            title: thread.title!,
-            createdAt: thread.createdAt,
-            updatedAt: thread.updatedAt,
-            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-          },
-        });
-      } catch (err) {
-        // saveThread failed after lock was swapped; restore previous lock state
-        let reacquired = false;
-        if (this.config.threadLock) {
-          try {
-            await this.config.threadLock.release(thread.id);
-          } catch {
-            // Best-effort release of new thread lock
-          }
-          if (oldThreadId) {
-            try {
-              await this.config.threadLock.acquire(oldThreadId);
-              reacquired = true;
-            } catch {
-              // Re-acquire failed; no lock is held
-            }
-          }
-        }
-        if (reacquired && oldThreadId) {
-          this.#session.thread.set({ threadId: oldThreadId });
-        } else {
-          this.#session.thread.clear();
-        }
-        throw err;
-      }
-    }
-
-    this.#session.thread.set({ threadId: thread.id });
-
-    if (modelId && !currentStateModel) {
-      this.#session.model.set({ modelId });
-    }
-
-    this.#session.resetTokenUsage();
-    this.emit({ type: 'thread_created', thread });
-    await this.ensureCurrentAgentThreadSubscription();
-
-    return thread;
-  }
-
-  /**
-   * Returns a memory accessor with thread and message management methods.
-   */
-  get memory() {
-    return {
-      createThread: this.createThread.bind(this),
-      switchThread: this.switchThread.bind(this),
-      listThreads: (options?: { allResources?: boolean; includeForkedSubagents?: boolean }) =>
-        this.#session.thread.list(options),
-      renameThread: this.renameThread.bind(this),
-      deleteThread: this.deleteThread.bind(this),
-    };
-  }
-
-  private async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    if (!this.config.storage) return;
-
-    const memoryStorage = await this.getMemoryStorage();
-    const thread = await memoryStorage.getThreadById({ threadId });
-    if (!thread) {
-      throw new Error(`Thread not found: ${threadId}`);
-    }
-
-    const isDeletingCurrentThread = this.#session.thread.getId() === threadId;
-
-    await memoryStorage.deleteThread({ threadId });
-
-    if (isDeletingCurrentThread) {
-      try {
-        await this.config.threadLock?.release(threadId);
-      } catch {
-        // Lock release failed; proceed with state cleanup regardless
-      }
-      this.cleanupAgentThreadSubscription();
-      this.#session.thread.clear();
-      this.#session.resetTokenUsage();
-    }
-
-    this.emit({ type: 'thread_deleted', threadId });
-  }
-
-  async renameThread({ title }: { title: string }): Promise<void> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId || !this.config.storage) return;
-
-    const memoryStorage = await this.getMemoryStorage();
-    const thread = await memoryStorage.getThreadById({ threadId });
-    if (thread) {
-      await memoryStorage.saveThread({
-        thread: { ...thread, title, updatedAt: new Date() },
-      });
-    }
-  }
-
-  async cloneThread({
-    sourceThreadId,
-    title,
-    resourceId,
-  }: {
-    sourceThreadId?: string;
-    title?: string;
-    resourceId?: string;
-  } = {}): Promise<HarnessThread> {
-    const sourceId = sourceThreadId ?? this.#session.thread.getId();
-    if (!sourceId) {
-      throw new Error('No source thread to clone');
-    }
-    if (!this.config.memory) {
-      throw new Error('Memory is not configured on this Harness');
-    }
-
-    const memory = await this.resolveMemory();
-
-    const result = await memory.cloneThread({
-      sourceThreadId: sourceId,
-      resourceId: resourceId ?? this.#session.identity.getResourceId(),
-      title,
-    });
-
-    const clonedThread: HarnessThread = {
-      id: result.thread.id,
-      resourceId: result.thread.resourceId,
-      title: result.thread.title ?? 'Cloned Thread',
-      createdAt: result.thread.createdAt,
-      updatedAt: result.thread.updatedAt,
-      metadata: result.thread.metadata,
-    };
-
-    // Acquire lock on new thread before releasing old one
-    const oldThreadId = this.#session.thread.getId();
-    if (this.config.threadLock) {
-      try {
-        await this.config.threadLock.acquire(clonedThread.id);
-      } catch (err) {
-        if (oldThreadId) {
-          try {
-            await this.config.threadLock.acquire(oldThreadId);
-          } catch {
-            // Best-effort re-acquire; original error is more important
-          }
-        }
-        throw err;
-      }
-      if (oldThreadId) {
-        await this.config.threadLock.release(oldThreadId);
-      }
-    }
-
-    this.cleanupAgentThreadSubscription();
-    this.#session.thread.set({ threadId: clonedThread.id });
-    await this.loadThreadMetadata();
-    this.#session.resetTokenUsage();
-    this.emit({ type: 'thread_created', thread: clonedThread });
-    await this.ensureCurrentAgentThreadSubscription();
-
-    return clonedThread;
-  }
-
-  async switchThread({ threadId }: { threadId: string }): Promise<void> {
-    this.abort();
-    this.cleanupAgentThreadSubscription();
-
-    // Acquire lock on new thread before releasing old one.
-    // Lock operations must be adjacent (no intermediate awaits) so callers
-    // can rely on a single microtask tick to observe both acquire and release.
-    await this.config.threadLock?.acquire(threadId);
-    const previousThreadId = this.#session.thread.getId();
-    if (previousThreadId) {
-      await this.config.threadLock?.release(previousThreadId);
-    }
-
-    if (this.config.storage) {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread not found: ${threadId}`);
-      }
-    }
-
-    this.#session.thread.set({ threadId });
-
-    await this.loadThreadMetadata();
-
-    this.emit({ type: 'thread_changed', threadId, previousThreadId });
-    await this.ensureCurrentAgentThreadSubscription();
-  }
-
-  private async loadThreadMetadata(): Promise<void> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId || !this.config.storage) {
-      this.#session.resetTokenUsage();
-      return;
-    }
-
-    try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-
-      // Load token usage
-      const savedUsage = thread?.metadata?.tokenUsage as TokenUsage | undefined;
-      if (savedUsage) {
-        this.#session.setTokenUsage({
-          ...createEmptyTokenUsage(),
-          ...savedUsage,
-          promptTokens: savedUsage.promptTokens ?? 0,
-          completionTokens: savedUsage.completionTokens ?? 0,
-          totalTokens: savedUsage.totalTokens ?? 0,
-          cachedInputTokens: savedUsage.cachedInputTokens ?? 0,
-          cacheCreationInputTokens: savedUsage.cacheCreationInputTokens ?? 0,
-        });
-      } else {
-        this.#session.resetTokenUsage();
-      }
-
-      const meta = thread?.metadata as Record<string, unknown> | undefined;
-      const updates: Record<string, unknown> = {};
-
-      // Restore the saved mode FIRST so we resolve currentModelId for the
-      // correct mode. Otherwise we'd look up modeModelId_<defaultMode> first
-      // and then never overwrite it when the saved mode has no per-mode
-      // override persisted (e.g. user only ever used the mode's default
-      // model), leaving the wrong mode's model active on restart.
-      let previousModeIdForEmit: string | undefined;
-      if (meta?.currentModeId) {
-        const savedModeId = meta.currentModeId as string;
-        const modeExists = this.config.modes.some(m => m.id === savedModeId);
-        if (modeExists && savedModeId !== this.#session.mode.get()) {
-          previousModeIdForEmit = this.#session.mode.get();
-          this.#session.mode.set({ modeId: savedModeId });
-        }
-      }
-
-      // Resolve the model for the (now-restored) current mode and apply it to
-      // the session (source of truth for the selected model).
-      // Order: per-mode thread metadata → mode's defaultModelId → legacy
-      // global currentModelId (set by createThread).
-      const currentModeId = this.#session.mode.get();
-      const modeModelKey = `modeModelId_${currentModeId}`;
-      if (meta?.[modeModelKey]) {
-        this.#session.model.set({ modelId: meta[modeModelKey] as string });
-      } else {
-        const currentMode = this.config.modes.find(m => m.id === currentModeId);
-        if (currentMode?.defaultModelId) {
-          this.#session.model.set({ modelId: currentMode.defaultModelId });
-        } else if (meta?.currentModelId) {
-          this.#session.model.set({ modelId: meta.currentModelId as string });
-        }
-      }
-
-      if (previousModeIdForEmit !== undefined) {
-        this.emit({
-          type: 'mode_changed',
-          modeId: this.#session.mode.get(),
-          previousModeId: previousModeIdForEmit,
-        });
-      }
-
-      // Restore observer/reflector model IDs
-      if (meta?.observerModelId) {
-        updates.observerModelId = meta.observerModelId;
-      }
-      if (meta?.reflectorModelId) {
-        updates.reflectorModelId = meta.reflectorModelId;
-      }
-      const hasObservationThreshold = typeof meta?.observationThreshold === 'number';
-      const hasReflectionThreshold = typeof meta?.reflectionThreshold === 'number';
-
-      if (hasObservationThreshold) {
-        updates.observationThreshold = meta.observationThreshold;
-      }
-      if (hasReflectionThreshold) {
-        updates.reflectionThreshold = meta.reflectionThreshold;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await this.#session.state.set(updates as unknown as Partial<TState>);
-      }
-
-      if (!hasObservationThreshold) {
-        const observationThreshold = this.#session.om.observer.threshold();
-        if (observationThreshold !== undefined) {
-          await this.#session.thread.setSetting({ key: 'observationThreshold', value: observationThreshold });
-        }
-      }
-      if (!hasReflectionThreshold) {
-        const reflectionThreshold = this.#session.om.reflector.threshold();
-        if (reflectionThreshold !== undefined) {
-          await this.#session.thread.setSetting({ key: 'reflectionThreshold', value: reflectionThreshold });
-        }
-      }
-    } catch {
-      this.#session.resetTokenUsage();
-    }
   }
 
   // ===========================================================================
@@ -1460,13 +1053,13 @@ export class Harness<TState = {}> {
    * Reads the OM record and recent messages to reconstruct status,
    * then emits an `om_status` event for the UI.
    */
-  async loadOMProgress(): Promise<void> {
-    const threadId = this.#session.thread.getId();
+  async loadOMProgress(session: Session<TState>): Promise<void> {
+    const threadId = session.thread.getId();
     if (!threadId) return;
 
     try {
       const memoryStorage = await this.getMemoryStorage();
-      const record = await memoryStorage.getObservationalMemory(threadId, this.#session.identity.getResourceId());
+      const record = await memoryStorage.getObservationalMemory(threadId, session.identity.getResourceId());
 
       if (!record) return;
 
@@ -1553,7 +1146,7 @@ export class Harness<TState = {}> {
         if (foundStatus) break;
       }
 
-      this.emit({
+      session.emit({
         type: 'om_status',
         windows: {
           active: {
@@ -1572,15 +1165,12 @@ export class Harness<TState = {}> {
     }
   }
 
-  async getObservationalMemoryRecord(): Promise<ObservationalMemoryRecord | null> {
-    if (!this.#session.thread.getId()) return null;
+  async getObservationalMemoryRecord(session: Session<TState>): Promise<ObservationalMemoryRecord | null> {
+    if (!session.thread.getId()) return null;
 
     try {
       const memoryStorage = await this.getMemoryStorage();
-      return await memoryStorage.getObservationalMemory(
-        this.#session.thread.getId(),
-        this.#session.identity.getResourceId(),
-      );
+      return await memoryStorage.getObservationalMemory(session.thread.getId(), session.identity.getResourceId());
     } catch {
       return null;
     }
@@ -1594,114 +1184,27 @@ export class Harness<TState = {}> {
     return this.config.toolCategoryResolver?.(toolName) ?? null;
   }
 
-  /**
-   * Resolve whether a tool call should be auto-approved, denied, or asked.
-   * Resolution chain: per-tool deny → yolo → per-tool policy → session tool grant →
-   * session category grant → category policy → "ask"
-   */
-  private resolveToolApproval(toolName: string): PermissionPolicy {
-    const state = this.#session.state.get() as Record<string, unknown>;
-    const rules = this.#session.permissions.getRules();
-
-    const toolPolicy = rules.tools[toolName];
-    if (toolPolicy === 'deny') return 'deny';
-
-    if (state.yolo === true) return 'allow';
-
-    if (toolPolicy) return toolPolicy;
-
-    if (this.#session.hasToolGrant(toolName)) return 'allow';
-
-    const category = this.getToolCategory({ toolName });
-    if (category) {
-      if (this.#session.hasCategoryGrant(category)) return 'allow';
-      const categoryPolicy = rules.categories[category];
-      if (categoryPolicy) return categoryPolicy;
-    }
-
-    return 'ask';
-  }
-
   // ===========================================================================
   // Message Handling
   // ===========================================================================
 
-  private cleanupAgentThreadSubscription(): void {
-    this.#session.stream.cleanup();
-    this.#session.run.reset();
-  }
-
-  private async ensureAgentThreadSubscription(agent: Agent, threadId: string): Promise<void> {
-    const key = SessionStream.keyFor({ agent, resourceId: this.#session.identity.getResourceId(), threadId });
-    if (this.#session.stream.matches({ key })) return;
-
-    this.cleanupAgentThreadSubscription();
-    const subscription = await agent.subscribeToThread({
-      resourceId: this.#session.identity.getResourceId(),
-      threadId,
-    });
-    this.#session.stream.attach({ subscription, key });
-    void this.processSubscribedThreadStream(subscription);
-  }
-
-  private async ensureCurrentAgentThreadSubscription(): Promise<void> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId) return;
-    await this.ensureAgentThreadSubscription(this.getCurrentAgent(), threadId);
-  }
-
-  private createMessageInput({
-    content,
-    files,
-  }: {
-    content: string;
-    files?: Array<{ data: string; mediaType: string; filename?: string }>;
-  }): AgentSignalContents {
-    if (!files?.length) return content;
-
-    const fileParts = files.map(f => {
-      const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
-      if (isText) {
-        let textContent = f.data;
-        const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
-        if (base64Match) {
-          try {
-            textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
-          } catch {
-            // Fall through with raw data
-          }
-        }
-        const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
-        const maxBacktickRun = Math.max(0, ...Array.from(textContent.matchAll(/`+/g), match => match[0].length));
-        const fence = '`'.repeat(Math.max(3, maxBacktickRun + 1));
-        return { type: 'text' as const, text: `${label}\n${fence}\n${textContent}\n${fence}` };
-      }
-      return {
-        type: 'file' as const,
-        data: f.data,
-        mediaType: f.mediaType,
-        ...(f.filename ? { filename: f.filename } : {}),
-      };
-    });
-
-    return [{ type: 'text', text: content }, ...fileParts];
-  }
-
   private async buildAgentMessageStreamOptions({
+    session,
     requestContext: requestContextInput,
     tracingContext,
     tracingOptions,
   }: {
+    session: Session<TState>;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
   }): Promise<Record<string, unknown>> {
-    if (!this.#session.thread.getId()) {
+    if (!session.thread.getId()) {
       throw new Error('Cannot build stream options without a current thread');
     }
 
-    this.#session.run.clearAbortRequested();
-    const requestContext = await this.buildRequestContext(requestContextInput);
+    session.run.clearAbortRequested();
+    const requestContext = await this.buildRequestContext(session, requestContextInput);
     // Resolve mode-aware instructions at call time so the agent's own
     // instructions are never mutated by the harness.
     // When mode/harness instructions exist, combine them with the agent's
@@ -1710,9 +1213,9 @@ export class Harness<TState = {}> {
     // full override.
     let callTimeInstructions: string | undefined;
     if (this.config.agent) {
-      const modeInstructions = this.resolveCurrentModeInstructions();
+      const modeInstructions = this.resolveCurrentModeInstructions(session);
       if (modeInstructions) {
-        const agent = this.getCurrentAgent();
+        const agent = this.getCurrentAgent(session);
         const agentInstructions = await agent.getInstructions({ requestContext });
         const agentStr = this.instructionsToString(agentInstructions);
         callTimeInstructions = [agentStr, modeInstructions].filter(Boolean).join('\n') || undefined;
@@ -1722,15 +1225,15 @@ export class Harness<TState = {}> {
     }
 
     const streamOptions: Record<string, unknown> = {
-      ...this.buildSharedRunOptions(),
-      memory: { thread: this.#session.thread.getId(), resource: this.#session.identity.getResourceId() },
-      abortSignal: this.#session.run.ensureAbortController().signal,
+      ...this.buildSharedRunOptions(session),
+      memory: { thread: session.thread.getId(), resource: session.identity.getResourceId() },
+      abortSignal: session.run.ensureAbortController().signal,
       requestContext,
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
-    streamOptions.toolsets = await this.buildToolsets(requestContext);
+    streamOptions.toolsets = await this.buildToolsets(session, requestContext);
 
     return streamOptions;
   }
@@ -1741,8 +1244,8 @@ export class Harness<TState = {}> {
    * missing `maxSteps` on resume silently caps the resumed run at the agent's
    * small default and ends it mid-task (see {@link HARNESS_MAX_STEPS}).
    */
-  private buildSharedRunOptions(): Record<string, unknown> {
-    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
+  private buildSharedRunOptions(session: Session<TState>): Record<string, unknown> {
+    const isYolo = (session.state.get() as Record<string, unknown>).yolo === true;
     const shared: Record<string, unknown> = {
       maxSteps: HARNESS_MAX_STEPS,
       savePerStep: false,
@@ -1751,7 +1254,7 @@ export class Harness<TState = {}> {
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
     // block is transparently retried on the fallback model instead of failing.
-    const fableFallback = buildFableFallbackProviderOptions(this.#session.model.get());
+    const fableFallback = buildFableFallbackProviderOptions(session.model.get());
     if (fableFallback) {
       shared.providerOptions = { anthropic: { ...fableFallback.anthropic } };
     }
@@ -1759,320 +1262,33 @@ export class Harness<TState = {}> {
     return shared;
   }
 
-  private async drainFollowUpQueue(options?: {
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-  }): Promise<boolean> {
-    if (this.#session.followUps.isEmpty()) return false;
-
-    const next = this.#session.followUps.dequeue()!;
-    const threadId = this.#session.thread.getId();
-    try {
-      if (this.#session.stream.isOpen() && threadId) {
-        const agent = this.getCurrentAgent();
-        const streamOptions = await this.buildAgentMessageStreamOptions({
-          requestContext: next.requestContext,
-          tracingContext: options?.tracingContext,
-          tracingOptions: options?.tracingOptions,
-        });
-        const result = agent.queueMessage(this.createMessageInput({ content: next.content }), {
-          resourceId: this.#session.identity.getResourceId(),
-          threadId,
-          ifIdle: { streamOptions: streamOptions as any },
-        });
-        this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count(), runId: result.runId });
-      } else {
-        this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
-        await this.sendMessage({
-          content: next.content,
-          requestContext: next.requestContext,
-          tracingContext: options?.tracingContext,
-          tracingOptions: options?.tracingOptions,
-        });
-      }
-      return true;
-    } catch (error) {
-      this.#session.followUps.requeue(next);
-      this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
-      throw error;
-    }
-  }
-
-  private async finishSubscribedStreamRun({
-    suspended,
-    error,
-    aborted,
-  }: {
-    suspended?: boolean;
-    error?: boolean;
-    aborted?: boolean;
-  }): Promise<void> {
-    const reason = error
-      ? 'error'
-      : suspended
-        ? 'suspended'
-        : aborted || this.#session.run.isAbortRequested()
-          ? 'aborted'
-          : 'complete';
-    this.emit({ type: 'agent_end', reason });
-    this.#session.run.reset();
-    await this.drainFollowUpQueue();
-  }
-
-  private async handleSubscribedStreamError(error: unknown): Promise<void> {
-    if (error instanceof Error && error.name === 'AbortError') {
-      this.emit({ type: 'agent_end', reason: 'aborted' });
-    } else {
-      this.emit({ type: 'error', error: getErrorFromUnknown(error) });
-      this.emit({ type: 'agent_end', reason: 'error' });
-    }
-    this.#session.stream.detach();
-    this.#session.run.reset();
-    await this.drainFollowUpQueue();
-  }
-
-  private async processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {
-    const requestContext = await this.buildRequestContext();
-    let currentRun: HarnessStreamState | undefined;
-    let lastFinishedRunId: string | null = null;
-
-    try {
-      for await (const chunk of subscription.stream) {
-        if (!this.#session.stream.isCurrent({ subscription })) {
-          subscription.unsubscribe();
-          break;
-        }
-
-        const chunkRunId = 'runId' in chunk ? chunk.runId : null;
-        if (lastFinishedRunId && chunkRunId === lastFinishedRunId) {
-          continue;
-        }
-
-        if (!currentRun) {
-          currentRun = this.createStreamState();
-          this.#session.run.nextOperation();
-          this.#session.run.ensureAbortController();
-          this.#session.run.setRunId({ runId: subscription.activeRunId() ?? ('runId' in chunk ? chunk.runId : null) });
-          this.#session.run.setTraceId({ traceId: null });
-          this.emit({ type: 'agent_start' });
-        }
-
-        if (chunk.type === 'start') {
-          continue;
-        }
-
-        try {
-          const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
-          if (
-            streamResult ||
-            chunk.type === 'finish' ||
-            chunk.type === 'error' ||
-            chunk.type === 'abort' ||
-            chunk.type === 'tool-call-suspended'
-          ) {
-            const finishedRunId: string | null = chunkRunId ?? this.#session.run.getRunId();
-            const suspended =
-              chunk.type === 'tool-call-suspended' ||
-              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-              undefined;
-            const aborted = chunk.type === 'abort';
-            // A non-success terminal finish reason (e.g. a `claude-fable-5`
-            // content-filter refusal) is surfaced as an explicit error so the
-            // run never silently stops without a visible terminal state.
-            let isError = chunk.type === 'error';
-            if (
-              currentRun.terminalError &&
-              !isError &&
-              !aborted &&
-              !this.#session.run.isAbortRequested() &&
-              !suspended
-            ) {
-              isError = true;
-              this.emit({ type: 'error', error: new Error(currentRun.terminalError) });
-            }
-            await this.finishSubscribedStreamRun({
-              suspended,
-              error: isError,
-              aborted,
-            });
-            lastFinishedRunId = finishedRunId;
-            currentRun = undefined;
-          }
-        } catch (error) {
-          await this.handleSubscribedStreamError(error);
-          currentRun = undefined;
-        }
-      }
-    } catch (error) {
-      if (this.#session.stream.isCurrent({ subscription })) {
-        await this.handleSubscribedStreamError(error);
-      }
-    }
-  }
-
   /**
-   * Send a signal to the current agent/thread.
+   * Persist a system-reminder message for a thread (host-owned storage). Throws
+   * when no storage is configured — the Session guards the no-thread case before
+   * calling. Returns the saved message converted to {@link HarnessMessage}.
    */
-  sendSignal(
-    input:
-      | AgentSignalInput
-      | {
-          content: AgentSignalContents;
-          ifActive?: { attributes?: AgentSignalAttributes };
-          ifIdle?: { attributes?: AgentSignalAttributes };
-          tracingContext?: TracingContext;
-          tracingOptions?: TracingOptions;
-          requestContext?: RequestContext;
-        },
-  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId: string }> } {
-    const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
-    const ifActive = 'content' in input ? input.ifActive : undefined;
-    const ifIdle = 'content' in input ? input.ifIdle : undefined;
-    const signal = createSignal(
-      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
-    );
-    const accepted = Promise.resolve().then(async () => {
-      if (!this.#session.thread.getId()) {
-        const thread = await this.createThread();
-        this.#session.thread.set({ threadId: thread.id });
-      }
-      const threadId = this.#session.thread.getId()!;
-
-      const agent = this.getCurrentAgent();
-      await this.ensureAgentThreadSubscription(agent, threadId);
-
-      if (this.#session.run.getRunId() && this.#session.stream.activeRunId()) {
-        const result = agent.sendSignal(signal, {
-          resourceId: this.#session.identity.getResourceId(),
-          threadId,
-          ifActive,
-          ifIdle,
-        });
-        return { accepted: result.accepted, runId: result.runId };
-      }
-
-      const streamOptions = await this.buildAgentMessageStreamOptions({
-        requestContext: requestContextInput,
-        tracingContext,
-        tracingOptions,
-      });
-
-      const result = agent.sendSignal(signal, {
-        resourceId: this.#session.identity.getResourceId(),
-        threadId,
-        ifActive,
-        ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
-      });
-      return { accepted: result.accepted, runId: result.runId };
-    });
-
-    return { id: signal.id, type: signal.type, accepted };
-  }
-
-  /**
-   * Send a notification signal to the current agent/thread.
-   */
-  async sendNotificationSignal(
-    input: SendNotificationSignalInput,
-    options: HarnessSendNotificationSignalOptions = {},
-  ): Promise<SendAgentNotificationSignalResult> {
-    const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
-    if (!this.#session.thread.getId()) {
-      const thread = await this.createThread();
-      this.#session.thread.set({ threadId: thread.id });
-    }
-    const threadId = this.#session.thread.getId()!;
-
-    const agent = this.getCurrentAgent();
-    await this.ensureAgentThreadSubscription(agent, threadId);
-
-    if (this.#session.run.getRunId() && this.#session.stream.activeRunId()) {
-      return agent.sendNotificationSignal(input, {
-        resourceId: this.#session.identity.getResourceId(),
-        threadId,
-        ifActive,
-        ifIdle,
-      });
-    }
-
-    const streamOptions = await this.buildAgentMessageStreamOptions({
-      requestContext: requestContextInput,
-      tracingContext,
-      tracingOptions,
-    });
-
-    return agent.sendNotificationSignal(input, {
-      resourceId: this.#session.identity.getResourceId(),
-      threadId,
-      ifActive,
-      ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
-    });
-  }
-
-  /**
-   * Send a message to the current agent.
-   * Streams the response and emits events.
-   */
-  async sendMessage({
-    content,
-    files,
-    tracingContext,
-    tracingOptions,
-    requestContext: requestContextInput,
-  }: {
-    content: string;
-    files?: Array<{ data: string; mediaType: string; filename?: string }>;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const messageInput = this.createMessageInput({ content, files });
-
-    const wasActive = this.#session.stream.isActive();
-    let emittedAgentEnd = false;
-    const unsubscribeAgentEnd = wasActive
-      ? undefined
-      : this.subscribe(event => {
-          if (event.type === 'agent_end') emittedAgentEnd = true;
-        });
-    const signal = this.sendSignal({
-      content: messageInput,
-      tracingContext,
-      tracingOptions,
-      requestContext: requestContextInput,
-    });
-    await signal.accepted;
-    if (!wasActive) {
-      await new Promise(resolve => setTimeout(resolve, 0));
-      await this.waitForCurrentThreadStreamIdle();
-      unsubscribeAgentEnd?.();
-      if (!emittedAgentEnd && !this.#session.suspensions.hasPending()) {
-        this.emit({ type: 'agent_end', reason: 'complete' });
-      }
-    }
-    return;
-  }
-
-  async saveSystemReminderMessage({
+  private async saveSystemReminder({
+    threadId,
+    resourceId,
     message,
     reminderType,
-    role = 'user',
+    role,
     metadata,
   }: {
+    threadId: string;
+    resourceId: string;
     message: string;
     reminderType: string;
-    role?: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
   }): Promise<HarnessMessage | null> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId || !this.config.storage) return null;
-
+    if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const dbMessage = {
       id: randomUUID(),
       role,
       threadId,
-      resourceId: this.#session.identity.getResourceId(),
+      resourceId,
       createdAt: new Date(),
       content: {
         format: 2 as const,
@@ -2091,6 +1307,22 @@ export class Harness<TState = {}> {
     const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
     const saved = result.messages[0] ?? dbMessage;
     return this.convertToHarnessMessage(saved);
+  }
+
+  /**
+   * Resolve the mode the session transitions to when a plan is approved: the
+   * current mode's `transitionsTo`, else the configured default mode. The mode
+   * catalog is Harness config, so this is host-owned. Returns `undefined` when
+   * no default mode is configured.
+   */
+  private resolveTransitionModeId(session: Session<TState>): string | undefined {
+    const currentMode = session.mode.resolve();
+    const transitionModeId =
+      currentMode.transitionsTo ??
+      this.config.defaultModeId ??
+      this.config.modes.find(mode => mode.default || mode.metadata?.default === true)?.id ??
+      this.config.modes[0]?.id;
+    return this.listModes().find(mode => mode.id === transitionModeId)?.id;
   }
 
   private convertToHarnessMessage(msg: {
@@ -2425,1025 +1657,21 @@ export class Harness<TState = {}> {
     return { id: msg.id, role: msg.role === 'signal' ? 'user' : msg.role, content, createdAt: msg.createdAt };
   }
 
-  private createEmptyAssistantMessage(): HarnessMessage {
-    return {
-      id: this.generateId(),
-      role: 'assistant',
-      content: [],
-      createdAt: new Date(),
-    };
-  }
-
-  private hasCurrentMessageContent(state: HarnessStreamState): boolean {
-    return state.currentMessage.content.length > 0 || Boolean(state.currentMessage.stopReason);
-  }
-
-  private finishCurrentMessageAndRotate(state: HarnessStreamState): void {
-    if (!this.hasCurrentMessageContent(state)) return;
-    this.emit({ type: 'message_end', message: state.currentMessage });
-    state.lastFinishedMessage = state.currentMessage;
-    state.currentMessage = this.createEmptyAssistantMessage();
-    state.textContentById.clear();
-    state.thinkingContentById.clear();
-  }
-
-  /**
-   * Process a stream response (shared between sendMessage and tool approval).
-   */
-  private createStreamState(): HarnessStreamState {
-    return {
-      currentMessage: this.createEmptyAssistantMessage(),
-      isSuspended: false,
-      textContentById: new Map<string, { index: number; text: string }>(),
-      thinkingContentById: new Map<string, { index: number; text: string }>(),
-    };
-  }
-
-  private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
-    this.emit({
-      type: 'error',
-      error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
-    });
-    this.abort();
-  }
-
-  private async processStream(
-    response: { fullStream: AsyncIterable<any> },
-    requestContextInput?: RequestContext,
-  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
-    const state = this.createStreamState();
-    const requestContext = await this.buildRequestContext(requestContextInput);
-    this.#session.run.nextOperation();
-    this.emit({ type: 'agent_start' });
-
-    let result: { message: HarnessMessage; suspended?: boolean } | undefined;
-    let error = false;
-    let aborted = false;
-
-    for await (const chunk of response.fullStream) {
-      result = await this.processStreamChunk(state, chunk, requestContext);
-      if (chunk.type === 'error') {
-        error = true;
-      }
-      if (chunk.type === 'abort') {
-        aborted = true;
-      }
-      if (
-        result ||
-        chunk.type === 'finish' ||
-        chunk.type === 'error' ||
-        chunk.type === 'abort' ||
-        chunk.type === 'tool-call-suspended' ||
-        this.#session.run.isAbortRequested()
-      ) {
-        result ??= this.finishStreamState(state);
-        break;
-      }
-    }
-
-    result ??= this.finishStreamState(state);
-
-    // A non-success terminal finish reason (e.g. a `claude-fable-5`
-    // content-filter refusal) is surfaced as an explicit error so the run never
-    // silently stops without a visible terminal state.
-    if (state.terminalError && !error && !aborted && !this.#session.run.isAbortRequested() && !result.suspended) {
-      error = true;
-      this.emit({ type: 'error', error: new Error(state.terminalError) });
-    }
-
-    this.emit({
-      type: 'agent_end',
-      reason: error
-        ? 'error'
-        : result.suspended
-          ? 'suspended'
-          : aborted || this.#session.run.isAbortRequested()
-            ? 'aborted'
-            : 'complete',
-    });
-
-    this.#session.run.reset();
-    await this.drainFollowUpQueue();
-
-    return result;
-  }
-
-  private async processStreamChunk(
-    state: HarnessStreamState,
-    chunk: any,
-    requestContext: RequestContext,
-  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
-    if ('runId' in chunk && chunk.runId) {
-      this.#session.run.setRunId({ runId: chunk.runId });
-    }
-
-    switch (chunk.type) {
-      case 'text-start': {
-        const textIndex = state.currentMessage.content.length;
-        state.currentMessage.content.push({ type: 'text', text: '' });
-        state.textContentById.set(chunk.payload.id, { index: textIndex, text: '' });
-        this.emit({ type: 'message_start', message: { ...state.currentMessage } });
-        break;
-      }
-
-      case 'text-delta': {
-        const textState = state.textContentById.get(chunk.payload.id);
-        if (textState) {
-          textState.text += chunk.payload.text;
-          const textContent = state.currentMessage.content[textState.index];
-          if (textContent && textContent.type === 'text') {
-            textContent.text = textState.text;
-          }
-          this.emit({ type: 'message_update', message: { ...state.currentMessage } });
-        }
-        break;
-      }
-
-      case 'reasoning-start': {
-        const thinkingIndex = state.currentMessage.content.length;
-        state.currentMessage.content.push({ type: 'thinking', thinking: '' });
-        state.thinkingContentById.set(chunk.payload.id, { index: thinkingIndex, text: '' });
-        this.emit({ type: 'message_update', message: { ...state.currentMessage } });
-        break;
-      }
-
-      case 'reasoning-delta': {
-        const thinkingState = state.thinkingContentById.get(chunk.payload.id);
-        if (thinkingState) {
-          thinkingState.text += chunk.payload.text;
-          const thinkingContent = state.currentMessage.content[thinkingState.index];
-          if (thinkingContent && thinkingContent.type === 'thinking') {
-            thinkingContent.thinking = thinkingState.text;
-          }
-          this.emit({ type: 'message_update', message: { ...state.currentMessage } });
-        }
-        break;
-      }
-
-      case 'tool-call-input-streaming-start': {
-        const { toolCallId, toolName } = chunk.payload;
-        this.emit({ type: 'tool_input_start', toolCallId, toolName });
-        break;
-      }
-
-      case 'tool-call-delta': {
-        const { toolCallId, argsTextDelta, toolName } = chunk.payload;
-        const transform = getTransformedToolPayload(chunk.metadata, 'display', 'input-delta');
-        if (!transform?.suppress) {
-          this.emit({
-            type: 'tool_input_delta',
-            toolCallId,
-            argsTextDelta: hasTransformedToolPayload(transform) ? transform.transformed : argsTextDelta,
-            toolName,
-          });
-        }
-        break;
-      }
-
-      case 'tool-call-input-streaming-end': {
-        const { toolCallId } = chunk.payload;
-        this.emit({ type: 'tool_input_end', toolCallId });
-        break;
-      }
-
-      case 'tool-call': {
-        const toolCall = chunk.payload;
-        const args = getDisplayTransform(chunk.metadata, 'input-available', toolCall.args);
-        state.currentMessage.content.push({
-          type: 'tool_call',
-          id: toolCall.toolCallId,
-          name: toolCall.toolName,
-          args,
-        });
-        this.emit({
-          type: 'tool_start',
-          toolCallId: toolCall.toolCallId,
-          toolName: toolCall.toolName,
-          args,
-        });
-        this.emit({ type: 'message_update', message: { ...state.currentMessage } });
-        break;
-      }
-
-      case 'tool-result': {
-        const toolResult = chunk.payload;
-        const providerMetadata = toolResult.providerMetadata as Record<string, unknown> | undefined;
-        const result = getDisplayTransform(chunk.metadata, 'output-available', toolResult.result);
-        state.currentMessage.content.push({
-          type: 'tool_result',
-          id: toolResult.toolCallId,
-          name: toolResult.toolName,
-          result,
-          isError: toolResult.isError ?? false,
-          ...(providerMetadata ? { providerMetadata } : {}),
-        });
-        this.emit({
-          type: 'tool_end',
-          toolCallId: toolResult.toolCallId,
-          result,
-          isError: toolResult.isError ?? false,
-          ...(providerMetadata ? { providerMetadata } : {}),
-        });
-        this.emit({ type: 'message_update', message: { ...state.currentMessage } });
-        break;
-      }
-
-      case 'tool-error': {
-        const toolError = chunk.payload;
-        this.emit({
-          type: 'tool_end',
-          toolCallId: toolError.toolCallId,
-          result: getDisplayTransform(chunk.metadata, 'error', toolError.error),
-          isError: true,
-        });
-        break;
-      }
-
-      case 'tool-call-approval': {
-        const toolCallId = chunk.payload.toolCallId;
-        const toolName = chunk.payload.toolName;
-        const approvalTransform = getTransformedToolPayload(chunk.metadata, 'display', 'approval');
-        const toolArgs = hasTransformedToolPayload(approvalTransform)
-          ? approvalTransform.transformed
-          : getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
-
-        const policy = this.resolveToolApproval(toolName);
-
-        if (policy === 'allow') {
-          await this.handleToolApprove({ toolCallId, requestContext });
-          break;
-        }
-
-        if (policy === 'deny') {
-          await this.handleToolDecline({ toolCallId, requestContext });
-          break;
-        }
-
-        const approvalPromise = this.#session.approval.arm({ toolName });
-        this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
-
-        const approval = await approvalPromise;
-        this.#session.approval.clearToolName();
-
-        if (approval.decision === 'approve') {
-          await this.handleToolApprove({ toolCallId, requestContext: approval.requestContext ?? requestContext });
-        } else {
-          await this.handleToolDecline({ toolCallId, requestContext: approval.requestContext ?? requestContext });
-        }
-        break;
-      }
-
-      case 'tool-call-suspended': {
-        const suspToolCallId = chunk.payload.toolCallId;
-        const suspToolName = chunk.payload.toolName;
-        const suspArgs = getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
-        const suspPayload = getDisplayTransform(chunk.metadata, 'suspend', chunk.payload.suspendPayload);
-        const suspResumeSchema = chunk.payload.resumeSchema;
-
-        const suspRunId = this.#session.run.getRunId();
-        if (suspRunId) {
-          this.#session.suspensions.register({
-            toolCallId: suspToolCallId,
-            runId: suspRunId,
-            toolName: suspToolName,
-          });
-        }
-        state.isSuspended = true;
-
-        this.emit({
-          type: 'tool_suspended',
-          toolCallId: suspToolCallId,
-          toolName: suspToolName,
-          args: suspArgs,
-          suspendPayload: suspPayload,
-          resumeSchema: suspResumeSchema,
-        });
-
-        break;
-      }
-
-      case 'error': {
-        const streamError = getErrorFromUnknown(chunk.payload.error);
-        this.emit({ type: 'error', error: streamError });
-        break;
-      }
-
-      case 'step-finish': {
-        const usage = chunk.payload?.output?.usage;
-        if (usage) {
-          const usageRecord = usage as Record<string, unknown>;
-          const promptTokens =
-            getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens') ?? 0;
-          const completionTokens =
-            getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens') ?? 0;
-          const totalTokens = getUsageNumber(usageRecord, 'totalTokens') ?? promptTokens + completionTokens;
-          const stepUsage: TokenUsage = {
-            promptTokens,
-            completionTokens,
-            totalTokens,
-          };
-          addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
-          addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
-          addOptionalUsageField(
-            stepUsage,
-            'cacheCreationInputTokens',
-            getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
-          );
-          if (usageRecord.raw !== undefined) {
-            stepUsage.raw = usageRecord.raw;
-          }
-
-          this.#session.addUsage(stepUsage);
-
-          this.persistTokenUsage().catch(() => {});
-          this.emit({ type: 'usage_update', usage: stepUsage });
-        }
-        break;
-      }
-
-      case 'finish': {
-        const finishReason = chunk.payload.stepResult?.reason;
-        const finishProviderMetadata = chunk.payload?.metadata?.providerMetadata ?? chunk.payload?.providerMetadata;
-        // A server-side fallback means the turn was answered by a different
-        // model than the one the user selected (e.g. fable-5 declined and the
-        // fallback served the response). Surface that, otherwise the
-        // substitution is invisible.
-        const fallbackNotice = describeServerSideFallback(finishProviderMetadata);
-        if (fallbackNotice) {
-          this.emit({ type: 'info', message: fallbackNotice });
-        }
-        if (finishReason === 'stop' || finishReason === 'end-turn') {
-          state.currentMessage.stopReason = 'complete';
-        } else if (finishReason === 'tool-calls') {
-          state.currentMessage.stopReason = 'tool_use';
-        } else {
-          // Non-success terminal reasons (e.g. `content-filter` from a
-          // `claude-fable-5` refusal, `error`, or `length`) must surface as an
-          // explicit terminal error rather than a silent `complete`. Otherwise
-          // the run ends with no final message and no error, leaving the user
-          // unable to tell whether it completed, failed, or is still active.
-          const errorMessage = describeNonSuccessFinishReason(finishReason, finishProviderMetadata);
-          if (errorMessage) {
-            state.currentMessage.stopReason = 'error';
-            state.currentMessage.errorMessage = errorMessage;
-            state.terminalError = errorMessage;
-          } else {
-            state.currentMessage.stopReason = 'complete';
-          }
-        }
-        break;
-      }
-
-      case 'goal': {
-        // In-loop goal evaluation marks a boundary between assistant attempts.
-        // Close the current assistant message before rendering the judge result
-        // so a continuation starts a fresh message instead of overwriting the
-        // previous attempt in streaming UIs.
-        this.finishCurrentMessageAndRotate(state);
-        // Forward the payload so consumers (the TUI's judge display) can render
-        // judge progress and the decision.
-        this.emit({ type: 'goal_evaluation', payload: chunk.payload });
-        break;
-      }
-
-      // Observational Memory data parts
-      // NOTE: OM data parts arrive as { type, data: { ... } } — NOT { type, payload }
-      case 'data-om-status': {
-        const d = (chunk as any).data as Record<string, any> | undefined;
-        if (d?.windows) {
-          const w = d.windows;
-          const active = w.active ?? {};
-          const msgs = active.messages ?? {};
-          const obs = active.observations ?? {};
-          const buffObs = w.buffered?.observations ?? {};
-          const buffRef = w.buffered?.reflection ?? {};
-
-          this.emit({
-            type: 'om_status',
-            windows: {
-              active: {
-                messages: { tokens: msgs.tokens ?? 0, threshold: msgs.threshold ?? 0 },
-                observations: { tokens: obs.tokens ?? 0, threshold: obs.threshold ?? 0 },
-              },
-              buffered: {
-                observations: {
-                  status: buffObs.status ?? 'idle',
-                  chunks: buffObs.chunks ?? 0,
-                  messageTokens: buffObs.messageTokens ?? 0,
-                  projectedMessageRemoval: buffObs.projectedMessageRemoval ?? 0,
-                  observationTokens: buffObs.observationTokens ?? 0,
-                },
-                reflection: {
-                  status: buffRef.status ?? 'idle',
-                  inputObservationTokens: buffRef.inputObservationTokens ?? 0,
-                  observationTokens: buffRef.observationTokens ?? 0,
-                },
-              },
-            },
-            recordId: d.recordId ?? '',
-            threadId: d.threadId ?? '',
-            stepNumber: d.stepNumber ?? 0,
-            generationCount: d.generationCount ?? 0,
-          });
-        }
-        break;
-      }
-      case 'data-om-observation-start': {
-        const payload = (chunk as any).data as Record<string, any> | undefined;
-        if (payload && payload.cycleId) {
-          if (payload.operationType === 'observation') {
-            this.emit({
-              type: 'om_observation_start',
-              cycleId: payload.cycleId,
-              operationType: payload.operationType,
-              tokensToObserve: payload.tokensToObserve ?? 0,
-            });
-          } else if (payload.operationType === 'reflection') {
-            this.emit({
-              type: 'om_reflection_start',
-              cycleId: payload.cycleId,
-              tokensToReflect: payload.tokensToObserve ?? 0,
-            });
-          }
-        }
-        break;
-      }
-      case 'data-om-observation-end': {
-        const payload = (chunk as any).data as Record<string, any> | undefined;
-        if (payload && payload.cycleId) {
-          if (payload.operationType === 'reflection') {
-            this.emit({
-              type: 'om_reflection_end',
-              cycleId: payload.cycleId,
-              durationMs: payload.durationMs ?? 0,
-              compressedTokens: payload.observationTokens ?? 0,
-              observations: payload.observations,
-            });
-          } else {
-            this.emit({
-              type: 'om_observation_end',
-              cycleId: payload.cycleId,
-              durationMs: payload.durationMs ?? 0,
-              tokensObserved: payload.tokensObserved ?? 0,
-              observationTokens: payload.observationTokens ?? 0,
-              observations: payload.observations,
-              currentTask: payload.currentTask,
-              suggestedResponse: payload.suggestedResponse,
-            });
-          }
-        }
-        break;
-      }
-      case 'data-om-observation-failed': {
-        const payload = (chunk as any).data as Record<string, any> | undefined;
-        if (payload) {
-          const operationType = payload.operationType === 'reflection' ? 'reflection' : 'observation';
-          const error = payload.error ?? 'Unknown error';
-
-          if (operationType === 'reflection') {
-            this.emit({
-              type: 'om_reflection_failed',
-              cycleId: payload.cycleId ?? 'unknown',
-              error,
-              durationMs: payload.durationMs ?? 0,
-            });
-          } else {
-            this.emit({
-              type: 'om_observation_failed',
-              cycleId: payload.cycleId ?? 'unknown',
-              error,
-              durationMs: payload.durationMs ?? 0,
-            });
-          }
-
-          this.abortForOmFailure({ operationType, stage: 'run', error });
-          return { message: state.currentMessage };
-        }
-        break;
-      }
-      // Async buffering lifecycle
-      case 'data-om-buffering-start': {
-        const payload = (chunk as any).data as Record<string, any> | undefined;
-        if (payload && payload.cycleId) {
-          this.emit({
-            type: 'om_buffering_start',
-            cycleId: payload.cycleId,
-            operationType: payload.operationType ?? 'observation',
-            tokensToBuffer: payload.tokensToBuffer ?? 0,
-          });
-        }
-        break;
-      }
-      case 'data-om-buffering-end': {
-        const payload = (chunk as any).data as Record<string, any> | undefined;
-        if (payload && payload.cycleId) {
-          this.emit({
-            type: 'om_buffering_end',
-            cycleId: payload.cycleId,
-            operationType: payload.operationType ?? 'observation',
-            tokensBuffered: payload.tokensBuffered ?? 0,
-            bufferedTokens: payload.bufferedTokens ?? 0,
-            observations: payload.observations,
-          });
-        }
-        break;
-      }
-      case 'data-om-buffering-failed': {
-        const payload = (chunk as any).data as Record<string, any> | undefined;
-        if (payload) {
-          const operationType = payload.operationType ?? 'observation';
-          const error = payload.error ?? 'Unknown error';
-
-          this.emit({
-            type: 'om_buffering_failed',
-            cycleId: payload.cycleId,
-            operationType,
-            error,
-          });
-
-          this.abortForOmFailure({ operationType, stage: 'buffering', error });
-          return { message: state.currentMessage };
-        }
-        break;
-      }
-      case 'data-signal': {
-        const payload = (chunk as any).data as Record<string, unknown> | undefined;
-        if (payload?.type === 'state') {
-          const stateSignal = toStateSignalContent(payload);
-          if (stateSignal) {
-            state.currentMessage.content.push(stateSignal);
-            this.emit({ type: 'message_update', message: state.currentMessage });
-          }
-        } else if (payload?.type === 'reactive' && payload.tagName === 'system-reminder') {
-          const reminder = toSystemReminderContent(payload);
-          if (reminder) {
-            state.currentMessage.content.push(reminder);
-            this.emit({ type: 'message_update', message: state.currentMessage });
-          }
-        } else if (payload?.type === 'notification' && payload.tagName === 'notification-summary') {
-          const notificationSummary = toNotificationSummaryContent(payload);
-          if (notificationSummary) {
-            state.currentMessage.content.push(notificationSummary);
-            this.emit({ type: 'message_update', message: state.currentMessage });
-          }
-        } else if (payload?.type === 'notification' && payload.tagName === 'notification') {
-          const notification = toNotificationContent(payload);
-          if (notification) {
-            state.currentMessage.content.push(notification);
-            this.emit({ type: 'message_update', message: state.currentMessage });
-          }
-        } else if (payload?.type === 'reactive') {
-          const reactiveSignal = toReactiveSignalContent(payload);
-          if (reactiveSignal) {
-            state.currentMessage.content.push(reactiveSignal);
-            this.emit({ type: 'message_update', message: state.currentMessage });
-          }
-        }
-        break;
-      }
-      case 'data-user-message': {
-        const payload = (chunk as any).data as Record<string, unknown> | undefined;
-        const message = payload ? toUserSignalMessage(payload) : undefined;
-        if (message) {
-          if (state.currentMessage.content.length > 0) {
-            state.currentMessage.stopReason ??= 'complete';
-            this.emit({ type: 'message_end', message: { ...state.currentMessage } });
-            state.currentMessage = {
-              id: this.generateId(),
-              role: 'assistant',
-              content: [],
-              createdAt: new Date(),
-            };
-            state.textContentById.clear();
-            state.thinkingContentById.clear();
-          }
-          this.emit({ type: 'message_start', message });
-          this.emit({ type: 'message_end', message });
-        }
-        break;
-      }
-      // Back-compat: persisted streams may still contain data-system-reminder parts
-      case 'data-system-reminder': {
-        const payload = (chunk as any).data as Record<string, unknown> | undefined;
-        const reminder = payload ? toSystemReminderContent(payload) : undefined;
-        if (reminder) {
-          state.currentMessage.content.push(reminder);
-          this.emit({ type: 'message_update', message: state.currentMessage });
-        }
-        break;
-      }
-      case 'data-om-activation': {
-        const payload = (chunk as any).data as Record<string, any> | undefined;
-        if (payload && payload.cycleId) {
-          this.emit({
-            type: 'om_activation',
-            cycleId: payload.cycleId,
-            operationType: payload.operationType ?? 'observation',
-            chunksActivated: payload.chunksActivated ?? 0,
-            tokensActivated: payload.tokensActivated ?? 0,
-            observationTokens: payload.observationTokens ?? 0,
-            messagesActivated: payload.messagesActivated ?? 0,
-            generationCount: payload.generationCount ?? 0,
-            triggeredBy: payload.triggeredBy,
-            lastActivityAt: payload.lastActivityAt,
-            ttlExpiredMs: payload.ttlExpiredMs,
-            activateAfterIdle:
-              typeof payload.config?.activateAfterIdle === 'number' ? payload.config.activateAfterIdle : undefined,
-            previousModel: payload.previousModel,
-            currentModel: payload.currentModel,
-          });
-        }
-        break;
-      }
-      case 'data-om-thread-update': {
-        const payload = (chunk as any).data as Record<string, any> | undefined;
-        if (payload && payload.newTitle) {
-          this.emit({
-            type: 'om_thread_title_updated',
-            cycleId: payload.cycleId ?? 'unknown',
-            threadId: payload.threadId ?? this.#session.thread.getId() ?? 'unknown',
-            oldTitle: payload.oldTitle,
-            newTitle: payload.newTitle,
-          });
-        }
-        break;
-      }
-
-      // Sandbox streaming data chunks (from workspace execute_command tool)
-      case 'data-sandbox-stdout': {
-        const d = (chunk as any).data as Record<string, any> | undefined;
-        if (d?.output && d?.toolCallId) {
-          this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stdout' });
-        }
-        break;
-      }
-      case 'data-sandbox-stderr': {
-        const d = (chunk as any).data as Record<string, any> | undefined;
-        if (d?.output && d?.toolCallId) {
-          this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stderr' });
-        }
-        break;
-      }
-
-      default:
-        break;
-    }
-  }
-
-  private finishStreamState(state: HarnessStreamState): { message: HarnessMessage; suspended?: boolean } {
-    if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
-      this.emit({ type: 'message_end', message: state.currentMessage });
-      return { message: state.currentMessage, suspended: state.isSuspended || undefined };
-    }
-
-    return { message: state.lastFinishedMessage, suspended: state.isSuspended || undefined };
-  }
-
   // ===========================================================================
   // Control
   // ===========================================================================
-
-  /**
-   * Abort the current operation.
-   */
-  abort(): void {
-    // session.abortRun() drops the parked tool suspensions (so a run sitting in
-    // a tool suspend() like ask_user / request_access isn't left orphaned),
-    // aborts the live subscription, and marks the run as aborting. The Harness
-    // owns the display-state mirror of those suspensions, so clear it here too.
-    const hadPendingSuspensions = this.#session.displayState.get().pendingSuspensions.size > 0;
-    this.#session.displayState.clearPendingSuspensions();
-    this.#session.abortRun();
-    // Clearing the suspension mirror is a direct mutation, so it doesn't flow
-    // through emit()'s display-state reducer. Notify subscribers explicitly when
-    // we actually removed something, otherwise stale suspension UI can linger.
-    if (hadPendingSuspensions) {
-      this.dispatchDisplayStateChanged();
-    }
-  }
-
-  /**
-   * Detach from the current thread's event stream without switching to another
-   * thread. Used by the TUI `/new` command to stop receiving cross-process
-   * events from the old thread while the new thread creation is deferred until
-   * the first user message.
-   *
-   * The current thread ID is preserved so that {@link createThread} can still
-   * release the thread lock (when configured) for the previous thread.
-   */
-  detachFromCurrentThread(): void {
-    this.abort();
-    this.cleanupAgentThreadSubscription();
-  }
-
-  /**
-   * Steer the agent mid-stream: aborts current run and sends a new message.
-   */
-  async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    this.abort();
-    this.#session.followUps.clear();
-    this.emit({ type: 'follow_up_queued', count: 0 });
-    await this.sendMessage({ content, requestContext });
-  }
-
-  /**
-   * Queue a follow-up message to be processed after the current operation completes.
-   */
-  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
-    if (this.#session.run.isRunning()) {
-      this.#session.followUps.enqueue({ content, requestContext });
-      this.emit({ type: 'follow_up_queued', count: this.#session.followUps.count() });
-    } else {
-      await this.sendMessage({ content, requestContext });
-    }
-  }
-
-  /**
-   * True when one or more tools are parked awaiting a resume (e.g. ask_user /
-   * request_access suspensions). A suspended run nulls the AbortController, so
-   * isRunning() returns false even though the run is still pending — callers that
-   * need to know whether the harness is awaiting user input (e.g. to allow abort)
-   * should check this too.
-   */
-  /**
-   * Resolve once the current thread's stream is fully idle.
-   *
-   * After `abort()` is called the run's status can still be `'running'` for a
-   * few microtasks while the underlying model stream finalizes. Callers that
-   * need to send a fresh signal after an abort (e.g. plan approval → mode
-   * switch → trigger reminder) should await this before calling `sendSignal`
-   * to avoid the new signal being queued onto the dying run, which would then
-   * be drained with the previous run's already-aborted abortSignal.
-   */
-  private async waitForCurrentThreadStreamIdle(): Promise<void> {
-    while (this.#session.stream.isActive() || this.#session.run.getRunId() !== null) {
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
-  }
 
   private getSubagentDisplayName(agentType: string): string | undefined {
     return this.config.subagents?.find(subagent => subagent.id === agentType)?.name;
   }
 
-  /**
-   * Respond to a pending tool suspension from the UI.
-   * Provides resume data so the suspended tool can continue execution.
-   *
-   * `toolCallId` selects which suspended tool to resume — required when more than
-   * one tool is suspended concurrently (e.g. parallel `ask_user` calls, see issue
-   * #13642). When omitted it resolves to the sole pending suspension.
-   */
-  async respondToToolSuspension({
-    resumeData,
-    toolCallId,
-    requestContext,
-  }: {
-    resumeData: any;
-    toolCallId?: string;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const resolvedToolCallId = this.#session.suspensions.resolveToolCallId(toolCallId);
-    if (!resolvedToolCallId) return;
-
-    const suspension = this.#session.suspensions.get({ toolCallId: resolvedToolCallId });
-
-    try {
-      // `submit_plan` resumes carry a plan-approval decision. Approval additionally
-      // switches the Harness from its planning mode to its default execution mode, so
-      // it is handled separately from a plain tool resume. Non-Harness consumers skip
-      // this entirely and resume the tool directly via agent.resumeStream.
-      if (suspension?.toolName === 'submit_plan') {
-        await this.handlePlanApprovalResume({
-          toolCallId: resolvedToolCallId,
-          response: resumeData as { action: 'approved' | 'rejected'; feedback?: string },
-          requestContext,
-        });
-        return;
-      }
-
-      await this.handleToolResume({
-        resumeData,
-        toolCallId: resolvedToolCallId,
-        requestContext,
-      });
-    } catch (error) {
-      const err = getErrorFromUnknown(error);
-      this.emit({ type: 'error', error: err });
-      this.emit({ type: 'agent_end', reason: 'error' });
-    }
-  }
-
-  // ===========================================================================
-  // Plan Approval
-  // ===========================================================================
-
-  /**
-   * Respond to a suspended `submit_plan` tool call.
-   *
-   * `submit_plan` is an agent-agnostic tool that pauses via the native tool-suspension
-   * primitive. The Harness layers its planning UX on top of that generic pause here:
-   *
-   * - On **rejection**, the plan-mode run is resumed with the feedback so the agent can
-   *   revise and submit again. This is an ordinary tool resume.
-   * - On **approval**, the parked plan-mode suspension is abandoned and the Harness
-   *   switches to its default (execution) mode. The mode switch aborts the plan-mode run, so
-   *   there is no point resuming it first; the next signal/message drives the fresh
-   *   default-mode run. The model still sees the "approved" tool result on the rebuilt
-   *   message history when the default-mode run starts.
-   *
-   * Non-Harness consumers (a plain Agent in Studio or a customer app) instead resume the
-   * tool directly via `agent.resumeStream({ action, feedback })` — no modes involved.
-   */
-  private async handlePlanApprovalResume({
-    toolCallId,
-    response,
-    requestContext,
-  }: {
-    toolCallId: string;
-    response: { action: 'approved' | 'rejected'; feedback?: string };
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    if (response.action === 'rejected') {
-      await this.handleToolResume({ resumeData: response, toolCallId, requestContext });
-      return;
-    }
-
-    // Approved: drop the parked suspension (its run is about to be aborted by the mode
-    // switch) and move to the default execution mode.
-    this.#session.suspensions.delete({ toolCallId });
-
-    const currentMode = this.#session.mode.resolve();
-    const transitionModeId =
-      currentMode.transitionsTo ??
-      this.config.defaultModeId ??
-      this.config.modes.find(mode => mode.default || mode.metadata?.default === true)?.id ??
-      this.config.modes[0]?.id;
-
-    const transitionMode = this.listModes().find(mode => mode.id === transitionModeId);
-    if (transitionMode && transitionMode.id !== this.#session.mode.get()) {
-      await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-      await this.#session.mode.switch({ modeId: transitionMode.id });
-      // The mode switch aborts the in-flight run but does not wait for it to
-      // finalize. If the caller (e.g. mastracode's plan-approval handler)
-      // immediately fires a system-reminder signal, that signal can land in
-      // the dying run's pending queue and later get drained with the run's
-      // already-aborted abortSignal — manifesting as a hang where the agent
-      // never resumes after "The user has approved the plan, begin
-      // executing.". Waiting for the stream to be fully idle here ensures
-      // the next sendSignal() always starts a fresh run.
-      await this.waitForCurrentThreadStreamIdle();
-    }
-  }
-
-  private async handleToolApprove({
-    toolCallId,
-    requestContext: requestContextInput,
-  }: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const runId = this.#session.run.getRunId();
-    if (!runId) {
-      throw new Error('No active run to approve tool call for');
-    }
-
-    const agent = this.getCurrentAgent();
-
-    const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.#session.thread.getId();
-    await agent.approveToolCall({
-      runId,
-      toolCallId,
-      requireToolApproval: !isYolo,
-      memory: threadId ? { thread: threadId, resource: this.#session.identity.getResourceId() } : undefined,
-      abortSignal: this.#session.run.ensureAbortController().signal,
-      requestContext,
-      toolsets: await this.buildToolsets(requestContext),
-    });
-  }
-
-  private async handleToolDecline({
-    toolCallId,
-    requestContext: requestContextInput,
-  }: {
-    toolCallId?: string;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const runId = this.#session.run.getRunId();
-    if (!runId) {
-      throw new Error('No active run to decline tool call for');
-    }
-
-    const agent = this.getCurrentAgent();
-
-    const requestContext = await this.buildRequestContext(requestContextInput);
-    const isYolo = (this.#session.state.get() as Record<string, unknown>).yolo === true;
-    const threadId = this.#session.thread.getId();
-    await agent.declineToolCall({
-      runId,
-      toolCallId,
-      requireToolApproval: !isYolo,
-      memory: threadId ? { thread: threadId, resource: this.#session.identity.getResourceId() } : undefined,
-      abortSignal: this.#session.run.ensureAbortController().signal,
-      requestContext,
-      toolsets: await this.buildToolsets(requestContext),
-    });
-  }
-
-  private async handleToolResume({
-    resumeData,
-    toolCallId,
-    requestContext: requestContextInput,
-  }: {
-    resumeData: any;
-    toolCallId: string;
-    requestContext?: RequestContext;
-  }): Promise<void> {
-    const suspension = this.#session.suspensions.get({ toolCallId });
-    if (!suspension) {
-      throw new Error('No active suspension to resume');
-    }
-
-    const agent = this.getCurrentAgent();
-
-    // Remove before resuming so a re-suspend during the resumed run can re-register
-    // the same toolCallId without being clobbered by this cleanup. Drop the matching
-    // display-state entry too so the UI stops rendering only the resolved prompt
-    // while any other parked suspensions stay visible.
-    this.#session.suspensions.delete({ toolCallId });
-    this.#session.displayState.deletePendingSuspension(toolCallId);
-
-    const requestContext = await this.buildRequestContext(requestContextInput);
-    const threadId = this.#session.thread.getId();
-
-    const output = await agent.resumeStream(resumeData, {
-      // Re-supply the shared run budget (maxSteps, etc). Without it the resumed
-      // run merges over the agent's small default maxSteps and stops mid-task.
-      ...this.buildSharedRunOptions(),
-      runId: suspension.runId,
-      toolCallId,
-      memory: threadId ? { thread: threadId, resource: this.#session.identity.getResourceId() } : undefined,
-      abortSignal: this.#session.run.ensureAbortController().signal,
-      requestContext,
-      toolsets: await this.buildToolsets(requestContext),
-    });
-
-    await this.processStream(output, requestContext);
-  }
-
   // ===========================================================================
   // Event System
   // ===========================================================================
-
-  /**
-   * Subscribe to harness events. Returns an unsubscribe function.
-   */
-  subscribe(listener: HarnessEventListener): () => void {
-    this.listeners.push(listener);
-    return () => {
-      const index = this.listeners.indexOf(listener);
-      if (index !== -1) {
-        this.listeners.splice(index, 1);
-      }
-    };
-  }
-
-  private emit(event: HarnessEvent): void {
-    // The Session owns the display-state reducer; fold the event into the
-    // canonical snapshot before dispatching to listeners. The Harness still owns
-    // the event bus (listeners) and the display_state_changed fan-out.
-    this.#session.displayState.apply(event);
-
-    this.dispatchToListeners(event);
-
-    if (event.type !== 'display_state_changed') {
-      this.dispatchDisplayStateChanged();
-    }
-  }
-
-  private dispatchDisplayStateChanged(): void {
-    // After every event, emit display_state_changed so UIs that prefer a single
-    // subscribe-and-render pattern can do so. We dispatch directly to listeners
-    // (not through emit()) to avoid infinite recursion.
-    this.dispatchToListeners({
-      type: 'display_state_changed',
-      displayState: this.#session.displayState.get(),
-    });
-  }
-
-  private dispatchToListeners(event: HarnessEvent): void {
-    for (const listener of this.listeners) {
-      try {
-        const result = listener(event);
-        if (result && typeof result === 'object' && 'catch' in result) {
-          (result as Promise<void>).catch(err => console.error('Error in harness event listener:', err));
-        }
-      } catch (err) {
-        console.error('Error in harness event listener:', err);
-      }
-    }
-  }
+  //
+  // The Session owns the event bus. To observe events, subscribe on a session:
+  // `harness.session.subscribe(listener)`. Internal orchestration emits on the
+  // session it is driving via `session.emit(...)`.
 
   // ===========================================================================
   // Runtime Context
@@ -3454,7 +1682,7 @@ export class Harness<TState = {}> {
    * and optionally subagent) plus any user-configured tools.
    * Used by sendMessage, handleToolApprove, and handleToolDecline.
    */
-  private async buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput> {
+  private async buildToolsets(session: Session<TState>, requestContext: RequestContext): Promise<ToolsetsInput> {
     const builtInTools: ToolsInput = {
       ask_user: askUserTool,
       submit_plan: submitPlanTool,
@@ -3476,19 +1704,19 @@ export class Harness<TState = {}> {
 
     // Auto-create subagent tool if subagent definitions are configured
     if (this.config.subagents?.length && this.config.resolveModel) {
-      const currentMode = this.#session.mode.resolve();
+      const currentMode = session.mode.resolve();
       const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
         resolveModel: this.config.resolveModel,
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
-        getParentModelId: () => this.#session.model.get(),
+        getParentModelId: () => session.model.get(),
         // Resolved lazily so forked subagents see the current mode's agent
         // even if the mode switches between tool-call scheduling and execution.
         getParentAgent: () => {
           try {
-            return this.getCurrentAgent();
+            return this.getCurrentAgent(session);
           } catch {
             return undefined;
           }
@@ -3502,10 +1730,10 @@ export class Harness<TState = {}> {
         // see `listThreads` (filtered by default).
         cloneThreadForFork: hasMemory
           ? async ({ sourceThreadId, resourceId, title }) => {
-              const memory = await this.resolveMemory();
+              const memory = await this.resolveMemory(session);
               const result = await memory.cloneThread({
                 sourceThreadId,
-                resourceId: resourceId ?? this.#session.identity.getResourceId(),
+                resourceId: resourceId ?? session.identity.getResourceId(),
                 title,
                 metadata: {
                   forkedSubagent: true,
@@ -3522,7 +1750,7 @@ export class Harness<TState = {}> {
         // prompt-cache prefix, and stripping it would invalidate the cache.
         // Recursive forking is blocked at runtime instead: see the patched
         // `subagent` execute that the forked tool path installs in `tools.ts`.
-        getParentToolsets: forkRequestContext => this.buildToolsets(forkRequestContext ?? requestContext),
+        getParentToolsets: forkRequestContext => this.buildToolsets(session, forkRequestContext ?? requestContext),
       });
     }
 
@@ -3533,7 +1761,7 @@ export class Harness<TState = {}> {
       }
     }
 
-    const permissionRules = this.#session.permissions.getRules();
+    const permissionRules = session.permissions.getRules();
     for (const [toolId, policy] of Object.entries(permissionRules.tools)) {
       if (policy === 'deny') {
         delete builtInTools[toolId];
@@ -3556,7 +1784,7 @@ export class Harness<TState = {}> {
     // supported yet.  validateModes() already prevents setting both on the
     // same mode.
     if (this.config.agent) {
-      const currentMode = this.#session.mode.resolve();
+      const currentMode = session.mode.resolve();
       const modeTools = currentMode.tools ?? currentMode.additionalTools;
       if (modeTools) {
         result.modeTools = modeTools;
@@ -3570,29 +1798,32 @@ export class Harness<TState = {}> {
    * Build request context for agent execution.
    * Tools can access harness state via requestContext.get('harness').
    */
-  private async buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
+  private async buildRequestContext(
+    session: Session<TState>,
+    requestContext?: RequestContext,
+  ): Promise<RequestContext> {
     requestContext ??= new RequestContext();
     const harnessContext: HarnessRequestContext<TState> = {
       harnessId: this.id,
-      state: this.#session.state.get(),
-      getState: () => this.#session.state.get(),
-      setState: updates => this.#session.state.set(updates),
-      updateState: updater => this.#session.state.update(updater),
-      threadId: this.#session.thread.getId(),
-      resourceId: this.#session.identity.getResourceId(),
+      state: session.state.get(),
+      getState: () => session.state.get(),
+      setState: updates => session.state.set(updates),
+      updateState: updater => session.state.update(updater),
+      threadId: session.thread.getId(),
+      resourceId: session.identity.getResourceId(),
       session: {
-        modeId: this.#session.mode.get(),
-        modelId: this.#session.model.get(),
+        modeId: session.mode.get(),
+        modelId: session.model.get(),
         state: {
-          get: () => this.#session.state.get(),
-          set: updates => this.#session.state.set(updates),
-          update: updater => this.#session.state.update(updater),
+          get: () => session.state.get(),
+          set: updates => session.state.set(updates),
+          update: updater => session.state.update(updater),
         },
       },
-      abortSignal: this.#session.run.getAbortSignal(),
+      abortSignal: session.run.getAbortSignal(),
       workspace: this.workspace,
-      emitEvent: event => this.emit(event),
-      getSubagentModelId: params => this.#session.subagents.model.get(params ?? {}),
+      emitEvent: event => session.emit(event),
+      getSubagentModelId: params => session.subagents.model.get(params ?? {}),
     };
 
     requestContext.set('harness', harnessContext);
@@ -3604,7 +1835,7 @@ export class Harness<TState = {}> {
       // from the one the agent resolves and registers — leaving harness-side
       // tools (e.g. request_access) mutating a different filesystem than the
       // agent's workspace tools (e.g. view) read from.
-      const resolved = await Promise.resolve(this.workspaceFn({ requestContext, mastra: this.#internalMastra }));
+      const resolved = await Promise.resolve(this.workspaceFn({ requestContext, mastra: this.getMastra() }));
       harnessContext.workspace = resolved;
       // Cache for getWorkspace() so callers outside request flow (e.g. /skills) can access it
       this.workspace = resolved;
@@ -3616,7 +1847,7 @@ export class Harness<TState = {}> {
   /**
    * Resolve memory from config — handles both static instances and dynamic factory functions.
    */
-  private async resolveMemory(): Promise<MastraMemory> {
+  private async resolveMemory(session: Session<TState>): Promise<MastraMemory> {
     const mem = this.config.memory;
     if (!mem) {
       throw new Error('Memory is not configured on this Harness');
@@ -3624,7 +1855,7 @@ export class Harness<TState = {}> {
     if (typeof mem !== 'function') {
       return mem;
     }
-    const requestContext = await this.buildRequestContext();
+    const requestContext = await this.buildRequestContext(session);
     const resolved = await Promise.resolve(mem({ requestContext }));
     if (!resolved) {
       throw new Error('Dynamic memory factory returned empty value');
@@ -3636,9 +1867,9 @@ export class Harness<TState = {}> {
   // Token Usage
   // ===========================================================================
 
-  private async persistTokenUsage(): Promise<void> {
-    const threadId = this.#session.thread.getId();
-    if (!threadId || !this.config.storage) return;
+  private async persistTokenUsage(session: Session<TState>): Promise<void> {
+    const threadId = session.thread.getId();
+    if (!threadId || !this.#resolveStorage()) return;
 
     try {
       const memoryStorage = await this.getMemoryStorage();
@@ -3647,7 +1878,7 @@ export class Harness<TState = {}> {
         await memoryStorage.saveThread({
           thread: {
             ...thread,
-            metadata: { ...thread.metadata, tokenUsage: this.#session.getTokenUsage() },
+            metadata: { ...thread.metadata, tokenUsage: session.getTokenUsage() },
             updatedAt: new Date(),
           },
         });
@@ -3671,14 +1902,16 @@ export class Harness<TState = {}> {
    * Useful for code paths outside the request flow (e.g. slash commands).
    */
   async resolveWorkspace({
+    session,
     requestContext,
   }: {
+    session: Session<TState>;
     requestContext?: RequestContext;
-  } = {}): Promise<Workspace | undefined> {
+  }): Promise<Workspace | undefined> {
     if (this.workspace) return this.workspace;
     if (this.workspaceFn) {
       // buildRequestContext resolves the workspace and caches it on this.workspace
-      await this.buildRequestContext(requestContext);
+      await this.buildRequestContext(session, requestContext);
       return this.workspace;
     }
     return undefined;
@@ -3696,10 +1929,10 @@ export class Harness<TState = {}> {
   async destroyWorkspace(): Promise<void> {
     if (this.workspaceFn) return;
     if (this.workspace && this.workspaceInitialized) {
+      // The workspace is a Harness-shared resource torn down at Harness
+      // shutdown; there is no single session to emit lifecycle events onto.
       try {
-        this.emit({ type: 'workspace_status_changed', status: 'destroying' });
         await this.workspace.destroy();
-        this.emit({ type: 'workspace_status_changed', status: 'destroyed' });
       } catch (error) {
         console.warn('Workspace destroy failed:', error);
       } finally {
@@ -3789,21 +2022,11 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   async destroy(): Promise<void> {
-    this.cleanupAgentThreadSubscription();
+    // The Harness owns no session; per-session teardown (thread-subscription
+    // cleanup) is the caller's responsibility via `session.thread.*`. Here we
+    // only tear down Harness-shared resources.
     await this.stopHeartbeats();
     await this.destroyWorkspace();
-  }
-
-  // ===========================================================================
-  // Session
-  // ===========================================================================
-
-  async getSession(): Promise<HarnessSession> {
-    return {
-      currentThreadId: this.#session.thread.getId(),
-      currentModeId: this.#session.mode.get(),
-      threads: await this.#session.thread.list(),
-    };
   }
 
   // ===========================================================================
@@ -3814,6 +2037,6 @@ export class Harness<TState = {}> {
     if (this.config.idGenerator) {
       return this.config.idGenerator();
     }
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    return randomUUID();
   }
 }

@@ -3,7 +3,6 @@ import type { RuleGroup, JsonSchema } from '@mastra/playground-ui';
 import {
   Button,
   CodeEditor,
-  ContentBlock,
   Input,
   Label,
   Tooltip,
@@ -20,6 +19,7 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui';
+import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { GripVertical, X, BookmarkPlus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';

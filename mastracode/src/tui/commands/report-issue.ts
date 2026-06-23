@@ -12,7 +12,7 @@ export async function handleReportIssueCommand(ctx: SlashCommandContext, args: s
 
   // Ensure thread exists
   if (ctx.state.pendingNewThread) {
-    await ctx.state.harness.createThread();
+    await ctx.state.session.thread.create();
     ctx.state.pendingNewThread = false;
   }
 

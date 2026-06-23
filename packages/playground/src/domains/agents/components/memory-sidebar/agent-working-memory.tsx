@@ -6,10 +6,10 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  useCopyToClipboard,
   toast,
   cn,
 } from '@mastra/playground-ui';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';

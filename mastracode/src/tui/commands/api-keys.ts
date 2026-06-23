@@ -91,7 +91,7 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
       if (!info) return;
       if (info.source === 'env') {
         detailText.setText(
-          theme.fg('dim', '  Key set via environment variable. To change it, update your shell environment.'),
+          theme.fg('dim', '  Key set via environment variable. Press Enter to store a local override.'),
         );
       } else if (info.source === 'stored') {
         detailText.setText(theme.fg('dim', '  Key stored locally. Press Enter to update or Delete to remove.'));
@@ -111,13 +111,6 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
       list.onSelect = (item: SelectItem) => {
         const info = providers.find(p => p.provider === item.value);
         if (!info) return;
-
-        if (info.source === 'env') {
-          ctx.showInfo(
-            `${info.provider} key is set via environment variable${info.envVar ? ` (${info.envVar})` : ''}. Update it in your shell environment.`,
-          );
-          return;
-        }
 
         showKeyDialog(info);
       };
@@ -149,6 +142,10 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
             providers = getProviderList(ctx, models);
             ctx.showInfo(`API key removed for ${info.provider}`);
             rebuildList();
+          } else if (info?.source === 'env') {
+            ctx.showInfo(
+              `${info.provider} key is set via environment variable${info.envVar ? ` (${info.envVar})` : ''}. Remove it from your shell environment to unset.`,
+            );
           }
           return;
         }

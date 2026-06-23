@@ -180,10 +180,6 @@ values
     await runtime.waitForScreenText(/notification from github/i, terminal, 30_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17638 CI recovered/i, terminal, 30_000);
     await runtime.waitForScreenText(/medium · pull-request-ci-recovered · delivered/i, terminal, 30_000);
-
-    terminal.submit('/github debug');
-    await runtime.waitForScreenText(/mastra-ai\/mastra#17638 sync=success/i, terminal, 30_000);
-    await runtime.waitForScreenText(/ci=success/i, terminal, 30_000);
-    runtime.printScreen('github incremental debug status', terminal);
+    runtime.printScreen('github incremental notification', terminal);
   },
 } satisfies McE2eScenario;

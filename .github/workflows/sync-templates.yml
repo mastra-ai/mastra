@@ -33,7 +33,7 @@ jobs:
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
           owner: mastra-ai
           permission-contents: write
-          permission-organization-administration: write
+          permission-administration: write
 
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10

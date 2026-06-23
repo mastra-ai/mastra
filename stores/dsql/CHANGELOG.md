@@ -1,5 +1,14 @@
 # @mastra/dsql
 
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- Fixed SQL query failures when filtering threads by resourceId or metadata in Aurora DSQL storage ([#18311](https://github.com/mastra-ai/mastra/pull/18311))
+
+- Updated dependencies [[`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c)]:
+  - @mastra/core@1.46.0-alpha.2
+
 ## 1.1.0
 
 ### Minor Changes

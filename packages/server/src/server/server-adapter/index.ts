@@ -30,6 +30,7 @@ import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
+export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
 export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
