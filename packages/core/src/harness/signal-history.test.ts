@@ -5,6 +5,29 @@ import { signalToMastraDBMessage } from '../agent/signals';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 
+function createTextDbMessage({
+  id,
+  text,
+  threadId,
+  resourceId,
+  createdAt,
+}: {
+  id: string;
+  text: string;
+  threadId: string;
+  resourceId: string;
+  createdAt: Date;
+}) {
+  return {
+    id,
+    role: 'user' as const,
+    threadId,
+    resourceId,
+    createdAt,
+    content: { format: 2 as const, parts: [{ type: 'text' as const, text }] },
+  };
+}
+
 describe('Harness signal history rendering', () => {
   async function createHarnessWithThread() {
     const storage = new InMemoryStore();
@@ -28,6 +51,44 @@ describe('Harness signal history rendering', () => {
 
     return { harness, session, memoryStorage, thread };
   }
+
+  it('loads the newest bounded history window even when storage pagination returns the oldest rows', async () => {
+    const { session, memoryStorage, thread } = await createHarnessWithThread();
+    const messages = Array.from({ length: 5 }, (_, index) =>
+      createTextDbMessage({
+        id: `message-${index + 1}`,
+        text: `message ${index + 1}`,
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        createdAt: new Date(`2026-06-19T12:00:0${index}.000Z`),
+      }),
+    );
+    await memoryStorage.saveMessages({ messages });
+
+    const originalListMessages = memoryStorage.listMessages.bind(memoryStorage);
+    const listMessages = vi.spyOn(memoryStorage, 'listMessages').mockImplementation(async input => {
+      if (input.perPage !== false && typeof input.perPage === 'number') {
+        const all = await originalListMessages({
+          ...input,
+          perPage: false,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+        });
+        return { ...all, messages: all.messages.slice(0, input.perPage), perPage: input.perPage, hasMore: false };
+      }
+      return originalListMessages(input);
+    });
+
+    const loaded = await session.thread.listActiveMessages({ limit: 2 });
+
+    expect(listMessages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: thread.id,
+        perPage: 5_000,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      }),
+    );
+    expect(loaded.map(message => message.id)).toEqual(['message-4', 'message-5']);
+  });
 
   it('renders persisted user-message signals as user content', async () => {
     const { session, memoryStorage, thread } = await createHarnessWithThread();
