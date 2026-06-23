@@ -1988,6 +1988,6 @@ export class Harness<TState = {}> {
     if (this.config.idGenerator) {
       return this.config.idGenerator();
     }
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    return randomUUID();
   }
 }
