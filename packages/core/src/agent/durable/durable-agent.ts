@@ -340,6 +340,10 @@ export class DurableAgent<
     return this.#wrappedAgent.getInstructions(options);
   }
 
+  override getDefaultOptions(options?: any) {
+    return this.#wrappedAgent.getDefaultOptions(options);
+  }
+
   override listTools(options?: any) {
     return this.#wrappedAgent.listTools(options);
   }
@@ -852,6 +856,12 @@ export class DurableAgent<
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
       messages,
       options,
+      // Forward the caller-provided runId (mirrors stream()). Without this,
+      // prepareForDurableExecution mints a fresh id, so prepare() registers a
+      // different run than requested and a follow-up resume(runId) — e.g. when
+      // rehydrating a persisted, suspended run in a fresh process — can't find
+      // its registry entry.
+      runId: options?.runId,
       requestContext: options?.requestContext,
       mastra: this.#mastra,
     });

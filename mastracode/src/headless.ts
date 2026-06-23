@@ -4,7 +4,7 @@
 import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
-import type { Harness, HarnessEvent, HarnessMessage } from '@mastra/core/harness';
+import type { Harness, HarnessEvent, HarnessMessage, Session } from '@mastra/core/harness';
 
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
@@ -201,18 +201,18 @@ function resolveExitCode(reason?: string): number {
 }
 
 function autoResolve<TState extends Record<string, unknown>>(
-  harness: Harness<TState>,
+  session: Session<TState>,
   event: HarnessEvent,
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
     case 'tool_approval_required': {
-      harness.session.respondToToolApproval({ decision: 'approve' });
+      session.respondToToolApproval({ decision: 'approve' });
       return { resolved: true, label: `[auto-approved] ${event.toolName}`, json: { ...event, autoApproved: true } };
     }
     case 'tool_suspended': {
       const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
       if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
-        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: 'Yes' });
+        void session.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: 'Yes' });
         return {
           resolved: true,
           label: `[auto-approved sandbox] ${String(payload.path ?? '')}`,
@@ -220,14 +220,14 @@ function autoResolve<TState extends Record<string, unknown>>(
         };
       }
       if (event.toolName === 'submit_plan') {
-        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: { action: 'approved' } });
+        void session.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: { action: 'approved' } });
         return {
           resolved: true,
           label: `[auto-approved plan] ${String(payload.title ?? '')}`,
           json: { ...event, autoApproved: true },
         };
       }
-      void harness.respondToToolSuspension({
+      void session.respondToToolSuspension({
         toolCallId: event.toolCallId,
         resumeData: 'Proceed with your best judgment. Do not ask further questions.',
       });
@@ -346,18 +346,18 @@ function aggregateIntoSummary(event: HarnessEvent, summary: HeadlessSummary): vo
 function finalizeSummary<TState extends Record<string, unknown>>(
   summary: HeadlessSummary,
   endEvent: Extract<HarnessEvent, { type: 'agent_end' }>,
-  harness: Harness<TState>,
+  session: Session<TState>,
 ): void {
   summary.finishReason = endEvent.reason;
-  summary.threadId = harness.session.thread.getId() ?? undefined;
+  summary.threadId = session.thread.getId() ?? undefined;
 }
 
 /** Resolve a thread by ID or title. Tries exact ID match first, then title. */
 async function resolveThread<TState extends Record<string, unknown>>(
-  harness: Harness<TState>,
+  session: Session<TState>,
   threadIdOrTitle: string,
 ): Promise<{ threadId: string; matchType: 'id' | 'title' } | { error: string }> {
-  const threads = await harness.session.thread.list();
+  const threads = await session.thread.list();
 
   const byId = threads.find(t => t.id === threadIdOrTitle);
   if (byId) return { threadId: byId.id, matchType: 'id' };
@@ -378,6 +378,7 @@ async function resolveThread<TState extends Record<string, unknown>>(
  */
 export async function runHeadless<TState extends Record<string, unknown>>(
   harness: Harness<TState>,
+  session: Session<TState>,
   args: HeadlessArgs & { prompt: string },
   effectiveDefaults?: Record<string, string>,
 ): Promise<number> {
@@ -399,7 +400,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
       } else {
         process.stderr.write(`\nTimeout: ${args.timeout}s elapsed. Aborting.\n`);
       }
-      harness.abort();
+      session.abort();
     }, args.timeout * 1000);
   }
 
@@ -432,7 +433,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
       const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
       return failEarly(`Model "${args.model}" has no API key configured.${keyHint}`);
     }
-    await harness.session.model.switch({ modelId: args.model });
+    await session.model.switch({ modelId: args.model });
     if (!emit) process.stderr.write(`[model] ${args.model}\n`);
   } else if (args.mode) {
     // --mode flag: look up model from effectiveDefaults (resolved from settings at startup)
@@ -447,7 +448,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
         const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
         return failEarly(`Model "${modelId}" (mode: ${args.mode}) has no API key configured.${keyHint}`);
       }
-      await harness.session.model.switch({ modelId });
+      await session.model.switch({ modelId });
       if (!emit) process.stderr.write(`[model] ${modelId} (mode: ${args.mode})\n`);
     } else {
       const warnMsg = `--mode ${args.mode} has no configured model, using default`;
@@ -458,7 +459,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
   // --- Resolve thinking level ---
   if (args.thinkingLevel) {
-    await harness.session.state.set({ thinkingLevel: args.thinkingLevel } as unknown as Partial<TState>);
+    await session.state.set({ thinkingLevel: args.thinkingLevel } as unknown as Partial<TState>);
     if (!emit) process.stderr.write(`[thinking] ${args.thinkingLevel}\n`);
   }
 
@@ -470,8 +471,8 @@ export async function runHeadless<TState extends Record<string, unknown>>(
   const streamCtx = { lastTextLength: 0 };
 
   const done = new Promise<number>(resolve => {
-    harness.subscribe(event => {
-      const result = autoResolve(harness, event);
+    const unsubscribe = session.subscribe(event => {
+      const result = autoResolve(session, event);
       if (result.resolved) {
         if (emit) emit(result.json);
         else if (!outputFormat) process.stderr.write(result.label + '\n');
@@ -486,7 +487,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
       if (event.type === 'agent_end') {
         if (summary) {
-          finalizeSummary(summary, event, harness);
+          finalizeSummary(summary, event, session);
           process.stdout.write(JSON.stringify(summary) + '\n');
         } else if (textBuffer !== null) {
           process.stdout.write(textBuffer);
@@ -494,6 +495,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
         } else if (emit) {
           emit({ ...event });
         }
+        unsubscribe();
         resolve(resolveExitCode(event.reason));
         return;
       }
@@ -508,14 +510,14 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
   // --- Resource ID ---
   if (args.resourceId) {
-    harness.setResourceId({ resourceId: args.resourceId });
+    await harness.setResourceId(session, { resourceId: args.resourceId });
     if (!emit) process.stderr.write(`[resource] ${args.resourceId}\n`);
   }
 
   // --- Thread selection ---
   try {
     if (args.thread) {
-      const result = await resolveThread(harness, args.thread);
+      const result = await resolveThread(session, args.thread);
       if ('error' in result) {
         const msg = result.error;
         if (emit) emit({ type: 'error', error: { message: msg } });
@@ -523,13 +525,13 @@ export async function runHeadless<TState extends Record<string, unknown>>(
         if (timeoutId) clearTimeout(timeoutId);
         return 1;
       }
-      await harness.switchThread({ threadId: result.threadId });
+      await session.thread.switch({ threadId: result.threadId });
       if (!emit) process.stderr.write(`[thread] resumed ${result.threadId} (matched by ${result.matchType})\n`);
     } else if (args.continue_) {
-      const threads = await harness.session.thread.list();
+      const threads = await session.thread.list();
       if (threads.length > 0) {
         const sorted = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-        await harness.switchThread({ threadId: sorted[0]!.id });
+        await session.thread.switch({ threadId: sorted[0]!.id });
         if (!emit) process.stderr.write(`[continued] thread ${sorted[0]!.id}\n`);
       } else if (!emit) {
         process.stderr.write(`[info] No existing threads found, starting new thread\n`);
@@ -547,7 +549,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
   // --- Clone ---
   if (args.cloneThread) {
     try {
-      const cloned = await harness.cloneThread();
+      const cloned = await session.thread.clone();
       if (emit) emit({ type: 'thread_cloned', threadId: cloned.id });
       else process.stderr.write(`[cloned] thread ${cloned.id}\n`);
     } catch (err) {
@@ -562,7 +564,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
   // --- Title ---
   if (args.title) {
     try {
-      await harness.renameThread({ title: args.title });
+      await session.thread.rename({ title: args.title });
       if (!emit) process.stderr.write(`[title] "${args.title}"\n`);
     } catch (err) {
       const msg = `Failed to set thread title: ${(err as Error).message}`;
@@ -573,7 +575,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
     }
   }
 
-  await harness.sendMessage({ content: args.prompt });
+  await session.sendMessage({ content: args.prompt });
 
   const exitCode = await done;
   if (timeoutId) clearTimeout(timeoutId);
@@ -622,7 +624,7 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   }
 
   const result = await createMastraCode({ settingsPath: args.settings });
-  const { harness, mcpManager, effectiveDefaults } = result;
+  const { harness, session, mcpManager, effectiveDefaults } = result;
 
   if (mcpManager?.hasServers()) {
     try {
@@ -633,10 +635,8 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   }
 
   setupDebugLogging();
-  await harness.init();
-  await harness.getMastra()?.startWorkers();
 
-  const exitCode = await runHeadless(harness, { ...args, prompt }, effectiveDefaults);
+  const exitCode = await runHeadless(harness, session, { ...args, prompt }, effectiveDefaults);
 
   // Cleanup
   releaseAllThreadLocks();

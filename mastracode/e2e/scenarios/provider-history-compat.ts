@@ -128,7 +128,7 @@ values
     terminal.write('provider history');
     await runtime.waitForScreenText(/E2E provider history compatibility fixture/i, terminal);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched to: E2E provider history compatibility fixture/i, terminal);
+    await runtime.waitForScreenText(/Seeded question before provider-history retry\./i, terminal);
     await runtime.waitForScreenText(new RegExp(ASSISTANT_TEXT), terminal);
 
     terminal.submit(USER_PROMPT);
