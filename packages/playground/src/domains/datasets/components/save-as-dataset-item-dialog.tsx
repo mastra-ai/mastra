@@ -30,8 +30,6 @@ type SaveAsDatasetItemDialogProps = {
   trajectoryLoading?: boolean;
   /** JSON string of the tool mocks (array of { toolName, args, output }) */
   initialToolMocks?: string;
-  /** Whether the tool mocks are still being fetched */
-  toolMocksLoading?: boolean;
   breadcrumb: ReactNode;
   isOpen: boolean;
   onClose: () => void;
@@ -48,7 +46,6 @@ export function SaveAsDatasetItemDialog({
   initialTrajectory,
   trajectoryLoading,
   initialToolMocks,
-  toolMocksLoading,
   breadcrumb,
   isOpen,
   onClose,
@@ -302,15 +299,9 @@ export function SaveAsDatasetItemDialog({
             <Button
               type="submit"
               variant="default"
-              disabled={
-                addItem.isPending ||
-                trajectoryLoading ||
-                toolMocksLoading ||
-                !selectedDatasetId ||
-                datasets.length === 0
-              }
+              disabled={addItem.isPending || trajectoryLoading || !selectedDatasetId || datasets.length === 0}
             >
-              {addItem.isPending ? 'Saving...' : trajectoryLoading || toolMocksLoading ? 'Loading...' : 'Save Item'}
+              {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading...' : 'Save Item'}
             </Button>
           </div>
         </form>

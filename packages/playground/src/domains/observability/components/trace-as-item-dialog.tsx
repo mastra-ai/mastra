@@ -94,7 +94,6 @@ export function TraceAsItemDialog({
       initialTrajectory={initialTrajectory}
       trajectoryLoading={isTrajectoryLoading}
       initialToolMocks={initialToolMocks}
-      toolMocksLoading={isTrajectoryLoading}
       breadcrumb={
         <TextAndIcon>
           <EyeIcon /> {getShortId(traceId)}
