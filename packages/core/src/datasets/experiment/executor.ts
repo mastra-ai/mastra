@@ -384,7 +384,10 @@ function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: A
       // 3. `live` — fall through to the real tool.
       return undefined;
     },
-    afterToolCall: context => userHooks?.afterToolCall?.(context),
+    // Pass the user's afterToolCall through as-is (preserving undefined) so the
+    // agent skips a no-op call when the user configured no afterToolCall. Served
+    // mocks invoke it manually above, since they short-circuit the real tool.
+    afterToolCall: userHooks?.afterToolCall,
   };
 }
 
