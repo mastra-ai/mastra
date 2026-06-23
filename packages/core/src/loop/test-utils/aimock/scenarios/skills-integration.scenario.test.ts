@@ -2,10 +2,10 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import { LocalFilesystem } from '../../../../workspace/filesystem';
 import { Workspace } from '../../../../workspace/workspace';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: SkillsProcessor integration with agent loop.
@@ -35,7 +35,7 @@ You are a code reviewer. When reviewing code:
 3. Suggest improvements for readability
 `;
 
-describe('AIMock scenario: skills integration', () => {
+describeForAllEngines('AIMock scenario: skills integration', engine => {
   const getMock = useLoopScenarioAimock();
   let tempDir: string;
   let workspace: Workspace;
@@ -61,6 +61,7 @@ describe('AIMock scenario: skills integration', () => {
 
   it('injects skill metadata into system prompt when workspace has skills', async () => {
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'What skills do you have?',
       workspace,
@@ -87,6 +88,7 @@ describe('AIMock scenario: skills integration', () => {
 
   it('model can call skill tool to load skill instructions mid-loop', async () => {
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Load the code-review skill and tell me what it does.',
       workspace,
@@ -142,6 +144,7 @@ describe('AIMock scenario: skills integration', () => {
 
   it('handles missing skill gracefully', async () => {
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Load the non-existent-skill.',
       workspace,

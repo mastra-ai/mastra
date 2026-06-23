@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import type { Processor } from '../../../../processors';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: input processors run before the model request.
@@ -10,7 +10,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * `requests[0]` — i.e. the model never sees the raw secret. A regression where
  * input processors are skipped or run after request assembly is caught here.
  */
-describe('AIMock loop scenario: input processor', () => {
+describeForAllEngines('AIMock loop scenario: input processor', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('redacts the user message before it reaches the model request', async () => {
@@ -36,6 +36,7 @@ describe('AIMock loop scenario: input processor', () => {
     };
 
     const { requests, output } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'My password is INPUT_SECRET, please acknowledge.',
       inputProcessors: [redactInput],

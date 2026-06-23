@@ -1,9 +1,9 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
 import { PubSub } from '../../../../events/pubsub';
 import { EventCallback } from '../../../../events/types';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Signal delivery to threads with no active subscriber.
@@ -58,7 +58,7 @@ class InMemoryPubSub extends PubSub {
   }
 }
 
-describe('AIMock scenario: signal delivery without subscriber', () => {
+describeForAllEngines('AIMock scenario: signal delivery without subscriber', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('sendMessage to an idle non-subscribed thread still wakes and completes a run', async () => {
@@ -69,6 +69,7 @@ describe('AIMock scenario: signal delivery without subscriber', () => {
     const resourceId = 'no-sub-resource';
 
     const { agent } = await runLoopScenario({
+      engine,
       llm: mock,
       prompt: 'Initial prompt',
       stopWhen: stepCountIs(1),
@@ -113,6 +114,7 @@ describe('AIMock scenario: signal delivery without subscriber', () => {
     const resourceId = 'no-sub-state-resource';
 
     const { agent } = await runLoopScenario({
+      engine,
       llm: mock,
       prompt: 'Initial prompt',
       stopWhen: stepCountIs(1),

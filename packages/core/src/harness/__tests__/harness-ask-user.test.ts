@@ -346,9 +346,13 @@ describe('Harness: ask_user native suspension', () => {
         expect(suspensions.map(e => e.toolCallId)).toEqual([next.toolCallId]);
         expect(events.some(e => e.type === 'tool_start')).toBe(false);
       } else {
-        // Last answer completes the run with no further suspensions.
+        // Last answer completes the run with no further suspensions. The resume
+        // call returns once the matching tool result boundary is observed, so the
+        // final agent_end may arrive on the subscription shortly after.
         expect(suspensions).toHaveLength(0);
-        expect(events.some(e => e.type === 'agent_end' && e.reason === 'complete')).toBe(true);
+        await vi.waitFor(() => {
+          expect(events.some(e => e.type === 'agent_end' && e.reason === 'complete')).toBe(true);
+        });
       }
     }
 
