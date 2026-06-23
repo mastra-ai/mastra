@@ -1,6 +1,5 @@
 import {
   PageLayout,
-  SectionCard,
   Select,
   SelectContent,
   SelectItem,
@@ -9,6 +8,7 @@ import {
   useTheme,
 } from '@mastra/playground-ui';
 import type { Theme } from '@mastra/playground-ui';
+import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
 import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import type { LucideIcon } from 'lucide-react';
 import { MonitorIcon, MoonIcon, SunIcon } from 'lucide-react';
