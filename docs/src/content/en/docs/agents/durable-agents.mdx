@@ -70,16 +70,16 @@ A durable agent adds three layers on top of a regular agent:
 
 1. **Workflow execution**: `stream()` serializes the messages and options into a workflow input, then triggers the agentic loop inside a durable workflow. The workflow runs the same loop as `Agent.stream()` but each step can be memoized and replayed.
 
-2. **PubSub streaming**: As the loop runs, chunks are published to a PubSub topic keyed by the run ID. The caller subscribes to this topic and pipes chunks into a `ReadableStream`. If the caller disconnects and reconnects, missed chunks are replayed from the cache.
+1. **PubSub streaming**: As the loop runs, chunks are published to a PubSub topic keyed by the run ID. The caller subscribes to this topic and pipes chunks into a `ReadableStream`. If the caller disconnects and reconnects, missed chunks are replayed from the cache.
 
-3. **Cache layer**: An optional cache (in-memory by default, Redis or another backend in production) stores published events so that a late subscriber can catch up.
+1. **Cache layer**: An optional cache (in-memory by default, Redis or another backend in production) stores published events so that a late subscriber can catch up.
 
 ## Execution variants
 
 Mastra provides three factory functions that produce durable agents. They differ in how the workflow is executed:
 
 | Factory | Package | Execution engine | Best for |
-| --- | --- | --- | --- |
+| - | - | - | - |
 | `createDurableAgent` | `@mastra/core` | In-process workflow engine | Local development, single-process servers |
 | `createEventedAgent` | `@mastra/core` | Fire-and-forget on the built-in engine | Background execution where the caller doesn't wait for the workflow trigger |
 | `createInngestAgent` | `@mastra/inngest` | Inngest durable execution platform | Production deployments with step memoization, retries, and monitoring |
@@ -178,13 +178,10 @@ export const durableAgent = createDurableAgent({
 Durable agents support the same [`untilIdle`](/reference/agents/durable-agent#stream) option as regular agents. When `untilIdle` is set, `stream()` keeps the connection open across background-task continuations until the agent is idle:
 
 ```typescript title="src/mastra/run.ts"
-const { output, cleanup } = await durableAgent.stream(
-  'Research and summarize the topic',
-  {
-    untilIdle: true,
-    memory: { thread: 'thread-1', resource: 'user-1' },
-  },
-)
+const { output, cleanup } = await durableAgent.stream('Research and summarize the topic', {
+  untilIdle: true,
+  memory: { thread: 'thread-1', resource: 'user-1' },
+})
 
 for await (const chunk of output.fullStream) {
   // Chunks from the initial turn AND any follow-up turns triggered by
@@ -214,15 +211,12 @@ Visit [Background tasks](/docs/agents/background-tasks) for the full background 
 Durable agents support tool approval (human-in-the-loop). When a tool call requires approval, the workflow suspends, emits an `onSuspended` callback, and waits for the caller to resume with `resume()`:
 
 ```typescript title="src/mastra/run.ts" {4}
-const { output, runId, cleanup } = await durableAgent.stream(
-  'Delete the old records',
-  {
-    requireToolApproval: true,
-    onSuspended: ({ toolCallId, toolName, args }) => {
-      // Notify the user and ask for approval
-    },
+const { output, runId, cleanup } = await durableAgent.stream('Delete the old records', {
+  requireToolApproval: true,
+  onSuspended: ({ toolCallId, toolName, args }) => {
+    // Notify the user and ask for approval
   },
-)
+})
 ```
 
 Resume the suspended run after approval:
