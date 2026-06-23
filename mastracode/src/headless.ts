@@ -510,7 +510,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
   // --- Resource ID ---
   if (args.resourceId) {
-    harness.setResourceId(session, { resourceId: args.resourceId });
+    await harness.setResourceId(session, { resourceId: args.resourceId });
     if (!emit) process.stderr.write(`[resource] ${args.resourceId}\n`);
   }
 

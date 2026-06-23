@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: empty/no-tool turn (model returns text immediately).
@@ -10,7 +10,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * the loop completes successfully with a single request. This is the simplest
  * possible loop behavior and should never break.
  */
-describe('AIMock loop scenario: empty/no-tool turn', () => {
+describeForAllEngines('AIMock loop scenario: empty/no-tool turn', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('completes immediately when model returns text without tool calls', async () => {
@@ -23,6 +23,7 @@ describe('AIMock loop scenario: empty/no-tool turn', () => {
     });
 
     const { requests, output, chunks } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Say hello',
       tools: { unused_tool: unusedTool },
@@ -67,6 +68,7 @@ describe('AIMock loop scenario: empty/no-tool turn', () => {
     });
 
     const { requests, output } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'What is the weather?',
       tools: { tool_one: tool1, tool_two: tool2 },
@@ -91,6 +93,7 @@ describe('AIMock loop scenario: empty/no-tool turn', () => {
 
   it('handles empty string response gracefully', async () => {
     const { requests, output } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Return empty',
       fixtures: llm => {

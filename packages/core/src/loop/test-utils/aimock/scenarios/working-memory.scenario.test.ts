@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: working-memory persistence + injection across turns.
@@ -12,7 +12,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * turn. A regression in working-memory wiring (tool not injected, value not
  * persisted, or not re-injected) is caught here.
  */
-describe('AIMock loop scenario: working memory', () => {
+describeForAllEngines('AIMock loop scenario: working memory', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('persists working memory in turn 1 and injects it into a later request', async () => {
@@ -39,6 +39,7 @@ describe('AIMock loop scenario: working memory', () => {
     // Turn 1: model calls updateWorkingMemory, then turn 2 of the inner loop
     // (with the tool result) emits final text.
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Remember that my name is Ada and I prefer WM_DARK_MODE.',
       memory,
@@ -72,6 +73,7 @@ describe('AIMock loop scenario: working memory', () => {
     // Turn 2: a fresh run on the same thread. The stored working memory must be
     // injected into the request (system prompt) so the model can use it.
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'What do you know about me?',
       memory,

@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: memory thread switching mid-conversation.
@@ -11,7 +11,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * 2. Switching back to Thread A after a Thread B turn still recalls Thread A's full history.
  * 3. Thread IDs correctly partition memory state.
  */
-describe('AIMock loop scenario: memory thread switching mid-conversation', () => {
+describeForAllEngines('AIMock loop scenario: memory thread switching mid-conversation', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('switching threads keeps conversation histories isolated', async () => {
@@ -45,6 +45,7 @@ describe('AIMock loop scenario: memory thread switching mid-conversation', () =>
 
     // Turn 1: Thread A — establish a fact
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'My secret code is ALPHA_7749.',
       memory,
@@ -61,6 +62,7 @@ describe('AIMock loop scenario: memory thread switching mid-conversation', () =>
 
     // Turn 2: Thread B — establish a different fact
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'My secret code is BRAVO_3312.',
       memory,
@@ -77,6 +79,7 @@ describe('AIMock loop scenario: memory thread switching mid-conversation', () =>
 
     // Turn 3: Thread A — should recall Thread A's history but NOT Thread B's
     const { requests: requestsA } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'What is my secret code?',
       memory,
@@ -98,6 +101,7 @@ describe('AIMock loop scenario: memory thread switching mid-conversation', () =>
 
     // Turn 4: Thread B — should recall Thread B's history but NOT Thread A's
     const { requests: requestsB } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'What is my secret code?',
       memory,
@@ -133,6 +137,7 @@ describe('AIMock loop scenario: memory thread switching mid-conversation', () =>
 
     // Establish history on old thread
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Remember LEGACY_DATA_99.',
       memory,
@@ -161,6 +166,7 @@ describe('AIMock loop scenario: memory thread switching mid-conversation', () =>
 
     // Switch to brand new thread — should have no prior history
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Hello, fresh start here.',
       memory,
