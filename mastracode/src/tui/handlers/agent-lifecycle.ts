@@ -55,6 +55,11 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   }
+  // Drop the live judge reference so that a continuation turn creates a fresh
+  // JudgeDisplayComponent *after* the new streaming text. Without this the
+  // reused component stays at the position of the previous turn's evaluation,
+  // causing the new turn's text to visually overwrite the old text + judge.
+  state.activeGoalJudge = undefined;
   state.followUpComponents = [];
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
@@ -73,7 +78,7 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
   // Drain queued follow-up actions once all harness-level follow-ups are done.
   // Each queued action that starts a new agent operation will eventually trigger
   // handleAgentEnd again, which drains the next FIFO item.
-  if (state.harness.getFollowUpCount() > 0) {
+  if (state.session.followUps.count() > 0) {
     return true;
   }
 
@@ -220,6 +225,13 @@ function removeJudgeComponent(state: EventHandlerContext['state'], component: Ju
 export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEvaluationPayload): void {
   const { state } = ctx;
 
+  // Esc/Ctrl+C pauses the goal and aborts the run. If a judge stream races in a
+  // late goal chunk after that, don't let it recreate UI or overwrite the
+  // user-paused objective with the stale active/continue result.
+  if (state.userInitiatedAbort && state.goalManager.getGoal()?.status === 'paused') {
+    return;
+  }
+
   // Reuse the existing judge component for this turn, or create one inline so
   // the judge's progress appears alongside the agent's response.
   let activeGoalJudge = state.activeGoalJudge;
@@ -235,6 +247,25 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
     insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   }
 
+  if (payload.activity?.length) {
+    for (const activity of payload.activity) {
+      if (activity.type === 'reason') {
+        activeGoalJudge.component.setStreamingReason(activity.message);
+      } else {
+        activeGoalJudge.component.addActivity(activity.message);
+      }
+    }
+  }
+
+  // A pending chunk signals that scoring has started but isn't finished yet.
+  // Show the loading indicator (the component already renders "evaluating…"
+  // when result is null) and wait for the follow-up chunk with the result.
+  if (payload.pending) {
+    ctx.updateStatusLine();
+    state.ui.requestRender();
+    return;
+  }
+
   activeGoalJudge.component.setEvaluation(payload);
 
   // Mirror the loop's progress into the synchronous adapter view so the status
@@ -244,18 +275,18 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
   ctx.updateStatusLine();
   state.ui.requestRender();
 
-  if (payload.status !== 'active') {
-    // The goal reached a terminal/parked state this turn. Drop the live judge
-    // reference so the next turn starts a fresh display.
-    state.activeGoalJudge = undefined;
-  }
+  // A final (non-pending) goal chunk completes this judge display. Keep the
+  // rendered component in history, but drop the live reference so an in-loop
+  // continuation creates a fresh display after the next assistant output instead
+  // of updating the previous turn's component in place.
+  state.activeGoalJudge = undefined;
 
   if (payload.status === 'done') {
     const goal = state.goalManager.getGoal();
     if (goal && goal.id === state.planStartedGoalId) {
       const goalId = state.planStartedGoalId;
       state.planStartedGoalId = undefined;
-      state.harness.switchMode({ modeId: 'plan' }).catch(error => {
+      state.session.mode.switch({ modeId: 'plan' }).catch(error => {
         ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
         state.planStartedGoalId = goalId;
       });

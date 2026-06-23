@@ -1,14 +1,8 @@
 import {
-  AlertDialog,
   Button,
   ButtonsGroup,
-  Column,
-  Columns,
-  CopyButton,
   MainContentContent,
   MainContentLayout,
-  MainHeader,
-  Notice,
   PermissionDenied,
   SessionExpired,
   TextAndIcon,
@@ -17,6 +11,11 @@ import {
   toast,
 } from '@mastra/playground-ui';
 import type { DatasetItemToolMock } from '@mastra/client-js';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { format } from 'date-fns';
 import {
   ArrowRightToLineIcon,

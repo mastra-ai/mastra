@@ -2,5 +2,5 @@
 .test-tmp/
 .test-tmp-editor/
 .tmp-mc-e2e/
-.tui-test/
+.tmp-mc-e2e-vitest/
 .mastra-project.json

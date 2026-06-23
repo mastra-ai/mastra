@@ -1,6 +1,9 @@
 'use client';
 
-import { Button, ButtonsGroup, Checkbox, Column, ItemList } from '@mastra/playground-ui';
+import { Button, ButtonsGroup } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { GitCompareIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetItemVersions } from '../../hooks/use-dataset-item-versions';

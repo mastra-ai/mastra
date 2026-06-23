@@ -4,6 +4,7 @@ import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, InternalSpans } from '../../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { createWorkflow } from '../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
@@ -58,6 +59,9 @@ const durableAgenticInputSchema = z.object({
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
+  // Exported AGENT_RUN / MODEL_GENERATION span data, threaded so the run shares one trace
+  agentSpanData: z.any().optional(),
+  modelSpanData: z.any().optional(),
 });
 
 // Re-export shared output schema (identical across implementations)
@@ -137,17 +141,22 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           state: state.state,
           messageId: state.messageId,
           stepIndex: state.iterationCount,
+          agentSpanData: state.agentSpanData,
+          modelSpanData: state.modelSpanData,
         };
       },
       { id: 'map-to-llm-input' },
     )
     // Step 1: Execute LLM
     .then(llmExecutionStep)
-    // Step 2: Extract tool calls as array for foreach
+    // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting)
     .map(
       async ({ inputData }) => {
         const llmOutput = inputData as DurableLLMStepOutput;
-        return (llmOutput.toolCalls ?? []) as DurableToolCallInput[];
+        return (llmOutput.toolCalls ?? []).map(toolCall => ({
+          ...toolCall,
+          stepSpanData: llmOutput.stepSpanData,
+        })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
     )
@@ -247,7 +256,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       // Map final state to output format, run output processors, persist memory, emit finish
       .map(
         async params => {
-          const { inputData, mastra, requestContext } = params;
+          const { inputData, mastra, requestContext, tracingContext } = params;
           const state = inputData as IterationState;
           const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
@@ -273,7 +282,14 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               });
               const outputMessageList = new MessageList();
               outputMessageList.deserialize(state.messageListState);
-              await runner.runOutputProcessors(outputMessageList, {} as any, requestContext ?? new RequestContext(), 0);
+              // Forward the step's tracingContext so processor_run spans parent
+              // to the AGENT_RUN ancestor via ProcessorRunner's findParent walk.
+              await runner.runOutputProcessors(
+                outputMessageList,
+                createObservabilityContext(tracingContext),
+                requestContext ?? new RequestContext(),
+                0,
+              );
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error running output processors: ${error}`);
             }
@@ -331,6 +347,35 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
             });
+          }
+
+          // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
+          // originals were ended as `suspended`, so end the *resume* spans (registry override).
+          try {
+            const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
+              requestContext,
+            });
+            const reg = globalRunRegistry.get(initData.runId);
+            const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
+            const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+            if (observability) {
+              if (modelSpanData) {
+                const modelSpan = observability.rebuildSpan(
+                  modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
+                ) as AIModelGenerationSpan | undefined;
+                modelSpan?.createTracker()?.endGeneration({
+                  output: { text: finalText },
+                  attributes: { finishReason: finalOutput.stepResult?.reason },
+                  usage: state.accumulatedUsage,
+                });
+              }
+              if (agentSpanData) {
+                const agentSpan = observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+                agentSpan?.end({ output: { text: finalText } });
+              }
+            }
+          } catch (error) {
+            logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
           }
 
           return finalOutput;

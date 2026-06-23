@@ -10,7 +10,7 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
   controller,
   runId,
   messageList,
-  mastra,
+  rotateResponseMessageId,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'signalDrainStep',
@@ -24,6 +24,7 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
       }
 
       messageList.markResponseMessageBoundary(typedInput.stepResult?.messageId ?? typedInput.messageId);
+      const nextMessageId = rotateResponseMessageId();
       for (const pendingSignal of pendingSignals) {
         const signalForTranscript = messageList.addSignal(pendingSignal);
         controller.enqueue(signalForTranscript.toDataPart() as unknown as ChunkType<OUTPUT>);
@@ -31,9 +32,10 @@ export function createSignalDrainStep<Tools extends ToolSet = ToolSet, OUTPUT = 
 
       return {
         ...typedInput,
-        messageId: _internal?.generateId?.() ?? mastra?.generateId?.() ?? typedInput.messageId,
+        messageId: nextMessageId,
         stepResult: {
           ...typedInput.stepResult,
+          messageId: nextMessageId,
           reason: 'other',
           isContinued: true,
         },

@@ -3,13 +3,13 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-  Textarea,
   Icon,
   RuleBuilder,
   countLeafRules,
   cn,
 } from '@mastra/playground-ui';
 import type { JsonSchema, RuleGroup } from '@mastra/playground-ui';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { ChevronRight, Ruler, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 

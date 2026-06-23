@@ -37,7 +37,7 @@ export function AgentsList({ agents, isLoading, search = '' }: AgentsListProps) 
   }
 
   return (
-    <EntityList columns={'auto 1fr auto auto auto auto'}>
+    <EntityList columns={'auto 1fr auto auto auto auto'} variant="striped">
       <EntityList.Top>
         <EntityList.TopCell className="">Name</EntityList.TopCell>
         <EntityList.TopCell className="">Instructions</EntityList.TopCell>

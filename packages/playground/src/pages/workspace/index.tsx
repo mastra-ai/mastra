@@ -1,6 +1,5 @@
 import {
   Button,
-  ErrorState,
   NoDataPageLayout,
   PageLayout,
   PermissionDenied,
@@ -14,6 +13,7 @@ import {
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';

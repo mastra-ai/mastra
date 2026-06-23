@@ -6,6 +6,10 @@ import { deepEqual } from '../../utils';
  * v1 is output-only: when matched, `output` is served to the agent in place of
  * executing the real tool. Error mocks are intentionally not supported in v1
  * (the agent `beforeToolCall` hook can only short-circuit with an output).
+ *
+ * Tool mocks only apply to experiments with `targetType: 'agent'`. They are
+ * ignored for `task`, `workflow`, and `scorer` targets (the experiment logs a
+ * warning if a dataset carrying `toolMocks` is run against a non-agent target).
  */
 /**
  * How a mock's `args` are matched against the agent's tool call.
@@ -27,7 +31,15 @@ export interface ItemToolMock {
   args: Record<string, unknown>;
   /** Output served to the agent when this mock is matched and consumed. */
   output: unknown;
-  /** Argument matching mode for this mock. Defaults to `strict`. */
+  /**
+   * Argument matching mode for this mock. Defaults to `strict`.
+   *
+   * @example
+   * // strict (default): served only when args deep-equal the call
+   * { toolName: 'getWeather', args: { city: 'Seattle' }, output: { tempF: 52 }, matchArgs: 'strict' }
+   * // ignore: served for any args to `getWeather` (tool-name-only match)
+   * { toolName: 'getWeather', args: {}, output: { tempF: 52 }, matchArgs: 'ignore' }
+   */
   matchArgs?: ToolMockMatchArgs;
 }
 

@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { cleanup, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
