@@ -4,8 +4,8 @@ import { CacheKeyGenerator } from './CacheKeyGenerator';
 /**
  * Regression test for https://github.com/mastra-ai/mastra/issues/18280
  *
- * Models that emit an empty reasoning summary (e.g. Anthropic Opus 4.7/4.8 with
- * thinking `display: omitted`, or OpenAI gpt-5.x via the Responses API returning
+ * Models that emit an empty reasoning summary (e.g. Anthropic __GATEWAY_ANTHROPIC_MODEL_OPUS__ with
+ * thinking `display: omitted`, or OpenAI __AI_SDK_OPENAI_MODEL_BASE__ via the Responses API returning
  * no summary) persist a reasoning part shaped like:
  *
  *   { type: 'reasoning', reasoning: '', details: [{ type: 'text' }] }   // no `text`
