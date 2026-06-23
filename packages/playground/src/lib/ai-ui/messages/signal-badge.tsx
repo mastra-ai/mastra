@@ -86,9 +86,7 @@ function isTaskItemArray(value: unknown): value is TaskItem[] {
 
 function getTaskSignalData(signal: SignalData): { tasks: TaskItem[]; mode: 'snapshot' | 'delta' } | undefined {
   const isTaskSignal =
-    signal.id === 'tasks' ||
-    signal.tagName === 'current-task-list' ||
-    signal.tagName === 'task-list-update';
+    signal.id === 'tasks' || signal.tagName === 'current-task-list' || signal.tagName === 'task-list-update';
   if (!isTaskSignal) return undefined;
 
   const metadata = signal.metadata;
