@@ -1890,6 +1890,14 @@ export class GeminiLiveVoice extends MastraVoice<
        * { handle } resumes a previous session.
        */
       session_resumption?: { handle?: string };
+      /**
+       * Opts the session into seeding initial conversation history via send_client_content frames.
+       * Must be present in the setup frame for sendContext() to work on gemini-3.1-flash-live-preview
+       * and later 3.x models — without it the server closes the WebSocket with code 1007.
+       */
+      history_config?: {
+        initial_history_in_client_content?: boolean;
+      };
     }
 
     // Native-audio models require `response_modalities: ["AUDIO"]` at setup time. This is a voice
@@ -1933,6 +1941,17 @@ export class GeminiLiveVoice extends MastraVoice<
         // { handle } resumes a previous session. Only included when enableResumption is set.
         ...(this.options.sessionConfig?.enableResumption && {
           session_resumption: this.isResuming && this.sessionHandle ? { handle: this.sessionHandle } : {},
+        }),
+        // history_config opts the session into send_client_content-based history seeding.
+        // Required by gemini-3.1-flash-live-preview (and later 3.x models) for sendContext() to
+        // succeed — without this field in the setup frame the server closes the WebSocket with
+        // code 1007 ("Request contains an invalid argument."). Defaults to true so that
+        // sendContext() works out of the box; set initialHistoryInClientContent: false on
+        // sessionConfig to opt out explicitly.
+        ...(this.options.sessionConfig?.initialHistoryInClientContent !== false && {
+          history_config: {
+            initial_history_in_client_content: true,
+          },
         }),
       },
     };

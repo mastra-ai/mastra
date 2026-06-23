@@ -2,12 +2,12 @@ import {
   Button,
   MainContentContent,
   MainContentLayout,
-  MainHeader,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { GitCompare, ArrowLeft } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetExperimentsComparison } from '@/domains/datasets';

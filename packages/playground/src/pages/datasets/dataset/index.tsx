@@ -1,9 +1,7 @@
 import {
   Button,
   ButtonsGroup,
-  DropdownMenu,
   EmptyState,
-  ErrorState,
   PageLayout,
   PermissionDenied,
   SessionExpired,
@@ -15,6 +13,8 @@ import {
   is404NotFoundError,
 } from '@mastra/playground-ui';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { format } from 'date-fns/format';
 import { ArrowLeft, Copy, DatabaseIcon, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';

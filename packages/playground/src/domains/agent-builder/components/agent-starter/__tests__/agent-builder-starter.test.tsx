@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
@@ -31,10 +30,6 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-vi.mock('@/domains/auth/hooks/use-default-visibility', () => ({
-  useDefaultVisibility: () => 'private',
-}));
-
 const BASE_URL = 'http://localhost:4111';
 
 const renderStarter = () => {
@@ -64,6 +59,7 @@ describe('AgentBuilderStarter', () => {
         HttpResponse.json({ enabled: true, modelPolicy: { active: false } }),
       ),
       http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
+      http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
       http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, login: null })),
     );
   });

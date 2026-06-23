@@ -1,4 +1,5 @@
-import { Notice, Badge, Button, MainContentLayout, Spinner } from '@mastra/playground-ui';
+import { Badge, Button, MainContentLayout, Spinner } from '@mastra/playground-ui';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Check, Download, GitPullRequest, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
