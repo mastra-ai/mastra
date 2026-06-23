@@ -175,7 +175,7 @@ When an item declares several mocks for the same tool and arguments, they are co
 By default each mock matches strictly on its `args`. Set `matchArgs: 'ignore'` to match on the tool name only — the mock's `args` are not compared and the next unconsumed mock for that tool is served regardless of how the agent called it:
 
 ```typescript
-{
+const subAgentMock = {
   toolName: 'agent-balanceAgent',
   args: { prompt: 'look up the balance for YJ' },
   output: { text: "YJ's balance is $100." },
