@@ -117,6 +117,7 @@ export type ScenarioName =
   | 'thread-history'
   | 'tool-history-reload'
   | 'tool-schema-compat'
+  | 'tool-suspension-same-run-resume'
   | 'update-command-prompt'
   | 'update-startup-prompt'
   | 'web-search-rendering'
