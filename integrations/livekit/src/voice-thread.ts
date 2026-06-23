@@ -40,6 +40,8 @@ export async function persistSpokenGreeting({
   resourceId,
   greeting,
 }: VoiceThreadArgs & { greeting: string }): Promise<void> {
+  // A whitespace/empty greeting would persist a low-value assistant message; skip it.
+  if (!greeting.trim()) return;
   const message: MastraDBMessage = {
     id: randomUUID(),
     role: 'assistant',
