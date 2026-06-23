@@ -128,6 +128,9 @@ const sidebars = {
           type: 'doc',
           id: 'agents/durable-agents',
           label: 'Durable Agents',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',

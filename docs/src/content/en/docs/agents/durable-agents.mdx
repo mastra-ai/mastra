@@ -8,6 +8,14 @@ packages:
 
 # Durable agents
 
+**Added in:** `@mastra/core@1.30.0`
+
+:::warning
+
+Durable agents are currently in **beta**. APIs may change in future releases.
+
+:::
+
 A durable agent wraps a regular [`Agent`](/docs/agents/overview) so the agentic loop runs inside a workflow. Events flow through [PubSub](/docs/server/pubsub), which means a client can disconnect and reconnect without missing chunks. The run state is persisted, so it survives process restarts.
 
 ## When to use durable agents
@@ -17,15 +25,15 @@ Use a durable agent when any of the following apply:
 - The client may drop and reconnect mid-stream (mobile, spotty networks, long-running calls).
 - The agentic loop may outlive a single HTTP request (background research, multi-step tool use).
 - You need an observe/reconnect API where a second client picks up a stream that a first client started.
-- You want Inngest-powered execution with step memoization, retries, and monitoring.
+- You want [Inngest-powered execution](/guides/deployment/inngest) with step memoization, retries, and monitoring.
 
 For short-lived, request-scoped calls where the client stays connected, a regular `Agent` with `stream()` or `generate()` is simpler.
 
 ## Quickstart
 
-Wrap an existing agent with `createDurableAgent` from `@mastra/core/agent/durable`:
+Wrap an existing agent with `createDurableAgent()` from `@mastra/core/agent/durable`:
 
-```typescript title="src/mastra/agents/index.ts"
+```typescript title="src/mastra/agents/researcher.ts"
 import { Agent } from '@mastra/core/agent'
 import { createDurableAgent } from '@mastra/core/agent/durable'
 
@@ -43,7 +51,7 @@ Register the durable agent with Mastra and call `stream()`:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-import { durableResearcher } from './agents'
+import { durableResearcher } from './agents/researcher'
 
 const mastra = new Mastra({
   agents: { durableResearcher },
@@ -52,7 +60,13 @@ const mastra = new Mastra({
 const { output, runId, cleanup } = await durableResearcher.stream(
   'Research quantum computing advances in 2025',
 )
-const text = await output.text
+
+for await (const chunk of output.fullStream) {
+  // Process each chunk as it arrives
+}
+
+// Release PubSub subscriptions and clear the run from the registry.
+// If you skip this, an automatic cleanup timer fires after the stream ends.
 cleanup()
 ```
 
@@ -78,17 +92,17 @@ A durable agent adds three layers on top of a regular agent:
 
 Mastra provides three factory functions that produce durable agents. They differ in how the workflow is executed:
 
-| Factory | Package | Execution engine | Best for |
-| - | - | - | - |
-| `createDurableAgent` | `@mastra/core` | In-process workflow engine | Local development, single-process servers |
-| `createEventedAgent` | `@mastra/core` | Fire-and-forget on the built-in engine | Background execution where the caller doesn't wait for the workflow trigger |
-| `createInngestAgent` | `@mastra/inngest` | Inngest durable execution platform | Production deployments with step memoization, retries, and monitoring |
+| Factory | Package | Best for |
+| - | - | - |
+| `createDurableAgent()` | `@mastra/core` | Local development and single-process servers — you get a stream you can await directly |
+| `createEventedAgent()` | `@mastra/core` | Background execution — the workflow starts without blocking, and you consume chunks through PubSub |
+| `createInngestAgent()` | `@mastra/inngest` | Production deployments — Inngest adds step memoization, retries, and a monitoring dashboard |
 
-All three return an object that can be registered with `Mastra` the same way as a regular agent. `createDurableAgent` and `createEventedAgent` return class instances that extend `Agent`. `createInngestAgent` returns a Proxy-backed object that forwards `Agent` methods to the underlying agent.
+All three return an object you register with `Mastra` the same way as a regular agent. `createDurableAgent()` and `createEventedAgent()` return class instances that extend `Agent`. `createInngestAgent()` returns a Proxy-backed object that forwards `Agent` methods to the underlying agent.
 
-### In-process with `createDurableAgent`
+### In-process with `createDurableAgent()`
 
-`createDurableAgent` runs the workflow in-process. The caller awaits the stream directly. This is the simplest option and works without external infrastructure:
+Wrap your agent and call `stream()` — you get a `DurableAgentStreamResult` back in the same process. No external infrastructure is required, so this is the fastest way to get started:
 
 ```typescript title="src/mastra/agents/durable.ts"
 import { Agent } from '@mastra/core/agent'
@@ -103,9 +117,9 @@ const agent = new Agent({
 export const durableHelper = createDurableAgent({ agent })
 ```
 
-### Fire-and-forget with `createEventedAgent`
+### Fire-and-forget with `createEventedAgent()`
 
-`createEventedAgent` uses `startAsync()` to execute the workflow without blocking the caller. Chunks still arrive through PubSub, so you get a stream back — the difference from `createDurableAgent` is that the workflow trigger is non-blocking:
+The workflow starts in the background without blocking the caller. You still receive chunks through PubSub, so `stream()` returns a result you can consume — but the HTTP handler that triggered the run does not need to wait for the workflow to finish:
 
 ```typescript title="src/mastra/agents/evented.ts"
 import { Agent } from '@mastra/core/agent'
@@ -120,9 +134,9 @@ const agent = new Agent({
 export const eventedWriter = createEventedAgent({ agent })
 ```
 
-### Inngest-powered with `createInngestAgent`
+### Inngest-powered with `createInngestAgent()`
 
-`createInngestAgent` runs the workflow on the [Inngest](https://www.inngest.com/docs) platform. Inngest handles step memoization, retries, rate limiting, and provides a dashboard for monitoring runs:
+Run the workflow on the [Inngest](https://www.inngest.com/docs) platform. Each tool call becomes a memoized step that Inngest can retry independently, and you get a dashboard for monitoring runs:
 
 ```typescript title="src/mastra/agents/inngest.ts"
 import { Agent } from '@mastra/core/agent'
@@ -142,7 +156,7 @@ export const inngestAnalyst = createInngestAgent({ agent, inngest })
 
 :::note
 
-Visit the [createInngestAgent reference](/reference/agents/inngest-agent) for the full API, including Inngest-specific options like PubSub and cache configuration.
+Visit the [`createInngestAgent()` reference](/reference/agents/inngest-agent) for the full API, including Inngest-specific options like PubSub and cache configuration.
 
 :::
 
@@ -160,18 +174,21 @@ for await (const chunk of output.fullStream) {
 cleanup()
 ```
 
-`createDurableAgent` and `createEventedAgent` use an in-memory cache by default, which means resumable streams work within a single process. For production, provide a persistent cache backend (e.g., Redis) so cached events survive process restarts:
+`createDurableAgent()` and `createEventedAgent()` use an in-memory cache by default, which means resumable streams work within a single process. For production, provide a persistent cache backend (e.g., Redis) so cached events survive process restarts:
 
-```typescript title="src/mastra/agents/durable-with-cache.ts" {5}
+```typescript title="src/mastra/agents/durable-with-cache.ts" {2,7}
 import { createDurableAgent } from '@mastra/core/agent/durable'
+import { RedisServerCache } from '@mastra/redis'
+
+const cache = new RedisServerCache({ url: 'redis://localhost:6379' })
 
 export const durableAgent = createDurableAgent({
   agent,
-  cache: redisCache,
+  cache,
 })
 ```
 
-`createInngestAgent` does not enable caching by default. Pass a `cache` option or register the agent with a `Mastra` instance that has a `serverCache` configured to enable resumable streams.
+`createInngestAgent()` does not enable caching by default. Pass a `cache` option or register the agent with a `Mastra` instance that has a `serverCache` configured to enable resumable streams.
 
 ## Streaming with background tasks
 
@@ -190,6 +207,10 @@ for await (const chunk of output.fullStream) {
 
 cleanup()
 ```
+
+### Cleanup
+
+Every `stream()` and `observe()` call returns a `cleanup` function. Calling it unsubscribes from PubSub and removes the run from the internal registry. If you forget to call it, an automatic timer fires after the stream ends, but calling `cleanup()` yourself frees resources immediately.
 
 Pass `{ maxIdleMs }` to customize the idle timeout (defaults to 5 minutes):
 
@@ -228,7 +249,7 @@ await durableAgent.resume(runId, { approved: true })
 ## Related
 
 - [DurableAgent reference](/reference/agents/durable-agent)
-- [createInngestAgent reference](/reference/agents/inngest-agent)
+- [`createInngestAgent()` reference](/reference/agents/inngest-agent)
 - [Background tasks](/docs/agents/background-tasks)
 - [Inngest deployment guide](/guides/deployment/inngest)
 - [Agent overview](/docs/agents/overview)
