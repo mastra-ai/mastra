@@ -87,7 +87,7 @@ export async function handleWorkflowStream({
 }: WorkflowStreamHandlerOptions): Promise<SupportedUIMessageStream> {
   const { runId, resourceId: resourceIdFromParams, inputData, initialState, resumeData, requestContext, ...rest } = params;
   const resourceIdFromContext = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-  const resourceId = resourceIdFromContext || resourceIdFromParams;
+  const resourceId = resourceIdFromContext ?? resourceIdFromParams;
 
   const workflowObj = mastra.getWorkflowById(workflowId);
   if (!workflowObj) {
