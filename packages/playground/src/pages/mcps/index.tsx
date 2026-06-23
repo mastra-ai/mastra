@@ -1,6 +1,4 @@
 import {
-  ErrorState,
-  ListSearch,
   NoDataPageLayout,
   PageLayout,
   PermissionDenied,
@@ -8,6 +6,8 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { useState } from 'react';
 import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';
 import { NoMCPServersInfo } from '@/domains/mcps/components/mcps-list/no-mcp-servers-info';

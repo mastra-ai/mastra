@@ -6,6 +6,5 @@ If you change Zod compatibility behavior, also run pnpm test:core:zod and pnpm -
 
 Most tests live under packages/core/src/
 Run focused processor, harness, agent, or loop tests before broader validation when those areas change
-For multi-step agentic-loop composition regressions (tool-result plumbing, cross-turn ordering, stop conditions) add BDD-style AIMock scenarios under src/loop/test-utils/aimock; see that dir's README.md
 
 Keep changes here surgical; many packages depend on core

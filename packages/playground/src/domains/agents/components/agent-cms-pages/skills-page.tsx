@@ -7,9 +7,9 @@ import {
   EntityName,
   EntityDescription,
   ScrollArea,
-  Searchbar,
-  Switch,
 } from '@mastra/playground-ui';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Plus, Drill } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';

@@ -2,7 +2,6 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import {
   codeLanguages,
-  Notice,
   Badge,
   useCodemirrorTheme,
   Skeleton,
@@ -16,6 +15,7 @@ import {
   ToolsIcon,
   WorkflowIcon,
 } from '@mastra/playground-ui';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { GaugeIcon, Folder, Globe } from 'lucide-react';
 import { useActivatedSkills } from '../../context/activated-skills-context';

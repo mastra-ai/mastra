@@ -1,4 +1,5 @@
-import { AlertDialog, Icon, Skeleton, Spinner, Txt } from '@mastra/playground-ui';
+import { Icon, Skeleton, Spinner, Txt } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { formatDate } from 'date-fns';
 import { useState } from 'react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';

@@ -5,17 +5,15 @@ import {
   Entity,
   Input,
   Label,
-  RadioGroup,
-  RadioGroupItem,
   ScrollArea,
-  Searchbar,
-  Section,
-  SubSectionRoot,
-  Switch,
   JudgeIcon,
   cn,
 } from '@mastra/playground-ui';
 import type { RuleGroup } from '@mastra/playground-ui';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
