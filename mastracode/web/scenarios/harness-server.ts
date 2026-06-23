@@ -38,6 +38,12 @@ export interface ScenarioServerOptions {
   yolo?: boolean;
   /** Attach a real sandboxed workspace + file/shell tools to the agent. */
   workspace?: boolean;
+  /**
+   * Build the Harness with no storage of its own and configure storage on the
+   * parent Mastra instead, exercising Harness#resolveStorage inheritance (the
+   * production web-server wiring). Default false (harness owns its storage).
+   */
+  inheritStorageFromMastra?: boolean;
 }
 
 export interface ScenarioServer {
@@ -53,7 +59,7 @@ export async function startHarnessServer(
   aimockBaseUrl: string,
   options: ScenarioServerOptions = {},
 ): Promise<ScenarioServer> {
-  const { yolo = true, workspace: withWorkspace = false } = options;
+  const { yolo = true, workspace: withWorkspace = false, inheritStorageFromMastra = false } = options;
   const openai = createOpenAI({ apiKey: 'scenario-key', baseURL: aimockBaseUrl });
 
   let workspace: Workspace | undefined;
@@ -110,9 +116,12 @@ export async function startHarnessServer(
     tools: { ...(tools ?? {}), request_access: requestAccessTool } as any,
   });
 
+  // When inheriting, the Harness gets no storage and reads through the parent
+  // Mastra's store; otherwise it owns its own in-memory store.
+  const harnessStore = inheritStorageFromMastra ? undefined : new InMemoryStore();
   const harness = new Harness({
     id: HARNESS_ID,
-    storage: new InMemoryStore(),
+    ...(harnessStore ? { storage: harnessStore } : {}),
     ...(workspace ? { workspace } : {}),
     // Auto-approve tool calls (yolo) so scenarios exercise the full
     // execute-and-suspend path for built-in interactive tools (ask_user,
@@ -129,6 +138,10 @@ export async function startHarnessServer(
   const notifications = new InMemoryNotificationsStorage();
   const compositeStorage = new MastraCompositeStore({
     id: 'scenario-storage',
+    // When the harness inherits storage from this Mastra, the Mastra must own a
+    // real memory domain (default store) so thread persistence has somewhere to
+    // land. Standalone-harness scenarios only need the notifications domain.
+    ...(inheritStorageFromMastra ? { default: new InMemoryStore() } : {}),
     domains: { notifications },
   });
   const mastra = new Mastra({ harnesses: { [HARNESS_ID]: harness }, storage: compositeStorage });

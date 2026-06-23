@@ -52,8 +52,11 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   const harness = result.harness;
 
   // Register the harness on a Mastra so the server route handlers can resolve it
-  // via `mastra.getHarness(id)`.
-  const mastra = new Mastra({ harnesses: { [HARNESS_ID]: harness } });
+  // via `mastra.getHarness(id)`. Storage is owned by the Mastra: we hand it the
+  // same composite store the harness was built with, so durability is
+  // configured in one place and every harness registered here inherits it
+  // (see Harness#resolveStorage — config.storage ?? parent Mastra storage).
+  const mastra = new Mastra({ harnesses: { [HARNESS_ID]: harness }, storage: result.storage });
 
   const app = new Hono();
   mountHarnessRoutes(app, SERVER_ROUTES as unknown as ServerRouteLike[], mastra);

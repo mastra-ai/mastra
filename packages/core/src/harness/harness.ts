@@ -9,9 +9,9 @@ import { getErrorFromUnknown } from '../error';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
-import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
+import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
 import { Workspace } from '../workspace/workspace';
@@ -446,6 +446,19 @@ export class Harness<TState = {}> {
   }
 
   /**
+   * Resolve the storage backend used for persistence (threads, messages, OM,
+   * memory).
+   *
+   * Precedence: an explicit `config.storage` always wins (standalone harness,
+   * e.g. the terminal app). When no storage is configured locally but the
+   * Harness is registered on a parent Mastra, inherit the parent's storage so
+   * a server can own durability once and have its harnesses share it.
+   */
+  #resolveStorage(): MastraCompositeStore | undefined {
+    return this.config.storage ?? (this.#externalMastra?.getStorage() as MastraCompositeStore | undefined);
+  }
+
+  /**
    * Sets or updates the harness-level browser and propagates it to mode agents.
    */
   setBrowser(browser: MastraBrowser | undefined): void {
@@ -549,10 +562,11 @@ export class Harness<TState = {}> {
   }
 
   private async getMemoryStorage(): Promise<MemoryStorage> {
-    if (!this.config.storage) {
+    const storage = this.#resolveStorage();
+    if (!storage) {
       throw new Error('Storage is not configured on this Harness');
     }
-    const memoryStorage = await this.config.storage.getStore('memory');
+    const memoryStorage = await storage.getStore('memory');
     if (!memoryStorage) {
       throw new Error('Storage does not have a memory domain configured');
     }
@@ -574,7 +588,7 @@ export class Harness<TState = {}> {
       getMetadata: ({ threadId, key }) => this.readThreadMetadataValue({ threadId, key }),
       setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
       deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
-      hasStorage: () => !!this.config.storage,
+      hasStorage: () => !!this.#resolveStorage(),
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
       cloneThread: ({ sourceThreadId, resourceId, title }) =>
@@ -587,7 +601,7 @@ export class Harness<TState = {}> {
 
   /** Persist a thread row to memory storage (gateway primitive for the Session thread domain). */
   private async persistThreadRow(thread: HarnessThread): Promise<void> {
-    if (!this.config.storage) return;
+    if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
     await memoryStorage.saveThread({
       thread: {
@@ -603,7 +617,7 @@ export class Harness<TState = {}> {
 
   /** Delete a thread row from memory storage (gateway primitive for the Session thread domain). */
   private async deleteThreadRow(threadId: string): Promise<void> {
-    if (!this.config.storage) return;
+    if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
     await memoryStorage.deleteThread({ threadId });
   }
@@ -637,7 +651,7 @@ export class Harness<TState = {}> {
   }
 
   private async readThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
-    if (!this.config.storage) return undefined;
+    if (!this.#resolveStorage()) return undefined;
     try {
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
@@ -658,7 +672,7 @@ export class Harness<TState = {}> {
     key: string;
     value: unknown;
   }): Promise<void> {
-    if (!this.config.storage) return;
+    if (!this.#resolveStorage()) return;
     try {
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
@@ -673,7 +687,7 @@ export class Harness<TState = {}> {
   }
 
   private async removeThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<void> {
-    if (!this.config.storage) return;
+    if (!this.#resolveStorage()) return;
     try {
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
@@ -694,7 +708,7 @@ export class Harness<TState = {}> {
   }
 
   private async queryThreadById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
-    if (!this.config.storage) return null;
+    if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const thread = await memoryStorage.getThreadById({ threadId });
     if (!thread) return null;
@@ -715,7 +729,7 @@ export class Harness<TState = {}> {
     resourceId?: string;
     includeForkedSubagents?: boolean;
   }): Promise<HarnessThread[]> {
-    if (!this.config.storage) return [];
+    if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
     const filter: { resourceId?: string } | undefined = resourceId === undefined ? undefined : { resourceId };
@@ -746,7 +760,7 @@ export class Harness<TState = {}> {
     threadId: string;
     limit?: number;
   }): Promise<HarnessMessage[]> {
-    if (!this.config.storage) return [];
+    if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
 
@@ -765,7 +779,7 @@ export class Harness<TState = {}> {
   }
 
   private async queryFirstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
-    if (!this.config.storage || threadIds.length === 0) return new Map();
+    if (!this.#resolveStorage() || threadIds.length === 0) return new Map();
 
     const memoryStorage = await this.getMemoryStorage();
     const result = await memoryStorage.listMessages({
@@ -1264,7 +1278,7 @@ export class Harness<TState = {}> {
     role: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
   }): Promise<HarnessMessage | null> {
-    if (!this.config.storage) return null;
+    if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const dbMessage = {
       id: randomUUID(),
@@ -1851,7 +1865,7 @@ export class Harness<TState = {}> {
 
   private async persistTokenUsage(session: Session<TState>): Promise<void> {
     const threadId = session.thread.getId();
-    if (!threadId || !this.config.storage) return;
+    if (!threadId || !this.#resolveStorage()) return;
 
     try {
       const memoryStorage = await this.getMemoryStorage();
