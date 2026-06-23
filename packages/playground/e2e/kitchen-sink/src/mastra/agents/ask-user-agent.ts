@@ -86,8 +86,9 @@ const mockAskUserModel = new MastraLanguageModelV2Mock({
     let callCount = 0;
     return async () => {
       callCount++;
+      // Odd calls = tool call (ask_user), Even calls = text response (after resume)
       return {
-        stream: callCount === 1 ? createAskUserToolCallStream() : createTextStream(),
+        stream: callCount % 2 === 1 ? createAskUserToolCallStream() : createTextStream(),
       };
     };
   })(),
