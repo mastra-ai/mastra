@@ -45,6 +45,7 @@ vi.mock('@mastra/core/processors', () => ({
   PrefillErrorHandler: class {},
   ProviderHistoryCompat: class {},
   StreamErrorRetryProcessor: class {},
+  isECONNRESETError: () => false,
 }));
 
 vi.mock('./agents/instructions.js', () => ({

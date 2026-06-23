@@ -19,6 +19,7 @@ import {
   PrefillErrorHandler,
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
+  isECONNRESETError,
 } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
@@ -93,6 +94,12 @@ import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
+
+// Global retry policy for transient network resets (e.g. provider sockets dropping mid-stream).
+// Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack
+// settings, so all modes/subagents benefit from a short wait before retrying an ECONNRESET.
+const MASTRACODE_ECONNRESET_MAX_RETRIES = 2;
+const MASTRACODE_ECONNRESET_RETRY_DELAY_MS = 1000;
 
 function applyEffectiveDefaultsToModes(modes: HarnessMode[], effectiveDefaults: Record<string, string>): HarnessMode[] {
   return modes.map(mode => {
@@ -518,7 +525,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       }),
       new ProviderHistoryCompat(),
     ],
-    errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
+    errorProcessors: [
+      new StreamErrorRetryProcessor({
+        maxRetries: MASTRACODE_ECONNRESET_MAX_RETRIES,
+        delayMs: MASTRACODE_ECONNRESET_RETRY_DELAY_MS,
+        matchers: [isECONNRESETError],
+      }),
+      new PrefillErrorHandler(),
+      new ProviderHistoryCompat(),
+    ],
   });
 
   // const defaultSubAgents: Array<HarnessSubagent> = [];

@@ -4,9 +4,18 @@ import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './in
 
 export type StreamErrorRetryMatcher = (error: unknown) => boolean;
 
+export type StreamErrorRetryDelayMs = number | ((args: ProcessAPIErrorArgs) => number | Promise<number>);
+
 export type StreamErrorRetryProcessorOptions = {
   maxRetries?: number;
   matchers?: StreamErrorRetryMatcher[];
+  /**
+   * Optional delay (ms) to wait before signaling a retry. Accepts a number or an
+   * async function evaluated with the current error args. Negative/non-finite
+   * values are clamped to 0. Defaults to 0 (retry immediately), preserving the
+   * existing behavior for consumers that do not configure a delay.
+   */
+  delayMs?: StreamErrorRetryDelayMs;
 };
 
 const DEFAULT_MAX_RETRIES = 1;
@@ -21,6 +30,7 @@ const RETRYABLE_OPENAI_ERROR_CODES = [
 ];
 const OPENAI_RETRY_MESSAGE_PATTERN = /you can retry your request/i;
 const DEFAULT_MATCHERS = [isRetryableOpenAIResponsesStreamError];
+const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -94,6 +104,34 @@ function isRetryableProviderMetadata(error: unknown): boolean {
   return retryable === true;
 }
 
+/**
+ * Opt-in matcher for transient network-reset failures. Node's `ECONNRESET` is
+ * surfaced as an error code (`code === 'ECONNRESET'`) on either the top-level
+ * error or a nested `cause`. Some SDKs/undici also surface resets as a
+ * `socket hang up` message, which is matched conservatively.
+ *
+ * This matcher is intentionally NOT part of the default matcher set; consumers
+ * that want to retry network resets must opt in via `matchers: [isECONNRESETError]`.
+ */
+export function isECONNRESETError(error: unknown): boolean {
+  if (error === null || error === undefined) {
+    return false;
+  }
+
+  const code = isRecord(error) ? getStringProperty(error, 'code') : undefined;
+  if (code && code.toUpperCase() === 'ECONNRESET') {
+    return true;
+  }
+
+  const message =
+    error instanceof Error ? error.message : isRecord(error) ? getStringProperty(error, 'message') : undefined;
+  if (message && ECONNRESET_MESSAGE_PATTERN.test(message)) {
+    return true;
+  }
+
+  return false;
+}
+
 function isRetryableStreamError(error: unknown, matchers: StreamErrorRetryMatcher[]): boolean {
   const visited = new WeakSet<object>();
 
@@ -126,16 +164,51 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
 
   readonly #maxRetries: number;
   readonly #matchers: StreamErrorRetryMatcher[];
+  readonly #delayMs: StreamErrorRetryDelayMs | undefined;
 
   constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.#matchers = [...DEFAULT_MATCHERS, ...(options.matchers ?? [])];
+    this.#delayMs = options.delayMs;
   }
 
-  async processAPIError({ error, retryCount }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
+  async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
+    const { error, retryCount, abortSignal } = args;
     if (retryCount >= this.#maxRetries) return;
     if (!isRetryableStreamError(error, this.#matchers)) return;
 
+    if (this.#delayMs !== undefined) {
+      await waitDelay(this.#delayMs, args, abortSignal);
+    }
+
     return { retry: true };
   }
+}
+
+function clampDelayMs(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+async function waitDelay(
+  delayMs: StreamErrorRetryDelayMs,
+  args: ProcessAPIErrorArgs,
+  abortSignal?: AbortSignal,
+): Promise<void> {
+  const delay = typeof delayMs === 'function' ? await delayMs(args) : delayMs;
+  const ms = clampDelayMs(delay);
+  if (ms <= 0) return;
+
+  if (abortSignal?.aborted) return;
+
+  await new Promise<void>(resolve => {
+    const timeout = setTimeout(resolve, ms);
+    abortSignal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timeout);
+        resolve();
+      },
+      { once: true },
+    );
+  });
 }

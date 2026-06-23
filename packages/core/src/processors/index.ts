@@ -829,8 +829,10 @@ export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
 export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
 export {
+  isECONNRESETError,
   isRetryableOpenAIResponsesStreamError,
   StreamErrorRetryProcessor,
+  type StreamErrorRetryDelayMs,
   type StreamErrorRetryMatcher,
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';
