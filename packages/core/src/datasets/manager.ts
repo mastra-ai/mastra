@@ -99,6 +99,10 @@ export class DatasetsManager {
     targetType?: TargetType;
     targetIds?: string[];
     scorerIds?: string[];
+    organizationId?: string | null;
+    resourceId?: string | null;
+    candidateKey?: string | null;
+    candidateId?: string | null;
   }): Promise<Dataset> {
     const store = await this.#getDatasetsStore();
 
@@ -140,11 +144,24 @@ export class DatasetsManager {
 
   /**
    * List all datasets with pagination.
+   *
+   * Supports optional tenancy and candidate-identity filters. When omitted, all
+   * datasets visible to the configured storage instance are returned.
    */
-  async list(args?: { page?: number; perPage?: number }) {
+  async list(args?: {
+    page?: number;
+    perPage?: number;
+    filters?: {
+      organizationId?: string;
+      resourceId?: string;
+      candidateKey?: string;
+      candidateId?: string;
+    };
+  }) {
     const store = await this.#getDatasetsStore();
     return store.listDatasets({
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
+      ...(args?.filters ? { filters: args.filters } : {}),
     });
   }
 

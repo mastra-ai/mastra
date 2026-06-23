@@ -4852,7 +4852,8 @@ export const API_ROUTE_METADATA = {
       "input",
       "metadata",
       "requestContext",
-      "source"
+      "source",
+      "toolMocks"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4922,7 +4923,8 @@ export const API_ROUTE_METADATA = {
       "input",
       "metadata",
       "requestContext",
-      "source"
+      "source",
+      "toolMocks"
     ],
     "hasQuery": false,
     "hasBody": true,
