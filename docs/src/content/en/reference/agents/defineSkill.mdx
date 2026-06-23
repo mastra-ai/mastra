@@ -1,0 +1,119 @@
+---
+title: "Reference: defineSkill() | Skills"
+description: "API reference for defineSkill(), a factory function for creating inline agent skills without a filesystem."
+packages:
+  - "@mastra/core"
+---
+
+# `defineSkill()`
+
+Creates an inline skill that can be passed directly to an agent's `skills` config without a filesystem or workspace.
+
+The returned object implements the `Skill` interface and works anywhere a filesystem-discovered skill works.
+
+## Usage example
+
+```typescript title="src/mastra/skills.ts"
+import { defineSkill } from '@mastra/core/skills'
+
+const reviewSkill = defineSkill({
+  name: 'code-review',
+  description: 'Use when reviewing code changes.',
+  instructions: `
+    When reviewing code:
+    1. Check for correctness
+    2. Check for style consistency
+    3. Look for potential bugs
+  `,
+  references: {
+    'checklist.md': '# Review Checklist\n- No unused imports\n- Error handling present',
+  },
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: 'name',
+      type: 'string',
+      description: 'Unique skill name. Used as the identifier when agents activate the skill. Must be a valid slug (lowercase, hyphens allowed).',
+    },
+    {
+      name: 'description',
+      type: 'string',
+      description: 'Short description shown to the agent in the system message. Helps the agent decide when to use the skill.',
+    },
+    {
+      name: 'instructions',
+      type: 'string',
+      description: 'The full skill instructions in markdown. Loaded into the conversation when the agent activates the skill.',
+    },
+    {
+      name: 'references',
+      type: 'Record<string, string>',
+      isOptional: true,
+      description: 'Supporting documents the agent can read with the `skill_read` tool. Keys are filenames, values are file contents.',
+    },
+    {
+      name: 'license',
+      type: 'string',
+      isOptional: true,
+      description: 'SPDX license identifier for the skill.',
+    },
+    {
+      name: 'compatibility',
+      type: 'string[]',
+      isOptional: true,
+      description: 'List of compatible platforms or environments.',
+    },
+    {
+      name: 'user-invocable',
+      type: 'boolean',
+      isOptional: true,
+      description: 'Whether end users can invoke this skill directly. Defaults to `undefined` (agent decides).',
+    },
+    {
+      name: 'metadata',
+      type: 'Record<string, unknown>',
+      isOptional: true,
+      description: 'Arbitrary metadata attached to the skill.',
+    },
+  ]}
+/>
+
+## Return value
+
+Returns an `InlineSkill` object that implements the `Skill` interface:
+
+```typescript
+interface InlineSkill extends Skill {
+  __inline: true
+  __referenceContents: Record<string, string>
+}
+```
+
+The skill is assigned a synthetic path of `inline/<name>` (e.g., `inline/code-review`).
+
+## Validation
+
+`defineSkill()` validates inputs using the same rules as filesystem skills:
+
+- `name` is required and must be a valid slug
+- `description` is required
+- `instructions` is required and non-empty
+
+If validation fails, an `Error` is thrown with details about the invalid fields.
+
+```typescript
+// Throws: Invalid skill "": name is required
+defineSkill({ name: '', description: 'test', instructions: 'test' })
+```
+
+## Related
+
+- [Agent skills](/docs/agents/skills)
+- [Workspace skills](/docs/workspace/skills)
+- [`.skill()` reference](/reference/agents/skill)
+- [`.listSkills()` reference](/reference/agents/listSkills)

@@ -50,9 +50,12 @@ const sidebars = {
         { type: 'doc', id: 'agents/getVoice', label: '.getVoice()' },
         { type: 'doc', id: 'agents/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'agents/listScorers', label: '.listScorers()' },
+        { type: 'doc', id: 'agents/listSkills', label: '.listSkills()' },
         { type: 'doc', id: 'agents/listTools', label: '.listTools()' },
         { type: 'doc', id: 'agents/listWorkflows', label: '.listWorkflows()' },
         { type: 'doc', id: 'agents/network', label: '.network()' },
+        { type: 'doc', id: 'agents/skill', label: '.skill()' },
+        { type: 'doc', id: 'agents/defineSkill', label: 'defineSkill()' },
       ],
     },
     {
