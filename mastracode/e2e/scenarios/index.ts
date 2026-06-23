@@ -79,6 +79,7 @@ import { quietSettingsScenario } from './quiet-settings.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
+import { resourceidDriftAutoResumeScenario } from './resourceid-drift-auto-resume.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
@@ -121,7 +122,6 @@ import { workspaceCommandsScenario } from './workspace-commands.js';
 import { workspacePlanModeToolsScenario } from './workspace-plan-mode-tools.js';
 import { workspaceToolNamesScenario } from './workspace-tool-names.js';
 import { workspaceToolOutputRenderingScenario } from './workspace-tool-output-rendering.js';
-import { resourceidDriftAutoResumeScenario } from './resourceid-drift-auto-resume.js';
 import { worktreeCrossThreadResumeScenario } from './worktree-cross-thread-resume.js';
 import { worktreeThreadScopingScenario } from './worktree-thread-scoping.js';
 
