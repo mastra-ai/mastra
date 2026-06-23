@@ -607,7 +607,7 @@
     },
     {
       "source": "/docs/getting-started/mcp-docs-server",
-      "destination": "/docs/build-with-ai/mcp-docs-server",
+      "destination": "/docs/getting-started/build-with-ai#mcp-docs-server",
       "permanent": true
     },
     {

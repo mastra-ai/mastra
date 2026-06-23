@@ -364,7 +364,6 @@ When a model generates a tool call, the arguments arrive incrementally as `tool-
 
 Using a partial JSON parser on the accumulated `argsTextDelta` fragments lets you extract usable argument values before the JSON is complete. This enables features like live diff previews for edit tools, streaming file content for write tools, and instant display of search patterns or file paths.
 
-
 ## Control tool selection
 
 Pass `toolChoice` or `activeTools` to `.generate()` or `.stream()` to control which tools the agent uses at runtime.
