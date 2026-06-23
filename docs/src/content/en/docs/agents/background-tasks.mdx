@@ -28,6 +28,30 @@ Background tasks require a configured [storage](/docs/memory/storage) backend on
 
 :::
 
+## Background tasks vs EventedAgent vs DurableAgent
+
+These three APIs all run work asynchronously but solve different problems:
+
+| | `backgroundTasks` | `EventedAgent` | `DurableAgent` |
+| - | - | - | - |
+| **What runs async** | A single tool call | The whole agent run | The whole agent run |
+| **User sees streaming output** | Yes, via `streamUntilIdle()` | Yes, via pubsub | Yes, via pubsub |
+| **Survives process restart** | No | No | Yes (external engine required) |
+| **External engine needed** | No | No | Yes (e.g. Inngest) |
+| **Reconnect to existing run** | No | Yes, via `observe(runId)` | Yes, via `observe(runId)` |
+
+**Use `backgroundTasks`** when one specific tool call is slow but the agent should keep responding to the user. The rest of the agentic loop runs normally and `streamUntilIdle()` keeps the stream open until the tool result is processed.
+
+**Use `EventedAgent`** when the entire agent run should be fire-and-forget and you do not need a durable external engine. `EventedAgent` uses the built-in evented workflow engine — execution is non-blocking via `startAsync()` and events are streamed through the internal pubsub. Runs are resumable via `observe(runId)` but do **not** survive a process restart.
+
+**Use `DurableAgent`** when the agent run must survive process restarts. This requires an external durable workflow engine such as [Inngest](https://inngest.com). Runs are checkpointed and resume automatically after a server crash.
+
+:::note
+
+`createEventedAgent` is a factory helper that wraps an existing `Agent` with `EventedAgent`. Use it when you already have an `Agent` instance and want to add evented execution without rewriting the class definition.
+
+:::
+
 ## Quickstart
 
 Background tasks are off by default. Enable them by setting `backgroundTasks.enabled` on the Mastra instance:
