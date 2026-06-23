@@ -22,6 +22,8 @@ export interface HarnessInfo {
 
 export interface HarnessMessageContent {
   type: 'text' | 'thinking' | 'tool_call' | 'tool_result' | string;
+  /** Correlates a `tool_call` part with its `tool_result` part. */
+  id?: string;
   text?: string;
   thinking?: string;
   name?: string;

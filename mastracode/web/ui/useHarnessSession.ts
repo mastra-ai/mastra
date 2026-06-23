@@ -9,6 +9,10 @@ export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error'
 
 type Session = ReturnType<ReturnType<MastraClient['getHarness']>['session']>;
 
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 interface UseHarnessSessionArgs {
   harnessId: string;
   resourceId: string;
@@ -218,14 +222,15 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '', enabled
   const switchThread = useCallback(async (threadId: string) => {
     const session = sessionRef.current;
     if (!session) return;
-    await session.switchThread(threadId);
-    // The thread's existing history isn't replayed over the event stream, so
-    // load it and hydrate the transcript; otherwise the view shows empty.
+    // Optimistically reflect the switch so the UI responds immediately, then
+    // load the thread's history (it isn't replayed over the event stream).
+    dispatch({ type: 'reset', threadId });
     try {
+      await session.switchThread(threadId);
       const [messages, state] = await Promise.all([session.listMessages(threadId), session.state()]);
       dispatch({ type: 'hydrate', messages, modeId: state.modeId, modelId: state.modelId, threadId });
-    } catch {
-      dispatch({ type: 'reset', threadId });
+    } catch (err) {
+      dispatch({ type: 'localNotice', level: 'error', text: `Failed to switch thread: ${errorText(err)}` });
     }
   }, []);
 

@@ -379,6 +379,10 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
  * Build a fresh transcript from a thread's persisted messages. Used when
  * switching to an existing thread, whose history isn't replayed over the event
  * stream — without this the view renders empty until new events arrive.
+ *
+ * Mirrors the TUI's history reconstruction: assistant messages interleave text
+ * and tool calls in content order, so we emit the running text and each tool
+ * call (matched to its result) as part of the same assistant entry.
  */
 function hydrate(
   messages: HarnessMessage[],
@@ -388,16 +392,38 @@ function hydrate(
 ): TranscriptState {
   const entries: TimelineEntry[] = [];
   for (const message of messages) {
-    const text = harnessMessageText(message);
     if (message.role === 'user') {
-      entries.push({ kind: 'user', id: message.id, text });
+      entries.push({ kind: 'user', id: message.id, text: harnessMessageText(message) });
     } else if (message.role === 'assistant') {
-      // Tool calls aren't reconstructed from history; show the final text.
-      entries.push({ kind: 'assistant', id: message.id, text, tools: [], streaming: false });
+      entries.push(hydrateAssistant(message));
     }
     // 'system' messages aren't shown in the transcript.
   }
   return { ...initialTranscript, entries, modeId, modelId, threadId };
+}
+
+/** Reconstruct an assistant entry (text + tool cards) from a persisted message. */
+function hydrateAssistant(message: HarnessMessage): AssistantEntry {
+  let text = '';
+  const tools: ToolCall[] = [];
+  for (const part of message.content) {
+    if (part.type === 'text' && typeof part.text === 'string') {
+      text += part.text;
+    } else if (part.type === 'tool_call') {
+      const result = message.content.find(c => c.type === 'tool_result' && c.id === part.id);
+      tools.push({
+        toolCallId: part.id ?? `${message.id}-${tools.length}`,
+        toolName: part.name ?? 'tool',
+        argsText: '',
+        args: part.args,
+        status: result?.isError ? 'error' : 'done',
+        result: result?.result,
+        output: '',
+      });
+    }
+    // 'thinking' and 'tool_result' parts are folded in above / not shown directly.
+  }
+  return { kind: 'assistant', id: message.id, text, tools, streaming: false };
 }
 
 function upsertAssistant(state: TranscriptState, message: HarnessMessage, streaming: boolean): TranscriptState {

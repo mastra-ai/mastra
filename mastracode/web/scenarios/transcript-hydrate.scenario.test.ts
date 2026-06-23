@@ -66,6 +66,52 @@ describe('transcript hydrate (thread history rendering)', () => {
     expect(text).not.toContain('thread A message');
   });
 
+  it('reconstructs tool calls (name, args, result) on the assistant entry', () => {
+    const assistantWithTool: HarnessMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'Let me read that file.' },
+        { type: 'tool_call', id: 'tc-1', name: 'read_file', args: { path: 'README.md' } },
+        { type: 'tool_result', id: 'tc-1', result: 'file contents here', isError: false },
+      ],
+    } as unknown as HarnessMessage;
+
+    const state = transcriptReducer(initialTranscript, {
+      type: 'hydrate',
+      messages: [userMsg('u1', 'read the readme'), assistantWithTool],
+      threadId: 't',
+    });
+
+    const assistant = state.entries.find(e => e.kind === 'assistant');
+    expect(assistant).toBeDefined();
+    if (assistant?.kind !== 'assistant') throw new Error('expected assistant entry');
+    expect(assistant.text).toBe('Let me read that file.');
+    expect(assistant.tools).toHaveLength(1);
+    expect(assistant.tools[0]).toMatchObject({
+      toolCallId: 'tc-1',
+      toolName: 'read_file',
+      args: { path: 'README.md' },
+      status: 'done',
+      result: 'file contents here',
+    });
+  });
+
+  it('marks a tool as errored when its result is an error', () => {
+    const msg: HarnessMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: [
+        { type: 'tool_call', id: 'tc-9', name: 'shell', args: { cmd: 'nope' } },
+        { type: 'tool_result', id: 'tc-9', result: 'command not found', isError: true },
+      ],
+    } as unknown as HarnessMessage;
+    const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages: [msg], threadId: 't' });
+    const assistant = state.entries[0];
+    if (assistant.kind !== 'assistant') throw new Error('expected assistant entry');
+    expect(assistant.tools[0].status).toBe('error');
+  });
+
   it('produces an empty transcript for a thread with no history', () => {
     const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages: [], threadId: 'empty' });
     expect(state.entries).toHaveLength(0);
