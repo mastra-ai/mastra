@@ -1,7 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import {
   Button,
-  Card,
   cn,
   Collapsible,
   CollapsibleContent,
@@ -11,6 +10,7 @@ import {
   Skeleton,
   Txt,
 } from '@mastra/playground-ui';
+import { Card } from '@mastra/playground-ui/components/Card';
 import { MessageFactory } from '@mastra/react';
 import type {
   MastraDBMessageMetadata,

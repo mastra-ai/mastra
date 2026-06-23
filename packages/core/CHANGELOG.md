@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 1.46.0-alpha.2
+
+### Patch Changes
+
+- Fixed agent channel initialization errors being silently swallowed. When an agent configured with channels failed to initialize during startup, the error was discarded by an un-awaited promise, leaving the channel dead with nothing logged. Initialization failures are now caught and logged through the Mastra logger so a misconfiguration surfaces clearly. ([#17720](https://github.com/mastra-ai/mastra/pull/17720))
+
+- Fixed subscribed thread streams so suspended tool resumes, same-run resumed streams, follow-up signals, and post-abort queued context are delivered through the authoritative subscription path without dropping or duplicating output. ([#18183](https://github.com/mastra-ai/mastra/pull/18183))
+
+## 1.46.0-alpha.1
+
+### Patch Changes
+
+- Fix `DurableAgent.prepare()` ignoring `options.runId`. `prepare()` did not forward `runId` to `prepareForDurableExecution()` (unlike `stream()`), so it always registered a freshly minted run id. This made `prepare()` unusable for rehydrating a persisted, suspended run in a fresh process (e.g. after a server restart or registry eviction): a follow-up `resume(runId)` couldn't find the registry entry `prepare()` had built and threw `No registry entry found for run … Cannot resume.`. `prepare()` now forwards the caller-provided `runId`, so re-registering a known run id and resuming a durable snapshot across a restart works. ([#18113](https://github.com/mastra-ai/mastra/pull/18113))
+
 ## 1.46.0-alpha.0
 
 ### Minor Changes

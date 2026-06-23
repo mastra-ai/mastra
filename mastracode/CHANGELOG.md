@@ -1,5 +1,35 @@
 # mastracode
 
+## 0.25.0-alpha.2
+
+### Minor Changes
+
+- Added ACP server mode for `mastracode`. ([#18231](https://github.com/mastra-ai/mastra/pull/18231))
+
+  You can now connect ACP-compatible editors and clients to `mastracode` over stdio. This lets clients start sessions, send prompts, and receive streamed responses.
+
+  **Example**
+
+  ```bash
+  mastracode --acp
+  ```
+
+### Patch Changes
+
+- Fixed Mastra Code steering display so messages wait for runtime acceptance, blocked inputs are shown as blocked instead of chat, abort cleanup removes pending steering without duplicating output, and plan approvals continue correctly in same-mode and cross-mode flows. ([#18183](https://github.com/mastra-ai/mastra/pull/18183))
+
+- Fixed thread loading in worktrees to only show threads explicitly tagged for the current worktree path, preventing threads from other worktrees or the main repo from being incorrectly loaded on startup ([#18332](https://github.com/mastra-ai/mastra/pull/18332))
+
+- Updated dependencies [[`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c)]:
+  - @mastra/core@1.46.0-alpha.2
+
+## 0.25.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7794d71`](https://github.com/mastra-ai/mastra/commit/7794d71872c68733a30e028dfb7b1705daf6c5d2)]:
+  - @mastra/core@1.46.0-alpha.1
+
 ## 0.25.0-alpha.0
 
 ### Minor Changes
