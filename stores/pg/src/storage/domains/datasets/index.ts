@@ -94,9 +94,16 @@ export class DatasetsPG extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetType', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetIds', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'scorerIds', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'organizationId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'projectId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'candidateKey', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'candidateId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'requestContext', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'source', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'expectedTrajectory', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'organizationId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'projectId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMocks', 'JSONB');
 
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -133,6 +140,22 @@ export class DatasetsPG extends DatasetsStorage {
         table: TABLE_DATASET_VERSIONS,
         columns: ['datasetId', 'version'],
         unique: true,
+      },
+      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with observability storage).
+      {
+        name: 'idx_datasets_org_project',
+        table: TABLE_DATASETS,
+        columns: ['organizationId', 'projectId'],
+      },
+      {
+        name: 'idx_datasets_candidate',
+        table: TABLE_DATASETS,
+        columns: ['candidateKey', 'candidateId'],
+      },
+      {
+        name: 'idx_dataset_items_org_project',
+        table: TABLE_DATASET_ITEMS,
+        columns: ['organizationId', 'projectId'],
       },
     ];
   }
@@ -174,6 +197,10 @@ export class DatasetsPG extends DatasetsStorage {
       targetType: (row.targetType as TargetType) || null,
       targetIds: row.targetIds || null,
       scorerIds: row.scorerIds || null,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
+      candidateKey: (row.candidateKey as string | null) ?? null,
+      candidateId: (row.candidateId as string | null) ?? null,
       version: row.version as number,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
@@ -185,9 +212,12 @@ export class DatasetsPG extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
+      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source) : undefined,
@@ -201,11 +231,14 @@ export class DatasetsPG extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
+      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source) : undefined,
@@ -244,6 +277,10 @@ export class DatasetsPG extends DatasetsStorage {
           targetType: input.targetType ?? null,
           targetIds: input.targetIds !== undefined ? JSON.stringify(input.targetIds) : null,
           scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
+          candidateKey: input.candidateKey ?? null,
+          candidateId: input.candidateId ?? null,
           version: 0,
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -261,6 +298,10 @@ export class DatasetsPG extends DatasetsStorage {
         targetType: input.targetType ?? null,
         targetIds: input.targetIds ?? null,
         scorerIds: input.scorerIds ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
+        candidateKey: input.candidateKey ?? null,
+        candidateId: input.candidateId ?? null,
         version: 0,
         createdAt: now,
         updatedAt: now,
@@ -352,6 +393,8 @@ export class DatasetsPG extends DatasetsStorage {
         setClauses.push(`"scorerIds" = $${paramIndex++}`);
         values.push(args.scorerIds === null ? null : JSON.stringify(args.scorerIds));
       }
+      // Tenancy (organizationId, projectId) and candidate identity (candidateKey,
+      // candidateId) are immutable after creation — they're not part of UpdateDatasetInput.
 
       values.push(args.id);
       await this.#db.client.none(
@@ -374,6 +417,10 @@ export class DatasetsPG extends DatasetsStorage {
         targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? null,
         targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? null,
         scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? null,
+        organizationId: existing.organizationId ?? null,
+        projectId: existing.projectId ?? null,
+        candidateKey: existing.candidateKey ?? null,
+        candidateId: existing.candidateId ?? null,
         updatedAt: new Date(now),
       };
     } catch (error) {
@@ -445,7 +492,36 @@ export class DatasetsPG extends DatasetsStorage {
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
 
-      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName}`);
+      const conditions: string[] = [];
+      const queryParams: any[] = [];
+      let paramIndex = 1;
+
+      if (args.filters) {
+        const { organizationId, projectId, candidateKey, candidateId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`"organizationId" = $${paramIndex++}`);
+          queryParams.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`"projectId" = $${paramIndex++}`);
+          queryParams.push(projectId);
+        }
+        if (candidateKey !== undefined) {
+          conditions.push(`"candidateKey" = $${paramIndex++}`);
+          queryParams.push(candidateKey);
+        }
+        if (candidateId !== undefined) {
+          conditions.push(`"candidateId" = $${paramIndex++}`);
+          queryParams.push(candidateId);
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const countResult = await this.#db.client.one(
+        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
+        queryParams,
+      );
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -457,8 +533,8 @@ export class DatasetsPG extends DatasetsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ORDER BY "createdAt" DESC, "id" ASC LIMIT $1 OFFSET $2`,
-        [limitValue, offset],
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "createdAt" DESC, "id" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...queryParams, limitValue, offset],
       );
 
       return {
@@ -499,23 +575,30 @@ export class DatasetsPG extends DatasetsStorage {
       const nowIso = now.toISOString();
 
       let newVersion: number;
+      let parentOrganizationId: string | null = null;
+      let parentProjectId: string | null = null;
 
       await this.#db.client.tx(async t => {
         const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
+          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "projectId"`,
           [args.datasetId],
         );
         newVersion = row.version as number;
+        parentOrganizationId = (row.organizationId as string | null) ?? null;
+        parentProjectId = (row.projectId as string | null) ?? null;
 
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [
             id,
             args.datasetId,
             newVersion,
+            parentOrganizationId,
+            parentProjectId,
             JSON.stringify(args.input),
             jsonbArg(args.groundTruth),
             jsonbArg(args.expectedTrajectory),
+            jsonbArg(args.toolMocks),
             jsonbArg(args.requestContext),
             jsonbArg(args.metadata),
             jsonbArg(args.source),
@@ -536,9 +619,12 @@ export class DatasetsPG extends DatasetsStorage {
         id,
         datasetId: args.datasetId,
         datasetVersion: newVersion!,
+        organizationId: parentOrganizationId,
+        projectId: parentProjectId,
         input: args.input,
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
+        toolMocks: args.toolMocks,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -594,19 +680,24 @@ export class DatasetsPG extends DatasetsStorage {
       const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
+      const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
 
       let newVersion: number;
+      let parentOrganizationId: string | null = null;
+      let parentProjectId: string | null = null;
 
       await this.#db.client.tx(async t => {
-        // 1. Bump dataset version
+        // 1. Bump dataset version and read parent tenancy
         const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
+          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "projectId"`,
           [args.datasetId],
         );
         newVersion = row.version as number;
+        parentOrganizationId = (row.organizationId as string | null) ?? null;
+        parentProjectId = (row.projectId as string | null) ?? null;
 
         // 2. Close old row (set validTo = newVersion)
         await t.none(
@@ -614,16 +705,20 @@ export class DatasetsPG extends DatasetsStorage {
           [newVersion, args.id],
         );
 
-        // 3. Insert new row with merged fields, preserving original createdAt
+        // 3. Insert new row with merged fields, preserving original createdAt;
+        //    tenancy is re-inherited from parent dataset (Option B)
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [
             args.id,
             args.datasetId,
             newVersion,
+            parentOrganizationId,
+            parentProjectId,
             JSON.stringify(mergedInput),
             jsonbArg(mergedGroundTruth),
             jsonbArg(mergedExpectedTrajectory),
+            jsonbArg(mergedToolMocks),
             jsonbArg(mergedRequestContext),
             jsonbArg(mergedMetadata),
             jsonbArg(mergedSource),
@@ -644,9 +739,12 @@ export class DatasetsPG extends DatasetsStorage {
       return {
         ...existing,
         datasetVersion: newVersion!,
+        organizationId: parentOrganizationId,
+        projectId: parentProjectId,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
+        toolMocks: mergedToolMocks,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -689,12 +787,14 @@ export class DatasetsPG extends DatasetsStorage {
       const nowIso = new Date().toISOString();
 
       await this.#db.client.tx(async t => {
-        // 1. Bump dataset version
+        // 1. Bump dataset version and re-inherit tenancy from parent
         const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version"`,
+          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "projectId"`,
           [datasetId],
         );
         const newVersion = row.version as number;
+        const parentOrganizationId = (row.organizationId as string | null) ?? null;
+        const parentProjectId = (row.projectId as string | null) ?? null;
 
         // 2. Close old row
         await t.none(
@@ -702,16 +802,20 @@ export class DatasetsPG extends DatasetsStorage {
           [newVersion, id],
         );
 
-        // 3. Insert tombstone (isDeleted=true, validTo=NULL — tombstone is the "current" terminal version)
+        // 3. Insert tombstone (isDeleted=true, validTo=NULL — tombstone is the "current" terminal version);
+        //    tenancy re-inherited from parent dataset
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [
             id,
             datasetId,
             newVersion,
+            parentOrganizationId,
+            parentProjectId,
             JSON.stringify(existing.input),
             jsonbArg(existing.groundTruth),
             jsonbArg(existing.expectedTrajectory),
+            jsonbArg(existing.toolMocks),
             jsonbArg(existing.requestContext),
             jsonbArg(existing.metadata),
             jsonbArg(existing.source),
@@ -767,6 +871,10 @@ export class DatasetsPG extends DatasetsStorage {
       // Pre-generate IDs
       const itemsWithIds = input.items.map(itemInput => ({ id: crypto.randomUUID(), input: itemInput }));
 
+      // Tenancy inherited from parent dataset (Option B)
+      const parentOrganizationId = dataset.organizationId ?? null;
+      const parentProjectId = dataset.projectId ?? null;
+
       let newVersion: number;
 
       await this.#db.client.tx(async t => {
@@ -780,14 +888,17 @@ export class DatasetsPG extends DatasetsStorage {
         // 2. N item inserts
         for (const { id, input: itemInput } of itemsWithIds) {
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
             [
               id,
               input.datasetId,
               newVersion,
+              parentOrganizationId,
+              parentProjectId,
               JSON.stringify(itemInput.input),
               jsonbArg(itemInput.groundTruth),
               jsonbArg(itemInput.expectedTrajectory),
+              jsonbArg(itemInput.toolMocks),
               jsonbArg(itemInput.requestContext),
               jsonbArg(itemInput.metadata),
               jsonbArg(itemInput.source),
@@ -810,9 +921,12 @@ export class DatasetsPG extends DatasetsStorage {
         id,
         datasetId: input.datasetId,
         datasetVersion: newVersion!,
+        organizationId: parentOrganizationId,
+        projectId: parentProjectId,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
         expectedTrajectory: itemInput.expectedTrajectory,
+        toolMocks: itemInput.toolMocks,
         requestContext: itemInput.requestContext,
         metadata: itemInput.metadata,
         source: itemInput.source,
@@ -864,6 +978,10 @@ export class DatasetsPG extends DatasetsStorage {
       const nowIso = new Date().toISOString();
       const versionId = crypto.randomUUID();
 
+      // Tenancy re-inherited from parent dataset (Option B)
+      const parentOrganizationId = dataset.organizationId ?? null;
+      const parentProjectId = dataset.projectId ?? null;
+
       await this.#db.client.tx(async t => {
         // 1. Single version bump
         const row = await t.one(
@@ -879,14 +997,17 @@ export class DatasetsPG extends DatasetsStorage {
             [newVersion, item.id],
           );
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","expectedTrajectory","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
             [
               item.id,
               input.datasetId,
               newVersion,
+              parentOrganizationId,
+              parentProjectId,
               JSON.stringify(item.input),
               jsonbArg(item.groundTruth),
               jsonbArg(item.expectedTrajectory),
+              jsonbArg(item.toolMocks),
               jsonbArg(item.requestContext),
               jsonbArg(item.metadata),
               jsonbArg(item.source),
@@ -1018,6 +1139,18 @@ export class DatasetsPG extends DatasetsStorage {
         );
         queryParams.push(`%${args.search}%`);
         paramIndex++;
+      }
+
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`"organizationId" = $${paramIndex++}`);
+          queryParams.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`"projectId" = $${paramIndex++}`);
+          queryParams.push(projectId);
+        }
       }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;

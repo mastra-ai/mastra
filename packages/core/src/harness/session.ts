@@ -321,9 +321,26 @@ export class SessionThread {
     return this.#store.getById({ threadId });
   }
 
+  /**
+   * Load a thread and verify it belongs to this session's resourceId before
+   * allowing access. Threads owned by another resource are treated as missing
+   * so a session can never read, switch to, rename, or delete a thread it does
+   * not own (the thread id is otherwise an unguessable but unscoped key). Throws
+   * `Thread not found: <id>` when the thread is absent or owned by someone else.
+   */
+  async #requireOwnedThread({ threadId }: { threadId: string }): Promise<HarnessThread> {
+    const thread = await this.#store?.getById({ threadId });
+    if (!thread || thread.resourceId !== this.#getResourceId()) {
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+    return thread;
+  }
+
   /** List messages for a thread (newest-`limit`, returned oldest-first), or all. */
   async listMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
     if (!this.#store) return [];
+    // Only expose messages for threads this session owns.
+    await this.#requireOwnedThread({ threadId });
     return this.#store.listMessages({ threadId, limit });
   }
 
@@ -540,6 +557,10 @@ export class SessionThread {
     if (!sourceId) {
       throw new Error('No source thread to clone');
     }
+    // Only allow cloning from a source thread this session owns.
+    if (store?.hasStorage()) {
+      await this.#requireOwnedThread({ threadId: sourceId });
+    }
     if (!store) {
       throw new Error('Memory is not configured on this Harness');
     }
@@ -594,10 +615,21 @@ export class SessionThread {
       await store?.releaseLock(previousThreadId);
     }
 
+    // Verify the thread exists and belongs to this session's resourceId before
+    // binding to it, so a session can never switch onto a thread owned by
+    // another resource. Release the just-acquired lock if the check fails so we
+    // never leave a foreign thread locked.
     if (store?.hasStorage()) {
-      const thread = await store.getById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread not found: ${threadId}`);
+      try {
+        await this.#requireOwnedThread({ threadId });
+      } catch (err) {
+        // Release the just-acquired foreign lock and restore the previous
+        // thread's lock so the still-bound session is not left unlocked.
+        await store.releaseLock(threadId).catch(() => {});
+        if (previousThreadId) {
+          await store.acquireLock(previousThreadId).catch(() => {});
+        }
+        throw err;
       }
     }
 
@@ -617,10 +649,8 @@ export class SessionThread {
     const store = this.#store;
     if (!store?.hasStorage()) return;
 
-    const thread = await store.getById({ threadId });
-    if (!thread) {
-      throw new Error(`Thread not found: ${threadId}`);
-    }
+    // Only allow deleting threads this session owns.
+    await this.#requireOwnedThread({ threadId });
 
     const isDeletingCurrentThread = this.#threadId === threadId;
 
@@ -773,6 +803,29 @@ export class SessionStream {
   #subscription: AgentThreadSubscription<any> | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
+  readonly #teardownWaiters = new Set<() => void>();
+
+  #notifyTeardown(): void {
+    const waiters = [...this.#teardownWaiters];
+    this.#teardownWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+
+  waitForTeardown(signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#teardownWaiters.delete(done);
+        resolve();
+      };
+      if (signal.aborted) return resolve();
+      this.#teardownWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
 
   /** Build the dedup key identifying a subscription to `threadId` for `agent`. */
   static keyFor({ agent, resourceId, threadId }: { agent: Agent; resourceId: string; threadId: string }): string {
@@ -822,6 +875,7 @@ export class SessionStream {
     this.#subscription?.unsubscribe();
     this.#subscription = null;
     this.#key = null;
+    this.#notifyTeardown();
   }
 
   /** Fully tear down the live subscription: abort, unsubscribe, and clear. */
@@ -830,6 +884,7 @@ export class SessionStream {
     this.#subscription?.unsubscribe();
     this.#subscription = null;
     this.#key = null;
+    this.#notifyTeardown();
   }
 }
 
@@ -989,17 +1044,25 @@ export class SessionApproval {
   #resolve: ((decision: ApprovalDecision) => void) | null = null;
   /** Name of the tool currently awaiting approval, or null when none. */
   #toolName: string | null = null;
+  /** Id of the tool call currently awaiting approval, or null when none. */
+  #toolCallId: string | null = null;
 
   /**
-   * Park a new approval for `toolName` and return a promise that resolves once
-   * {@link resolve} is called with the user's decision. The caller awaits this
-   * while the run is suspended on the gate.
+   * Park a new approval for `toolName`/`toolCallId` and return a promise that
+   * resolves once {@link respond} is called with the user's decision. The caller
+   * awaits this while the run is suspended on the gate.
    */
-  arm({ toolName }: { toolName: string }): Promise<ApprovalDecision> {
+  arm({ toolName, toolCallId }: { toolName: string; toolCallId?: string }): Promise<ApprovalDecision> {
     this.#toolName = toolName;
+    this.#toolCallId = toolCallId ?? null;
     return new Promise<ApprovalDecision>(resolve => {
       this.#resolve = resolve;
     });
+  }
+
+  /** Id of the tool call currently awaiting approval, or null when none. */
+  getToolCallId(): string | null {
+    return this.#toolCallId;
   }
 
   /** Whether an approval is currently parked awaiting a decision. */
@@ -1009,17 +1072,21 @@ export class SessionApproval {
 
   /**
    * Apply a user's {@link ApprovalResponse} to the parked gate. A no-op when
-   * nothing is armed. `always_allow_category` runs `onAlwaysAllow` with the
+   * nothing is armed. When `toolCallId` is supplied it must match the gated
+   * call; a mismatch is ignored so a stale/delayed response cannot resolve a
+   * different pending gate. `always_allow_category` runs `onAlwaysAllow` with the
    * gated tool name (so the caller can grant the tool's category — a lookup that
    * needs Harness config) and then approves; `approve`/`decline` resolve as-is.
    */
   respond({
     decision,
+    toolCallId,
     requestContext,
     declineContext,
     onAlwaysAllow,
-  }: ApprovalResponse & { onAlwaysAllow?: (toolName: string) => void }): void {
+  }: ApprovalResponse & { toolCallId?: string; onAlwaysAllow?: (toolName: string) => void }): void {
     if (!this.isArmed()) return;
+    if (toolCallId !== undefined && this.#toolCallId !== null && toolCallId !== this.#toolCallId) return;
 
     if (decision === 'always_allow_category' && this.#toolName) {
       onAlwaysAllow?.(this.#toolName);
@@ -1033,6 +1100,7 @@ export class SessionApproval {
     this.#resolve?.(resolved);
     this.#resolve = null;
     this.#toolName = null;
+    this.#toolCallId = null;
   }
 
   /**
@@ -1045,11 +1113,13 @@ export class SessionApproval {
     this.#resolve?.({ decision: 'decline' });
     this.#resolve = null;
     this.#toolName = null;
+    this.#toolCallId = null;
   }
 
-  /** Clear the gated tool name once a parked approval has been consumed. */
+  /** Clear the gated tool name/call id once a parked approval has been consumed. */
   clearToolName(): void {
     this.#toolName = null;
+    this.#toolCallId = null;
   }
 }
 
@@ -1075,6 +1145,29 @@ export class SessionRun {
   #abortController: AbortController | null = null;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
+  readonly #teardownWaiters = new Set<() => void>();
+
+  #notifyTeardown(): void {
+    const waiters = [...this.#teardownWaiters];
+    this.#teardownWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+
+  waitForTeardown(signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#teardownWaiters.delete(done);
+        resolve();
+      };
+      if (signal.aborted) return resolve();
+      this.#teardownWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
 
   /** The current run id (null when idle). */
   getRunId(): string | null {
@@ -1105,6 +1198,7 @@ export class SessionRun {
     this.#traceId = null;
     this.#abortController = null;
     this.#abortRequested = false;
+    this.#notifyTeardown();
   }
 
   /** Bump and return the operation counter at the start of a new operation. */
@@ -2571,15 +2665,18 @@ export class Session<TState = unknown> {
    */
   respondToToolApproval({
     decision,
+    toolCallId,
     requestContext,
     declineContext,
   }: {
     decision: 'approve' | 'decline' | 'always_allow_category';
+    toolCallId?: string;
     requestContext?: RequestContext;
     declineContext?: { reason?: string; message?: string };
   }): void {
     this.approval.respond({
       decision,
+      toolCallId,
       requestContext,
       declineContext,
       onAlwaysAllow: toolName => {
@@ -2645,9 +2742,30 @@ export class Session<TState = unknown> {
    * to avoid the new signal being queued onto the dying run, which would then
    * be drained with the previous run's already-aborted abortSignal.
    */
-  private async waitForStreamIdle(): Promise<void> {
-    while (this.stream.isActive() || this.run.getRunId() !== null) {
-      await new Promise(resolve => setTimeout(resolve, 0));
+  private async waitForStreamIdle(timeoutMs = 1_000): Promise<void> {
+    if (!this.stream.isActive() && this.run.getRunId() === null) return;
+
+    let lifecycleWait: AbortController | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<'timeout'>(resolve => {
+      timeout = setTimeout(() => resolve('timeout'), timeoutMs);
+    });
+
+    try {
+      while (this.stream.isActive() || this.run.getRunId() !== null) {
+        lifecycleWait = new AbortController();
+        const result = await Promise.race([
+          this.stream.waitForTeardown(lifecycleWait.signal),
+          this.run.waitForTeardown(lifecycleWait.signal),
+          timeoutPromise,
+        ]);
+        lifecycleWait.abort();
+        lifecycleWait = undefined;
+        if (result === 'timeout') return;
+      }
+    } finally {
+      lifecycleWait?.abort();
+      if (timeout) clearTimeout(timeout);
     }
   }
 
@@ -2683,6 +2801,16 @@ export class Session<TState = unknown> {
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();
     const submittedActiveRunId = this.stream.activeRunId();
+    // After `abort()` the AbortController is cleared immediately but the run id
+    // and active-run id linger until `run.reset()` runs (after `agent_end`).
+    // Without this guard, a signal sent right after an interrupt is dispatched
+    // onto the dying run and lost — the follow-up message never gets a response.
+    const submittedIsRunning = this.run.isRunning();
+    // An abort was requested but the previous run hasn't finished tearing down
+    // yet (the flag stays set until `run.reset()` after `agent_end`). This is
+    // the post-interrupt window where a fresh signal must wait for the dying
+    // run to fully idle before starting a new run.
+    const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
       'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
     );
@@ -2696,7 +2824,7 @@ export class Session<TState = unknown> {
       const agent = this.machinery.getAgent();
       await this.thread.ensureSubscription(threadId);
 
-      if (submittedRunId && submittedActiveRunId) {
+      if (submittedRunId && submittedActiveRunId && submittedIsRunning) {
         this.approval.respond({
           decision: 'decline',
           declineContext: {
@@ -2711,6 +2839,18 @@ export class Session<TState = unknown> {
           ifIdle,
         });
         return { accepted: true as const, runId: await settleRunId(result) };
+      }
+
+      // Post-abort lingering state: the AbortController was cleared (so
+      // `submittedIsRunning` is false) but the previous run is still finalizing
+      // — its run id / active-run id linger until `run.reset()` runs after
+      // `agent_end`. Dispatching a fresh signal now would let the agent queue it
+      // onto the dying run instead of starting a new run, and the follow-up
+      // would never get a response. Wait for the stream to fully idle first.
+      // Only do this in the post-abort window (an abort was requested but the
+      // run hasn't reset yet) so normal idle signals aren't delayed.
+      if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
+        await this.waitForStreamIdle();
       }
 
       const streamOptions = await this.machinery.buildStreamOptions({

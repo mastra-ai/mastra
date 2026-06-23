@@ -1,5 +1,103 @@
 # @mastra/core
 
+## 1.46.0-alpha.3
+
+### Minor Changes
+
+- Added `untilIdle` option to `DurableAgent.stream()` — pass `untilIdle: true` or `{ maxIdleMs }` to keep the stream open across background-task continuations. This is the same behavior as the now-deprecated `streamUntilIdle()` method, matching the consolidation done for the non-durable Agent in #17536. ([#18349](https://github.com/mastra-ai/mastra/pull/18349))
+
+  ```ts
+  // Before (deprecated)
+  const result = await durableAgent.streamUntilIdle('Research topic', {
+    memory: { thread: 't1', resource: 'u1' },
+  });
+
+  // After
+  const result = await durableAgent.stream('Research topic', {
+    untilIdle: true,
+    memory: { thread: 't1', resource: 'u1' },
+  });
+  ```
+
+- Register `Harness` instances on `Mastra`. ([#18355](https://github.com/mastra-ai/mastra/pull/18355))
+
+  Pass harnesses to `new Mastra({ harnesses })` (keyed like agents and workflows) and look them up with `mastra.getHarness(key)`, `mastra.getHarnessById(id)`, or `mastra.listHarnesses()`. A registered Harness shares the parent Mastra — its storage, agents, gateways, and observability — instead of building its own internal one, and is torn down with `mastra.shutdown()`. A standalone Harness is unchanged. This is the foundation for serving Harness sessions over HTTP.
+
+  ```typescript
+  const code = new Harness({ id: 'code', modes });
+  const mastra = new Mastra({ harnesses: { code }, storage });
+
+  mastra.getHarness('code') === code; // by registration key
+  code.getMastra() === mastra; // shares the parent Mastra and its storage
+  ```
+
+- Added item-level static tool mocks so agent experiments can run deterministically without calling real, side-effecting tools. ([#18036](https://github.com/mastra-ai/mastra/pull/18036))
+
+  A dataset item can now declare `toolMocks`. When the agent calls a mocked tool with matching arguments, the experiment serves the recorded `output` instead of executing the tool. Mocks for the same `(toolName, args)` are consumed in order, so repeated calls can return different outputs. If a mocked tool is called with arguments that do not match (or the mocks are exhausted), the item fails immediately and the agent is stopped so it cannot keep calling tools after a failure. Tools without a mock still run live.
+
+  ```ts
+  await dataset.addItem({
+    input: { question: 'What is the weather in Seattle?' },
+    toolMocks: [
+      {
+        toolName: 'getWeather',
+        args: { city: 'Seattle' },
+        output: { temperatureF: 52 },
+        // 'strict' (default) deep-compares args; 'ignore' matches on tool name only,
+        // useful for sub-agent calls where the prompt is LLM-authored.
+        matchArgs: 'strict',
+      },
+    ],
+  });
+  ```
+
+  Each item result carries a `toolMockReport` describing which mocks were served, which went unconsumed, and which tools ran live, so you can see exactly how a run behaved.
+
+  Items that declare `toolMocks` run their tools sequentially (`toolCallConcurrency: 1`) within that item run to guarantee ordered consumption. Items without mocks are unaffected.
+
+### Patch Changes
+
+- Guard `CacheKeyGenerator.fromAIV4Part` against reasoning parts with empty/undefined `details` text. Models that emit an empty reasoning summary (Anthropic Opus 4.7/4.8 with thinking `display: omitted`, OpenAI gpt-5.x via the Responses API with no summary) persist a reasoning part shaped `{ type: 'reasoning', reasoning: '', details: [{ type: 'text' }] }` — the text detail has no `text` field. On the next turn, Observational Memory reloads that message and the cache-key generator crashed with `TypeError: Cannot read properties of undefined (reading 'length')`, killing the whole turn (`PROCESSOR_WORKFLOW_FAILED`). This is the reasoning-branch sibling of the tool-invocation guard (#16756 / #16773). The reduce now tolerates missing `details` and missing detail `text`; no behavior change for well-formed parts. Fixes #18280. ([#18281](https://github.com/mastra-ai/mastra/pull/18281))
+
+- Added unit test coverage for `channels/inline-media.ts` and `workspace/tools/output-helpers.ts`. No behaviour changes — purely additive test coverage. ([#18006](https://github.com/mastra-ai/mastra/pull/18006))
+
+- Fixed an issue where publishing instruction-only or model-only overrides could remove tools from request-scoped `createDurableAgent` agents. ([#18121](https://github.com/mastra-ai/mastra/pull/18121))
+  Request-scoped agents now stay durable and preserve code-owned tools plus delegated behavior (model and memory).
+
+- Fixed durable agent input/output processor spans orphaning when an `AGENT_RUN` root was present. Following #18083, durable runs opened an `AGENT_RUN` span but `prepareForDurableExecution` and the durable agentic-loop output-processor step still passed `{} as any` as the observability context to `runInputProcessors` / `runOutputProcessors`. Agent-level processors (including the auto-injected `MessageHistory` when memory is configured) emitted `processor_run` spans with no parent — and their inner `MEMORY_OPERATION` children were dropped entirely because the processor bails out when `currentSpan` is undefined. The `AGENT_RUN` span is now opened before input processors run and the durable workflow's output-processor step forwards its step `tracingContext` to the runner, so processor and memory-operation spans nest under `AGENT_RUN` on every durable turn. ([#18344](https://github.com/mastra-ai/mastra/pull/18344))
+
+- Fixed channel handlers so background tasks finish before responses are posted. ([#16343](https://github.com/mastra-ai/mastra/pull/16343))
+
+  The channel handler was calling `agent.stream()`, which closes as soon as the
+  model finishes generating text. Any `agent.backgroundTask()` calls scheduled
+  during the turn were silently abandoned before they could complete.
+
+  Switch the call site to use `untilIdle: true` so the channel waits for all
+  background tasks to finish before posting the response and releasing the thread.
+
+  Fixes #16163
+
+- CompositeAuth now supports credentials-based authentication. When a credentials provider is included, `signIn`, `signUp`, and related methods are available on the composite — so Studio shows the sign-in form and the credentials endpoint responds correctly. ([#17708](https://github.com/mastra-ai/mastra/pull/17708))
+
+- Expose Harness sessions over HTTP. ([#18358](https://github.com/mastra-ai/mastra/pull/18358))
+
+  Adds a set of `harness`-scoped server routes that let a registered Harness be
+  driven over HTTP: create (get-or-create) a session by `resourceId`, send
+  messages, steer, abort, approve/decline tool calls, respond to tool
+  suspensions, switch mode/model, manage threads, read session state, and
+  subscribe to the session's event stream via SSE. Routes resolve the target
+  Harness through `mastra.getHarness(id)` and operate on the session returned by
+  `harness.createSession(...)`.
+
+  A new `harness` permission resource is included (`harness:read`,
+  `harness:execute`).
+
+  The tool-approval route forwards the request's `toolCallId` so a stale or
+  delayed approval can only resolve the gate it targets, and the list-models
+  route no longer returns API key environment variable names.
+
+- Enforce resource ownership on Harness session thread operations. `SessionThread.switch`, `delete`, `listMessages`, and `clone` now verify the target thread belongs to the session's `resourceId` before acting, treating threads owned by another resource as not found. This prevents a session (e.g. an authenticated HTTP caller scoped to one `resourceId`) from reading, switching to, renaming, deleting, or cloning a thread owned by a different resource via an arbitrary `threadId`. When a `switch` is rejected for ownership, the session's previous thread lock is restored so it is never left bound but unlocked. ([#18358](https://github.com/mastra-ai/mastra/pull/18358))
+
 ## 1.46.0-alpha.2
 
 ### Patch Changes
