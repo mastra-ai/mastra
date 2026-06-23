@@ -16,4 +16,4 @@ overrides:
   '@internal/test-utils': link:../../../../packages/_test-utils
 
 allowBuilds:
-  esbuild: true
+  esbuild: set this to true or false
