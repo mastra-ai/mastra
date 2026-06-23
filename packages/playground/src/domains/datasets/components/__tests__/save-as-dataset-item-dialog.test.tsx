@@ -2,7 +2,14 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { ButtonHTMLAttributes, ChangeEvent, HTMLAttributes, PropsWithChildren, SelectHTMLAttributes } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  ChangeEvent,
+  HTMLAttributes,
+  PropsWithChildren,
+  ReactNode,
+  SelectHTMLAttributes,
+} from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SaveAsDatasetItemDialog } from '../save-as-dataset-item-dialog';
@@ -94,6 +101,14 @@ function renderDialog(props: Partial<Parameters<typeof SaveAsDatasetItemDialog>[
         />
       </QueryClientProvider>
     </MastraReactProvider>,
+  );
+}
+
+function wrap(children: ReactNode) {
+  return (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
+    </MastraReactProvider>
   );
 }
 
@@ -225,14 +240,16 @@ describe('SaveAsDatasetItemDialog', () => {
     expect(getEditors()[3].value).toBe('');
 
     rerender(
-      <SaveAsDatasetItemDialog
-        initialInput="{}"
-        initialGroundTruth=""
-        initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
-        breadcrumb={<span>Trace</span>}
-        isOpen
-        onClose={vi.fn()}
-      />,
+      wrap(
+        <SaveAsDatasetItemDialog
+          initialInput="{}"
+          initialGroundTruth=""
+          initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+          breadcrumb={<span>Trace</span>}
+          isOpen
+          onClose={vi.fn()}
+        />,
+      ),
     );
 
     await waitFor(() => {
@@ -246,14 +263,16 @@ describe('SaveAsDatasetItemDialog', () => {
     fireEvent.change(getEditors()[3], { target: { value: 'manual mocks' } });
 
     rerender(
-      <SaveAsDatasetItemDialog
-        initialInput="{}"
-        initialGroundTruth=""
-        initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
-        breadcrumb={<span>Trace</span>}
-        isOpen
-        onClose={vi.fn()}
-      />,
+      wrap(
+        <SaveAsDatasetItemDialog
+          initialInput="{}"
+          initialGroundTruth=""
+          initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+          breadcrumb={<span>Trace</span>}
+          isOpen
+          onClose={vi.fn()}
+        />,
+      ),
     );
 
     await waitFor(() => {
