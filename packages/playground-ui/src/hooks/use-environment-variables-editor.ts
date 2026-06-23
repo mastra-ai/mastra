@@ -258,7 +258,7 @@ function parsePastedEnvText(text: string) {
   const entries = parseEnvFileText(trimmedText);
   if (entries.length === 0) return [];
 
-  const firstAssignmentLooksLikeEnvVar = /^[A-Z_][A-Z0-9_]*\s*=/.test(trimmedText);
+  const firstAssignmentLooksLikeEnvVar = /^(?:export\s+)?[A-Z_][A-Z0-9_]*\s*=/.test(trimmedText);
   const hasBulkShape = entries.length > 1 || trimmedText.includes('\n') || firstAssignmentLooksLikeEnvVar;
 
   return hasBulkShape ? entries : [];
