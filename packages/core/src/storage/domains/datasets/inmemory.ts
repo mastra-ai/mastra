@@ -27,7 +27,7 @@ function toDatasetItem(row: DatasetItemRow): DatasetItem {
     datasetId: row.datasetId,
     datasetVersion: row.datasetVersion,
     organizationId: row.organizationId,
-    resourceId: row.resourceId,
+    projectId: row.projectId,
     input: row.input,
     groundTruth: row.groundTruth,
     expectedTrajectory: row.expectedTrajectory,
@@ -87,7 +87,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       targetIds: input.targetIds,
       scorerIds: input.scorerIds ?? null,
       organizationId: input.organizationId ?? null,
-      resourceId: input.resourceId ?? null,
+      projectId: input.projectId ?? null,
       candidateKey: input.candidateKey ?? null,
       candidateId: input.candidateId ?? null,
       version: 0,
@@ -156,10 +156,10 @@ export class DatasetsInMemory extends DatasetsStorage {
     let datasets = Array.from(this.db.datasets.values());
 
     if (args.filters) {
-      const { organizationId, resourceId, candidateKey, candidateId } = args.filters;
+      const { organizationId, projectId, candidateKey, candidateId } = args.filters;
       datasets = datasets.filter(d => {
         if (organizationId !== undefined && d.organizationId !== organizationId) return false;
-        if (resourceId !== undefined && d.resourceId !== resourceId) return false;
+        if (projectId !== undefined && d.projectId !== projectId) return false;
         if (candidateKey !== undefined && d.candidateKey !== candidateKey) return false;
         if (candidateId !== undefined && d.candidateId !== candidateId) return false;
         return true;
@@ -205,7 +205,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       datasetVersion: newVersion,
       // Tenancy inherited from parent dataset (Option B — never settable per item)
       organizationId: dataset.organizationId ?? null,
-      resourceId: dataset.resourceId ?? null,
+      projectId: dataset.projectId ?? null,
       validTo: null,
       isDeleted: false,
       input: args.input,
@@ -261,7 +261,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       datasetVersion: newVersion,
       // Re-inherit tenancy from parent dataset (handles dataset-level retroactive tenancy backfill)
       organizationId: dataset.organizationId ?? null,
-      resourceId: dataset.resourceId ?? null,
+      projectId: dataset.projectId ?? null,
       validTo: null,
       isDeleted: false,
       input: args.input !== undefined ? args.input : currentRow.input,
@@ -314,8 +314,8 @@ export class DatasetsInMemory extends DatasetsStorage {
     // the parent dataset (the pattern used by every DB adapter). This is
     // deliberate and safe: tenancy is immutable post-create on both datasets
     // and items (see CreateDatasetInput / UpdateDatasetInput in ../../types.ts),
-    // so currentRow.organizationId / currentRow.resourceId are guaranteed to
-    // equal dataset.organizationId / dataset.resourceId. Keep this branch in
+    // so currentRow.organizationId / currentRow.projectId are guaranteed to
+    // equal dataset.organizationId / dataset.projectId. Keep this branch in
     // sync with the DB adapters if that invariant ever changes.
     const now = new Date();
     rows.push({
@@ -323,7 +323,7 @@ export class DatasetsInMemory extends DatasetsStorage {
       datasetId,
       datasetVersion: newVersion,
       organizationId: currentRow.organizationId ?? null,
-      resourceId: currentRow.resourceId ?? null,
+      projectId: currentRow.projectId ?? null,
       validTo: null,
       isDeleted: true,
       input: currentRow.input,
@@ -402,10 +402,10 @@ export class DatasetsInMemory extends DatasetsStorage {
     }
 
     if (args.filters) {
-      const { organizationId, resourceId } = args.filters;
+      const { organizationId, projectId } = args.filters;
       items = items.filter(item => {
         if (organizationId !== undefined && item.organizationId !== organizationId) return false;
-        if (resourceId !== undefined && item.resourceId !== resourceId) return false;
+        if (projectId !== undefined && item.projectId !== projectId) return false;
         return true;
       });
     }
@@ -505,7 +505,7 @@ export class DatasetsInMemory extends DatasetsStorage {
         datasetVersion: newVersion,
         // Tenancy inherited from parent dataset (Option B)
         organizationId: dataset.organizationId ?? null,
-        resourceId: dataset.resourceId ?? null,
+        projectId: dataset.projectId ?? null,
         validTo: null,
         isDeleted: false,
         input: itemInput.input,
@@ -558,7 +558,7 @@ export class DatasetsInMemory extends DatasetsStorage {
         datasetId: input.datasetId,
         datasetVersion: newVersion,
         organizationId: currentRow.organizationId ?? null,
-        resourceId: currentRow.resourceId ?? null,
+        projectId: currentRow.projectId ?? null,
         validTo: null,
         isDeleted: true,
         input: currentRow.input,

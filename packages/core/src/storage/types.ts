@@ -2392,8 +2392,8 @@ export interface DatasetRecord {
   scorerIds?: string[] | null;
   /** Multi-tenant organization/account scope. */
   organizationId?: string | null;
-  /** Broader resource context (Mastra memory compatibility). */
-  resourceId?: string | null;
+  /** Platform project scope. Pairs with {@link DatasetRecord.organizationId} to form the dataset's tenancy bucket. */
+  projectId?: string | null;
   /** Recurring-problem fingerprint (e.g. detector-emitted candidate key). */
   candidateKey?: string | null;
   /** Incident-specific identifier minted by the detector. */
@@ -2439,7 +2439,7 @@ export interface DatasetItem {
   /** Inherited from the parent dataset at insert time. */
   organizationId?: string | null;
   /** Inherited from the parent dataset at insert time. */
-  resourceId?: string | null;
+  projectId?: string | null;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
@@ -2458,7 +2458,7 @@ export interface DatasetItemRow {
   /** Inherited from the parent dataset at insert time. */
   organizationId?: string | null;
   /** Inherited from the parent dataset at insert time. */
-  resourceId?: string | null;
+  projectId?: string | null;
   validTo: number | null;
   isDeleted: boolean;
   input: unknown;
@@ -2498,10 +2498,11 @@ export interface CreateDatasetInput {
    */
   organizationId?: string | null;
   /**
-   * Broader resource context (Mastra memory compatibility). Stamped onto every item.
-   * Immutable after create — see {@link CreateDatasetInput.organizationId}.
+   * Platform project scope. Stamped onto every item inserted into this dataset.
+   * Pairs with {@link CreateDatasetInput.organizationId} to form the (organizationId, projectId)
+   * tenancy bucket. Immutable after create — see {@link CreateDatasetInput.organizationId}.
    */
-  resourceId?: string | null;
+  projectId?: string | null;
   /**
    * Recurring-problem fingerprint (e.g. detector-emitted candidate key).
    * Immutable after create — pairs with {@link CreateDatasetInput.candidateId} to identify
@@ -2517,7 +2518,7 @@ export interface CreateDatasetInput {
 
 /**
  * Update input for a dataset. Tenancy ({@link CreateDatasetInput.organizationId},
- * {@link CreateDatasetInput.resourceId}) and candidate identity
+ * {@link CreateDatasetInput.projectId}) and candidate identity
  * ({@link CreateDatasetInput.candidateKey}, {@link CreateDatasetInput.candidateId})
  * are intentionally omitted: they are set once at create time and must remain immutable
  * so item SCD-2 history (which inherits these fields per-write from the parent dataset)
@@ -2562,7 +2563,7 @@ export interface UpdateDatasetItemInput {
 
 export interface DatasetTenancyFilters {
   organizationId?: string;
-  resourceId?: string;
+  projectId?: string;
 }
 
 export interface ListDatasetsFilters extends DatasetTenancyFilters {

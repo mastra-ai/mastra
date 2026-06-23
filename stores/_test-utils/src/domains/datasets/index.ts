@@ -302,7 +302,7 @@ export function createDatasetsTests({
         const ds = await datasetsStorage.createDataset({
           name: 'scd2-delete-tenancy',
           organizationId: 'org_delete',
-          resourceId: 'res_delete',
+          projectId: 'proj_delete',
         });
         const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'bye' } });
 
@@ -312,14 +312,14 @@ export function createDatasetsTests({
         const tombstone = history.find(h => h.isDeleted);
         expect(tombstone).toBeDefined();
         expect(tombstone!.organizationId).toBe('org_delete');
-        expect(tombstone!.resourceId).toBe('res_delete');
+        expect(tombstone!.projectId).toBe('proj_delete');
       });
 
       it('batchDeleteItems tombstones inherit tenancy from parent dataset', async () => {
         const ds = await datasetsStorage.createDataset({
           name: 'scd2-batch-delete-tenancy',
           organizationId: 'org_batch',
-          resourceId: 'res_batch',
+          projectId: 'proj_batch',
         });
         const items = await datasetsStorage.batchInsertItems({
           datasetId: ds.id,
@@ -336,7 +336,7 @@ export function createDatasetsTests({
           const tombstone = history.find(h => h.isDeleted);
           expect(tombstone).toBeDefined();
           expect(tombstone!.organizationId).toBe('org_batch');
-          expect(tombstone!.resourceId).toBe('res_batch');
+          expect(tombstone!.projectId).toBe('proj_batch');
         }
       });
     });
