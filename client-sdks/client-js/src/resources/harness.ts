@@ -495,9 +495,11 @@ export class HarnessSession extends BaseResource {
   }
 
   /** Update goal options (judge model, max runs, status). */
-  async updateGoal(
-    options: { judgeModelId?: string; maxRuns?: number; status?: 'active' | 'paused' | 'done' },
-  ): Promise<HarnessGoalRecord | undefined> {
+  async updateGoal(options: {
+    judgeModelId?: string;
+    maxRuns?: number;
+    status?: 'active' | 'paused' | 'done';
+  }): Promise<HarnessGoalRecord | undefined> {
     const body = await this.request<{ goal?: HarnessGoalRecord }>(`${this.base()}/goal`, {
       method: 'PUT',
       body: options,

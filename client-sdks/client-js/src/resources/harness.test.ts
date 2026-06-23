@@ -128,9 +128,17 @@ describe('Harness Resource', () => {
   });
 
   it('lists modes and threads, and switches thread', async () => {
-    mockJson({ modes: [{ id: 'build', name: 'Build' }, { id: 'plan', name: 'Plan' }] });
+    mockJson({
+      modes: [
+        { id: 'build', name: 'Build' },
+        { id: 'plan', name: 'Plan' },
+      ],
+    });
     const modes = await client.getHarness('code').listModes();
-    expect(modes).toEqual([{ id: 'build', name: 'Build' }, { id: 'plan', name: 'Plan' }]);
+    expect(modes).toEqual([
+      { id: 'build', name: 'Build' },
+      { id: 'plan', name: 'Plan' },
+    ]);
     expect(lastCall()[0]).toBe('http://localhost:4111/api/harness/code/modes');
 
     mockJson({ threads: [{ id: 't-1', title: 'One' }] });
@@ -150,16 +158,15 @@ describe('Harness Resource', () => {
       { type: 'agent_start' },
       { type: 'message_update', message: { id: 'm1', role: 'assistant', content: [{ type: 'text', text: 'hi' }] } },
     ];
-    mockSse([
-      `data: ${JSON.stringify(events[0])}\n\n`,
-      `: heartbeat\n\n`,
-      `data: ${JSON.stringify(events[1])}\n\n`,
-    ]);
+    mockSse([`data: ${JSON.stringify(events[0])}\n\n`, `: heartbeat\n\n`, `data: ${JSON.stringify(events[1])}\n\n`]);
 
     const received: HarnessEvent[] = [];
-    const sub = await client.getHarness('code').session('user-1').subscribe({
-      onEvent: e => received.push(e),
-    });
+    const sub = await client
+      .getHarness('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: e => received.push(e),
+      });
 
     // Allow the async pump to drain the (already-closed) stream.
     await new Promise(r => setTimeout(r, 10));
@@ -181,9 +188,12 @@ describe('Harness Resource', () => {
     mockSse([serialized.slice(0, mid), serialized.slice(mid)]);
 
     const received: HarnessEvent[] = [];
-    const sub = await client.getHarness('code').session('user-1').subscribe({
-      onEvent: e => received.push(e),
-    });
+    const sub = await client
+      .getHarness('code')
+      .session('user-1')
+      .subscribe({
+        onEvent: e => received.push(e),
+      });
     await new Promise(r => setTimeout(r, 10));
     sub.unsubscribe();
 
@@ -192,13 +202,16 @@ describe('Harness Resource', () => {
 
   it('sends a notification signal', async () => {
     mockJson({ accepted: true, notificationId: 'n-1', decision: 'deliver', runId: 'run-1' });
-    const result = await client.getHarness('code').session('user-1').sendNotification({
-      source: 'github',
-      kind: 'pr_review',
-      summary: 'PR #42 was approved',
-      priority: 'high',
-      payload: { pr: 42 },
-    });
+    const result = await client
+      .getHarness('code')
+      .session('user-1')
+      .sendNotification({
+        source: 'github',
+        kind: 'pr_review',
+        summary: 'PR #42 was approved',
+        priority: 'high',
+        payload: { pr: 42 },
+      });
 
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/notifications');

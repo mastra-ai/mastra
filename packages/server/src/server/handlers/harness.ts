@@ -1,5 +1,5 @@
-import type { Harness, Session } from '@mastra/core/harness';
 import type { Agent } from '@mastra/core/agent';
+import type { Harness, Session } from '@mastra/core/harness';
 import { z } from 'zod/v4';
 
 import { HTTPException } from '../http-exception';
@@ -17,7 +17,10 @@ import { handleError } from './error';
  * than fork the conversation).
  */
 
-function getHarnessOrThrow(mastra: { getHarness: (id: string) => Harness<any> | undefined }, harnessId: string): Harness<any> {
+function getHarnessOrThrow(
+  mastra: { getHarness: (id: string) => Harness<any> | undefined },
+  harnessId: string,
+): Harness<any> {
   const harness = mastra.getHarness(harnessId);
   if (!harness) {
     throw new HTTPException(404, { message: `harness "${harnessId}" not found` });
@@ -117,9 +120,11 @@ const threadResponseSchema = z.object({
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
-const messageContentSchema = z.object({
-  type: z.string(),
-}).passthrough();
+const messageContentSchema = z
+  .object({
+    type: z.string(),
+  })
+  .passthrough();
 const listMessagesResponseSchema = z.object({
   messages: z.array(
     z.object({
@@ -561,8 +566,7 @@ export const LIST_HARNESS_THREADS_ROUTE = createRoute({
       const harness = getHarnessOrThrow(mastra, harnessId);
       const session = await getSession(harness, resourceId);
       const threads = await session.thread.list();
-      const toTime = (t: { updatedAt?: Date; createdAt?: Date }) =>
-        (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
+      const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
       const sorted = [...threads].sort((a, b) => toTime(b) - toTime(a));
       const max = Number(limit);
       const limited = Number.isFinite(max) && max > 0 ? sorted.slice(0, max) : sorted;
@@ -592,28 +596,41 @@ export const SEND_HARNESS_NOTIFICATION_ROUTE = createRoute({
     runId: z.string().optional(),
   }),
   summary: 'Send a notification signal to a session',
-  description: 'Delivers a notification to the session\u2019s current agent/thread. The agent\u2019s delivery policy determines whether the notification wakes an idle thread, is summarised, or is persisted for later.',
+  description:
+    'Delivers a notification to the session\u2019s current agent/thread. The agent\u2019s delivery policy determines whether the notification wakes an idle thread, is summarised, or is persisted for later.',
   tags: ['Harness'],
   requiresAuth: true,
   requiresPermission: 'harness:execute',
-  handler: async ({ mastra, harnessId, resourceId, source, kind, summary, priority, payload, sourceId, dedupeKey, coalesceKey, attributes, metadata }) => {
+  handler: async ({
+    mastra,
+    harnessId,
+    resourceId,
+    source,
+    kind,
+    summary,
+    priority,
+    payload,
+    sourceId,
+    dedupeKey,
+    coalesceKey,
+    attributes,
+    metadata,
+  }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
       const session = await getSession(harness, resourceId);
-      const result = await session.sendNotificationSignal(
-        {
-          source,
-          kind,
-          summary,
-          priority,
-          payload,
-          sourceId,
-          dedupeKey,
-          coalesceKey,
-          attributes: attributes as Record<string, string | number | boolean | null | undefined> | undefined,
-          metadata,
-        },
-      );
+      const result = await session.sendNotificationSignal({
+        source,
+        kind,
+        summary,
+        priority,
+        payload,
+        sourceId,
+        dedupeKey,
+        coalesceKey,
+        attributes: attributes as Record<string, string | number | boolean | null | undefined> | undefined,
+        metadata,
+      });
       return {
         accepted: result.accepted !== undefined,
         notificationId: result.record?.id,
@@ -784,7 +801,8 @@ export const FOLLOW_UP_HARNESS_SESSION_ROUTE = createRoute({
   bodySchema: followUpBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Queue a follow-up message',
-  description: 'Queues a follow-up message. If the session is idle it sends immediately; if a run is active it queues for after completion.',
+  description:
+    'Queues a follow-up message. If the session is idle it sends immediately; if a run is active it queues for after completion.',
   tags: ['Harness'],
   requiresAuth: true,
   requiresPermission: 'harness:execute',
@@ -1008,7 +1026,8 @@ export const SET_HARNESS_GOAL_ROUTE = createRoute({
   bodySchema: setGoalBodySchema,
   responseSchema: goalResponseSchema,
   summary: 'Set a goal',
-  description: 'Sets a new objective for the session\u2019s thread. The agent\u2019s in-loop goal judge evaluates progress after each turn.',
+  description:
+    'Sets a new objective for the session\u2019s thread. The agent\u2019s in-loop goal judge evaluates progress after each turn.',
   tags: ['Harness', 'Goals'],
   requiresAuth: true,
   requiresPermission: 'harness:execute',
@@ -1152,7 +1171,8 @@ export const SET_HARNESS_TOOL_PERMISSION_ROUTE = createRoute({
   bodySchema: setToolPermissionBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Set permission for a specific tool',
-  description: 'Sets the approval policy (allow/ask/deny) for a specific tool by name. Per-tool overrides take precedence over category policies.',
+  description:
+    'Sets the approval policy (allow/ask/deny) for a specific tool by name. Per-tool overrides take precedence over category policies.',
   tags: ['Harness', 'Permissions'],
   requiresAuth: true,
   requiresPermission: 'harness:execute',
@@ -1182,7 +1202,8 @@ export const SET_HARNESS_SESSION_STATE_ROUTE = createRoute({
   bodySchema: setSessionStateBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Set session state',
-  description: 'Merges the provided key-value pairs into the session state. Existing keys not in the payload are preserved.',
+  description:
+    'Merges the provided key-value pairs into the session state. Existing keys not in the payload are preserved.',
   tags: ['Harness'],
   requiresAuth: true,
   requiresPermission: 'harness:execute',
