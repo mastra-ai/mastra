@@ -50,7 +50,7 @@ import { refundWorkflow } from '../workflows/refund-workflow.js';
 export const balanceAgent = new Agent({
   id: 'balance-agent',
   name: 'Balance Agent',
-  description: 'Sub-agent that looks up a user\'s account balance. Delegated to by the billing agent.',
+  description: "Sub-agent that looks up a user's account balance. Delegated to by the billing agent.",
   instructions: `You are a balance lookup specialist.
 When asked for a user's balance, use lookupBalance with the user name and report the balance.
 Always call the tool rather than guessing.`,

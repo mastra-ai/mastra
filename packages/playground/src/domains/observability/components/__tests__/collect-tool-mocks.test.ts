@@ -57,7 +57,12 @@ describe('collectToolMocks', () => {
         children: [
           // The sub-agent's own internal tool call — must be skipped, it never
           // reaches the parent agent's tool-mock matcher.
-          { name: "tool: 'lookupBalance'", stepType: 'tool_call', toolArgs: { user: 'YJ' }, toolResult: { balance: 100 } },
+          {
+            name: "tool: 'lookupBalance'",
+            stepType: 'tool_call',
+            toolArgs: { user: 'YJ' },
+            toolResult: { balance: 100 },
+          },
         ],
       },
     ];

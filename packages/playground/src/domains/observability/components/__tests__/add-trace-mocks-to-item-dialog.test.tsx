@@ -35,9 +35,7 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
     <option value={value}>{children}</option>
   );
   const SelectContent = ({ children }: PropsWithChildren) => (
-    <>
-      {Children.toArray(children).filter(child => isValidElement(child) && child.type === SelectItem)}
-    </>
+    <>{Children.toArray(children).filter(child => isValidElement(child) && child.type === SelectItem)}</>
   );
 
   return {

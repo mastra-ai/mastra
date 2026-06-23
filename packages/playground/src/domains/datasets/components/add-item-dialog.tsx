@@ -235,12 +235,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
 
             <div className="space-y-2">
               <Label htmlFor="item-tool-mocks">Tool Mocks (JSON array, optional)</Label>
-              <CodeEditor
-                value={toolMocks}
-                onChange={setToolMocks}
-                showCopyButton={false}
-                className="min-h-[80px]"
-              />
+              <CodeEditor value={toolMocks} onChange={setToolMocks} showCopyButton={false} className="min-h-[80px]" />
             </div>
 
             <div className="space-y-2">

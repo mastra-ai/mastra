@@ -61,10 +61,7 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
   const datasets = datasetsData?.datasets ?? [];
 
   const { data: items = [], isLoading: isItemsLoading } = useDatasetItems(selectedDatasetId);
-  const { data: selectedItem, isFetching: isSelectedItemFetching } = useDatasetItem(
-    selectedDatasetId,
-    selectedItemId,
-  );
+  const { data: selectedItem, isFetching: isSelectedItemFetching } = useDatasetItem(selectedDatasetId, selectedItemId);
   const { updateItem } = useDatasetMutations();
 
   const { data: trajectory, isLoading: isTrajectoryLoading } = useQuery({

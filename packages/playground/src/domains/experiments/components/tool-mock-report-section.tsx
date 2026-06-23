@@ -60,7 +60,10 @@ export function ToolMockReportSection({ report }: ToolMockReportSectionProps) {
 
       <div className="rounded border border-border1 divide-y divide-border1 text-sm">
         {rows.map((row, i) => (
-          <div key={`${row.outcome}-${row.toolName}-${i}`} className="flex items-center justify-between gap-2 px-3 py-1.5">
+          <div
+            key={`${row.outcome}-${row.toolName}-${i}`}
+            className="flex items-center justify-between gap-2 px-3 py-1.5"
+          >
             <span className="min-w-0 truncate">
               <span className="font-mono text-neutral4">{row.toolName}</span>
               <span className="ml-2 font-mono text-xs text-neutral3">{formatArgs(row.args)}</span>

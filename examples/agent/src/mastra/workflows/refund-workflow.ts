@@ -24,7 +24,7 @@ import { refundLedger, userBalances } from '../tools/billing-tools.js';
 
 const lookupBalanceStep = createStep({
   id: 'lookup-balance',
-  description: 'Ask the balance sub-agent for the user\'s current balance.',
+  description: "Ask the balance sub-agent for the user's current balance.",
   inputSchema: z.object({
     user: z.string().describe('The user to refund, e.g. "YJ"'),
     amount: z.number().describe('The refund amount in dollars'),

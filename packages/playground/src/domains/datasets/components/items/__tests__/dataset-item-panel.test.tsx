@@ -30,13 +30,7 @@ const renderPanel = (item: DatasetItem) => {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <DatasetItemPanel
-            datasetId="ds-1"
-            item={item}
-            items={[item]}
-            onItemChange={() => {}}
-            onClose={() => {}}
-          />
+          <DatasetItemPanel datasetId="ds-1" item={item} items={[item]} onItemChange={() => {}} onClose={() => {}} />
         </MemoryRouter>
       </QueryClientProvider>
     </MastraReactProvider>,

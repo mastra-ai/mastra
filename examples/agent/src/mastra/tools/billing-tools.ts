@@ -23,7 +23,7 @@ export const refundLedger: Array<{ user: string; amount: number; refundId: strin
 
 export const getUserBalance = createTool({
   id: 'getUserBalance',
-  description: 'Get a user\'s current account balance by name. Read-only; safe to call during evals.',
+  description: "Get a user's current account balance by name. Read-only; safe to call during evals.",
   inputSchema: z.object({
     user: z.string().describe('The user name, e.g. "YJ"'),
   }),
@@ -49,7 +49,7 @@ export const getUserBalance = createTool({
  */
 export const lookupBalance = createTool({
   id: 'lookupBalance',
-  description: 'Look up a user\'s current account balance by name. Read-only.',
+  description: "Look up a user's current account balance by name. Read-only.",
   inputSchema: z.object({
     user: z.string().describe('The user name, e.g. "YJ"'),
   }),
@@ -70,7 +70,7 @@ export const lookupBalance = createTool({
 export const refundUser = createTool({
   id: 'refundUser',
   description:
-    'Refund a user a dollar amount. THIS HAS A SIDE EFFECT: it subtracts the amount from the user\'s account balance and records the refund. Mock this tool during experiments to keep it deterministic.',
+    "Refund a user a dollar amount. THIS HAS A SIDE EFFECT: it subtracts the amount from the user's account balance and records the refund. Mock this tool during experiments to keep it deterministic.",
   inputSchema: z.object({
     user: z.string().describe('The user to refund, e.g. "YJ"'),
     amount: z.number().describe('The refund amount in dollars'),
@@ -79,7 +79,7 @@ export const refundUser = createTool({
     refundId: z.string(),
     user: z.string(),
     amount: z.number(),
-    newBalance: z.number().describe('The user\'s account balance after this refund'),
+    newBalance: z.number().describe("The user's account balance after this refund"),
   }),
   execute: async ({ user, amount }) => {
     // Loud, irreversible side effect: mutate the persisted balance.

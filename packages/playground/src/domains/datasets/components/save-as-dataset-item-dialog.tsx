@@ -319,11 +319,7 @@ export function SaveAsDatasetItemDialog({
                 datasets.length === 0
               }
             >
-              {addItem.isPending
-                ? 'Saving...'
-                : trajectoryLoading || toolMocksLoading
-                  ? 'Loading...'
-                  : 'Save Item'}
+              {addItem.isPending ? 'Saving...' : trajectoryLoading || toolMocksLoading ? 'Loading...' : 'Save Item'}
             </Button>
           </div>
         </form>
