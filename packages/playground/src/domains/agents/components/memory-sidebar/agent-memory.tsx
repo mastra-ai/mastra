@@ -22,7 +22,7 @@ interface AgentMemoryProps {
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
   const isGatewayMemory = memoryType === 'gateway';
-  const { threadInput: chatInputValue } = useThreadInput();
+  const { threadInput: chatInputValue } = useThreadInput(threadId);
 
   const { paths, navigate } = useLinkComponent();
 

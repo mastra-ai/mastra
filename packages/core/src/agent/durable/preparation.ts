@@ -10,6 +10,7 @@ import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import type { CoreTool, ToolHooks } from '../../tools/types';
+import { deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
@@ -27,6 +28,7 @@ import { createWorkflowInput } from './utils/serialize-state';
 interface DurablePreparationAgent {
   id: string;
   name?: string;
+  getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
   getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;
@@ -113,7 +115,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const {
     agent,
     messages,
-    options: execOptions,
+    options: rawExecOptions,
     runId: providedRunId,
     requestContext: providedRequestContext,
     logger,
@@ -128,6 +130,16 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 2. Get request context
   const requestContext = providedRequestContext ?? new RequestContext();
+
+  // 2b. Merge the wrapped agent's defaultOptions under the per-request options,
+  // mirroring the non-durable Agent.stream()/generate() paths. Without this the
+  // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
+  // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
+  const defaultOptions = await typedAgent.getDefaultOptions({ requestContext });
+  const execOptions = deepMerge(
+    (defaultOptions ?? {}) as Record<string, unknown>,
+    (rawExecOptions ?? {}) as Record<string, unknown>,
+  ) as AgentExecutionOptions<OUTPUT>;
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;

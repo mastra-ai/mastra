@@ -37,10 +37,12 @@ function threadSocketPath(baseDir: string, resourceId: string, threadId: string)
 
 type MessagePeer = Pick<ChildProcess, 'on' | 'off'> | Pick<Worker, 'on' | 'off'>;
 
+const WORKER_READY_TIMEOUT_MS = 15_000;
+
 function waitForMessage(
   peer: MessagePeer,
   type: string,
-  timeoutMs = 5000,
+  timeoutMs = type === 'ready' ? WORKER_READY_TIMEOUT_MS : 5000,
   predicate: (msg: WorkerMessage) => boolean = () => true,
 ): Promise<WorkerMessage> {
   return new Promise((resolve, reject) => {

@@ -286,7 +286,7 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
     if (goal && goal.id === state.planStartedGoalId) {
       const goalId = state.planStartedGoalId;
       state.planStartedGoalId = undefined;
-      state.harness.switchMode({ modeId: 'plan' }).catch(error => {
+      state.session.mode.switch({ modeId: 'plan' }).catch(error => {
         ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
         state.planStartedGoalId = goalId;
       });

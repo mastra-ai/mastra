@@ -173,11 +173,15 @@ values
         if (!agent || !originalSendNotificationSignal) return;
         type SendNotificationSignal = typeof agent.sendNotificationSignal;
         const sendScopedNotificationSignal = ((notification: unknown, target: unknown) => {
+          // Scope the target to this fixture's resource/thread, but preserve the
+          // delivery options (ifIdle/ifActive) — they carry the stream options
+          // (model/mode/state) the woken run needs to resolve a model.
           const scopedTarget =
             target && typeof target === 'object'
               ? {
-                  resourceId: (target as { resourceId?: string }).resourceId,
-                  threadId: (target as { threadId?: string }).threadId,
+                  ...(target as Record<string, unknown>),
+                  resourceId: threadFixture.resourceId,
+                  threadId: threadFixture.threadId,
                 }
               : target;
           return (originalSendNotificationSignal as (notification: unknown, target: unknown) => unknown)(
@@ -187,10 +191,19 @@ values
         }) as SendNotificationSignal;
         agent.sendNotificationSignal = sendScopedNotificationSignal;
         const pollTimer = setTimeout(() => {
-          void result.githubSignals?.startPollingForThread(
-            { threadId: threadFixture.threadId, resourceId: threadFixture.resourceId },
-            { pollImmediately: true },
-          );
+          void (async () => {
+            // The notification targets a seeded resource that the startup
+            // session is not on. In the multi-session world the woken run uses
+            // the target resource's own session, so materialize one before
+            // polling — mirroring how a server would have a session per thread.
+            await result.harness.createSession({ resourceId: threadFixture.resourceId });
+            await result.githubSignals?.startPollingForThread(
+              { threadId: threadFixture.threadId, resourceId: threadFixture.resourceId },
+              { pollImmediately: true },
+            );
+          })().catch(error => {
+            process.stderr.write(String(error instanceof Error ? (error.stack ?? error.message) : error) + '\n');
+          });
         }, 250);
         pollTimer.unref?.();
       },
@@ -230,8 +243,10 @@ values
     await runtime.waitForScreenText(/medium · pull-request-ci-recovered · delivered/i, terminal, 60_000);
 
     terminal.submit('Read the GitHub polling notification from the inbox.');
-    await runtime.waitForScreenText(/GitHub polling inbox notification read completed/i, terminal, 30_000);
+    await runtime.waitForScreenText(/Read the GitHub polling notification from the inbox\./i, terminal, 8_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17640 CI recovered/i, terminal, 30_000);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/│ ›/i, terminal, 60_000);
     terminal.submit(
       `!sqlite3 "$MC_E2E_DB_PATH" "select 'GITHUB_POLLING_INBOX_STATUS=' || status || ':' || kind from mastra_notifications where source='github' order by createdAt desc limit 1;"`,
     );
@@ -241,8 +256,10 @@ values
       8_000,
     );
 
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/│ ›/i, terminal, 15_000);
     terminal.submit('/new');
-    await runtime.waitForScreenText(/Ready for new conversation/i, terminal, 8_000);
+    await runtime.waitForScreenText(/│ ›/i, terminal, 15_000);
     terminal.submit('/threads');
     await runtime.waitForScreenText(/E2E GitHub polling inbox fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/mc-e2e-github-polling-inbox-resource/i, terminal, 8_000);

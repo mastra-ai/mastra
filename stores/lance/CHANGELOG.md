@@ -1,5 +1,56 @@
 # @mastra/lance
 
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- Fixed `LanceVectorStore.query()` returning a raw LanceDB distance in the `score` field, which inverted ranking compared to every other Mastra vector store. ([#18104](https://github.com/mastra-ai/mastra/pull/18104))
+
+  LanceDB's `_distance` is a distance (lower = more similar), while Mastra's `score` is a similarity (higher = more similar). Returning the distance unchanged meant the closest match got the _lowest_ score, silently breaking `Memory` semantic recall, `rerank()` vector weighting, and any `minScore`/threshold filtering written against other stores (pg, Chroma, S3 Vectors, Pinecone, …).
+
+  `query()` now converts `_distance` into a similarity score consistent with the other stores and sets the search distance type to match the detected index metric, or an explicit query metric when no physical Lance index exists:
+  - cosine → `1 - distance` (cosine similarity)
+  - dot product → `1 - distance` (recovers the dot product, matching `@mastra/pg`)
+  - euclidean → `1 / (1 + sqrt(distance))` (Lance `l2` returns squared L2, so this maps to Mastra's L2 similarity semantics)
+
+  The metric defaults to the table's vector index metric when one exists, otherwise `cosine` (matching `createIndex`'s default). For small/unindexed tables where LanceDB has no physical index metadata to inspect, pass `metric` to `query()` when using a non-cosine metric. If a query metric conflicts with an existing Lance index metric, the index metric is used because Lance requires indexed searches to use the index's distance type:
+
+  ```ts
+  // Before: `exact` got score 0, `far` got score 2 — ranking inverted.
+  // After:  `exact` gets the highest score and ranks first.
+  const results = await store.query({
+    indexName: 'docs',
+    queryVector: [1, 0, 0],
+    topK: 2,
+    metric: 'cosine', // optional; resolved from the index by default
+  });
+  ```
+
+- Updated dependencies [[`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c)]:
+  - @mastra/core@1.46.0-alpha.2
+
+## 1.1.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3)]:
+  - @mastra/core@1.45.0
+
+## 1.1.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3)]:
+  - @mastra/core@1.45.0-alpha.0
+
 ## 1.0.9
 
 ### Patch Changes

@@ -1,7 +1,6 @@
 import {
   Button,
   Chip,
-  Combobox,
   CopyButton,
   Dialog,
   DialogContent,
@@ -16,6 +15,7 @@ import {
   toast,
   cn,
 } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';

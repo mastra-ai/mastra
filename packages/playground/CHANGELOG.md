@@ -1,5 +1,103 @@
 # @internal/playground
 
+## 1.15.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`1823575`](https://github.com/mastra-ai/mastra/commit/18235757dac857e1c6620622c4dc3d650ba40cd3), [`d1f1abb`](https://github.com/mastra-ai/mastra/commit/d1f1abbb37726cbbc4e63396d560df40f8f85189), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c)]:
+  - @mastra/core@1.46.0-alpha.2
+  - @mastra/playground-ui@35.1.0-alpha.2
+  - @mastra/client-js@1.26.1-alpha.2
+  - @mastra/react@1.1.1-alpha.2
+
+## 1.15.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7794d71`](https://github.com/mastra-ai/mastra/commit/7794d71872c68733a30e028dfb7b1705daf6c5d2)]:
+  - @mastra/core@1.46.0-alpha.1
+  - @mastra/client-js@1.26.1-alpha.1
+  - @mastra/react@1.1.1-alpha.1
+  - @mastra/playground-ui@35.1.0-alpha.1
+
+## 1.15.1-alpha.0
+
+### Patch Changes
+
+- Fixed Studio clearing a code-defined agent's prompt when saving. A code agent that doesn't set an `editor` config is fully editable, but Studio was sending an empty instructions array on save, so saving wiped the prompt — both inline prompt blocks and referenced prompt blocks. Studio now sends the edited instructions for these agents, matching the fields the server actually persists. ([#18015](https://github.com/mastra-ai/mastra/pull/18015))
+
+- Fixed PDF attachments failing to preview in the Studio chat. When a PDF was attached, the `data:application/pdf;base64,` prefix was added twice, producing a malformed `data:application/pdf;base64,data:application/pdf;base64,...` URL that the browser could not open. PDFs now preview correctly. ([#18071](https://github.com/mastra-ai/mastra/pull/18071))
+
+- Improved Studio mobile navigation by moving search from the drawer to the top bar. ([#18288](https://github.com/mastra-ai/mastra/pull/18288))
+
+- Fixed the Studio conversation copy button in browsers that block async clipboard writes. ([#18268](https://github.com/mastra-ai/mastra/pull/18268))
+
+- Updated dependencies [[`5bd72d2`](https://github.com/mastra-ai/mastra/commit/5bd72d255f45b5ea8ab342643bd463814a980a24), [`1cc9ee1`](https://github.com/mastra-ai/mastra/commit/1cc9ee1ba51db53020a735626d33017a60b4b5b3), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`30ebaf0`](https://github.com/mastra-ai/mastra/commit/30ebaf07bed5f4d30f2f257836c15d1bf7e40aae), [`4df8c0b`](https://github.com/mastra-ai/mastra/commit/4df8c0b811113ae5da660f4a2a8b69ca825cf6a6), [`5704634`](https://github.com/mastra-ai/mastra/commit/5704634b22133167dea337a942a34f57aaa3fa14), [`d2ab27f`](https://github.com/mastra-ai/mastra/commit/d2ab27fa4a093e45d8d9b313adb5974f21719829), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`b13925b`](https://github.com/mastra-ai/mastra/commit/b13925bfa91aa8700f56fa54a9ce707ee7e4ba62), [`bf94ec6`](https://github.com/mastra-ai/mastra/commit/bf94ec68192d9f16e46ef7e5ac36370aeeddf35d), [`a29f371`](https://github.com/mastra-ai/mastra/commit/a29f371aef629ac8562661524a497127e93b5131), [`da0e991`](https://github.com/mastra-ai/mastra/commit/da0e991ee857d929ea423a9ae0bafffea169b2dc), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`073f910`](https://github.com/mastra-ai/mastra/commit/073f910481e7d94b95ba3830f96531774ae95d33), [`f91235f`](https://github.com/mastra-ai/mastra/commit/f91235fe5a305bfc004afe0ea461abd5b81881e2), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`97eb3ef`](https://github.com/mastra-ai/mastra/commit/97eb3ef37ff5c148106fa68a20ad4773a33cf2cd), [`893bb29`](https://github.com/mastra-ai/mastra/commit/893bb29418dd66056c5361053194dd7f245e26b9), [`8edd4f0`](https://github.com/mastra-ai/mastra/commit/8edd4f0e3788a4c11aed584c18322cdefa2792ac), [`1f97ce5`](https://github.com/mastra-ai/mastra/commit/1f97ce5695463bebb4eaacf501da6fb403e20885), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`64f58c0`](https://github.com/mastra-ai/mastra/commit/64f58c04e78b40137497d47f781e897e416f22a5), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`8e25a78`](https://github.com/mastra-ai/mastra/commit/8e25a78e0597575f0b0729bae8c5e190c84869b5), [`2cb3180`](https://github.com/mastra-ai/mastra/commit/2cb318004ba95b3cc6c09a6c3e09cdb49955b18e), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`a5b22d3`](https://github.com/mastra-ai/mastra/commit/a5b22d314d62a68d801886a8d3d0eb6c089473db), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858)]:
+  - @mastra/core@1.46.0-alpha.0
+  - @mastra/playground-ui@35.1.0-alpha.0
+  - @mastra/client-js@1.26.1-alpha.0
+  - @mastra/react@1.1.1-alpha.0
+
+## 1.15.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+- Redesigned the agent page in Studio to separate configuration from usage. ([#17970](https://github.com/mastra-ai/mastra/pull/17970))
+
+  **Settings moved out of the side panel.** The right-hand information panel on the agent chat page is gone. Agent configuration (description, model, tools, workflows, skills, scorers, system prompt, memory configuration, and channels) now lives in a full-width Settings view with Overview, Memory, and Channels tabs. Open it from the new Settings button at the top right of the chat — it replaces the chat in place with a smooth transition while the thread sidebar stays visible, and it is deep-linkable at `/agents/:agentId/settings`. Channels moved out of the tool tab bar into this view (old `/channels` links redirect), and the agent header now copies the agent id when you click the title, with an icon-only share button beside the Settings toggle.
+
+  **Run options follow their frequency of use.** Request context lives in a popover beside the model settings in the chat composer, and tracing options moved to the tab bar — adjusting a test run never requires leaving the conversation. Request Context fields now share one accessible label and tooltip pattern, run-option popovers no longer repeat section labels, and model/run-option popovers stay left aligned while avoiding viewport collisions. The per-thread Traces shortcut was removed from the composer; the Traces tab covers it.
+
+  **Left sidebar focuses on usage.** The thread list now ends with a Memory card showing the memory setup at a glance (recent-messages window, semantic recall, working memory, observational memory, plus a live observation progress bar while it streams) and a preview of the working memory. Clicking the card smoothly expands it in place into the full live memory view. Agent pages keep the redesigned shell visible while data loads, thread skeletons match the embedded sidebar chrome, and Memory copy/edit controls have cleaner keyboard and accessibility behavior. The Editor tab shares this same resizable sidebar — only its content changes between routes, so the panel keeps its size. On desktop the sidebar is always visible (resizable, no longer collapsible); on mobile it becomes an edge drawer.
+
+  **Editor test chat uses agent defaults.** The editor test chat now applies the same model settings defaults (max tokens, max steps, provider options) as the main chat page, and activating a skill from a tool call works in the editor test chat instead of being silently ignored.
+
+  **Browser sessions simplified.** Agent browser sessions now display in the centered overlay only — the sidebar display mode was removed.
+
+### Patch Changes
+
+- Added icons to the Studio theme selector. ([#18141](https://github.com/mastra-ai/mastra/pull/18141))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d545337`](https://github.com/mastra-ai/mastra/commit/d545337588d5f1e0b198ef2c4eb1274f143e8319), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`fa14f8d`](https://github.com/mastra-ai/mastra/commit/fa14f8db417ef973774404d2c97e848872e785be), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3), [`fa14f8d`](https://github.com/mastra-ai/mastra/commit/fa14f8db417ef973774404d2c97e848872e785be)]:
+  - @mastra/core@1.45.0
+  - @mastra/playground-ui@35.0.0
+  - @mastra/ai-sdk@1.5.0
+  - @mastra/client-js@1.26.0
+  - @mastra/react@1.1.0
+  - @mastra/schema-compat@1.3.0
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+- Redesigned the agent page in Studio to separate configuration from usage. ([#17970](https://github.com/mastra-ai/mastra/pull/17970))
+
+  **Settings moved out of the side panel.** The right-hand information panel on the agent chat page is gone. Agent configuration (description, model, tools, workflows, skills, scorers, system prompt, memory configuration, and channels) now lives in a full-width Settings view with Overview, Memory, and Channels tabs. Open it from the new Settings button at the top right of the chat — it replaces the chat in place with a smooth transition while the thread sidebar stays visible, and it is deep-linkable at `/agents/:agentId/settings`. Channels moved out of the tool tab bar into this view (old `/channels` links redirect), and the agent header now copies the agent id when you click the title, with an icon-only share button beside the Settings toggle.
+
+  **Run options follow their frequency of use.** Request context lives in a popover beside the model settings in the chat composer, and tracing options moved to the tab bar — adjusting a test run never requires leaving the conversation. Request Context fields now share one accessible label and tooltip pattern, run-option popovers no longer repeat section labels, and model/run-option popovers stay left aligned while avoiding viewport collisions. The per-thread Traces shortcut was removed from the composer; the Traces tab covers it.
+
+  **Left sidebar focuses on usage.** The thread list now ends with a Memory card showing the memory setup at a glance (recent-messages window, semantic recall, working memory, observational memory, plus a live observation progress bar while it streams) and a preview of the working memory. Clicking the card smoothly expands it in place into the full live memory view. Agent pages keep the redesigned shell visible while data loads, thread skeletons match the embedded sidebar chrome, and Memory copy/edit controls have cleaner keyboard and accessibility behavior. The Editor tab shares this same resizable sidebar — only its content changes between routes, so the panel keeps its size. On desktop the sidebar is always visible (resizable, no longer collapsible); on mobile it becomes an edge drawer.
+
+  **Editor test chat uses agent defaults.** The editor test chat now applies the same model settings defaults (max tokens, max steps, provider options) as the main chat page, and activating a skill from a tool call works in the editor test chat instead of being silently ignored.
+
+  **Browser sessions simplified.** Agent browser sessions now display in the centered overlay only — the sidebar display mode was removed.
+
+### Patch Changes
+
+- Added icons to the Studio theme selector. ([#18141](https://github.com/mastra-ai/mastra/pull/18141))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d545337`](https://github.com/mastra-ai/mastra/commit/d545337588d5f1e0b198ef2c4eb1274f143e8319), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`fa14f8d`](https://github.com/mastra-ai/mastra/commit/fa14f8db417ef973774404d2c97e848872e785be), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3), [`fa14f8d`](https://github.com/mastra-ai/mastra/commit/fa14f8db417ef973774404d2c97e848872e785be)]:
+  - @mastra/core@1.45.0-alpha.0
+  - @mastra/playground-ui@35.0.0-alpha.0
+  - @mastra/ai-sdk@1.5.0-alpha.0
+  - @mastra/client-js@1.26.0-alpha.0
+  - @mastra/react@1.1.0-alpha.0
+  - @mastra/schema-compat@1.3.0-alpha.0
+
 ## 1.14.1
 
 ### Patch Changes

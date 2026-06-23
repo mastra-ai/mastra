@@ -1,5 +1,17 @@
 # @mastra/schema-compat
 
+## 1.3.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
 ## 1.2.14
 
 ### Patch Changes
