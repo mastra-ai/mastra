@@ -4,6 +4,9 @@
 # onnxruntime) resolve to one physical copy instead of loading twice.
 enableGlobalVirtualStore: true
 
+# pnpm 11 reads overrides from here, not package.json. They are duplicated in
+# package.json `pnpm.overrides` because the example validator
+# (.github/scripts/validate-examples.js) checks for them there.
 overrides:
   '@mastra/core': 'link:../../packages/core'
   '@mastra/libsql': 'link:../../stores/libsql'
