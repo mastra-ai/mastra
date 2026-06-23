@@ -2488,6 +2488,16 @@ export interface CreateDatasetInput {
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
   requestContextSchema?: Record<string, unknown> | null;
+  /**
+   * Discriminator for the target this dataset's items will be replayed against.
+   * Optional because a dataset can exist purely as a collection of items
+   * (e.g. emitted by a detector for a target kind OSS doesn't yet know how to
+   * run). Datasets created without a {@link TargetType} are **not
+   * experiment-eligible**: the experiment runner requires a non-null
+   * {@link CreateExperimentInput.targetType} to resolve an executor, so a
+   * downstream consumer must either set this on create or refuse to run an
+   * experiment against the dataset.
+   */
   targetType?: TargetType;
   targetIds?: string[];
   scorerIds?: string[];
@@ -2643,6 +2653,10 @@ export interface Experiment {
   failedCount: number;
   skippedCount: number;
   agentVersion?: string | null;
+  /** Multi-tenant organization/account scope. Hydrated from the parent dataset on create. */
+  organizationId?: string | null;
+  /** Platform project scope. Pairs with {@link Experiment.organizationId} to form the experiment's tenancy bucket. */
+  projectId?: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -2667,6 +2681,10 @@ export interface ExperimentResult {
   status: ExperimentResultStatus | null;
   tags: string[] | null;
   toolMockReport?: DatasetToolMockReport | null;
+  /** Multi-tenant organization/account scope. Denormalized from the parent experiment for efficient tenancy-scoped queries. */
+  organizationId?: string | null;
+  /** Platform project scope. Pairs with {@link ExperimentResult.organizationId} to form the result's tenancy bucket. */
+  projectId?: string | null;
   createdAt: Date;
 }
 
@@ -2686,9 +2704,26 @@ export interface CreateExperimentInput {
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion?: string;
+  /**
+   * Discriminator for the target this experiment runs against. Required because
+   * an experiment by definition replays inputs through a specific target; the
+   * runner uses this to resolve the correct executor. Datasets whose
+   * {@link CreateDatasetInput.targetType} is absent are not experiment-eligible.
+   */
   targetType: TargetType;
   targetId: string;
   totalItems: number;
+  /**
+   * Multi-tenant organization/account scope. Should be hydrated from the parent
+   * dataset on create so experiments inherit their dataset's tenancy bucket.
+   */
+  organizationId?: string | null;
+  /**
+   * Platform project scope. Pairs with {@link CreateExperimentInput.organizationId}
+   * to form the (organizationId, projectId) tenancy bucket. Hydrated from the
+   * parent dataset on create.
+   */
+  projectId?: string | null;
 }
 
 export interface UpdateExperimentInput {
@@ -2726,6 +2761,20 @@ export interface AddExperimentResultInput {
    * ran with mocks — see `served`/`unconsumed`/`liveCalls`/`failure`.
    */
   toolMockReport?: DatasetToolMockReport | null;
+  /** Multi-tenant organization/account scope. Should be hydrated from the parent experiment on insert. */
+  organizationId?: string | null;
+  /** Platform project scope. Hydrated from the parent experiment on insert. */
+  projectId?: string | null;
+}
+
+/**
+ * Multi-tenant scoping filters for experiment queries. Mirrors
+ * {@link DatasetTenancyFilters} so the experiments domain can be queried
+ * within a tenancy bucket using the same shape.
+ */
+export interface ExperimentTenancyFilters {
+  organizationId?: string;
+  projectId?: string;
 }
 
 export interface ListExperimentsInput {
@@ -2734,6 +2783,8 @@ export interface ListExperimentsInput {
   targetId?: string;
   agentVersion?: string;
   status?: ExperimentStatus;
+  /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
+  filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
 }
 
@@ -2746,6 +2797,8 @@ export interface ListExperimentResultsInput {
   experimentId: string;
   traceId?: string;
   status?: ExperimentResultStatus;
+  /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
+  filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
 }
 
