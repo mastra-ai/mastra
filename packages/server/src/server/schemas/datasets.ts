@@ -199,12 +199,8 @@ const toolMocksSchema = z
 // Diagnostic receipt for item-level tool mocks, persisted on experiment results.
 const toolMockReportSchema = z
   .object({
-    served: z.array(
-      z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() }),
-    ),
-    unconsumed: z.array(
-      z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() }),
-    ),
+    served: z.array(z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() })),
+    unconsumed: z.array(z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() })),
     liveCalls: z.array(z.object({ toolName: z.string(), args: z.unknown() })),
     failure: z
       .object({

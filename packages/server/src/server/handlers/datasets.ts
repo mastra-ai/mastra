@@ -441,7 +441,15 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       if (!existing || (existing as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata, expectedTrajectory, toolMocks });
+      return await ds.updateItem({
+        itemId,
+        input,
+        groundTruth,
+        requestContext,
+        metadata,
+        expectedTrajectory,
+        toolMocks,
+      });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
