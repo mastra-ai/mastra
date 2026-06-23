@@ -10,7 +10,7 @@ packages:
 
 **Added in:** `@mastra/core@1.29.0`
 
-Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement, the LLM continues responding, and the task runs to completion in the background. When it finishes, its result is written to memory and if you use [`streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) the agent is re-invoked automatically so the result is processed in the same call.
+Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement, the LLM continues responding, and the task runs to completion in the background. When it finishes, its result is written to memory and if you use `stream()` with the [`untilIdle`](/reference/agents/agent#stream) option the agent is re-invoked automatically so the result is processed in the same call.
 
 ## When to use background tasks
 
@@ -149,20 +149,20 @@ When a tool call dispatches as a background task, two streams may surface lifecy
 | `background-task-suspended` | The tool called `suspend()` from inside its execute. | Manager stream |
 | `background-task-resumed` | A suspended task was resumed via `manager.resume(taskId, resumeData)`. | Manager stream |
 
-`agent.stream().fullStream` only emits the agent-loop chunks (`background-task-started`, `background-task-progress`) on its own. `agent.streamUntilIdle()` emits the same two chunks and additionally subscribes to the manager pubsub for the run's memory scope and pipes the seven manager chunks (`background-task-running`, `background-task-output`, `background-task-completed`, `background-task-failed`, `background-task-cancelled`, `background-task-suspended`, `background-task-resumed`) into the same `fullStream`.
+`agent.stream().fullStream` only emits the agent-loop chunks (`background-task-started`, `background-task-progress`) on its own. `agent.stream()` with `untilIdle: true` emits the same two chunks and additionally subscribes to the manager pubsub for the run's memory scope and pipes the seven manager chunks (`background-task-running`, `background-task-output`, `background-task-completed`, `background-task-failed`, `background-task-cancelled`, `background-task-suspended`, `background-task-resumed`) into the same `fullStream`.
 
 `backgroundTaskManager.stream()` only emits the seven manager chunks.
 
 The full payload shapes are documented in the [background task chunks reference](/reference/streaming/ChunkType#background-task-chunks).
 
-## Keep the agent stream open with `streamUntilIdle()`
+## Keep the agent stream open with `untilIdle`
 
-`agent.stream()` returns once the LLM emits a final response even if a background task is still running. Use `agent.streamUntilIdle()` when you want the stream to stay open until every dispatched background task has completed and the LLM has had a chance to respond to the result:
+`agent.stream()` returns once the LLM emits a final response even if a background task is still running. Pass `untilIdle: true` when you want the stream to stay open until every dispatched background task has completed and the LLM has had a chance to respond to the result:
 
 ```typescript title="src/mastra/run.ts"
-const stream = await agent.streamUntilIdle('Research solana for me', {
+const stream = await agent.stream('Research solana for me', {
   memory: { thread: 't1', resource: 'u1' },
-  maxIdleMs: 5 * 60_000,
+  untilIdle: true,
 })
 
 for await (const chunk of stream.fullStream) {
@@ -171,19 +171,26 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-When a background task completes, the result is injected into the agent memory, `streamUntilIdle()` re-enters the agentic loop so the LLM can react to it. The stream closes when no tasks are running and no completions are queued.
+When a background task completes, the result is injected into the agent memory, `stream()` re-enters the agentic loop so the LLM can react to it. The stream closes when no tasks are running and no completions are queued.
 
-`maxIdleMs` caps how long the stream waits between turns. The timer only runs while the wrapper is between turns, so a slow first token won't close the stream. The default is 5 minutes.
+Customize the idle timeout by passing an object instead of `true`. The timer only runs while the wrapper is between turns, so a slow first token won't close the stream. The default is 5 minutes:
+
+```typescript
+const stream = await agent.stream('Research solana for me', {
+  memory: { thread: 't1', resource: 'u1' },
+  untilIdle: { maxIdleMs: 30_000 },
+})
+```
 
 :::note
 
-Visit [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamUntilIdle) for the full API.
+Visit [`Agent.stream()`](/reference/agents/agent#stream) for the full API.
 
 :::
 
 ### Aggregate properties
 
-`streamUntilIdle()` returns a `MastraModelOutput` that looks like the one from `stream()`, but only `fullStream` spans the initial turn **and** any auto-continuations. Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()`) still resolve against the **first turn's** internal buffer. If you need an aggregate view across continuations, consume `fullStream` yourself and accumulate.
+`stream()` with `untilIdle` returns a `MastraModelOutput` that looks like the one from a regular `stream()` call, but only `fullStream` spans the initial turn **and** any auto-continuations. Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()`) still resolve against the **first turn's** internal buffer. If you need an aggregate view across continuations, consume `fullStream` yourself and accumulate.
 
 ## Subagents in the background
 
@@ -207,8 +214,9 @@ const supervisor = new Agent({
   // highlight-end
 })
 
-const stream = await supervisor.streamUntilIdle('Research AI in education and write an article', {
+const stream = await supervisor.stream('Research AI in education and write an article', {
   memory: { thread: 't1', resource: 'u1' },
+  untilIdle: true,
 })
 ```
 
@@ -287,7 +295,7 @@ await mastra.backgroundTaskManager?.resume(taskId, {
 
 ### What happens to the agent loop
 
-When a task suspends mid-`streamUntilIdle()`, the wrapper treats it as terminal for the current iteration and closes. To continue the agent immediately when the resume payload is in hand, call `agent.resumeStreamUntilIdle(resumeData, { runId, toolCallId, memory })`: the resumed bg task runs to completion, its result lands in the message list, and the agent runs a follow-up turn — all on the same SSE connection. If you'd rather drive the resume out-of-band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly and the result still writes into the thread for the next user turn to pick up.
+When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. To continue the agent immediately when the resume payload is in hand, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })`: the resumed bg task runs to completion, its result lands in the message list, and the agent runs a follow-up turn — all on the same SSE connection. If you'd rather drive the resume out-of-band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly and the result still writes into the thread for the next user turn to pick up.
 
 ### Re-registering the executor on resume
 
@@ -322,8 +330,9 @@ export const mastra = new Mastra({
 
 ## Related
 
-- [`Agent.streamUntilIdle()` reference](/reference/streaming/agents/streamUntilIdle)
+- [`Agent.stream()` reference](/reference/agents/agent#stream)
 - [backgroundTasks configuration reference](/reference/configuration#backgroundtasks)
+- [Durable agents](./durable-agents)
 - [Supervisor agents](./supervisor-agents)
 - [Stream chunk types](/reference/streaming/ChunkType)
 - [Storage](/docs/memory/storage)
