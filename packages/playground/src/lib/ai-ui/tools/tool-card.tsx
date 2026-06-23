@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { AskUserBadge, isAskUserTool, isAskUserSuspendPayload } from './badges/ask-user-badge';
 import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
@@ -169,6 +170,22 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   // of inline to avoid repetition. Hide them entirely here.
   if (isTaskTool(toolName)) {
     return null;
+  }
+
+  // ask_user tool renders a custom interactive badge for answering questions.
+  // Access suspendedTools directly (bypassing the mode check) because when messages
+  // are loaded from the database, metadata.mode may not be persisted.
+  const askUserSuspendMeta = metadata?.suspendedTools?.[toolName] ?? suspendedToolMetadata;
+  if (isAskUserTool(toolName) && askUserSuspendMeta?.suspendPayload && isAskUserSuspendPayload(askUserSuspendMeta.suspendPayload)) {
+    return (
+      <AskUserBadge
+        toolCallId={toolCallId}
+        toolName={toolName}
+        suspendPayload={askUserSuspendMeta.suspendPayload}
+        result={result}
+        isGenerateMode={metadata?.mode === 'generate'}
+      />
+    );
   }
 
   if (isBackgroundTaskResult) {
