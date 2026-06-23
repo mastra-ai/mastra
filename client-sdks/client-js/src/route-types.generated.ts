@@ -87533,30 +87533,33 @@ export type PostDatasetsDatasetIdExperiments_Response = {
     retryCount: number;
     /** Diagnostic receipt for item-level tool mocks */
     toolMockReport?:
-      | {
-          served: {
-            mockIndex: number;
-            toolName: string;
-            args: unknown;
-          }[];
-          unconsumed: {
-            mockIndex: number;
-            toolName: string;
-            args: unknown;
-          }[];
-          liveCalls: {
-            toolName: string;
-            args: unknown;
-          }[];
-          failure?:
-            | {
-                code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+      | (
+          | {
+              served: {
+                mockIndex: number;
                 toolName: string;
                 args: unknown;
-              }
-            | undefined;
-        }
-      | undefined;
+              }[];
+              unconsumed: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              liveCalls: {
+                toolName: string;
+                args: unknown;
+              }[];
+              failure?:
+                | {
+                    code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+                    toolName: string;
+                    args: unknown;
+                  }
+                | undefined;
+            }
+          | undefined
+        )
+      | null;
     scores: {
       scorerId: string;
       scorerName: string;
