@@ -4,7 +4,7 @@ import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
-import { EntityType, SpanType, getOrCreateSpan } from '../../observability';
+import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
@@ -28,9 +28,7 @@ import { createWorkflowInput } from './utils/serialize-state';
 interface DurablePreparationAgent {
   id: string;
   name?: string;
-  getDefaultOptions(opts: {
-    requestContext: RequestContext;
-  }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
+  getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
   getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;
@@ -222,6 +220,26 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
   }
 
+  // Open AGENT_RUN here so processor_run spans (and their MEMORY_OPERATION
+  // children) parent to it. MODEL_GENERATION is opened later under it.
+  const agentSpan = getOrCreateSpan({
+    type: SpanType.AGENT_RUN,
+    name: `agent run: '${agent.id}'`,
+    entityType: EntityType.AGENT,
+    entityId: agent.id,
+    entityName: agent.name,
+    input: messages,
+    metadata: {
+      runId,
+      resourceId,
+      threadId,
+    },
+    tracingContext: execOptions?.tracingContext,
+    tracingOptions: execOptions?.tracingOptions,
+    requestContext,
+    mastra,
+  });
+
   // Run processInput (once, before execution) if we have any processors
   if (inputProcessors.length > 0) {
     try {
@@ -253,7 +271,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         agentName: agent.name,
         processorStates,
       });
-      await runner.runInputProcessors(messageList, {} as any, requestContext, 0);
+      await runner.runInputProcessors(
+        messageList,
+        createObservabilityContext({ currentSpan: agentSpan }),
+        requestContext,
+        0,
+      );
     } catch (error) {
       logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
     }
@@ -339,26 +362,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const savePerStep = execOptions?.savePerStep;
   const observationalMemory = !!memoryConfig?.observationalMemory;
 
-  // 12b. Open the AGENT_RUN + MODEL_GENERATION spans and export them into the workflow
-  // input so each durable step can rebuild them. No-ops when observability is off.
-  const agentSpan = getOrCreateSpan({
-    type: SpanType.AGENT_RUN,
-    name: `agent run: '${agent.id}'`,
-    entityType: EntityType.AGENT,
-    entityId: agent.id,
-    entityName: agent.name,
-    input: messages,
-    metadata: {
-      runId,
-      resourceId,
-      threadId,
-    },
-    tracingContext: execOptions?.tracingContext,
-    tracingOptions: execOptions?.tracingOptions,
-    requestContext,
-    mastra,
-  });
-
+  // 12b. Open MODEL_GENERATION under the AGENT_RUN opened in step 6, and export both
+  // into the workflow input so each durable step can rebuild them. No-ops when
+  // observability is off.
   const modelSpan = agentSpan?.createChildSpan({
     type: SpanType.MODEL_GENERATION,
     name: `llm: '${model.modelId}'`,

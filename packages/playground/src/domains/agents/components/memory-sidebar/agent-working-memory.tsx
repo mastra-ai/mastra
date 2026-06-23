@@ -1,15 +1,15 @@
 import {
   Button,
-  MarkdownRenderer,
   ScrollArea,
   Skeleton,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  useCopyToClipboard,
   toast,
   cn,
 } from '@mastra/playground-ui';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 import { useWorkingMemory } from '../../context/agent-working-memory-context';

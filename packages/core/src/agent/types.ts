@@ -193,7 +193,8 @@ export type SendAgentSignalAccepted<OUTPUT = unknown> =
   | { action: 'wake'; runId: string; output: MastraModelOutput<OUTPUT> }
   | { action: 'deliver'; runId: string }
   | { action: 'persist' }
-  | { action: 'discard' };
+  | { action: 'discard' }
+  | { action: 'blocked'; reason: 'thread-blocked'; runId: string };
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -201,7 +202,7 @@ export type SendAgentSignalAccepted<OUTPUT = unknown> =
 export interface SendAgentSignalResult<OUTPUT = unknown> {
   /**
    * Resolves once the runtime has decided what to do with the signal
-   * (`wake`/`deliver`/`persist`/`discard`). This settles at decision-time — it
+   * (`wake`/`deliver`/`persist`/`discard`/`blocked`). This settles at decision-time — it
    * never waits for a woken run to finish or for a `persist` write to land.
    *
    * Rejects only when the signal cannot be routed/started at all — for example
@@ -212,9 +213,10 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
    * `wake` means this process ran the agent and `output` is its
    * `MastraModelOutput`. A signal queued onto an existing run, or one whose
    * cross-process wake race was lost (and forwarded to the winning run),
-   * resolves to `deliver`. `runId` is present on `wake`/`deliver` only; for
-   * `persist`/`discard`, correlate via {@link signal}'s `id`. To await a
-   * `persist` write, use {@link persisted}.
+   * resolves to `deliver`. `blocked` means the signal targeted a suspended
+   * thread that cannot accept a new idle wake. `runId` is present on
+   * `wake`/`deliver`/`blocked` only; for `persist`/`discard`, correlate via
+   * {@link signal}'s `id`. To await a `persist` write, use {@link persisted}.
    */
   accepted: Promise<SendAgentSignalAccepted<OUTPUT>>;
   signal: CreatedAgentSignal;
@@ -241,6 +243,27 @@ export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
+
+/**
+ * @experimental Agent stream resume APIs are experimental and may change in a future release.
+ */
+export type SendAgentStreamResumeOptions<OUTPUT = unknown> = {
+  threadId: string;
+  resourceId: string;
+  runId: string;
+  toolCallId?: string;
+  resumeData: unknown;
+  streamOptions?: AgentExecutionOptions<OUTPUT>;
+};
+
+/**
+ * @experimental Agent stream resume APIs are experimental and may change in a future release.
+ */
+export interface SendAgentStreamResumeResult {
+  accepted: true;
+  runId: string;
+  toolCallId?: string;
+}
 
 /**
  * @experimental Agent state signal APIs are experimental and may change in a future release.

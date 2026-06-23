@@ -831,6 +831,7 @@ export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningCon
 export {
   isRetryableOpenAIResponsesStreamError,
   StreamErrorRetryProcessor,
+  type StreamErrorRetryDelayMs,
   type StreamErrorRetryMatcher,
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';

@@ -22,8 +22,8 @@ export const planApprovalHandoffScenario: McE2eScenario = {
 
     terminal.write('\r');
     await runtime.waitForScreenText(/✓\s+Approved/i, terminal, 10_000);
-    await runtime.waitForScreenText(/The user has approved the plan, begin executing\./i, terminal, 10_000);
-    await runtime.waitForScreenText(/Build handoff e2e acknowledged\./i, terminal, 15_000);
+    await runtime.waitForScreenText(/▐build▌/i, terminal, 10_000);
+    await runtime.sleep(1_000);
 
     terminal.keyCtrlC();
   },
@@ -37,8 +37,11 @@ export const planApprovalHandoffScenario: McE2eScenario = {
     if (!allRequests.includes('call_plan_approval_e2e_submit')) {
       throw new Error('Expected AIMock requests to include the submit_plan tool call id');
     }
-    if (!allRequests.includes('The user has approved the plan, begin executing.')) {
-      throw new Error('Expected AIMock requests to include the structured build handoff reminder');
+    if (!allRequests.includes('Plan approved. Proceed with implementation following the approved plan.')) {
+      throw new Error('Expected AIMock requests to include the approved submit_plan tool result');
+    }
+    if (allRequests.includes('The user has approved the plan, begin executing.')) {
+      throw new Error('Approve should not send the old structured build handoff reminder');
     }
   },
 };

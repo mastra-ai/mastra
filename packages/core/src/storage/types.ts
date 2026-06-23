@@ -2390,23 +2390,60 @@ export interface DatasetRecord {
   targetType?: TargetType | null;
   targetIds?: string[] | null;
   scorerIds?: string[] | null;
+  /** Multi-tenant organization/account scope. */
+  organizationId?: string | null;
+  /** Broader resource context (Mastra memory compatibility). */
+  resourceId?: string | null;
+  /** Recurring-problem fingerprint (e.g. detector-emitted candidate key). */
+  candidateKey?: string | null;
+  /** Incident-specific identifier minted by the detector. */
+  candidateId?: string | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface DatasetItemSource {
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   referenceId?: string;
+}
+
+/**
+ * A single static tool mock authored on a dataset item (output-only in v1).
+ * Structurally mirrors `ItemToolMock` in the experiment engine; kept local here
+ * to avoid a storage→datasets import cycle.
+ */
+export interface DatasetItemToolMock {
+  toolName: string;
+  args: Record<string, unknown>;
+  output: unknown;
+  /** Argument matching mode. `strict` (default) deep-equals args; `ignore` matches on toolName only. */
+  matchArgs?: 'strict' | 'ignore';
+}
+
+/**
+ * Diagnostic receipt for tool-mock usage on a single experiment result.
+ * Structurally mirrors `ToolMockReport` in the experiment engine.
+ */
+export interface DatasetToolMockReport {
+  served: { mockIndex: number; toolName: string; args: unknown }[];
+  unconsumed: { mockIndex: number; toolName: string; args: unknown }[];
+  liveCalls: { toolName: string; args: unknown }[];
+  failure?: { code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED'; toolName: string; args: unknown };
 }
 
 export interface DatasetItem {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  /** Inherited from the parent dataset at insert time. */
+  organizationId?: string | null;
+  /** Inherited from the parent dataset at insert time. */
+  resourceId?: string | null;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2418,11 +2455,16 @@ export interface DatasetItemRow {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  /** Inherited from the parent dataset at insert time. */
+  organizationId?: string | null;
+  /** Inherited from the parent dataset at insert time. */
+  resourceId?: string | null;
   validTo: number | null;
   isDeleted: boolean;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2449,8 +2491,38 @@ export interface CreateDatasetInput {
   targetType?: TargetType;
   targetIds?: string[];
   scorerIds?: string[];
+  /**
+   * Multi-tenant organization/account scope. Stamped onto every item inserted into this dataset.
+   * Immutable after create — items inherit this from the parent dataset on every write, so changing
+   * it later would corrupt SCD-2 tombstone history. Intentionally absent from {@link UpdateDatasetInput}.
+   */
+  organizationId?: string | null;
+  /**
+   * Broader resource context (Mastra memory compatibility). Stamped onto every item.
+   * Immutable after create — see {@link CreateDatasetInput.organizationId}.
+   */
+  resourceId?: string | null;
+  /**
+   * Recurring-problem fingerprint (e.g. detector-emitted candidate key).
+   * Immutable after create — pairs with {@link CreateDatasetInput.candidateId} to identify
+   * the dataset's source incident and must not drift over the dataset's lifetime.
+   */
+  candidateKey?: string | null;
+  /**
+   * Incident-specific identifier minted by the detector.
+   * Immutable after create — see {@link CreateDatasetInput.candidateKey}.
+   */
+  candidateId?: string | null;
 }
 
+/**
+ * Update input for a dataset. Tenancy ({@link CreateDatasetInput.organizationId},
+ * {@link CreateDatasetInput.resourceId}) and candidate identity
+ * ({@link CreateDatasetInput.candidateKey}, {@link CreateDatasetInput.candidateId})
+ * are intentionally omitted: they are set once at create time and must remain immutable
+ * so item SCD-2 history (which inherits these fields per-write from the parent dataset)
+ * stays consistent across the dataset's lifetime.
+ */
 export interface UpdateDatasetInput {
   id: string;
   name?: string;
@@ -2470,6 +2542,7 @@ export interface AddDatasetItemInput {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2481,13 +2554,25 @@ export interface UpdateDatasetItemInput {
   input?: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
 }
 
+export interface DatasetTenancyFilters {
+  organizationId?: string;
+  resourceId?: string;
+}
+
+export interface ListDatasetsFilters extends DatasetTenancyFilters {
+  candidateKey?: string;
+  candidateId?: string;
+}
+
 export interface ListDatasetsInput {
   pagination: StoragePagination;
+  filters?: ListDatasetsFilters;
 }
 
 export interface ListDatasetsOutput {
@@ -2500,6 +2585,7 @@ export interface ListDatasetItemsInput {
   version?: number;
   search?: string;
   pagination: StoragePagination;
+  filters?: DatasetTenancyFilters;
 }
 
 export interface ListDatasetItemsOutput {
@@ -2523,6 +2609,7 @@ export interface BatchInsertItemsInput {
     input: unknown;
     groundTruth?: unknown;
     expectedTrajectory?: unknown;
+    toolMocks?: DatasetItemToolMock[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2578,6 +2665,7 @@ export interface ExperimentResult {
   traceId: string | null;
   status: ExperimentResultStatus | null;
   tags: string[] | null;
+  toolMockReport?: DatasetToolMockReport | null;
   createdAt: Date;
 }
 
@@ -2631,6 +2719,12 @@ export interface AddExperimentResultInput {
   traceId?: string | null;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
+  /**
+   * Tool mock diagnostics for this item run. `null`/`undefined` both mean "no
+   * report" (the item ran without tool mocks). A present report means the item
+   * ran with mocks — see `served`/`unconsumed`/`liveCalls`/`failure`.
+   */
+  toolMockReport?: DatasetToolMockReport | null;
 }
 
 export interface ListExperimentsInput {

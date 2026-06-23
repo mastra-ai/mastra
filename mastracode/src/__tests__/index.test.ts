@@ -109,11 +109,13 @@ vi.mock('@mastra/core/harness', () => ({
     constructor(config: unknown) {
       harnessConstructorMock(config);
     }
-    subscribe(eventHandler: unknown) {
-      harnessSubscribeMock(eventHandler);
+    async init() {}
+    getMastra() {
+      return undefined;
     }
-    get session() {
+    async createSession() {
       return {
+        subscribe: (eventHandler: unknown) => harnessSubscribeMock(eventHandler),
         identity: {
           getResourceId: () => 'project-resource',
         },
@@ -146,6 +148,8 @@ vi.mock('@mastra/core/harness', () => ({
   taskCheckTool: {},
 }));
 
+const streamErrorRetryProcessorConstructorMock = vi.fn();
+
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
@@ -158,6 +162,9 @@ vi.mock('@mastra/core/processors', () => ({
   },
   StreamErrorRetryProcessor: class {
     readonly id = 'stream-error-retry-processor';
+    constructor(options?: unknown) {
+      streamErrorRetryProcessorConstructorMock(options);
+    }
   },
 }));
 
@@ -348,6 +355,7 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
     harnessConstructorMock.mockReset();
+    streamErrorRetryProcessorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
     for (const key of Object.keys(providerRegistryMock)) {
@@ -713,6 +721,27 @@ describe('createMastraCode', () => {
       'prefill-error-handler',
       'provider-history-compat',
     ]);
+  });
+
+  it('configures the StreamErrorRetryProcessor with a global ECONNRESET retry policy', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(1);
+    const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
+      | { maxRetries?: number; delayMs?: (args: { retryCount: number }) => number; matchers?: Array<unknown> }
+      | undefined;
+    expect(options?.maxRetries).toBe(2);
+    // The global policy must opt in the ECONNRESET matcher.
+    expect(options?.matchers).toHaveLength(1);
+    // delayMs must be an exponential-backoff function capped at a max delay.
+    expect(typeof options?.delayMs).toBe('function');
+    expect(options!.delayMs!({ retryCount: 0 })).toBe(1000);
+    expect(options!.delayMs!({ retryCount: 1 })).toBe(2000);
+    expect(options!.delayMs!({ retryCount: 2 })).toBe(4000);
+    // High retry counts are capped at the max delay (30000ms).
+    expect(options!.delayMs!({ retryCount: 10 })).toBe(30000);
   });
 
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
