@@ -9,9 +9,9 @@ import {
   DialogBody,
   Input,
   Label,
-  SelectFieldBlock,
   toast,
 } from '@mastra/playground-ui';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { useReducer } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { SchemaConfigSection } from './schema-config-section';

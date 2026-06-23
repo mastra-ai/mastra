@@ -1,4 +1,4 @@
-import { useMaybeSidebar, AgentIcon, McpServerIcon, ScrollArea, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
+import { AgentIcon, McpServerIcon, ScrollArea, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
 import {
   CommandDialog,
   CommandEmpty,
@@ -9,6 +9,7 @@ import {
   CommandShortcut,
 } from '@mastra/playground-ui/components/Command';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
+import { useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import {
   Cpu,

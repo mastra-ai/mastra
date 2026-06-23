@@ -1,6 +1,7 @@
 'use client';
 
-import { AlertDialog, toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 export interface DeleteDatasetDialogProps {

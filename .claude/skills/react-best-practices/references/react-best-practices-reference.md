@@ -14,7 +14,7 @@ January 2026
 
 ## Abstract
 
-Performance optimization guide for React applications, designed for AI agents and LLMs. Contains 14 rules across 7 categories, prioritized by impact from critical (eliminating waterfalls, reducing bundle size) to incremental (JavaScript micro-optimizations). Each rule includes detailed explanations, real-world examples comparing incorrect vs. correct implementations, and specific impact metrics to guide automated refactoring and code generation.
+Performance optimization guide for React applications, designed for AI agents and LLMs. Contains 15 rules across 7 categories, prioritized by impact from critical (eliminating waterfalls, reducing bundle size) to incremental (JavaScript micro-optimizations). Each rule includes detailed explanations, real-world examples comparing incorrect vs. correct implementations, and specific impact metrics to guide automated refactoring and code generation.
 
 ---
 
@@ -41,6 +41,7 @@ Performance optimization guide for React applications, designed for AI agents an
    - 6.3 [Use toSorted() Instead of sort() for Immutability](#63-use-tosorted-instead-of-sort-for-immutability)
 7. [Component Structure](#7-component-structure) — **MEDIUM-HIGH**
    - 7.1 [One Component or Hook = One Responsibility = One File](#71-one-component-or-hook--one-responsibility--one-file)
+   - 7.2 [JSX-Returning Helpers Must Be Components](#72-jsx-returning-helpers-must-be-components)
 
 ---
 
@@ -722,6 +723,52 @@ Splitting also narrows re-render scope: typing in the filter no longer re-render
 Smells that trigger a split: multiple unrelated `useState`/`useQuery` clusters, comment headers separating "sections", a component you can't name without "And".
 
 The page/container component's single responsibility is composition — wiring hooks and children together is fine.
+
+### 7.2 JSX-Returning Helpers Must Be Components
+
+Any reusable function that returns JSX should be a PascalCase component. Lowercase helpers are for computing values, formatting data, or building props. A helper named `renderX` that returns JSX is a component in practice, so name it and call it like one.
+
+**Incorrect:**
+
+```tsx
+const renderJsonCodeBlock = (value: unknown, testId: string) => (
+  <div data-testid={testId}>
+    <CodeBlock code={JSON.stringify(value, null, 2)} lang="json" />
+  </div>
+);
+
+export function ToolBadge({ result }: ToolBadgeProps) {
+  return <section>{renderJsonCodeBlock(result, 'tool-result')}</section>;
+}
+```
+
+**Correct:**
+
+```tsx
+function JsonCodeBlock({ value, testId }: { value: unknown; testId: string }) {
+  return (
+    <div data-testid={testId}>
+      <CodeBlock code={JSON.stringify(value, null, 2)} lang="json" />
+    </div>
+  );
+}
+
+export function ToolBadge({ result }: ToolBadgeProps) {
+  return (
+    <section>
+      <JsonCodeBlock value={result} testId="tool-result" />
+    </section>
+  );
+}
+```
+
+Use a lowercase helper only when it does not return JSX:
+
+```tsx
+const formatJson = (value: unknown) => JSON.stringify(value, null, 2) ?? String(value);
+```
+
+Smell to catch in reviews: `renderSomething(...)` returning JSX, especially when it accepts props-like arguments or is reused in multiple JSX branches.
 
 ---
 

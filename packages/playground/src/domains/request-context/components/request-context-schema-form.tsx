@@ -1,4 +1,5 @@
-import { CopyButton, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useMemo } from 'react';
 import { parse } from 'superjson';
