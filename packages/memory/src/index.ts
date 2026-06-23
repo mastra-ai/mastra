@@ -951,28 +951,41 @@ ${workingMemory}`;
   }
 
   protected chunkText(text: string, tokenSize = 4096) {
-    // Convert token size to character size with some buffer
     const charSize = tokenSize * CHARS_PER_TOKEN;
     const chunks: string[] = [];
     let currentChunk = '';
 
-    // Split text into words to avoid breaking words
     const words = text.split(/\s+/);
 
     for (const word of words) {
-      // Add space before word unless it's the first word in the chunk
+      if (word.length > charSize) {
+        if (currentChunk) {
+          chunks.push(currentChunk);
+          currentChunk = '';
+        }
+        for (let i = 0; i < word.length; i += charSize) {
+          const slice = word.slice(i, i + charSize);
+          if (slice.length === charSize) {
+            chunks.push(slice);
+          } else {
+            currentChunk = slice;
+          }
+        }
+        continue;
+      }
+
       const wordWithSpace = currentChunk ? ' ' + word : word;
 
-      // If adding this word would exceed the chunk size, start a new chunk
       if (currentChunk.length + wordWithSpace.length > charSize) {
-        chunks.push(currentChunk);
+        if (currentChunk) {
+          chunks.push(currentChunk);
+        }
         currentChunk = word;
       } else {
         currentChunk += wordWithSpace;
       }
     }
 
-    // Add the final chunk if not empty
     if (currentChunk) {
       chunks.push(currentChunk);
     }
