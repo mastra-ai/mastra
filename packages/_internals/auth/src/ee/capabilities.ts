@@ -2,9 +2,8 @@
  * Capabilities detection and response building for EE authentication.
  */
 
-import type { MastraAuthProvider } from '../provider';
-import { captureEEEvent, getEETelemetryFallbackDistinctId } from './telemetry';
 import type { IUserProvider, ISSOProvider, ISessionProvider, ICredentialsProvider } from '..';
+import type { MastraAuthProvider } from '../provider';
 import type { IACLProvider } from './interfaces/acl';
 import type { IFGAProvider } from './interfaces/fga';
 import type { IRBACProvider } from './interfaces/rbac';
@@ -16,6 +15,7 @@ import {
   getSafeLicenseSummary,
   warnIfDevEENeedsLicense,
 } from './license';
+import { captureEEEvent, getEETelemetryFallbackDistinctId } from './telemetry';
 
 /**
  * Public capabilities response (no authentication required).

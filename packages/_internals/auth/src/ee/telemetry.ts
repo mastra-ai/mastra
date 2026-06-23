@@ -19,8 +19,18 @@ export function getEETelemetryFallbackDistinctId(): string {
   return `mastra-${getHashedHostname()}`;
 }
 
-export function captureEEEvent(_event: EEEventName, _distinctId: string | undefined, _properties?: Record<string, unknown>): void {
-  // Telemetry is emitted by @mastra/core. Internal auth keeps EE behavior independent of that dependency.
+type EETelemetryBridge = {
+  captureEEEvent?: (event: EEEventName, distinctId: string | undefined, properties?: Record<string, unknown>) => void;
+};
+
+const EE_TELEMETRY_BRIDGE = Symbol.for('mastra.eeTelemetryBridge');
+
+function getTelemetryBridge(): EETelemetryBridge | undefined {
+  return (globalThis as typeof globalThis & { [EE_TELEMETRY_BRIDGE]?: EETelemetryBridge })[EE_TELEMETRY_BRIDGE];
+}
+
+export function captureEEEvent(event: EEEventName, distinctId: string | undefined, properties?: Record<string, unknown>): void {
+  getTelemetryBridge()?.captureEEEvent?.(event, distinctId, properties);
 }
 
 export function resetEETelemetryForTests(): void {}

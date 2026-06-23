@@ -263,7 +263,7 @@ export class LicenseClient {
       // revalidate(), not validate(): at 75% of TTL the cache is still fresh,
       // so validate()'s early return would skip the refresh entirely.
       this.revalidate().catch(err => {
-        this.logger?.error('Background license revalidation failed', err);
+        this.logger?.error(`Background license revalidation failed: ${err instanceof Error ? err.message : String(err)}`);
       });
     }, revalidateMs);
 

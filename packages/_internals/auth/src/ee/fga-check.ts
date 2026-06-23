@@ -4,10 +4,10 @@
  * @license Mastra Enterprise License - see ee/LICENSE
  */
 
-import { captureEEEvent, getEETelemetryFallbackDistinctId } from './telemetry';
 import type { FGACheckContext, IFGAProvider } from './interfaces/fga';
 import type { MastraFGAPermissionInput } from './interfaces/permissions.generated';
 import { getSafeLicenseSummary } from './license';
+import { captureEEEvent, getEETelemetryFallbackDistinctId } from './telemetry';
 
 export type ActorSignal =
   | true
