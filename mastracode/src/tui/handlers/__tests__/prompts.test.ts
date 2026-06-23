@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createMockState } from '../../__tests__/harness-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
 import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
@@ -6,30 +7,32 @@ import type { EventHandlerContext } from '../types.js';
 
 function createCtx() {
   const answerQuestion = vi.fn().mockResolvedValue('Verified');
-  const state = {
-    goalManager: {
-      getGoal: vi.fn(() => ({ status: 'active', judgeModelId: 'openai/gpt-5.5' })),
-      answerQuestion,
-    },
-    options: { inlineQuestions: true },
-    harness: {
+  const state = createMockState({
+    session: {
       respondToToolSuspension: vi.fn(),
-      getDisplayState: vi.fn(() => ({ isRunning: false })),
+      displayState: { get: vi.fn(() => ({ isRunning: false })) },
     },
-    pendingInlineQuestions: [],
-    gradientAnimator: {
-      start: vi.fn(),
-      stop: vi.fn(),
+    extra: {
+      goalManager: {
+        getGoal: vi.fn(() => ({ status: 'active', judgeModelId: 'openai/gpt-5.5' })),
+        answerQuestion,
+      },
+      options: { inlineQuestions: true },
+      pendingInlineQuestions: [],
+      gradientAnimator: {
+        start: vi.fn(),
+        stop: vi.fn(),
+      },
+      ui: {
+        requestRender: vi.fn(),
+      },
+      chatContainer: {
+        addChild: vi.fn(),
+        invalidate: vi.fn(),
+      },
+      hideThinkingBlock: false,
     },
-    ui: {
-      requestRender: vi.fn(),
-    },
-    chatContainer: {
-      addChild: vi.fn(),
-      invalidate: vi.fn(),
-    },
-    hideThinkingBlock: false,
-  } as unknown as TUIState;
+  }) as unknown as TUIState;
 
   const ctx = {
     state,
@@ -50,7 +53,7 @@ describe('handleAskQuestion goal mode', () => {
 
     expect(answerQuestion).not.toHaveBeenCalled();
     expect(state.activeInlineQuestion).toBeDefined();
-    expect(state.harness.respondToToolSuspension).not.toHaveBeenCalled();
+    expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
     expect(ctx.addChildBeforeFollowUps).not.toHaveBeenCalled();
     expect(state.activeGoalJudge).toBeUndefined();
 
@@ -74,7 +77,7 @@ describe('handleAskQuestion goal mode', () => {
 
     await promise;
 
-    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledWith({
       toolCallId: 'q1',
       resumeData: ['React', 'Svelte'],
     });
@@ -88,12 +91,14 @@ function createPlanApprovalCtx() {
     accepted: Promise.resolve({ accepted: true, runId: 'run-1' }),
   });
   const state = {
-    harness: {
-      setState: vi.fn().mockResolvedValue(undefined),
-      getResourceId: vi.fn(() => 'resource-1'),
-      respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
-      sendSignal,
-    },
+    ...createMockState({
+      session: {
+        state: { set: vi.fn().mockResolvedValue(undefined) },
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
+        sendSignal,
+      },
+    }),
     goalManager: {
       getGoal: vi.fn(() => ({ id: 'goal-123', status: 'active', judgeModelId: 'openai/gpt-5.5' })),
     },
@@ -133,7 +138,7 @@ describe('handlePlanApproval goal mode', () => {
     await (component as any).onGoal();
     await promise;
 
-    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledWith({
       toolCallId: 'plan-1',
       resumeData: { action: 'approved' },
     });
@@ -147,7 +152,7 @@ describe('handlePlanApproval goal mode', () => {
     expect(ctx.fireMessage).not.toHaveBeenCalled();
     // The goal handler does not send the "begin executing" reminder — the
     // goal judge keeps the agent driving toward the goal.
-    expect(state.harness.sendSignal).not.toHaveBeenCalled();
+    expect(state.session.sendSignal).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBe('goal-123');
   });
 
@@ -182,7 +187,7 @@ describe('handlePlanApproval regular approval', () => {
     expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
   });
 
-  it('approves the plan and sends a single begin-executing system-reminder through harness.sendSignal', async () => {
+  it('approves the plan without sending a handoff signal', async () => {
     const { state, ctx, sendSignal } = createPlanApprovalCtx();
 
     const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
@@ -191,21 +196,14 @@ describe('handlePlanApproval regular approval', () => {
     await (component as any).onApprove();
     await promise;
 
-    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledWith({
       toolCallId: 'plan-1',
       resumeData: { action: 'approved' },
     });
     expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
-    // The trigger goes through the structured signal pathway. We do not
-    // also call `addUserMessage` or `fireMessage` — either would render
-    // the reminder a second time.
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
-    expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect(sendSignal).toHaveBeenCalledWith({
-      type: 'system-reminder',
-      contents: 'The user has approved the plan, begin executing.',
-    });
+    expect(sendSignal).not.toHaveBeenCalled();
     // Regular approval should not enter goal mode or set the return flag.
     expect(ctx.startGoal).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBeUndefined();

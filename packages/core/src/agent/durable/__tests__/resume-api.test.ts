@@ -132,6 +132,34 @@ describe('Resume API', () => {
       result.cleanup();
     });
 
+    it('prepare() honors a caller-provided runId so resume(runId) can find the run', async () => {
+      // Regression: prepare() previously dropped options.runId when calling
+      // prepareForDurableExecution (unlike stream()), so it registered a random
+      // id. That breaks rehydrating a persisted, suspended run in a fresh
+      // process: resume(runId) couldn't find the registry entry prepare() built.
+      const mockModel = createTextModel('Prepared!');
+
+      const baseAgent = new Agent({
+        id: 'prepare-runid-agent',
+        name: 'Prepare RunId Agent',
+        instructions: 'Test prepare honors runId',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const requestedRunId = 'fixed-run-id-aaaaaaaa';
+      const prep = await durableAgent.prepare('Start something', { runId: requestedRunId });
+
+      // prepare() must register the run under the requested id, not a random one.
+      expect(prep.runId).toBe(requestedRunId);
+
+      // ...so a follow-up resume(requestedRunId) finds the registry entry.
+      const result = await durableAgent.resume(requestedRunId, { approved: true });
+      expect(result.runId).toBe(requestedRunId);
+      result.cleanup();
+    });
+
     it('should preserve threadId and resourceId from prepare through resume', async () => {
       const mockModel = createTextModel('Done');
 

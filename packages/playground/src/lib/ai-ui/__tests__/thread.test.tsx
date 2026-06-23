@@ -12,6 +12,7 @@ import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
+import { ThreadInputProvider } from '@/domains/conversation';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -48,6 +49,7 @@ const workingMemoryResponse = () =>
 
 const baseHandlers = () => [
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
   http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
   http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
@@ -65,14 +67,14 @@ const baseHandlers = () => [
   ),
 ];
 
-const Wrapper = ({ children }: { children: ReactNode }) => {
+const Wrapper = ({ children, threadId = 'thread-1' }: { children: ReactNode; threadId?: string }) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <BrowserSessionProvider agentId="agent-1" threadId="thread-1" enabled={false}>
-            <WorkingMemoryProvider agentId="agent-1" threadId="thread-1" resourceId="agent-1">
+          <BrowserSessionProvider agentId="agent-1" threadId={threadId} enabled={false}>
+            <WorkingMemoryProvider agentId="agent-1" threadId={threadId} resourceId="agent-1">
               {children}
             </WorkingMemoryProvider>
           </BrowserSessionProvider>
@@ -82,14 +84,27 @@ const Wrapper = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const renderThread = (initialMessages: MastraDBMessage[], props: { hasModelList?: boolean } = { hasModelList: true }) =>
-  render(
-    <Wrapper>
-      <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={initialMessages}>
-        <Thread agentId="agent-1" agentName="Helper" threadId="thread-1" hasModelList={props.hasModelList} />
-      </ChatProvider>
-    </Wrapper>,
+const renderThreadTree = (
+  initialMessages: MastraDBMessage[],
+  options: { hasModelList?: boolean; threadId?: string } = {},
+) => {
+  const { hasModelList = true, threadId = 'thread-1' } = options;
+
+  return (
+    <Wrapper threadId={threadId}>
+      <ThreadInputProvider>
+        <ChatProvider key={threadId} agentId="agent-1" threadId={threadId} initialMessages={initialMessages}>
+          <Thread agentId="agent-1" agentName="Helper" threadId={threadId} hasModelList={hasModelList} />
+        </ChatProvider>
+      </ThreadInputProvider>
+    </Wrapper>
   );
+};
+
+const renderThread = (
+  initialMessages: MastraDBMessage[],
+  options: { hasModelList?: boolean; threadId?: string } = { hasModelList: true },
+) => render(renderThreadTree(initialMessages, options));
 
 const userMessage = (text: string): MastraDBMessage => ({
   id: `m-${text}`,
@@ -200,6 +215,49 @@ describe('Thread', () => {
     expect((textarea as HTMLTextAreaElement).value).toBe('');
   });
 
+  it('restores unsent composer drafts when switching threads', async () => {
+    server.use(...baseHandlers());
+
+    let rendered: ReturnType<typeof render> | undefined;
+    await act(async () => {
+      rendered = render(renderThreadTree([], { threadId: 'thread-1' }));
+    });
+
+    const firstThreadTextarea = screen.getByPlaceholderText('Enter your message...') as HTMLTextAreaElement;
+    await act(async () => {
+      fireEvent.change(firstThreadTextarea, { target: { value: 'first thread draft' } });
+    });
+    expect(firstThreadTextarea.value).toBe('first thread draft');
+
+    await act(async () => {
+      rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
+    });
+
+    const secondThreadTextarea = screen.getByPlaceholderText('Enter your message...') as HTMLTextAreaElement;
+    expect(secondThreadTextarea.value).toBe('');
+
+    await act(async () => {
+      fireEvent.change(secondThreadTextarea, { target: { value: 'second thread draft' } });
+    });
+    expect(secondThreadTextarea.value).toBe('second thread draft');
+
+    await act(async () => {
+      rendered?.rerender(renderThreadTree([], { threadId: 'thread-1' }));
+    });
+
+    expect((screen.getByPlaceholderText('Enter your message...') as HTMLTextAreaElement).value).toBe(
+      'first thread draft',
+    );
+
+    await act(async () => {
+      rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
+    });
+
+    expect((screen.getByPlaceholderText('Enter your message...') as HTMLTextAreaElement).value).toBe(
+      'second thread draft',
+    );
+  });
+
   it('does not send when the composer is empty', async () => {
     const captured: Captured[] = [];
     server.use(
@@ -220,6 +278,49 @@ describe('Thread', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
+    expect(captured).toHaveLength(0);
+  });
+
+  it('attaches a URL from the popover without sending the chat message', async () => {
+    const captured: Captured[] = [];
+    server.use(
+      ...baseHandlers(),
+      http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+        captured.push({ url: request.url, body: await captureBody(request) });
+        return sseResponse();
+      }),
+      http.head(
+        'https://files.example.com/pic.png',
+        () => new HttpResponse(null, { status: 200, headers: { 'content-type': 'image/png' } }),
+      ),
+    );
+
+    await act(async () => {
+      renderThread([]);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+    });
+
+    const urlInput = await screen.findByLabelText('Public URL');
+    await act(async () => {
+      fireEvent.change(urlInput, { target: { value: 'https://files.example.com/pic.png' } });
+    });
+
+    await act(async () => {
+      fireEvent.submit(urlInput.closest('form') as HTMLFormElement);
+      await new Promise(resolve => setTimeout(resolve, 80));
+    });
+
+    // The attachment chip row appears and the popover closes.
+    await waitFor(() => {
+      expect(document.querySelector('[data-attachments-row]')).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Public URL')).toBeFalsy();
+    });
+    // Submitting the popover form must not bubble into the composer form and send a chat message.
     expect(captured).toHaveLength(0);
   });
 

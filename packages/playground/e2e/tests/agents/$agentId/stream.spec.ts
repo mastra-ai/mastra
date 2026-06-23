@@ -95,7 +95,7 @@ async function assertToolStream(page: Page) {
   await expect(page.getByTestId('thread-wrapper').getByText(expectedTextResult)).toBeVisible({ timeout: 20000 });
 
   await page.getByRole('button', { name: `weatherInfo` }).click();
-  await expect(page.getByTestId('tool-args')).toContainText('{  "location": "paris"}');
+  await expect(page.getByTestId('tool-args')).toContainText('"location": "paris"');
 
   await expect(page.getByTestId('tool-result')).toContainText(`"temperature":`);
   await expect(page.getByTestId('tool-result')).toContainText(`"feelsLike":`);

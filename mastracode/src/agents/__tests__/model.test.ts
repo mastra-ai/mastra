@@ -452,8 +452,8 @@ describe('resolveModel', () => {
         set: (key: string, value: unknown) => values.set(key, value),
       } as any;
       requestContext.set('harness', {
+        session: { modelId: 'openai/gpt-5.2' },
         state: {
-          currentModelId: 'openai/gpt-5.2',
           thinkingLevel: 'high',
         },
       });

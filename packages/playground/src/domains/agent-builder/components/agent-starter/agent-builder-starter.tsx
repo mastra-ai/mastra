@@ -1,4 +1,5 @@
-import { Button, Spinner, Textarea, toast } from '@mastra/playground-ui';
+import { Button, Spinner, toast } from '@mastra/playground-ui';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { ArrowUpIcon } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useRef, useState } from 'react';
@@ -9,6 +10,7 @@ import { useBuilderModelPolicy, useBuilderSettings } from '../../hooks/use-build
 import { ExampleList } from './example-list';
 import { resolveStarterModel, truncateName } from './utils';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 
 export const AgentBuilderStarter = () => {
@@ -17,6 +19,7 @@ export const AgentBuilderStarter = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { createStoredAgent } = useStoredAgentMutations(undefined);
   const defaultVisibility = useDefaultVisibility();
+  const { data: authCapabilities } = useAuthCapabilities();
   const { models: allowedModels } = useAgentBuilderAllowedModels();
   const modelPolicy = useBuilderModelPolicy();
   // While builder settings are still loading, useBuilderModelPolicy falls back
@@ -45,7 +48,7 @@ export const AgentBuilderStarter = () => {
         skills: {},
         visibility: defaultVisibility,
         model: resolveStarterModel(allowedModels, modelPolicy),
-        requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA,
+        ...(authCapabilities?.enabled ? { requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } : {}),
       });
 
       void navigate(`/agent-builder/agents/${id}/edit`, {

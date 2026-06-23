@@ -1,4 +1,6 @@
-import { Badge, Label, ScrollArea, Searchbar, Switch, Txt, Icon } from '@mastra/playground-ui';
+import { Badge, Label, ScrollArea, Txt, Icon } from '@mastra/playground-ui';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Calculator, CheckCircle2, Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
