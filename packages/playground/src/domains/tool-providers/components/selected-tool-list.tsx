@@ -1,4 +1,5 @@
-import { Checkbox, ScrollArea, Txt, cn } from '@mastra/playground-ui';
+import { ScrollArea, Txt, cn } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { useMemo } from 'react';
 
 interface SelectedToolListProps {

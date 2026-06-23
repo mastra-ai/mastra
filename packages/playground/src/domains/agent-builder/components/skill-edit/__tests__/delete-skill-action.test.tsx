@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
-import { DropdownMenu, TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';

@@ -1,14 +1,14 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
 import {
   EmptyState,
-  ErrorState,
-  ListSearch,
   PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { LibraryIcon, SparklesIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
