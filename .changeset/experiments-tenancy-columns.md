@@ -1,5 +1,10 @@
 ---
 '@mastra/core': minor
+'@mastra/libsql': patch
+'@mastra/pg': patch
+'@mastra/mongodb': patch
+'@mastra/mysql': patch
+'@mastra/spanner': patch
 ---
 
 Added multi-tenant scoping columns (`organizationId`, `projectId`) to the experiments domain so experiment records and per-item results inherit the tenancy bucket of their parent dataset.

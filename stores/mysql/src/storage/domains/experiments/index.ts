@@ -48,6 +48,8 @@ interface ExperimentRow {
   id: string;
   datasetId: string | null;
   datasetVersion: number | null;
+  organizationId: string | null;
+  projectId: string | null;
   targetType: string;
   targetId: string;
   name: string | null;
@@ -69,6 +71,8 @@ interface ExperimentResultRow {
   experimentId: string;
   itemId: string;
   itemDatasetVersion: number | null;
+  organizationId: string | null;
+  projectId: string | null;
   input: string;
   output: string | null;
   groundTruth: string | null;
@@ -156,6 +160,18 @@ export class ExperimentsMySQL extends ExperimentsStorage {
   async init(): Promise<void> {
     await this.operations.createTable({ tableName: TABLE_EXPERIMENTS, schema: EXPERIMENTS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: EXPERIMENT_RESULTS_SCHEMA });
+    // Backfill tenancy columns on pre-existing tables so older deployments
+    // keep working when they upgrade in place.
+    await this.operations.alterTable({
+      tableName: TABLE_EXPERIMENTS,
+      schema: EXPERIMENTS_SCHEMA,
+      ifNotExists: ['organizationId', 'projectId'],
+    });
+    await this.operations.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: EXPERIMENT_RESULTS_SCHEMA,
+      ifNotExists: ['organizationId', 'projectId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -170,6 +186,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       id: row.id,
       datasetId: row.datasetId ?? null,
       datasetVersion: row.datasetVersion ?? null,
+      organizationId: row.organizationId ?? null,
+      projectId: row.projectId ?? null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId,
       name: row.name ?? undefined,
@@ -193,6 +211,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       experimentId: row.experimentId,
       itemId: row.itemId,
       itemDatasetVersion: row.itemDatasetVersion ?? null,
+      organizationId: row.organizationId ?? null,
+      projectId: row.projectId ?? null,
       input: parseJSON<Record<string, unknown>>(row.input),
       output: row.output ? parseJSON<Record<string, unknown>>(row.output) : null,
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : null,
@@ -218,6 +238,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           id,
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
           targetType: input.targetType,
           targetId: input.targetId,
           name: input.name ?? null,
@@ -239,6 +261,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         id,
         datasetId: input.datasetId,
         datasetVersion: input.datasetVersion,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         targetType: input.targetType,
         targetId: input.targetId,
         name: input.name,
@@ -341,6 +365,17 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       if (args.datasetId) {
         conditions.push(`${quoteIdentifier('datasetId', 'column name')} = ?`);
         params.push(args.datasetId);
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          params.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          params.push(projectId);
+        }
       }
 
       const whereClause = {
@@ -456,6 +491,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           experimentId: input.experimentId,
           itemId: input.itemId,
           itemDatasetVersion: input.itemDatasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
           input: JSON.stringify(input.input),
           output: input.output ? JSON.stringify(input.output) : null,
           groundTruth: input.groundTruth ? JSON.stringify(input.groundTruth) : null,
@@ -475,6 +512,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         experimentId: input.experimentId,
         itemId: input.itemId,
         itemDatasetVersion: input.itemDatasetVersion,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         input: input.input,
         output: input.output,
         groundTruth: input.groundTruth,
@@ -606,9 +645,23 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     try {
       const { page, perPage: perPageInput } = args.pagination;
 
+      const conditions: string[] = [`${quoteIdentifier('experimentId', 'column name')} = ?`];
+      const params: any[] = [args.experimentId];
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          params.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          params.push(projectId);
+        }
+      }
+
       const whereClause = {
-        sql: ` WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
-        args: [args.experimentId] as any[],
+        sql: ` WHERE ${conditions.join(' AND ')}`,
+        args: params,
       };
 
       const total = await this.operations.loadTotalCount({ tableName: TABLE_EXPERIMENT_RESULTS, whereClause });

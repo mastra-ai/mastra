@@ -523,5 +523,151 @@ export function createExperimentsTests({
         expect(list.experiments).toHaveLength(0);
       });
     });
+
+    // ---------------------------------------------------------------------------
+    // Tenancy
+    // ---------------------------------------------------------------------------
+    describe('Tenancy', () => {
+      beforeEach(async () => {
+        await experimentsStorage.dangerouslyClearAll();
+      });
+
+      it('createExperiment persists organizationId and projectId', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'tenancy-create',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        expect(exp.organizationId).toBe('org_a');
+        expect(exp.projectId).toBe('proj_a');
+
+        const reread = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(reread?.organizationId).toBe('org_a');
+        expect(reread?.projectId).toBe('proj_a');
+      });
+
+      it('createExperiment defaults tenancy fields to null when omitted', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'tenancy-null',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+
+        expect(exp.organizationId).toBeNull();
+        expect(exp.projectId).toBeNull();
+      });
+
+      it('listExperiments filters by organizationId and projectId', async () => {
+        await experimentsStorage.createExperiment({
+          name: 'a-1',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_1',
+        });
+        await experimentsStorage.createExperiment({
+          name: 'a-2',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_2',
+        });
+        await experimentsStorage.createExperiment({
+          name: 'b-1',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_b',
+          projectId: 'proj_1',
+        });
+
+        const byOrg = await experimentsStorage.listExperiments({
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_a' },
+        });
+        expect(byOrg.experiments.map(e => e.name).sort()).toEqual(['a-1', 'a-2']);
+
+        const byOrgAndProject = await experimentsStorage.listExperiments({
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_a', projectId: 'proj_1' },
+        });
+        expect(byOrgAndProject.experiments.map(e => e.name)).toEqual(['a-1']);
+      });
+
+      it('addExperimentResult persists tenancy and listExperimentResults filters by it', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'results-tenancy',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 2,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-1',
+          itemDatasetVersion: null,
+          input: { x: 1 },
+          output: { y: 1 },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+        await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-2',
+          itemDatasetVersion: null,
+          input: { x: 2 },
+          output: { y: 2 },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: 'org_b',
+          projectId: 'proj_b',
+        });
+
+        const orgA = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_a' },
+        });
+        expect(orgA.results.map(r => r.itemId)).toEqual(['item-1']);
+        expect(orgA.results[0]!.organizationId).toBe('org_a');
+        expect(orgA.results[0]!.projectId).toBe('proj_a');
+
+        const projB = await experimentsStorage.listExperimentResults({
+          experimentId: exp.id,
+          pagination: { page: 0, perPage: 50 },
+          filters: { projectId: 'proj_b' },
+        });
+        expect(projB.results.map(r => r.itemId)).toEqual(['item-2']);
+      });
+    });
   }); // describeExperiments
 }
