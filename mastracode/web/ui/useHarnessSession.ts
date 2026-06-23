@@ -150,7 +150,16 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '', enabled
         setModes(harnessModes);
 
         const state = await session.state();
-        dispatch({ type: 'reset', modeId: state.modeId, modelId: state.modelId, threadId: created.threadId });
+        // Resuming a thread that already has history: load and render it so the
+        // view isn't empty until new events arrive. Falls back to a clean reset.
+        const threadId = created.threadId ?? state.threadId;
+        try {
+          const messages = threadId ? await session.listMessages(threadId) : [];
+          if (disposed) return;
+          dispatch({ type: 'hydrate', messages, modeId: state.modeId, modelId: state.modelId, threadId });
+        } catch {
+          dispatch({ type: 'reset', modeId: state.modeId, modelId: state.modelId, threadId });
+        }
 
         await subscribe(session, false);
         if (!disposed) void refreshThreads();
@@ -207,8 +216,17 @@ export function useHarnessSession({ harnessId, resourceId, baseUrl = '', enabled
   }, []);
 
   const switchThread = useCallback(async (threadId: string) => {
-    await sessionRef.current?.switchThread(threadId);
-    dispatch({ type: 'reset', threadId });
+    const session = sessionRef.current;
+    if (!session) return;
+    await session.switchThread(threadId);
+    // The thread's existing history isn't replayed over the event stream, so
+    // load it and hydrate the transcript; otherwise the view shows empty.
+    try {
+      const [messages, state] = await Promise.all([session.listMessages(threadId), session.state()]);
+      dispatch({ type: 'hydrate', messages, modeId: state.modeId, modelId: state.modelId, threadId });
+    } catch {
+      dispatch({ type: 'reset', threadId });
+    }
   }, []);
 
   const followUp = useCallback(async (text: string) => {

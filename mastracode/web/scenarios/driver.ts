@@ -146,7 +146,14 @@ export async function createDriver(opts: {
     },
     switchThread: async threadId => {
       await session.switchThread(threadId);
-      apply(transcriptReducer(state, { type: 'reset', threadId }));
+      // Mirror the hook: load the thread's history and hydrate the transcript
+      // (its messages aren't replayed over the event stream).
+      try {
+        const [messages, snap] = await Promise.all([session.listMessages(threadId), session.state()]);
+        apply(transcriptReducer(state, { type: 'hydrate', messages, modeId: snap.modeId, modelId: snap.modelId, threadId }));
+      } catch {
+        apply(transcriptReducer(state, { type: 'reset', threadId }));
+      }
     },
     listThreads: async () => session.listThreads(),
     listMessages: async threadId => session.listMessages(threadId),

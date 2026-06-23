@@ -164,12 +164,15 @@ type Action =
   | { type: 'localUser'; text: string; steer?: boolean }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
-  | { type: 'reset'; modeId?: string; modelId?: string; threadId?: string };
+  | { type: 'reset'; modeId?: string; modelId?: string; threadId?: string }
+  | { type: 'hydrate'; messages: HarnessMessage[]; modeId?: string; modelId?: string; threadId?: string };
 
 export function transcriptReducer(state: TranscriptState, action: Action): TranscriptState {
   switch (action.type) {
     case 'reset':
       return { ...initialTranscript, modeId: action.modeId, modelId: action.modelId, threadId: action.threadId };
+    case 'hydrate':
+      return hydrate(action.messages, action.modeId, action.modelId, action.threadId);
     case 'localUser':
       return {
         ...state,
@@ -370,6 +373,31 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
     default:
       return state;
   }
+}
+
+/**
+ * Build a fresh transcript from a thread's persisted messages. Used when
+ * switching to an existing thread, whose history isn't replayed over the event
+ * stream — without this the view renders empty until new events arrive.
+ */
+function hydrate(
+  messages: HarnessMessage[],
+  modeId?: string,
+  modelId?: string,
+  threadId?: string,
+): TranscriptState {
+  const entries: TimelineEntry[] = [];
+  for (const message of messages) {
+    const text = harnessMessageText(message);
+    if (message.role === 'user') {
+      entries.push({ kind: 'user', id: message.id, text });
+    } else if (message.role === 'assistant') {
+      // Tool calls aren't reconstructed from history; show the final text.
+      entries.push({ kind: 'assistant', id: message.id, text, tools: [], streaming: false });
+    }
+    // 'system' messages aren't shown in the transcript.
+  }
+  return { ...initialTranscript, entries, modeId, modelId, threadId };
 }
 
 function upsertAssistant(state: TranscriptState, message: HarnessMessage, streaming: boolean): TranscriptState {
