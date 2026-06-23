@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react';
 
 import { Button } from '../../../ds/components/Button';
 import { Skeleton } from '../../../ds/components/Skeleton';
+import { Txt } from '../../../ds/components/Txt';
+import { MemoryIcon } from '../../../ds/icons/MemoryIcon';
 import { extractOmMarkers } from '../lib/extract-markers';
 import { findRecordIdAtOrBefore } from '../lib/replay-selection';
 import { getLatestThreadContextWindowState } from '../lib/thread-context-window-state';
@@ -10,7 +12,7 @@ import { timestampsToTDomain } from '../lib/timeline';
 import type { MemoryMessage, OMHistoryRecord } from '../types';
 import { FlameGraph } from './flame-graph';
 import { ObservationDetailView } from './observation-detail-view';
-import { ThreadContextProgress } from './thread-context-progress';
+import { ThreadContextProgress, formatCompactTokens } from './thread-context-progress';
 
 export interface MemoryStudioPanelProps {
   messages: MemoryMessage[];
@@ -21,6 +23,19 @@ export interface MemoryStudioPanelProps {
   selectedTimestamp?: number | null;
   /** Fired when the flame graph timeline is clicked, surfacing the replay cursor. */
   onSelectTimestamp?: (timestamp: number | null) => void;
+  /**
+   * Authoritative context-window token counts/thresholds supplied by the caller
+   * (e.g. derived from the OM record + live stream progress). When provided these
+   * take precedence over the values re-derived from message markers, keeping this
+   * panel aligned with the OM sidebar. Marker-derived values remain the fallback
+   * for standalone usage.
+   */
+  contextWindow?: {
+    messageTokens?: number;
+    messageThreshold?: number;
+    memoryTokens?: number;
+    memoryThreshold?: number;
+  };
 }
 
 export function MemoryStudioPanel({
@@ -30,6 +45,7 @@ export function MemoryStudioPanel({
   onClose,
   selectedTimestamp,
   onSelectTimestamp,
+  contextWindow,
 }: MemoryStudioPanelProps) {
   const [manualOMRecordId, setManualOMRecordId] = useState<string | null>(null);
 
@@ -47,10 +63,24 @@ export function MemoryStudioPanel({
   }, [messages]);
   const windowState = useMemo(() => getLatestThreadContextWindowState({ markers, omRecords }), [markers, omRecords]);
 
+  const memoryTokens = contextWindow?.memoryTokens ?? windowState?.memoryTokens;
+  const memoryThreshold = contextWindow?.memoryThreshold ?? windowState?.memoryThreshold;
+  const showHeaderTokens = memoryTokens != null && memoryThreshold != null;
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center gap-2 border-b border-border1 px-4 py-2.5">
-        <h2 className="text-sm font-medium text-neutral6">Memory</h2>
+      <div className="flex shrink-0 items-center gap-2 border-b border-border1 px-3 py-2.5">
+        <span className="flex min-w-0 items-center gap-1.5 text-neutral6">
+          <MemoryIcon className="h-4 w-4 shrink-0" />
+          <Txt as="span" variant="ui-sm" className="font-medium">
+            Observational memory
+          </Txt>
+        </span>
+        {showHeaderTokens ? (
+          <Txt as="span" variant="ui-xs" className="shrink-0 font-mono tabular-nums text-icon3">
+            {formatCompactTokens(memoryTokens)}/{formatCompactTokens(memoryThreshold)}k
+          </Txt>
+        ) : null}
         <div className="flex-1" />
         <Button type="button" variant="ghost" size="icon-sm" tooltip="Close memory panel" onClick={() => onClose?.()}>
           <XIcon />
@@ -75,10 +105,8 @@ export function MemoryStudioPanel({
           </div>
           <div className="border-t border-border1">
             <ThreadContextProgress
-              messageTokens={windowState?.messageTokens}
-              messageThreshold={windowState?.messageThreshold}
-              memoryTokens={windowState?.memoryTokens}
-              memoryThreshold={windowState?.memoryThreshold}
+              messageTokens={contextWindow?.messageTokens ?? windowState?.messageTokens}
+              messageThreshold={contextWindow?.messageThreshold ?? windowState?.messageThreshold}
             />
             <FlameGraph
               omRecords={omRecords}

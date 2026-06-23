@@ -20,6 +20,7 @@ import {
 } from '@/services/om-parts-converter';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 import type { ChatProps } from '@/types';
+import { observationalMemoryQueryKey, memoryThreadMessagesQueryKey, memoryStatusQueryKey } from '@mastra/playground-ui';
 
 /**
  * Runtime + dispatch context for the main agent chat.
@@ -155,8 +156,15 @@ export function ChatProvider({
       signalObservationsUpdated();
       void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
       void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+      // Force an immediate refetch of the memory timeline panel, which uses the
+      // playground-ui hooks keyed under the ['memory', ...] prefix. Scope to the
+      // active thread so unrelated memory caches and other threads are untouched,
+      // and refetch (not just invalidate) so the panel shows live data right away.
+      void queryClient.refetchQueries({ queryKey: observationalMemoryQueryKey(agentId, threadId) });
+      void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKey(threadId) });
+      void queryClient.refetchQueries({ queryKey: memoryStatusQueryKey(agentId, threadId) });
     },
-    [agentId, queryClient, setIsObservingFromStream, setIsReflectingFromStream, signalObservationsUpdated],
+    [agentId, queryClient, setIsObservingFromStream, setIsReflectingFromStream, signalObservationsUpdated, threadId],
   );
 
   const handleActivation = useCallback(
@@ -175,7 +183,11 @@ export function ChatProvider({
     setMessages(prev => markOmMarkersAsDisconnected(prev));
     void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
     void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
-  }, [agentId, queryClient, setIsObservingFromStream, setIsReflectingFromStream, setMessages]);
+    // Force an immediate refetch of the memory timeline panel on stream reset (see refreshObservationalMemory).
+    void queryClient.refetchQueries({ queryKey: observationalMemoryQueryKey(agentId, threadId) });
+    void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKey(threadId) });
+    void queryClient.refetchQueries({ queryKey: memoryStatusQueryKey(agentId, threadId) });
+  }, [agentId, queryClient, setIsObservingFromStream, setIsReflectingFromStream, setMessages, threadId]);
 
   // On initial load, scan messages for activation markers + last progress so
   // buffering badges show as activated and token counts are accurate on reload.
@@ -244,6 +256,7 @@ export function ChatProvider({
     refreshObservationalMemory,
     handleActivation,
     resetObservationalMemoryStreamState,
+    signalTimelineRefresh: signalObservationsUpdated,
   });
 
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';

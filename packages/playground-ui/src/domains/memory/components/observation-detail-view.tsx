@@ -287,36 +287,18 @@ export function ObservationDetailView({
     <div className="flex h-full w-full overflow-hidden">
       {/* Main observation content */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="border-b border-border1 px-4 py-2">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm font-normal text-neutral6">
-                <span>Memory</span>
-                <span className="font-mono text-ui-xs text-icon3 tabular-nums">
-                  {showDiff && previousRecord ? (
-                    <>
-                      {previousRecord.observationTokenCount} →{' '}
-                      <span className="font-semibold text-neutral6">{selected.observationTokenCount}</span>{' '}
-                      tokens
-                    </>
-                  ) : (
-                    <>{selected.observationTokenCount} tokens</>
-                  )}
-                </span>
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              {previousRecord && (
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
-                  <span className="text-xs text-icon3">Show diff</span>
-                </label>
-              )}
+        {previousRecord && (
+          <div className="border-b border-border1 px-4 py-2">
+            <div className="flex items-start justify-end gap-3">
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <Checkbox checked={showDiff} onCheckedChange={v => setShowDiff(v === true)} />
+                <span className="text-xs text-icon3">Show diff</span>
+              </label>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div data-testid="observation-detail-body" className="flex-1 overflow-y-auto p-4">
           {showDiff && previousRecord ? (
             <CodeDiff
               codeA={typeof previousRecord.activeObservations === 'string' ? previousRecord.activeObservations : ''}

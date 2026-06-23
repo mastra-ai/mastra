@@ -86,7 +86,7 @@ export function MemorySidebar({
   hasMemory,
 }: MemorySidebarProps) {
   const { selectedTab, handleTabChange } = useMemorySidebarTab();
-  const { isPanelOpen, openPanel, closePanel } = useMemoryTimeline();
+  const { isPanelOpen } = useMemoryTimeline();
   const { streamProgress } = useObservationalMemoryContext();
   const { data: memoryConfig } = useMemoryConfig(agentId);
 
@@ -278,23 +278,6 @@ export function MemorySidebar({
                   </span>
                 ) : null}
               </button>
-
-              {showMemory && observationalOn && (
-                <div className="shrink-0 border-t border-border1 px-3 py-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => (isPanelOpen ? closePanel() : openPanel())}
-                    aria-pressed={isPanelOpen}
-                    data-testid="memory-sidebar-om-detail-toggle"
-                    className="w-full justify-start gap-2"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    Observational memory detail
-                  </Button>
-                </div>
-              )}
 
               {showMemory && (
                 <div className="memory-card-content flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-border1">

@@ -8,6 +8,8 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { useObservationalMemory, useMemoryThreadMessages } from '@mastra/playground-ui';
+
 import { useChatRunning, useChatSend } from '../chat-context';
 import { ChatProvider } from '../chat-provider';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
@@ -42,6 +44,31 @@ const finishStream = () =>
 
 const sseResponse = () =>
   new HttpResponse(finishStream(), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+
+/**
+ * Streams an OM `data-om-observation-end` event then a `finish` event, so the
+ * provider runs its OM-end refresh path (which must invalidate the memory
+ * timeline panel queries) before the stream closes cleanly.
+ */
+const omObservationEndStream = () =>
+  new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      // Let the panel's initial mount fetches settle before emitting the OM
+      // event, so the subsequent refetch is observable as a distinct increment.
+      await new Promise(resolve => setTimeout(resolve, 120));
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({ type: 'data-om-observation-end', data: { operationType: 'observation' } })}\n\n`,
+        ),
+      );
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'finish', payload: {} })}\n\n`));
+      controller.close();
+    },
+  });
+
+const omObservationEndResponse = () =>
+  new HttpResponse(omObservationEndStream(), { status: 200, headers: { 'content-type': 'text/event-stream' } });
 
 const workingMemoryResponse = () =>
   HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
@@ -90,6 +117,16 @@ const SendOnMount = ({ text }: { text: string }) => {
     fired.current = true;
     send({ message: text });
   }, [send, text]);
+  return null;
+};
+
+/**
+ * Subscribes to the memory timeline panel's React Query keys (the playground-ui
+ * hooks) so the test can observe whether OM stream events trigger a refetch.
+ */
+const PanelQueriesConsumer = ({ agentId, threadId }: { agentId: string; threadId: string }) => {
+  useObservationalMemory(agentId, threadId);
+  useMemoryThreadMessages(threadId);
   return null;
 };
 
@@ -310,5 +347,100 @@ describe('ChatProvider', () => {
     // With a supported model + thread signals enabled + a threadId, the composer
     // may send while streaming.
     expect(canSendValues.at(-1)).toBe(true);
+  });
+
+  it('refetches the memory timeline panel queries (scoped to the thread) on an OM observation-end event', async () => {
+    // Count requests to the panel's endpoints. The panel reads playground-ui
+    // hooks keyed under ['memory', ...]; a streamed OM observation-end must
+    // invalidate exactly those keys so the panel refetches.
+    const omRequests: string[] = [];
+    const messageRequests: string[] = [];
+
+    server.use(
+      ...baseHandlers([]),
+      http.get(`${BASE_URL}/api/memory/observational-memory`, ({ request }) => {
+        omRequests.push(request.url);
+        return HttpResponse.json({ record: null });
+      }),
+      http.get(`${BASE_URL}/api/memory/threads/thread-1/messages`, ({ request }) => {
+        messageRequests.push(request.url);
+        return HttpResponse.json({ messages: [], uiMessages: [] });
+      }),
+      http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => omObservationEndResponse()),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <PanelQueriesConsumer agentId="agent-1" threadId="thread-1" />
+            <SendOnMount text="trigger OM" />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    // Initial mount fetches each panel query once (the stream delays its OM
+    // event by ~120ms, so these have settled by now).
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 80));
+    });
+    const omAfterMount = omRequests.length;
+    const messagesAfterMount = messageRequests.length;
+    expect(omAfterMount).toBeGreaterThanOrEqual(1);
+    expect(messagesAfterMount).toBeGreaterThanOrEqual(1);
+
+    // After the OM observation-end event, the panel queries must refetch.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    });
+    expect(omRequests.length).toBeGreaterThan(omAfterMount);
+    expect(messageRequests.length).toBeGreaterThan(messagesAfterMount);
+
+    // The refetch stays scoped to the active thread.
+    expect(messageRequests.every(url => url.includes('/threads/thread-1/messages'))).toBe(true);
+  });
+
+  it('refetches the memory timeline panel queries when the chat stream finishes (OM disabled)', async () => {
+    // Even without observational memory, the panel's thread messages and OM/status
+    // queries must refetch when a plain chat stream finishes, so the panel never
+    // shows stale data after a completion.
+    const omRequests: string[] = [];
+    const messageRequests: string[] = [];
+
+    server.use(
+      ...baseHandlers([]),
+      http.get(`${BASE_URL}/api/memory/observational-memory`, ({ request }) => {
+        omRequests.push(request.url);
+        return HttpResponse.json({ record: null });
+      }),
+      http.get(`${BASE_URL}/api/memory/threads/thread-1/messages`, ({ request }) => {
+        messageRequests.push(request.url);
+        return HttpResponse.json({ messages: [], uiMessages: [] });
+      }),
+      // A plain finish stream — no OM events at all.
+      http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => sseResponse()),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <PanelQueriesConsumer agentId="agent-1" threadId="thread-1" />
+            <SendOnMount text="just finish" />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    // Wait for mount fetches and the stream to finish + the finish-path refetch.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 250));
+    });
+
+    // The finish-path refresh must have refetched the panel queries more than once.
+    expect(omRequests.length).toBeGreaterThan(1);
+    expect(messageRequests.length).toBeGreaterThan(1);
+    expect(messageRequests.every(url => url.includes('/threads/thread-1/messages'))).toBe(true);
   });
 });
