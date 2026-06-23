@@ -24,8 +24,8 @@ export const notificationInboxToolFlowScenario = {
       },
       onCreated: result => {
         timer = setInterval(() => {
-          const threadId = result.harness.getCurrentThreadId();
-          if (sent || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
+          const threadId = result.session.thread.getId();
+          if (sent || !threadId || !result.session.stream.isActive()) return;
           sent = true;
           if (timer) clearInterval(timer);
           const agent = result.harness.getMastra()?.getAgentById('code-agent');
@@ -38,7 +38,7 @@ export const notificationInboxToolFlowScenario = {
               dedupeKey: 'mc-e2e-notification-inbox-tool-flow',
             },
             {
-              resourceId: result.harness.getResourceId(),
+              resourceId: result.session.identity.getResourceId(),
               threadId,
               ifIdle: { behavior: 'wake' },
             },

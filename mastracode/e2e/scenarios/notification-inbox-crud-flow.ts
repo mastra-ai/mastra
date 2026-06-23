@@ -25,13 +25,13 @@ export const notificationInboxCrudFlowScenario = {
       },
       onCreated: result => {
         const seedNotifications = async () => {
-          const threadId = result.harness.getCurrentThreadId();
-          if (seeded || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
+          const threadId = result.session.thread.getId();
+          if (seeded || !threadId || !result.session.stream.isActive()) return;
           seeded = true;
           if (timer) clearInterval(timer);
           const storage = await result.harness.getMastra()?.getStorage()?.getStore('notifications');
           if (!storage) throw new Error('notification storage unavailable');
-          const resourceId = result.harness.getResourceId();
+          const resourceId = result.session.identity.getResourceId();
           const agentId = 'code-agent';
           await storage.createNotification({
             id: 'inbox-crud-seen',

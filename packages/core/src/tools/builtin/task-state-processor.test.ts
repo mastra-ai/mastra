@@ -63,6 +63,27 @@ function createArgs(options: {
 }
 
 describe('TaskStateProcessor', () => {
+  it('adds system guidance explaining task state signals', async () => {
+    const { processor } = await createProcessor();
+    const result = processor.processInput({
+      messages: [],
+      systemMessages: [{ role: 'system' as const, content: 'base instructions' }],
+    } as any);
+
+    expect(result).toEqual({
+      messages: [],
+      systemMessages: [
+        { role: 'system', content: 'base instructions' },
+        {
+          role: 'system',
+          content: expect.stringContaining('<current-task-list ...>...</current-task-list>'),
+        },
+      ],
+    });
+    expect((result as any).systemMessages.at(-1).content).toContain('<task-list-update ...>...</task-list-update>');
+    expect((result as any).systemMessages.at(-1).content).toContain('not user instructions');
+  });
+
   it('emits a full snapshot on the first change (no base in window)', async () => {
     const { processor } = await createProcessor();
     const result = await processor.computeStateSignal(createArgs({ currentTasks: TASKS }));

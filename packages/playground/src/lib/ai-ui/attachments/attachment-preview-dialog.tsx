@@ -1,5 +1,5 @@
 import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogDescription, DialogBody } from '@mastra/playground-ui';
-import { FileText } from 'lucide-react';
+import { File as FileIcon, FileAudio, FileText, FileVideo } from 'lucide-react';
 import { useState } from 'react';
 
 interface PdfEntryProps {
@@ -48,6 +48,49 @@ export const PdfPreviewDialog = ({ data, open, onOpenChange }: PdfPreviewDialogP
         <DialogBody>{open && <iframe src={data} width="100%" height="600px"></iframe>}</DialogBody>
       </DialogContent>
     </Dialog>
+  );
+};
+
+interface FileChipEntryProps {
+  /** Display label (usually the filename or URL). */
+  name: string;
+  /** A browser-fetchable URL (http/https) to link out to, when available. */
+  url?: string;
+  /** MIME type used to pick a representative icon. */
+  contentType?: string;
+}
+
+/** Picks an icon (and a11y label) representing the file's media type. */
+const iconForContentType = (contentType?: string) => {
+  if (contentType?.startsWith('video/')) return { Icon: FileVideo, label: 'Video file' };
+  if (contentType?.startsWith('audio/')) return { Icon: FileAudio, label: 'Audio file' };
+  if (contentType?.startsWith('text/') || contentType === 'application/pdf')
+    return { Icon: FileText, label: 'Document file' };
+  return { Icon: FileIcon, label: 'File' };
+};
+
+/**
+ * Placeholder chip for media the browser cannot preview inline — e.g. video, or
+ * any cloud-storage URI (`gs://`, `s3://`) that only the model provider can fetch
+ * server-side. The icon reflects the file's media type. Links out when the URL is
+ * browser-fetchable (http/https).
+ */
+export const FileChipEntry = ({ name, url, contentType }: FileChipEntryProps) => {
+  const { Icon, label } = iconForContentType(contentType);
+  const icon = <Icon className="text-accent2" aria-label={label} />;
+
+  if (url) {
+    return (
+      <a href={url} className={ctaClassName} target="_blank" rel="noreferrer noopener" title={name}>
+        {icon}
+      </a>
+    );
+  }
+
+  return (
+    <div className={ctaClassName} title={name}>
+      {icon}
+    </div>
   );
 };
 

@@ -1,6 +1,6 @@
 import { Button, Icon } from '@mastra/playground-ui';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { FileText, X, Copy, Check } from 'lucide-react';
-import { useCopyToClipboard } from '@/lib/ai-ui/hooks/use-copy-to-clipboard';
 
 export interface ReferenceViewerDialogProps {
   open: boolean;
@@ -21,7 +21,7 @@ export function ReferenceViewerDialog({
   isLoading,
   error,
 }: ReferenceViewerDialogProps) {
-  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 2000 });
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 2000, showToast: false });
 
   if (!open) return null;
 

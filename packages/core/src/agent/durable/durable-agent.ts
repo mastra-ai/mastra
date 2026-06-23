@@ -4,6 +4,7 @@ import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
+import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
 import { Agent } from '../agent';
@@ -14,7 +15,7 @@ import type { ToolsInput } from '../types';
 import { AGENT_STREAM_TOPIC } from './constants';
 import { runDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
-import { ExtendedRunRegistry, globalRunRegistry } from './run-registry';
+import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitErrorEvent } from './stream-adapter';
 import type {
   AgentFinishEventData,
@@ -74,6 +75,23 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onError?: (error: Error) => void | Promise<void>;
   /** Callback when workflow suspends (e.g., for tool approval) */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /**
+   * When set, `stream()` delegates to the idle-loop wrapper that keeps the
+   * outer stream open across background-task continuations — the same
+   * behaviour as the now-deprecated `streamUntilIdle()`.
+   *
+   * Pass `true` for default idle timeout (5 min), or `{ maxIdleMs }` to
+   * customise.
+   *
+   * @example
+   * ```typescript
+   * const { output, cleanup } = await durableAgent.stream('Research topic', {
+   *   untilIdle: true,
+   *   memory: { thread: 't1', resource: 'u1' },
+   * });
+   * ```
+   */
+  untilIdle?: boolean | { maxIdleMs?: number };
   /** When true, the in-loop background task check step skips waiting (streamUntilIdle sets this) */
   _skipBgTaskWait?: boolean;
 }
@@ -339,6 +357,10 @@ export class DurableAgent<
     return this.#wrappedAgent.getInstructions(options);
   }
 
+  override getDefaultOptions(options?: any) {
+    return this.#wrappedAgent.getDefaultOptions(options);
+  }
+
   override listTools(options?: any) {
     return this.#wrappedAgent.listTools(options);
   }
@@ -460,10 +482,16 @@ export class DurableAgent<
    */
   protected async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     const workflow = this.getWorkflow();
-    const requestContext = globalRunRegistry.get(runId)?.requestContext;
+    const entry = globalRunRegistry.get(runId);
+    const requestContext = entry?.requestContext;
 
     const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-    const result = await run.start({ inputData: workflowInput, requestContext });
+    // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
+    const result = await run.start({
+      inputData: workflowInput,
+      requestContext,
+      ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
+    });
 
     if (result?.status === 'failed') {
       const error = new Error((result as any).error?.message || 'Workflow execution failed');
@@ -494,6 +522,8 @@ export class DurableAgent<
    * @internal
    */
   protected async emitError(runId: string, error: Error): Promise<void> {
+    // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
+    endRunSpansWithError(runId, error);
     await emitErrorEvent(this.pubsub, runId, error);
   }
 
@@ -509,6 +539,23 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    // Delegate to the idle-loop wrapper when `untilIdle` is set.
+    // Strip `untilIdle` before passing to the wrapper so its internal
+    // agent.stream() call doesn't recurse.
+    if (options?.untilIdle) {
+      const { untilIdle, ...rest } = options;
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      return runDurableStreamUntilIdle<TOutput>(
+        this as unknown as DurableAgent<any, any, TOutput>,
+        messages,
+        { ...rest, maxIdleMs },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
+
     // 1. Prepare for durable execution (non-durable phase)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
@@ -677,10 +724,53 @@ export class DurableAgent<
     // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
     const requestContext = globalRunRegistry.get(runId)?.requestContext;
+
+    // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
+    // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
+    // steps + terminal end() target these via the registry override. (Linking = follow-up.)
+    const origTraceId = entry.agentSpan?.traceId;
+    if (origTraceId && this.#mastra?.observability) {
+      try {
+        const ag = this.#wrappedAgent as Agent<string, any, any>;
+        const resumeAgentSpan = getOrCreateSpan({
+          type: SpanType.AGENT_RUN,
+          name: `agent run (resumed): '${ag.id}'`,
+          entityType: EntityType.AGENT,
+          entityId: ag.id,
+          entityName: ag.name,
+          metadata: { runId, resumed: true },
+          tracingOptions: { traceId: origTraceId },
+          requestContext,
+          mastra: this.#mastra,
+        });
+        const resumeModelSpan = resumeAgentSpan?.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: `llm: '${resumeModel?.modelId ?? ''}'`,
+          attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
+          metadata: { runId, resumed: true },
+          requestContext,
+        });
+        for (const reg of [entry, globalRunRegistry.get(runId)]) {
+          if (!reg) continue;
+          reg.resumeAgentSpan = resumeAgentSpan;
+          reg.resumeModelSpan = resumeModelSpan;
+          reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
+          reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
+        }
+      } catch (error) {
+        // Span bookkeeping must never block resume.
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
+      }
+    }
+
     ready
       .then(async () => {
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-        const result = await run.resume({ resumeData, requestContext });
+        const result = await run.resume({
+          resumeData,
+          requestContext,
+          ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+        });
         if (result?.status === 'failed') {
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
           void this.emitError(runId, error);
@@ -848,6 +938,8 @@ export class DurableAgent<
   }
 
   /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   *
    * Stream until all background tasks complete and the agent is idle.
    * Mirrors the regular Agent's streamUntilIdle but adapted for durable execution.
    */
@@ -875,6 +967,12 @@ export class DurableAgent<
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
       messages,
       options,
+      // Forward the caller-provided runId (mirrors stream()). Without this,
+      // prepareForDurableExecution mints a fresh id, so prepare() registers a
+      // different run than requested and a follow-up resume(runId) — e.g. when
+      // rehydrating a persisted, suspended run in a fresh process — can't find
+      // its registry entry.
+      runId: options?.runId,
       requestContext: options?.requestContext,
       mastra: this.#mastra,
     });

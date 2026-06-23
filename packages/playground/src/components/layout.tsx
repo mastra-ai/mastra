@@ -1,5 +1,5 @@
 import {
-  ErrorBoundary,
+  Button,
   LogoWithoutText,
   MainSidebar,
   MainSidebarProvider,
@@ -7,7 +7,10 @@ import {
   ThemeProvider,
   Toaster,
   TooltipProvider,
+  useMainSidebar,
 } from '@mastra/playground-ui';
+import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
+import { Search } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { AppSidebar } from './ui/app-sidebar';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
@@ -16,7 +19,7 @@ import { isAuthenticated } from '@/domains/auth/types';
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
-import { NavigationCommand } from '@/lib/command';
+import { NavigationCommand, useNavigationCommand } from '@/lib/command';
 import {
   RouteHeader,
   RouteHeaderActionsProvider,
@@ -28,13 +31,34 @@ import {
 import { cn } from '@/lib/utils';
 
 function MobileNavbar() {
+  const { setOpenMobile } = useMainSidebar();
+  const { setOpen: setNavigationCommandOpen } = useNavigationCommand({ enableShortcut: false });
+
+  const openNavigationCommand = () => {
+    setOpenMobile(false);
+    setNavigationCommandOpen(true);
+  };
+
   return (
-    <header className="lg:hidden sticky top-0 z-20 flex h-12 shrink-0 items-center gap-3 border-b border-border1 bg-surface1 px-3">
-      <MainSidebar.MobileTrigger />
-      <span className="flex items-center gap-2">
-        <LogoWithoutText className="size-[1.5rem] shrink-0" />
-        <span className="font-display text-sm whitespace-nowrap">Mastra Studio</span>
-      </span>
+    <header className="lg:hidden sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border1 bg-surface1 px-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <MainSidebar.MobileTrigger />
+        <span className="flex min-w-0 items-center gap-2">
+          <LogoWithoutText className="size-[1.5rem] shrink-0" />
+          <span className="font-display text-sm whitespace-nowrap">Mastra Studio</span>
+        </span>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-md"
+        tooltip="Search"
+        aria-label="Search and navigate"
+        onClick={openNavigationCommand}
+        className="shrink-0"
+      >
+        <Search />
+      </Button>
     </header>
   );
 }

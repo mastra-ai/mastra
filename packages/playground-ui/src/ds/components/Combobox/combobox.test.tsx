@@ -74,6 +74,32 @@ describe('Combobox', () => {
     });
   });
 
+  it('supports multiple selections and fires onValueChange with selected values', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        multiple
+        options={options}
+        value={['openai']}
+        onValueChange={onValueChange}
+        placeholder="Pick providers"
+        searchPlaceholder="Search providers"
+      />,
+    );
+
+    expect(screen.getByRole('combobox').textContent).toContain('1 selected');
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const anthropic = await screen.findByRole('option', { name: 'Anthropic' });
+    fireEvent.pointerDown(anthropic, { pointerType: 'mouse' });
+    fireEvent.click(anthropic, { detail: 1 });
+
+    await waitFor(() => {
+      expect(onValueChange).toHaveBeenCalledWith(['openai', 'anthropic']);
+    });
+  });
+
   it('selects the first filtered item when pressing Enter after searching', async () => {
     const onValueChange = vi.fn();
     renderCombobox({ onValueChange });

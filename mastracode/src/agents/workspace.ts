@@ -129,8 +129,8 @@ function detectPackageRunner(projectPath: string): string | undefined {
 
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
-  const state = ctx?.getState();
-  const modeId = ctx?.modeId ?? 'build';
+  const state = ctx?.session.state.get();
+  const modeId = ctx?.session?.modeId ?? 'build';
   const rawProjectPath = state?.projectPath;
 
   if (!rawProjectPath) {

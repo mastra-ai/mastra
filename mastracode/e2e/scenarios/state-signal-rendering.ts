@@ -21,8 +21,8 @@ export const stateSignalRenderingScenario: McE2eScenario = {
         let sent = false;
         timer = setInterval(async () => {
           try {
-            const threadId = result.harness.getCurrentThreadId();
-            if (sent || !threadId || !result.harness.isCurrentThreadStreamActive()) return;
+            const threadId = result.session.thread.getId();
+            if (sent || !threadId || !result.session.stream.isActive()) return;
             sent = true;
             if (timer) clearInterval(timer);
             const agent = result.harness.getMastra()?.getAgentById('code-agent');
@@ -35,7 +35,7 @@ export const stateSignalRenderingScenario: McE2eScenario = {
                 value: { activeUrl: 'https://example.test/state' },
               },
               {
-                resourceId: result.harness.getResourceId(),
+                resourceId: result.session.identity.getResourceId(),
                 threadId,
                 ifActive: { attributes: { source: 'mc-e2e' } },
                 ifIdle: { behavior: 'persist' },
