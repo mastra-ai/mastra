@@ -57,7 +57,7 @@ class AsyncCallbackPubSub extends PubSub {
   #index = 0;
   #pending = new Set<Promise<void>>();
 
-  async publish(topic: string, event: any): Promise<void> {
+  async publish(topic: string, event: any, _options?: { localOnly?: boolean }): Promise<void> {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
     const envelope = {
       ...event,
@@ -915,6 +915,154 @@ describe('Agent signals', () => {
     }
   });
 
+  it('keeps subscriber streams open across tool-call finish boundaries until tool results arrive', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'tool-call-boundary-agent' } as Agent<any, any, any, any>;
+    const threadId = 'tool-call-boundary-thread';
+    const resourceId = 'tool-call-boundary-user';
+    const runId = 'tool-call-boundary-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    const fullStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: 'start', runId });
+        controller.enqueue({ type: 'tool-call', runId, payload: { toolCallId: 'tool-1', toolName: 'testTool' } });
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          payload: { finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        });
+        controller.enqueue({ type: 'tool-result', runId, payload: { toolCallId: 'tool-1', result: 'tool output' } });
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          payload: { finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        });
+        controller.close();
+        finish();
+      },
+    });
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for boundary start')).resolves.toMatchObject({
+        value: { type: 'start', runId },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for boundary tool call')).resolves.toMatchObject({
+        value: { type: 'tool-call', runId },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for tool-call finish')).resolves.toMatchObject({
+        value: { type: 'finish', runId, payload: expect.objectContaining({ finishReason: 'tool-calls' }) },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for live tool result')).resolves.toMatchObject({
+        value: { type: 'tool-result', runId, payload: expect.objectContaining({ toolCallId: 'tool-1' }) },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for final finish')).resolves.toMatchObject({
+        value: { type: 'finish', runId, payload: expect.objectContaining({ finishReason: 'stop' }) },
+      });
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('assigns a new stream identity to same-run registrations without stale cleanup clearing the active stream', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = { id: 'stream-identity-agent' } as Agent<any, any, any, any>;
+    const threadId = 'stream-identity-thread';
+    const resourceId = 'stream-identity-resource';
+    const runId = 'stream-identity-run';
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const publishedEvents: any[] = [];
+    await pubsub.subscribe(topic, event => publishedEvents.push(event.data));
+
+    const createRun = (text: string, finished: Promise<void>) => {
+      const fullStream = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'start', runId });
+          controller.enqueue({ type: 'text-delta', runId, payload: { text } });
+          controller.enqueue({ type: 'finish', runId, payload: { finishReason: 'stop' } });
+          controller.close();
+        },
+      });
+
+      return runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+    };
+
+    let finishInitial!: () => void;
+    const initialFinished = new Promise<void>(resolve => {
+      finishInitial = resolve;
+    });
+    let finishResumed!: () => void;
+    const resumedFinished = new Promise<void>(resolve => {
+      finishResumed = resolve;
+    });
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const initialRun = readNextRun(iterator);
+      await createRun('initial response', initialFinished);
+      await expect(withTimeout(initialRun, 'Timed out waiting for initial stream identity run')).resolves.toMatchObject(
+        {
+          value: { runId, text: 'initial response' },
+        },
+      );
+      expect(subscription.activeRunId()).toBe(runId);
+
+      const resumedRun = readNextRun(iterator);
+      await createRun('resumed response', resumedFinished);
+      await expect(withTimeout(resumedRun, 'Timed out waiting for resumed stream identity run')).resolves.toMatchObject(
+        {
+          value: { runId, text: 'resumed response' },
+        },
+      );
+
+      const registeredEvents = publishedEvents.filter(event => event?.type === 'run-registered');
+      expect(registeredEvents).toHaveLength(2);
+      expect(registeredEvents.map(event => event.runId)).toEqual([runId, runId]);
+      expect(registeredEvents.map(event => event.streamSeq)).toEqual([1, 2]);
+      expect(registeredEvents[0].streamId).toEqual(expect.any(String));
+      expect(registeredEvents[1].streamId).toEqual(expect.any(String));
+      expect(registeredEvents[1].streamId).not.toBe(registeredEvents[0].streamId);
+
+      finishInitial();
+      await nextTick();
+      expect(subscription.activeRunId()).toBe(runId);
+
+      finishResumed();
+      await waitForCondition(() => subscription.activeRunId() === null);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
   it('keeps multicast thread streams alive when one subscriber unsubscribes mid-run', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const agent = { id: 'subscriber-cancel-agent' } as Agent<any, any, any, any>;
@@ -1006,7 +1154,7 @@ describe('Agent signals', () => {
     );
 
     const subscribedRun = await nextRun;
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
     expect(signalResult.signal.id).toBeDefined();
     expect(signalResult.signal.acceptedAt).toBeInstanceOf(Date);
     expect(subscribedRun.value.text).toBe('signal response');
@@ -1046,7 +1194,7 @@ describe('Agent signals', () => {
     );
 
     const subscribedRun = await nextRun;
-    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
     expect(result.signal).toMatchObject({ type: 'user', tagName: 'user', contents: 'Hello from sendMessage' });
     const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-user-message');
     expect(signalPart?.data).toMatchObject({
@@ -1082,8 +1230,8 @@ describe('Agent signals', () => {
       },
       { resourceId: 'state-user', threadId: 'state-thread', ifIdle: { behavior: 'persist' } },
     );
-    expect(result.accepted).toBe(true);
-    expect(result.skipped).not.toBe(true);
+    if (result.skipped) throw new Error('expected state signal to be persisted, not skipped');
+    await expect(result.accepted).resolves.toMatchObject({ action: 'persist' });
     expect(result.signal).toBeDefined();
 
     expect(result.signal).toMatchObject({
@@ -1099,7 +1247,7 @@ describe('Agent signals', () => {
         { id: 'browser', cacheKey: 'browser:v1', contents: 'unchanged' },
         { resourceId: 'state-user', threadId: 'state-thread', ifIdle: { behavior: 'persist' } },
       ),
-    ).resolves.toEqual({ accepted: true, skipped: true, reason: 'unchanged' });
+    ).resolves.toEqual({ skipped: true, reason: 'unchanged' });
     const thread = await memory.getThreadById({ threadId: 'state-thread' });
     expect(thread?.metadata?.mastra).toEqual(
       expect.objectContaining({
@@ -1147,7 +1295,8 @@ describe('Agent signals', () => {
     );
 
     const subscribedRun = await nextRun;
-    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
+    expect(result).toEqual(expect.objectContaining({ runId: subscribedRun.value.runId }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
     expect(result.decision).toMatchObject({ action: 'deliver' });
     expect(result.record).toMatchObject({
       agentId: 'notification-agent',
@@ -1191,10 +1340,12 @@ describe('Agent signals', () => {
     );
 
     expect(results).toHaveLength(2);
-    expect(results[0]).toMatchObject({ accepted: true, decision: { action: 'deliver', reason: 'idle-high' } });
+    expect(results[0]).toMatchObject({ decision: { action: 'deliver', reason: 'idle-high' } });
+    await expect(results[0]?.accepted).resolves.toMatchObject({ action: expect.stringMatching(/wake|deliver/) });
     expect(results[0]?.signal).toMatchObject({ type: 'notification', tagName: 'notification' });
     expect(results[0]?.record).toMatchObject({ status: 'delivered', deliveredSignalId: results[0]?.signal?.id });
-    expect(results[1]).toMatchObject({ accepted: true, decision: { action: 'deliver', reason: 'idle-high' } });
+    expect(results[1]).toMatchObject({ decision: { action: 'deliver', reason: 'idle-high' } });
+    await expect(results[1]?.accepted).resolves.toMatchObject({ action: expect.stringMatching(/wake|deliver/) });
     expect(results[1]?.signal).toMatchObject({ type: 'notification', tagName: 'notification' });
     expect(results[1]?.record).toMatchObject({ status: 'delivered', deliveredSignalId: results[1]?.signal?.id });
   });
@@ -1269,9 +1420,12 @@ describe('Agent signals', () => {
       model: createTextStreamModel('unused'),
     });
     new Mastra({ agents: { rejectedNotificationAgent: agent }, storage, logger: false });
+    const rejectedAccepted = Promise.reject(new Error('signal rejected'));
+    // Attach a no-op catch so the rejection is considered handled and never surfaces as an
+    // unhandled rejection; the dispatcher attaches its own awaiting handler in try/catch.
+    rejectedAccepted.catch(() => {});
     const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockReturnValue({
-      accepted: false,
-      runId: 'run-1',
+      accepted: rejectedAccepted,
       signal: createSignal({ type: 'notification', tagName: 'notification', contents: 'Rejected' }),
     } as any);
 
@@ -1281,11 +1435,11 @@ describe('Agent signals', () => {
         { resourceId: 'notification-user', threadId: 'notification-thread' },
       );
 
-      expect(result.accepted).toBe(false);
+      expect(result.accepted).toBeUndefined();
       expect(result.record).toMatchObject({
         status: 'pending',
         deliveryAttempts: 1,
-        lastDeliveryError: 'Notification signal was rejected',
+        lastDeliveryError: 'signal rejected',
       });
       expect(result.record.deliveredSignalId).toBeUndefined();
       const stored = await notifications.getNotification({ threadId: 'notification-thread', id: result.record.id });
@@ -1725,8 +1879,8 @@ describe('Agent signals', () => {
     await nextTick();
     expect(streamCount).toBe(0);
     expect(result.signal).toBeUndefined();
+    expect(result.accepted).toBeUndefined();
     expect(result).toMatchObject({
-      accepted: true,
       decision: { action: 'summarize', reason: 'idle-low-summary' },
       record: { status: 'pending', deliveryReason: 'idle-low-summary' },
     });
@@ -1971,11 +2125,11 @@ describe('Agent signals', () => {
     await nextTick();
     expect(streamCount).toBe(0);
     expect(result).toMatchObject({
-      accepted: true,
       decision: { action: 'defer', reason: 'after-hours' },
       record: { status: 'pending', deliveryReason: 'after-hours' },
     });
     expect(result.signal).toBeUndefined();
+    expect(result.accepted).toBeUndefined();
     expect(result.record.deliverAt?.toISOString()).toBe(deliverAt.toISOString());
   });
 
@@ -2091,7 +2245,7 @@ describe('Agent signals', () => {
       threadId: 'active-message-thread',
     });
 
-    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     releaseFirst();
     await expect(stream.text).resolves.toBe('first responsemessage response');
     expect(streamCount).toBe(2);
@@ -2143,10 +2297,95 @@ describe('Agent signals', () => {
 
       const result = runtime.sendMessage(agent, 'Queued behind approval', { resourceId, threadId });
 
-      expect(result).toEqual(expect.objectContaining({ accepted: true, runId }));
+      await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
       expect((agent as any).stream).not.toHaveBeenCalled();
       const [signal] = runtime.drainPendingSignals(runId);
       expect(signal).toMatchObject({ type: 'user', contents: 'Queued behind approval' });
+    } finally {
+      finishRun();
+      subscription.unsubscribe();
+    }
+  });
+
+  it.each(['request_access', 'ask_user'])('keeps %s suspensions discoverable and blocks idle wake', async toolName => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = {
+      id: `generic-suspended-${toolName}`,
+      stream: vi.fn(),
+    } as unknown as Agent<any, any, any, any>;
+    const idleAgent = {
+      id: `idle-agent-${toolName}`,
+      stream: vi.fn(),
+    } as unknown as Agent<any, any, any, any>;
+    const runId = `generic-suspended-run-${toolName}`;
+    const threadId = `generic-suspended-thread-${toolName}`;
+    const resourceId = `generic-suspended-user-${toolName}`;
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const events: any[] = [];
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    await pubsub.subscribe(topic, event => events.push(event.data));
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'suspended',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({
+                type: 'tool-call-suspended',
+                runId,
+                payload: { toolCallId: `tool-call-${toolName}`, toolName },
+              });
+              controller.close();
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+
+      await withTimeout(iterator.next(), 'Timed out waiting for generic suspended run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for generic suspended chunk');
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+
+      const queuedForSuspendedRun = runtime.sendMessage(
+        agent,
+        'Resume-adjacent input',
+        { resourceId, threadId },
+        pubsub,
+      );
+      await expect(queuedForSuspendedRun.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+      expect((agent as any).stream).not.toHaveBeenCalled();
+      expect(runtime.drainPendingSignals(runId, pubsub)[0]).toMatchObject({
+        type: 'user',
+        contents: 'Resume-adjacent input',
+      });
+
+      finishRun();
+      await waitForCondition(() => events.some(event => event?.type === 'run-suspended' && event.runId === runId));
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+
+      const idleWake = runtime.sendSignal(
+        idleAgent,
+        createSignal({ type: 'user-message', contents: 'Unrelated idle wake' }),
+        { resourceId, threadId, ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } } },
+        pubsub,
+      );
+      await expect(idleWake.accepted).resolves.toMatchObject({ action: 'blocked', reason: 'thread-blocked', runId });
+      expect((idleAgent as any).stream).not.toHaveBeenCalled();
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
     } finally {
       finishRun();
       subscription.unsubscribe();
@@ -2211,8 +2450,10 @@ describe('Agent signals', () => {
       threadId: 'queue-message-thread',
     });
 
-    expect(result.accepted).toBe(true);
-    expect(result.runId).not.toBe(stream.runId);
+    const settled = await result.accepted;
+    const queuedRunId = 'runId' in settled ? settled.runId : undefined;
+    expect(settled.action).toBe('deliver');
+    expect(queuedRunId).not.toBe(stream.runId);
     await nextTick();
     expect(streamCount).toBe(1);
 
@@ -2220,7 +2461,7 @@ describe('Agent signals', () => {
     await expect(stream.text).resolves.toBe('first response');
     await firstRun;
     const secondRun = await readNextRunWithParts(iterator);
-    expect(secondRun.value.runId).toBe(result.runId);
+    expect(secondRun.value.runId).toBe(queuedRunId);
     expect(secondRun.value.text).toBe('queued response');
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[1])).toContain('Queued follow-up');
@@ -2297,7 +2538,7 @@ describe('Agent signals', () => {
         );
         const [firstRun] = runs;
 
-        expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: firstRun.value.runId }));
+        await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: firstRun.value.runId });
         expect(firstRun.value.text).toBe(`signal response ${runIndex}`);
 
         for (const run of runs) {
@@ -2335,7 +2576,7 @@ describe('Agent signals', () => {
       { resourceId: 'idle-user', threadId: 'idle-thread' },
     );
 
-    expect(result).toEqual(expect.objectContaining({ accepted: true }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake' });
   });
 
   it('reports the reserved runId as active before registerRun populates the stream record', async () => {
@@ -2360,8 +2601,10 @@ describe('Agent signals', () => {
       ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } as any },
     });
 
-    expect(result.accepted).toBe(true);
-    expect(subscription.activeRunId()).toBe(result.runId);
+    // accepted never settles here because agent.stream is pinned; the reserved runId is
+    // observable via the subscription's active run id before registerRun populates the stream.
+    expect(result.accepted).toBeInstanceOf(Promise);
+    expect(subscription.activeRunId()).not.toBeNull();
 
     subscription.unsubscribe();
   });
@@ -2558,13 +2801,76 @@ describe('Agent signals', () => {
       pubsub,
     );
 
-    expect(result.accepted).toBe(true);
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver' });
     await waitForCondition(() => ownerRuntime.drainPendingSignals('remote-run-1', pubsub).length === 1);
 
     finishRun();
     await waitForRemoteRun;
     ownerSubscription.unsubscribe();
     senderSubscription.unsubscribe();
+  });
+
+  it('grants the wake output to exactly one runtime when two race to wake an idle thread', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runtimeA = new AgentThreadStreamRuntime();
+    const runtimeB = new AgentThreadStreamRuntime();
+
+    // Track which agents had their .stream invoked. Only the lease winner
+    // should actually call .stream(); the loser must short-circuit.
+    const streamCallsA: number[] = [];
+    const streamCallsB: number[] = [];
+
+    const makeStubAgent = (id: string, calls: number[]) => {
+      let nextRunId = 0;
+      return {
+        id,
+        stream: async () => {
+          const runId = `${id}-run-${++nextRunId}`;
+          calls.push(nextRunId);
+          return {
+            runId,
+            status: 'running',
+            fullStream: (async function* () {})(),
+            _waitUntilFinished: () => new Promise<void>(() => {}),
+          } as any;
+        },
+      } as any;
+    };
+
+    const agentA = makeStubAgent('race-agent-a', streamCallsA);
+    const agentB = makeStubAgent('race-agent-b', streamCallsB);
+
+    const target = {
+      resourceId: 'race-resource',
+      threadId: 'race-thread',
+      ifIdle: {
+        behavior: 'wake' as const,
+        streamOptions: { memory: { resource: 'race-resource', thread: 'race-thread' } },
+      },
+    };
+
+    // Fire both signals in the same microtask burst so the lease race is real.
+    const resultA = runtimeA.sendSignal(agentA, { type: 'user-message', contents: 'from A' }, target, pubsub);
+    const resultB = runtimeB.sendSignal(agentB, { type: 'user-message', contents: 'from B' }, target, pubsub);
+
+    expect(resultA.accepted).toBeInstanceOf(Promise);
+    expect(resultB.accepted).toBeInstanceOf(Promise);
+
+    const [settledA, settledB] = await Promise.all([resultA.accepted, resultB.accepted]);
+
+    // Exactly one runtime won the lease and ran the stream (`wake` + owned output); the
+    // loser forwarded its signal to the winner and resolves to `deliver`.
+    const ownerA = settledA.action === 'wake' ? settledA.output : undefined;
+    const ownerB = settledB.action === 'wake' ? settledB.output : undefined;
+    const winners = [ownerA, ownerB].filter(s => s !== undefined);
+    expect(winners).toHaveLength(1);
+
+    const actions = [settledA.action, settledB.action].sort();
+    expect(actions).toEqual(['deliver', 'wake']);
+
+    // Only the winner's agent.stream was invoked.
+    const totalStreamCalls = streamCallsA.length + streamCallsB.length;
+    expect(totalStreamCalls).toBe(1);
   });
 
   it.runIf(process.platform !== 'win32')(
@@ -2786,7 +3092,7 @@ describe('Agent signals', () => {
       },
     );
     const signalRun = await secondRunPromise;
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: signalRun.value.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: signalRun.value.runId });
     expect(signalResult.signal.id).toBeDefined();
     expect(signalRun.value.text).toBe('standalone shared response');
 
@@ -2882,8 +3188,10 @@ describe('Agent signals', () => {
       model: createTextStreamModel('observer response'),
     });
     new Mastra({ agents: { runner, observer }, logger: false, pubsub });
-    expect(runner.getPubSub()).toBe(pubsub);
-    expect(observer.getPubSub()).toBe(pubsub);
+    // Mastra wraps the raw pubsub in a Proxy (for localOnly tagging), so
+    // reference equality against the raw instance won't hold. Verify both
+    // agents share the *same* (proxy-wrapped) pubsub instead.
+    expect(runner.getPubSub()).toBe(observer.getPubSub());
 
     const subscription = await observer.subscribeToThread({
       threadId: 'shared-thread',
@@ -2910,7 +3218,7 @@ describe('Agent signals', () => {
       },
     );
     const signalRun = await secondRunPromise;
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: signalRun.value.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: signalRun.value.runId });
     expect(signalResult.signal.id).toBeDefined();
     expect(signalRun.value.text).toBe('shared response');
 
@@ -2995,7 +3303,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'First signal while running' },
       { resourceId: 'active-user', threadId: 'active-thread' },
     );
-    expect(firstSignalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(firstSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     expect(firstSignalResult.signal.id).toBeDefined();
 
     releaseFirst();
@@ -3005,7 +3313,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'Second signal while running' },
       { resourceId: 'active-user', threadId: 'active-thread' },
     );
-    expect(secondSignalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(secondSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     expect(secondSignalResult.signal.id).toBeDefined();
     expect(secondSignalResult.signal.id).not.toBe(firstSignalResult.signal.id);
 
@@ -3180,7 +3488,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'Actually stop and answer this instead' },
       { resourceId: 'tool-interjection-user', threadId: 'tool-interjection-thread' },
     );
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
     continueToToolCall();
     await waitForCondition(() => callCount === 2);
@@ -3278,7 +3586,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'Stop reasoning and answer this' },
       { resourceId: 'interleaved-reasoning-user', threadId: 'interleaved-reasoning-thread' },
     );
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
     releaseReasoningChunk?.();
     await waitForCondition(() => !!finishFirstCall);
@@ -3350,10 +3658,15 @@ describe('Agent signals', () => {
       },
     );
 
-    expect(followUp.runId).toBe(firstSignal.runId);
+    const firstAccepted = await firstSignal.accepted;
+    const followUpAccepted = await followUp.accepted;
+    const firstRunId = 'runId' in firstAccepted ? firstAccepted.runId : undefined;
+    const followUpRunId = 'runId' in followUpAccepted ? followUpAccepted.runId : undefined;
+    expect(firstAccepted.action).toBe('wake');
+    expect(followUpRunId).toBe(firstRunId);
 
     const run = await runPromise;
-    expect(run.value.runId).toBe(firstSignal.runId);
+    expect(run.value.runId).toBe(firstRunId);
     expect(run.value.text).toBe('response');
     expect(prompts).toHaveLength(1);
     expect(JSON.stringify(prompts[0])).toContain('thread targeted follow up');
@@ -3556,8 +3869,10 @@ describe('Agent signals', () => {
     await expect(firstText).resolves.toBe('first response');
     await expect(firstRunPromise).resolves.toMatchObject({ value: { runId: firstStream.runId }, done: false });
 
+    const signalAccepted = await signalResult.accepted;
+    const signalRunId = 'runId' in signalAccepted ? signalAccepted.runId : undefined;
     const secondRun = await readNextRun(iterator);
-    expect(secondRun.value.runId).toBe(signalResult.runId);
+    expect(secondRun.value.runId).toBe(signalRunId);
     expect(secondRun.value.text).toBe('second response');
     expect(secondStarted).toBe(true);
 
@@ -3781,12 +4096,11 @@ describe('Agent signals', () => {
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
 
-    expect(agent.sendSignal({ type: 'user-message', contents: 'Hello by run id' }, { runId: stream.runId })).toEqual(
-      expect.objectContaining({
-        accepted: true,
-        runId: stream.runId,
-      }),
+    const runIdSignalResult = agent.sendSignal(
+      { type: 'user-message', contents: 'Hello by run id' },
+      { runId: stream.runId },
     );
+    await expect(runIdSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
     releaseFirst();
     await firstRunPromise;
@@ -3850,7 +4164,7 @@ describe('Agent signals', () => {
       },
     );
 
-    expect(stream.accepted).toBe(true);
+    await expect(stream.accepted).resolves.toMatchObject({ action: 'wake' });
     for (let i = 0; i < 10 && !capturedPrompt; i++) {
       await nextTick();
     }

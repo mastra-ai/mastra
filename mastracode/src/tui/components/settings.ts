@@ -6,8 +6,8 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, SettingItem } from '@mariozechner/pi-tui';
+import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
+import type { Focusable, SelectItem, SettingItem } from '@earendil-works/pi-tui';
 import type { StorageBackend } from '../../onboarding/settings.js';
 import type { NotificationMode } from '../notify.js';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';

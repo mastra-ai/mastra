@@ -6,6 +6,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
   MCPAuthInfoToUserMapper,
+  MCPServerFGAConfig,
   MCPServerConfig,
   ServerInfo,
   ServerDetailInfo,
@@ -37,6 +38,8 @@ import {
   GetPromptRequestSchema,
   SetLevelRequestSchema,
   PromptSchema,
+  McpError,
+  ErrorCode,
 } from '@modelcontextprotocol/sdk/types.js';
 import type {
   TextResourceContents,
@@ -104,6 +107,7 @@ export class MCPServer extends MCPServerBase {
   private promptOptions?: MCPServerPrompts;
   private jsonSchemaValidator?: jsonSchemaValidator;
   private mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
+  private fga?: MCPServerFGAConfig;
   private subscriptions: Set<string> = new Set();
   private currentLoggingLevel: LoggingLevel | undefined;
 
@@ -312,6 +316,7 @@ export class MCPServer extends MCPServerBase {
     this.promptOptions = opts.prompts;
     this.jsonSchemaValidator = opts.jsonSchemaValidator;
     this.mapAuthInfoToUser = opts.mapAuthInfoToUser;
+    this.fga = opts.fga;
 
     const capabilities: ServerCapabilities = {
       tools: {},
@@ -859,7 +864,7 @@ export class MCPServer extends MCPServerBase {
 
         if (!resource) {
           this.logger.warn('Unknown resource URI requested', { uri });
-          throw new Error(`Resource not found: ${uri}`);
+          throw new McpError(ErrorCode.InvalidParams, `Resource not found: ${uri}`);
         }
 
         try {
@@ -989,7 +994,7 @@ export class MCPServer extends MCPServerBase {
           if (prompt.arguments) {
             for (const arg of prompt.arguments) {
               if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
-                throw new Error(`Missing required argument: ${arg.name}`);
+                throw new McpError(ErrorCode.InvalidParams, `Missing required argument: ${arg.name}`);
               }
             }
           }
@@ -2266,12 +2271,18 @@ export class MCPServer extends MCPServerBase {
     if (!user) {
       throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
     }
+    const { resource, permission } = this.resolveToolFGAParams({
+      user,
+      resourceId,
+      requestContext,
+      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+    });
 
     await requireFGA({
       fgaProvider,
       user,
-      resource: { type: 'tool', id: resourceId },
-      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+      resource,
+      permission,
       requestContext,
       context: {
         resourceId,
@@ -2282,6 +2293,36 @@ export class MCPServer extends MCPServerBase {
         toolId,
       },
     });
+  }
+
+  private resolveToolFGAParams({
+    user,
+    resourceId,
+    requestContext,
+    permission,
+  }: {
+    user: unknown;
+    resourceId: string;
+    requestContext?: RequestContext;
+    permission: string;
+  }): { resource: { type: string; id: string }; permission: string } {
+    const mappedPermission = this.fga?.permissionMapping?.[permission] ?? permission;
+    const resourceMapping = this.fga?.resourceMapping?.tool ?? this.fga?.resourceMapping?.tools;
+
+    if (!resourceMapping) {
+      return {
+        resource: { type: 'tool', id: resourceId },
+        permission: mappedPermission,
+      };
+    }
+
+    return {
+      resource: {
+        type: resourceMapping.fgaResourceType,
+        id: resourceMapping.deriveId?.({ user, resourceId, requestContext }) ?? resourceId,
+      },
+      permission: mappedPermission,
+    };
   }
 
   /**

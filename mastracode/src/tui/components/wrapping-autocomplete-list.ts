@@ -11,8 +11,8 @@
  * predictable regardless of how many rows a description wraps onto.
  */
 
-import { getKeybindings, truncateToWidth, visibleWidth, wrapTextWithAnsi } from '@mariozechner/pi-tui';
-import type { Component, SelectItem, SelectListTheme } from '@mariozechner/pi-tui';
+import { getKeybindings, truncateToWidth, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
+import type { Component, SelectItem, SelectListTheme } from '@earendil-works/pi-tui';
 
 const DEFAULT_PRIMARY_COLUMN_WIDTH = 32;
 const PRIMARY_COLUMN_GAP = 2;

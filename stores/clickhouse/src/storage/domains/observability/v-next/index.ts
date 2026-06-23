@@ -88,6 +88,14 @@ import type {
 
 import { resolveClickhouseConfig } from '../../../db';
 import type { ClickhouseDomainConfig } from '../../../db';
+import {
+  addOnClusterToDDL,
+  applyReplicationToDDL,
+  buildLocalTableReplicationError,
+  isReplicationConfigured,
+  isReplicatedOrSharedEngine,
+} from '../../../db/replication';
+import type { ClickhouseReplicationConfig } from '../../../db/replication';
 
 import {
   BASE_MV_DDL,
@@ -247,7 +255,29 @@ async function filterAppliedRetention(
  * Silently returns if `system.tables` can't be queried — the rest of init
  * will still run and leave any existing tables untouched.
  */
-async function reconcileDiscoveryTables(client: ClickHouseClient): Promise<void> {
+async function assertExistingTablesCompatibleWithReplication(
+  client: ClickHouseClient,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
+  if (!isReplicationConfigured(replication)) return;
+
+  const result = await client.query({
+    query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name IN ({tables:Array(String)})`,
+    query_params: { tables: [...ALL_TABLE_NAMES] },
+    format: 'JSONEachRow',
+  });
+  const rows = (await result.json()) as Array<{ name: string; engine: string }>;
+  const localTable = rows.find(row => !isReplicatedOrSharedEngine(row.engine));
+
+  if (localTable) {
+    throw buildLocalTableReplicationError([{ name: localTable.name, engine: localTable.engine }]);
+  }
+}
+
+async function reconcileDiscoveryTables(
+  client: ClickHouseClient,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
   let engines: Map<string, string>;
   try {
     const result = await client.query({
@@ -273,8 +303,8 @@ async function reconcileDiscoveryTables(client: ClickHouseClient): Promise<void>
   for (const { table, mv } of targets) {
     const engine = engines.get(table);
     if (!engine || isReplacingMergeTreeEngine(engine)) continue;
-    await client.command({ query: `DROP VIEW IF EXISTS ${mv}` });
-    await client.command({ query: `DROP TABLE IF EXISTS ${table}` });
+    await client.command({ query: addOnClusterToDDL(`DROP VIEW IF EXISTS ${mv}`, replication) });
+    await client.command({ query: addOnClusterToDDL(`DROP TABLE IF EXISTS ${table}`, replication) });
   }
 }
 
@@ -379,13 +409,15 @@ async function detectExistingDeltaCursorStrategy(
 export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
   readonly #client: ClickHouseClient;
   readonly #retention?: RetentionConfig;
+  readonly #replication?: ClickhouseReplicationConfig;
   readonly #deltaCursorStrategyOverride?: ClickHouseDeltaCursorStrategy;
   #deltaCursorStrategy: ClickHouseDeltaCursorStrategy | null = 'fallback';
 
   constructor(config: VNextObservabilityConfig) {
     super();
-    const { client } = resolveClickhouseConfig(config);
+    const { client, replication } = resolveClickhouseConfig(config);
     this.#client = client;
+    this.#replication = replication;
     this.#retention = config.retention;
     this.#deltaCursorStrategyOverride = config.deltaCursorStrategy;
   }
@@ -409,6 +441,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     }
 
     try {
+      await assertExistingTablesCompatibleWithReplication(this.#client, this.#replication);
       const existingStrategy = await detectExistingDeltaCursorStrategy(this.#client);
       if (existingStrategy === 'mixed') {
         this.#deltaCursorStrategy = null;
@@ -427,7 +460,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // tables are fully derived from the base signal tables and get
       // repopulated by the refreshable MV at the end of init(), so it is safe
       // to recreate them in place when the engine doesn't match.
-      await reconcileDiscoveryTables(this.#client);
+      await reconcileDiscoveryTables(this.#client, this.#replication);
 
       // Core tables + incremental MVs (must succeed)
       const coreDdl =
@@ -435,7 +468,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
           ? [...BASE_TABLE_DDL, ...BASE_MV_DDL]
           : [...buildAllTableDDL(), ...buildAllMvDDL(this.#deltaCursorStrategy)];
       for (const ddl of coreDdl) {
-        await this.#client.command({ query: ddl });
+        await this.#client.command({ query: applyReplicationToDDL(ddl, this.#replication) });
       }
 
       // Additive migrations for existing databases (add new columns/indexes).
@@ -445,7 +478,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // errors on every boot when multiple replicas/pods race.
       const pendingMigrations = await filterAppliedMigrations(this.#client, ALL_MIGRATIONS);
       for (const migration of pendingMigrations) {
-        await this.#client.command({ query: migration.sql });
+        await this.#client.command({ query: addOnClusterToDDL(migration.sql, this.#replication) });
       }
 
       // Apply retention TTL if configured (per design doc: per-signal, day increments).
@@ -455,7 +488,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       if (this.#retention) {
         const pendingRetention = await filterAppliedRetention(this.#client, buildRetentionEntries(this.#retention));
         for (const entry of pendingRetention) {
-          await this.#client.command({ query: entry.sql });
+          await this.#client.command({ query: addOnClusterToDDL(entry.sql, this.#replication) });
         }
       }
 
@@ -499,16 +532,26 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     // discovery methods should continue returning empty results until a later refresh succeeds."
     try {
       for (const ddl of DISCOVERY_MV_DDL) {
-        await this.#client.command({ query: ddl });
+        await this.#client.command({ query: addOnClusterToDDL(ddl, this.#replication) });
       }
       // Trigger an immediate refresh so discovery data is available right away
       // instead of waiting for the first scheduled refresh cycle.
       // SYSTEM REFRESH VIEW kicks off the refresh; SYSTEM WAIT VIEW blocks
-      // until it finishes (or re-throws if the refresh failed).
-      await this.#client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_VALUES}` });
-      await this.#client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}` });
-      await this.#client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}` });
-      await this.#client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}` });
+      // until it finishes (or re-throws if the refresh failed). Under
+      // replication these run ON CLUSTER so every replica's refreshable MV
+      // schedule is kicked, not just the coordinator's.
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM REFRESH VIEW ${MV_DISCOVERY_VALUES}`, this.#replication),
+      });
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}`, this.#replication),
+      });
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}`, this.#replication),
+      });
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}`, this.#replication),
+      });
     } catch {
       // Discovery MVs may fail on ClickHouse versions without refreshable MV support.
       // Discovery methods will return empty results until the MVs are created and refreshed.
@@ -535,6 +578,17 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         duplicatesRemoved: 0,
         message: 'Migration already complete. Signal tables already use signal-ID dedupe keys.',
       };
+    }
+
+    if (isReplicationConfigured(this.#replication)) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'REPLICATION', 'SIGNAL_TABLES_MIGRATION_UNSUPPORTED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text:
+          'ClickHouse replication is enabled, so Mastra will not run copy-and-swap signal table migrations automatically. ' +
+          'Migrate existing local signal tables manually before enabling replication.',
+      });
     }
 
     await migrateSignalTables(this.#client, this.logger);
@@ -1292,9 +1346,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async dangerouslyClearAll(): Promise<void> {
     try {
-      // Truncate all signal tables
+      // Truncate all signal tables. Under replication we fan out via ON CLUSTER
+      // so every replica is cleared rather than only the receiving node.
       await Promise.all(
-        ALL_TABLE_NAMES.map(table => this.#client.command({ query: `TRUNCATE TABLE IF EXISTS ${table}` })),
+        ALL_TABLE_NAMES.map(table =>
+          this.#client.command({
+            query: addOnClusterToDDL(`TRUNCATE TABLE IF EXISTS ${table}`, this.#replication),
+          }),
+        ),
       );
     } catch (error) {
       if (error instanceof MastraError) throw error;

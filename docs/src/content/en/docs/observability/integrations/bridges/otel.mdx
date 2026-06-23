@@ -149,7 +149,7 @@ const sdk = new NodeSDK({
 
 Logs that originate inside a Mastra span are emitted under that span's OTEL context, so backends like Datadog, Grafana, and Honeycomb correlate them with the surrounding trace automatically. Logs without trace context fall through to the currently active OTEL context.
 
-If you do not register a `LoggerProvider`, log emission is a silent no-op — traces continue to work as configured.
+If you don't register a `LoggerProvider`, log emission is a silent no-op — traces continue to work as configured.
 
 ### Running Your Application
 

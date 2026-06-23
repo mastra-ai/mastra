@@ -5,7 +5,7 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { HarnessQuestionAnswer, HarnessRequestContext } from '@mastra/core/harness';
+import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
 import { LocalFilesystem } from '@mastra/core/workspace';
 import { z } from 'zod';
@@ -17,8 +17,6 @@ function expandTilde(p: string): string {
   if (p.startsWith('~/') || p.startsWith('~\\')) return path.join(os.homedir(), p.slice(2));
   return p;
 }
-
-let requestCounter = 0;
 
 type RequestSandboxAccessInput = {
   path: string;
@@ -34,6 +32,12 @@ export const requestSandboxAccessTool = createTool({
   id: 'request_access',
   description: `Request permission to access a directory outside the current project. Use this when you need to read or write files in a directory that is not within the project root. The user will be prompted to approve or deny the request.`,
   inputSchema: requestSandboxAccessInputSchema,
+  suspendSchema: z.object({
+    kind: z.literal('sandbox_access_request'),
+    path: z.string(),
+    reason: z.string(),
+  }),
+  resumeSchema: z.union([z.string(), z.array(z.string())]),
   execute: async ({ path: requestedPath, reason }: RequestSandboxAccessInput, context: any) => {
     try {
       const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
@@ -52,48 +56,45 @@ export const requestSandboxAccessTool = createTool({
         };
       }
 
-      if (!harnessCtx?.emitEvent || !harnessCtx?.registerQuestion) {
-        return {
-          content: `Cannot request sandbox access: TUI context not available. The user should manually run /sandbox add ${absolutePath}`,
-          isError: true,
-        };
+      const suspend = context?.agent?.suspend ?? context?.suspend;
+      const resumeData = context?.agent?.resumeData ?? context?.resumeData;
+
+      // First pass: pause via the native tool-suspension primitive so the host can
+      // prompt the user. The suspend payload carries the request details; the host
+      // resumes with the user's answer as resume data.
+      if (resumeData === undefined) {
+        if (!suspend) {
+          return {
+            content: `Cannot request sandbox access: interactive context not available. The user should manually run /sandbox add ${absolutePath}`,
+            isError: true,
+          };
+        }
+        await suspend({ kind: 'sandbox_access_request', path: absolutePath, reason });
+        return;
       }
 
-      const questionId = `sandbox_${++requestCounter}_${Date.now()}`;
-
-      // Create a promise that resolves when the user answers in the TUI
-      const answer = await new Promise<HarnessQuestionAnswer>(resolve => {
-        // Register the resolver so respondToQuestion() can resolve it
-        harnessCtx.registerQuestion!({
-          questionId,
-          resolve: answer => {
-            resolve(Array.isArray(answer) ? answer.join(',') : answer);
-          },
-        });
-
-        // Emit event — TUI will show the dialog
-        harnessCtx.emitEvent!({
-          type: 'sandbox_access_request',
-          questionId,
-          path: absolutePath,
-          reason,
-        });
-      });
-
-      const answerText = Array.isArray(answer) ? answer.join(', ') : answer;
+      const answerText = Array.isArray(resumeData) ? resumeData.join(', ') : String(resumeData);
       const approved = answerText.toLowerCase().startsWith('y') || answerText.toLowerCase() === 'approve';
       if (approved) {
-        // Add to allowed paths in harness state (persists across turns)
-        const currentAllowed = (harnessCtx.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];
+        // Persist to harness state first (and await it) so the value is
+        // committed before the next tool call re-derives the workspace's
+        // allowed paths from state. The workspace factory rebuilds the
+        // filesystem allowlist from `sandboxAllowedPaths` on every call
+        // (getDynamicWorkspace), so an unawaited setState would let that
+        // rebuild clobber the in-turn widen below before the grant lands.
+        const currentAllowed = (harnessCtx?.session.state.get()?.sandboxAllowedPaths as string[] | undefined) ?? [];
         if (!currentAllowed.includes(absolutePath)) {
-          harnessCtx.setState?.({
+          await harnessCtx?.session.state.set({
             sandboxAllowedPaths: [...currentAllowed, absolutePath],
           });
         }
 
-        // Also update the workspace filesystem immediately so tools in the
-        // same turn can access the path without waiting for the next turn.
-        const fs = context?.workspace?.filesystem;
+        // Also update the live workspace filesystem immediately so tools in
+        // the same turn (e.g. `view`) can access the path without waiting for
+        // a fresh workspace build. The resolved workspace is carried on the
+        // harness request context — the tool-execution context does not expose
+        // it — so read the filesystem from there.
+        const fs = harnessCtx?.workspace?.filesystem ?? context?.workspace?.filesystem;
         if (fs instanceof LocalFilesystem) {
           fs.setAllowedPaths((prev: readonly string[]) => [...prev, absolutePath]);
         }

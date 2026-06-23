@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fastq from 'fastq';
 import type { done as DoneCallback } from 'fastq';
+import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import type { PubSub } from '../../events/pubsub';
@@ -53,6 +54,7 @@ export interface ExecuteParallelParams extends ObservabilityContext {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   perStep?: boolean;
@@ -77,6 +79,7 @@ export async function executeParallel(
     pubsub,
     abortController,
     requestContext,
+    actor,
     outputWriter,
     disableScorers,
     perStep,
@@ -169,6 +172,7 @@ export async function executeParallel(
         pubsub,
         abortController,
         requestContext,
+        actor,
         outputWriter,
         disableScorers,
         perStep,
@@ -251,6 +255,7 @@ export interface ExecuteConditionalParams extends ObservabilityContext {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   perStep?: boolean;
@@ -275,6 +280,7 @@ export async function executeConditional(
     pubsub,
     abortController,
     requestContext,
+    actor,
     outputWriter,
     disableScorers,
     perStep,
@@ -324,6 +330,7 @@ export async function executeConditional(
             workflowId,
             mastra: engine.mastra!,
             requestContext,
+            actor,
             inputData: prevOutput,
             state: executionContext.state,
             retryCount: -1,
@@ -464,6 +471,7 @@ export async function executeConditional(
         pubsub,
         abortController,
         requestContext,
+        actor,
         outputWriter,
         disableScorers,
         perStep,
@@ -550,6 +558,7 @@ export interface ExecuteLoopParams extends ObservabilityContext {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -574,6 +583,7 @@ export async function executeLoop(
     pubsub,
     abortController,
     requestContext,
+    actor,
     outputWriter,
     disableScorers,
     serializedStepGraph,
@@ -644,6 +654,7 @@ export async function executeLoop(
       pubsub,
       abortController,
       requestContext,
+      actor,
       outputWriter,
       disableScorers,
       serializedStepGraph,
@@ -716,6 +727,7 @@ export async function executeLoop(
           runId,
           mastra: engine.mastra!,
           requestContext,
+          actor,
           inputData: result.output,
           state: executionContext.state,
           retryCount: -1,
@@ -817,6 +829,7 @@ export interface ExecuteForeachParams extends ObservabilityContext {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -841,6 +854,7 @@ export async function executeForeach(
     pubsub,
     abortController,
     requestContext,
+    actor,
     outputWriter,
     disableScorers,
     serializedStepGraph,
@@ -972,6 +986,7 @@ export async function executeForeach(
       pubsub,
       abortController,
       requestContext,
+      actor,
       skipEmits: true,
       outputWriter,
       disableScorers,

@@ -1,4 +1,5 @@
-import { Button, SearchFieldBlock, SelectFieldBlock, cn } from '@mastra/playground-ui';
+import { Button, cn } from '@mastra/playground-ui';
+import { SearchFieldBlock, SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { XIcon } from 'lucide-react';
 
 type TemplatesToolsProps = {

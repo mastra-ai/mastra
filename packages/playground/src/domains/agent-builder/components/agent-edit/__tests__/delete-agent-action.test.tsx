@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
-import { DropdownMenu, TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -33,6 +34,22 @@ vi.mock('@mastra/playground-ui', async () => {
 const { toast } = await import('@mastra/playground-ui');
 
 const BASE_URL = 'http://localhost:4111';
+
+type DependentsStub = {
+  dependents: Array<{ id: string; name: string }>;
+  hiddenCount?: number;
+};
+
+const stubAgentDependents = (agentId: string, payload: DependentsStub = { dependents: [] }) => {
+  server.use(
+    http.get(`${BASE_URL}/api/stored/agents/${agentId}/dependents`, () =>
+      HttpResponse.json({
+        dependents: payload.dependents,
+        hiddenCount: payload.hiddenCount ?? 0,
+      }),
+    ),
+  );
+};
 
 const installRadixDomShims = () => {
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
@@ -70,6 +87,7 @@ describe('DeleteAgentPanelButton', () => {
     navigate.mockReset();
     (toast.success as ReturnType<typeof vi.fn>).mockReset();
     (toast.error as ReturnType<typeof vi.fn>).mockReset();
+    stubAgentDependents('agent-123');
   });
 
   afterEach(() => {
@@ -132,6 +150,9 @@ describe('DeleteAgentPanelButton', () => {
     );
 
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+    await waitFor(() => {
+      expect((screen.getByTestId('agent-builder-delete-agent-confirm') as HTMLButtonElement).disabled).toBe(false);
+    });
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent-confirm'));
 
     await waitFor(() => {
@@ -157,7 +178,11 @@ describe('DeleteAgentPanelButton', () => {
     );
 
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
-    fireEvent.click(await screen.findByTestId('agent-builder-delete-agent-confirm'));
+    const confirmBtn = await screen.findByTestId('agent-builder-delete-agent-confirm');
+    await waitFor(() => {
+      expect((confirmBtn as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(confirmBtn);
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalled();
@@ -176,6 +201,7 @@ describe('DeleteAgentMenuItem', () => {
     navigate.mockReset();
     (toast.success as ReturnType<typeof vi.fn>).mockReset();
     (toast.error as ReturnType<typeof vi.fn>).mockReset();
+    stubAgentDependents('agent-123');
   });
 
   afterEach(() => {
@@ -199,5 +225,95 @@ describe('DeleteAgentMenuItem', () => {
 
     const dialog = await screen.findByTestId('agent-builder-delete-agent-dialog');
     expect(dialog.textContent).toContain('My Agent');
+  });
+});
+
+describe('DeleteAgentDialog impact warnings', () => {
+  beforeAll(() => {
+    installRadixDomShims();
+  });
+
+  beforeEach(() => {
+    navigate.mockReset();
+    (toast.success as ReturnType<typeof vi.fn>).mockReset();
+    (toast.error as ReturnType<typeof vi.fn>).mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('renders nothing when there are no dependents and no hidden references', async () => {
+    stubAgentDependents('agent-123', { dependents: [], hiddenCount: 0 });
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+    await screen.findByTestId('agent-builder-delete-agent-dialog');
+    await waitFor(() => {
+      expect((screen.getByTestId('agent-builder-delete-agent-confirm') as HTMLButtonElement).disabled).toBe(false);
+    });
+    expect(screen.queryByTestId('agent-impact-warnings')).toBeNull();
+  });
+
+  it('lists dependent agents by name and truncates after five', async () => {
+    stubAgentDependents('agent-123', {
+      dependents: [
+        { id: 'a1', name: 'Alpha' },
+        { id: 'a2', name: 'Beta' },
+        { id: 'a3', name: 'Gamma' },
+        { id: 'a4', name: 'Delta' },
+        { id: 'a5', name: 'Epsilon' },
+        { id: 'a6', name: 'Zeta' },
+        { id: 'a7', name: 'Eta' },
+      ],
+    });
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const warning = await screen.findByTestId('agent-impact-dependents-warning');
+    expect(warning.textContent).toContain('used as a sub-agent');
+    expect(screen.getAllByTestId('agent-impact-dependent')).toHaveLength(5);
+    expect((await screen.findByTestId('agent-impact-dependents-more')).textContent).toContain('2 more');
+  });
+
+  it('surfaces hiddenCount for cross-workspace private dependents', async () => {
+    stubAgentDependents('agent-123', { dependents: [], hiddenCount: 3 });
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const hidden = await screen.findByTestId('agent-impact-hidden-warning');
+    expect(hidden.textContent).toContain('3 other private agents also reference this agent.');
+  });
+
+  it('singularizes the hiddenCount line when exactly one private dependent', async () => {
+    stubAgentDependents('agent-123', { dependents: [], hiddenCount: 1 });
+
+    render(
+      <Wrapper>
+        <DeleteAgentPanelButton agentId="agent-123" agentName="My Agent" />
+      </Wrapper>,
+    );
+
+    fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
+
+    const hidden = await screen.findByTestId('agent-impact-hidden-warning');
+    expect(hidden.textContent).toContain('1 other private agent also references this agent.');
   });
 });

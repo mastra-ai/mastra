@@ -51,8 +51,8 @@ The Builder derives a deterministic id from the inline config and persists the s
 
 `configuration.agent.workspace` accepts a `StorageWorkspaceRef`:
 
-- **`{ type: 'inline', config }`** — embeds a serialized workspace snapshot directly on the agent. Useful for per-agent, ad-hoc configurations.
-- **`{ type: 'id', workspaceId }`** — references a workspace already registered on the `Mastra` instance via `new Mastra({ workspace })` or `mastra.addWorkspace(...)`. Use this for shared, named workspaces.
+- **`{ type: 'inline', config }`**: Embeds a serialized workspace snapshot directly on the agent. Useful for per-agent, ad-hoc configurations.
+- **`{ type: 'id', workspaceId }`**: References a workspace already registered on the `Mastra` instance via `new Mastra({ workspace })` or `mastra.addWorkspace(...)`. Use this for shared, named workspaces.
 
 See the [StorageWorkspaceRef reference](/reference/editor/storage-workspace-ref) for both variants.
 
@@ -64,7 +64,7 @@ For cloud deployments, swap `LocalFilesystem` / `LocalSandbox` for managed provi
 
 ## Related
 
-- [Workspace overview](/docs/workspace/overview) — the underlying workspace model.
-- [Filesystem](/docs/workspace/filesystem) and [Sandbox](/docs/workspace/sandbox) — the building blocks.
-- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — the full `workspace` field schema.
-- [Configuration](/docs/agent-builder/configuration) — wire `workspace` alongside the rest of the Builder config.
+- [Workspace overview](/docs/workspace/overview): The underlying workspace model.
+- [Filesystem](/docs/workspace/filesystem) and [Sandbox](/docs/workspace/sandbox): The building blocks.
+- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults): The full `workspace` field schema.
+- [Configuration](/docs/agent-builder/configuration): Wire `workspace` alongside the rest of the Builder config.

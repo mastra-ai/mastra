@@ -280,6 +280,54 @@ Converts text to speech and sends it to the model. Can accept either a string or
 
 Returns: `Promise<void>` (responses are emitted via `speaker` and `writing` events)
 
+### `sendContext()`
+
+Sends conversation history into the live session without triggering a model response. Use this to seed prior turns (e.g. from Mastra Memory) on a cold connect so the model has context before the user speaks.
+
+```typescript
+await voice.sendContext([
+  { role: 'user', content: 'What is the weather?' },
+  { role: 'assistant', content: 'It is 72°F in San Francisco.' },
+])
+
+// Model stays silent until the user actually speaks.
+await voice.send(micStream)
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'turns',
+    type: 'IncrementalTurn[]',
+    description:
+      'Prior conversation turns to seed into the session. Each turn has a `role` ("user" or "assistant") and `content` string. Both roles are supported on newer models (e.g. `gemini-2.5-flash-native-audio-preview-12-2025`). Some older models only accept user-role turns.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Optional configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'turnComplete',
+            type: 'boolean',
+            description: 'Whether to mark the turn as complete and trigger a model response.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+Returns: `Promise<void>`
+
 ### `listen()`
 
 Processes audio input for speech recognition. Takes a readable stream of audio data and returns the transcribed text.
@@ -526,7 +574,7 @@ Native-audio Gemini Live models — any model whose ID contains `native-audio`, 
 - The model's spoken reply is delivered as audio plus an `output_audio_transcription` transcript and surfaced as `writing` with `role: 'assistant'`.
 - The model's internal reasoning is delivered as `modelTurn.parts.text` and surfaced as `thinking`.
 
-On non-native-audio models there is no `output_audio_transcription` channel, so `modelTurn.parts.text` is the spoken response itself and is emitted as `writing`; the `thinking` event does not fire.
+On non-native-audio models there is no `output_audio_transcription` channel, so `modelTurn.parts.text` is the spoken response itself and is emitted as `writing`; the `thinking` event doesn't fire.
 
 Input transcription, output transcription, and barge-in detection (`realtime_input_config.activity_handling = 'START_OF_ACTIVITY_INTERRUPTS'`) are enabled automatically in the setup payload — no extra configuration is required.
 

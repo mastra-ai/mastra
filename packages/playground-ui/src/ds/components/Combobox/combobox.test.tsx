@@ -74,6 +74,53 @@ describe('Combobox', () => {
     });
   });
 
+  it('supports multiple selections and fires onValueChange with selected values', async () => {
+    const onValueChange = vi.fn();
+    render(
+      <Combobox
+        multiple
+        options={options}
+        value={['openai']}
+        onValueChange={onValueChange}
+        placeholder="Pick providers"
+        searchPlaceholder="Search providers"
+      />,
+    );
+
+    expect(screen.getByRole('combobox').textContent).toContain('1 selected');
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const anthropic = await screen.findByRole('option', { name: 'Anthropic' });
+    fireEvent.pointerDown(anthropic, { pointerType: 'mouse' });
+    fireEvent.click(anthropic, { detail: 1 });
+
+    await waitFor(() => {
+      expect(onValueChange).toHaveBeenCalledWith(['openai', 'anthropic']);
+    });
+  });
+
+  it('selects the first filtered item when pressing Enter after searching', async () => {
+    const onValueChange = vi.fn();
+    renderCombobox({ onValueChange });
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    const search = await screen.findByPlaceholderText('Search providers');
+    fireEvent.input(search, { target: { value: 'goo' }, inputType: 'insertText' });
+
+    const google = await screen.findByRole('option', { name: 'Google' });
+    await waitFor(() => {
+      expect(google.hasAttribute('data-highlighted')).toBe(true);
+    });
+
+    fireEvent.keyDown(search, { key: 'Enter', code: 'Enter' });
+
+    await waitFor(() => {
+      expect(onValueChange).toHaveBeenCalledWith('google');
+    });
+  });
+
   it('renders a pill-shaped trigger from the shared buttonVariants recipe', () => {
     render(<Combobox options={options} placeholder="Pick provider" />);
 

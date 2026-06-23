@@ -206,7 +206,7 @@ export class CompositeAuth
     }
   }
 
-  getLoginUrl(redirectUri: string, state: string): string {
+  getLoginUrl(redirectUri: string, state: string): string | Promise<string> {
     const sso = this.findProvider(isSSOProvider);
     if (!sso) throw new Error('No SSO provider configured in CompositeAuth');
     return sso.getLoginUrl(redirectUri, state);

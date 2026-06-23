@@ -15,6 +15,7 @@ Use `BrowserViewer` when your agent drives a browser through a CLI tool like `br
 
 ```typescript title="src/mastra/index.ts"
 import { Workspace, LocalSandbox } from '@mastra/core/workspace'
+import { Memory } from '@mastra/memory'
 import { BrowserViewer } from '@mastra/browser-viewer'
 import { Agent } from '@mastra/core/agent'
 
@@ -33,6 +34,7 @@ const browserAgent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
   instructions: 'You are a web automation assistant.',
+  memory: new Memory(),
 })
 ```
 
@@ -53,7 +55,7 @@ When `cdpUrl` is provided, `BrowserViewer` connects to the existing browser inst
   content={[
   {
     name: 'cli',
-    type: "'agent-browser' | 'browser-use' | 'browse-cli'",
+    type: "'agent-browser' | 'browser-use' | 'browse' | 'browse-cli'",
     description: 'Which CLI the agent uses for browser automation. The CLI connects to Chrome via the CDP URL.',
   },
   {
@@ -144,7 +146,7 @@ When `cdpUrl` is provided, `BrowserViewer` connects to the existing browser inst
   },
   {
     name: 'cli',
-    type: "'agent-browser' | 'browser-use' | 'browse-cli'",
+    type: "'agent-browser' | 'browser-use' | 'browse' | 'browse-cli'",
     description: 'The CLI provider this instance is configured for.',
   },
   {
@@ -271,9 +273,9 @@ await viewer.injectKeyboardEvent({
 
 Each CLI must be installed separately. Each also publishes a [skill](/docs/workspace/skills) that teaches the agent its commands and workflows. When a CLI command runs through `workspace_execute_command`, Mastra detects it and injects the CDP URL automatically using the correct flag.
 
-Unlike SDK providers, `BrowserViewer` does not provide agent tools. The agent uses CLI commands through `workspace_execute_command` instead.
+Unlike SDK providers, `BrowserViewer` doesn't provide agent tools. The agent uses CLI commands through `workspace_execute_command` instead.
 
-### [agent-browser](https://www.npmjs.com/package/agent-browser)
+### [`agent-browser`](https://www.npmjs.com/package/agent-browser)
 
 Config value: `'agent-browser'` · CDP flag: `--cdp`
 
@@ -282,7 +284,7 @@ npm install -g agent-browser
 npx skills add vercel-labs/agent-browser
 ```
 
-### [browser-use](https://pypi.org/project/browser-use/)
+### [`browser-use`](https://pypi.org/project/browser-use/)
 
 Config value: `'browser-use'` · CDP flag: `--cdp-url`
 
@@ -291,13 +293,13 @@ pip install browser-use
 npx skills add browser-use/browser-use --skill browser-use
 ```
 
-### [browse-cli](https://www.npmjs.com/package/@browserbasehq/browse-cli) (command: `browse`)
+### [`browse`](https://www.npmjs.com/package/browse) (command: `browse`)
 
-Config value: `'browse-cli'` · CDP flag: `--ws`
+Config value: `'browse'` · CDP flag: `--ws`
 
 ```bash
-npm install -g @browserbasehq/browse-cli
-npx skills add browserbase/skills
+npm install -g browse
+browse skills install
 ```
 
 ## Related

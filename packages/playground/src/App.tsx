@@ -28,7 +28,6 @@ import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
-import AgentChannelsPage from './pages/agents/agent-channels';
 import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentReview from './pages/agents/agent-review';
@@ -59,6 +58,7 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import ExperimentPage from './pages/experiments/experiment';
+import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -441,6 +441,7 @@ export const routes: RouteObject[] = [
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
+          { path: 'settings', element: <Agent view="settings" /> },
           ...(isExperimentalFeatures
             ? [
                 { path: 'editor', element: <AgentPlayground /> },
@@ -449,7 +450,12 @@ export const routes: RouteObject[] = [
               ]
             : []),
           { path: 'traces', element: <AgentTraces /> },
-          { path: 'channels', element: <AgentChannelsPage /> },
+          {
+            // Channels is configuration, not a tool tab: it now lives in the
+            // agent settings view. Keep old links working.
+            path: 'channels',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/settings?tab=channels`),
+          },
         ],
       },
 
@@ -458,6 +464,12 @@ export const routes: RouteObject[] = [
         path: '/tools/:toolId',
         element: <Tool />,
         handle: navHandleWithChildren('/tools', [{ id: 'tool', Component: ToolCrumb, heading: 'Tool' }]),
+      },
+
+      {
+        path: '/integrations',
+        element: <IntegrationsPage />,
+        handle: { crumbs: [{ id: 'integrations', label: 'Integrations' }] } satisfies RouteHeaderHandle,
       },
 
       { path: '/processors', element: <Processors />, handle: navHandle('/processors') },

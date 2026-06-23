@@ -1,5 +1,6 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Chip, DataList as EntityList, DataListSkeleton as EntityListSkeleton, AgentIcon } from '@mastra/playground-ui';
+import { DataList as EntityList, DataListSkeleton as EntityListSkeleton, AgentIcon } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
 import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
@@ -42,7 +43,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
   }
 
   return (
-    <EntityList columns={COLUMNS}>
+    <EntityList columns={COLUMNS} variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>

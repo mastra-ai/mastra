@@ -903,6 +903,7 @@ describe('GCSFilesystem SDK Operations', () => {
       mockFile.getMetadata.mockResolvedValueOnce([
         {
           size: 1024,
+          contentType: 'text/plain',
           timeCreated: '2024-01-15T10:30:00Z',
           updated: '2024-01-16T12:00:00Z',
         },
@@ -915,9 +916,43 @@ describe('GCSFilesystem SDK Operations', () => {
         path: '/docs/readme.txt',
         type: 'file',
         size: 1024,
+        mimeType: 'text/plain',
         createdAt: new Date('2024-01-15T10:30:00Z'),
         modifiedAt: new Date('2024-01-16T12:00:00Z'),
       });
+    });
+
+    it('surfaces Content-Type metadata as mimeType for image objects', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValueOnce([true]);
+      mockFile.getMetadata.mockResolvedValueOnce([
+        {
+          size: 2048,
+          contentType: 'image/png',
+          timeCreated: '2024-01-15T10:30:00Z',
+          updated: '2024-01-15T10:30:00Z',
+        },
+      ]);
+
+      const stat = await fs.stat('/images/screenshot.png');
+
+      expect(stat.mimeType).toBe('image/png');
+    });
+
+    it('falls back to extension-based mimeType when Content-Type is missing', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValueOnce([true]);
+      mockFile.getMetadata.mockResolvedValueOnce([
+        {
+          size: 2048,
+          timeCreated: '2024-01-15T10:30:00Z',
+          updated: '2024-01-15T10:30:00Z',
+        },
+      ]);
+
+      const stat = await fs.stat('/images/no-content-type.png');
+
+      expect(stat.mimeType).toBe('image/png');
     });
 
     it('returns directory stat when file not found but prefix exists', async () => {

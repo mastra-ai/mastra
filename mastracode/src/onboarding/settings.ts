@@ -8,6 +8,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
+import { AuthStorage } from '../auth/storage.js';
+import { buildOpenAICodexOAuthFetch } from '../providers/openai-codex.js';
 import { getAppDataDir } from '../utils/project.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
@@ -971,6 +973,10 @@ export function checkProfileProviderMismatch(
   return undefined;
 }
 
+function browserRecordingOptions() {
+  return { outputDir: join(getAppDataDir(), 'browser-recordings') };
+}
+
 /**
  * Create a browser instance from settings.
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
@@ -992,20 +998,41 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
 
   if (provider === 'stagehand') {
     const { StagehandBrowser } = await import('@mastra/stagehand');
-    const stagehandOpts = {
+    const stagehandOpts: Record<string, unknown> = {
       env: stagehand?.env ?? 'LOCAL',
       apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
       projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
       preserveUserDataDir: stagehand?.preserveUserDataDir,
+      recording: browserRecordingOptions(),
     };
+
+    // When the user has an active OpenAI subscription (OAuth), configure
+    // Stagehand's model to use the subscription. The subscription takes priority
+    // over OPENAI_API_KEY since it provides access through the user's plan.
+    // The custom fetch rewrites requests to the Codex endpoint and injects the
+    // OAuth access token as the Bearer credential.
+    const authStorage = new AuthStorage();
+    const cred = authStorage.get('openai-codex');
+    if (cred?.type === 'oauth') {
+      stagehandOpts.model = {
+        modelName: 'openai/gpt-4.1-mini',
+        apiKey: 'codex-oauth',
+        fetch: buildOpenAICodexOAuthFetch({ authStorage }),
+      };
+    }
+
     return cdpUrl
       ? new StagehandBrowser({ ...launchConfig, cdpUrl, scope: 'shared', ...stagehandOpts })
       : new StagehandBrowser({ ...launchConfig, ...stagehandOpts });
   } else if (provider === 'agent-browser') {
     const { AgentBrowser } = await import('@mastra/agent-browser');
+    const agentBrowserOpts = {
+      storageState: agentBrowser?.storageState,
+      recording: browserRecordingOptions(),
+    };
     return cdpUrl
-      ? new AgentBrowser({ ...launchConfig, cdpUrl, scope: 'shared', storageState: agentBrowser?.storageState })
-      : new AgentBrowser({ ...launchConfig, storageState: agentBrowser?.storageState, scope });
+      ? new AgentBrowser({ ...launchConfig, cdpUrl, scope: 'shared', ...agentBrowserOpts })
+      : new AgentBrowser({ ...launchConfig, ...agentBrowserOpts, scope });
   }
 
   throw new Error(`Unsupported browser provider: ${provider}`);

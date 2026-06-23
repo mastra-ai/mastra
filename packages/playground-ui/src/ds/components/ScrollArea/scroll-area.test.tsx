@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ScrollArea } from './scroll-area';
 
@@ -109,6 +109,62 @@ describe('ScrollArea', () => {
       );
       const content = getContent(getViewport());
       expect(content.querySelector('[data-testid="child"]')?.textContent).toBe('hello');
+    });
+  });
+
+  describe('scrollButtons', () => {
+    it('uses Base UI overflow data attributes to control horizontal button visibility', () => {
+      renderArea({ orientation: 'horizontal', scrollButtons: true });
+
+      const leftButton = screen.getByRole('button', { name: 'Scroll left' });
+      const rightButton = screen.getByRole('button', { name: 'Scroll right' });
+
+      expect(leftButton.className).toContain('hidden');
+      expect(leftButton.className).toContain('group-data-[overflow-x-start]/scroll-area:flex');
+      expect(rightButton.className).toContain('hidden');
+      expect(rightButton.className).toContain('group-data-[overflow-x-end]/scroll-area:flex');
+    });
+
+    it('scrolls the viewport with configured button speed', () => {
+      renderArea({
+        orientation: 'horizontal',
+        scrollButtons: { scrollSpeed: 30, scrollIntervalTime: 50, rightLabel: 'Scroll tags right' },
+      });
+      const viewport = getViewport();
+      const scrollBy = vi.fn();
+      Object.defineProperty(viewport, 'scrollBy', { configurable: true, value: scrollBy });
+
+      const button = screen.getByRole('button', { name: 'Scroll tags right' });
+      fireEvent.pointerDown(button);
+      fireEvent.pointerUp(button);
+
+      expect(scrollBy).toHaveBeenCalledWith({ left: 60, behavior: 'smooth' });
+    });
+
+    it('clamps scroll button numeric options to safe positive values', () => {
+      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+      renderArea({
+        orientation: 'horizontal',
+        scrollButtons: { scrollSpeed: -30, scrollIntervalTime: 0, rightLabel: 'Scroll tags right' },
+      });
+      const viewport = getViewport();
+      const scrollBy = vi.fn();
+      Object.defineProperty(viewport, 'scrollBy', { configurable: true, value: scrollBy });
+
+      const button = screen.getByRole('button', { name: 'Scroll tags right' });
+      fireEvent.pointerDown(button);
+      fireEvent.pointerUp(button);
+
+      expect(scrollBy).toHaveBeenCalledWith({ left: 2, behavior: 'smooth' });
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 16);
+      setIntervalSpy.mockRestore();
+    });
+
+    it('does not render scroll buttons for vertical-only scroll areas', () => {
+      renderArea({ scrollButtons: true });
+
+      expect(screen.queryByRole('button', { name: 'Scroll left' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Scroll right' })).toBeNull();
     });
   });
 });

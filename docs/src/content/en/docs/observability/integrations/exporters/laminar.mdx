@@ -90,7 +90,7 @@ export const mastra = new Mastra({
 For advanced usage, including the full `MastraExporter` options and multi-agent trace examples, see [Laminar's Mastra integration guide](https://laminar.sh/docs/tracing/integrations/mastra).
 :::
 
-Mastra also ships a standalone [`LaminarExporter`](/reference/observability/tracing/exporters/laminar) in `@mastra/laminar` that sends spans over OTLP/HTTP. It cannot inherit an active OTel context and does not fully map Mastra spans to Laminar's native format, so use the `@lmnr-ai/lmnr` integration above for `observe()` wrappers, multi-agent root spans, and accurate Laminar rendering.
+Mastra also ships a standalone [`LaminarExporter`](/reference/observability/tracing/exporters/laminar) in `@mastra/laminar` that sends spans over OTLP/HTTP. It can't inherit an active OTel context and doesn't fully map Mastra spans to Laminar's native format, so use the `@lmnr-ai/lmnr` integration above for `observe()` wrappers, multi-agent root spans, and accurate Laminar rendering.
 
 ## Related
 
