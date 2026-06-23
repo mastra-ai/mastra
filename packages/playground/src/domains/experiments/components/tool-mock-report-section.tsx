@@ -1,7 +1,8 @@
 'use client';
 
 import type { ToolMockReport } from '@mastra/client-js';
-import { DataPanel, Notice } from '@mastra/playground-ui';
+import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { WrenchIcon } from 'lucide-react';
 
 export interface ToolMockReportSectionProps {

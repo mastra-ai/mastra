@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -23,7 +24,7 @@ const BASE_URL = 'http://localhost:4111';
 // editor) so the test stays deterministic in jsdom. The real client, React Query, data
 // hooks and the dialog's own logic all run unmocked against MSW.
 vi.mock('@mastra/playground-ui', async importOriginal => {
-  const actual = await importOriginal<typeof import('@mastra/playground-ui')>();
+  const actual = await importOriginal<typeof PlaygroundUi>();
 
   type SelectStubProps = PropsWithChildren<{
     value?: string;

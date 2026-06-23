@@ -1,3 +1,4 @@
+import type { DatasetItemToolMock } from '@mastra/client-js';
 import {
   Button,
   ButtonsGroup,
@@ -10,7 +11,6 @@ import {
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
-import type { DatasetItemToolMock } from '@mastra/client-js';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';

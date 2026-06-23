@@ -6,9 +6,9 @@ import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideD
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon } from 'lucide-react';
-import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
 import { collectToolMocks } from './collect-tool-mocks';
 import type { ToolCallTrajectoryStep } from './collect-tool-mocks';
+import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
 
 type TraceAsItemDialogProps = {
   /** Full span record — if provided, used directly (no fetch). */

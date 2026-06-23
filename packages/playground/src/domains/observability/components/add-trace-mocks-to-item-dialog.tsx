@@ -1,5 +1,6 @@
 'use client';
 
+import type { DatasetItemToolMock } from '@mastra/client-js';
 import {
   Button,
   CodeEditor,
@@ -15,16 +16,15 @@ import {
 } from '@mastra/playground-ui';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
-import type { DatasetItemToolMock } from '@mastra/client-js';
-import { EyeIcon, WrenchIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
+import { EyeIcon, WrenchIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { collectToolMocks } from './collect-tool-mocks';
+import type { ToolCallTrajectoryStep } from './collect-tool-mocks';
 import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { collectToolMocks } from './collect-tool-mocks';
-import type { ToolCallTrajectoryStep } from './collect-tool-mocks';
 
 type AddTraceMocksToItemDialogProps = {
   traceId?: string;

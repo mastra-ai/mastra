@@ -1,5 +1,6 @@
 'use client';
 
+import type { DatasetItemToolMock } from '@mastra/client-js';
 import {
   Button,
   CodeEditor,
@@ -14,7 +15,6 @@ import {
 } from '@mastra/playground-ui';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
-import type { DatasetItemToolMock } from '@mastra/client-js';
 import { DatabaseIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
