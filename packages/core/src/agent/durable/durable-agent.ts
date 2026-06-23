@@ -444,11 +444,16 @@ export class DurableAgent<
     }
     fork.#innerPubsub = this.#innerPubsub;
     fork.source = this.source;
-    fork._agentNetworkAppend = this._agentNetworkAppend;
+    // `_agentNetworkAppend` is a private base-class flag; copy it via an indexed
+    // cast (the same idiom the base uses in `toRawConfig()`) so the fork mirrors
+    // `Agent.__fork()` without widening the field's visibility.
+    (fork as unknown as { _agentNetworkAppend: unknown })._agentNetworkAppend = (
+      this as unknown as { _agentNetworkAppend: unknown }
+    )._agentNetworkAppend;
 
     // DurableAgent intentionally diverges from Agent's `stream` signature, so the
-    // structural assignment to the base `Agent` return type is bridged here — the
-    // editor's fork-then-mutate contract only relies on the base Agent surface.
+    // re-wrapped fork is bridged to the base `Agent` return type here. The editor's
+    // fork-then-mutate contract only relies on the base Agent surface.
     return fork as unknown as Agent<TAgentId, TTools, TOutput>;
   }
 
