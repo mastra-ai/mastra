@@ -888,7 +888,7 @@ export const useChat = ({
     _requestContext.current = undefined;
   };
 
-  const approveToolCall = async (toolCallId: string) => {
+  const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
 
@@ -906,6 +906,7 @@ export const useChat = ({
           threadId,
           toolCallId,
           approved: true,
+          ...(resumeData !== undefined ? { resumeData } : {}),
           requestContext: _requestContext.current,
         });
         pendingToolApprovalIdsRef.current.delete(toolCallId);

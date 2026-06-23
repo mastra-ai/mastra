@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { AskUserBadge, isAskUserTool, isAskUserSuspendPayload } from './badges/ask-user-badge';
 import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
@@ -169,6 +170,19 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   // of inline to avoid repetition. Hide them entirely here.
   if (isTaskTool(toolName)) {
     return null;
+  }
+
+  // ask_user tool renders a custom interactive badge for answering questions.
+  if (isAskUserTool(toolName) && suspendedToolMetadata?.suspendPayload && isAskUserSuspendPayload(suspendedToolMetadata.suspendPayload)) {
+    return (
+      <AskUserBadge
+        toolCallId={toolCallId}
+        toolName={toolName}
+        suspendPayload={suspendedToolMetadata.suspendPayload}
+        result={result}
+        isGenerateMode={metadata?.mode === 'generate'}
+      />
+    );
   }
 
   if (isBackgroundTaskResult) {
