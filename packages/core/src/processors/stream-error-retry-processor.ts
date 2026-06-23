@@ -4,9 +4,18 @@ import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './in
 
 export type StreamErrorRetryMatcher = (error: unknown) => boolean;
 
+export type StreamErrorRetryDelayMs = number | ((args: ProcessAPIErrorArgs) => number | Promise<number>);
+
 export type StreamErrorRetryProcessorOptions = {
   maxRetries?: number;
   matchers?: StreamErrorRetryMatcher[];
+  /**
+   * Optional delay (ms) to wait before signaling a retry. Accepts a number or an
+   * async function evaluated with the current error args. Negative/non-finite
+   * values are clamped to 0. Defaults to 0 (retry immediately), preserving the
+   * existing behavior for consumers that do not configure a delay.
+   */
+  delayMs?: StreamErrorRetryDelayMs;
 };
 
 const DEFAULT_MAX_RETRIES = 1;
@@ -126,16 +135,62 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
 
   readonly #maxRetries: number;
   readonly #matchers: StreamErrorRetryMatcher[];
+  readonly #delayMs: StreamErrorRetryDelayMs | undefined;
 
   constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.#matchers = [...DEFAULT_MATCHERS, ...(options.matchers ?? [])];
+    this.#delayMs = options.delayMs;
   }
 
-  async processAPIError({ error, retryCount }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
+  async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
+    const { error, retryCount, abortSignal } = args;
     if (retryCount >= this.#maxRetries) return;
     if (!isRetryableStreamError(error, this.#matchers)) return;
 
+    if (this.#delayMs !== undefined) {
+      await waitDelay(this.#delayMs, args, abortSignal);
+    }
+
     return { retry: true };
   }
+}
+
+function clampDelayMs(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+async function waitDelay(
+  delayMs: StreamErrorRetryDelayMs,
+  args: ProcessAPIErrorArgs,
+  abortSignal?: AbortSignal,
+): Promise<void> {
+  const delay = typeof delayMs === 'function' ? await delayMs(args) : delayMs;
+  const ms = clampDelayMs(delay);
+  if (ms <= 0) return;
+
+  if (!abortSignal) {
+    await new Promise<void>(resolve => setTimeout(resolve, ms));
+    return;
+  }
+
+  await new Promise<void>(resolve => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const onAbort = () => {
+      if (timeout) clearTimeout(timeout);
+      abortSignal.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    // Register before checking aborted to close the race window where
+    // abort fires between the check and addEventListener.
+    abortSignal.addEventListener('abort', onAbort, { once: true });
+    if (abortSignal.aborted) {
+      onAbort();
+      return;
+    }
+    timeout = setTimeout(() => {
+      abortSignal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+  });
 }

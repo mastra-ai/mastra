@@ -1,6 +1,6 @@
 'use client';
 
-import type { DatasetItem } from '@mastra/client-js';
+import type { DatasetItem, DatasetItemToolMock } from '@mastra/client-js';
 import { Button, ButtonsGroup, toast } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
@@ -17,6 +17,7 @@ import {
   RouteIcon,
   TagIcon,
   Trash2,
+  WrenchIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
@@ -25,7 +26,7 @@ import { useLinkComponent } from '@/lib/framework';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
-  field: 'input' | 'groundTruth';
+  field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -70,6 +71,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
   const [groundTruthValue, setGroundTruthValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
   const [trajectoryValue, setTrajectoryValue] = useState('');
+  const [toolMocksValue, setToolMocksValue] = useState('');
   const [requestContextValue, setRequestContextValue] = useState('');
 
   // Validation error state
@@ -85,6 +87,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
+      setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
       setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
@@ -144,6 +147,24 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       }
     }
 
+    // Parse toolMocks: empty string means clear, otherwise must be a JSON array
+    let parsedToolMocks: DatasetItemToolMock[] | undefined;
+    if (toolMocksValue.trim()) {
+      try {
+        const parsed = JSON.parse(toolMocksValue);
+        if (!Array.isArray(parsed)) {
+          toast.error('Tool Mocks must be a JSON array');
+          return;
+        }
+        parsedToolMocks = parsed as DatasetItemToolMock[];
+      } catch {
+        toast.error('Tool Mocks must be valid JSON');
+        return;
+      }
+    } else {
+      parsedToolMocks = [];
+    }
+
     // Parse requestContext if provided
     let parsedRequestContext: Record<string, unknown> | undefined;
     if (requestContextValue.trim()) {
@@ -163,6 +184,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
         expectedTrajectory: parsedTrajectory,
+        toolMocks: parsedToolMocks,
         requestContext: parsedRequestContext,
       });
 
@@ -186,6 +208,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
     setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
+    setToolMocksValue(item.toolMocks?.length ? JSON.stringify(item.toolMocks, null, 2) : '');
     setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
     setIsEditing(false);
     setValidationErrors(null);
@@ -280,6 +303,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
               setMetadataValue={setMetadataValue}
               trajectoryValue={trajectoryValue}
               setTrajectoryValue={setTrajectoryValue}
+              toolMocksValue={toolMocksValue}
+              setToolMocksValue={setToolMocksValue}
               requestContextValue={requestContextValue}
               setRequestContextValue={setRequestContextValue}
               validationErrors={validationErrors}
@@ -331,6 +356,11 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                     codeStr={JSON.stringify(item.expectedTrajectory, null, 2)}
                   />
                 )}
+                <DataPanel.CodeSection
+                  title="Tool Mocks"
+                  icon={<WrenchIcon />}
+                  codeStr={JSON.stringify(item.toolMocks ?? [], null, 2)}
+                />
                 {item.requestContext != null && (
                   <DataPanel.CodeSection
                     title="Request Context"

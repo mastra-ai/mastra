@@ -5,6 +5,7 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 
 export type ScenarioName =
   | 'startup'
+  | 'abort-followup'
   | 'branch-context-long-name'
   | 'active-signal-followup'
   | 'autocomplete-wrapping-navigation'
