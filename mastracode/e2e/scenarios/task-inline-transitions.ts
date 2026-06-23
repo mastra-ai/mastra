@@ -5,7 +5,6 @@ export const taskInlineTransitionsScenario: McE2eScenario = {
   name: 'task-inline-transitions',
   description: 'Drive task tools through AIMock and verify completed and cleared inline TUI transitions.',
   testName: 'renders completed and cleared task inline transitions from real task tools',
-  skipReason: 'current main task tool request shape no longer matches the AIMock inline-transition fixture',
   useOpenAIModel: true,
   aimockFixture: 'task-inline-transitions.json',
   async run({ terminal, runtime }) {
@@ -14,9 +13,14 @@ export const taskInlineTransitionsScenario: McE2eScenario = {
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
     terminal.submit('Exercise task inline transitions through real task tools.');
 
-    await runtime.waitForScreenText(/Tasks\s+\[2\/2 completed\]/i, terminal, 8_000);
     await runtime.waitForScreenText(/✓\s+Plan task inline e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/✓\s+Finish task inline e2e/i, terminal, 8_000);
+    await runtime.waitForOutputText(/Tasks/i, terminal, 8_000);
+    await runtime.waitForOutputText(/✓ Plan task inline e2e/i, terminal, 8_000);
+    await runtime.waitForOutputText(/▶ Finishing task inline e2e/i, terminal, 8_000);
+    await runtime.waitForOutputText(/Tasks\s+\[2\/2 completed\]/i, terminal, 8_000);
+    await runtime.waitForOutputText(/Plan task inline e2e/i, terminal, 8_000);
+    await runtime.waitForOutputText(/Finish task inline e2e/i, terminal, 8_000);
 
     await runtime.waitForScreenText(/Tasks cleared/i, terminal, 8_000);
     await runtime.waitForScreenText(/Task inline transition e2e complete\./i, terminal, 8_000);
