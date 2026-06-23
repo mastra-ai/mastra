@@ -1,5 +1,6 @@
 {
   "attachment": [
+    "hf:MiniMaxAI/MiniMax-M3",
     "hf:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
     "hf:meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "hf:moonshotai/Kimi-K2.6"
