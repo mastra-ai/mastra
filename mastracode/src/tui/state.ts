@@ -41,6 +41,7 @@ import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 export interface PendingSignalMessage {
   component: Component;
   text: string;
+  images?: Array<{ data: string; mimeType: string }>;
   isInterjection?: boolean;
 }
 
@@ -234,8 +235,8 @@ export interface TUIState {
   pendingSlashCommands: string[];
   /** Pending user-message component ids for queued slash commands */
   pendingSlashCommandMessageIds: string[];
-  /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
-  pendingApprovalDismiss: (() => void) | null;
+  /** Active approval dialog dismiss callback — called on Ctrl+C or user interruption to unblock the dialog */
+  pendingApprovalDismiss: ((context?: { reason?: string; message?: string }) => void) | null;
 
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;
