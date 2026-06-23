@@ -187,5 +187,14 @@
     },
     "name": "Build a B2B SaaS sec…",
     "tools": {}
+  },
+  "9dJyMnazLXneYeBNnKLUi": {
+    "instructions": "",
+    "model": {
+      "name": "gemini-2.5-flash",
+      "provider": "google"
+    },
+    "name": "Build an agent that …",
+    "tools": {}
   }
 }
