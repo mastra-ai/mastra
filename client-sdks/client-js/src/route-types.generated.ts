@@ -87676,6 +87676,7 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Response = {
     traceId: string | null;
     status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
     tags?: (string[] | null) | undefined;
+    /** Diagnostic receipt for item-level tool mocks */
     toolMockReport?:
       | (
           | {
@@ -87772,6 +87773,7 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Respons
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
+  /** Diagnostic receipt for item-level tool mocks */
   toolMockReport?:
     | (
         | {
