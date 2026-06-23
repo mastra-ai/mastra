@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { BuilderAvailableModelsResponse, BuilderSettingsResponse } from '@mastra/client-js';
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui';
@@ -187,6 +186,49 @@ describe('AgentBuilderAgentsPage', () => {
     await act(() => new Promise(resolve => setTimeout(resolve, 0)));
     expect(screen.queryByText('No agents yet')).toBeNull();
     expect(screen.queryByText('Create an agent')).toBeNull();
+  });
+
+  it('renders the resolved author name returned by the API in each row', async () => {
+    server.use(
+      ...defaultHandlers(),
+      ...userHandler({ id: 'user-1' }),
+      http.get(`${BASE_URL}/api/stored/agents`, () => {
+        return HttpResponse.json({
+          agents: [
+            {
+              ...baseAgent,
+              id: 'agent-1',
+              name: 'Alpha',
+              description: 'd1',
+              authorId: 'user-1',
+              author: { id: 'user-1', name: 'Alice Doe' },
+            },
+            {
+              ...baseAgent,
+              id: 'agent-2',
+              name: 'Beta',
+              description: 'd2',
+              authorId: 'user-2',
+              author: { id: 'user-2', email: 'bob@example.com' },
+            },
+          ],
+          total: 2,
+          page: 1,
+          perPage: 100,
+          hasMore: false,
+        });
+      }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha')).toBeTruthy();
+      expect(screen.getByText('Beta')).toBeTruthy();
+    });
+
+    expect(screen.getAllByText('Alice Doe').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('bob@example.com').length).toBeGreaterThan(0);
   });
 
   it('seeds the builder-available-models cache so the model picker is warm on the create/edit page', async () => {

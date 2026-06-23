@@ -9,7 +9,7 @@ packages:
 
 `StorageBrowserRef` is the inline browser configuration attached to a stored agent. The `provider` id is resolved at hydration time against the [`BrowserProvider`](/reference/editor/browser-provider) registered on [`MastraEditor.browsers`](/reference/editor/mastra-editor).
 
-It is the type used by [`BuilderAgentDefaults.browser`](/reference/editor/agent-builder/builder-agent-defaults) and by stored agent records.
+It's the type used by [`BuilderAgentDefaults.browser`](/reference/editor/agent-builder/builder-agent-defaults) and by stored agent records.
 
 ## Usage example
 
@@ -43,7 +43,7 @@ new MastraEditor({
 type StorageBrowserRef = { type: 'inline'; config: StorageBrowserConfig }
 ```
 
-There is no `{ type: 'id' }` variant for browsers — they are always inlined.
+A `{ type: 'id' }` variant for browsers isn't available — they're always inlined.
 
 ## Properties
 
@@ -147,7 +147,7 @@ The shape embedded under `config`. Defined in `@mastra/core/storage`.
 
 ## Hydration
 
-`StorageBrowserRef` is resolved lazily on `mastra.editor.agent.getById()`. The editor looks up `config.provider` on `MastraEditor.browsers` and calls `provider.createBrowser(config)`. If the provider is not registered, the editor logs a warning and returns `undefined` — the agent still loads, but without a browser.
+`StorageBrowserRef` is resolved lazily on `mastra.editor.agent.getById()`. The editor looks up `config.provider` on `MastraEditor.browsers` and calls `provider.createBrowser(config)`. If the provider isn't registered, the editor logs a warning and returns `undefined` — the agent still loads, but without a browser.
 
 ## Related
 

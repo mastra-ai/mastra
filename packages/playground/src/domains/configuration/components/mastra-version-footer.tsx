@@ -1,6 +1,4 @@
 import {
-  CodeBlock,
-  CopyButton,
   Spinner,
   Tooltip,
   TooltipContent,
@@ -15,6 +13,8 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui';
+import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MoveRight, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
@@ -39,8 +39,7 @@ const packageManagerCommands: Record<PackageManager, string> = {
 };
 
 const versionBadgeClassName =
-  'inline-flex h-[1.375rem] items-center gap-1.5 rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs font-semibold leading-none tracking-normal text-black/80 tabular-nums whitespace-nowrap dark:text-neutral6';
-const versionBadgeRailClassName = 'h-3.5 w-1 rounded-full bg-positive1';
+  'inline-flex h-[1.375rem] items-center rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs font-semibold leading-none tracking-normal text-black/80 tabular-nums whitespace-nowrap dark:text-neutral6';
 
 export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => {
   const { data, isLoading: isLoadingPackages } = useMastraPackages();
@@ -67,8 +66,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   if (isLoadingPackages) {
     return (
-      <div className="flex items-center justify-between gap-2 px-3 h-9">
-        <div className="animate-pulse h-3 w-12 bg-surface4 rounded" />
+      <div className="flex items-center justify-end gap-2 px-3 h-9">
         <div className="animate-pulse h-[1.125rem] w-20 bg-surface4 rounded-full" />
       </div>
     );
@@ -86,24 +84,25 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   return (
     <Dialog>
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 w-full px-3 py-1.5 min-h-9 rounded-lg text-left hover:bg-sidebar-nav-hover transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring"
-        >
-          <Txt as="span" variant="ui-sm" className="text-neutral3 font-serif mr-auto">
-            Mastra
-          </Txt>
-          <span className="flex flex-col items-end gap-1 shrink-0">
-            {isLoadingUpdates && <Spinner className="size-3 text-neutral3" />}
-            {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
-            {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
-            <span className={versionBadgeClassName}>
-              <span className={versionBadgeRailClassName} />v{mainVersion}
+      <div className="flex px-3 py-1.5">
+        <DialogTrigger asChild>
+          <button
+            type="button"
+            className="flex rounded-lg p-1 hover:bg-sidebar-nav-hover transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring"
+          >
+            <span className="relative inline-flex">
+              {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
+                <span className="absolute -right-1.5 -top-1.5 flex items-center gap-1">
+                  {isLoadingUpdates && <Spinner className="size-3 text-neutral3" />}
+                  {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
+                  {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
+                </span>
+              )}
+              <span className={versionBadgeClassName}>v{mainVersion}</span>
             </span>
-          </span>
-        </button>
-      </DialogTrigger>
+          </button>
+        </DialogTrigger>
+      </div>
       <PackagesModalContent
         packages={packageUpdates}
         isLoadingUpdates={isLoadingUpdates}

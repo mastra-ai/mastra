@@ -1,15 +1,17 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import { TripWire } from '../../agent';
 import { coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
+import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
-import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
+// Inlined to avoid importing structured-output.ts which pulls in the agent
+// barrel and creates an ESM init-time cycle.
+const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
@@ -702,9 +704,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 response: {
                   id: chunk.payload.id || '',
                   timestamp: (chunk.payload.metadata?.timestamp as Date) || new Date(),
+                  ...otherMetadata,
                   modelId:
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
-                  ...otherMetadata,
                   messages: chunk.payload.messages?.nonUser || [],
                   dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too

@@ -1,12 +1,28 @@
 /**
  * License validation for EE features.
+ *
+ * Validation is delegated to the Mastra license server via `LicenseClient`
+ * (POST {MASTRA_LICENSE_URL}/validate). The client validates in the
+ * background and caches the result; the synchronous helpers in this module
+ * read the cached state:
+ *
+ * - No license key configured → EE features disabled.
+ * - Key configured, validation pending → fail open (features enabled) until
+ *   the first server response settles the state.
+ * - Server says invalid/revoked/expired → EE features disabled.
+ * - Server unreachable → fail open with a 72h grace period for previously
+ *   validated licenses.
+ *
+ * `MASTRA_LICENSE_KEY` is the primary env var; `MASTRA_EE_LICENSE` is a
+ * supported legacy alias.
  */
+
+import { LicenseClient } from '../../license';
+import { hashTelemetryValue } from '../../telemetry/posthog';
 
 /**
  * License information.
  */
-import { hashTelemetryValue } from '../../telemetry/posthog';
-
 export interface LicenseInfo {
   /** Whether the license is valid */
   valid: boolean;
@@ -16,8 +32,8 @@ export interface LicenseInfo {
   features?: string[];
   /** Organization name */
   organization?: string;
-  /** License tier */
-  tier?: 'standard' | 'enterprise';
+  /** License plan tier (e.g. 'teams', 'enterprise') */
+  tier?: string;
 }
 
 export interface SafeLicenseSummary {
@@ -26,71 +42,96 @@ export interface SafeLicenseSummary {
   licenseHash?: string;
   anonymousId?: string;
   features?: string[];
-  tier?: 'standard' | 'enterprise';
+  tier?: string;
 }
 
-// Cached license validation result
-let cachedLicense: LicenseInfo | null = null;
-let cacheTimestamp = 0;
-const CACHE_TTL = 60 * 1000; // 1 minute
+/**
+ * Resolve the configured license key.
+ * `MASTRA_LICENSE_KEY` is primary; `MASTRA_EE_LICENSE` is a supported legacy alias.
+ */
+function getLicenseKey(): string | undefined {
+  return process.env['MASTRA_LICENSE_KEY'] || process.env['MASTRA_EE_LICENSE'];
+}
+
+let validationStarted = false;
+let hasWarnedAboutDevLicense = false;
 
 /**
- * Validate a license key and return license information.
+ * Get the shared LicenseClient and kick off background validation on first use.
+ */
+function getClient(): LicenseClient {
+  const client = LicenseClient.getInstance();
+  if (!validationStarted) {
+    validationStarted = true;
+    void client.validate().catch(() => {
+      // Background validation failures are handled inside LicenseClient
+      // (grace period / fail-open). Never let them surface here.
+    });
+  }
+  return client;
+}
+
+/**
+ * Start license validation against the license server.
  *
- * Currently implements a simple check for the presence of the license key.
- * In production, this would validate against a license server.
+ * Safe to call multiple times — the underlying client caches results and
+ * schedules its own background revalidation. Resolves to whether the license
+ * is currently considered valid.
+ */
+export function startLicenseValidation(): Promise<boolean> {
+  const client = LicenseClient.getInstance();
+  validationStarted = true;
+  return client.validate();
+}
+
+/**
+ * Validate the configured license and return license information.
  *
- * @param licenseKey - License key to validate
+ * Reflects the current server-backed validation state. The actual network
+ * validation happens in the background via `LicenseClient`, and only the
+ * configured key (env var) is ever validated — passing any other key
+ * returns invalid.
+ *
+ * @param licenseKey - Optional key to check; must match the configured key.
  * @returns License information
  */
 export function validateLicense(licenseKey?: string): LicenseInfo {
-  const key = licenseKey ?? process.env['MASTRA_EE_LICENSE'];
+  const configuredKey = getLicenseKey();
+  const key = licenseKey ?? configuredKey;
 
   if (!key) {
     return { valid: false };
   }
 
-  // TODO: Implement actual license validation
-  // For now, any non-empty key is considered valid
-  // In production, this would:
-  // 1. Verify signature of the license key
-  // 2. Check expiration date embedded in key
-  // 3. Optionally validate against license server
-
-  // Simple validation: key should be at least 32 characters
-  if (key.length < 32) {
+  // The client only ever validates the configured key, so its snapshot can't
+  // vouch for any other key the caller supplies.
+  if (licenseKey !== undefined && licenseKey !== configuredKey) {
     return { valid: false };
   }
 
+  const snap = getClient().getSnapshot();
+
   return {
-    valid: true,
-    features: ['user', 'session', 'sso', 'rbac', 'acl', 'fga', 'agent-builder'],
-    tier: 'enterprise',
+    valid: snap.status !== 'invalid',
+    features: snap.entitlements ?? undefined,
+    tier: snap.planTier ?? undefined,
+    expiresAt: snap.expiresAt ? new Date(snap.expiresAt) : undefined,
   };
 }
 
 /**
- * Check if EE features are enabled (valid license or cache).
+ * Check if EE features are enabled (valid or pending server validation).
  *
  * @returns True if EE features should be enabled
  */
 export function isLicenseValid(): boolean {
-  const now = Date.now();
-
-  // Return cached result if still valid
-  if (cachedLicense && now - cacheTimestamp < CACHE_TTL) {
-    return cachedLicense.valid;
+  if (!getLicenseKey()) {
+    return false;
   }
 
-  // Validate and cache
-  cachedLicense = validateLicense();
-  cacheTimestamp = now;
-
-  if (!cachedLicense.valid && process.env['MASTRA_EE_LICENSE']) {
-    console.warn('[mastra/auth-ee] Invalid or expired EE license. EE features are disabled.');
-  }
-
-  return cachedLicense.valid;
+  // 'valid' or 'pending' (fail open until the first server response).
+  // LicenseClient logs the failure reason when the server rejects the key.
+  return getClient().getSnapshot().status !== 'invalid';
 }
 
 /**
@@ -99,36 +140,35 @@ export function isLicenseValid(): boolean {
 export const isEELicenseValid = isLicenseValid;
 
 /**
- * Check if a specific EE feature is enabled.
+ * Check if a specific EE feature is enabled by the license entitlements.
  *
- * @param feature - Feature name to check
+ * @param feature - Feature name to check (e.g. 'rbac', 'fga', 'sso')
  * @returns True if the feature is enabled
  */
 export function isFeatureEnabled(feature: string): boolean {
-  if (!isLicenseValid()) {
+  if (!getLicenseKey()) {
     return false;
   }
 
-  // If license is valid but no features array, all features are enabled
-  if (!cachedLicense?.features) {
-    return true;
-  }
-
-  return cachedLicense.features.includes(feature);
+  return getClient().hasFeature(feature);
 }
 
 /**
  * Get the current license information.
  *
- * @returns License info or null if not validated yet
+ * @returns License info or null if no license key is configured
  */
 export function getLicenseInfo(): LicenseInfo | null {
-  return cachedLicense;
+  if (!getLicenseKey()) {
+    return null;
+  }
+
+  return validateLicense();
 }
 
 export function getSafeLicenseSummary(): SafeLicenseSummary {
-  const key = process.env['MASTRA_EE_LICENSE'];
-  const info = cachedLicense ?? validateLicense(key);
+  const key = getLicenseKey();
+  const info = validateLicense(key);
   const licenseHash = key ? hashTelemetryValue(key) : undefined;
 
   return {
@@ -141,12 +181,25 @@ export function getSafeLicenseSummary(): SafeLicenseSummary {
   };
 }
 
+export function warnIfDevEENeedsLicense(): void {
+  if (hasWarnedAboutDevLicense || !isDevEnvironment() || isLicenseValid()) {
+    return;
+  }
+
+  hasWarnedAboutDevLicense = true;
+  console.warn(
+    '[mastra/auth-ee] Mastra Enterprise features are enabled for local development, but no valid MASTRA_LICENSE_KEY is configured. These features will be disabled in production without a valid license. Contact us to get a production license: https://mastra.ai/contact',
+  );
+}
+
 /**
  * Clear the license cache (useful for testing).
+ * Resets the shared client so the next check re-reads env vars.
  */
 export function clearLicenseCache(): void {
-  cachedLicense = null;
-  cacheTimestamp = 0;
+  validationStarted = false;
+  hasWarnedAboutDevLicense = false;
+  LicenseClient.resetInstance();
 }
 
 /**
@@ -167,6 +220,7 @@ export function isDevEnvironment(): boolean {
  */
 export function isEEEnabled(): boolean {
   if (isDevEnvironment()) {
+    warnIfDevEENeedsLicense();
     return true;
   }
   return isLicenseValid();

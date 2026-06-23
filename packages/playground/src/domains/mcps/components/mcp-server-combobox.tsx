@@ -1,5 +1,6 @@
-import { Combobox, toast } from '@mastra/playground-ui';
-import type { ComboboxProps } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { useEffect } from 'react';
 import { useMCPServers } from '../hooks/use-mcp-servers';
 import { useLinkComponent } from '@/lib/framework';
@@ -24,7 +25,7 @@ export function MCPServerCombobox({
   emptyText = 'No MCP servers found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant,
   container,
 }: MCPServerComboboxProps) {
   const { data: mcpServers = [], isLoading, isError, error } = useMCPServers();

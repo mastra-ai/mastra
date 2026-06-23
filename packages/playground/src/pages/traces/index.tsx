@@ -1,14 +1,10 @@
 import { EntityType } from '@mastra/core/observability';
 import {
   Button,
-  DateTimeRangePicker,
   Label,
   NoTracesInfo,
-  Notice,
   PageLayout,
-  PropertyFilterCreator,
   SpanDataPanelView,
-  Switch,
   TraceDataPanelView,
   TracesErrorContent,
   TracesLayout,
@@ -31,6 +27,10 @@ import {
   useTraces,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { CircleSlash2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -246,8 +246,10 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       ? lightSpans?.find(s => s.spanId === anchorSpanId)
       : lightSpans?.find(s => s.parentSpanId == null);
     if (!anchorSpan) return;
-    url.handleSpanChange(anchorSpan.spanId);
-    url.handleSpanTabChange('scoring');
+    // Select span + switch to scoring in ONE URL update. Two separate calls race (each reads the
+    // same pre-update searchParams snapshot, last write wins) and the tab switch was lost on the
+    // first click.
+    url.handleSpanChangeWithTab(anchorSpan.spanId, 'scoring');
   }, [lightSpans, anchorSpanId, url]);
 
   const filtersApplied =

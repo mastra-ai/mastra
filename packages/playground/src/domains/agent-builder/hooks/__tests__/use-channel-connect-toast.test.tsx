@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { cleanup, render } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';

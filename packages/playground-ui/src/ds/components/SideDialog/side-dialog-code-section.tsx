@@ -17,7 +17,7 @@ import { useTheme } from '@/ds/components/ThemeProvider';
 function buildSideDialogDarkTheme(): Extension {
   return draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.8125rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -37,7 +37,7 @@ function buildSideDialogLightTheme(): Extension {
       fontSize: '0.8125rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',

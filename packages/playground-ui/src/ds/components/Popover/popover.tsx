@@ -2,20 +2,20 @@ import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import * as React from 'react';
 
 import { usePortalContainer } from '@/ds/primitives/portal-container';
+import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
 const Popover = PopoverPrimitive.Root;
 
 type PopoverTriggerProps = PopoverPrimitive.Trigger.Props & {
+  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
   asChild?: boolean;
 };
 
 const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
   ({ asChild, children, ...props }, ref) => {
-    const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
-
     return (
-      <PopoverPrimitive.Trigger ref={ref} {...renderProps} {...props}>
+      <PopoverPrimitive.Trigger ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
         {asChild ? undefined : children}
       </PopoverPrimitive.Trigger>
     );
@@ -24,13 +24,25 @@ const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
 PopoverTrigger.displayName = 'PopoverTrigger';
 
 type PopoverContentProps = PopoverPrimitive.Popup.Props &
-  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
+  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset' | 'collisionAvoidance'> & {
     /** Optional portal container, forwarded to `Popover.Portal`. */
     container?: HTMLElement | null;
   };
 
 const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
-  ({ className, container, align = 'center', alignOffset = 0, side = 'bottom', sideOffset = 4, ...props }, ref) => {
+  (
+    {
+      className,
+      container,
+      align = 'center',
+      alignOffset = 0,
+      side = 'bottom',
+      sideOffset = 4,
+      collisionAvoidance,
+      ...props
+    },
+    ref,
+  ) => {
     const classNameString = typeof className === 'string' ? className : undefined;
     // Default to the nearest SideDialog/Drawer popup so the content stays
     // interactive inside a modal drawer; an explicit `container` still wins.
@@ -43,6 +55,7 @@ const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
           alignOffset={alignOffset}
           side={side}
           sideOffset={sideOffset}
+          collisionAvoidance={collisionAvoidance}
           className="z-50 outline-none"
         >
           <PopoverPrimitive.Popup

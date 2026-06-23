@@ -25,7 +25,7 @@ import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
-import { ToolNotFoundError } from '../errors';
+import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
 type AddToolMetadataOptions = {
@@ -59,6 +59,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   logger,
   agentId,
   mastra,
+  requireToolApproval: requireToolApprovalFromFactory,
+  actor,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -326,8 +328,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         return {
-          error: new ToolNotFoundError(
-            `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
+          // The workflow step output crosses the evented engine's pubsub boundary, where
+          // `JSON.stringify` reduces Error instances to `{}`. Serialize to a plain object
+          // here so `name`/`message`/`stack` survive and the consumer can reify the Error.
+          error: serializeToolError(
+            new ToolNotFoundError(
+              `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
+            ),
           ),
           ...inputData,
         };
@@ -351,7 +358,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
 
       try {
-        const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
+        // The factory closure value is authoritative when set: a function-valued policy
+        // doesn't survive `RequestContext.toJSON()` across the evented engine's event bus,
+        // so reading only from requestContext would lose it. Fall back to requestContext for
+        // direct callers (e.g. legacy tests) that seed the value there.
+        const requireToolApproval =
+          requireToolApprovalFromFactory ?? requestContext.get('__mastra_requireToolApproval');
 
         let resumeDataFromArgs: any = undefined;
         let args: any = inputData.args;
@@ -512,6 +524,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           workspace: _internal?.stepWorkspace,
           // Forward requestContext so tools receive values set by the workflow step
           requestContext,
+          actor,
           // Let tools that read thread history mid-stream (e.g. forked subagents
           // cloning the parent thread) drain the save queue so the store reflects
           // the latest user/assistant messages before they read.
@@ -647,7 +660,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-
           for (const message of assistantMessages) {
             const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
               message.content.metadata?.pendingToolApprovals) as Record<string, any>;
@@ -683,8 +695,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (args === null || args === undefined) {
           return {
-            error: new Error(
-              `Tool "${inputData.toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+            error: serializeToolError(
+              new Error(
+                `Tool "${inputData.toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+              ),
             ),
             ...inputData,
           };
@@ -701,19 +715,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const toolFgaProvider = mastra?.getServer?.()?.fga;
         if (toolFgaProvider) {
           const fgaUser = requestContext?.get('user');
-          const { checkFGA, FGADeniedError } = await import('../../../auth/ee/fga-check');
-          if (!fgaUser) {
-            throw new FGADeniedError(
-              { id: 'unknown' },
-              { type: 'tool', id: inputData.toolName },
-              MastraFGAPermissions.TOOLS_EXECUTE,
-            );
-          }
+          const { checkFGA } = await import('../../../auth/ee/fga-check');
           await checkFGA({
             fgaProvider: toolFgaProvider,
             user: fgaUser,
             resource: { type: 'tool', id: inputData.toolName },
             permission: MastraFGAPermissions.TOOLS_EXECUTE,
+            requestContext,
+            actor,
           });
         }
 
@@ -1160,7 +1169,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           throw error;
         }
         return {
-          error: error as Error,
+          error: serializeToolError(error),
           ...inputData,
         };
       }

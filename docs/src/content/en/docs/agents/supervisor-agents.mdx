@@ -185,7 +185,7 @@ The callback receives `messages` (the full conversation history), `primitiveId` 
 
 ## Subagent result context
 
-When a subagent completes, the supervisor model receives the subagent's text response in later iterations. Nested tool calls and subagent metadata, such as thread and resource IDs, are not added to the supervisor model context.
+When a subagent completes, the supervisor model receives the subagent's text response in later iterations. Nested tool calls and subagent metadata, such as thread and resource IDs, aren't added to the supervisor model context.
 
 Application code and UI integrations can still inspect the raw delegation result, including `subAgentToolResults`, from the tool result payload. This keeps debugging and display data available without sending nested tool arguments or outputs back into the supervisor's next model call.
 
@@ -298,7 +298,7 @@ controller.abort()
 
 ## Task completion scoring
 
-Task completion scorers validate whether the task is complete after each iteration. If validation fails, the supervisor continues iterating. Feedback from failed scorers is included in the conversation context so subagents can see what was missing.
+Agents don't always produce a complete, correct output on the first try. Task completion scorers can help with that by validating whether the task is complete after each iteration. If validation fails, the supervisor continues iterating. Feedback from failed scorers is included in the conversation context so subagents can see what was missing.
 
 ```typescript
 import { createScorer } from '@mastra/core/evals'
@@ -324,6 +324,44 @@ const stream = await supervisor.stream('Research AI in education', {
   },
 })
 ```
+
+### Rubric scorer
+
+The built-in rubric scorer lets you define what "correct" looks like as a checklist and have the agent self-evaluate and iterate until every criterion is satisfied or `maxSteps` is reached.
+
+It works as an **LLM-as-judge** scorer: a separate grader model reviews the agent's output against the rubric after each iteration. If every required criterion passes, the loop ends. If anything falls short, per-criterion feedback is injected back into the conversation and the agent tries again.
+
+This is most effective for tasks with clear, verifiable success criteria. You can use it like so:
+
+```typescript title="src/mastra/agents/rubric-scorer.ts"
+import { Agent } from '@mastra/core/agent'
+import { createRubricScorer } from '@mastra/evals/scorers/prebuilt'
+
+const supervisor = new Agent({
+  id: 'supervisor',
+  instructions: 'You coordinate research and writing using specialized agents.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  agents: { researchAgent, writingAgent },
+})
+
+const rubricScorer = createRubricScorer({
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  criteria: [
+    { description: 'The response includes an analysis section' },
+    { description: 'The response includes concrete recommendations' },
+  ],
+})
+
+const stream = await supervisor.stream('Research AI in education', {
+  maxSteps: 10,
+  isTaskComplete: {
+    scorers: [rubricScorer],
+    strategy: 'all',
+  },
+})
+```
+
+For full API details, see the [rubric scorer reference](/reference/evals/rubric).
 
 ## Writing effective instructions
 

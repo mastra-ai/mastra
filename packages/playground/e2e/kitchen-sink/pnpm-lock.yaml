@@ -41,35 +41,35 @@ importers:
         specifier: link:../../../memory
         version: link:../../../memory
       ai:
-        specifier: ^5.0.179
-        version: 5.0.193(zod@4.4.3)
+        specifier: ^5.0.196
+        version: 5.0.203(zod@4.4.3)
       mastra:
         specifier: link:../../../cli
         version: link:../../../cli
       msw:
-        specifier: ^2.13.6
-        version: 2.14.6(@types/node@22.19.19)(typescript@5.9.3)
+        specifier: ^2.14.6
+        version: 2.14.6(@types/node@22.19.20)(typescript@5.9.3)
       zod:
-        specifier: ^4.3.6
+        specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
       '@types/node':
-        specifier: 22.19.19
-        version: 22.19.19
+        specifier: 22.19.20
+        version: 22.19.20
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
 
 packages:
 
-  '@ai-sdk/gateway@2.0.94':
-    resolution: {integrity: sha512-sH4QfvKYODzwSby8Q10QfryICqI0aDAnGxJKPULkS8sNnQ3MM2s88+7cMwDpdK9kA5FYgExS/IERDpF1Hp3QoQ==}
+  '@ai-sdk/gateway@2.0.102':
+    resolution: {integrity: sha512-5OxMbtF4AFeyHjKS2smzCYDvjkE+nWktLCS0xsWNnI71cP0mTKXqkygta5lq1WTytVVkonLMP9J0OqEbteBzfQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@3.0.25':
-    resolution: {integrity: sha512-CvsRu+32Y8a167s+lrIBtsybvgTHp8j9y+6BeTvLeoW3Q+okw/b4CnNUFOLIXsRaKHQKAH+IHNJPYWywfpw0LA==}
+  '@ai-sdk/provider-utils@3.0.26':
+    resolution: {integrity: sha512-dNciNI4knep6z3cqDNng7yORCcBnEDBHZYj8rJLcLn9pLzEtNVkf6WLg9HR6AnVDDRxHsUeGAEqyF8M+FAtRgg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -136,8 +136,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@types/node@22.19.19':
-    resolution: {integrity: sha512-dyh/xO2Fh5bYrfWaaqGrRQQGkNdmYw6AmaAUvYeUMNTWQtvb796ikLdmTchRmOlOiIJ1TDXfWgVx1QkUlQ6Hew==}
+  '@types/node@22.19.20':
+    resolution: {integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==}
 
   '@types/set-cookie-parser@2.4.10':
     resolution: {integrity: sha512-GGmQVGpQWUe5qglJozEjZV/5dyxbOOZ0LHe/lqyWssB88Y4svNfst0uqBVscdDeIKl5Jy5+aPSvy7mI9tYRguw==}
@@ -149,8 +149,8 @@ packages:
     resolution: {integrity: sha512-Fw28YZpRnA3cAHHDlkt7xQHiJ0fcL+NRcIqsocZQUSmbzeIKRpwttJjik5ZGanXP+vlA4SbTg+AbA3bP363l+w==}
     engines: {node: '>= 20'}
 
-  ai@5.0.193:
-    resolution: {integrity: sha512-qyVpDNcjRearWaJYMVmrxAITtW+Y8OSnPZFjNssEbCCaYQMY14UaBY+S9nA3zPay3865v2YnN+KVKhG0dmtALw==}
+  ai@5.0.203:
+    resolution: {integrity: sha512-U50l+Np0IDzkUJ59QOBb80y3x1QH8+XJqzoIIxkO756mPlOuoRfj80CFIBKtaHmDSTJoEAMdt0iaaDOqMCGZkQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -206,8 +206,8 @@ packages:
     resolution: {integrity: sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==}
     engines: {node: 6.* || 8.* || >= 10.*}
 
-  graphql@16.14.0:
-    resolution: {integrity: sha512-BBvQ/406p+4CZbTpCbVPSxfzrZrbnuWSP1ELYgyS6B+hNeKzgrdB4JczCa5VZUBQrDa9hUngm0KnexY6pJRN5Q==}
+  graphql@16.14.2:
+    resolution: {integrity: sha512-Chq1s4CY7jmh8gO2qvLIJyfCDIN+EHLFW/9iShnp1z8FjBQMoodWP1kDC36VAMXXIvAjj4ARa7ntfAV2BrjsbA==}
     engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
 
   headers-polyfill@5.0.1:
@@ -279,19 +279,19 @@ packages:
     resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
     engines: {node: '>=20'}
 
-  tldts-core@7.4.2:
-    resolution: {integrity: sha512-nwEyF4vl4RSJjwSjBUmOSxc3BFPoIFdlRthJ6e+5v9P3bHNsoD06UjuqMUspqp7vsEZ1beaHi1km+optiE17yA==}
+  tldts-core@7.4.3:
+    resolution: {integrity: sha512-27ep5H9PzdBrNd5OFM/j3WCU8F3kPwM9D0BOaOf7uYfxMJfyr0K5Tjj69Gri+sZlh2WXd5buIm47NuPF29CDiw==}
 
-  tldts@7.4.2:
-    resolution: {integrity: sha512-kCwffuaH8ntKtygnWe1b4BJKWiCUH30n5KfoTr6IchcXOwR7chAOFJxFrH3vjANafUYrIA4a7SDL+nn7SiR4Sw==}
+  tldts@7.4.3:
+    resolution: {integrity: sha512-A3BDQBeeukYPzB4QdQ1DtdlUmp4x2OCH8n5UVhEWbyANxNep8GavottKzd1xYKFJKjUgMyPT7EzOfnBO55s8Sg==}
     hasBin: true
 
   tough-cookie@6.0.1:
     resolution: {integrity: sha512-LktZQb3IeoUWB9lqR5EWTHgW/VTITCXg4D21M+lvybRVdylLrRMnqaIONLVb5mav8vM19m44HIcGq4qASeu2Qw==}
     engines: {node: '>=16'}
 
-  type-fest@5.6.0:
-    resolution: {integrity: sha512-8ZiHFm91orbSAe2PSAiSVBVko18pbhbiB3U9GglSzF/zCGkR+rxpHx6sEMCUm4kxY4LjDIUGgCfUMtwfZfjfUA==}
+  type-fest@5.7.0:
+    resolution: {integrity: sha512-1URUxUqfHFM1c+zfSPsa3gnkO7Aq21qyH75SIduNYz4SzY964rn1X2vCMQaHSHhktiw+0kPa2iyb6PUpXqB6Vg==}
     engines: {node: '>=20'}
 
   typescript@5.9.3:
@@ -326,14 +326,14 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/gateway@2.0.94(zod@4.4.3)':
+  '@ai-sdk/gateway@2.0.102(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.25(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.26(zod@4.4.3)
       '@vercel/oidc': 3.1.0
       zod: 4.4.3
 
-  '@ai-sdk/provider-utils@3.0.25(zod@4.4.3)':
+  '@ai-sdk/provider-utils@3.0.26(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
       '@standard-schema/spec': 1.1.0
@@ -346,30 +346,30 @@ snapshots:
 
   '@inquirer/ansi@2.0.7': {}
 
-  '@inquirer/confirm@6.1.1(@types/node@22.19.19)':
+  '@inquirer/confirm@6.1.1(@types/node@22.19.20)':
     dependencies:
-      '@inquirer/core': 11.2.1(@types/node@22.19.19)
-      '@inquirer/type': 4.0.7(@types/node@22.19.19)
+      '@inquirer/core': 11.2.1(@types/node@22.19.20)
+      '@inquirer/type': 4.0.7(@types/node@22.19.20)
     optionalDependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
 
-  '@inquirer/core@11.2.1(@types/node@22.19.19)':
+  '@inquirer/core@11.2.1(@types/node@22.19.20)':
     dependencies:
       '@inquirer/ansi': 2.0.7
       '@inquirer/figures': 2.0.7
-      '@inquirer/type': 4.0.7(@types/node@22.19.19)
+      '@inquirer/type': 4.0.7(@types/node@22.19.20)
       cli-width: 4.1.0
       fast-wrap-ansi: 0.2.2
       mute-stream: 3.0.0
       signal-exit: 4.1.0
     optionalDependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
 
   '@inquirer/figures@2.0.7': {}
 
-  '@inquirer/type@4.0.7(@types/node@22.19.19)':
+  '@inquirer/type@4.0.7(@types/node@22.19.20)':
     optionalDependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
 
   '@mswjs/interceptors@0.41.9':
     dependencies:
@@ -395,23 +395,23 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@types/node@22.19.19':
+  '@types/node@22.19.20':
     dependencies:
       undici-types: 6.21.0
 
   '@types/set-cookie-parser@2.4.10':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
 
   '@types/statuses@2.0.6': {}
 
   '@vercel/oidc@3.1.0': {}
 
-  ai@5.0.193(zod@4.4.3):
+  ai@5.0.203(zod@4.4.3):
     dependencies:
-      '@ai-sdk/gateway': 2.0.94(zod@4.4.3)
+      '@ai-sdk/gateway': 2.0.102(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.25(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.26(zod@4.4.3)
       '@opentelemetry/api': 1.9.0
       zod: 4.4.3
 
@@ -455,7 +455,7 @@ snapshots:
 
   get-caller-file@2.0.5: {}
 
-  graphql@16.14.0: {}
+  graphql@16.14.2: {}
 
   headers-polyfill@5.0.1:
     dependencies:
@@ -468,14 +468,14 @@ snapshots:
 
   json-schema@0.4.0: {}
 
-  msw@2.14.6(@types/node@22.19.19)(typescript@5.9.3):
+  msw@2.14.6(@types/node@22.19.20)(typescript@5.9.3):
     dependencies:
-      '@inquirer/confirm': 6.1.1(@types/node@22.19.19)
+      '@inquirer/confirm': 6.1.1(@types/node@22.19.20)
       '@mswjs/interceptors': 0.41.9
       '@open-draft/deferred-promise': 3.0.0
       '@types/statuses': 2.0.6
       cookie: 1.1.1
-      graphql: 16.14.0
+      graphql: 16.14.2
       headers-polyfill: 5.0.1
       is-node-process: 1.2.0
       outvariant: 1.4.3
@@ -485,7 +485,7 @@ snapshots:
       statuses: 2.0.2
       strict-event-emitter: 0.5.1
       tough-cookie: 6.0.1
-      type-fest: 5.6.0
+      type-fest: 5.7.0
       until-async: 3.0.2
       yargs: 17.7.2
     optionalDependencies:
@@ -525,17 +525,17 @@ snapshots:
 
   tagged-tag@1.0.0: {}
 
-  tldts-core@7.4.2: {}
+  tldts-core@7.4.3: {}
 
-  tldts@7.4.2:
+  tldts@7.4.3:
     dependencies:
-      tldts-core: 7.4.2
+      tldts-core: 7.4.3
 
   tough-cookie@6.0.1:
     dependencies:
-      tldts: 7.4.2
+      tldts: 7.4.3
 
-  type-fest@5.6.0:
+  type-fest@5.7.0:
     dependencies:
       tagged-tag: 1.0.0
 

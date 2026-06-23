@@ -1247,6 +1247,18 @@ export type ConditionalVariant<T> = StorageConditionalVariant<T>;
 export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
+ * Resolved author identity. Returned by the server when an auth provider is
+ * configured and the agent's `authorId` could be looked up. All fields except
+ * `id` are optional — providers may not expose every field.
+ */
+export interface ResolvedAuthor {
+  id: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+/**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
@@ -1255,6 +1267,7 @@ export interface StoredAgentResponse {
   status: string;
   activeVersionId?: string;
   authorId?: string;
+  author?: ResolvedAuthor;
   visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -1394,11 +1407,23 @@ export type ExportStoredAgentParams = Partial<
   Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
 >;
 
+export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
+  changeMessage?: string;
+  userName?: string;
+  inspectOnly?: boolean;
+};
+
 export interface ExportStoredAgentResponse {
   agentId: string;
   fileName: string;
   content: string;
   config: Record<string, unknown>;
+}
+
+export interface OpenStoredAgentChangeRequestResponse {
+  id?: string | number;
+  url: string;
+  ref?: string;
 }
 
 export interface UpdateStoredAgentParams {

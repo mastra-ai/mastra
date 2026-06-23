@@ -11,16 +11,29 @@ jobs:
   delete-spam:
     # Only run on the main repository, not on forks
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     permissions:
-      issues: write
       contents: read
 
     steps:
-      - name: Delete spam issues with GraphQL
-        uses: actions/github-script@v8
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          github-token: ${{ secrets.ISSUE_SPAM_PROTECTION_TOKEN }}
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+
+      - name: Delete spam issues with GraphQL
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          github-token: ${{ steps.app-auth.outputs.token }}
           script: |
             // Helper function to add delay between operations
             const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));

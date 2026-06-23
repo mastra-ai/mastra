@@ -7,7 +7,8 @@ import { TripWire } from '../agent/trip-wire';
 import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
 import { Tool } from '../tools';
-import { createStep, createWorkflow, isProcessor } from './workflow';
+import { createWorkflow } from './create';
+import { createStep, isProcessor } from './workflow';
 
 // Helper to create a mock MessageList
 function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
@@ -18,6 +19,8 @@ function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
       response: { db: () => messages.filter(m => m.role === 'assistant') },
     },
     add: vi.fn(),
+    addSignal: vi.fn(signal => signal),
+    markResponseMessageBoundary: vi.fn(),
     addSystem: vi.fn(),
     removeByIds: vi.fn(),
     startRecording: vi.fn(),
@@ -301,7 +304,8 @@ describe('createStep with Processor', () => {
       await step.execute({ inputData, outputWriter: writer } as any);
 
       expect(processInputStepMock).toHaveBeenCalledWith(expect.objectContaining({ sendSignal: expect.any(Function) }));
-      expect(messageList.add).toHaveBeenCalledWith(expect.objectContaining({ role: 'signal' }), 'input');
+      expect(messageList.markResponseMessageBoundary).toHaveBeenCalledTimes(1);
+      expect(messageList.addSignal).toHaveBeenCalledWith(expect.objectContaining({ tagName: 'system-reminder' }));
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
       expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-signal', transient: true }));
     });

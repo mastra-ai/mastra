@@ -1,5 +1,6 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { AlertDialog, Icon, Skeleton } from '@mastra/playground-ui';
+import { Icon, Skeleton } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import {
@@ -20,25 +21,33 @@ export interface ChatThreadsProps {
   onDelete: (threadId: string) => void;
   resourceId: string;
   resourceType: 'agent' | 'network';
+  embedded?: boolean;
 }
 
-export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
+export const ChatThreads = ({
+  threads,
+  isLoading,
+  threadId,
+  onDelete,
+  resourceId,
+  resourceType,
+  embedded = false,
+}: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
 
   const canDeleteThread = canDelete('memory');
-
-  if (isLoading) {
-    return <ChatThreadSkeleton />;
-  }
-
   const newThreadLink =
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
 
+  if (isLoading) {
+    return <ChatThreadSkeleton embedded={embedded} Link={Link} newThreadLink={newThreadLink} />;
+  }
+
   return (
     <>
-      <ThreadList>
+      <ThreadList embedded={embedded}>
         <ThreadListNewItem as={Link} to={newThreadLink}>
           <Icon>
             <Plus />
@@ -113,18 +122,44 @@ const DeleteThreadDialog = ({ open, onOpenChange, onDelete }: DeleteThreadDialog
   );
 };
 
-const ChatThreadSkeleton = () => (
-  <div className="p-4 w-full h-full space-y-2">
-    <div className="flex justify-end">
-      <Skeleton className="h-9 w-9" />
+const ChatThreadSkeleton = ({
+  embedded,
+  Link,
+  newThreadLink,
+}: {
+  embedded: boolean;
+  Link: ReturnType<typeof useLinkComponent>['Link'];
+  newThreadLink: string;
+}) => (
+  <ThreadList embedded={embedded} aria-label="Loading threads">
+    <div className="flex h-full w-full flex-col gap-1" data-testid="chat-threads-skeleton" aria-busy="true">
+      <ThreadListNewItem as={Link} to={newThreadLink}>
+        <Icon>
+          <Plus />
+        </Icon>
+        New Chat
+      </ThreadListNewItem>
+      <ThreadListSeparator />
+      <ThreadListItems>
+        <ThreadTitleSkeleton widthClassName="w-32" />
+        <ThreadTitleSkeleton widthClassName="w-24" />
+        <ThreadTitleSkeleton widthClassName="w-36" />
+        <ThreadTitleSkeleton widthClassName="w-28" />
+        <ThreadTitleSkeleton widthClassName="w-20" />
+      </ThreadListItems>
     </div>
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-  </div>
+  </ThreadList>
 );
+
+function ThreadTitleSkeleton({ widthClassName }: { widthClassName: string }) {
+  return (
+    <li className="group relative">
+      <div className="flex h-9 w-full min-w-0 items-center rounded-xl px-3">
+        <Skeleton className={`h-3 ${widthClassName}`} data-testid="chat-thread-title-skeleton" />
+      </div>
+    </li>
+  );
+}
 
 function isDefaultThreadName(name: string): boolean {
   const defaultPattern = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;

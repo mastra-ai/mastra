@@ -65,7 +65,7 @@ const makeSpyRenderers = () => {
     },
     Reasoning: part => {
       calls.Reasoning(part);
-      return <div data-testid="reasoning">{part.reasoning}</div>;
+      return <div data-testid="reasoning">{part.state ? `${part.reasoning}:${part.state}` : part.reasoning}</div>;
     },
     File: part => {
       calls.File(part);
@@ -108,7 +108,8 @@ const makeSpyRenderers = () => {
 const asPart = (part: unknown): AccumulatorPart => part as AccumulatorPart;
 
 const textPart = (text: string, textId?: string): AccumulatorPart => ({ type: 'text', text, textId });
-const reasoningPart = (reasoning: string): AccumulatorPart => asPart({ type: 'reasoning', reasoning });
+const reasoningPart = (reasoning: string, state?: 'streaming' | 'done'): AccumulatorPart =>
+  asPart({ type: 'reasoning', reasoning, state });
 const filePart = (): AccumulatorPart => asPart({ type: 'file', mimeType: 'image/png', data: 'AAAA' });
 const stepStartPart = (): AccumulatorPart => asPart({ type: 'step-start' });
 const toolInvocationPart = (toolCallId: string, toolName: string): AccumulatorPart =>
@@ -149,6 +150,14 @@ describe('MessageFactory', () => {
     expect(screen.getByTestId('reasoning').textContent).toBe('thinking');
     expect(calls.Reasoning).toHaveBeenCalledTimes(1);
     expect(calls.Text).not.toHaveBeenCalled();
+  });
+
+  it('passes streaming state to the Reasoning renderer', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    render(<MessageFactory message={makeMessage([reasoningPart('thinking', 'streaming')])} {...renderers} />);
+
+    expect(screen.getByTestId('reasoning').textContent).toBe('thinking:streaming');
+    expect(calls.Reasoning).toHaveBeenCalledWith(expect.objectContaining({ state: 'streaming' }));
   });
 
   it('renders file only via the File renderer', () => {
@@ -463,6 +472,37 @@ describe('MessageFactory', () => {
       );
 
       expect(screen.getByTestId('task').getAttribute('data-suppressed')).toBe('true');
+    });
+
+    it('wraps the parts walk with the Pending slot when status is pending', () => {
+      const { calls, renderers } = makeSpyRenderers();
+      const status: MessageStatusRenderers = {
+        Pending: props => <div data-testid="pending">{props.children}</div>,
+      };
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('sending this')], { status: 'pending' })}
+          status={status}
+          {...renderers}
+        />,
+      );
+
+      const pending = screen.getByTestId('pending');
+      expect(pending.querySelector('[data-testid="text"]')?.textContent).toBe('sending this');
+      expect(calls.Text).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls through to the bare parts walk when status is pending but no Pending slot is provided', () => {
+      const { calls, renderers } = makeSpyRenderers();
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('sending this')], { status: 'pending' })}
+          {...renderers}
+        />,
+      );
+
+      expect(screen.getByTestId('text').textContent).toBe('sending this');
+      expect(calls.Text).toHaveBeenCalledTimes(1);
     });
 
     it('wraps a replacement slot with a matching role wrapper', () => {

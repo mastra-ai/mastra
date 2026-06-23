@@ -121,7 +121,7 @@ const workosAuth = new MastraAuthWorkos({
 })
 ```
 
-This is useful when your JWT template already includes the exact FGA context Mastra needs, such as `organizationMembershipId`, tenant IDs, or service-principal identifiers. When `trustJwtClaims` is enabled, Mastra can fall back to those verified claims if a bearer token is not meant to round-trip through `workos.userManagement.getUser()`.
+This is useful when your JWT template already includes the exact FGA context Mastra needs, such as `organizationMembershipId`, tenant IDs, or service-principal identifiers. When `trustJwtClaims` is enabled, Mastra can fall back to those verified claims if a bearer token isn't meant to round-trip through `workos.userManagement.getUser()`.
 
 ### Custom authorization
 

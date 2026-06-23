@@ -9,7 +9,7 @@ packages:
 
 `DurableAgent` wraps an existing [`Agent`](/reference/agents/agent) with durable execution and resumable streams. It runs the agentic loop so that a client can disconnect and reconnect without missing events, and it streams those events over [PubSub](/docs/server/pubsub). Use it when a run must outlive a single request or survive a dropped connection.
 
-Create one with the [`createDurableAgent`](#createdurableagentoptions) factory, or use [`createEventedAgent`](#createeventedagentoptions) for fire-and-forget execution on the built-in workflow engine. For Inngest-powered execution, use `createInngestAgent` from `@mastra/inngest`.
+Create one with the [`createDurableAgent`](#createdurableagentoptions) factory, or use [`createEventedAgent`](#createeventedagentoptions) for fire-and-forget execution on the built-in workflow engine. For Inngest-powered execution, use [`createInngestAgent`](/reference/agents/inngest-agent) from `@mastra/inngest`.
 
 ## Usage example
 
@@ -103,7 +103,7 @@ Returns: `DurableAgent`
 
 ## `createEventedAgent(options)`
 
-Wraps an `Agent` with fire-and-forget durable execution on the built-in workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the underlying workflow runs non-blocking (via `startAsync`) instead of running to completion before the stream is wired up. Use it when you want the run to progress independently of the caller. It does not accept `id` or `name` overrides.
+Wraps an `Agent` with fire-and-forget durable execution on the built-in workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the underlying workflow runs non-blocking (via `startAsync`) instead of running to completion before the stream is wired up. Use it when you want the run to progress independently of the caller. It doesn't accept `id` or `name` overrides.
 
 ```typescript
 import { createEventedAgent } from '@mastra/core/agent/durable'
@@ -255,9 +255,35 @@ Returns: `Promise<DurableAgentStreamResult>`
 
 :::warning
 
-The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, do not call `cleanup()` — let the auto-cleanup timer handle it after the run finishes or errors. Auto-cleanup does not fire on suspended events.
+The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, don't call `cleanup()` — let the auto-cleanup timer handle it after the run finishes or errors. Auto-cleanup doesn't fire on suspended events.
 
 :::
+
+#### `prepare(messages, options?)`
+
+Prepares a run for durable execution without starting it. Registers the run in the internal registry and returns the serialized workflow input. Use this when you need to control when and how the workflow is triggered.
+
+```typescript
+const { runId, messageId, workflowInput, threadId, resourceId } = await durableAgent.prepare(
+  'Summarize the document',
+  {
+    memory: { threadId: 'thread-1', resourceId: 'user-1' },
+  },
+)
+```
+
+Returns:
+
+```typescript
+interface PrepareResult {
+  runId: string
+  messageId: string
+  workflowInput: any
+  registryEntry: object
+  threadId?: string
+  resourceId?: string
+}
+```
 
 ## Stream options
 
@@ -369,6 +395,13 @@ The `cleanup()` returned by `observe()` destroys the run's registry entries and 
     description: 'Structured output configuration.',
   },
   {
+    name: 'untilIdle',
+    type: 'boolean | { maxIdleMs?: number }',
+    isOptional: true,
+    description:
+      'When set, keeps the stream open across background-task continuations until the agent is idle. Pass `true` for the default 5-minute idle timeout, or `{ maxIdleMs }` to customise. Equivalent to the deprecated `streamUntilIdle()` method.',
+  },
+  {
     name: 'versions',
     type: 'object',
     isOptional: true,
@@ -463,6 +496,7 @@ interface DurableAgentStreamResult<OUTPUT = undefined> {
 
 ## Related
 
+- [`createInngestAgent()`](/reference/agents/inngest-agent)
 - [Agent class](/reference/agents/agent)
 - [PubSub](/docs/server/pubsub)
 - [`.getMemory()`](/reference/agents/getMemory)

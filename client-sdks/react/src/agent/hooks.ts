@@ -10,8 +10,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accumulateChunk,
   accumulateNetworkChunk,
+  CLIENT_MESSAGE_ID_KEY,
   finishStreamingAssistantMessage,
-  fromCoreUserMessageToMastraDBMessage,
+  fromCoreUserMessagesToMastraDBMessage,
 } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import { useMastraClient } from '../mastra-client-context';
@@ -77,9 +78,32 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
     })
     .map(message => {
       const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
-      const pendingToolApprovals = metadata?.pendingToolApprovals;
+
+      // A persisted/refetched thread must never show a stuck "sending" bubble
+      // and must never carry the optimistic correlation key: the pending status
+      // and its `clientMessageId` are transient UI state. The `clientMessageId`
+      // can survive into storage (it is sent to the server with the message), so
+      // strip it on every reload regardless of pending status; the rendered row
+      // key falls back to the stable server `id`.
+      const normalizedMessage =
+        metadata && (metadata.status === 'pending' || CLIENT_MESSAGE_ID_KEY in metadata)
+          ? (() => {
+              const { [CLIENT_MESSAGE_ID_KEY]: _omitClientMessageId, ...rest } = metadata;
+              const { status: _omitStatus, ...restWithoutStatus } = rest;
+              return {
+                ...message,
+                content: {
+                  ...message.content,
+                  metadata: metadata.status === 'pending' ? restWithoutStatus : rest,
+                },
+              };
+            })()
+          : message;
+
+      const normalizedMetadata = normalizedMessage.content?.metadata as MastraDBMessageMetadata | undefined;
+      const pendingToolApprovals = normalizedMetadata?.pendingToolApprovals;
       if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
-        return message;
+        return normalizedMessage;
       }
 
       const stillPending = Object.fromEntries(
@@ -88,17 +112,17 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
             approval &&
             typeof approval === 'object' &&
             typeof approval.toolCallId === 'string' &&
-            !toolCallHasOutput(message.content.parts, approval.toolCallId),
+            !toolCallHasOutput(normalizedMessage.content.parts, approval.toolCallId),
         ),
       );
 
-      const { pendingToolApprovals: _omit, ...restMetadata } = metadata;
+      const { pendingToolApprovals: _omit, ...restMetadata } = normalizedMetadata;
       const hasStillPending = Object.keys(stillPending).length > 0;
 
       return {
-        ...message,
+        ...normalizedMessage,
         content: {
-          ...message.content,
+          ...normalizedMessage.content,
           metadata: {
             ...restMetadata,
             mode: 'stream' as const,
@@ -173,6 +197,11 @@ export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
   clientTools?: ClientToolsInput;
   signalId?: string;
+  /**
+   * Client-generated correlation id stamped on the optimistic pending bubble
+   * and the outgoing message metadata so the server echo can reconcile them.
+   */
+  clientMessageId?: string;
 };
 
 export type NetworkArgs = SharedArgs & {
@@ -597,6 +626,7 @@ export const useChat = ({
     tracingOptions,
     clientTools,
     signalId,
+    clientMessageId,
   }: StreamArgs) => {
     const {
       frequencyPenalty,
@@ -722,7 +752,9 @@ export const useChat = ({
 
     try {
       const result = await agent.sendMessage({
-        message: messageContents,
+        message: clientMessageId
+          ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
+          : messageContents,
         resourceId: resourceId || agentId,
         threadId,
         ifIdle: {
@@ -763,7 +795,7 @@ export const useChat = ({
           onSignalEcho?.(resolvedSignalId);
           if (isThreadSignalUnsupportedError(signalError)) {
             markThreadSignalsUnsupported();
-            setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToMastraDBMessage)]);
+            setMessages(prev => [...prev, fromCoreUserMessagesToMastraDBMessage(coreUserMessages)]);
             await streamWithLegacyRoute();
             return;
           }
@@ -1077,19 +1109,37 @@ export const useChat = ({
       coreUserMessages.push(...args.coreUserMessages);
     }
 
-    const dbUserMessages = coreUserMessages.map(fromCoreUserMessageToMastraDBMessage);
-    const signalId =
+    // The whole user turn (text + any attachments) is merged into a single
+    // optimistic message so streaming renders one bubble, matching how
+    // memory/reload resolves the persisted multi-part user message.
+    const dbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
+    const clientSetId =
       mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
-        ? dbUserMessages[0]?.id
+        ? `client-set-${uuid()}`
         : undefined;
-    if (!signalId) {
-      setMessages(s => [...s, ...dbUserMessages]);
+    const signalId = clientSetId;
+    const clientMessageId = clientSetId;
+
+    if (signalId) {
+      // Signal path: append the user turn optimistically as `pending` with a
+      // visibly client-owned id. The server echo can replace the final message
+      // id while the matching client id reconciles the pending bubble.
+      const metadata: MastraDBMessageMetadata = {
+        ...dbUserMessage.content.metadata,
+        mode: 'stream',
+        status: 'pending',
+        [CLIENT_MESSAGE_ID_KEY]: clientMessageId,
+      };
+      const pendingMessage = { ...dbUserMessage, id: clientSetId, content: { ...dbUserMessage.content, metadata } };
+      setMessages(s => [...s, pendingMessage]);
+    } else {
+      setMessages(s => [...s, dbUserMessage]);
     }
 
     if (mode === 'generate') {
       await generate({ ...args, coreUserMessages });
     } else if (mode === 'stream') {
-      await stream({ ...args, coreUserMessages, signalId });
+      await stream({ ...args, coreUserMessages, signalId, clientMessageId });
     } else if (mode === 'network') {
       await network({ ...args, coreUserMessages });
     }

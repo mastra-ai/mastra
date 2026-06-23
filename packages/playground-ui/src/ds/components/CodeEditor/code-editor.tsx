@@ -24,7 +24,7 @@ export type CodeEditorLanguage = 'json' | 'markdown';
 function buildDarkTheme(): Extension {
   const baseTheme = draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.8rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -78,7 +78,7 @@ function buildDarkTheme(): Extension {
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
     '.cm-tooltip-autocomplete > ul': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
       color: 'var(--neutral6)',
@@ -119,7 +119,7 @@ function buildLightTheme(): Extension {
       fontSize: '0.8rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -154,7 +154,7 @@ function buildLightTheme(): Extension {
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
     '.cm-tooltip-autocomplete > ul': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
       color: 'var(--neutral6)',
@@ -236,6 +236,8 @@ export type CodeEditorProps = {
   autoFocus?: boolean;
   /** Show line numbers in the gutter (default: true) */
   lineNumbers?: boolean;
+  /** Wrap long lines within the editor viewport (default: true) */
+  lineWrapping?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
@@ -254,6 +256,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       schema,
       autoFocus,
       lineNumbers = true,
+      lineWrapping = true,
       editable,
       ...props
     },
@@ -265,11 +268,14 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const extensions = useMemo(() => {
       const exts: Extension[] = [];
 
+      if (lineWrapping) {
+        exts.push(EditorView.lineWrapping);
+      }
+
       if (language === 'json') {
         exts.push(jsonLanguage);
       } else if (language === 'markdown') {
         exts.push(markdown({ base: markdownLanguage, codeLanguages }));
-        exts.push(EditorView.lineWrapping);
       }
 
       if (highlightVariables && language === 'markdown') {
@@ -285,7 +291,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable]);
+    }, [language, highlightVariables, schema, editable, lineWrapping]);
 
     return (
       <div

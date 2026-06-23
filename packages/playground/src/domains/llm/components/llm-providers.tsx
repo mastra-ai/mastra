@@ -1,5 +1,6 @@
-import { Combobox, Skeleton, cn } from '@mastra/playground-ui';
-import type { ComboboxProps, ComboboxOption } from '@mastra/playground-ui';
+import { Skeleton, cn } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { Info } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useMemo } from 'react';
@@ -24,8 +25,8 @@ export interface LLMProvidersProps {
 export const LLMProviders = ({
   value,
   onValueChange,
-  variant = 'default',
-  size = 'default',
+  variant,
+  size = 'md',
   className,
   open,
   onOpenChange,

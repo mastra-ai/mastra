@@ -1,5 +1,4 @@
 import {
-  ErrorState,
   NoDataPageLayout,
   PageLayout,
   PermissionDenied,
@@ -7,6 +6,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { useMemo, useState } from 'react';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';

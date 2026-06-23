@@ -1,6 +1,9 @@
 'use client';
 
-import { Button, Column, MainHeader, PrevNextNav, getShortId, useSpanDetail } from '@mastra/playground-ui';
+import { Button, getShortId, useSpanDetail } from '@mastra/playground-ui';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PrevNextNav } from '@mastra/playground-ui/components/PrevNextNav';
 import { BracesIcon, XIcon } from 'lucide-react';
 import { ExperimentTraceSpanDetails } from './experiment-trace-span-details';
 

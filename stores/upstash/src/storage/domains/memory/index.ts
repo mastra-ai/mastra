@@ -269,6 +269,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       });
     }
 
+    const now = new Date();
     const updatedThread = {
       ...thread,
       title,
@@ -276,6 +277,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
+      updatedAt: now,
     };
 
     try {

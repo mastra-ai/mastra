@@ -1,4 +1,5 @@
-import { Button, TextFieldBlock, Txt } from '@mastra/playground-ui';
+import { Button, Txt } from '@mastra/playground-ui';
+import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Plus, Trash } from 'lucide-react';
 import { useId } from 'react';
 

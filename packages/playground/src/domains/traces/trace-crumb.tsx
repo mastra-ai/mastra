@@ -1,4 +1,4 @@
-import { Truncate } from '@mastra/playground-ui';
+import { Truncate } from '@mastra/playground-ui/components/Truncate';
 import { useParams } from 'react-router';
 
 export function TraceCrumb() {

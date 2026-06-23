@@ -11,9 +11,12 @@ import {
   Label,
   toast,
 } from '@mastra/playground-ui';
-import { useState, useEffect } from 'react';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { useReducer } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { SchemaConfigSection } from './schema-config-section';
+import type { DatasetTargetType } from './target-type-options';
+import { DATASET_TARGET_TYPE_OPTIONS, isDatasetTargetType } from './target-type-options';
 
 export interface EditDatasetDialogProps {
   open: boolean;
@@ -22,6 +25,7 @@ export interface EditDatasetDialogProps {
     id: string;
     name: string;
     description?: string;
+    targetType?: string | null;
     inputSchema?: Record<string, unknown> | null;
     groundTruthSchema?: Record<string, unknown> | null;
     requestContextSchema?: Record<string, unknown> | null;
@@ -29,49 +33,97 @@ export interface EditDatasetDialogProps {
   onSuccess?: () => void;
 }
 
-export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: EditDatasetDialogProps) {
-  const [name, setName] = useState(dataset.name);
-  const [description, setDescription] = useState(dataset.description ?? '');
-  const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(dataset.inputSchema ?? null);
-  const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(
-    dataset.groundTruthSchema ?? null,
-  );
-  const [requestContextSchema, setRequestContextSchema] = useState<Record<string, unknown> | null>(
-    dataset.requestContextSchema ?? null,
-  );
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const { updateDataset } = useDatasetMutations();
+type EditDatasetDialogFormProps = Omit<EditDatasetDialogProps, 'open'>;
+type Dataset = EditDatasetDialogProps['dataset'];
+type SchemaValue = Record<string, unknown> | null;
 
-  // Sync form state when dialog opens
-  useEffect(() => {
-    if (open) {
-      setName(dataset.name);
-      setDescription(dataset.description ?? '');
-      setInputSchema(dataset.inputSchema ?? null);
-      setGroundTruthSchema(dataset.groundTruthSchema ?? null);
-      setRequestContextSchema(dataset.requestContextSchema ?? null);
-      setValidationError(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+type EditDatasetFormState = {
+  name: string;
+  description: string;
+  targetType: DatasetTargetType | '';
+  inputSchema: SchemaValue;
+  groundTruthSchema: SchemaValue;
+  requestContextSchema: SchemaValue;
+  validationError: string | null;
+};
+
+type EditDatasetFormAction =
+  | { type: 'setStringField'; field: 'name' | 'description'; value: string }
+  | { type: 'setTargetType'; value: DatasetTargetType | '' }
+  | { type: 'setSchemas'; inputSchema: SchemaValue; groundTruthSchema: SchemaValue; requestContextSchema: SchemaValue }
+  | { type: 'setValidationError'; validationError: string | null };
+
+function getInitialFormState(dataset: Dataset): EditDatasetFormState {
+  return {
+    name: dataset.name,
+    description: dataset.description ?? '',
+    targetType: isDatasetTargetType(dataset.targetType) ? dataset.targetType : '',
+    inputSchema: dataset.inputSchema ?? null,
+    groundTruthSchema: dataset.groundTruthSchema ?? null,
+    requestContextSchema: dataset.requestContextSchema ?? null,
+    validationError: null,
+  };
+}
+
+function editDatasetFormReducer(state: EditDatasetFormState, action: EditDatasetFormAction): EditDatasetFormState {
+  switch (action.type) {
+    case 'setStringField':
+      return { ...state, [action.field]: action.value };
+    case 'setTargetType':
+      return { ...state, targetType: action.value };
+    case 'setSchemas':
+      return {
+        ...state,
+        inputSchema: action.inputSchema,
+        groundTruthSchema: action.groundTruthSchema,
+        requestContextSchema: action.requestContextSchema,
+        validationError: null,
+      };
+    case 'setValidationError':
+      return { ...state, validationError: action.validationError };
+    default:
+      return state;
+  }
+}
+
+export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: EditDatasetDialogProps) {
+  // The form lives inside DialogContent so it mounts/unmounts with the popup:
+  // Base UI unmounts the popup's children after the exit transition completes,
+  // which both resets the form state for the next open and keeps the closing
+  // popup instance alive through its own exit transition. Keying a remount on
+  // `open` here would destroy the popup mid-transition and orphan it on screen
+  // (see https://github.com/mastra-ai/mastra/issues/17890).
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <EditDatasetDialogForm key={dataset.id} dataset={dataset} onOpenChange={onOpenChange} onSuccess={onSuccess} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditDatasetDialogForm({ onOpenChange, dataset, onSuccess }: EditDatasetDialogFormProps) {
+  const [formState, dispatch] = useReducer(editDatasetFormReducer, dataset, getInitialFormState);
+  const { updateDataset } = useDatasetMutations();
 
   const handleSchemaChange = (schemas: {
     inputSchema: Record<string, unknown> | null;
     outputSchema: Record<string, unknown> | null;
     requestContextSchema: Record<string, unknown> | null;
   }) => {
-    setInputSchema(schemas.inputSchema);
-    setGroundTruthSchema(schemas.outputSchema);
-    setRequestContextSchema(schemas.requestContextSchema);
-    // Clear validation error when user changes schema
-    setValidationError(null);
+    dispatch({
+      type: 'setSchemas',
+      inputSchema: schemas.inputSchema,
+      groundTruthSchema: schemas.outputSchema,
+      requestContextSchema: schemas.requestContextSchema,
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setValidationError(null);
+    dispatch({ type: 'setValidationError', validationError: null });
 
-    if (!name.trim()) {
+    if (!formState.name.trim()) {
       toast.error('Dataset name is required');
       return;
     }
@@ -79,11 +131,12 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
     try {
       await updateDataset.mutateAsync({
         datasetId: dataset.id,
-        name: name.trim(),
-        description: description.trim() || undefined,
-        inputSchema,
-        groundTruthSchema,
-        requestContextSchema,
+        name: formState.name.trim(),
+        description: formState.description.trim() || undefined,
+        targetType: formState.targetType || undefined,
+        inputSchema: formState.inputSchema,
+        groundTruthSchema: formState.groundTruthSchema,
+        requestContextSchema: formState.requestContextSchema,
       });
 
       toast.success('Dataset updated successfully');
@@ -95,7 +148,10 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
       const body = (err as { body?: { cause?: { failingItems?: unknown[] } } })?.body;
       if (Array.isArray(body?.cause?.failingItems) && body.cause.failingItems.length > 0) {
         const count = body.cause.failingItems.length;
-        setValidationError(`${count} existing item(s) fail validation. Fix items or adjust schema.`);
+        dispatch({
+          type: 'setValidationError',
+          validationError: `${count} existing item(s) fail validation. Fix items or adjust schema.`,
+        });
       } else {
         const error = err as { message?: string };
         toast.error(`Failed to update dataset: ${error?.message || 'Unknown error'}`);
@@ -104,71 +160,73 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
   };
 
   const handleCancel = () => {
-    // Reset to original values
-    setName(dataset.name);
-    setDescription(dataset.description ?? '');
-    setInputSchema(dataset.inputSchema ?? null);
-    setGroundTruthSchema(dataset.groundTruthSchema ?? null);
-    setRequestContextSchema(dataset.requestContextSchema ?? null);
-    setValidationError(null);
     onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Edit Dataset</DialogTitle>
-        </DialogHeader>
-        <DialogBody className="max-h-[70vh] overflow-y-auto">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-dataset-name">Name *</Label>
-              <Input
-                id="edit-dataset-name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Enter dataset name"
-                autoFocus
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-dataset-description">Description</Label>
-              <Input
-                id="edit-dataset-description"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder="Enter dataset description (optional)"
-              />
-            </div>
-
-            <SchemaConfigSection
-              inputSchema={inputSchema}
-              outputSchema={groundTruthSchema}
-              requestContextSchema={requestContextSchema}
-              onChange={handleSchemaChange}
-              disabled={updateDataset.isPending}
-              defaultOpen={!!(dataset.inputSchema || dataset.groundTruthSchema || dataset.requestContextSchema)}
+    <>
+      <DialogHeader>
+        <DialogTitle>Edit Dataset</DialogTitle>
+      </DialogHeader>
+      <DialogBody className="max-h-[70vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-dataset-name">Name *</Label>
+            <Input
+              id="edit-dataset-name"
+              value={formState.name}
+              onChange={e => dispatch({ type: 'setStringField', field: 'name', value: e.target.value })}
+              placeholder="Enter dataset name"
+              autoFocus
             />
+          </div>
 
-            {validationError && (
-              <div className="p-3 bg-red-950/20 border border-red-900/50 rounded-md">
-                <p className="text-sm text-red-200">{validationError}</p>
-              </div>
-            )}
+          <div className="space-y-2">
+            <Label htmlFor="edit-dataset-description">Description</Label>
+            <Input
+              id="edit-dataset-description"
+              value={formState.description}
+              onChange={e => dispatch({ type: 'setStringField', field: 'description', value: e.target.value })}
+              placeholder="Enter dataset description (optional)"
+            />
+          </div>
 
-            <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" onClick={handleCancel}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" disabled={updateDataset.isPending || !name.trim()}>
-                {updateDataset.isPending ? 'Saving...' : 'Save Changes'}
-              </Button>
+          <SelectFieldBlock
+            label="Target type"
+            name="edit-dataset-target-type"
+            placeholder="Select a target type (optional)"
+            options={[...DATASET_TARGET_TYPE_OPTIONS]}
+            value={formState.targetType}
+            onValueChange={value => dispatch({ type: 'setTargetType', value: value as DatasetTargetType })}
+            helpText="What this dataset evaluates. Drives the Target column and the Target filter."
+            disabled={updateDataset.isPending}
+          />
+
+          <SchemaConfigSection
+            inputSchema={formState.inputSchema}
+            outputSchema={formState.groundTruthSchema}
+            requestContextSchema={formState.requestContextSchema}
+            onChange={handleSchemaChange}
+            disabled={updateDataset.isPending}
+            defaultOpen={!!(dataset.inputSchema || dataset.groundTruthSchema || dataset.requestContextSchema)}
+          />
+
+          {formState.validationError && (
+            <div className="p-3 bg-red-950/20 border border-red-900/50 rounded-md">
+              <p className="text-sm text-red-200">{formState.validationError}</p>
             </div>
-          </form>
-        </DialogBody>
-      </DialogContent>
-    </Dialog>
+          )}
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button type="button" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" disabled={updateDataset.isPending || !formState.name.trim()}>
+              {updateDataset.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
+        </form>
+      </DialogBody>
+    </>
   );
 }

@@ -1,3 +1,7 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { hostname, tmpdir } from 'node:os';
+import path from 'node:path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createMastraCodeAnalytics, getMastraAnalyticsDistinctId, isTelemetryDisabled } from '../analytics.js';
@@ -8,8 +12,50 @@ afterEach(() => {
 });
 
 describe('analytics telemetry disable', () => {
-  it('uses the same distinct id format as the Mastra CLI analytics', () => {
-    expect(getMastraAnalyticsDistinctId('test-host')).toBe('mastra-test-host');
+  it('generates and persists a random distinct id', () => {
+    withTempAnalyticsConfig(configPath => {
+      const distinctId = getMastraAnalyticsDistinctId(configPath);
+
+      expect(distinctId).toMatch(/^mastra-[0-9a-f-]{36}$/);
+      expect(JSON.parse(readFileSync(configPath, 'utf-8'))).toEqual({ distinctId });
+      expect(getMastraAnalyticsDistinctId(configPath)).toBe(distinctId);
+    });
+  });
+
+  it('migrates hostname-derived distinct ids without aliasing collided users', () => {
+    withTempAnalyticsConfig(configPath => {
+      const oldDistinctId = `mastra-${hostname()}`;
+      writeFileSync(configPath, JSON.stringify({ distinctId: oldDistinctId }));
+
+      const distinctId = getMastraAnalyticsDistinctId(configPath);
+
+      expect(distinctId).toMatch(/^mastra-[0-9a-f-]{36}$/);
+      expect(distinctId).not.toBe(oldDistinctId);
+      expect(JSON.parse(readFileSync(configPath, 'utf-8'))).toEqual({ distinctId });
+    });
+  });
+
+  it('regenerates when analytics config is invalid', () => {
+    withTempAnalyticsConfig(configPath => {
+      writeFileSync(configPath, '{invalid');
+
+      const distinctId = getMastraAnalyticsDistinctId(configPath);
+
+      expect(distinctId).toMatch(/^mastra-[0-9a-f-]{36}$/);
+      expect(JSON.parse(readFileSync(configPath, 'utf-8'))).toEqual({ distinctId });
+    });
+  });
+
+  it('regenerates when analytics config has a malformed distinct id', () => {
+    withTempAnalyticsConfig(configPath => {
+      writeFileSync(configPath, JSON.stringify({ distinctId: 'mastra-local' }));
+
+      const distinctId = getMastraAnalyticsDistinctId(configPath);
+
+      expect(distinctId).toMatch(/^mastra-[0-9a-f-]{36}$/);
+      expect(distinctId).not.toBe('mastra-local');
+      expect(JSON.parse(readFileSync(configPath, 'utf-8'))).toEqual({ distinctId });
+    });
   });
 
   it('treats common truthy env values as disabled', () => {
@@ -67,3 +113,13 @@ describe('analytics telemetry disable', () => {
     }
   });
 });
+
+function withTempAnalyticsConfig(run: (configPath: string) => void): void {
+  const dir = mkdtempSync(path.join(tmpdir(), 'mastracode-analytics-'));
+  const configPath = path.join(dir, 'analytics.json');
+  try {
+    run(configPath);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}

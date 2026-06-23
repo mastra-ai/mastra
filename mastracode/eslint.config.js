@@ -11,6 +11,6 @@ export default [
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    ignores: ['scripts/**'],
+    ignores: ['scripts/**', '.tmp-mc-e2e/**', '.tmp-mc-e2e-vitest/**'],
   },
 ];
