@@ -1,5 +1,5 @@
 import type { CompareExperimentsResponse } from '@mastra/client-js';
-import { Column } from '@mastra/playground-ui';
+import { Column } from '@mastra/playground-ui/components/Columns';
 import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import type { ItemListColumn } from '@mastra/playground-ui/components/ItemList';
 import { ScoreDelta } from './score-delta';

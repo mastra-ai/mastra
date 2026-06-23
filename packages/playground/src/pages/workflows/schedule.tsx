@@ -1,6 +1,5 @@
 import {
   Button,
-  ErrorState,
   NoDataPageLayout,
   PageLayout,
   PermissionDenied,
@@ -9,6 +8,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ArrowLeftIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';
