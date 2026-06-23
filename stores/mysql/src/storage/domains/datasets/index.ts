@@ -66,6 +66,22 @@ export class DatasetsMySQL extends DatasetsStorage {
   static readonly MANAGED_TABLES = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
 
   /**
+   * Item-level tool mocks are not persisted by the MySQL adapter. Reject writes
+   * that carry them so the feature fails loudly here instead of silently dropping
+   * the mocks and then running tools live during experiments.
+   */
+  #rejectToolMocks(toolMocks: unknown): void {
+    if (Array.isArray(toolMocks) && toolMocks.length > 0) {
+      throw new MastraError({
+        id: 'MYSQL_DATASET_TOOL_MOCKS_UNSUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Tool mocks are not supported on the MySQL storage adapter. Use a supported adapter (LibSQL, PostgreSQL, MongoDB, or Spanner) to persist dataset item tool mocks.',
+      });
+    }
+  }
+
+  /**
    * Returns default index definitions for the datasets domain tables.
    * Currently no default indexes are defined for datasets.
    */
@@ -136,6 +152,18 @@ export class DatasetsMySQL extends DatasetsStorage {
     await this.operations.createTable({ tableName: TABLE_DATASETS, schema: DATASETS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_DATASET_ITEMS as any, schema: DATASET_ITEMS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: DATASET_VERSIONS_SCHEMA });
+    // Backfill tenancy + candidate identity columns on pre-existing tables so
+    // older deployments keep working when they upgrade in place.
+    await this.operations.alterTable({
+      tableName: TABLE_DATASETS,
+      schema: DATASETS_SCHEMA,
+      ifNotExists: ['organizationId', 'resourceId', 'candidateKey', 'candidateId'],
+    });
+    await this.operations.alterTable({
+      tableName: TABLE_DATASET_ITEMS as any,
+      schema: DATASET_ITEMS_SCHEMA,
+      ifNotExists: ['organizationId', 'resourceId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -157,6 +185,10 @@ export class DatasetsMySQL extends DatasetsStorage {
       inputSchema: parseJSON<Record<string, unknown>>(row.inputSchema),
       groundTruthSchema: parseJSON<Record<string, unknown>>(row.groundTruthSchema),
       version: row.version as number,
+      organizationId: (row.organizationId as string | null | undefined) ?? null,
+      resourceId: (row.resourceId as string | null | undefined) ?? null,
+      candidateKey: (row.candidateKey as string | null | undefined) ?? null,
+      candidateId: (row.candidateId as string | null | undefined) ?? null,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
     };
@@ -167,6 +199,8 @@ export class DatasetsMySQL extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      organizationId: (row.organizationId as string | null | undefined) ?? null,
+      resourceId: (row.resourceId as string | null | undefined) ?? null,
       input: parseJSON<Record<string, unknown>>(row.input),
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : undefined,
       metadata: row.metadata ? parseJSON<Record<string, unknown>>(row.metadata) : undefined,
@@ -180,6 +214,8 @@ export class DatasetsMySQL extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      organizationId: (row.organizationId as string | null | undefined) ?? null,
+      resourceId: (row.resourceId as string | null | undefined) ?? null,
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
       input: parseJSON<Record<string, unknown>>(row.input),
@@ -216,6 +252,10 @@ export class DatasetsMySQL extends DatasetsStorage {
           inputSchema: jsonArg(input.inputSchema),
           groundTruthSchema: jsonArg(input.groundTruthSchema),
           version: 0,
+          organizationId: input.organizationId ?? null,
+          resourceId: input.resourceId ?? null,
+          candidateKey: input.candidateKey ?? null,
+          candidateId: input.candidateId ?? null,
           createdAt: now,
           updatedAt: now,
         },
@@ -229,6 +269,10 @@ export class DatasetsMySQL extends DatasetsStorage {
         inputSchema: input.inputSchema ?? undefined,
         groundTruthSchema: input.groundTruthSchema ?? undefined,
         version: 0,
+        organizationId: input.organizationId ?? null,
+        resourceId: input.resourceId ?? null,
+        candidateKey: input.candidateKey ?? null,
+        candidateId: input.candidateId ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -366,7 +410,28 @@ export class DatasetsMySQL extends DatasetsStorage {
     try {
       const { page, perPage: perPageInput } = args.pagination;
 
-      const whereClause = { sql: '', args: [] as any[] };
+      const filterParts: string[] = [];
+      const filterArgs: any[] = [];
+      if (args.filters?.organizationId !== undefined) {
+        filterParts.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+        filterArgs.push(args.filters.organizationId);
+      }
+      if (args.filters?.resourceId !== undefined) {
+        filterParts.push(`${quoteIdentifier('resourceId', 'column name')} = ?`);
+        filterArgs.push(args.filters.resourceId);
+      }
+      if (args.filters?.candidateKey !== undefined) {
+        filterParts.push(`${quoteIdentifier('candidateKey', 'column name')} = ?`);
+        filterArgs.push(args.filters.candidateKey);
+      }
+      if (args.filters?.candidateId !== undefined) {
+        filterParts.push(`${quoteIdentifier('candidateId', 'column name')} = ?`);
+        filterArgs.push(args.filters.candidateId);
+      }
+      const whereClause = {
+        sql: filterParts.length > 0 ? `WHERE ${filterParts.join(' AND ')}` : '',
+        args: filterArgs,
+      };
       const total = await this.operations.loadTotalCount({ tableName: TABLE_DATASETS, whereClause });
 
       if (total === 0) {
@@ -412,6 +477,7 @@ export class DatasetsMySQL extends DatasetsStorage {
   // --- SCD-2 item mutations ---
 
   protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
+    this.#rejectToolMocks(args.toolMocks);
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -428,20 +494,25 @@ export class DatasetsMySQL extends DatasetsStorage {
         args.datasetId,
       ]);
 
-      // Get new version
-      const [versionRows] = await connection.execute<RowDataPacket[]>(
-        `SELECT \`version\` FROM ${tableDatasetsName} WHERE id = ?`,
+      // Get new version + parent tenancy
+      const [datasetRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT \`version\`, \`organizationId\`, \`resourceId\` FROM ${tableDatasetsName} WHERE id = ?`,
         [args.datasetId],
       );
-      const newVersion = (versionRows as any[])[0]?.version as number;
+      const parentRow = (datasetRows as any[])[0];
+      const newVersion = parentRow?.version as number;
+      const parentOrganizationId = (parentRow?.organizationId as string | null | undefined) ?? null;
+      const parentResourceId = (parentRow?.resourceId as string | null | undefined) ?? null;
 
-      // Insert item
+      // Insert item (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`resourceId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
         [
           id,
           args.datasetId,
           newVersion,
+          parentOrganizationId,
+          parentResourceId,
           jsonArg(args.input),
           jsonArg(args.groundTruth),
           jsonArg(args.metadata),
@@ -462,6 +533,8 @@ export class DatasetsMySQL extends DatasetsStorage {
         id,
         datasetId: args.datasetId,
         datasetVersion: newVersion,
+        organizationId: parentOrganizationId,
+        resourceId: parentResourceId,
         input: args.input,
         groundTruth: args.groundTruth,
         metadata: args.metadata,
@@ -485,6 +558,7 @@ export class DatasetsMySQL extends DatasetsStorage {
   }
 
   protected async _doUpdateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
+    this.#rejectToolMocks(args.toolMocks);
     const existing = await this.getItemById({ id: args.id });
     if (!existing) {
       throw new MastraError({
@@ -522,11 +596,14 @@ export class DatasetsMySQL extends DatasetsStorage {
         args.datasetId,
       ]);
 
-      const [versionRows] = await connection.execute<RowDataPacket[]>(
-        `SELECT \`version\` FROM ${tableDatasetsName} WHERE id = ?`,
+      const [datasetRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT \`version\`, \`organizationId\`, \`resourceId\` FROM ${tableDatasetsName} WHERE id = ?`,
         [args.datasetId],
       );
-      const newVersion = (versionRows as any[])[0]?.version as number;
+      const parentRow = (datasetRows as any[])[0];
+      const newVersion = parentRow?.version as number;
+      const parentOrganizationId = (parentRow?.organizationId as string | null | undefined) ?? null;
+      const parentResourceId = (parentRow?.resourceId as string | null | undefined) ?? null;
 
       // Close old row
       await connection.execute(
@@ -534,13 +611,15 @@ export class DatasetsMySQL extends DatasetsStorage {
         [newVersion, args.id],
       );
 
-      // Insert new row
+      // Insert new row (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`resourceId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
         [
           args.id,
           args.datasetId,
           newVersion,
+          parentOrganizationId,
+          parentResourceId,
           jsonArg(mergedInput),
           jsonArg(mergedGroundTruth),
           jsonArg(mergedMetadata),
@@ -560,6 +639,8 @@ export class DatasetsMySQL extends DatasetsStorage {
       return {
         ...existing,
         datasetVersion: newVersion,
+        organizationId: parentOrganizationId,
+        resourceId: parentResourceId,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         metadata: mergedMetadata,
@@ -608,11 +689,14 @@ export class DatasetsMySQL extends DatasetsStorage {
         datasetId,
       ]);
 
-      const [versionRows] = await connection.execute<RowDataPacket[]>(
-        `SELECT \`version\` FROM ${tableDatasetsName} WHERE id = ?`,
+      const [datasetRows] = await connection.execute<RowDataPacket[]>(
+        `SELECT \`version\`, \`organizationId\`, \`resourceId\` FROM ${tableDatasetsName} WHERE id = ?`,
         [datasetId],
       );
-      const newVersion = (versionRows as any[])[0]?.version as number;
+      const parentRow = (datasetRows as any[])[0];
+      const newVersion = parentRow?.version as number;
+      const parentOrganizationId = (parentRow?.organizationId as string | null | undefined) ?? null;
+      const parentResourceId = (parentRow?.resourceId as string | null | undefined) ?? null;
 
       // Close old row
       await connection.execute(
@@ -620,13 +704,15 @@ export class DatasetsMySQL extends DatasetsStorage {
         [newVersion, id],
       );
 
-      // Insert tombstone
+      // Insert tombstone (tenancy inherited from parent dataset)
       await connection.execute(
-        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)`,
+        `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`resourceId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)`,
         [
           id,
           datasetId,
           newVersion,
+          parentOrganizationId,
+          parentResourceId,
           jsonArg(existing.input),
           jsonArg(existing.groundTruth),
           jsonArg(existing.metadata),
@@ -750,6 +836,15 @@ export class DatasetsMySQL extends DatasetsStorage {
         // Current items only
         conditions.push(`\`validTo\` IS NULL`);
         conditions.push(`\`isDeleted\` = 0`);
+      }
+
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push(`\`organizationId\` = ?`);
+        params.push(args.filters.organizationId);
+      }
+      if (args.filters?.resourceId !== undefined) {
+        conditions.push(`\`resourceId\` = ?`);
+        params.push(args.filters.resourceId);
       }
 
       if (args.search) {
@@ -886,6 +981,9 @@ export class DatasetsMySQL extends DatasetsStorage {
   // --- Bulk operations (SCD-2 internally) ---
 
   protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
+    for (const item of input.items) {
+      this.#rejectToolMocks(item.toolMocks);
+    }
     const dataset = await this.getDatasetById({ id: input.datasetId });
     if (!dataset) {
       throw new MastraError({
@@ -917,17 +1015,22 @@ export class DatasetsMySQL extends DatasetsStorage {
       );
       const newVersion = (versionRows as any[])[0]?.version as number;
 
+      const parentOrganizationId = dataset.organizationId ?? null;
+      const parentResourceId = dataset.resourceId ?? null;
+
       const items: { id: string; itemInput: BatchInsertItemsInput['items'][number] }[] = [];
       for (const itemInput of input.items) {
         const id = randomUUID();
         items.push({ id, itemInput });
 
         await connection.execute(
-          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
+          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`resourceId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)`,
           [
             id,
             input.datasetId,
             newVersion,
+            parentOrganizationId,
+            parentResourceId,
             jsonArg(itemInput.input),
             jsonArg(itemInput.groundTruth),
             jsonArg(itemInput.metadata),
@@ -949,6 +1052,8 @@ export class DatasetsMySQL extends DatasetsStorage {
         id,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
+        organizationId: parentOrganizationId,
+        resourceId: parentResourceId,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
         metadata: itemInput.metadata,
@@ -1014,6 +1119,9 @@ export class DatasetsMySQL extends DatasetsStorage {
       );
       const newVersion = (versionRows as any[])[0]?.version as number;
 
+      const parentOrganizationId = dataset.organizationId ?? null;
+      const parentResourceId = dataset.resourceId ?? null;
+
       for (const item of currentItems) {
         // Close old row
         await connection.execute(
@@ -1021,13 +1129,15 @@ export class DatasetsMySQL extends DatasetsStorage {
           [newVersion, item.id],
         );
 
-        // Insert tombstone
+        // Insert tombstone (tenancy inherited from parent dataset)
         await connection.execute(
-          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)`,
+          `INSERT INTO ${tableItemsName} (\`id\`, \`datasetId\`, \`datasetVersion\`, \`organizationId\`, \`resourceId\`, \`validTo\`, \`isDeleted\`, \`input\`, \`groundTruth\`, \`metadata\`, \`createdAt\`, \`updatedAt\`) VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?, ?, ?, ?)`,
           [
             item.id,
             input.datasetId,
             newVersion,
+            parentOrganizationId,
+            parentResourceId,
             jsonArg(item.input),
             jsonArg(item.groundTruth),
             jsonArg(item.metadata),

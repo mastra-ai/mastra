@@ -1,5 +1,20 @@
 # @mastra/pg
 
+## 1.14.1-alpha.0
+
+### Patch Changes
+
+- Fixed `PostgresStore.init()` failing with "RoutingDbClient already has a pinned client" when a single store is shared across concurrent requests (for example, request-scoped Mastra instances reusing one store/pool). Concurrent `init()` calls are now coalesced into a single shared initialization instead of each pinning the client. ([#18336](https://github.com/mastra-ai/mastra/pull/18336))
+
+  Also, `init()` is now a no-op when `disableInit: true`, so apps that manage their database schema externally are no longer forced through the connect-and-pin path.
+
+- Fixed: `mastra build` output no longer hangs on the first storage-touching request when an app uses `LibSQLStore`, `PostgresStore`, or `MySQLStore` with observational memory. `mastra dev` was unaffected; only the bundled `mastra start` output deadlocked. No code changes or `bundler.externals` workaround required on the app side after upgrading. ([#18302](https://github.com/mastra-ai/mastra/pull/18302))
+
+- Added storage for item-level tool mocks. Dataset items persist their `toolMocks` and experiment results persist their `toolMockReport`, so mocks and run diagnostics survive across sessions. ([#18036](https://github.com/mastra-ai/mastra/pull/18036))
+
+- Updated dependencies [[`65f255a`](https://github.com/mastra-ai/mastra/commit/65f255a38667beb6ceeadabfa9eb5059bfec8298), [`4a88c6e`](https://github.com/mastra-ai/mastra/commit/4a88c6e2bdce316f8d7551b4ec3449b0b06fc71c), [`87a17ef`](https://github.com/mastra-ai/mastra/commit/87a17efbd725aca6639febdc5e69e2abb3048689), [`e11ff30`](https://github.com/mastra-ai/mastra/commit/e11ff301408bf1731dca2fb7fbfcd8c819500a35), [`9d2c946`](https://github.com/mastra-ai/mastra/commit/9d2c946d0859e90ae4bcec5beeb1da7398d2ad1e), [`f1ec385`](https://github.com/mastra-ai/mastra/commit/f1ec385386f62b1a0847ec5353ae2bb169d1c3d9), [`e14986f`](https://github.com/mastra-ai/mastra/commit/e14986f6e5478d6384d04ff9a7f9a79a46a8b529), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`974f614`](https://github.com/mastra-ai/mastra/commit/974f614e083bd68278536f94453f7b320b86a3c7), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16)]:
+  - @mastra/core@1.46.0-alpha.3
+
 ## 1.14.0
 
 ### Minor Changes
